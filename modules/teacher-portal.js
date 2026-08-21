@@ -1513,8 +1513,6 @@ function tsSubmitSchedule(){
   const bk=AppData.bookings.find(b=>b.id===savedId);if(!bk)return;
   // Block teachers from submitting for past retreats (admin can still create via admin tools)
   if(IS_TEACHER_MODE&&bk.endDate&&new Date().toISOString().slice(0,10)>bk.endDate){showToast('Your retreat has passed. Please contact Amansala if you need schedule changes.');return;}
-  // Block edits within 6 weeks of retreat start
-  if(IS_TEACHER_MODE&&bk.startDate){const daysUntil=Math.ceil((pd(bk.startDate)-new Date())/DAY_MS);if(daysUntil<=42){showToast('Schedule editing is closed — your retreat is within 6 weeks.');return;}}
   const arrCbEl=document.getElementById('tsHasArrivalClass');if(arrCbEl)_ts.hasArrivalClass=arrCbEl.checked;
   const arrSlotEl=document.getElementById('tsArrivalSlot');if(arrSlotEl)_ts.arrivalSlot=arrSlotEl.value;
   const arrDurEl=document.getElementById('tsArrivalDur');if(arrDurEl)_ts.arrivalDur=parseInt(arrDurEl.value);
