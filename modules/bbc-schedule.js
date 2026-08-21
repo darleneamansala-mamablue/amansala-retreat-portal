@@ -429,7 +429,7 @@ function bbcPrint(){
       +'<h2 style="margin:0 0 10px;font-size:20px;font-family:Georgia,serif;color:#1a3333">'+bbcFmtDate(day.date)+'</h2>'
       +noteH+promptH+'<div>'+slotsH+'</div></div>';
   }).join('');
-  win.document.write('<!DOCTYPE html><html><head><link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>'+s.name+'</title><style>body{font-family:Helvetica Neue,Arial,sans-serif;margin:0;padding:32px 40px;color:#1a2332;max-width:720px;margin:0 auto}@media print{body{padding:20px}}</style></head><body>'
+  win.document.write('<!DOCTYPE html><html><head><link rel="icon" type="image/png" href="/favicon.png"><title>'+s.name+'</title><style>body{font-family:Helvetica Neue,Arial,sans-serif;margin:0;padding:32px 40px;color:#1a2332;max-width:720px;margin:0 auto}@media print{body{padding:20px}}</style></head><body>'
     +'<div style="text-align:center;margin-bottom:36px;padding-bottom:24px;border-bottom:2px solid #2d6a6a">'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#2d6a6a;margin-bottom:8px">Amansala · Tulum</div>'
     +'<h1 style="margin:0;font-size:28px;font-family:Georgia,serif;color:#1a3333">'+s.name+'</h1>'

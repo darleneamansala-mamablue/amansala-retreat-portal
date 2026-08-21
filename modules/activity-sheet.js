@@ -814,7 +814,7 @@ function actGuestReport() {
 
   const win=window.open('','_blank','width=900,height=700');
   win.document.write(`<!DOCTYPE html><html><head>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>Guest Activity Report</title>
+  <link rel="icon" type="image/png" href="/favicon.png"><title>Guest Activity Report</title>
   <style>body{font-family:'Jost',sans-serif;padding:30px;color:#1a2332}h2{font-size:18px;margin-bottom:4px}p{font-size:12px;color:#6b7280;margin-bottom:20px}table{width:100%;border-collapse:collapse}th{text-align:left;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.6px;background:#f9f7f4;border-bottom:2px solid #e5e7eb}@media print{button{display:none}}</style></head>
   <body>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
@@ -895,7 +895,7 @@ function actSheetPrint() {
   const fmt2=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
   const win=window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>Activity Sheet · ${fmt2(weekStart)} – ${fmt2(wEnd)}</title>
+  <link rel="icon" type="image/png" href="/favicon.png"><title>Activity Sheet · ${fmt2(weekStart)} – ${fmt2(wEnd)}</title>
     <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>body{font-family:'Jost',sans-serif;margin:32px;color:#1a2332}@media print{body{margin:16px}.no-print{display:none}}</style>
   </head><body>

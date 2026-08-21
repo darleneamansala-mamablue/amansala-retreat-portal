@@ -499,7 +499,7 @@ function menuPrint(){
   const title=fromVal===toVal?`Menu — ${fromFmt}`:`Menu — ${fromFmt} to ${toFmt}`;
   const w=window.open('','_blank');
   w.document.write(`<!DOCTYPE html><html><head>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:16px;font-size:11px;}h1{font-size:15px;margin:0 0 10px;text-align:center;}@media print{@page{size:landscape}}</style></head><body><h1>${title}</h1>${gridHtml}</body></html>`);
+  <link rel="icon" type="image/png" href="/favicon.png"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:16px;font-size:11px;}h1{font-size:15px;margin:0 0 10px;text-align:center;}@media print{@page{size:landscape}}</style></head><body><h1>${title}</h1>${gridHtml}</body></html>`);
   w.document.close();
   setTimeout(()=>w.print(),400);
 }
