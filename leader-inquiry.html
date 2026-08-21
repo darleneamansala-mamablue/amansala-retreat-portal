@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retreat Inquiry — Amansala Tulum</title>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500;600&family=Cormorant+Garamond:ital,wght@1,300;1,400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html,body{min-height:100%;}
+body{font-family:'Jost',-apple-system,sans-serif;font-size:14px;color:#1a1a2e;background:#f7f9f8;}
+.page{min-height:100vh;padding:40px 20px 60px;background:radial-gradient(ellipse at 20% 0%,rgba(45,106,106,.12) 0%,transparent 50%),radial-gradient(ellipse at 80% 100%,rgba(107,181,181,.08) 0%,transparent 50%),#f7f9f8;}
+
+/* HEADER */
+.portal-header{text-align:center;margin-bottom:32px;}
+.portal-logo{display:inline-flex;align-items:center;gap:14px;margin-bottom:8px;}
+.portal-mark{width:50px;height:50px;border-radius:13px;background:linear-gradient(135deg,#2d6a6a,#5ba8a8);display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.9rem;color:#fff;}
+.portal-brand-name{font-size:1.05rem;font-weight:600;color:#1a1a2e;letter-spacing:.02em;text-align:left;}
+.portal-brand-sub{font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:#9ca3af;margin-top:2px;}
+
+/* PROGRESS */
+.progress-wrap{display:flex;align-items:flex-start;justify-content:center;max-width:600px;margin:0 auto 28px;}
+.step-item{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;}
+.step-circle{width:26px;height:26px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;color:#9ca3af;transition:all .3s;}
+.step-circle.active{background:#2d6a6a;color:#fff;box-shadow:0 0 0 4px rgba(45,106,106,.18);}
+.step-circle.done{background:#5ba8a8;color:#fff;}
+.step-label{font-size:.56rem;text-transform:uppercase;letter-spacing:.07em;color:#c4c9d4;white-space:nowrap;}
+.step-label.active{color:#2d6a6a;font-weight:600;}
+.step-connector{height:2px;flex:1;background:#e5e7eb;margin-top:12px;}
+.step-connector.done{background:#5ba8a8;}
+
+/* CARD */
+.card{max-width:660px;margin:0 auto;background:#fff;border-radius:20px;box-shadow:0 4px 6px rgba(0,0,0,.04),0 20px 50px rgba(0,0,0,.09);overflow:hidden;}
+.card-inner{padding:44px 48px 8px;}
+.step-num{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:#2d6a6a;margin-bottom:8px;}
+.step-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.95rem;color:#1a1a2e;margin-bottom:8px;line-height:1.2;}
+.step-sub{font-size:.81rem;color:#6b7280;line-height:1.75;margin-bottom:30px;}
+
+/* FORM */
+.fg{margin-bottom:20px;}
+.fg label{display:block;font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6b7280;margin-bottom:7px;}
+.req{color:#ef4444;}
+.fg input,.fg select,.fg textarea{width:100%;padding:11px 14px;border:1.5px solid #e5e7eb;border-radius:9px;font-family:inherit;font-size:.87rem;color:#1a1a2e;outline:none;transition:border-color .2s,box-shadow .2s;background:#fff;}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:#2d6a6a;box-shadow:0 0 0 3px rgba(45,106,106,.1);}
+.fg textarea{resize:vertical;min-height:100px;line-height:1.65;}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.field-error{font-size:.72rem;color:#ef4444;margin-top:5px;display:none;}
+.has-error input,.has-error select,.has-error textarea{border-color:#ef4444!important;}
+.has-error .field-error{display:block;}
+
+/* YES/NO CARDS */
+.yn-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:4px;}
+.yn-card{border:1.5px solid #e5e7eb;border-radius:13px;padding:18px 16px;cursor:pointer;transition:all .2s;text-align:center;position:relative;background:#fff;user-select:none;}
+.yn-card:hover{border-color:#2d6a6a;background:#f4f9f9;}
+.yn-card.selected{border-color:#2d6a6a;background:#f4f9f9;box-shadow:0 0 0 3px rgba(45,106,106,.14);}
+.yn-card input{position:absolute;opacity:0;width:0;height:0;}
+.yn-label{font-size:.92rem;font-weight:600;color:#1a1a2e;}
+.yn-sub{font-size:.68rem;color:#9ca3af;margin-top:4px;line-height:1.5;}
+
+/* TYPE GRID */
+.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:4px;}
+.type-card{border:1.5px solid #e5e7eb;border-radius:11px;padding:18px 12px 14px;cursor:pointer;transition:all .18s;text-align:center;background:#fff;position:relative;user-select:none;}
+.type-card:hover{border-color:#2d6a6a;background:#f4f9f9;}
+.type-card.selected{border-color:#2d6a6a;background:#f4f9f9;box-shadow:0 0 0 3px rgba(45,106,106,.13);}
+.type-card input{position:absolute;opacity:0;width:0;height:0;}
+.type-icon{font-size:1.6rem;margin-bottom:7px;display:block;}
+.type-label{font-size:.82rem;font-weight:500;color:#374151;}
+
+/* CONDITIONAL */
+.conditional{display:none;padding:18px;background:#f9fafb;border-radius:12px;margin-top:12px;border:1px solid #f0f0f0;}
+.conditional.show{display:block;}
+
+/* FLEXIBLE TOGGLE */
+.flex-row{display:flex;align-items:center;gap:12px;margin-top:6px;}
+.flex-opt{display:flex;align-items:center;gap:7px;padding:8px 14px;border:1.5px solid #e5e7eb;border-radius:8px;cursor:pointer;font-size:.82rem;font-weight:500;color:#6b7280;transition:all .15s;user-select:none;}
+.flex-opt.selected{border-color:#2d6a6a;color:#2d6a6a;background:#f4f9f9;font-weight:600;}
+.flex-opt input{position:absolute;opacity:0;width:0;height:0;}
+
+/* PAX */
+.pax-wrap{display:flex;align-items:center;gap:10px;}
+.pax-btn{width:34px;height:34px;border-radius:8px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;font-size:1.1rem;color:#2d6a6a;font-weight:600;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.pax-btn:hover{border-color:#2d6a6a;background:#f4f9f9;}
+.pax-val{font-size:1.1rem;font-weight:700;color:#1a1a2e;min-width:32px;text-align:center;}
+.pax-input{width:72px!important;}
+
+/* NAV */
+.card-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 48px 32px;}
+.btn-back{padding:11px 22px;border:1.5px solid #e5e7eb;border-radius:9px;background:#fff;font-family:inherit;font-size:.8rem;font-weight:500;color:#6b7280;cursor:pointer;transition:all .15s;}
+.btn-back:hover{border-color:#2d6a6a;color:#2d6a6a;}
+.btn-next{padding:12px 32px;border:none;border-radius:9px;background:#2d6a6a;font-family:inherit;font-size:.82rem;font-weight:600;color:#fff;cursor:pointer;transition:background .2s;letter-spacing:.02em;}
+.btn-next:hover{background:#235555;}
+.step-counter{font-size:.7rem;color:#9ca3af;}
+
+/* STEP PANELS */
+.step-panel{display:none;}
+.step-panel.active{display:block;}
+
+/* THANK YOU */
+.thankyou{display:none;text-align:center;padding:64px 48px;}
+.ty-icon{font-size:3rem;margin-bottom:20px;}
+.ty-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:2.3rem;color:#1a1a2e;margin-bottom:14px;}
+.ty-sub{font-size:.85rem;color:#6b7280;line-height:1.85;max-width:420px;margin:0 auto 24px;}
+.ty-ref{display:inline-block;padding:9px 20px;background:#f0fdf9;border:1px solid #a7f3d0;border-radius:8px;font-size:.74rem;color:#047857;font-weight:600;letter-spacing:.08em;}
+.ty-contact{margin-top:24px;font-size:.75rem;color:#9ca3af;}
+.ty-contact a{color:#2d6a6a;text-decoration:none;font-weight:600;}
+
+@media(max-width:640px){
+  .card-inner{padding:28px 22px 8px;}
+  .card-nav{padding:16px 22px 26px;}
+  .f2{grid-template-columns:1fr;}
+  .type-grid{grid-template-columns:1fr 1fr;}
+  .yn-grid{gap:10px;}
+  .thankyou{padding:44px 24px;}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="portal-header">
+    <div class="portal-logo">
+      <div class="portal-mark">A</div>
+      <div>
+        <div class="portal-brand-name">Amansala Tulum</div>
+        <div class="portal-brand-sub">Retreat Leader Inquiry</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap"></div>
+
+  <div class="card" id="mainCard">
+
+    <!-- STEP 1: About You -->
+    <div class="step-panel active" id="step1">
+      <div class="card-inner">
+        <div class="step-num">Step 1 of 3</div>
+        <h2 class="step-title">Tell us about yourself</h2>
+        <p class="step-sub">We'd love to host your retreat at Amansala Tulum. Fill in your details and we'll be in touch within 48 hours.</p>
+
+        <div class="f2">
+          <div class="fg" id="fg-name">
+            <label>Your Name <span class="req">*</span></label>
+            <input type="text" id="f-name" placeholder="Full name" oninput="clearErr('fg-name')">
+            <div class="field-error">Please enter your name.</div>
+          </div>
+          <div class="fg" id="fg-email">
+            <label>Email Address <span class="req">*</span></label>
+            <input type="email" id="f-email" placeholder="you@example.com" oninput="clearErr('fg-email')">
+            <div class="field-error">Please enter a valid email.</div>
+          </div>
+        </div>
+
+        <div class="fg">
+          <label>Phone Number <span style="color:#9ca3af;font-weight:400;font-size:.6rem">(optional)</span></label>
+          <input type="tel" id="f-phone" placeholder="+1 555 000 0000">
+        </div>
+
+        <div class="fg" style="margin-bottom:4px">
+          <label>Have you hosted a retreat at Amansala before? <span class="req">*</span></label>
+          <div class="yn-grid">
+            <div class="yn-card" id="yn-yes" onclick="setReturn(true)">
+              <input type="radio" name="returnGuest" value="yes">
+              <div class="yn-label">Yes, I'm returning</div>
+              <div class="yn-sub">I've hosted a retreat here before</div>
+            </div>
+            <div class="yn-card" id="yn-no" onclick="setReturn(false)">
+              <input type="radio" name="returnGuest" value="no">
+              <div class="yn-label">First time</div>
+              <div class="yn-sub">This would be my first retreat at Amansala</div>
+            </div>
+          </div>
+          <div class="conditional" id="cond-return">
+            <div class="fg" style="margin-bottom:0">
+              <label>When was your last retreat with us?</label>
+              <input type="text" id="f-previous" placeholder="e.g. January 2024, or approximate year">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-nav">
+        <span class="step-counter">1 of 3</span>
+        <button class="btn-next" onclick="goStep(2)">Continue &rarr;</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: Your Retreat -->
+    <div class="step-panel" id="step2">
+      <div class="card-inner">
+        <div class="step-num">Step 2 of 3</div>
+        <h2 class="step-title">About your retreat</h2>
+        <p class="step-sub">Tell us what you have in mind so we can check availability and prepare for you.</p>
+
+        <div class="fg">
+          <label>Retreat / Studio Name</label>
+          <input type="text" id="f-retreat-name" placeholder="e.g. Flow Studio Tulum Retreat">
+        </div>
+
+        <div class="fg" id="fg-type">
+          <label>Type of Retreat <span class="req">*</span></label>
+          <div class="type-grid">
+            <div class="type-card" onclick="setType('Yoga')"><input type="radio" name="retreatType" value="Yoga"><span class="type-icon">🧘</span><div class="type-label">Yoga</div></div>
+            <div class="type-card" onclick="setType('Pilates')"><input type="radio" name="retreatType" value="Pilates"><span class="type-icon">🤸</span><div class="type-label">Pilates</div></div>
+            <div class="type-card" onclick="setType('Meditation')"><input type="radio" name="retreatType" value="Meditation"><span class="type-icon">🪬</span><div class="type-label">Meditation</div></div>
+            <div class="type-card" onclick="setType('Wellness &amp; Spa')"><input type="radio" name="retreatType" value="Wellness & Spa"><span class="type-icon">🌸</span><div class="type-label">Wellness &amp; Spa</div></div>
+            <div class="type-card" onclick="setType('Fitness')"><input type="radio" name="retreatType" value="Fitness"><span class="type-icon">💪</span><div class="type-label">Fitness</div></div>
+            <div class="type-card" onclick="setType('Other')"><input type="radio" name="retreatType" value="Other"><span class="type-icon">🌀</span><div class="type-label">Other</div></div>
+          </div>
+          <div class="conditional" id="cond-type">
+            <div class="fg" style="margin-bottom:0">
+              <label>Please describe</label>
+              <input type="text" id="f-type-other" placeholder="e.g. Sound healing, dance, surf…">
+            </div>
+          </div>
+          <div class="field-error" id="err-type" style="display:none">Please select a retreat type.</div>
+        </div>
+
+        <div class="fg">
+          <label>Preferred Dates</label>
+          <div class="f2">
+            <div>
+              <input type="date" id="f-start" onchange="onStartDate()">
+              <div style="font-size:.68rem;color:#9ca3af;margin-top:5px">Arrival</div>
+            </div>
+            <div>
+              <input type="date" id="f-end">
+              <div style="font-size:.68rem;color:#9ca3af;margin-top:5px">Departure</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="fg">
+          <label>Are your dates flexible?</label>
+          <div class="flex-row">
+            <label class="flex-opt" id="flex-yes" onclick="setFlex(true)">
+              <input type="radio" name="flexible" value="yes"> Yes, flexible
+            </label>
+            <label class="flex-opt" id="flex-no" onclick="setFlex(false)">
+              <input type="radio" name="flexible" value="no"> No, fixed dates
+            </label>
+          </div>
+        </div>
+
+        <div class="fg">
+          <label>Approximate Group Size</label>
+          <div class="pax-wrap">
+            <button type="button" class="pax-btn" onclick="paxChange(-1)">−</button>
+            <span class="pax-val" id="pax-val">10</span>
+            <button type="button" class="pax-btn" onclick="paxChange(1)">+</button>
+            <input type="number" class="pax-input" id="f-pax" value="10" min="1" max="300" oninput="paxSync()">
+          </div>
+        </div>
+
+      </div>
+      <div class="card-nav">
+        <button class="btn-back" onclick="goStep(1)">&larr; Back</button>
+        <span class="step-counter">2 of 3</span>
+        <button class="btn-next" onclick="goStep(3)">Continue &rarr;</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Notes -->
+    <div class="step-panel" id="step3">
+      <div class="card-inner">
+        <div class="step-num">Step 3 of 3</div>
+        <h2 class="step-title">Anything else to share?</h2>
+        <p class="step-sub">Let us know about any special requirements, vision for the retreat, or anything that will help us prepare for you.</p>
+
+        <div class="fg">
+          <label>Special requirements or notes</label>
+          <textarea id="f-notes" placeholder="Tell us about your vision, dietary needs, preferred shala setup, or anything else we should know…"></textarea>
+        </div>
+
+        <div class="fg">
+          <label>How did you hear about Amansala?</label>
+          <select id="f-referral">
+            <option value="">— Select —</option>
+            <option value="Previous retreat">I've attended or led a retreat here before</option>
+            <option value="Instagram">Instagram</option>
+            <option value="Google search">Google search</option>
+            <option value="Amansala website">Amansala website</option>
+            <option value="Friend / referral">Friend or colleague referral</option>
+            <option value="Travel agent">Travel agent / planner</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-nav">
+        <button class="btn-back" onclick="goStep(2)">&larr; Back</button>
+        <span class="step-counter">3 of 3</span>
+        <button class="btn-next" onclick="submitInquiry()">Submit Inquiry &rarr;</button>
+      </div>
+    </div>
+
+    <!-- THANK YOU -->
+    <div class="thankyou" id="thankyouPanel">
+      <div class="ty-icon">✓</div>
+      <div class="ty-title">Thank you!</div>
+      <p class="ty-sub">Your inquiry has been received. Our team will review your request and be in touch within 48 hours to discuss availability and next steps.</p>
+      <div class="ty-ref" id="ty-ref">—</div>
+      <div class="ty-contact" style="margin-top:16px">Questions? Email us at <a href="mailto:darlene@amansala.com">darlene@amansala.com</a></div>
+    </div>
+
+  </div><!-- /card -->
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+const _db=supabase.createClient('https://fzresosiqafiyxfgeyvk.supabase.co','sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB');
+async function pushToSupabase(newBk){
+  try{
+    const {data}=await _db.from('app_store').select('value').eq('key','bookings').single();
+    const existing=Array.isArray(data?.value)?data.value:[];
+    existing.push(newBk);
+    await _db.from('app_store').upsert({key:'bookings',value:existing,updated_at:new Date().toISOString()});
+  }catch(e){console.warn('Supabase push failed:',e);}
+}
+</script>
+<script>
+const STEPS=['step1','step2','step3'];
+const STEP_LABELS=['About You','Your Retreat','Notes'];
+let currentStep=1;
+let paxN=10;
+let returnGuest=null;
+let retreatType=null;
+let datesFlexible=null;
+
+// ── PROGRESS BAR ──
+function renderProgress(){
+  const wrap=document.getElementById('progressWrap');
+  wrap.innerHTML='';
+  STEP_LABELS.forEach((lbl,i)=>{
+    if(i>0){
+      const conn=document.createElement('div');
+      conn.className='step-connector'+(i<currentStep-1?' done':'');
+      wrap.appendChild(conn);
+    }
+    const item=document.createElement('div');item.className='step-item';
+    const circ=document.createElement('div');
+    circ.className='step-circle'+(i+1===currentStep?' active':i+1<currentStep?' done':'');
+    circ.textContent=i+1<currentStep?'✓':String(i+1);
+    const label=document.createElement('div');
+    label.className='step-label'+(i+1===currentStep?' active':'');
+    label.textContent=lbl;
+    item.appendChild(circ);item.appendChild(label);
+    wrap.appendChild(item);
+  });
+}
+
+function goStep(n){
+  if(n>currentStep){
+    // Validate current step before advancing
+    if(currentStep===1&&!validateStep1())return;
+    if(currentStep===2&&!validateStep2())return;
+  }
+  document.getElementById('step'+currentStep).classList.remove('active');
+  currentStep=n;
+  document.getElementById('step'+currentStep).classList.add('active');
+  renderProgress();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── VALIDATION ──
+function validateStep1(){
+  let ok=true;
+  const name=document.getElementById('f-name').value.trim();
+  if(!name){document.getElementById('fg-name').classList.add('has-error');ok=false;}
+  const email=document.getElementById('f-email').value.trim();
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){document.getElementById('fg-email').classList.add('has-error');ok=false;}
+  if(!ok)document.querySelector('.has-error')?.scrollIntoView({behavior:'smooth',block:'center'});
+  return ok;
+}
+function validateStep2(){
+  if(!retreatType){document.getElementById('err-type').style.display='block';document.getElementById('fg-type').scrollIntoView({behavior:'smooth',block:'center'});return false;}
+  return true;
+}
+function clearErr(id){document.getElementById(id)?.classList.remove('has-error');}
+
+// ── FIELD HANDLERS ──
+function setReturn(val){
+  returnGuest=val;
+  document.getElementById('yn-yes').classList.toggle('selected',val===true);
+  document.getElementById('yn-no').classList.toggle('selected',val===false);
+  document.getElementById('cond-return').classList.toggle('show',val===true);
+}
+function setType(val){
+  retreatType=val;
+  document.querySelectorAll('.type-card').forEach(c=>c.classList.toggle('selected',c.querySelector('input').value===val));
+  document.getElementById('cond-type').classList.toggle('show',val==='Other');
+  document.getElementById('err-type').style.display='none';
+}
+function setFlex(val){
+  datesFlexible=val;
+  document.getElementById('flex-yes').classList.toggle('selected',val===true);
+  document.getElementById('flex-no').classList.toggle('selected',val===false);
+}
+function paxChange(d){
+  paxN=Math.max(1,Math.min(300,paxN+d));
+  document.getElementById('f-pax').value=paxN;
+  document.getElementById('pax-val').textContent=paxN;
+}
+function paxSync(){
+  paxN=parseInt(document.getElementById('f-pax').value)||1;
+  document.getElementById('pax-val').textContent=paxN;
+}
+function onStartDate(){
+  const s=document.getElementById('f-start').value;
+  const eEl=document.getElementById('f-end');
+  if(!s)return;
+  eEl.min=s;
+  if(!eEl.value||eEl.value<=s){
+    const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+5);
+    eEl.value=d.toISOString().split('T')[0];
+  }
+}
+
+// ── SUBMIT ──
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function fmtDate(d){if(!d)return'';const[y,m,dy]=d.split('-');return new Date(y,m-1,dy).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+
+function submitInquiry(){
+  const name=document.getElementById('f-name').value.trim();
+  const email=document.getElementById('f-email').value.trim();
+  const phone=document.getElementById('f-phone').value.trim();
+  const retreatName=document.getElementById('f-retreat-name').value.trim();
+  const start=document.getElementById('f-start').value;
+  const end=document.getElementById('f-end').value;
+  const notes=document.getElementById('f-notes').value.trim();
+  const referral=document.getElementById('f-referral').value;
+  const typeOther=document.getElementById('f-type-other').value.trim();
+  const finalType=retreatType==='Other'&&typeOther?typeOther:retreatType;
+  const previous=document.getElementById('f-previous').value.trim();
+  paxN=parseInt(document.getElementById('f-pax').value)||paxN;
+
+  const notesStr=[
+    `Retreat type: ${finalType||'Not specified'}`,
+    returnGuest===true?`Returning leader${previous?` (last visit: ${previous})`:''}`:returnGuest===false?'First-time leader at Amansala':'',
+    datesFlexible===true?'Dates are flexible':datesFlexible===false?'Dates are fixed':'',
+    referral?`Heard about us: ${referral}`:'',
+    notes?`Notes: ${notes}`:'',
+  ].filter(Boolean).join('\n');
+
+  const chicaHint=(notesStr+' '+(retreatName||'')+' '+(finalType||'')+' '+name).toLowerCase().includes('chica');
+  const newBk={
+    id:uid(),
+    row:chicaHint?'CHICA':'RETREAT 1',
+    leaderName:name,
+    retreatName:retreatName||`${name}'s Retreat`,
+    leaderEmail:email,
+    leaderPhone:phone,
+    startDate:start,
+    endDate:end,
+    pax:paxN,
+    status:'requested',
+    source:'inquiry',
+    retreatType:finalType,
+    isReturnGuest:returnGuest===true,
+    previousVisit:previous,
+    datesFlexible:datesFlexible===true,
+    referralSource:referral,
+    notes:notesStr,
+    docLink:'',
+    roomAssignments:[],
+    blockedRooms:[],
+    submittedAt:new Date().toISOString(),
+  };
+
+  // Push to Supabase so it appears in the admin portal Venues tab
+  pushToSupabase(newBk);
+
+  // Hide all steps, show thank you
+  STEPS.forEach(s=>document.getElementById(s).classList.remove('active'));
+  document.getElementById('thankyouPanel').style.display='block';
+  const refNum='AMR-'+uid().toUpperCase().slice(0,6);
+  document.getElementById('ty-ref').textContent=`Reference: ${refNum}`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// Init
+renderProgress();
+</script>
+</body>
+</html>

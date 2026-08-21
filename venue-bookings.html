@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Venue Bookings — Amansala</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --teal:#2d6a6a;--teal-l:#3d8080;--dark:#1a2332;
+      --sb:#1e2a3a;--sb-hov:#2d3f52;
+      --text:#2c3e50;--muted:#7f8c9a;--border:#e0d8cc;
+      --label-w:200px;--day-w:36px;--row-h:56px;
+    }
+    body{font-family:'Jost',sans-serif;background:#f0ece4;color:var(--text);display:flex;min-height:100vh;overflow:hidden;}
+
+    /* Sidebar */
+    .sidebar{width:220px;min-width:220px;background:var(--sb);display:flex;flex-direction:column;z-index:100;}
+    .sb-logo{padding:28px 24px 20px;border-bottom:1px solid rgba(255,255,255,.08);}
+    .sb-logo .brand{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:#fff;letter-spacing:.5px;}
+    .sb-logo .sub{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;}
+    .sb-nav{flex:1;padding:16px 0;}
+    .nav-lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.3);padding:12px 24px 6px;}
+    .sb-nav a{display:flex;align-items:center;gap:10px;padding:10px 24px;color:rgba(255,255,255,.65);text-decoration:none;font-size:13.5px;border-left:3px solid transparent;transition:all .15s;}
+    .sb-nav a:hover{background:var(--sb-hov);color:#fff;}
+    .sb-nav a.active{background:rgba(45,106,106,.25);color:#fff;border-left-color:var(--teal-l);}
+    .sb-nav svg{width:16px;height:16px;flex-shrink:0;opacity:.8;}
+    .sb-user{padding:16px 20px;border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px;}
+    .sb-av{width:34px;height:34px;border-radius:50%;background:var(--teal);color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;}
+    .sb-uname{font-size:13px;color:#fff;font-weight:500;}
+    .sb-urole{font-size:11px;color:rgba(255,255,255,.4);}
+
+    /* Main */
+    .main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+    .topbar{background:#fff;border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+    .topbar h1{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:var(--dark);}
+    .topbar-actions{display:flex;align-items:center;gap:10px;}
+
+    .year-nav{display:flex;align-items:center;gap:8px;background:#f7f4ef;border:1px solid var(--border);border-radius:8px;padding:6px 12px;}
+    .year-nav button{background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;padding:0 4px;line-height:1;transition:color .15s;}
+    .year-nav button:hover{color:var(--teal);}
+    .year-lbl{font-size:15px;font-weight:600;color:var(--dark);min-width:44px;text-align:center;}
+
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:8px;font-family:'Jost',sans-serif;font-size:13.5px;font-weight:500;cursor:pointer;transition:all .15s;border:none;}
+    .btn-primary{background:var(--teal);color:#fff;}
+    .btn-primary:hover{background:#235555;}
+    .btn-secondary{background:#fff;color:var(--text);border:1px solid var(--border);}
+    .btn-secondary:hover{background:#f7f4ef;}
+    .btn-danger{background:#fff0f0;color:#c0392b;border:1px solid #f5c6c6;}
+    .btn-danger:hover{background:#fee2e2;}
+    .btn-sm{padding:6px 12px;font-size:12.5px;}
+
+    /* Legend */
+    .legend-bar{background:#fff;border-bottom:1px solid var(--border);padding:8px 28px;display:flex;align-items:center;gap:16px;flex-shrink:0;flex-wrap:wrap;}
+    .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+    .legend-sw{width:28px;height:14px;border-radius:3px;border:2px solid;}
+
+    /* Gantt */
+    .gantt-wrap{flex:1;overflow:auto;position:relative;}
+    .gantt-inner{position:relative;min-width:max-content;}
+
+    .gantt-header{position:sticky;top:0;z-index:50;background:#fff;border-bottom:2px solid var(--border);}
+    .gantt-hrow{display:flex;}
+    .gantt-corner{width:var(--label-w);min-width:var(--label-w);flex-shrink:0;position:sticky;left:0;z-index:60;background:#fff;border-right:2px solid var(--border);}
+    .month-cells{display:flex;}
+    .month-cell{display:flex;align-items:center;justify-content:center;border-right:1px solid var(--border);font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--dark);height:40px;background:#f7f4ef;}
+    .day-cells{display:flex;}
+    .day-cell{width:var(--day-w);min-width:var(--day-w);height:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;color:var(--muted);border-right:1px solid #ece7df;user-select:none;}
+    .day-cell .dn{font-size:9px;color:#bbb;}
+    .day-cell.today{background:rgba(45,106,106,.1);}
+    .day-cell.today .dd{color:var(--teal);font-weight:700;}
+    .day-cell.weekend{background:#fafaf8;}
+
+    /* Rows */
+    .gantt-rows{position:relative;}
+    .gantt-row{display:flex;height:var(--row-h);border-bottom:1px solid var(--border);position:relative;}
+    .row-label{width:var(--label-w);min-width:var(--label-w);flex-shrink:0;position:sticky;left:0;z-index:20;background:#fff;border-right:2px solid var(--border);display:flex;align-items:center;padding:0 16px;}
+    .row-label span{font-size:12.5px;font-weight:700;color:var(--dark);text-transform:uppercase;letter-spacing:.5px;}
+    .row-track{flex:1;position:relative;overflow:visible;}
+
+    /* Grid lines */
+    .gl{position:absolute;top:0;bottom:0;width:1px;background:#ece7df;pointer-events:none;}
+    .gl.ms{background:#d5cfc5;width:2px;}
+
+    /* Booking blocks */
+    .bk-block{position:absolute;top:8px;height:40px;border-radius:6px;border:2px solid;padding:0 10px;display:flex;align-items:center;cursor:pointer;overflow:hidden;transition:opacity .15s,box-shadow .15s;z-index:10;white-space:nowrap;}
+    .bk-block:hover{opacity:.88;box-shadow:0 3px 10px rgba(0,0,0,.18);z-index:15;}
+    .bk-block.dashed{border-style:dashed;}
+    .bk-name{font-size:12px;font-weight:600;}
+    .bk-sub{font-size:11px;opacity:.7;margin-left:6px;}
+    .bk-pax{font-size:11px;margin-left:auto;padding-left:8px;opacity:.75;}
+
+    /* Occupancy */
+    .occ-row{display:flex;height:36px;border-top:2px solid var(--border);background:#f7f4ef;position:sticky;bottom:0;z-index:40;}
+    .occ-lbl{width:var(--label-w);min-width:var(--label-w);flex-shrink:0;position:sticky;left:0;z-index:50;background:#ede9e1;border-right:2px solid var(--border);display:flex;align-items:center;padding:0 16px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+    .occ-cells{display:flex;}
+    .occ-cell{width:var(--day-w);min-width:var(--day-w);height:36px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--muted);border-right:1px solid #ece7df;}
+    .occ-1{background:rgba(167,243,208,.35);color:#065f46;}
+    .occ-2{background:rgba(167,243,208,.6);color:#065f46;}
+    .occ-3{background:rgba(52,211,153,.45);color:#065f46;}
+    .occ-4{background:rgba(16,185,129,.5);color:#064e3b;}
+    .occ-5{background:rgba(5,150,105,.6);color:#fff;}
+
+    /* Modal */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:opacity .2s,visibility .2s;}
+    .modal-overlay.open{opacity:1;visibility:visible;}
+    .modal{background:#fff;border-radius:16px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);transform:translateY(12px);transition:transform .2s;}
+    .modal-overlay.open .modal{transform:translateY(0);}
+    .modal.wide{width:620px;}
+    .modal-hdr{padding:22px 28px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+    .modal-hdr h2{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--dark);}
+    .modal-x{background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;padding:2px 6px;line-height:1;}
+    .modal-x:hover{color:var(--dark);}
+    .modal-body{padding:22px 28px;}
+    .modal-foot{padding:14px 28px 22px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);}
+    .modal-foot .l,.modal-foot .r{display:flex;gap:8px;}
+
+    .frow{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+    .frow.full{grid-template-columns:1fr;}
+    .fg{display:flex;flex-direction:column;gap:5px;}
+    .fg label{font-size:11.5px;font-weight:600;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;}
+    .fg input,.fg select,.fg textarea{padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:14px;color:var(--text);background:#fff;outline:none;transition:border-color .15s;}
+    .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--teal);}
+    .fg textarea{resize:vertical;min-height:76px;}
+
+    /* Room list */
+    .sec-div{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin:18px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+    .rl-table{width:100%;border-collapse:collapse;margin-bottom:18px;}
+    .rl-table th{padding:9px 12px;background:#f7f4ef;font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);text-align:left;border-bottom:2px solid var(--border);}
+    .rl-table td{padding:7px 12px;border-bottom:1px solid var(--border);font-size:13.5px;color:#444;}
+    .rl-table input{width:100%;border:none;background:transparent;font-family:'Jost',sans-serif;font-size:13.5px;color:var(--text);outline:none;padding:3px 0;border-bottom:1.5px solid transparent;}
+    .rl-table input:focus{border-bottom-color:var(--teal);}
+    .copy-prev{background:#1a2332;color:#e2e8f0;border-radius:10px;padding:18px;font-family:'Courier New',monospace;font-size:12.5px;line-height:1.7;white-space:pre;overflow-x:auto;margin-bottom:14px;}
+
+    /* Tooltip */
+    .tip{position:fixed;background:#1a2332;color:#fff;padding:10px 14px;border-radius:8px;font-size:12.5px;line-height:1.5;pointer-events:none;z-index:400;opacity:0;transition:opacity .15s;max-width:240px;}
+    .tip.show{opacity:1;}
+    .tip-name{font-weight:700;font-size:13px;}
+    .tip-dates{color:rgba(255,255,255,.65);font-size:11.5px;}
+
+    /* Toast */
+    .toast{position:fixed;bottom:28px;right:28px;background:#1a2332;color:#fff;padding:11px 20px;border-radius:10px;font-size:13.5px;z-index:500;opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s;pointer-events:none;}
+    .toast.show{opacity:1;transform:translateY(0);}
+
+    /* Scrollbar */
+    .gantt-wrap::-webkit-scrollbar{width:8px;height:8px;}
+    .gantt-wrap::-webkit-scrollbar-track{background:#f0ece4;}
+    .gantt-wrap::-webkit-scrollbar-thumb{background:#c5bfb5;border-radius:4px;}
+    .gantt-wrap::-webkit-scrollbar-thumb:hover{background:#a09890;}
+  </style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sb-logo">
+    <div class="brand">Amansala</div>
+    <div class="sub">Retreat Portal</div>
+  </div>
+  <nav class="sb-nav">
+    <div class="nav-lbl">Navigation</div>
+    <a href='/retreat-portal'>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Leader Form
+    </a>
+    <a href='/retreat-admin'>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Submissions
+    </a>
+    <a class='active' href='/venue-bookings'>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Venue Bookings
+    </a>
+    <a href='/room-registrations'>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Room Registrations
+    </a>
+  </nav>
+  <div class="sb-user">
+    <div class="sb-av">A</div>
+    <div>
+      <div class="sb-uname">Admin</div>
+      <div class="sb-urole">Amansala Staff</div>
+    </div>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <h1>Venue Bookings</h1>
+    <div class="topbar-actions">
+      <div class="year-nav">
+        <button onclick="shiftYear(-1)">&#8249;</button>
+        <span class="year-lbl" id="yearLbl">2027</span>
+        <button onclick="shiftYear(1)">&#8250;</button>
+      </div>
+      <button class="btn btn-secondary" onclick="openRoomModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Room List
+      </button>
+      <button class="btn btn-primary" onclick="openAddModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Booking
+      </button>
+    </div>
+  </div>
+
+  <div class="legend-bar">
+    <span style="font-size:11.5px;font-weight:600;color:var(--muted);margin-right:2px">STATUS:</span>
+    <div class="legend-item"><div class="legend-sw" style="background:#fef3c7;border-color:#fcd34d;border-style:dashed"></div>Contract Sent</div>
+    <div class="legend-item"><div class="legend-sw" style="background:#ffedd5;border-color:#fb923c"></div>Deposit Received</div>
+    <div class="legend-item"><div class="legend-sw" style="background:#d1fae5;border-color:#34d399"></div>Signed</div>
+    <div class="legend-item"><div class="legend-sw" style="background:#a7f3d0;border-color:#10b981"></div>Confirmed</div>
+    <div class="legend-item"><div class="legend-sw" style="background:#fee2e2;border-color:#f87171;border-style:dashed"></div>Cancelled</div>
+  </div>
+
+  <div class="gantt-wrap" id="ganttWrap">
+    <div class="gantt-inner" id="ganttInner"></div>
+  </div>
+</div>
+
+<!-- Booking Modal -->
+<div class="modal-overlay" id="bkModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h2 id="modalTitle">Add Booking</h2>
+      <button class="modal-x" onclick="closeModal('bkModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="frow">
+        <div class="fg"><label>Leader / Group</label><input type="text" id="m-leader" placeholder="e.g. Megan Aaron"></div>
+        <div class="fg"><label>Retreat Name</label><input type="text" id="m-retreat" placeholder="e.g. Flow Studio"></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>Arrival Date</label><input type="date" id="m-start"></div>
+        <div class="fg"><label>Departure Date</label><input type="date" id="m-end"></div>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>Venue Row</label><select id="m-row"></select></div>
+        <div class="fg"><label>Pax (guests)</label><input type="number" id="m-pax" min="1" max="200" placeholder="0"></div>
+      </div>
+      <div class="frow full">
+        <div class="fg"><label>Status</label>
+          <select id="m-status">
+            <option value="contract_sent">Contract Sent</option>
+            <option value="deposit">Deposit Received</option>
+            <option value="signed">Signed</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow full">
+        <div class="fg"><label>Notes</label><textarea id="m-notes" placeholder="Internal notes..."></textarea></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="l"><button class="btn btn-danger btn-sm" id="delBtn" onclick="deleteBooking()" style="display:none">Delete</button></div>
+      <div class="r">
+        <button class="btn btn-secondary" onclick="closeModal('bkModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveBooking()">Save Booking</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Room List Modal -->
+<div class="modal-overlay" id="rlModal">
+  <div class="modal wide">
+    <div class="modal-hdr">
+      <h2>Room List</h2>
+      <button class="modal-x" onclick="closeModal('rlModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="sec-div">Select Retreat</div>
+      <div class="frow full">
+        <div class="fg"><label>Booking</label>
+          <select id="rl-bk" onchange="loadRooms()">
+            <option value="">— Select a booking —</option>
+          </select>
+        </div>
+      </div>
+      <div id="rlSection" style="display:none">
+        <div class="sec-div">Room Assignments</div>
+        <table class="rl-table">
+          <thead><tr><th style="width:50%">Room</th><th>Guest Name(s)</th></tr></thead>
+          <tbody id="rlBody"></tbody>
+        </table>
+        <div class="sec-div">Preview — Copy for Teacher</div>
+        <div class="copy-prev" id="copyPrev"></div>
+        <div style="display:flex;gap:10px;margin-top:4px">
+          <button class="btn btn-primary" onclick="copyList()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy for Teacher
+          </button>
+          <button class="btn btn-secondary" onclick="saveRooms()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tip" id="tip"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const STATUS = {
+  contract_sent:{ label:'Contract Sent',   bg:'#fef3c7', border:'#fcd34d', text:'#92400e', dash:true  },
+  deposit:      { label:'Deposit Received',bg:'#ffedd5', border:'#fb923c', text:'#9a3412', dash:false },
+  signed:       { label:'Signed',          bg:'#d1fae5', border:'#34d399', text:'#065f46', dash:false },
+  confirmed:    { label:'Confirmed',       bg:'#a7f3d0', border:'#10b981', text:'#064e3b', dash:false },
+  cancelled:    { label:'Cancelled',       bg:'#fee2e2', border:'#f87171', text:'#991b1b', dash:true  },
+};
+
+const DEF_ROWS  = ['RETREAT 1','RETREAT 2','RETREAT 3','RETREAT 4','AMANSALA'];
+const DEF_ROOMS = [
+  'Casa Master','Casa Shanti',
+  'Beachfront Suite 1','Beachfront Suite 2',
+  'Beachfront King 1','Beachfront King 2',
+  'Garden King 1','Garden King 2',
+  'Garden Double 1','Garden Double 2',
+  'Standard Room 1','Standard Room 2','Standard Room 3','Standard Room 4'
+];
+
+const DAY_W = 36;
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DSHORT = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+let year = new Date().getFullYear() + 1;
+let bookings = [], rows = [], rooms = [], editingId = null;
+
+function load(){
+  bookings = JSON.parse(localStorage.getItem('amansala_venue_bookings')||'[]');
+  rows     = JSON.parse(localStorage.getItem('amansala_venue_rows')||'null')||DEF_ROWS.slice();
+  rooms    = JSON.parse(localStorage.getItem('amansala_rooms')||'null')||DEF_ROOMS.slice();
+  year     = parseInt(localStorage.getItem('amansala_venue_year')||String(new Date().getFullYear()+1));
+}
+function persist(){
+  localStorage.setItem('amansala_venue_bookings',JSON.stringify(bookings));
+  localStorage.setItem('amansala_venue_rows',JSON.stringify(rows));
+  localStorage.setItem('amansala_rooms',JSON.stringify(rooms));
+  localStorage.setItem('amansala_venue_year',String(year));
+}
+
+function isLeap(y){ return (y%4===0&&y%100!==0)||y%400===0; }
+function dim(m,y){ return [31,isLeap(y)?29:28,31,30,31,30,31,31,30,31,30,31][m]; }
+function diy(y){ return isLeap(y)?366:365; }
+function pd(s){ return new Date(s+'T00:00:00'); }
+function fmtDate(s){
+  if(!s) return '';
+  const d=pd(s);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+function buildDays(){
+  const arr=[], today=new Date().toISOString().split('T')[0];
+  for(let m=0;m<12;m++){
+    const n=dim(m,year);
+    for(let d=1;d<=n;d++){
+      const dow=new Date(year,m,d).getDay();
+      const ds=`${year}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      arr.push({m,d,dow,ds,wk:dow===0||dow===6,td:ds===today});
+    }
+  }
+  return arr;
+}
+
+function buildGantt(){
+  document.getElementById('yearLbl').textContent=year;
+  const inner=document.getElementById('ganttInner');
+  inner.innerHTML='';
+  const days=buildDays();
+  const total=days.length;
+
+  // Header
+  const hdr=document.createElement('div');
+  hdr.className='gantt-header';
+
+  // Month row
+  const mr=document.createElement('div'); mr.className='gantt-hrow';
+  const c1=document.createElement('div'); c1.className='gantt-corner'; c1.style.height='40px'; mr.appendChild(c1);
+  const mc=document.createElement('div'); mc.className='month-cells';
+  for(let m=0;m<12;m++){
+    const w=dim(m,year)*DAY_W;
+    const el=document.createElement('div');
+    el.className='month-cell';
+    el.style.cssText=`width:${w}px;min-width:${w}px`;
+    el.textContent=MONTHS[m];
+    mc.appendChild(el);
+  }
+  mr.appendChild(mc); hdr.appendChild(mr);
+
+  // Day row
+  const dr=document.createElement('div'); dr.className='gantt-hrow';
+  const c2=document.createElement('div'); c2.className='gantt-corner'; c2.style.height='40px'; dr.appendChild(c2);
+  const dc=document.createElement('div'); dc.className='day-cells';
+  days.forEach(day=>{
+    const el=document.createElement('div');
+    el.className='day-cell'+(day.td?' today':'')+(day.wk?' weekend':'');
+    el.innerHTML=`<span class="dd">${day.d}</span><span class="dn">${DSHORT[day.dow]}</span>`;
+    dc.appendChild(el);
+  });
+  dr.appendChild(dc); hdr.appendChild(dr);
+  inner.appendChild(hdr);
+
+  // Rows
+  const rc=document.createElement('div'); rc.className='gantt-rows';
+  rows.forEach(rowName=>{
+    const row=document.createElement('div'); row.className='gantt-row';
+    const lbl=document.createElement('div'); lbl.className='row-label';
+    lbl.innerHTML=`<span>${rowName}</span>`; row.appendChild(lbl);
+
+    const track=document.createElement('div');
+    track.className='row-track';
+    track.style.cssText=`width:${total*DAY_W}px;min-width:${total*DAY_W}px`;
+
+    // Grid lines
+    days.forEach((day,i)=>{
+      if(day.d===1){
+        const gl=document.createElement('div'); gl.className='gl ms'; gl.style.left=`${i*DAY_W}px`; track.appendChild(gl);
+      }
+    });
+
+    // Today line
+    if(new Date().getFullYear()===year){
+      const ti=days.findIndex(d=>d.td);
+      if(ti>=0){
+        const tl=document.createElement('div');
+        tl.style.cssText=`position:absolute;top:0;bottom:0;left:${ti*DAY_W+DAY_W/2}px;width:2px;background:rgba(45,106,106,.55);z-index:5;pointer-events:none;`;
+        track.appendChild(tl);
+      }
+    }
+
+    // Bookings
+    bookings.filter(b=>b.row===rowName).forEach(bk=>{
+      const sd=pd(bk.startDate), ed=pd(bk.endDate);
+      if(sd.getFullYear()>year||ed.getFullYear()<year) return;
+      const soy=new Date(year,0,1), eoy=new Date(year,11,31);
+      const cs=new Date(Math.max(sd,soy)), ce=new Date(Math.min(ed,eoy));
+      const li=Math.floor((cs-soy)/86400000);
+      const wi=Math.floor((ce-cs)/86400000)+1;
+      if(wi<=0) return;
+
+      const st=STATUS[bk.status]||STATUS.confirmed;
+      const bl=document.createElement('div');
+      bl.className='bk-block'+(st.dash?' dashed':'');
+      bl.style.cssText=`left:${li*DAY_W+2}px;width:${wi*DAY_W-4}px;background:${st.bg};border-color:${st.border};color:${st.text};`;
+      bl.innerHTML=`<span class="bk-name">${bk.leaderName||bk.retreatName}</span>`
+        +(bk.retreatName&&bk.leaderName?`<span class="bk-sub">${bk.retreatName}</span>`:'')
+        +(bk.pax?`<span class="bk-pax">${bk.pax} pax</span>`:'');
+
+      bl.addEventListener('click',()=>openEditModal(bk.id));
+      bl.addEventListener('mouseenter',e=>showTip(e,bk));
+      bl.addEventListener('mousemove',moveTip);
+      bl.addEventListener('mouseleave',hideTip);
+      track.appendChild(bl);
+    });
+
+    row.appendChild(track); rc.appendChild(row);
+  });
+  inner.appendChild(rc);
+
+  // Occupancy row
+  const occ=document.createElement('div'); occ.className='occ-row';
+  const ol=document.createElement('div'); ol.className='occ-lbl'; ol.textContent='Occupancy'; occ.appendChild(ol);
+  const occMap=new Array(total).fill(0);
+  bookings.forEach(bk=>{
+    if(bk.status==='cancelled') return;
+    const soy=new Date(year,0,1), eoy=new Date(year,11,31);
+    const cs=new Date(Math.max(pd(bk.startDate),soy));
+    const ce=new Date(Math.min(pd(bk.endDate),eoy));
+    const si=Math.floor((cs-soy)/86400000);
+    const ei=Math.floor((ce-soy)/86400000);
+    for(let i=Math.max(0,si);i<=Math.min(total-1,ei);i++) occMap[i]++;
+  });
+  const ocells=document.createElement('div'); ocells.className='occ-cells';
+  occMap.forEach(n=>{
+    const oc=document.createElement('div');
+    oc.className='occ-cell'+(n===1?' occ-1':n===2?' occ-2':n===3?' occ-3':n===4?' occ-4':n>=5?' occ-5':'');
+    oc.textContent=n>0?n:'';
+    ocells.appendChild(oc);
+  });
+  occ.appendChild(ocells); inner.appendChild(occ);
+
+  // Scroll to today
+  if(new Date().getFullYear()===year){
+    const ti=days.findIndex(d=>d.td);
+    if(ti>3) setTimeout(()=>{document.getElementById('ganttWrap').scrollLeft=(ti-3)*DAY_W;},60);
+  }
+}
+
+function shiftYear(d){ year+=d; persist(); buildGantt(); }
+
+// Tooltip
+const tip=document.getElementById('tip');
+function showTip(e,bk){
+  const st=STATUS[bk.status]||STATUS.confirmed;
+  tip.innerHTML=`<div class="tip-name">${bk.leaderName}${bk.retreatName?` — ${bk.retreatName}`:''}</div>`
+    +`<div class="tip-dates">${fmtDate(bk.startDate)} → ${fmtDate(bk.endDate)}</div>`
+    +(bk.pax?`<div class="tip-dates">${bk.pax} guests</div>`:'')
+    +`<div style="font-size:11px;font-weight:600;color:${st.border};margin-top:4px">${st.label}</div>`
+    +(bk.notes?`<div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:3px">${bk.notes}</div>`:'');
+  tip.classList.add('show'); moveTip(e);
+}
+function moveTip(e){
+  let x=e.clientX+14, y=e.clientY-10;
+  if(x+260>window.innerWidth) x=e.clientX-260;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+function hideTip(){ tip.classList.remove('show'); }
+
+// Booking modal
+function openAddModal(){
+  editingId=null;
+  document.getElementById('modalTitle').textContent='Add Booking';
+  document.getElementById('delBtn').style.display='none';
+  document.getElementById('m-leader').value='';
+  document.getElementById('m-retreat').value='';
+  document.getElementById('m-start').value=`${year}-01-01`;
+  document.getElementById('m-end').value=`${year}-01-07`;
+  document.getElementById('m-pax').value='';
+  document.getElementById('m-status').value='confirmed';
+  document.getElementById('m-notes').value='';
+  fillRowSel(); openModal('bkModal');
+}
+function openEditModal(id){
+  const bk=bookings.find(b=>b.id===id); if(!bk) return;
+  editingId=id;
+  document.getElementById('modalTitle').textContent='Edit Booking';
+  document.getElementById('delBtn').style.display='inline-flex';
+  document.getElementById('m-leader').value=bk.leaderName||'';
+  document.getElementById('m-retreat').value=bk.retreatName||'';
+  document.getElementById('m-start').value=bk.startDate||'';
+  document.getElementById('m-end').value=bk.endDate||'';
+  document.getElementById('m-pax').value=bk.pax||'';
+  document.getElementById('m-status').value=bk.status||'confirmed';
+  document.getElementById('m-notes').value=bk.notes||'';
+  fillRowSel(bk.row); openModal('bkModal');
+}
+function fillRowSel(sel){
+  document.getElementById('m-row').innerHTML=rows.map(r=>`<option value="${r}"${r===sel?' selected':''}>${r}</option>`).join('');
+}
+function saveBooking(){
+  const leader=document.getElementById('m-leader').value.trim();
+  const retreat=document.getElementById('m-retreat').value.trim();
+  const start=document.getElementById('m-start').value;
+  const end=document.getElementById('m-end').value;
+  const row=document.getElementById('m-row').value;
+  const pax=parseInt(document.getElementById('m-pax').value)||0;
+  const status=document.getElementById('m-status').value;
+  const notes=document.getElementById('m-notes').value.trim();
+  if(!leader&&!retreat){ alert('Enter a leader or retreat name.'); return; }
+  if(!start||!end){ alert('Select arrival and departure dates.'); return; }
+  if(start>end){ alert('Departure must be after arrival.'); return; }
+  if(editingId){
+    const bk=bookings.find(b=>b.id===editingId);
+    Object.assign(bk,{leaderName:leader,retreatName:retreat,startDate:start,endDate:end,row,pax,status,notes});
+  } else {
+    bookings.push({id:'bk_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+      leaderName:leader,retreatName:retreat,startDate:start,endDate:end,row,pax,status,notes,roomAssignments:[]});
+  }
+  persist(); closeModal('bkModal'); buildGantt();
+  showToast(editingId?'Booking updated.':'Booking added.');
+}
+function deleteBooking(){
+  if(!editingId||!confirm('Delete this booking?')) return;
+  bookings=bookings.filter(b=>b.id!==editingId);
+  persist(); closeModal('bkModal'); buildGantt(); showToast('Booking deleted.');
+}
+
+// Room list modal
+function openRoomModal(){
+  const sel=document.getElementById('rl-bk');
+  sel.innerHTML='<option value="">— Select a booking —</option>';
+  [...bookings].filter(b=>b.status!=='cancelled')
+    .sort((a,b)=>a.startDate.localeCompare(b.startDate))
+    .forEach(bk=>{
+      const o=document.createElement('option');
+      o.value=bk.id;
+      o.textContent=`${bk.leaderName||bk.retreatName} · ${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}`;
+      sel.appendChild(o);
+    });
+  document.getElementById('rlSection').style.display='none';
+  openModal('rlModal');
+}
+function loadRooms(){
+  const id=document.getElementById('rl-bk').value;
+  if(!id){ document.getElementById('rlSection').style.display='none'; return; }
+  const bk=bookings.find(b=>b.id===id); if(!bk) return;
+  if(!bk.roomAssignments) bk.roomAssignments=[];
+  const tbody=document.getElementById('rlBody');
+  tbody.innerHTML='';
+  rooms.forEach(room=>{
+    const a=bk.roomAssignments.find(x=>x.room===room);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${room}</td><td><input type="text" placeholder="Guest name(s)" value="${a?a.guest:''}" data-room="${escHtml(room)}"></td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('rlSection').style.display='block';
+  refreshPreview(bk);
+  tbody.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>refreshPreview(bk,true)));
+}
+function getCurAssign(){
+  return [...document.querySelectorAll('#rlBody input')]
+    .filter(i=>i.value.trim())
+    .map(i=>({room:i.dataset.room,guest:i.value.trim()}));
+}
+function refreshPreview(bk,fromInputs){
+  const id=document.getElementById('rl-bk').value;
+  const booking=bookings.find(b=>b.id===id)||bk;
+  const assigns=fromInputs?getCurAssign():(bk.roomAssignments||[]);
+  const filled=assigns.filter(a=>a.guest);
+  let t=`ROOM LIST — ${(booking.leaderName||booking.retreatName).toUpperCase()}\n`;
+  t+=`${fmtDate(booking.startDate)} – ${fmtDate(booking.endDate)}\n`;
+  if(booking.pax) t+=`${booking.pax} Guests\n`;
+  t+=`${'─'.repeat(38)}\n\n`;
+  if(!filled.length){ t+='No room assignments yet.'; }
+  else { filled.forEach(a=>{ t+=`${a.room.padEnd(26)}${a.guest}\n`; }); }
+  document.getElementById('copyPrev').textContent=t;
+}
+function saveRooms(){
+  const id=document.getElementById('rl-bk').value; if(!id) return;
+  const bk=bookings.find(b=>b.id===id); if(!bk) return;
+  bk.roomAssignments=getCurAssign();
+  persist(); showToast('Room assignments saved.');
+}
+function copyList(){
+  const text=document.getElementById('copyPrev').textContent;
+  navigator.clipboard.writeText(text).then(()=>showToast('Copied to clipboard!')).catch(()=>{
+    const ta=document.createElement('textarea');
+    ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); showToast('Copied to clipboard!');
+  });
+}
+
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m=>{
+  m.addEventListener('click',e=>{ if(e.target===m) closeModal(m.id); });
+});
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// Seed demo data
+function seedDemo(){
+  if(bookings.length>0) return;
+  const y=year;
+  const demos=[
+    {row:'RETREAT 1',leaderName:'Megan Aaron',   retreatName:'Flow Studio',     startDate:`${y}-01-21`,endDate:`${y}-01-28`,pax:14,status:'confirmed'},
+    {row:'RETREAT 2',leaderName:'Sarah Jennings',retreatName:'Surf & Soul',     startDate:`${y}-01-14`,endDate:`${y}-01-21`,pax:10,status:'signed'},
+    {row:'RETREAT 3',leaderName:'Michael Torres',retreatName:'Breathwork Week', startDate:`${y}-02-01`,endDate:`${y}-02-08`,pax:8, status:'deposit'},
+    {row:'RETREAT 1',leaderName:'Kate Fowler',   retreatName:'Yoga & Restore',  startDate:`${y}-02-18`,endDate:`${y}-02-25`,pax:16,status:'confirmed'},
+    {row:'AMANSALA', leaderName:'Amansala',      retreatName:'Staff Retreat',   startDate:`${y}-03-05`,endDate:`${y}-03-10`,pax:0, status:'confirmed'},
+    {row:'RETREAT 2',leaderName:'Lisa Park',     retreatName:'Mind Body Reset', startDate:`${y}-03-15`,endDate:`${y}-03-22`,pax:12,status:'contract_sent'},
+    {row:'RETREAT 4',leaderName:'James Wu',      retreatName:'Detox & Cleanse', startDate:`${y}-04-05`,endDate:`${y}-04-12`,pax:9, status:'signed'},
+    {row:'RETREAT 1',leaderName:'Anna López',    retreatName:'Slow Flow',       startDate:`${y}-04-19`,endDate:`${y}-04-26`,pax:15,status:'confirmed'},
+    {row:'RETREAT 3',leaderName:'Demo Group',    retreatName:'Cancelled Event', startDate:`${y}-05-01`,endDate:`${y}-05-07`,pax:0, status:'cancelled'},
+  ];
+  bookings=demos.map(d=>({...d,id:'bk_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),notes:'',roomAssignments:[]}));
+  persist();
+}
+
+load();
+seedDemo();
+buildGantt();
+</script>
+</body>
+</html>

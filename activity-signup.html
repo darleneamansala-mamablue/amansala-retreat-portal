@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Activity Sign-Up · Amansala</title>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Jost',sans-serif;background:#f7f4ef;color:#2d3a3a;min-height:100vh}
+.header{background:#2d6a6a;padding:18px 20px;display:flex;align-items:center;gap:12px}
+.header-logo{color:#fff;font-size:18px;font-weight:700;letter-spacing:.5px}
+.header-sub{color:rgba(255,255,255,.65);font-size:12px;margin-top:2px}
+.wrap{max-width:540px;margin:0 auto;padding:24px 16px 60px}
+.retreat-card{background:#fff;border-radius:14px;padding:18px 20px;margin-bottom:20px;border:1px solid #e8dfd4}
+.retreat-name{font-size:17px;font-weight:700;color:#2d3a3a}
+.retreat-dates{font-size:13px;color:#8a7e74;margin-top:3px}
+.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#8a7e74;margin-bottom:10px}
+.act-card{background:#fff;border-radius:12px;border:1px solid #e8dfd4;padding:14px 16px;margin-bottom:8px}
+.act-card.selectable{cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.act-card.selectable:hover{border-color:#2d6a6a;box-shadow:0 2px 8px rgba(45,106,106,.1)}
+.act-card.selected{border-color:#2d6a6a;background:#f0f9f9;box-shadow:0 2px 8px rgba(45,106,106,.12)}
+.act-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.act-name{font-size:14px;font-weight:600;color:#2d3a3a}
+.act-date{font-size:12px;color:#8a7e74;margin-top:2px}
+.act-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+.badge-prepaid{background:#d1fae5;color:#065f46}
+.badge-price{background:#fef3c7;color:#92400e}
+.act-check{width:20px;height:20px;border-radius:6px;border:2px solid #d1cfc8;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.act-check.on{background:#2d6a6a;border-color:#2d6a6a;color:#fff}
+.form-card{background:#fff;border-radius:14px;border:1px solid #e8dfd4;padding:20px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.form-group{margin-bottom:14px}
+.form-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;display:block;margin-bottom:5px}
+.form-input{width:100%;padding:10px 12px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:14px;color:#2d3a3a;outline:none;transition:border-color .15s}
+.form-input:focus{border-color:#2d6a6a}
+.btn-submit{width:100%;padding:14px;background:#2d6a6a;color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:background .15s;margin-top:4px}
+.btn-submit:hover{background:#245858}
+.btn-submit:disabled{background:#9ca3af;cursor:not-allowed}
+.section-gap{margin-bottom:20px}
+.msg{text-align:center;padding:60px 20px}
+.msg-icon{font-size:48px;margin-bottom:12px}
+.msg-title{font-size:20px;font-weight:700;color:#2d3a3a;margin-bottom:8px}
+.msg-sub{font-size:14px;color:#8a7e74;line-height:1.6}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a2332;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+.already-signed{background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#166534}
+.already-signed b{font-weight:700}
+.no-acts{color:#9ca3af;font-size:13px;font-style:italic;padding:10px 0}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-logo">Amansala</div>
+    <div class="header-sub">Activity Sign-Up</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="mainContent">
+    <div class="msg"><div class="msg-icon">⏳</div><div class="msg-title">Loading…</div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPA_URL='https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPA_KEY='sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
+const db=supabase.createClient(SUPA_URL,SUPA_KEY);
+
+const ADD_ONS=[
+  {id:'ao1', name:'Tulum Ruins',                   desc:'Archaeological tour of ancient Maya ruins',                  price:85},
+  {id:'ao6', name:'Grande Cenote',                  desc:'Snorkeling and swimming in a stunning cenote',               price:85},
+  {id:'ao7', name:'Mangroves',                      desc:'Scenic boat tour through the mangrove jungle',               price:85},
+  {id:'ao2', name:'Muyil Float Tour',               desc:'Lazy river float through ancient Maya canals',               price:145},
+  {id:'ao3', name:'Atik Cenote',                    desc:'Sacred cenote experience',                                   price:95},
+  {id:'ao4', name:'Sound Healing & Cacao Ceremony', desc:'Traditional heart-opening ceremony with live sound healing', price:65},
+  {id:'ao5', name:'Temazcal',                       desc:'Traditional Maya sweat lodge ceremony',                      price:85},
+  {id:'ao9', name:'Mayan Clay Ceremony',            desc:'Natural clay body treatment on the beach',                   price:65},
+  {id:'ao10',name:'Ice Bath & Breathwork',          desc:'Cold plunge ice bath with guided breathwork session',        price:45},
+  {id:'ao8', name:'Massage (60 min)',               desc:'Relaxation or deep tissue massage',                         price:95},
+  {id:'ao11',name:'Offsite Dinner Onsite',          desc:'Onsite dinner option on the offsite dinner evening',         price:40},
+  {id:'ao13',name:'Gitano Dinner',                  desc:'Offsite dinner at Gitano Tulum',                            price:101.25},
+  {id:'ao14',name:'Cooking Class',                  desc:'Hands-on cooking demonstration',                            price:0},
+  {id:'ao12',name:'Group Salsa Class',              desc:'Group salsa dance class',                                   price:0},
+];
+const ACTS_MAP={};ADD_ONS.forEach(a=>ACTS_MAP[a.id]=a);
+
+const params=new URLSearchParams(location.search);
+const bkId=params.get('id')||'';
+
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
+
+function fmtDate(ds){if(!ds)return'';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});}
+function fmtDateShort(ds){if(!ds)return'TBD';const d=new Date(ds+'T12:00:00');const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return M[d.getMonth()]+' '+d.getDate();}
+function fmtTime(t){if(!t)return'';const[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';return(h%12||12)+':'+String(m).padStart(2,'0')+' '+ap;}
+
+let bk=null, selectedIds=new Set(), existingSignup=null;
+
+async function init(){
+  const el=document.getElementById('mainContent');
+  if(!bkId){el.innerHTML=`<div class="msg"><div class="msg-icon">❌</div><div class="msg-title">Invalid Link</div><div class="msg-sub">This link is missing a retreat ID. Please ask your retreat leader for the correct sign-up link.</div></div>`;return;}
+  try{
+    const {data,error}=await db.from('app_store').select('value').eq('key','bookings').single();
+    if(error||!data){throw new Error('No data');}
+    const bookings=data.value||[];
+    bk=bookings.find(b=>b.id===bkId);
+    if(!bk){el.innerHTML=`<div class="msg"><div class="msg-icon">🔍</div><div class="msg-title">Retreat Not Found</div><div class="msg-sub">We couldn't find this retreat. The link may be outdated. Please contact your retreat leader.</div></div>`;return;}
+    // Load existing signups
+    const {data:sd}=await db.from('app_store').select('value').eq('key','act_signups_'+bkId).single();
+    const signups=(sd?.value)||[];
+    existingSignup=signups.find(s=>false); // will check after name entry
+    render(signups);
+  }catch(e){
+    el.innerHTML=`<div class="msg"><div class="msg-icon">⚠️</div><div class="msg-title">Something went wrong</div><div class="msg-sub">Please try refreshing the page. If the issue persists, contact your retreat leader.</div></div>`;
+  }
+}
+
+function render(signups){
+  const el=document.getElementById('mainContent');
+  const allActs=bk.retreatActivities||[];
+  const pkgIds=new Set(bk.packages||[]);
+
+  // Prepaid: activities marked prepaid OR in packages
+  const prepaid=allActs.filter(a=>a.prepaid||pkgIds.has(a.aoId));
+  // Optional: scheduled, not prepaid, has a price > 0
+  const optional=allActs.filter(a=>!a.prepaid&&!pkgIds.has(a.aoId)&&a.aoId&&(ACTS_MAP[a.aoId]?.price||0)>0);
+
+  const seen=new Set();
+  const prepaidUniq=prepaid.filter(a=>{if(seen.has(a.aoId))return false;seen.add(a.aoId);return true;});
+  const seen2=new Set();
+  const optionalUniq=optional.filter(a=>{if(seen2.has(a.aoId))return false;seen2.add(a.aoId);return true;});
+
+  let html=`
+    <div class="retreat-card">
+      <div class="retreat-name">${bk.retreatName||bk.leaderName||'Retreat'}</div>
+      <div class="retreat-dates">${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}</div>
+    </div>`;
+
+  // Already signed up notice (shown after form submit, checks by name)
+  html+=`<div id="alreadyNotice" style="display:none" class="already-signed">✓ You're already signed up! Submit again to update your selections.</div>`;
+
+  // Prepaid activities
+  if(prepaidUniq.length){
+    html+=`<div class="section-gap">
+      <div class="section-title">Included in Your Package</div>`;
+    prepaidUniq.forEach(a=>{
+      const ao=ACTS_MAP[a.aoId]||{name:a.aoId};
+      const dateTxt=a.date?fmtDateShort(a.date)+(a.time?' · '+fmtTime(a.time):''):'';
+      html+=`<div class="act-card">
+        <div class="act-top">
+          <div><div class="act-name">${ao.name}</div>${dateTxt?`<div class="act-date">${dateTxt}</div>`:''}</div>
+          <span class="act-badge badge-prepaid">Prepaid</span>
+        </div>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+
+  // Optional activities
+  html+=`<div class="section-gap">
+    <div class="section-title">Optional Add-Ons — Select What You'd Like</div>`;
+  if(optionalUniq.length){
+    optionalUniq.forEach(a=>{
+      const ao=ACTS_MAP[a.aoId]||{name:a.aoId,price:0};
+      const dateTxt=a.date?fmtDateShort(a.date)+(a.time?' · '+fmtTime(a.time):''):'';
+      html+=`<div class="act-card selectable" id="act-${a.aoId}" onclick="toggleAct('${a.aoId}')">
+        <div class="act-top">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <div class="act-check" id="chk-${a.aoId}"></div>
+            <div>
+              <div class="act-name">${ao.name}</div>
+              ${dateTxt?`<div class="act-date">${dateTxt}</div>`:''}
+            </div>
+          </div>
+          <span class="act-badge badge-price">$${ao.price}/person</span>
+        </div>
+      </div>`;
+    });
+  }else{
+    html+=`<div class="no-acts">No optional activities have been scheduled yet. Check back closer to your retreat date.</div>`;
+  }
+  html+=`</div>`;
+
+  // Guest form
+  html+=`<div class="form-card">
+    <div class="section-title" style="margin-bottom:14px">Your Information</div>
+    <div class="form-row">
+      <div><label class="form-label">First Name *</label><input class="form-input" id="suFirst" type="text" placeholder="Sarah" autocomplete="given-name"></div>
+      <div><label class="form-label">Last Name *</label><input class="form-input" id="suLast" type="text" placeholder="Anderson" autocomplete="family-name"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Room Number <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9ca3af">(optional)</span></label>
+      <input class="form-input" id="suRoom" type="text" placeholder="e.g. GV3" autocomplete="off">
+    </div>
+    <button class="btn-submit" id="submitBtn" onclick="submitSignup()">Submit Sign-Up</button>
+  </div>`;
+
+  el.innerHTML=html;
+}
+
+function toggleAct(aoId){
+  if(selectedIds.has(aoId)){
+    selectedIds.delete(aoId);
+    document.getElementById('act-'+aoId)?.classList.remove('selected');
+    document.getElementById('chk-'+aoId)?.classList.remove('on');
+    document.getElementById('chk-'+aoId).innerHTML='';
+  }else{
+    selectedIds.add(aoId);
+    document.getElementById('act-'+aoId)?.classList.add('selected');
+    const chk=document.getElementById('chk-'+aoId);
+    if(chk){chk.classList.add('on');chk.innerHTML='<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';}
+  }
+}
+
+async function submitSignup(){
+  const first=(document.getElementById('suFirst')?.value||'').trim();
+  const last=(document.getElementById('suLast')?.value||'').trim();
+  const room=(document.getElementById('suRoom')?.value||'').trim();
+  if(!first||!last){showToast('Please enter your first and last name.');return;}
+  if(!selectedIds.size){showToast('Please select at least one activity.');return;}
+  const btn=document.getElementById('submitBtn');
+  btn.disabled=true;btn.textContent='Saving…';
+  try{
+    const {data:sd}=await db.from('app_store').select('value').eq('key','act_signups_'+bkId).single();
+    let signups=(sd?.value)||[];
+    const isMine=s=>s.firstName?.toLowerCase()===first.toLowerCase()&&s.lastName?.toLowerCase()===last.toLowerCase();
+    const hadPrev=signups.some(isMine);
+    signups=signups.filter(s=>!isMine(s));
+    signups.push({id:'su_'+Date.now(),bookingId:bkId,firstName:first,lastName:last,roomNumber:room,activities:[...selectedIds],submittedAt:new Date().toISOString()});
+    await db.from('app_store').upsert({key:'act_signups_'+bkId,value:signups,updated_at:new Date().toISOString()});
+    // Show success
+    const el=document.getElementById('mainContent');
+    const actNames=[...selectedIds].map(id=>ACTS_MAP[id]?.name||id);
+    el.innerHTML=`<div class="msg">
+      <div class="msg-icon">🎉</div>
+      <div class="msg-title">${hadPrev?'Sign-Up Updated!':'You\'re Signed Up!'}</div>
+      <div class="msg-sub" style="margin-bottom:20px">Thanks, <b>${first}</b>! We've recorded your selections for:<br><br>
+        ${actNames.map(n=>`<b>· ${n}</b>`).join('<br>')}
+      </div>
+      <div style="font-size:12.5px;color:#9ca3af">Questions? Contact your retreat leader.</div>
+    </div>`;
+  }catch(e){
+    showToast('Error saving. Please try again.');
+    btn.disabled=false;btn.textContent='Submit Sign-Up';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

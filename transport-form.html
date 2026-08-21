@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transportation Info — Amansala</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --teal: #2d6a6a;
+      --teal-l: #3d8080;
+      --teal-pale: #e8f2f2;
+      --dark: #1a2332;
+      --text: #2c3e50;
+      --label: #3d3530;
+      --muted: #7f8c9a;
+      --border: #d4c8bc;
+      --bg: #f5f0eb;
+      --card: #ffffff;
+      --sand: #f7f4ef;
+      --err: #c0392b;
+    }
+
+    html, body {
+      min-height: 100%;
+    }
+
+    body {
+      font-family: 'Jost', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 48px 20px 80px;
+    }
+
+    /* ── Page header ── */
+    .page-header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .brand-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--teal);
+      margin-bottom: 10px;
+    }
+
+    .page-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 42px;
+      font-weight: 400;
+      color: var(--dark);
+      line-height: 1.1;
+      margin-bottom: 10px;
+    }
+
+    .page-subtitle {
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 300;
+      max-width: 480px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 40px 44px;
+      max-width: 700px;
+      margin: 0 auto;
+      box-shadow: 0 4px 32px rgba(45, 58, 50, 0.08);
+    }
+
+    /* ── Section headings ── */
+    .section-heading {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      font-weight: 400;
+      color: var(--dark);
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #ece5dc;
+    }
+
+    /* ── Form sections ── */
+    .form-section {
+      margin-bottom: 36px;
+    }
+
+    .form-section:last-of-type {
+      margin-bottom: 28px;
+    }
+
+    /* ── Field grid ── */
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .field-row.single {
+      grid-template-columns: 1fr;
+    }
+
+    .field-row.triple {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    /* ── Field ── */
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--label);
+      letter-spacing: 0.3px;
+    }
+
+    label .req {
+      color: var(--teal);
+      margin-left: 2px;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="date"],
+    input[type="time"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: 'Jost', sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      background: #fff;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    input[type="date"]:focus,
+    input[type="time"]:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px rgba(45, 106, 106, 0.1);
+    }
+
+    input[type="text"]::placeholder,
+    input[type="email"]::placeholder,
+    textarea::placeholder {
+      color: #b8afa6;
+      font-weight: 300;
+    }
+
+    input[readonly] {
+      background: var(--sand);
+      color: var(--muted);
+      cursor: default;
+    }
+
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237f8c9a' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 96px;
+      line-height: 1.6;
+    }
+
+    /* ── Radio group ── */
+    .radio-group {
+      display: flex;
+      gap: 14px;
+      padding-top: 2px;
+      flex-wrap: wrap;
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 9px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      transition: border-color 0.15s, background 0.15s;
+      font-size: 14px;
+      color: var(--text);
+      user-select: none;
+    }
+
+    .radio-option:hover {
+      border-color: var(--teal-l);
+      background: var(--teal-pale);
+    }
+
+    .radio-option input[type="radio"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--teal);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .radio-option.selected {
+      border-color: var(--teal);
+      background: var(--teal-pale);
+    }
+
+    /* ── Validation state ── */
+    .field.invalid input,
+    .field.invalid select,
+    .field.invalid textarea {
+      border-color: var(--err);
+      box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.08);
+    }
+
+    .field-err {
+      font-size: 12px;
+      color: var(--err);
+      margin-top: 2px;
+      display: none;
+    }
+
+    .field.invalid .field-err {
+      display: block;
+    }
+
+    .radio-err {
+      font-size: 12px;
+      color: var(--err);
+      margin-top: 4px;
+      display: none;
+    }
+
+    .radio-err.show {
+      display: block;
+    }
+
+    /* ── Submit button ── */
+    .submit-btn {
+      width: 100%;
+      padding: 14px 20px;
+      background: var(--teal);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-family: 'Jost', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      margin-top: 8px;
+    }
+
+    .submit-btn:hover {
+      background: #235555;
+    }
+
+    .submit-btn:active {
+      transform: scale(0.99);
+    }
+
+    /* ── Divider ── */
+    .section-divider {
+      height: 1px;
+      background: #ece5dc;
+      margin: 32px 0;
+    }
+
+    /* ── Success screen ── */
+    .success-screen {
+      display: none;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .success-card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 56px 44px;
+      text-align: center;
+      box-shadow: 0 4px 32px rgba(45, 58, 50, 0.08);
+    }
+
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      background: var(--teal-pale);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+    }
+
+    .success-icon svg {
+      width: 30px;
+      height: 30px;
+      color: var(--teal);
+    }
+
+    .success-brand {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--teal);
+      margin-bottom: 14px;
+    }
+
+    .success-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 36px;
+      font-weight: 400;
+      color: var(--dark);
+      margin-bottom: 16px;
+      line-height: 1.2;
+    }
+
+    .success-body {
+      font-size: 15px;
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 420px;
+      margin: 0 auto 32px;
+      font-weight: 300;
+    }
+
+    .success-divider {
+      width: 48px;
+      height: 2px;
+      background: var(--teal);
+      margin: 0 auto 32px;
+      border-radius: 2px;
+      opacity: 0.4;
+    }
+
+    .another-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--teal);
+      text-decoration: none;
+      border: 1px solid var(--teal);
+      border-radius: 8px;
+      padding: 10px 22px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .another-link:hover {
+      background: var(--teal);
+      color: #fff;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      body {
+        padding: 32px 12px 60px;
+      }
+
+      .card {
+        padding: 28px 20px;
+        border-radius: 12px;
+      }
+
+      .success-card {
+        padding: 40px 20px;
+      }
+
+      .field-row {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      .field-row.triple {
+        grid-template-columns: 1fr;
+      }
+
+      .page-title {
+        font-size: 32px;
+      }
+
+      .section-heading {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Page header -->
+  <div class="page-header">
+    <div class="brand-name">Amansala Eco-Chic Resort + Retreat</div>
+    <h1 class="page-title">Transportation Info</h1>
+    <p class="page-subtitle">Please share your flight details so we can coordinate your arrival and departure transfers in Tulum.</p>
+  </div>
+
+  <!-- Edit mode banner -->
+  <div id="editBanner" style="display:none;align-items:center;gap:12px;background:#fef9c3;border:1.5px solid #fcd34d;border-radius:12px;padding:14px 20px;margin:0 auto 0;max-width:580px;box-sizing:border-box;font-family:'Jost',sans-serif">
+    <span style="font-size:20px">✏️</span>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:#92400e">Updating your flight info</div>
+      <div style="font-size:12px;color:#b45309;margin-top:2px">Your existing details are pre-filled — just change what needs updating and hit Submit.</div>
+    </div>
+  </div>
+
+  <!-- Form -->
+  <div id="formWrap">
+    <div class="card">
+      <form id="transportForm" novalidate>
+
+        <!-- Section: Information -->
+        <div class="form-section">
+          <h2 class="section-heading">Information &#x1F9F3;</h2>
+
+          <div class="field-row">
+            <div class="field" id="field-firstName">
+              <label for="firstName">First Name <span class="req">*</span></label>
+              <input type="text" id="firstName" name="firstName" autocomplete="given-name" required>
+              <span class="field-err">Please enter your first name.</span>
+            </div>
+            <div class="field" id="field-lastName">
+              <label for="lastName">Last Name <span class="req">*</span></label>
+              <input type="text" id="lastName" name="lastName" autocomplete="family-name" required>
+              <span class="field-err">Please enter your last name.</span>
+            </div>
+          </div>
+
+          <div class="field-row single" style="margin-bottom:18px;">
+            <div class="field" id="field-email">
+              <label for="email">Email <span class="req">*</span></label>
+              <input type="email" id="email" name="email" autocomplete="email" required>
+              <span class="field-err">Please enter a valid email address.</span>
+            </div>
+          </div>
+
+          <div class="field-row single" style="margin-bottom:18px;">
+            <div class="field" id="field-retreat">
+              <label for="retreatSelect">Retreat <span class="req">*</span></label>
+              <!-- Filled dynamically -->
+              <div id="retreatFieldContainer" style="position:relative;"></div>
+              <span class="field-err" id="retreatErr">Please type and select a retreat leader.</span>
+            </div>
+          </div>
+
+          <div class="field-row single">
+            <div class="field">
+              <label for="flightNumber">Airline &amp; Flight Number</label>
+              <input type="text" id="flightNumber" name="flightNumber" placeholder="e.g. AA1234">
+            </div>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <!-- OT note -->
+        <div style="background:linear-gradient(135deg,#e8f5f5,#f5f1eb);border:1.5px solid #9dd1d1;border-radius:12px;padding:14px 18px;margin-bottom:0;display:flex;align-items:flex-start;gap:12px">
+          <span style="font-size:20px;flex-shrink:0;margin-top:1px">ℹ️</span>
+          <p style="font-size:13px;color:#2d6a6a;line-height:1.6;margin:0"><b>Arranging your own transportation?</b> Even if you are organizing your own transfer, we still require you to complete this form so we can see your estimated time of arrival and plan accordingly. Simply check <b>"OT — Own Transport"</b> below and fill in your date and estimated arrival time.</p>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <!-- Section: Arrival -->
+        <div class="form-section">
+          <h2 class="section-heading">Arrival &#x2708;&#xFE0F;</h2>
+
+          <!-- OT toggle for arrival -->
+          <label id="arrOtLabel" style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;margin-bottom:16px;padding:10px 14px;background:#f5f1eb;border:1.5px solid #c8bfb5;border-radius:10px">
+            <input type="checkbox" id="arrivalOT" style="width:16px;height:16px;accent-color:#0e9494;cursor:pointer;flex-shrink:0">
+            <span style="font-size:13px;color:#2d2520;line-height:1.4"><b style="color:#0e9494">OT — Own Transport</b><br><span style="font-size:11.5px;color:#8a7e74">I am arranging my own arrival transfer</span></span>
+          </label>
+
+          <div class="field-row">
+            <div class="field" id="field-arrivalDate">
+              <label for="arrivalDate">Arrival Date <span class="req">*</span></label>
+              <input type="date" id="arrivalDate" name="arrivalDate" required>
+              <span class="field-err">Please select your arrival date.</span>
+            </div>
+            <div class="field" id="field-arrivalTime">
+              <label for="arrivalTime">Estimated Arrival Time <span class="req">*</span></label>
+              <input type="time" id="arrivalTime" name="arrivalTime" required>
+              <span class="field-err">Please enter your arrival time.</span>
+            </div>
+          </div>
+
+          <div id="arrivalAirportWrap" class="field" style="margin-bottom:0;">
+            <label>Arrival Airport <span class="req">*</span></label>
+            <div class="radio-group" id="arrivalAirportGroup">
+              <label class="radio-option" id="arr-cancun-label">
+                <input type="radio" name="arrivalAirport" value="cancun"> Cancun Airport
+              </label>
+              <label class="radio-option" id="arr-tulum-label">
+                <input type="radio" name="arrivalAirport" value="tulum"> Tulum Airport
+              </label>
+            </div>
+            <span class="radio-err" id="arrivalAirportErr">Please select your arrival airport.</span>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <!-- Section: Departure -->
+        <div class="form-section">
+          <h2 class="section-heading">Departure &#x1F6EB;</h2>
+
+          <!-- OT toggle for departure -->
+          <label id="depOtLabel" style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;margin-bottom:16px;padding:10px 14px;background:#f5f1eb;border:1.5px solid #c8bfb5;border-radius:10px">
+            <input type="checkbox" id="departureOT" style="width:16px;height:16px;accent-color:#0e9494;cursor:pointer;flex-shrink:0">
+            <span style="font-size:13px;color:#2d2520;line-height:1.4"><b style="color:#0e9494">OT — Own Transport</b><br><span style="font-size:11.5px;color:#8a7e74">I am arranging my own departure transfer</span></span>
+          </label>
+
+          <div class="field-row">
+            <div class="field" id="field-departureDate">
+              <label for="departureDate">Departure Date <span class="req">*</span></label>
+              <input type="date" id="departureDate" name="departureDate" required>
+            </div>
+            <div class="field" id="field-departureTime">
+              <label for="departureTime">Estimated Departure Time <span class="req">*</span></label>
+              <input type="time" id="departureTime" name="departureTime" required>
+            </div>
+          </div>
+
+          <div id="departureAirportWrap" class="field" style="margin-bottom:0;">
+            <label>Departure Airport <span class="req">*</span></label>
+            <div class="radio-group" id="departureAirportGroup">
+              <label class="radio-option" id="dep-cancun-label">
+                <input type="radio" name="departureAirport" value="cancun"> Cancun Airport
+              </label>
+              <label class="radio-option" id="dep-tulum-label">
+                <input type="radio" name="departureAirport" value="tulum"> Tulum Airport
+              </label>
+            </div>
+            <span class="radio-err" id="departureAirportErr">Please select your departure airport.</span>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <!-- Section: Notes -->
+        <div class="form-section">
+          <h2 class="section-heading">Notes</h2>
+          <div class="field">
+            <label for="notes">Additional Notes</label>
+            <textarea id="notes" name="notes" placeholder="Any special requests or notes about your travel..."></textarea>
+          </div>
+        </div>
+
+        <div class="form-section" style="background:linear-gradient(135deg,#e8f5f5 0%,#faf7f2 100%);border:1.5px solid #9dd1d1;border-radius:12px;padding:20px 24px">
+          <h2 class="section-heading" style="color:#0e9494;margin-top:0">Shared Ride</h2>
+          <label id="shareLabel" style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;user-select:none">
+            <input type="checkbox" id="willingToShare" name="willingToShare" style="width:18px;height:18px;accent-color:#0e9494;margin-top:2px;flex-shrink:0;cursor:pointer">
+            <span style="font-size:14px;color:#2d2520;line-height:1.5">
+              <b style="color:#0e9494">I'm happy to share a ride</b> — I'm willing to wait up to 30 minutes at the airport for a shared transfer with another guest arriving around the same time.<br>
+              <span style="font-size:12px;color:#8a7e74;margin-top:4px;display:block">Shared rides are typically cheaper. We will try to match you with other guests arriving at a similar time.</span>
+            </span>
+          </label>
+        </div>
+
+        <button type="submit" class="submit-btn">Submit Transportation Info</button>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- Success screen -->
+  <div id="successScreen" class="success-screen">
+    <div class="success-card">
+      <div class="success-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+      </div>
+      <div class="success-brand">Amansala Eco-Chic Resort + Retreat</div>
+      <h2 class="success-title" id="successTitle">Thank You!</h2>
+      <div class="success-divider"></div>
+      <p class="success-body" id="successBody">Your transportation info has been received! Your retreat coordinator will be in touch with your ride details.</p>
+      <button onclick="trEditMyInfo()" style="display:block;width:100%;margin-top:14px;padding:12px 20px;background:#0e9494;color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.2px">My flight changed — Update my info</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script>
+  const _db=supabase.createClient('https://fzresosiqafiyxfgeyvk.supabase.co','sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB');
+  async function saveTransportToCloud(entry){
+    try{await _db.from('transport').upsert({id:entry.id,booking_id:entry.bookingId,data:entry,submitted_at:entry.submittedAt});}catch(e){console.warn('Cloud save failed',e);}
+  }
+  </script>
+  <script>
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    function getBookings() {
+      try {
+        return JSON.parse(localStorage.getItem('amansala_venue_bookings') || '[]');
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function getTransport() {
+      try {
+        return JSON.parse(localStorage.getItem('amansala_transport') || '[]');
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveTransport(entries) {
+      localStorage.setItem('amansala_transport', JSON.stringify(entries));
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${months[parseInt(m, 10) - 1]} ${parseInt(d, 10)}, ${y}`;
+    }
+
+    function todayISO() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    // ── Retreat field setup ───────────────────────────────────────────────────
+
+    const params = new URLSearchParams(window.location.search);
+    const codeParam = (params.get('code') || '').trim().toUpperCase();
+
+    const container = document.getElementById('retreatFieldContainer');
+    const retreatErrSpan = document.getElementById('retreatErr');
+    let selectedBookingId = '';
+
+    const bookings = getBookings();
+
+    if (codeParam) {
+      // Look up booking by teacherCode
+      const match = bookings.find(bk => (bk.teacherCode || '').toUpperCase() === codeParam);
+
+      if (match) {
+        selectedBookingId = match.id;
+
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.id = 'retreatSelect';
+        inp.value = match.retreatName || match.title || match.name || 'Retreat';
+        inp.readOnly = true;
+        container.appendChild(inp);
+      } else {
+        // Code provided but not found — show a note and fall through to dropdown
+        const note = document.createElement('p');
+        note.style.cssText = 'font-size:12.5px;color:#c0392b;margin-bottom:8px;';
+        note.textContent = `No retreat found for code "${codeParam}". Please select below.`;
+        container.appendChild(note);
+        buildDropdown();
+      }
+    } else {
+      buildDropdown();
+    }
+
+    function buildDropdown() {
+      const today = todayISO();
+
+      const future = bookings.filter(bk => {
+        const status = (bk.status || '').toLowerCase();
+        if (status === 'cancelled') return false;
+        const end = bk.endDate || bk.end || '';
+        return end >= today;
+      });
+
+      // Search input
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.id = 'retreatSelect';
+      inp.placeholder = 'Type retreat leader name...';
+      inp.autocomplete = 'off';
+      container.appendChild(inp);
+
+      // Dropdown list
+      const dropdown = document.createElement('div');
+      dropdown.id = 'retreatDropdown';
+      dropdown.style.cssText = 'position:absolute;left:0;right:0;background:#fff;border:1.5px solid #c8d8d8;border-top:none;border-radius:0 0 8px 8px;z-index:100;max-height:220px;overflow-y:auto;display:none;box-shadow:0 4px 16px rgba(14,148,148,0.10);';
+      container.appendChild(dropdown);
+
+      function renderList(query) {
+        const q = query.trim().toLowerCase();
+        const matches = q
+          ? future.filter(bk => {
+              const leader = (bk.leaderName || bk.leader || bk.teacherName || '').toLowerCase();
+              return leader.includes(q);
+            })
+          : future;
+
+        dropdown.innerHTML = '';
+        if (matches.length === 0) {
+          const msg = document.createElement('div');
+          msg.style.cssText = 'padding:10px 14px;font-size:13px;color:#888;';
+          msg.textContent = q ? 'No matching retreat found.' : 'No upcoming retreats.';
+          dropdown.appendChild(msg);
+        } else {
+          matches.forEach(bk => {
+            const leader = bk.leaderName || bk.leader || bk.teacherName || '';
+            const start  = bk.startDate  || bk.start  || '';
+            const end    = bk.endDate    || bk.end    || '';
+            const label  = leader + ' — ' + formatDate(start) + ' to ' + formatDate(end);
+
+            const item = document.createElement('div');
+            item.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:1px solid #f0f4f4;transition:background 0.15s;';
+            item.textContent = label;
+            item.addEventListener('mouseenter', () => item.style.background = '#e8f5f5');
+            item.addEventListener('mouseleave', () => item.style.background = '');
+            item.addEventListener('mousedown', e => {
+              e.preventDefault();
+              inp.value = label;
+              selectedBookingId = bk.id;
+              dropdown.style.display = 'none';
+              clearFieldInvalid('field-retreat');
+            });
+            dropdown.appendChild(item);
+          });
+        }
+        dropdown.style.display = 'block';
+      }
+
+      inp.addEventListener('focus', () => renderList(inp.value));
+      inp.addEventListener('input', () => {
+        selectedBookingId = '';
+        renderList(inp.value);
+      });
+      inp.addEventListener('blur', () => setTimeout(() => { dropdown.style.display = 'none'; }, 150));
+
+      if (future.length === 0) {
+        inp.placeholder = 'No upcoming retreats found';
+        inp.disabled = true;
+      }
+    }
+
+    // ── Radio button visual state ─────────────────────────────────────────────
+
+    document.querySelectorAll('.radio-group').forEach(group => {
+      group.querySelectorAll('.radio-option').forEach(label => {
+        const radio = label.querySelector('input[type="radio"]');
+        radio.addEventListener('change', () => {
+          // Deselect siblings
+          group.querySelectorAll('.radio-option').forEach(l => l.classList.remove('selected'));
+          label.classList.add('selected');
+
+          // Clear airport error if present
+          const errId = group.id === 'arrivalAirportGroup' ? 'arrivalAirportErr' : group.id === 'departureAirportGroup' ? 'departureAirportErr' : null;
+          if (errId) {
+            document.getElementById(errId).classList.remove('show');
+          }
+        });
+      });
+    });
+
+    // ── Validation helpers ────────────────────────────────────────────────────
+
+    function markFieldInvalid(fieldId) {
+      const el = document.getElementById(fieldId);
+      if (el) el.classList.add('invalid');
+    }
+
+    function clearFieldInvalid(fieldId) {
+      const el = document.getElementById(fieldId);
+      if (el) el.classList.remove('invalid');
+    }
+
+    function validateEmail(val) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
+    }
+
+    // Live clear on input
+    ['firstName', 'lastName', 'email', 'arrivalDate', 'arrivalTime', 'departureDate', 'departureTime'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', () => { clearFieldInvalid('field-' + id); });
+    });
+
+    // OT toggle — show/hide airport field and relax its requirement
+    function updateOtState(type) {
+      const isOT = document.getElementById(type + 'OT').checked;
+      const wrap = document.getElementById(type + 'AirportWrap');
+      const lbl  = document.getElementById(type === 'arrival' ? 'arrOtLabel' : 'depOtLabel');
+      if (wrap) {
+        wrap.style.opacity  = isOT ? '0.35' : '1';
+        wrap.style.pointerEvents = isOT ? 'none' : '';
+      }
+      if (lbl) {
+        lbl.style.borderColor = isOT ? '#0e9494' : '#c8bfb5';
+        lbl.style.background  = isOT ? '#e8f5f5' : '#f5f1eb';
+      }
+      // Clear airport error when toggling OT on
+      if (isOT) {
+        const errId = type === 'arrival' ? 'arrivalAirportErr' : 'departureAirportErr';
+        const err = document.getElementById(errId);
+        if (err) err.classList.remove('show');
+      }
+    }
+    document.getElementById('arrivalOT').addEventListener('change',  () => updateOtState('arrival'));
+    document.getElementById('departureOT').addEventListener('change', () => updateOtState('departure'));
+
+    // ── Form submit ───────────────────────────────────────────────────────────
+
+    document.getElementById('transportForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      let valid = true;
+
+      // First name
+      const firstName = document.getElementById('firstName').value.trim();
+      if (!firstName) { markFieldInvalid('field-firstName'); valid = false; }
+      else { clearFieldInvalid('field-firstName'); }
+
+      // Last name
+      const lastName = document.getElementById('lastName').value.trim();
+      if (!lastName) { markFieldInvalid('field-lastName'); valid = false; }
+      else { clearFieldInvalid('field-lastName'); }
+
+      // Email
+      const email = document.getElementById('email').value.trim();
+      if (!validateEmail(email)) { markFieldInvalid('field-email'); valid = false; }
+      else { clearFieldInvalid('field-email'); }
+
+      // Retreat — selectedBookingId is set when user picks from search list or code param
+      const bookingId = selectedBookingId;
+
+      if (!bookingId) {
+        markFieldInvalid('field-retreat');
+        retreatErrSpan.style.display = 'block';
+        valid = false;
+      } else {
+        clearFieldInvalid('field-retreat');
+        retreatErrSpan.style.display = 'none';
+      }
+
+      // Arrival date
+      const arrivalDate = document.getElementById('arrivalDate').value;
+      if (!arrivalDate) { markFieldInvalid('field-arrivalDate'); valid = false; }
+      else { clearFieldInvalid('field-arrivalDate'); }
+
+      // Arrival time
+      const arrivalTime = document.getElementById('arrivalTime').value;
+      if (!arrivalTime) { markFieldInvalid('field-arrivalTime'); valid = false; }
+      else { clearFieldInvalid('field-arrivalTime'); }
+
+      // OT flags
+      const arrivalOT   = document.getElementById('arrivalOT').checked;
+      const departureOT = document.getElementById('departureOT').checked;
+
+      // Arrival airport — only required if NOT own transport
+      const arrivalAirportEl = document.querySelector('input[name="arrivalAirport"]:checked');
+      const arrivalAirportErr = document.getElementById('arrivalAirportErr');
+      if (!arrivalOT && !arrivalAirportEl) {
+        arrivalAirportErr.classList.add('show');
+        valid = false;
+      } else {
+        arrivalAirportErr.classList.remove('show');
+      }
+
+      // Departure date + time + airport (all required; airport skipped if OT)
+      const departureDate = document.getElementById('departureDate').value;
+      const departureTime = document.getElementById('departureTime').value;
+      const departureAirportEl = document.querySelector('input[name="departureAirport"]:checked');
+      const departureAirportErr = document.getElementById('departureAirportErr');
+      if (!departureDate) { markFieldInvalid('field-departureDate'); valid = false; }
+      else { clearFieldInvalid('field-departureDate'); }
+      if (!departureTime) { markFieldInvalid('field-departureTime'); valid = false; }
+      else { clearFieldInvalid('field-departureTime'); }
+      if (!departureOT && !departureAirportEl) { departureAirportErr.classList.add('show'); valid = false; }
+      else { departureAirportErr.classList.remove('show'); }
+
+      if (!valid) {
+        // Scroll to first error
+        const firstErr = document.querySelector('.field.invalid, .radio-err.show');
+        if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
+      // ── Build entry ──
+      const flightNumber     = document.getElementById('flightNumber').value.trim();
+      const willingToShare   = document.getElementById('willingToShare').checked;
+      let   notes            = document.getElementById('notes').value.trim();
+      if (willingToShare) {
+        const shareNote = 'Happy to share a ride and wait up to 30 minutes for a cheaper transfer.';
+        notes = notes ? notes + '\n' + shareNote : shareNote;
+      }
+
+      // Reuse existing entry ID if we're editing (upsert, not insert)
+      const entry = {
+        id:               _editingEntryId || ('tr_' + Date.now()),
+        submittedAt:      new Date().toISOString(),
+        bookingId:        bookingId,
+        firstName:        firstName,
+        lastName:         lastName,
+        email:            email,
+        flightNumber:     flightNumber,
+        arrivalDate:      arrivalDate,
+        arrivalTime:      arrivalTime,
+        arrivalAirport:   arrivalOT ? '' : (arrivalAirportEl ? arrivalAirportEl.value : ''),
+        arrivalOT:        arrivalOT,
+        departureDate:    departureDate,
+        departureTime:    departureTime,
+        departureAirport: departureOT ? '' : (departureAirportEl ? departureAirportEl.value : ''),
+        departureOT:      departureOT,
+        notes:            notes,
+        willingToShare:   willingToShare
+      };
+
+      // Save to localStorage (upsert by ID)
+      const existing = getTransport().filter(e => e.id !== entry.id);
+      existing.push(entry);
+      saveTransport(existing);
+      saveTransportToCloud(entry); // sync to shared database (upserts by ID)
+
+      // Store for edit-in-place
+      sessionStorage.setItem('tr_last_entry', JSON.stringify(entry));
+      _editingEntryId = entry.id;
+
+      // ── Show success ──
+      const isUpdate = !!document.getElementById('formWrap').dataset.editing;
+      document.getElementById('successTitle').textContent = isUpdate ? 'Info Updated!' : 'Thank You!';
+      document.getElementById('successBody').textContent = isUpdate
+        ? 'Your flight details have been updated. We will use this information to coordinate your transfer.'
+        : 'Your transportation info has been received! Your retreat coordinator will be in touch with your ride details.';
+      document.getElementById('formWrap').style.display = 'none';
+      document.getElementById('successScreen').style.display = 'block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // ── Edit mode: pre-fill the form with previously saved data ──────────────
+    let _editingEntryId = null;
+
+    function trPrefillForm(entry) {
+      _editingEntryId = entry.id;
+      document.getElementById('formWrap').dataset.editing = '1';
+
+      // Name / email
+      const fnEl = document.getElementById('firstName'); if (fnEl) fnEl.value = entry.firstName || '';
+      const lnEl = document.getElementById('lastName');  if (lnEl) lnEl.value = entry.lastName  || '';
+      const emEl = document.getElementById('email');     if (emEl) emEl.value = entry.email      || '';
+      const flEl = document.getElementById('flightNumber'); if (flEl) flEl.value = entry.flightNumber || '';
+
+      // Arrival
+      const adEl = document.getElementById('arrivalDate'); if (adEl) adEl.value = entry.arrivalDate || '';
+      const atEl = document.getElementById('arrivalTime'); if (atEl) atEl.value = entry.arrivalTime || '';
+      if (entry.arrivalAirport) {
+        const r = document.querySelector(`input[name="arrivalAirport"][value="${entry.arrivalAirport}"]`);
+        if (r) { r.checked = true; r.closest('.radio-option').classList.add('selected'); }
+      }
+
+      // Departure
+      const ddEl = document.getElementById('departureDate'); if (ddEl) ddEl.value = entry.departureDate || '';
+      const dtEl = document.getElementById('departureTime'); if (dtEl) dtEl.value = entry.departureTime || '';
+      if (entry.departureAirport) {
+        const r = document.querySelector(`input[name="departureAirport"][value="${entry.departureAirport}"]`);
+        if (r) { r.checked = true; r.closest('.radio-option').classList.add('selected'); }
+      }
+
+      // Notes / share / OT
+      const ntEl = document.getElementById('notes'); if (ntEl) ntEl.value = entry.notes || '';
+      const shEl = document.getElementById('willingToShare'); if (shEl) shEl.checked = !!entry.willingToShare;
+      const aOtEl = document.getElementById('arrivalOT');   if (aOtEl) { aOtEl.checked = !!entry.arrivalOT;   updateOtState('arrival'); }
+      const dOtEl = document.getElementById('departureOT'); if (dOtEl) { dOtEl.checked = !!entry.departureOT; updateOtState('departure'); }
+
+      // Update submit button label
+      const btn = document.querySelector('.submit-btn');
+      if (btn) btn.textContent = 'Update My Flight Info';
+
+      // Show edit banner
+      const banner = document.getElementById('editBanner');
+      if (banner) banner.style.display = 'flex';
+    }
+
+    function trEditMyInfo() {
+      const raw = sessionStorage.getItem('tr_last_entry');
+      if (!raw) return;
+      document.getElementById('successScreen').style.display = 'none';
+      document.getElementById('formWrap').style.display = 'block';
+      trPrefillForm(JSON.parse(raw));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // On load: check if there's a saved entry to pre-fill (returning user, same session)
+    (function(){
+      const raw = sessionStorage.getItem('tr_last_entry');
+      if (!raw) return;
+      try {
+        const saved = JSON.parse(raw);
+        // Only pre-fill if it matches the current retreat code
+        if (codeParam && saved.bookingId && selectedBookingId && saved.bookingId !== selectedBookingId) return;
+        if (saved.bookingId === selectedBookingId || !codeParam) trPrefillForm(saved);
+      } catch(e) {}
+    })();
+  </script>
+</body>
+</html>

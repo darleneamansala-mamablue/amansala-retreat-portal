@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retreat Leader Portal — Amansala Tulum</title>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500;600&family=Cormorant+Garamond:ital,wght@1,300;1,400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html,body{min-height:100%;}
+body{font-family:'Jost',-apple-system,sans-serif;font-size:14px;color:#1a1a2e;background:#f7f9f8;}
+.page{min-height:100vh;padding:40px 20px 60px;background:radial-gradient(ellipse at 20% 0%,rgba(61,138,138,0.12) 0%,transparent 50%),radial-gradient(ellipse at 80% 100%,rgba(107,181,181,0.08) 0%,transparent 50%),#f7f9f8;}
+
+/* HEADER */
+.portal-header{text-align:center;margin-bottom:32px;}
+.portal-logo{display:inline-flex;align-items:center;gap:14px;margin-bottom:8px;}
+.portal-mark{width:50px;height:50px;border-radius:13px;background:linear-gradient(135deg,#3d8a8a,#6bb5b5);display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.9rem;color:#fff;}
+.portal-brand-name{font-size:1.05rem;font-weight:600;color:#1a1a2e;letter-spacing:0.02em;text-align:left;}
+.portal-brand-sub{font-size:0.62rem;text-transform:uppercase;letter-spacing:0.14em;color:#9ca3af;margin-top:2px;}
+
+/* PROGRESS */
+.progress-wrap{display:flex;align-items:flex-start;justify-content:center;max-width:600px;margin:0 auto 28px;}
+.step-item{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;}
+.step-circle{width:26px;height:26px;border-radius:50%;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#9ca3af;transition:all 0.3s;}
+.step-circle.active{background:#3d8a8a;color:#fff;box-shadow:0 0 0 4px rgba(61,138,138,0.18);}
+.step-circle.done{background:#6bb5b5;color:#fff;}
+.step-label{font-size:0.56rem;text-transform:uppercase;letter-spacing:0.07em;color:#c4c9d4;white-space:nowrap;}
+.step-label.active{color:#3d8a8a;font-weight:600;}
+.step-connector{height:2px;flex:1;background:#e5e7eb;margin-top:12px;}
+.step-connector.done{background:#6bb5b5;}
+
+/* CARD */
+.card{max-width:660px;margin:0 auto;background:#fff;border-radius:20px;box-shadow:0 4px 6px rgba(0,0,0,0.04),0 20px 50px rgba(0,0,0,0.09);overflow:hidden;}
+.card-inner{padding:44px 48px 8px;}
+.step-num{font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:#3d8a8a;margin-bottom:8px;}
+.step-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.95rem;color:#1a1a2e;margin-bottom:8px;line-height:1.2;}
+.step-sub{font-size:0.81rem;color:#6b7280;line-height:1.75;margin-bottom:30px;}
+
+/* FORM */
+.fg{margin-bottom:20px;}
+.fg label,.fg-label{display:block;font-size:0.64rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6b7280;margin-bottom:7px;}
+.req{color:#ef4444;}
+.fg input,.fg select,.fg textarea{width:100%;padding:11px 14px;border:1.5px solid #e5e7eb;border-radius:9px;font-family:inherit;font-size:0.87rem;color:#1a1a2e;outline:none;transition:border-color 0.2s,box-shadow 0.2s;background:#fff;}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:#3d8a8a;box-shadow:0 0 0 3px rgba(61,138,138,0.1);}
+.fg textarea{resize:vertical;min-height:100px;line-height:1.65;}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+
+/* CHOICE CARDS */
+.choice-grid{display:grid;gap:10px;margin-bottom:4px;}
+.choice-grid.col2{grid-template-columns:1fr 1fr;}
+.choice-grid.col3{grid-template-columns:1fr 1fr 1fr;}
+.choice-grid.col5{grid-template-columns:repeat(5,1fr);}
+.choice-card{border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 10px;cursor:pointer;transition:all 0.15s;text-align:center;background:#fff;position:relative;}
+.choice-card:hover{border-color:#3d8a8a;background:#f0fdf9;}
+.choice-card.selected{border-color:#3d8a8a;background:#f0fdf9;box-shadow:0 0 0 3px rgba(61,138,138,0.14);}
+.choice-card input{position:absolute;opacity:0;width:0;height:0;}
+.cc-label{font-size:0.79rem;font-weight:500;color:#374151;display:block;}
+
+/* YES/NO BIG CARDS */
+.yn-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;}
+.yn-card{border:2px solid #e5e7eb;border-radius:14px;padding:26px 18px;cursor:pointer;transition:all 0.2s;text-align:center;position:relative;}
+.yn-card:hover{border-color:#3d8a8a;background:#f0fdf9;}
+.yn-card.selected{border-color:#3d8a8a;background:#f0fdf9;box-shadow:0 0 0 4px rgba(61,138,138,0.15);}
+.yn-card input{position:absolute;opacity:0;width:0;height:0;}
+.yn-icon{font-size:2rem;display:block;margin-bottom:10px;}
+.yn-label{font-size:0.95rem;font-weight:600;color:#1a1a2e;}
+.yn-sub{font-size:0.7rem;color:#9ca3af;margin-top:5px;}
+
+/* INFO / WARN BOXES */
+.info-box{background:#f0fdf9;border:1px solid #a7f3d0;border-radius:10px;padding:16px 18px;margin-bottom:20px;font-size:0.79rem;color:#065f46;line-height:1.75;}
+.info-box .ib-title{font-size:0.62rem;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;color:#059669;margin-bottom:7px;}
+.warn-box{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px 18px;margin-bottom:20px;font-size:0.79rem;color:#92400e;line-height:1.75;}
+.warn-box .wb-title{font-size:0.62rem;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;color:#b45309;margin-bottom:7px;}
+
+/* CONDITIONAL */
+.conditional{display:none;padding:22px;background:#f9fafb;border-radius:12px;margin-top:14px;border:1px solid #f0f0f0;}
+.conditional.show{display:block;}
+
+/* CHECKBOXES */
+.ck-item{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;background:#f9fafb;border-radius:9px;margin-bottom:10px;cursor:pointer;transition:background 0.12s;}
+.ck-item:hover{background:#f0fdf9;}
+.ck-box{width:20px;height:20px;border:2px solid #d1d5db;border-radius:5px;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;color:#fff;transition:all 0.15s;}
+.ck-item.checked .ck-box{background:#3d8a8a;border-color:#3d8a8a;}
+.ck-item.checked .ck-box::after{content:'✓';}
+.ck-item input{position:absolute;opacity:0;width:0;height:0;}
+.ck-text{font-size:0.81rem;color:#374151;line-height:1.65;}
+
+/* OTHER TIME */
+.other-time{display:none;margin-top:10px;}
+.other-time.show{display:block;}
+
+/* REVIEW */
+.review-section{margin-bottom:22px;}
+.review-section h4{font-size:0.62rem;text-transform:uppercase;letter-spacing:0.12em;color:#3d8a8a;font-weight:700;margin-bottom:11px;padding-bottom:8px;border-bottom:1px solid #f0fdf9;}
+.review-row{display:flex;gap:12px;margin-bottom:7px;font-size:0.81rem;}
+.review-lbl{color:#9ca3af;min-width:140px;flex-shrink:0;}
+.review-val{color:#1a1a2e;font-weight:500;}
+
+/* NAV */
+.card-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 48px 32px;}
+.btn-back{padding:11px 22px;border:1.5px solid #e5e7eb;border-radius:9px;background:#fff;font-family:inherit;font-size:0.8rem;font-weight:500;color:#6b7280;cursor:pointer;transition:all 0.15s;}
+.btn-back:hover{border-color:#3d8a8a;color:#3d8a8a;}
+.btn-next{padding:12px 32px;border:none;border-radius:9px;background:#3d8a8a;font-family:inherit;font-size:0.82rem;font-weight:600;color:#fff;cursor:pointer;transition:background 0.2s;letter-spacing:0.02em;}
+.btn-next:hover{background:#2d6f6f;}
+.step-counter{font-size:0.7rem;color:#9ca3af;}
+
+/* THANK YOU */
+.thankyou{text-align:center;padding:64px 48px;}
+.ty-icon{font-size:3rem;margin-bottom:20px;}
+.ty-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:2.3rem;color:#1a1a2e;margin-bottom:14px;}
+.ty-sub{font-size:0.85rem;color:#6b7280;line-height:1.85;max-width:420px;margin:0 auto 24px;}
+.ty-ref{display:inline-block;padding:9px 20px;background:#f0fdf9;border:1px solid #a7f3d0;border-radius:8px;font-size:0.74rem;color:#047857;font-weight:600;letter-spacing:0.08em;}
+.ty-contact{margin-top:24px;font-size:0.75rem;color:#9ca3af;}
+
+@media(max-width:640px){
+  .card-inner{padding:28px 22px 8px;}
+  .card-nav{padding:16px 22px 26px;}
+  .f2{grid-template-columns:1fr;}
+  .choice-grid.col3,.choice-grid.col5{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="portal-header">
+    <div class="portal-logo">
+      <div class="portal-mark">A</div>
+      <div>
+        <div class="portal-brand-name">Amansala Tulum</div>
+        <div class="portal-brand-sub">Retreat Leader Scheduling Portal</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap"></div>
+
+  <div class="card" id="mainCard">
+
+    <!-- STEP 1 -->
+    <div class="step-panel" id="step1">
+      <div class="card-inner">
+        <div class="step-num">Step 1 of 7</div>
+        <h2 class="step-title">Welcome, Retreat Leader</h2>
+        <p class="step-sub">Please submit your preferred class schedule, workshop needs, and notes for your upcoming retreat. Our team will review your request and confirm final times based on shala availability, meals, tours, and other groups onsite.</p>
+        <div class="f2">
+          <div class="fg"><label>Your Name <span class="req">*</span></label><input type="text" id="leaderName" placeholder="Full name"></div>
+          <div class="fg"><label>Email Address <span class="req">*</span></label><input type="email" id="leaderEmail" placeholder="your@email.com"></div>
+        </div>
+        <div class="fg"><label>Retreat / Group Name <span class="req">*</span></label><input type="text" id="retreatName" placeholder="e.g. Radiant Body Retreat with Sarah"></div>
+        <div class="f2">
+          <div class="fg"><label>Arrival Date <span class="req">*</span></label><input type="date" id="arrivalDate" onchange="autoSetDep()"></div>
+          <div class="fg"><label>Departure Date <span class="req">*</span></label><input type="date" id="departureDate"></div>
+        </div>
+        <div class="fg"><label>Approximate Group Size</label><input type="number" id="groupSize" placeholder="e.g. 14" min="1" max="200"></div>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="step-panel" id="step2" style="display:none">
+      <div class="card-inner">
+        <div class="step-num">Step 2 of 7</div>
+        <h2 class="step-title">Have you hosted at Amansala before?</h2>
+        <p class="step-sub">Returning retreat leaders may indicate a preferred shala. Preference is subject to availability and confirmed by our team.</p>
+        <div class="yn-grid">
+          <label class="yn-card" id="ynYes" onclick="selectReturning(true)">
+            <input type="radio" name="returning" value="yes">
+            <span class="yn-icon">🌿</span>
+            <div class="yn-label">Yes, I've been here before</div>
+            <div class="yn-sub">Returning leader</div>
+          </label>
+          <label class="yn-card" id="ynNo" onclick="selectReturning(false)">
+            <input type="radio" name="returning" value="no">
+            <span class="yn-icon">✨</span>
+            <div class="yn-label">First time at Amansala</div>
+            <div class="yn-sub">New leader</div>
+          </label>
+        </div>
+        <div class="conditional" id="shalaSection">
+          <div class="info-box">
+            <div class="ib-title">Returning Leader Perk</div>
+            Shala preference is available for returning leaders only and is subject to availability. Our team will do their best to honor your request.
+          </div>
+          <div class="fg-label" style="margin-bottom:10px;">Preferred Shala</div>
+          <div class="choice-grid col5" id="shalaGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3: AM & PM CLASSES -->
+    <div class="step-panel" id="step3" style="display:none">
+      <div class="card-inner">
+        <div class="step-num">Step 3 of 7</div>
+        <h2 class="step-title">AM & PM Classes</h2>
+        <p class="step-sub">Tell us your preferred times and class types for your morning and afternoon sessions. Our team will confirm based on shala availability.</p>
+
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#3d8a8a;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #f0fdf9;">Morning Class</div>
+        <p style="font-size:0.76rem;color:#6b7280;margin-bottom:16px;">Light breakfast served <strong>6:45 – 8:00 AM</strong>. Brunch served 15 min after class ends.</p>
+        <div class="fg">
+          <div class="fg-label">Preferred Start Time <span class="req">*</span></div>
+          <div class="choice-grid col2" id="amTimeGrid"></div>
+          <div class="other-time" id="amOtherWrap">
+            <div class="fg" style="margin-top:10px;margin-bottom:0"><label>Specify Time</label><input type="time" id="amOtherTime"></div>
+          </div>
+        </div>
+        <div class="fg">
+          <div class="fg-label">Class Type <span class="req">*</span></div>
+          <div class="choice-grid col3" id="amTypeGrid"></div>
+        </div>
+        <div class="fg">
+          <div class="fg-label">Preferred Shala</div>
+          <div class="choice-grid col5" id="amShalaGrid"></div>
+        </div>
+        <div class="fg"><label>Duration</label>
+          <select id="amDuration">
+            <option value="60">60 minutes</option>
+            <option value="75">75 minutes</option>
+            <option value="90" selected>90 minutes</option>
+            <option value="120">120 minutes</option>
+          </select>
+        </div>
+
+        <div style="border-top:2px solid #f3f4f6;margin:28px 0 22px;"></div>
+
+        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#3d8a8a;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #f0fdf9;">Afternoon Class</div>
+        <p style="font-size:0.76rem;color:#6b7280;margin-bottom:16px;">Snack served <strong>2:00 – 4:00 PM</strong>. Dinner served 45 min after class ends.</p>
+        <div class="fg">
+          <div class="fg-label">Preferred Start Time <span class="req">*</span></div>
+          <div class="choice-grid col2" id="pmTimeGrid"></div>
+          <div class="other-time" id="pmOtherWrap">
+            <div class="fg" style="margin-top:10px;margin-bottom:0"><label>Specify Time</label><input type="time" id="pmOtherTime"></div>
+          </div>
+        </div>
+        <div class="fg">
+          <div class="fg-label">Class Type <span class="req">*</span></div>
+          <div class="choice-grid col3" id="pmTypeGrid"></div>
+        </div>
+        <div class="fg">
+          <div class="fg-label">Preferred Shala</div>
+          <div class="choice-grid col5" id="pmShalaGrid"></div>
+        </div>
+        <div class="fg"><label>Duration</label>
+          <select id="pmDuration">
+            <option value="60">60 minutes</option>
+            <option value="75">75 minutes</option>
+            <option value="90" selected>90 minutes</option>
+            <option value="120">120 minutes</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="step-panel" id="step4" style="display:none">
+      <div class="card-inner">
+        <div class="step-num">Step 4 of 7</div>
+        <h2 class="step-title">Workshops & Special Sessions</h2>
+        <p class="step-sub">Midday workshops should be requested <strong>before</strong> finalizing tours or additional activities so our team can coordinate the schedule properly.</p>
+        <div class="yn-grid">
+          <label class="yn-card" id="wsYes" onclick="selectWorkshop(true)">
+            <input type="radio" name="workshop" value="yes">
+            <span class="yn-icon">🎯</span>
+            <div class="yn-label">Yes, I need a workshop</div>
+            <div class="yn-sub">Midday or special session</div>
+          </label>
+          <label class="yn-card" id="wsNo" onclick="selectWorkshop(false)">
+            <input type="radio" name="workshop" value="no">
+            <span class="yn-icon">🌊</span>
+            <div class="yn-label">No workshop needed</div>
+            <div class="yn-sub">Classes only</div>
+          </label>
+        </div>
+        <div class="conditional" id="workshopSection">
+          <div class="f2">
+            <div class="fg"><label>Workshop Title</label><input type="text" id="wsTitle" placeholder="e.g. Sound Healing Journey"></div>
+            <div class="fg"><label>Preferred Time</label><input type="time" id="wsTime"></div>
+          </div>
+          <div class="f2">
+            <div class="fg"><label>Duration</label>
+              <select id="wsDuration">
+                <option value="60">60 min</option>
+                <option value="90">90 min</option>
+                <option value="120">120 min</option>
+                <option value="180">180 min</option>
+              </select>
+            </div>
+            <div class="fg"><label>Preferred Space</label>
+              <select id="wsSpace">
+                <option value="">— Select space —</option>
+                <option>Beachfront Shala</option>
+                <option>Skye Shala</option>
+                <option>Grande Shala</option>
+                <option>Chica Shala</option>
+                <option>Heaven Shala</option>
+                <option>Outdoor / Cenote Area</option>
+                <option>No Preference</option>
+              </select>
+            </div>
+          </div>
+          <div class="fg"><label>Setup Needs</label><input type="text" id="wsSetup" placeholder="e.g. singing bowls, blankets, circle seating, projector"></div>
+          <div class="fg"><label>Workshop Notes</label><textarea id="wsNotes" rows="3" placeholder="Any additional details…"></textarea></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 5 -->
+    <div class="step-panel" id="step5" style="display:none">
+      <div class="card-inner">
+        <div class="step-num">Step 5 of 7</div>
+        <h2 class="step-title">Schedule Guidelines</h2>
+        <p class="step-sub">Please review and acknowledge these guidelines so our team can build an accurate schedule for your group.</p>
+        <div class="info-box">
+          <div class="ib-title">Meal Timing</div>
+          <strong>Light Breakfast:</strong> 6:45 AM – 8:00 AM<br>
+          <strong>Brunch:</strong> Served 15 minutes after your morning class ends<br>
+          <strong>Snack:</strong> 2:00 PM – 4:00 PM<br>
+          <strong>Dinner:</strong> Served 45 minutes after your afternoon class ends
+        </div>
+        <div class="warn-box">
+          <div class="wb-title">Tour & Activity Timing</div>
+          Tours typically depart at <strong>11:45 AM</strong> and last approximately <strong>2.5 hours</strong>.<br>
+          <strong>Muyil</strong> departs at <strong>10:30 AM</strong> and lasts approximately <strong>3 hours</strong>.<br><br>
+          If an activity was <strong>not prepaid or included</strong> in your retreat package, it will be scheduled onsite with other groups based on availability.
+        </div>
+        <div class="fg-label" style="margin-bottom:12px;">Please confirm you understand <span class="req">*</span></div>
+        <div class="ck-item" id="ckMeals" onclick="toggleCk('ckMeals','ackMeals')">
+          <input type="checkbox" id="ackMeals">
+          <div class="ck-box"></div>
+          <div class="ck-text">I understand that <strong>meal times are coordinated around the final retreat schedule</strong> and may shift based on class start and end times.</div>
+        </div>
+        <div class="ck-item" id="ckTours" onclick="toggleCk('ckTours','ackTours')">
+          <input type="checkbox" id="ackTours">
+          <div class="ck-box"></div>
+          <div class="ck-text">I understand that <strong>only prepaid or included activities are scheduled in advance</strong>. Additional tours and activities will be coordinated onsite.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 6 -->
+    <div class="step-panel" id="step6" style="display:none">
+      <div class="card-inner">
+        <div class="step-num">Step 6 of 7</div>
+        <h2 class="step-title">Additional Requests</h2>
+        <p class="step-sub">Anything else we should know? Special equipment, ceremony-style evenings, timing requests, or notes for the team.</p>
+        <div class="fg">
+          <label>Notes & Special Requests</label>
+          <textarea id="additionalNotes" rows="6" placeholder="Examples:&#10;• We need a sound system for evening sessions&#10;• We prefer a gentler first morning&#10;• We'd love one ceremony-style evening&#10;• We need extra mats, blocks, and bolsters&#10;• Please avoid scheduling classes at a specific time"></textarea>
+        </div>
+        <div class="fg">
+          <label>Prepaid / Included Activities</label>
+          <textarea id="prepaidActivities" rows="3" placeholder="List any tours or activities already included in your package (e.g. Cenote Tour, Muyil, Mangrove Kayak)…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 7: REVIEW -->
+    <div class="step-panel" id="step7" style="display:none">
+      <div class="card-inner">
+        <div class="step-num">Step 7 of 7</div>
+        <h2 class="step-title">Review Your Request</h2>
+        <p class="step-sub">Please review the details below before submitting. Our team will follow up within 48 hours to confirm your final schedule.</p>
+        <div id="reviewContent"></div>
+      </div>
+    </div>
+
+    <!-- THANK YOU -->
+    <div class="step-panel" id="stepDone" style="display:none">
+      <div class="thankyou">
+        <div class="ty-icon">🌴</div>
+        <h2 class="ty-title">Thank you!</h2>
+        <p class="ty-sub">Your retreat schedule request has been submitted. Our team will review your preferences and reach out within 48 hours to confirm your final schedule.</p>
+        <div class="ty-ref" id="tyRef"></div>
+        <div class="ty-contact">Questions? Reach us at <strong>retreats@amansala.com</strong></div>
+      </div>
+    </div>
+
+    <!-- NAV -->
+    <div class="card-nav" id="cardNav">
+      <button class="btn-back" id="btnBack" onclick="prevStep()" style="visibility:hidden">← Back</button>
+      <span class="step-counter" id="stepCounter"></span>
+      <button class="btn-next" id="btnNext" onclick="nextStep()">Continue →</button>
+    </div>
+  </div>
+
+</div>
+<script>
+const SHALAS=['Beachfront','Skye','Grande','Chica','Heaven'];
+const CLASS_TYPES=['Yoga','Pilates','Meditation','Breathwork','Fitness','Other'];
+const AM_TIMES=['7:00 AM','7:30 AM','8:00 AM','8:30 AM','Other / Request'];
+const PM_TIMES=['4:00 PM','4:30 PM','5:00 PM','5:30 PM','Other / Request'];
+const STEP_NAMES=['Info','Returning','AM & PM','Workshop','Guidelines','Notes','Review'];
+const MAX=7;
+let cur=1;
+
+const S={
+  leaderName:'',leaderEmail:'',retreatName:'',arrivalDate:'',departureDate:'',groupSize:'',
+  isReturning:null,preferredShala:'',
+  amTime:'',amTimeCustom:'',amType:'',amShala:'',amDuration:'90',
+  pmTime:'',pmTimeCustom:'',pmType:'',pmShala:'',pmDuration:'90',
+  hasWorkshop:null,wsTitle:'',wsTime:'',wsDuration:'60',wsSpace:'',wsSetup:'',wsNotes:'',
+  ackMeals:false,ackTours:false,
+  additionalNotes:'',prepaidActivities:''
+};
+
+function autoSetDep(){const s=document.getElementById('arrivalDate').value;const eEl=document.getElementById('departureDate');if(!s||!eEl)return;eEl.min=s;if(!eEl.value||eEl.value<=s){const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+5);eEl.value=d.toISOString().split('T')[0];}}
+function buildProgress(){
+  const w=document.getElementById('progressWrap');
+  w.innerHTML='';
+  STEP_NAMES.forEach((name,i)=>{
+    const idx=i+1;
+    if(i>0){const c=document.createElement('div');c.className='step-connector'+(cur>idx?' done':'');w.appendChild(c);}
+    const item=document.createElement('div');item.className='step-item';
+    const circle=document.createElement('div');
+    circle.className='step-circle'+(cur===idx?' active':cur>idx?' done':'');
+    circle.textContent=cur>idx?'✓':idx;
+    const lbl=document.createElement('div');
+    lbl.className='step-label'+(cur===idx?' active':'');
+    lbl.textContent=name;
+    item.appendChild(circle);item.appendChild(lbl);w.appendChild(item);
+  });
+}
+
+function buildGrid(id,items,key,otherKey){
+  const g=document.getElementById(id);if(!g)return;
+  g.innerHTML='';
+  items.forEach(item=>{
+    const lbl=document.createElement('label');
+    lbl.className='choice-card'+(S[key]===item?' selected':'');
+    lbl.innerHTML=`<input type="radio" name="${key}" value="${item}"><span class="cc-label">${item}</span>`;
+    lbl.onclick=()=>{
+      S[key]=item;
+      g.querySelectorAll('.choice-card').forEach(c=>c.classList.remove('selected'));
+      lbl.classList.add('selected');
+      if(otherKey){
+        const w=document.getElementById(otherKey);
+        if(w)w.classList.toggle('show',item==='Other / Request');
+      }
+    };
+    g.appendChild(lbl);
+  });
+}
+
+function selectReturning(val){
+  S.isReturning=val;
+  document.getElementById('ynYes').classList.toggle('selected',val);
+  document.getElementById('ynNo').classList.toggle('selected',!val);
+  document.getElementById('shalaSection').classList.toggle('show',val);
+  if(!val)S.preferredShala='';
+}
+
+function selectWorkshop(val){
+  S.hasWorkshop=val;
+  document.getElementById('wsYes').classList.toggle('selected',val);
+  document.getElementById('wsNo').classList.toggle('selected',!val);
+  document.getElementById('workshopSection').classList.toggle('show',val);
+}
+
+function toggleCk(itemId,key){
+  S[key]=!S[key];
+  document.getElementById(itemId).classList.toggle('checked',S[key]);
+}
+
+function collect(){
+  S.leaderName=document.getElementById('leaderName').value.trim();
+  S.leaderEmail=document.getElementById('leaderEmail').value.trim();
+  S.retreatName=document.getElementById('retreatName').value.trim();
+  S.arrivalDate=document.getElementById('arrivalDate').value;
+  S.departureDate=document.getElementById('departureDate').value;
+  S.groupSize=document.getElementById('groupSize').value;
+  S.amDuration=document.getElementById('amDuration').value;
+  S.pmDuration=document.getElementById('pmDuration').value;
+  S.amTimeCustom=document.getElementById('amOtherTime').value;
+  S.pmTimeCustom=document.getElementById('pmOtherTime').value;
+  if(S.hasWorkshop){
+    S.wsTitle=document.getElementById('wsTitle').value.trim();
+    S.wsTime=document.getElementById('wsTime').value;
+    S.wsDuration=document.getElementById('wsDuration').value;
+    S.wsSpace=document.getElementById('wsSpace').value;
+    S.wsSetup=document.getElementById('wsSetup').value.trim();
+    S.wsNotes=document.getElementById('wsNotes').value.trim();
+  }
+  S.additionalNotes=document.getElementById('additionalNotes').value.trim();
+  S.prepaidActivities=document.getElementById('prepaidActivities').value.trim();
+}
+
+function validate(){
+  if(cur===1){
+    if(!document.getElementById('leaderName').value.trim()){alert('Please enter your name.');return false;}
+    if(!document.getElementById('leaderEmail').value.trim()){alert('Please enter your email.');return false;}
+    if(!document.getElementById('retreatName').value.trim()){alert('Please enter your retreat name.');return false;}
+    if(!document.getElementById('arrivalDate').value){alert('Please select your arrival date.');return false;}
+    if(!document.getElementById('departureDate').value){alert('Please select your departure date.');return false;}
+  }
+  if(cur===2&&S.isReturning===null){alert('Please let us know if you are a returning leader.');return false;}
+  if(cur===3){
+    if(!S.amTime){alert('Please select a morning class time.');return false;}
+    if(!S.amType){alert('Please select a morning class type.');return false;}
+    if(!S.pmTime){alert('Please select an afternoon class time.');return false;}
+    if(!S.pmType){alert('Please select an afternoon class type.');return false;}
+  }
+  if(cur===4&&S.hasWorkshop===null){alert('Please indicate if you need a workshop.');return false;}
+  if(cur===5&&(!S.ackMeals||!S.ackTours)){alert('Please confirm both schedule guidelines before continuing.');return false;}
+  return true;
+}
+
+function buildReview(){
+  collect();
+  const fd=d=>{if(!d)return'—';const p=d.split('-');return`${p[1]}/${p[2]}/${p[0]}`;};
+  const ft=t=>t==='Other / Request'?'Requested separately':t||'—';
+  let h=`
+    <div class="review-section">
+      <h4>Retreat Information</h4>
+      <div class="review-row"><span class="review-lbl">Leader Name</span><span class="review-val">${S.leaderName}</span></div>
+      <div class="review-row"><span class="review-lbl">Email</span><span class="review-val">${S.leaderEmail}</span></div>
+      <div class="review-row"><span class="review-lbl">Retreat Name</span><span class="review-val">${S.retreatName}</span></div>
+      <div class="review-row"><span class="review-lbl">Dates</span><span class="review-val">${fd(S.arrivalDate)} – ${fd(S.departureDate)}</span></div>
+      ${S.groupSize?`<div class="review-row"><span class="review-lbl">Group Size</span><span class="review-val">${S.groupSize} guests</span></div>`:''}
+      <div class="review-row"><span class="review-lbl">Returning Leader</span><span class="review-val">${S.isReturning?'Yes':'No'}</span></div>
+      ${S.isReturning&&S.preferredShala?`<div class="review-row"><span class="review-lbl">Preferred Shala</span><span class="review-val">${S.preferredShala}</span></div>`:''}
+    </div>
+    <div class="review-section">
+      <h4>Morning Class</h4>
+      <div class="review-row"><span class="review-lbl">Time</span><span class="review-val">${ft(S.amTime)}${S.amTime==='Other / Request'&&S.amTimeCustom?' ('+S.amTimeCustom+')':''}</span></div>
+      <div class="review-row"><span class="review-lbl">Class Type</span><span class="review-val">${S.amType||'—'}</span></div>
+      <div class="review-row"><span class="review-lbl">Duration</span><span class="review-val">${S.amDuration} min</span></div>
+      <div class="review-row"><span class="review-lbl">Preferred Shala</span><span class="review-val">${S.amShala||'No preference'}</span></div>
+    </div>
+    <div class="review-section">
+      <h4>Afternoon Class</h4>
+      <div class="review-row"><span class="review-lbl">Time</span><span class="review-val">${ft(S.pmTime)}${S.pmTime==='Other / Request'&&S.pmTimeCustom?' ('+S.pmTimeCustom+')':''}</span></div>
+      <div class="review-row"><span class="review-lbl">Class Type</span><span class="review-val">${S.pmType||'—'}</span></div>
+      <div class="review-row"><span class="review-lbl">Duration</span><span class="review-val">${S.pmDuration} min</span></div>
+      <div class="review-row"><span class="review-lbl">Preferred Shala</span><span class="review-val">${S.pmShala||'No preference'}</span></div>
+    </div>`;
+  h+=S.hasWorkshop?`
+    <div class="review-section">
+      <h4>Midday Workshop</h4>
+      <div class="review-row"><span class="review-lbl">Title</span><span class="review-val">${S.wsTitle||'—'}</span></div>
+      <div class="review-row"><span class="review-lbl">Time</span><span class="review-val">${S.wsTime||'—'}</span></div>
+      <div class="review-row"><span class="review-lbl">Duration</span><span class="review-val">${S.wsDuration} min</span></div>
+      <div class="review-row"><span class="review-lbl">Space</span><span class="review-val">${S.wsSpace||'No preference'}</span></div>
+      ${S.wsSetup?`<div class="review-row"><span class="review-lbl">Setup</span><span class="review-val">${S.wsSetup}</span></div>`:''}
+      ${S.wsNotes?`<div class="review-row"><span class="review-lbl">Notes</span><span class="review-val">${S.wsNotes}</span></div>`:''}
+    </div>`:`
+    <div class="review-section">
+      <h4>Midday Workshop</h4>
+      <div class="review-row"><span class="review-lbl">Workshop</span><span class="review-val">Not requested</span></div>
+    </div>`;
+  if(S.additionalNotes||S.prepaidActivities){
+    h+=`<div class="review-section"><h4>Additional Information</h4>`;
+    if(S.additionalNotes)h+=`<div class="review-row"><span class="review-lbl">Notes</span><span class="review-val">${S.additionalNotes}</span></div>`;
+    if(S.prepaidActivities)h+=`<div class="review-row"><span class="review-lbl">Prepaid Activities</span><span class="review-val">${S.prepaidActivities}</span></div>`;
+    h+=`</div>`;
+  }
+  document.getElementById('reviewContent').innerHTML=h;
+}
+
+function showStep(n){
+  for(let i=1;i<=MAX;i++){const el=document.getElementById('step'+i);if(el)el.style.display=n===i?'block':'none';}
+  document.getElementById('stepDone').style.display='none';
+  document.getElementById('cardNav').style.display='flex';
+  document.getElementById('btnBack').style.visibility=n>1?'visible':'hidden';
+  document.getElementById('btnNext').textContent=n===MAX?'Submit Request ✓':'Continue →';
+  document.getElementById('stepCounter').textContent=`${n} of ${MAX}`;
+  buildProgress();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function initStep(n){
+  if(n===2){
+    if(S.isReturning!==null)selectReturning(S.isReturning);
+    buildGrid('shalaGrid',SHALAS,'preferredShala');
+  }
+  if(n===3){
+    buildGrid('amTimeGrid',AM_TIMES,'amTime','amOtherWrap');
+    buildGrid('amTypeGrid',CLASS_TYPES,'amType');
+    buildGrid('amShalaGrid',SHALAS,'amShala');
+    buildGrid('pmTimeGrid',PM_TIMES,'pmTime','pmOtherWrap');
+    buildGrid('pmTypeGrid',CLASS_TYPES,'pmType');
+    buildGrid('pmShalaGrid',SHALAS,'pmShala');
+    if(S.amTime==='Other / Request')document.getElementById('amOtherWrap').classList.add('show');
+    if(S.pmTime==='Other / Request')document.getElementById('pmOtherWrap').classList.add('show');
+  }
+  if(n===4&&S.hasWorkshop!==null)selectWorkshop(S.hasWorkshop);
+  if(n===5){
+    if(S.ackMeals)document.getElementById('ckMeals').classList.add('checked');
+    if(S.ackTours)document.getElementById('ckTours').classList.add('checked');
+  }
+}
+
+function nextStep(){
+  if(!validate())return;
+  collect();
+  if(cur===MAX){submit();return;}
+  cur++;
+  if(cur===MAX)buildReview();  // MAX is now 7
+  showStep(cur);initStep(cur);
+}
+
+function prevStep(){
+  if(cur<=1)return;
+  cur--;showStep(cur);initStep(cur);
+}
+
+function submit(){
+  collect();
+  const id='RLP-'+Date.now().toString(36).toUpperCase();
+  const sub={id,submittedAt:new Date().toISOString(),status:'pending',adminNotes:'',...S};
+  const all=JSON.parse(localStorage.getItem('amansala_retreats')||'[]');
+  all.push(sub);
+  localStorage.setItem('amansala_retreats',JSON.stringify(all));
+  for(let i=1;i<=MAX;i++){const el=document.getElementById('step'+i);if(el)el.style.display='none';}
+  document.getElementById('stepDone').style.display='block';
+  document.getElementById('cardNav').style.display='none';
+  document.getElementById('progressWrap').style.display='none';
+  document.getElementById('tyRef').textContent='Reference: '+id;
+}
+
+showStep(1);initStep(1);
+</script>
+</body>
+</html>
