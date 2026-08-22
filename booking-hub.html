@@ -4432,6 +4432,9 @@ checkBackupReminder();
 
 // ===== REAL-TIME SYNC — all devices update instantly when data changes =====
 function _applyRemoteSync(silent){
+  // Teachers filling out their own schedule are a single-user session — a background
+  // sync reloading/re-rendering mid-form risks discarding unsaved picks. Skip entirely.
+  if(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE)return;
   loadFromSupabase().then(loaded=>{
     if(!loaded)return;
     try{

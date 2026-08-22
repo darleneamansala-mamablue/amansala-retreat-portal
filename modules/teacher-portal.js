@@ -1295,6 +1295,7 @@ function tsBuildMorningFields(){
     <div style="margin-top:16px">
       <div class="ts-section-lbl">Why doesn't this fit the standard windows? <span style="font-size:11px;font-weight:400;color:var(--muted)">(required — helps Amansala plan around it)</span></div>
       <textarea id="tsMorningSpecialReason" placeholder="e.g. My group needs an earlier sunrise class at 6:00 AM..." style="width:100%;height:70px;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;line-height:1.6;background:var(--sand);outline:none;resize:vertical;box-sizing:border-box;margin-top:6px" onchange="_ts.morningSpecialReason=this.value">${_ts.morningSpecialReason||''}</textarea>
+      <div style="font-size:12px;color:var(--muted);font-style:italic;margin-top:8px">This time is based on availability — Amansala will confirm or follow up with you if it doesn't work.</div>
     </div>`;
     return;
   }
