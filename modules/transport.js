@@ -486,11 +486,11 @@ function trGetUpgrade(bkId,roomNum){
   const grandeFirst=[...available.filter(r=>!r.toUpperCase().startsWith('CH')),...available.filter(r=>r.toUpperCase().startsWith('CH'))];
   available.splice(0,available.length,...grandeFirst);
 
-  // Nightly fee = (nextPrice - currentPrice) × 0.8
+  // Nightly fee = (nextPrice - currentPrice) × 0.9 (10% discount off the price difference)
   const guestCount=reg?(reg.guests||[]).filter(g=>g.name).length:1;
   const curPrice=guestCount>=2?rt.price2:rt.price1;
   const nxtPrice=guestCount>=2?nextRt.price2:nextRt.price1;
-  const upgradeNightly=Math.round((nxtPrice-curPrice)*0.8);
+  const upgradeNightly=Math.round((nxtPrice-curPrice)*0.9);
   if(upgradeNightly<=0)return null;
 
   return{
