@@ -7,8 +7,9 @@ const TRANSPORT_KEY='amansala_transport';
 let trSelBkId=null;
 let trCurrentView='month'; // 'month' | 'retreat' | 'all' | 'individual'
 let trMonthOffset=0; // months from today's month
+let deletedTransportIds=new Set(JSON.parse(localStorage.getItem('amansala_deleted_transport_ids')||'[]'));
 
-function loadTransport(){try{return JSON.parse(localStorage.getItem(TRANSPORT_KEY)||'[]');}catch{return[];}}
+function loadTransport(){try{return(JSON.parse(localStorage.getItem(TRANSPORT_KEY)||'[]')).filter(s=>!deletedTransportIds.has(s.id));}catch{return[];}}
 function trNormName(s){return(s||'').toLowerCase().replace(/\s+/g,' ').trim();}
 function trTransportFullName(s){return trNormName(((s.firstName||'')+' '+(s.lastName||'')).trim());}
 function trGuestMatchesSub(guest,sub){
@@ -56,16 +57,25 @@ function saveTransport(data){
 }
 // Merge Supabase transport into localStorage (Supabase wins per entry, keep local-only entries)
 async function syncTransportFromSupabase(){
+  // Merge deletedTransportIds from Supabase so deletions from ANY device stay permanent
+  try{
+    const {data:delData}=await db.from('app_store').select('value').eq('key','deletedTransportIds').maybeSingle();
+    if(delData?.value&&Array.isArray(delData.value))delData.value.forEach(id=>deletedTransportIds.add(id));
+    localStorage.setItem('amansala_deleted_transport_ids',JSON.stringify([...deletedTransportIds]));
+  }catch(e){}
+
   const remote=await loadTransportFromSupabase();
   if(!remote)return;
   const local=loadTransport();
   const remoteIds=new Set(remote.map(r=>r.id));
-  // Keep local entries not yet in Supabase, merge with all remote entries
-  const localOnly=local.filter(l=>!remoteIds.has(l.id));
-  const merged=[...remote,...localOnly];
+  // Keep local entries not yet in Supabase, merge with all remote entries — excluding anything deleted
+  const localOnly=local.filter(l=>!remoteIds.has(l.id)&&!deletedTransportIds.has(l.id));
+  const merged=[...remote,...localOnly].filter(s=>!deletedTransportIds.has(s.id));
   localStorage.setItem(TRANSPORT_KEY,JSON.stringify(merged));
   // Push any local-only entries up to Supabase
   localOnly.forEach(e=>saveTransportToSupabase(e));
+  // If Supabase still somehow has a row marked deleted, remove it there too
+  remote.filter(r=>deletedTransportIds.has(r.id)).forEach(r=>deleteTransportFromSupabase(r.id));
 }
 async function refreshTransport(){
   await syncTransportFromSupabase();
@@ -959,10 +969,20 @@ function trCopyIndividualLink(){
   else{prompt('Copy this link:',url);}
 }
 
+function trTombstoneDelete(id){
+  deletedTransportIds.add(id);
+  localStorage.setItem('amansala_deleted_transport_ids',JSON.stringify([...deletedTransportIds]));
+  const data=loadTransport(); // already excludes deleted ids
+  localStorage.setItem(TRANSPORT_KEY,JSON.stringify(data));
+  deleteTransportFromSupabase(id);
+  try{
+    db.from('app_store').upsert({key:'deletedTransportIds',value:[...deletedTransportIds],updated_at:new Date().toISOString()});
+  }catch(e){}
+}
+
 function trDeleteIndividualSub(id){
   if(!confirm('Remove this transport submission?'))return;
-  const data=loadTransport().filter(s=>s.id!==id);
-  saveTransport(data);
+  trTombstoneDelete(id);
   trBuildIndividual();
   showToast('Submission removed.');
 }
@@ -1038,16 +1058,14 @@ function trBuildIndividual(){
 
 function trDeleteSub(id){
   if(!confirm('Remove this transport submission?'))return;
-  const data=loadTransport().filter(s=>s.id!==id);
-  saveTransport(data);
+  trTombstoneDelete(id);
   trSelectRetreat(trSelBkId);
   showToast('Submission removed.');
 }
 
 function trDeleteArrival(id){
   if(!confirm('Remove this transport submission?'))return;
-  const data=loadTransport().filter(s=>s.id!==id);
-  saveTransport(data);
+  trTombstoneDelete(id);
   refreshTransport();
   showToast('Submission removed.');
 }

@@ -3630,6 +3630,10 @@ async function saveTransportToSupabase(entry){
   }catch(e){console.warn('Transport Supabase save failed:',e);}
 }
 
+async function deleteTransportFromSupabase(id){
+  try{await db.from('transport').delete().eq('id',id);}catch(e){console.warn('Transport Supabase delete failed:',e);}
+}
+
 // ===== SHARED CONSTANTS =====
 const RT_VERSION='9';
 
