@@ -858,6 +858,20 @@ const TS_WINDOWS=[
   {id:'2',label:'9:30 – 11:00 AM',start:'09:30',end:'11:00'},
 ];
 
+const TS_SPECIAL_TIME_SLOTS=(()=>{
+  const slots=[];
+  const startM=7*60+30; // 7:30 AM
+  const endM=21*60;     // 9:00 PM
+  for(let m=startM;m<=endM;m+=15){
+    const hh=String(Math.floor(m/60)).padStart(2,'0');
+    const mm=String(m%60).padStart(2,'0');
+    const h=Math.floor(m/60);
+    const disp=(h%12===0?12:h%12)+':'+mm+' '+(h<12?'AM':'PM');
+    slots.push({val:`${hh}:${mm}`,label:disp});
+  }
+  return slots;
+})();
+
 let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:''};
 let _tsBkId=null;
 
@@ -1262,7 +1276,10 @@ function tsBuildMorningFields(){
     const dur=_ts.morningDur||60;
     el.innerHTML=`<div class="ts-fields">
       <div class="ts-field"><label>Start Time</label>
-        <input type="time" id="tsMorningStart" value="${_ts.morningStart||''}" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.morningStart=this.value;tsRenderShalaGrid('morning')">
+        <select id="tsMorningStart" onchange="_ts.morningStart=this.value;tsRenderShalaGrid('morning')">
+          <option value="">— Choose —</option>
+          ${TS_SPECIAL_TIME_SLOTS.map(s=>`<option value="${s.val}"${_ts.morningStart===s.val?' selected':''}>${s.label}</option>`).join('')}
+        </select>
       </div>
       <div class="ts-field"><label>Duration</label>
         <select id="tsMorningDur" onchange="tsMorningDurSelect(this.value)">

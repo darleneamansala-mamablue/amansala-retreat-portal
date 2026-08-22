@@ -611,6 +611,7 @@ function trBuildMonthView(){
             <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">Room</th>
             <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">Flight</th>
             <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">Retreat</th>
+            <th style="padding:5px 10px;border-bottom:1px solid #bbf7d0"></th>
           </tr></thead>
           <tbody>${enriched.map((s,i)=>{
             const airChip=s.arrivalAirport==='cancun'
@@ -625,6 +626,7 @@ function trBuildMonthView(){
               <td style="padding:6px 10px;white-space:nowrap"><span style="font-weight:700;color:#2d2520">${s.room}</span>${mRoomCat?`<br><span style="font-size:10px;color:#8a7e74">${mRoomCat}</span>`:''}</td>
               <td style="padding:6px 10px;color:#5a5048">${s.flightNumber||'—'}</td>
               <td style="padding:6px 10px;color:#8a7e74;font-size:11px">${s.retreatLabel}</td>
+              <td style="padding:6px 10px;text-align:right"><button onclick="trDeleteArrival('${s.id}')" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" title="Remove">✕</button></td>
             </tr>`;}).join('')}
           </tbody>
         </table></div>
@@ -748,6 +750,7 @@ function trBuildAllArrivals(){
                 <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Room #</th>
                 <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Guest</th>
                 <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Retreat</th>
+                <th style="padding:7px 12px;border-bottom:1px solid #e8dfd4"></th>
               </tr></thead>
               <tbody>${enriched2.map((s,i)=>{
                 const airChip=s.arrivalAirport==='cancun'
@@ -761,6 +764,7 @@ function trBuildAllArrivals(){
                   <td style="padding:8px 12px;white-space:nowrap"><span style="font-weight:700;color:#2d2520">${s.room}</span>${trRoomCat(s.room)?`<br><span style="font-size:10px;color:#8a7e74">${trRoomCat(s.room)}</span>`:''}</td>
                   <td style="padding:8px 12px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
                   <td style="padding:8px 12px;color:#8a7e74;font-size:11.5px">${s.retreatLabel}</td>
+                  <td style="padding:8px 12px;text-align:right"><button onclick="trDeleteArrival('${s.id}')" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" title="Remove">✕</button></td>
                 </tr>`;}).join('')}
               </tbody>
             </table>
@@ -1031,6 +1035,14 @@ function trDeleteSub(id){
   const data=loadTransport().filter(s=>s.id!==id);
   saveTransport(data);
   trSelectRetreat(trSelBkId);
+  showToast('Submission removed.');
+}
+
+function trDeleteArrival(id){
+  if(!confirm('Remove this transport submission?'))return;
+  const data=loadTransport().filter(s=>s.id!==id);
+  saveTransport(data);
+  refreshTransport();
   showToast('Submission removed.');
 }
 
