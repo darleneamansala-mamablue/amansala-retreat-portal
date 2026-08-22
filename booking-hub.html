@@ -1279,6 +1279,8 @@
             <div class="ts-field">
               <label>Time Slot</label>
               <select id="tsArrivalSlot" onchange="_ts.arrivalSlot=this.value;tsRenderShalaGrid('arrival')">
+                <option value="16:00">4:00 PM</option>
+                <option value="16:30">4:30 PM</option>
                 <option value="17:00">5:00 PM</option>
                 <option value="17:30">5:30 PM</option>
                 <option value="18:00">6:00 PM</option>
@@ -1417,14 +1419,14 @@
       <div class="ts-card">
         <div class="ts-card-title">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-          Workshop
+          Mid-Afternoon Class
         </div>
         <label class="ts-toggle" style="margin-bottom:0">
           <input type="checkbox" id="tsHasWorkshop" onchange="tsToggleWorkshop()">
-          <span>I would like to include a workshop</span>
+          <span>I would like to include a mid-afternoon class</span>
         </label>
         <div id="tsWorkshopSection" style="display:none;margin-top:18px">
-          <p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.6">Select the days you'd like to add a workshop. You can schedule one per day.</p>
+          <p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.6">Select the days you'd like to add a mid-afternoon class. You can schedule one per day.</p>
           <div id="tsWorkshopDaysList"></div>
         </div>
       </div>
