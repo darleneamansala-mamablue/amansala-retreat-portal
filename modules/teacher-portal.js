@@ -3607,12 +3607,15 @@ function skedGetRetreatEvents(dateStr){
     }
     // Middle days — morning class + evening class
     else {
-      if(effMornStart&&effMornShala){
+      const skips=bk.scheduleSkips||[];
+      const mornSkipped=skips.some(s=>s.date===dateStr&&s.period==='morn');
+      const aftSkipped=skips.some(s=>s.date===dateStr&&s.period==='aft');
+      if(effMornStart&&effMornShala&&!mornSkipped){
         const mEnd=skedMinToTime(skedTimeToMin(effMornStart)+effMornDur);
         evs.push({id:'ret_'+bk.id+'_morn',resourceId:effMornShala,date:dateStr,startTime:effMornStart,endTime:mEnd,title,subtitle:'Morning Class'+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
       const hasAf=sr.hasAfternoon||(ov.afternoonStart&&(ov.afternoonShala1||sr.afternoonShala1||sr.morningShala1));
-      if(hasAf&&effAfSlot&&effAfShala){
+      if(hasAf&&effAfSlot&&effAfShala&&!aftSkipped){
         const aEnd=skedMinToTime(skedTimeToMin(effAfSlot)+effAfDur);
         evs.push({id:'ret_'+bk.id+'_aft',resourceId:effAfShala,date:dateStr,startTime:effAfSlot,endTime:aEnd,title,subtitle:'Evening Class',color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
@@ -3764,7 +3767,7 @@ function skedBuild(){
       const bgColor=ev.bg||(color+'22');
       const textColor=ev.textColor||color;
       const evId=ev.isRetreat?ev.bkId:ev.id;
-      html+='<div class="sked-event" style="top:'+top+'px;height:'+height+'px;background:'+bgColor+';border-left:3px solid '+color+'" onclick="event.stopPropagation();skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+')">';
+      html+='<div class="sked-event" style="top:'+top+'px;height:'+height+'px;background:'+bgColor+';border-left:3px solid '+color+'" onclick="event.stopPropagation();skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+',\''+ev.date+'\')">';
       html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:3px;overflow:hidden">';
       html+='<span style="font-size:11px;font-weight:700;color:'+textColor+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+escHtml(ev.title)+'</span>';
       if(shalaLabel)html+='<span style="font-size:11.5px;font-weight:800;color:'+textColor+';background:rgba(255,255,255,.55);border-radius:4px;padding:0 5px;flex-shrink:0;white-space:nowrap;letter-spacing:-.2px">'+escHtml(shalaLabel)+'</span>';
@@ -3826,7 +3829,7 @@ function skedBuildWeek(weekStart,DAYS_SHORT,MONTHS_LONG){
       const height=Math.max(16,(endMin-startMin)*(SKED_PX_HR/60));
       const color=ev.color||'#2d6a6a';const bgColor=ev.bg||(color+'22');
       const evId=ev.isRetreat?ev.bkId:ev.id;
-      h+='<div class="sked-event" style="top:'+top+'px;height:'+height+'px;background:'+bgColor+';border-left:3px solid '+color+'" onclick="event.stopPropagation();skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+')">';
+      h+='<div class="sked-event" style="top:'+top+'px;height:'+height+'px;background:'+bgColor+';border-left:3px solid '+color+'" onclick="event.stopPropagation();skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+',\''+ev.date+'\')">';
       h+='<div style="font-size:10px;font-weight:700;color:'+color+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(ev.title)+'</div>';
       h+='<div style="font-size:9px;color:#6b7280">'+skedFmtTime(ev.startTime)+'</div>';
       h+='</div>';
@@ -3854,7 +3857,7 @@ function skedBuildList(days,DAYS_LONG,MONTHS_LONG){
       const color=ev.color||'#2d6a6a';const bgColor=ev.bg||(color+'22');
       const rsLabel=[...SKED_SHALAS,...SKED_ACTIVITIES].find(r=>r.id===ev.resourceId)?.name||ev.resourceId||'';
       const evId=ev.isRetreat?ev.bkId:ev.id;
-      h+='<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid '+color+'44;border-left:4px solid '+color+';border-radius:8px;margin-bottom:8px;background:'+bgColor+';cursor:pointer" onclick="skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+')">';
+      h+='<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid '+color+'44;border-left:4px solid '+color+';border-radius:8px;margin-bottom:8px;background:'+bgColor+';cursor:pointer" onclick="skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+',\''+ev.date+'\')">';
       h+='<div style="min-width:80px;font-size:12px;font-weight:700;color:'+color+'">'+skedFmtTime(ev.startTime)+(ev.endTime?' – '+skedFmtTime(ev.endTime):'')+'</div>';
       h+='<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#1a2332">'+escHtml(ev.title)+'</div>';
       if(ev.subtitle)h+='<div style="font-size:12px;color:#374151">'+escHtml(ev.subtitle)+'</div>';
@@ -3872,8 +3875,33 @@ function skedBuildList(days,DAYS_LONG,MONTHS_LONG){
 
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
-function skedClickEvent(evId,bkId,isRetreat){
-  if(isRetreat){openScheduleViewer(bkId);}
+function skedClickEvent(evId,bkId,isRetreat,dateStr){
+  if(isRetreat){
+    const prefix='ret_'+bkId+'_';
+    const suffix=evId.indexOf(prefix)===0?evId.slice(prefix.length):'';
+    if((suffix==='morn'||suffix==='aft')&&dateStr){
+      const period=suffix==='morn'?'morning':'evening';
+      const bk=AppData.bookings.find(b=>b.id===bkId);
+      if(bk){
+        const label=bk.leaderName||bk.retreatName||'This teacher';
+        const already=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period===suffix);
+        if(already){
+          if(confirm(`Restore ${label}'s ${period} class on ${dateStr}?`)){
+            bk.scheduleSkips=(bk.scheduleSkips||[]).filter(s=>!(s.date===dateStr&&s.period===suffix));
+            saveAll();skedBuild();showToast('Class restored for '+dateStr+'.');
+          }
+          return;
+        }
+        if(confirm(`Skip ${label}'s ${period} class on ${dateStr} only?\n\nThis removes it from the calendar and meal timing for that date only — every other day is unaffected.\n\nClick Cancel to view the full schedule instead.`)){
+          if(!bk.scheduleSkips)bk.scheduleSkips=[];
+          bk.scheduleSkips.push({date:dateStr,period:suffix});
+          saveAll();skedBuild();showToast('Class skipped for '+dateStr+'.');
+          return;
+        }
+      }
+    }
+    openScheduleViewer(bkId);
+  }
   else{openSkedEditModal(evId);}
 }
 

@@ -305,10 +305,11 @@ function menuMealTime(bk,meal,dateStr){
   // Uses departure-day class if applicable; arrival day has no morning class → fall through to '09:30'
   if(meal==='brunch'){
     let mStart='', mDur=90;
+    const mornSkipped=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='morn');
     if(isDeparture && sr.hasDepartureClass && sr.departureSlot){
       mStart=sr.departureSlot;
       mDur=parseInt(sr.departureDur||60);
-    } else if(!isArrival){
+    } else if(!isArrival && !mornSkipped){
       // Regular day — admin override takes priority
       mStart=ov.morningStart||sr.morningStart||'';
       mDur=parseInt(ov.morningDur||sr.morningDur||90);
@@ -328,9 +329,10 @@ function menuMealTime(bk,meal,dateStr){
       const afDur=parseInt(sr.arrivalDur||60);
       return addMin(sr.arrivalSlot,afDur+45)||'19:30';
     }
+    const aftSkipped=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='aft');
     const afStart=ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart||'';
     const afDur=parseInt(ov.afternoonDur||sr.afternoonDur||60);
-    if(sr.hasAfternoon&&afStart) return addMin(afStart,afDur+45)||'19:30';
+    if(sr.hasAfternoon&&afStart&&!aftSkipped) return addMin(afStart,afDur+45)||'19:30';
     return '19:30';
   }
   return '';
