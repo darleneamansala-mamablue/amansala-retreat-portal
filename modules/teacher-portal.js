@@ -4020,16 +4020,22 @@ function openDailyReport(){
     html+=`<div style="margin-bottom:18px">
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--teal);padding:8px 0 6px;border-bottom:2px solid var(--border);margin-bottom:8px">${dayLabel}</div>
       ${occupied.length?`<table style="width:100%;border-collapse:collapse">
-        <tr style="background:var(--sand)"><th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Room</th><th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Guests</th><th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Type</th><th style="text-align:right;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Rate/Night</th></tr>
+        <tr style="background:var(--sand)"><th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Room</th><th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Guests</th><th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Type</th><th style="text-align:right;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Rate/Night</th><th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Upgrade Potential</th><th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Upgrade Group</th></tr>
         ${occupied.map(r=>{
           const rt=AppData.roomTypes.find(t=>t.id===r.roomTypeId);
           const gNames=(r.guests||[]).filter(g=>g.name).map(g=>g.name+(r.isTeacherRoom?' (Teacher)':'')).join(', ');
           const rate=rt?`$${rt.price1}`:r.customPrice?`$${r.customPrice/nights}`:'—';
+          const upg=(typeof trGetUpgrade==='function')?trGetUpgrade(bk.id,r.room):null;
+          const upgCell=upg
+            ?`<span style="font-weight:700;color:#15803d">→ ${upg.toName}</span> <span style="color:var(--muted)">+$${upg.upgradeNightly}/night${upg.isSolo?'':' pp'} · ${upg.availableCount} avail.</span>`
+            :`<span style="color:#c0b8b0">—</span>`;
           return`<tr style="border-bottom:1px solid var(--border)">
             <td style="padding:6px 10px;font-size:13px;font-weight:700">${r.room}</td>
             <td style="padding:6px 10px;font-size:13px">${gNames}</td>
             <td style="padding:6px 10px;font-size:12.5px;color:var(--muted)">${rt?.name||'—'}</td>
             <td style="padding:6px 10px;font-size:12.5px;text-align:right">${rate}</td>
+            <td style="padding:6px 10px;font-size:12px;white-space:nowrap">${upgCell}</td>
+            <td style="padding:6px 10px"><input type="text" value="${escHtml(r.upgradeGroupNote||'')}" placeholder="e.g. group with GV5, GV10" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12px;background:var(--sand)" onchange="drSaveUpgradeGroup('${r.id}',this.value)"></td>
           </tr>`;
         }).join('')}
       </table>`:`<div style="font-size:12.5px;color:var(--muted);font-style:italic;padding:4px 0">No guests registered yet</div>`}
@@ -4038,5 +4044,13 @@ function openDailyReport(){
   document.getElementById('drSub').textContent=`${bk.leaderName||bk.retreatName} · ${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}`;
   document.getElementById('drContent').innerHTML=html;
   openModal('dailyReportModal');
+}
+
+function drSaveUpgradeGroup(regId,val){
+  const r=AppData.regs.find(x=>x.id===regId);if(!r)return;
+  r.upgradeGroupNote=val.trim();
+  r.updatedAt=new Date().toISOString();
+  saveAll();
+  showToast('Saved.');
 }
 
