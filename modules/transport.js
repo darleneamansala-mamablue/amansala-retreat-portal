@@ -549,9 +549,10 @@ function trRoomCat(roomNum){
 
 // ── Onsite upgrade helper ────────────────────────────────────────────────────
 // Category names used on pricing chart (guest-facing)
-const TR_CAT={rt1:'Beachfront',rt2:'Beachview',rt3:'Steps to Sea',rt4:'Garden Plus',rt5:'Garden Basico'};
-// Upgrade chain: each entry can move to the next
-const TR_CHAIN=['rt5','rt4','rt3','rt2','rt1'];
+// Upgrade targets — each starting room type maps to the one room type it upgrades
+// to. Not a strict price ladder (nicer isn't always pricier), so each pairing is
+// set explicitly here rather than inferred from price or room-list order.
+const TR_UPGRADE_MAP={rt5:'rt4',rt4:'rt6',rt3:'rt2',rt2:'rt1'};
 
 function trGetUpgrade(bkId,roomNum){
   if(!roomNum||roomNum==='—')return null;
@@ -561,10 +562,10 @@ function trGetUpgrade(bkId,roomNum){
   let rt=AppData.roomTypes.find(r=>r.id===rtId)||AppData.roomTypes.find(r=>r.rooms.includes(roomNum));
   if(!rt)return null;
 
-  const idx=TR_CHAIN.indexOf(rt.id);
-  if(idx===-1||idx===TR_CHAIN.length-1)return null; // not in chain or already top
+  const nextId=TR_UPGRADE_MAP[rt.id];
+  if(!nextId)return null;
 
-  const nextRt=AppData.roomTypes.find(r=>r.id===TR_CHAIN[idx+1]);
+  const nextRt=AppData.roomTypes.find(r=>r.id===nextId);
   if(!nextRt)return null;
 
   const bk=AppData.bookings.find(b=>b.id===bkId);
@@ -602,8 +603,8 @@ function trGetUpgrade(bkId,roomNum){
   const needsConfirmation=guestCount===2&&!(reg&&reg.upgradeBothInterested);
 
   return{
-    fromName:TR_CAT[rt.id]||rt.name,
-    toName:TR_CAT[nextRt.id]||nextRt.name,
+    fromName:rt.name,
+    toName:nextRt.name,
     upgradeNightly,
     availableCount:available.length,
     suggestedRoom:available[0],
