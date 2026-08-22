@@ -1328,6 +1328,22 @@
         </div>
       </div>
 
+      <!-- Workshop -->
+      <div class="ts-card">
+        <div class="ts-card-title">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Mid-Afternoon Class
+        </div>
+        <label class="ts-toggle" style="margin-bottom:0">
+          <input type="checkbox" id="tsHasWorkshop" onchange="tsToggleWorkshop()">
+          <span>I would like to include a mid-afternoon class</span>
+        </label>
+        <div id="tsWorkshopSection" style="display:none;margin-top:18px">
+          <p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.6">Select the days you'd like to add a mid-afternoon class. You can schedule one per day.</p>
+          <div id="tsWorkshopDaysList"></div>
+        </div>
+      </div>
+
       <!-- Afternoon / Evening Class -->
       <div class="ts-card">
         <div class="ts-card-title">
@@ -1419,22 +1435,6 @@
           <div class="ts-section-lbl" style="margin-top:20px">Departure Morning Shala Preference</div>
           <div style="font-size:12.5px;color:var(--muted);margin:6px 0 12px;line-height:1.6">Tap to set 1st choice, tap again for 2nd choice, tap once more to remove.</div>
           <div id="tsDepartureShalaGrid" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-        </div>
-      </div>
-
-      <!-- Workshop -->
-      <div class="ts-card">
-        <div class="ts-card-title">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-          Mid-Afternoon Class
-        </div>
-        <label class="ts-toggle" style="margin-bottom:0">
-          <input type="checkbox" id="tsHasWorkshop" onchange="tsToggleWorkshop()">
-          <span>I would like to include a mid-afternoon class</span>
-        </label>
-        <div id="tsWorkshopSection" style="display:none;margin-top:18px">
-          <p style="font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.6">Select the days you'd like to add a mid-afternoon class. You can schedule one per day.</p>
-          <div id="tsWorkshopDaysList"></div>
         </div>
       </div>
 
