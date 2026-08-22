@@ -858,7 +858,7 @@ const TS_WINDOWS=[
   {id:'2',label:'9:30 – 11:00 AM',start:'09:30',end:'11:00'},
 ];
 
-let _ts={window:'',morningStart:'',morningDur:90,hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureShala1:'',departureShala2:'',departureNotes:''};
+let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:''};
 let _tsBkId=null;
 
 function tsRenderSetupDays(){
@@ -986,7 +986,7 @@ function tsInit(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   _ts=bk.scheduleRequest
     ?{..._ts,...bk.scheduleRequest}
-    :{window:'',morningStart:'',morningDur:60,morningNotes:'',morningFlags:[],hasAfternoon:false,afternoonSlot:'16:30',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureShala1:'',departureShala2:'',departureNotes:''};
+    :{window:'',morningStart:'',morningDurRequest:'',morningDur:60,morningNotes:'',morningFlags:[],hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:''};
   // Migrate old field name: afternoonStart → afternoonSlot
   if(!_ts.afternoonSlot&&_ts.afternoonStart)_ts.afternoonSlot=_ts.afternoonStart;
   tsRenderBrowseGrid();
@@ -998,21 +998,24 @@ function tsInit(bkId){
   const arrCb=document.getElementById('tsHasArrivalClass');if(arrCb)arrCb.checked=!!_ts.hasArrivalClass;
   const arrSec=document.getElementById('tsArrivalSection');if(arrSec)arrSec.style.display=_ts.hasArrivalClass?'block':'none';
   const arrSlot=document.getElementById('tsArrivalSlot');if(arrSlot)arrSlot.value=_ts.arrivalSlot||'16:00';
-  const arrDur=document.getElementById('tsArrivalDur');if(arrDur)arrDur.value=String(_ts.arrivalDur||60);
+  const arrDur=document.getElementById('tsArrivalDur');if(arrDur)arrDur.value=_ts.arrivalDurRequest?'custom':String(_ts.arrivalDur||60);
+  const arrDurC=document.getElementById('tsArrivalDurCustom');if(arrDurC){arrDurC.value=_ts.arrivalDurRequest||'';arrDurC.style.display=_ts.arrivalDurRequest?'block':'none';}
   const arrNotes=document.getElementById('tsArrivalNotes');if(arrNotes)arrNotes.value=_ts.arrivalNotes||'';
   if(_ts.hasArrivalClass)tsRenderShalaGrid('arrival');
   // Restore departure class
   const depCb=document.getElementById('tsHasDepartureClass');if(depCb)depCb.checked=!!_ts.hasDepartureClass;
   const depSec=document.getElementById('tsDepartureSection');if(depSec)depSec.style.display=_ts.hasDepartureClass?'block':'none';
   const depSlot=document.getElementById('tsDepartureSlot');if(depSlot)depSlot.value=_ts.departureSlot||'08:00';
-  const depDur=document.getElementById('tsDepartureDur');if(depDur)depDur.value=String(_ts.departureDur||60);
+  const depDur=document.getElementById('tsDepartureDur');if(depDur)depDur.value=_ts.departureDurRequest?'custom':String(_ts.departureDur||60);
+  const depDurC=document.getElementById('tsDepartureDurCustom');if(depDurC){depDurC.value=_ts.departureDurRequest||'';depDurC.style.display=_ts.departureDurRequest?'block':'none';}
   const depNotes=document.getElementById('tsDepartureNotes');if(depNotes)depNotes.value=_ts.departureNotes||'';
   if(_ts.hasDepartureClass)tsRenderShalaGrid('departure');
   // Restore form values
   const hasCb=document.getElementById('tsHasAfternoon');if(hasCb)hasCb.checked=!!_ts.hasAfternoon;
   const afSec=document.getElementById('tsAfternoonSection');if(afSec)afSec.style.display=_ts.hasAfternoon?'block':'none';
   const afSlot=document.getElementById('tsAfternoonSlot');if(afSlot)afSlot.value=_ts.afternoonSlot||'16:30';
-  const afDur=document.getElementById('tsAfternoonDur');if(afDur)afDur.value=String(_ts.afternoonDur||60);
+  const afDur=document.getElementById('tsAfternoonDur');if(afDur)afDur.value=_ts.afternoonDurRequest?'custom':String(_ts.afternoonDur||60);
+  const afDurC=document.getElementById('tsAfternoonDurCustom');if(afDurC){afDurC.value=_ts.afternoonDurRequest||'';afDurC.style.display=_ts.afternoonDurRequest?'block':'none';}
   const afNotes=document.getElementById('tsAfternoonNotes');if(afNotes)afNotes.value=_ts.afternoonNotes||'';
   tsBuildAfternoonFlags();
   // Restore workshop
@@ -1224,6 +1227,31 @@ function tsBuildAfternoonFlags(){
   }).join('');
 }
 
+function tsDurSelect(type,value){
+  const cap=type.charAt(0).toUpperCase()+type.slice(1);
+  const customEl=document.getElementById('ts'+cap+'DurCustom');
+  if(value==='custom'){
+    if(customEl)customEl.style.display='block';
+    return;
+  }
+  if(customEl){customEl.style.display='none';customEl.value='';}
+  _ts[type+'DurRequest']='';
+  _ts[type+'Dur']=parseInt(value);
+  tsRenderShalaGrid(type);
+}
+
+function tsMorningDurSelect(value){
+  const customEl=document.getElementById('tsMorningDurCustom');
+  if(value==='custom'){
+    if(customEl)customEl.style.display='block';
+    return;
+  }
+  if(customEl){customEl.style.display='none';customEl.value='';}
+  _ts.morningDurRequest='';
+  _ts.morningDur=parseInt(value);
+  tsBuildMorningFields();
+}
+
 function tsBuildMorningFields(){
   const el=document.getElementById('tsMorningFields');if(!el)return;
   if(!_ts.window){el.innerHTML='<div style="font-size:13px;color:var(--muted);font-style:italic">Select a time window above first.</div>';return;}
@@ -1239,12 +1267,14 @@ function tsBuildMorningFields(){
       </select>
     </div>
     <div class="ts-field"><label>Duration</label>
-      <select id="tsMorningDur" onchange="_ts.morningDur=parseInt(this.value);tsBuildMorningFields()">
+      <select id="tsMorningDur" onchange="tsMorningDurSelect(this.value)">
         <option value="45"${dur===45?' selected':''}>45 minutes</option>
         <option value="60"${dur===60?' selected':''}>60 minutes</option>
         <option value="75"${dur===75?' selected':''}>75 minutes</option>
         <option value="90"${dur===90?' selected':''}>90 minutes</option>
+        <option value="custom"${![45,60,75,90].includes(dur)?' selected':''}>Other (request longer)</option>
       </select>
+      <input type="text" id="tsMorningDurCustom" placeholder="e.g. 2 hours, for a workshop" value="${_ts.morningDurRequest||''}" style="display:${_ts.morningDurRequest?'block':'none'};margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.morningDurRequest=this.value">
     </div>
   </div>
   <div style="margin-top:16px">
@@ -1492,16 +1522,20 @@ function tsSubmitSchedule(){
   if(IS_TEACHER_MODE&&bk.endDate&&new Date().toISOString().slice(0,10)>bk.endDate){showToast('Your retreat has passed. Please contact Amansala if you need schedule changes.');return;}
   const arrCbEl=document.getElementById('tsHasArrivalClass');if(arrCbEl)_ts.hasArrivalClass=arrCbEl.checked;
   const arrSlotEl=document.getElementById('tsArrivalSlot');if(arrSlotEl)_ts.arrivalSlot=arrSlotEl.value;
-  const arrDurEl=document.getElementById('tsArrivalDur');if(arrDurEl)_ts.arrivalDur=parseInt(arrDurEl.value);
+  const arrDurEl=document.getElementById('tsArrivalDur');if(arrDurEl&&arrDurEl.value!=='custom')_ts.arrivalDur=parseInt(arrDurEl.value);
+  const arrDurCEl=document.getElementById('tsArrivalDurCustom');if(arrDurCEl)_ts.arrivalDurRequest=arrDurEl&&arrDurEl.value==='custom'?arrDurCEl.value.trim():'';
   const arrNotesEl=document.getElementById('tsArrivalNotes');if(arrNotesEl)_ts.arrivalNotes=arrNotesEl.value.trim();
   const depCbEl=document.getElementById('tsHasDepartureClass');if(depCbEl)_ts.hasDepartureClass=depCbEl.checked;
   const depSlotEl=document.getElementById('tsDepartureSlot');if(depSlotEl)_ts.departureSlot=depSlotEl.value;
-  const depDurEl=document.getElementById('tsDepartureDur');if(depDurEl)_ts.departureDur=parseInt(depDurEl.value);
+  const depDurEl=document.getElementById('tsDepartureDur');if(depDurEl&&depDurEl.value!=='custom')_ts.departureDur=parseInt(depDurEl.value);
+  const depDurCEl=document.getElementById('tsDepartureDurCustom');if(depDurCEl)_ts.departureDurRequest=depDurEl&&depDurEl.value==='custom'?depDurCEl.value.trim():'';
   const depNotesEl=document.getElementById('tsDepartureNotes');if(depNotesEl)_ts.departureNotes=depNotesEl.value.trim();
   const mStartEl=document.getElementById('tsMorningStart');if(mStartEl)_ts.morningStart=mStartEl.value;
-  const mDurEl=document.getElementById('tsMorningDur');if(mDurEl)_ts.morningDur=parseInt(mDurEl.value);
+  const mDurEl=document.getElementById('tsMorningDur');if(mDurEl&&mDurEl.value!=='custom')_ts.morningDur=parseInt(mDurEl.value);
+  const mDurCEl=document.getElementById('tsMorningDurCustom');if(mDurCEl)_ts.morningDurRequest=mDurEl&&mDurEl.value==='custom'?mDurCEl.value.trim():'';
   const afSlotEl=document.getElementById('tsAfternoonSlot');if(afSlotEl)_ts.afternoonSlot=afSlotEl.value;
-  const afDurEl=document.getElementById('tsAfternoonDur');if(afDurEl)_ts.afternoonDur=parseInt(afDurEl.value);
+  const afDurEl=document.getElementById('tsAfternoonDur');if(afDurEl&&afDurEl.value!=='custom')_ts.afternoonDur=parseInt(afDurEl.value);
+  const afDurCEl=document.getElementById('tsAfternoonDurCustom');if(afDurCEl)_ts.afternoonDurRequest=afDurEl&&afDurEl.value==='custom'?afDurCEl.value.trim():'';
   const afNotesEl=document.getElementById('tsAfternoonNotes');if(afNotesEl)_ts.afternoonNotes=afNotesEl.value.trim();
   const mNotesEl=document.getElementById('tsMorningNotes');if(mNotesEl)_ts.morningNotes=mNotesEl.value.trim();
   const hasCb=document.getElementById('tsHasAfternoon');if(hasCb)_ts.hasAfternoon=hasCb.checked;
@@ -1746,23 +1780,24 @@ function openScheduleViewer(bkId){
   const shalaName=id=>SHALAS.find(s=>s.id===id)?.name||'—';
   const dur=n=>n?`${n} min`:'—';
   const fmtT=t=>t?tsFmt(t):'—';
+  const durReq=txt=>txt?`<br><span style="color:#b45309;font-weight:700">⚠️ Requested longer: ${txt} — adjust the schedule to match</span>`:'';
   let html=`<div style="font-size:13px;line-height:1.8;color:var(--dark)">`;
   if(sr.hasArrivalClass&&sr.arrivalSlot){html+=`<div style="margin-bottom:14px"><b>Arrival Evening Class</b><br>
     Start: ${fmtT(sr.arrivalSlot)} · Duration: ${dur(sr.arrivalDur)}<br>
-    Shala: ${shalaName(sr.arrivalShala1)}${sr.arrivalNotes?'<br><span style="color:var(--muted)">'+sr.arrivalNotes+'</span>':''}
+    Shala: ${shalaName(sr.arrivalShala1)}${sr.arrivalNotes?'<br><span style="color:var(--muted)">'+sr.arrivalNotes+'</span>':''}${durReq(sr.arrivalDurRequest)}
   </div>`;}
   html+=`<div style="margin-bottom:14px"><b>Daily Morning Class</b><br>
       Window: ${win?win.label:'—'}<br>
       Start: ${fmtT(sr.morningStart)} · Duration: ${dur(sr.morningDur)}<br>
-      Shala: ${shalaName(sr.morningShala1)}
+      Shala: ${shalaName(sr.morningShala1)}${durReq(sr.morningDurRequest)}
     </div>`;
   if(sr.hasAfternoon){html+=`<div style="margin-bottom:14px"><b>Daily Afternoon Class</b><br>
     Start: ${fmtT(sr.afternoonSlot||sr.afternoonStart)} · Duration: ${dur(sr.afternoonDur)}<br>
-    Shala: ${shalaName(sr.afternoonShala1)}
+    Shala: ${shalaName(sr.afternoonShala1)}${durReq(sr.afternoonDurRequest)}
   </div>`;}
   if(sr.hasDepartureClass&&sr.departureSlot){html+=`<div style="margin-bottom:14px"><b>Departure Morning Class</b><br>
     Start: ${fmtT(sr.departureSlot)} · Duration: ${dur(sr.departureDur)}<br>
-    Shala: ${shalaName(sr.departureShala1)}${sr.departureNotes?'<br><span style="color:var(--muted)">'+sr.departureNotes+'</span>':''}
+    Shala: ${shalaName(sr.departureShala1)}${sr.departureNotes?'<br><span style="color:var(--muted)">'+sr.departureNotes+'</span>':''}${durReq(sr.departureDurRequest)}
   </div>`;}
   // 2nd-choice note for admin
   const sv2Parts=[];

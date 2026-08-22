@@ -1292,12 +1292,14 @@
             </div>
             <div class="ts-field">
               <label>Duration</label>
-              <select id="tsArrivalDur" onchange="_ts.arrivalDur=parseInt(this.value);tsRenderShalaGrid('arrival')">
+              <select id="tsArrivalDur" onchange="tsDurSelect('arrival',this.value)">
                 <option value="45">45 minutes</option>
                 <option value="60">60 minutes</option>
                 <option value="75">75 minutes</option>
                 <option value="90">90 minutes</option>
+                <option value="custom">Other (request longer)</option>
               </select>
+              <input type="text" id="tsArrivalDurCustom" placeholder="e.g. 2 hours, for a workshop" style="display:none;margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.arrivalDurRequest=this.value">
             </div>
           </div>
           <div style="margin-top:16px">
@@ -1348,11 +1350,13 @@
             </div>
             <div class="ts-field">
               <label>Duration</label>
-              <select id="tsAfternoonDur" onchange="_ts.afternoonDur=parseInt(this.value);tsRenderShalaGrid('afternoon')">
+              <select id="tsAfternoonDur" onchange="tsDurSelect('afternoon',this.value)">
                 <option value="45">45 minutes</option>
                 <option value="60">60 minutes</option>
                 <option value="75">75 minutes</option>
+                <option value="custom">Other (request longer)</option>
               </select>
+              <input type="text" id="tsAfternoonDurCustom" placeholder="e.g. 2 hours, for a workshop" style="display:none;margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.afternoonDurRequest=this.value">
             </div>
           </div>
           <div style="margin-top:16px" id="tsAfternoonFlagsWrap">
@@ -1397,12 +1401,14 @@
             </div>
             <div class="ts-field">
               <label>Duration</label>
-              <select id="tsDepartureDur" onchange="_ts.departureDur=parseInt(this.value);tsRenderShalaGrid('departure')">
+              <select id="tsDepartureDur" onchange="tsDurSelect('departure',this.value)">
                 <option value="45">45 minutes</option>
                 <option value="60">60 minutes</option>
                 <option value="75">75 minutes</option>
                 <option value="90">90 minutes</option>
+                <option value="custom">Other (request longer)</option>
               </select>
+              <input type="text" id="tsDepartureDurCustom" placeholder="e.g. 2 hours, for a workshop" style="display:none;margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.departureDurRequest=this.value">
             </div>
           </div>
           <div style="margin-top:16px">
