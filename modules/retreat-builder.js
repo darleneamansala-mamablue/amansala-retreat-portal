@@ -8,7 +8,7 @@ const ADD_ONS_DEFAULT=[
   {id:'ao6', name:'Grande Cenote',                   desc:'Snorkeling and swimming in a stunning cenote',               price:95},
   {id:'ao7', name:'Mangroves',                       desc:'Scenic boat tour through the mangrove jungle',               price:95},
   {id:'ao2', name:'Muyil Float Tour',                desc:'Lazy river float through ancient Maya canals',               price:145},
-  {id:'ao3', name:'Atik Cenote',                     desc:'Sacred cenote experience',                                   price:95},
+  {id:'ao3', name:'Atik Cenote',                     desc:'Sacred cenote experience with an art walk',                  price:130},
   {id:'ao4', name:'Sound Healing & Cacao Ceremony',  desc:'Traditional heart-opening ceremony with live sound healing', price:65},
   {id:'ao5', name:'Temazcal',                        desc:'Traditional Maya sweat lodge ceremony',                      price:95},
   {id:'ao9', name:'Mayan Clay Ceremony',             desc:'Natural clay body treatment on the beach',                   price:65},

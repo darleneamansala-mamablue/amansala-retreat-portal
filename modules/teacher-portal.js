@@ -1127,15 +1127,14 @@ function tsInitWorkshopDays(){
 
 const WS_TIME_SLOTS=(()=>{
   const slots=[];
-  for(let h=11;h<=20;h++){
-    for(let m=0;m<60;m+=30){
-      if(h===11&&m===0)continue;// start at 11:30
-      const hh=String(h).padStart(2,'0');
-      const mm=String(m).padStart(2,'0');
-      const ampm=h<12?'AM':h===12?'PM':'PM';
-      const disp=(h>12?h-12:h)+':'+mm+' '+(h<12?'AM':'PM');
-      slots.push({val:`${hh}:${mm}`,label:disp});
-    }
+  const startM=9*60+45; // 9:45 AM
+  const endM=21*60+45;  // 9:45 PM
+  for(let m=startM;m<=endM;m+=30){
+    const hh=String(Math.floor(m/60)).padStart(2,'0');
+    const mm=String(m%60).padStart(2,'0');
+    const h=Math.floor(m/60);
+    const disp=(h%12===0?12:h%12)+':'+mm+' '+(h<12||h===24?'AM':'PM');
+    slots.push({val:`${hh}:${mm}`,label:disp});
   }
   return slots;
 })();
