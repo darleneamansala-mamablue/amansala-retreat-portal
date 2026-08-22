@@ -302,13 +302,7 @@ function trSelectRetreat(bkId){
                 :`<span style="font-weight:800;color:#15803d">$${gm.pricePerPax}</span> <span style="font-size:10px;color:#8a7e74">sharing</span>`)
               :'—';
             const upg=trGetUpgrade(bkId,room);
-            const upgCell=upg
-              ?`<div style="display:inline-flex;flex-direction:column;gap:2px">
-                  <span style="font-size:11px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 8px;white-space:nowrap">↑ ${upg.toName}</span>
-                  <input type="text" placeholder="Room #" value="${s.upgradeRoomAssigned||''}" onchange="trSaveUpgradeRoom('${s.id}',this.value)" style="font-size:10px;width:56px;padding:2px 5px;border:1px solid #bbf7d0;border-radius:5px;color:#15803d;font-weight:700" />
-                  <span style="font-size:10.5px;font-weight:700;color:#15803d">+$${upg.upgradeNightly}/night${upg.isSolo?'':' pp'} · ${upg.availableCount} avail.</span>
-                </div>`
-              :'<span style="color:#c0b8b0;font-size:11px">—</span>';
+            const upgCell=trUpgradeCellHtml(upg,s,11);
             const roomCat=trRoomCat(room);
             return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
               <td style="padding:9px 12px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
@@ -383,13 +377,7 @@ function trBuildGroups(subs,direction,heading,showUpgrade=false){
               const sRoom=trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName);
               const sEta=s[airportKey]==='cancun'?trAddMins(s[timeKey],120):trAddMins(s[timeKey],60);
               const sUpg=showUpgrade?trGetUpgrade(s.bookingId,sRoom):null;
-              const sUpgCell=sUpg
-                ?`<div style="display:inline-flex;flex-direction:column;gap:2px">
-                    <span style="font-size:10px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${sUpg.toName}</span>
-                    <input type="text" placeholder="Room #" value="${s.upgradeRoomAssigned||''}" onchange="trSaveUpgradeRoom('${s.id}',this.value)" style="font-size:10px;width:56px;padding:2px 5px;border:1px solid #bbf7d0;border-radius:5px;color:#15803d;font-weight:700" />
-                    <span style="font-size:10px;font-weight:700;color:#15803d">+$${sUpg.upgradeNightly}/night${sUpg.isSolo?'':' pp'} · ${sUpg.availableCount} avail.</span>
-                  </div>`
-                :'<span style="color:#c0b8b0;font-size:11px">—</span>';
+              const sUpgCell=showUpgrade?trUpgradeCellHtml(sUpg,s,10):'';
               const sRoomCat=trRoomCat(sRoom);
               return`<tr style="border-bottom:1px solid rgba(0,0,0,.04)">
                 <td style="padding:6px 8px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
@@ -593,6 +581,10 @@ function trGetUpgrade(bkId,roomNum){
   // Rooms assigned to OTHER guests in the same booking are also unavailable
   AppData.regs.filter(r=>r.bookingId===bk.id&&r.room&&r.room!==roomNum).forEach(r=>busyRooms.add(r.room));
 
+  // Triples (and larger) never upgrade — only solo and double-occupancy rooms are eligible
+  const guestCount=reg?(reg.guests||[]).filter(g=>g.name).length:1;
+  if(guestCount>=3)return null;
+
   const available=nextRt.rooms.filter(room=>!busyRooms.has(room));
   if(!available.length)return null;
   // Prefer Grande rooms over Chica (CH) rooms — only suggest CH if nothing else available
@@ -600,11 +592,14 @@ function trGetUpgrade(bkId,roomNum){
   available.splice(0,available.length,...grandeFirst);
 
   // Nightly fee = (nextPrice - currentPrice) × 0.9 (10% discount off the price difference)
-  const guestCount=reg?(reg.guests||[]).filter(g=>g.name).length:1;
   const curPrice=guestCount>=2?rt.price2:rt.price1;
   const nxtPrice=guestCount>=2?nextRt.price2:nextRt.price1;
   const upgradeNightly=Math.round((nxtPrice-curPrice)*0.9);
   if(upgradeNightly<=0)return null;
+
+  // Doubles only surface an upgrade once both roommates have confirmed interest —
+  // it's a per-person charge, so both need to agree to split it before we offer it.
+  const needsConfirmation=guestCount===2&&!(reg&&reg.upgradeBothInterested);
 
   return{
     fromName:TR_CAT[rt.id]||rt.name,
@@ -612,8 +607,35 @@ function trGetUpgrade(bkId,roomNum){
     upgradeNightly,
     availableCount:available.length,
     suggestedRoom:available[0],
-    isSolo:guestCount<2
+    isSolo:guestCount<2,
+    needsConfirmation,
+    regId:reg?reg.id:null
   };
+}
+
+function trConfirmUpgradeInterest(regId){
+  const reg=AppData.regs.find(r=>r.id===regId);
+  if(!reg)return;
+  reg.upgradeBothInterested=true;
+  reg.updatedAt=new Date().toISOString();
+  saveAll();
+  refreshTransport();
+  showToast('Marked — both guests interested in upgrading.');
+}
+
+// Shared "Onsite Upgrade" cell — used everywhere the badge is rendered so the
+// blank-room-input and both-interested confirmation stay consistent.
+function trUpgradeCellHtml(upg,sub,fontSize){
+  fontSize=fontSize||10;
+  if(!upg)return'<span style="color:#c0b8b0;font-size:11px">—</span>';
+  if(upg.needsConfirmation){
+    return`<button onclick="trConfirmUpgradeInterest('${upg.regId}')" title="Doubles only upgrade if both roommates want to split the cost" style="font-size:${fontSize}px;font-weight:600;padding:3px 8px;border-radius:6px;border:1px dashed #d6c7ae;background:#faf7f2;color:#8a7e74;cursor:pointer;white-space:nowrap">↑ ${upg.toName}? Ask both</button>`;
+  }
+  return`<div style="display:inline-flex;flex-direction:column;gap:2px">
+    <span style="font-size:${fontSize}px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${upg.toName}</span>
+    <input type="text" placeholder="Room #" value="${sub.upgradeRoomAssigned||''}" onchange="trSaveUpgradeRoom('${sub.id}',this.value)" style="font-size:${fontSize}px;width:56px;padding:2px 5px;border:1px solid #bbf7d0;border-radius:5px;color:#15803d;font-weight:700" />
+    <span style="font-size:${fontSize}px;font-weight:700;color:#15803d">+$${upg.upgradeNightly}/night${upg.isSolo?'':' pp'} · ${upg.availableCount} avail.</span>
+  </div>`;
 }
 
 function trBuildMonthView(){
@@ -1052,13 +1074,7 @@ function trBuildAllArrivals(){
                 ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
                 :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
               const gUpg=trGetUpgrade(g.bookingId,g.room);
-              const gUpgCell=gUpg
-                ?`<div style="display:inline-flex;flex-direction:column;gap:2px">
-                    <span style="font-size:10px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${gUpg.toName}</span>
-                    <input type="text" placeholder="Room #" value="${g.upgradeRoomAssigned||''}" onchange="trSaveUpgradeRoom('${g.id}',this.value)" style="font-size:10px;width:56px;padding:2px 5px;border:1px solid #bbf7d0;border-radius:5px;color:#15803d;font-weight:700" />
-                    <span style="font-size:10px;font-weight:700;color:#15803d">+$${gUpg.upgradeNightly}/night${gUpg.isSolo?'':' pp'} · ${gUpg.availableCount} avail.</span>
-                  </div>`
-                :'<span style="color:#c0b8b0;font-size:11px">—</span>';
+              const gUpgCell=trUpgradeCellHtml(gUpg,g,10);
               return`<tr style="border-bottom:1px solid rgba(200,216,212,.4)">
               <td style="padding:7px 10px;font-weight:600;color:#2d2520;white-space:nowrap">${g.firstName} ${g.lastName}</td>
               <td style="padding:7px 10px;font-weight:700;color:#2d2520">${g.room}</td>
@@ -1110,13 +1126,7 @@ function trBuildAllArrivals(){
               :`<span style="font-weight:800;color:#15803d">$${gInfo.pricePerPax}</span> <span style="font-size:10px;color:#8a7e74">sharing</span>`)
             :'—';
           const mUpg=trGetUpgrade(s.bookingId,s.room);
-          const mUpgCell=mUpg
-            ?`<div style="display:inline-flex;flex-direction:column;gap:2px">
-                <span style="font-size:10px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${mUpg.toName}</span>
-                <input type="text" placeholder="Room #" value="${s.upgradeRoomAssigned||''}" onchange="trSaveUpgradeRoom('${s.id}',this.value)" style="font-size:10px;width:56px;padding:2px 5px;border:1px solid #bbf7d0;border-radius:5px;color:#15803d;font-weight:700" />
-                <span style="font-size:10px;font-weight:700;color:#15803d">+$${mUpg.upgradeNightly}/night${mUpg.isSolo?'':' pp'} · ${mUpg.availableCount} avail.</span>
-              </div>`
-            :'<span style="color:#c0b8b0;font-size:11px">—</span>';
+          const mUpgCell=trUpgradeCellHtml(mUpg,s,10);
           return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
             <td style="padding:9px 12px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
             <td style="padding:9px 12px;font-weight:700;color:#2d2520">${s.room}</td>
