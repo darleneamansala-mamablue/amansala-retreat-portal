@@ -858,7 +858,7 @@ const TS_WINDOWS=[
   {id:'2',label:'9:30 – 11:00 AM',start:'09:30',end:'11:00'},
 ];
 
-let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:''};
+let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:''};
 let _tsBkId=null;
 
 function tsRenderSetupDays(){
@@ -986,7 +986,7 @@ function tsInit(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   _ts=bk.scheduleRequest
     ?{..._ts,...bk.scheduleRequest}
-    :{window:'',morningStart:'',morningDurRequest:'',morningDur:60,morningNotes:'',morningFlags:[],hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:''};
+    :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:''};
   // Migrate old field name: afternoonStart → afternoonSlot
   if(!_ts.afternoonSlot&&_ts.afternoonStart)_ts.afternoonSlot=_ts.afternoonStart;
   tsRenderBrowseGrid();
@@ -1060,7 +1060,11 @@ function tsRenderWindows(){
     <div class="ts-window-card${_ts.window===w.id?' active':''}" onclick="tsPickWindow('${w.id}')">
       <div class="ts-window-label">${w.label}</div>
       <div class="ts-window-sub">Choose your start time within this window</div>
-    </div>`).join('');
+    </div>`).join('')+`
+    <div class="ts-window-card${_ts.window==='special'?' active':''}" onclick="tsPickWindow('special')" style="border-style:dashed">
+      <div class="ts-window-label">Special Request</div>
+      <div class="ts-window-sub">My class doesn't start during either window above</div>
+    </div>`;
 }
 
 function tsPickWindow(id){_ts.window=id;_ts.morningStart='';tsRenderWindows();tsBuildMorningFields();tsRenderShalaGrid('morning');}
@@ -1255,6 +1259,29 @@ function tsMorningDurSelect(value){
 function tsBuildMorningFields(){
   const el=document.getElementById('tsMorningFields');if(!el)return;
   if(!_ts.window){el.innerHTML='<div style="font-size:13px;color:var(--muted);font-style:italic">Select a time window above first.</div>';return;}
+  if(_ts.window==='special'){
+    const dur=_ts.morningDur||60;
+    el.innerHTML=`<div class="ts-fields">
+      <div class="ts-field"><label>Start Time</label>
+        <input type="time" id="tsMorningStart" value="${_ts.morningStart||''}" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.morningStart=this.value;tsRenderShalaGrid('morning')">
+      </div>
+      <div class="ts-field"><label>Duration</label>
+        <select id="tsMorningDur" onchange="tsMorningDurSelect(this.value)">
+          <option value="45"${dur===45?' selected':''}>45 minutes</option>
+          <option value="60"${dur===60?' selected':''}>60 minutes</option>
+          <option value="75"${dur===75?' selected':''}>75 minutes</option>
+          <option value="90"${dur===90?' selected':''}>90 minutes</option>
+          <option value="custom"${![45,60,75,90].includes(dur)?' selected':''}>Other (request longer)</option>
+        </select>
+        <input type="text" id="tsMorningDurCustom" placeholder="e.g. 2 hours, for a workshop" value="${_ts.morningDurRequest||''}" style="display:${_ts.morningDurRequest?'block':'none'};margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.morningDurRequest=this.value">
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      <div class="ts-section-lbl">Why doesn't this fit the standard windows? <span style="font-size:11px;font-weight:400;color:var(--muted)">(required — helps Amansala plan around it)</span></div>
+      <textarea id="tsMorningSpecialReason" placeholder="e.g. My group needs an earlier sunrise class at 6:00 AM..." style="width:100%;height:70px;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;line-height:1.6;background:var(--sand);outline:none;resize:vertical;box-sizing:border-box;margin-top:6px" onchange="_ts.morningSpecialReason=this.value">${_ts.morningSpecialReason||''}</textarea>
+    </div>`;
+    return;
+  }
   const win=TS_WINDOWS.find(w=>w.id===_ts.window);
   const startM=tsT2M(win.start),endM=tsT2M(win.end),dur=_ts.morningDur||60;
   const opts=[];
@@ -1538,6 +1565,7 @@ function tsSubmitSchedule(){
   const afDurCEl=document.getElementById('tsAfternoonDurCustom');if(afDurCEl)_ts.afternoonDurRequest=afDurEl&&afDurEl.value==='custom'?afDurCEl.value.trim():'';
   const afNotesEl=document.getElementById('tsAfternoonNotes');if(afNotesEl)_ts.afternoonNotes=afNotesEl.value.trim();
   const mNotesEl=document.getElementById('tsMorningNotes');if(mNotesEl)_ts.morningNotes=mNotesEl.value.trim();
+  const mSpecialEl=document.getElementById('tsMorningSpecialReason');if(mSpecialEl)_ts.morningSpecialReason=mSpecialEl.value.trim();
   const hasCb=document.getElementById('tsHasAfternoon');if(hasCb)_ts.hasAfternoon=hasCb.checked;
   _ts.music=Array.from(document.querySelectorAll('.tsMusic:checked')).map(el=>el.value);
   const shalaFlexEl=document.querySelector('input[name="tsShalaFlex"]:checked');if(shalaFlexEl)_ts.shalaFlexibility=shalaFlexEl.value;
@@ -1553,6 +1581,7 @@ function tsSubmitSchedule(){
   const bowlQtyEl=document.getElementById('tsBowlQty');if(bowlQtyEl)_ts.bowlQty=parseInt(bowlQtyEl.value)||1;
   if(!_ts.bowlRental)_ts.bowlDays=[];
   if(!_ts.window){showToast('Please select a morning time window.');return;}
+  if(_ts.window==='special'&&!_ts.morningSpecialReason){showToast('Please tell us why your class needs a special time.');return;}
   if(!_ts.morningStart){showToast('Please select a morning start time.');return;}
   if(!_ts.morningShala1){showToast('Please select at least a 1st choice shala.');return;}
   if(!_ts.offsiteNight){showToast('Please select which night your group will dine offsite — this is required.');return;}
@@ -1787,9 +1816,9 @@ function openScheduleViewer(bkId){
     Shala: ${shalaName(sr.arrivalShala1)}${sr.arrivalNotes?'<br><span style="color:var(--muted)">'+sr.arrivalNotes+'</span>':''}${durReq(sr.arrivalDurRequest)}
   </div>`;}
   html+=`<div style="margin-bottom:14px"><b>Daily Morning Class</b><br>
-      Window: ${win?win.label:'—'}<br>
+      Window: ${sr.window==='special'?'⚠️ Special Request (outside standard windows)':(win?win.label:'—')}<br>
       Start: ${fmtT(sr.morningStart)} · Duration: ${dur(sr.morningDur)}<br>
-      Shala: ${shalaName(sr.morningShala1)}${durReq(sr.morningDurRequest)}
+      Shala: ${shalaName(sr.morningShala1)}${durReq(sr.morningDurRequest)}${sr.window==='special'&&sr.morningSpecialReason?'<br><span style="color:#b45309;font-weight:700">Reason: '+sr.morningSpecialReason+'</span>':''}
     </div>`;
   if(sr.hasAfternoon){html+=`<div style="margin-bottom:14px"><b>Daily Afternoon Class</b><br>
     Start: ${fmtT(sr.afternoonSlot||sr.afternoonStart)} · Duration: ${dur(sr.afternoonDur)}<br>
