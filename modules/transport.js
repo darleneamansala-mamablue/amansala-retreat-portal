@@ -26,7 +26,7 @@ function trGuestMatchesSub(guest,sub){
 }
 /** Room-list roster is source of truth for who should submit transport. */
 function getTransportRoster(bkId){
-  const allSubs=loadTransport().filter(s=>s.bookingId===bkId);
+  const allSubs=loadTransport().filter(s=>s.bookingId===bkId&&s.status!=='cancelled');
   const roster=[];
   AppData.regs.filter(r=>r.bookingId===bkId&&!r.isTeacherRoom).forEach(r=>{
     (r.guests||[]).filter(g=>g.name).forEach(g=>{
@@ -612,20 +612,23 @@ function trBuildMonthView(){
             <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">Flight</th>
             <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">Retreat</th>
             <th style="padding:5px 10px;border-bottom:1px solid #bbf7d0"></th>
+            <th style="padding:5px 10px;border-bottom:1px solid #bbf7d0"></th>
           </tr></thead>
           <tbody>${enriched.map((s,i)=>{
             const airChip=s.arrivalAirport==='cancun'
               ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 5px;font-weight:700">CUN</span>'
               :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 5px;font-weight:700">TQO</span>';
             const mRoomCat=trRoomCat(s.room);
-            return`<tr style="border-bottom:1px solid #f0fdf4;background:${i%2===0?'#fff':'#f9fefe'}">
+            const isCancelled=s.status==='cancelled';
+            return`<tr style="border-bottom:1px solid #f0fdf4;background:${i%2===0?'#fff':'#f9fefe'};opacity:${isCancelled?.5:1}">
               <td style="padding:6px 10px;font-weight:700;color:#0e9494;white-space:nowrap">${tsFmt(s.arrivalTime)}</td>
               <td style="padding:6px 10px">${airChip}</td>
               <td style="padding:6px 10px;color:#2d2520;font-weight:600;white-space:nowrap">${s.eta}</td>
-              <td style="padding:6px 10px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
+              <td style="padding:6px 10px;font-weight:600;color:#2d2520;white-space:nowrap;text-decoration:${isCancelled?'line-through':'none'}">${s.firstName} ${s.lastName}</td>
               <td style="padding:6px 10px;white-space:nowrap"><span style="font-weight:700;color:#2d2520">${s.room}</span>${mRoomCat?`<br><span style="font-size:10px;color:#8a7e74">${mRoomCat}</span>`:''}</td>
               <td style="padding:6px 10px;color:#5a5048">${s.flightNumber||'—'}</td>
               <td style="padding:6px 10px;color:#8a7e74;font-size:11px">${s.retreatLabel}</td>
+              <td style="padding:6px 10px">${trStatusBadge(s)}</td>
               <td style="padding:6px 10px;text-align:right"><button onclick="trDeleteArrival('${s.id}')" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" title="Remove">✕</button></td>
             </tr>`;}).join('')}
           </tbody>
@@ -751,19 +754,22 @@ function trBuildAllArrivals(){
                 <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Guest</th>
                 <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Retreat</th>
                 <th style="padding:7px 12px;border-bottom:1px solid #e8dfd4"></th>
+                <th style="padding:7px 12px;border-bottom:1px solid #e8dfd4"></th>
               </tr></thead>
               <tbody>${enriched2.map((s,i)=>{
                 const airChip=s.arrivalAirport==='cancun'
                   ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
                   :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
-                return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
+                const isCancelled=s.status==='cancelled';
+                return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'};opacity:${isCancelled?.5:1}">
                   <td style="padding:8px 12px;font-weight:700;color:#0e9494;white-space:nowrap">${tsFmt(s.arrivalTime)}</td>
                   <td style="padding:8px 12px">${airChip}</td>
                   <td style="padding:8px 12px;color:#2d2520;font-weight:600;white-space:nowrap">${s.eta}</td>
                   <td style="padding:8px 12px;color:#5a5048">${s.flightNumber||'—'}</td>
                   <td style="padding:8px 12px;white-space:nowrap"><span style="font-weight:700;color:#2d2520">${s.room}</span>${trRoomCat(s.room)?`<br><span style="font-size:10px;color:#8a7e74">${trRoomCat(s.room)}</span>`:''}</td>
-                  <td style="padding:8px 12px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
+                  <td style="padding:8px 12px;font-weight:600;color:#2d2520;white-space:nowrap;text-decoration:${isCancelled?'line-through':'none'}">${s.firstName} ${s.lastName}</td>
                   <td style="padding:8px 12px;color:#8a7e74;font-size:11.5px">${s.retreatLabel}</td>
+                  <td style="padding:8px 12px">${trStatusBadge(s)}</td>
                   <td style="padding:8px 12px;text-align:right"><button onclick="trDeleteArrival('${s.id}')" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" title="Remove">✕</button></td>
                 </tr>`;}).join('')}
               </tbody>
@@ -1044,6 +1050,21 @@ function trDeleteArrival(id){
   saveTransport(data);
   refreshTransport();
   showToast('Submission removed.');
+}
+
+function trSetStatus(id,status){
+  const data=loadTransport();
+  const sub=data.find(s=>s.id===id);
+  if(!sub)return;
+  sub.status=status;
+  saveTransport(data);
+  refreshTransport();
+  showToast(status==='cancelled'?'Marked as cancelled — no longer counted as transport received.':'Marked as confirmed.');
+}
+
+function trStatusBadge(s){
+  const cancelled=s.status==='cancelled';
+  return`<button onclick="trSetStatus('${s.id}','${cancelled?'confirmed':'cancelled'}')" title="Click to ${cancelled?'confirm':'cancel'}" style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px;border:1px solid ${cancelled?'#fca5a5':'#86efac'};background:${cancelled?'#fef2f2':'#f0fdf4'};color:${cancelled?'#dc2626':'#15803d'};cursor:pointer;white-space:nowrap">${cancelled?'✕ Cancelled':'✓ Confirmed'}</button>`;
 }
 
 // Hook into tab switch
