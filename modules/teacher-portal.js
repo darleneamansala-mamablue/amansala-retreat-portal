@@ -106,30 +106,6 @@ async function regOnRetreat(){
   }
   const bk=AppData.bookings.find(b=>b.id===id)||null;
   if(!bk)return;
-  // Try to acquire exclusive lock for this retreat
-  const lockResult=await _acquireRetreatLock(id);
-  if(lockResult.locked){
-    // Another user has it open — show lock panel, block editing
-    regSelBk=null;
-    _updateRegButtons(null);
-    document.getElementById('regTeacherCodeWrap').style.display='none';
-    document.getElementById('estQuotePanel').style.display='none';
-    _showRetreatLockedPanel(bk,lockResult.by);
-    // Watch the channel and auto-open when they leave
-    _watchRetreatForRelease(id,async()=>{
-      const retry=await _acquireRetreatLock(id);
-      if(!retry.locked){
-        regSelBk=bk;
-        _updateRegButtons(bk);
-        document.getElementById('regTeacherCodeWrap').style.display='none';
-        document.getElementById('estQuotePanel').style.display='none';
-        regRender();
-        showToast(`${bk.leaderName||bk.retreatName} ya está disponible.`);
-      }
-    });
-    return;
-  }
-  // Lock acquired — open retreat normally
   regSelBk=bk;
   _updateRegButtons(bk);
   document.getElementById('regTeacherCodeWrap').style.display='none';
