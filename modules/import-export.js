@@ -560,6 +560,7 @@ function confirmRGPaste(){
         if(r.phone&&existingReg.guests[0])existingReg.guests[0].phone=r.phone;
         if(r.notes&&existingReg.guests[0])existingReg.guests[0].notes=r.notes;
       }
+      existingReg.updatedAt=new Date().toISOString();
       targetReg=existingReg;updated++;
     }else{
       roomGuestIdx.set(canonRoom.toLowerCase(),(roomGuestIdx.get(canonRoom.toLowerCase())||0)+1);

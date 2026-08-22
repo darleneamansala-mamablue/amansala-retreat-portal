@@ -563,6 +563,7 @@ function gDelete(){
     // Compact: keep only named guests (re-index from 0) so price recalculates correctly
     const kept=reg.guests.filter(g=>g.name);
     reg.guests=kept.length?kept:[{name:'',email:'',phone:'',notes:''}];
+    reg.updatedAt=new Date().toISOString();
     saveAll();closeModal('guestModal');regRender();showToast('Removed.');
     // Sync updated guest list to Cloudbeds
     const _cbResId=(regSelBk?.cbReservationIds||{})[gEditRoom];
