@@ -897,9 +897,18 @@ function buildDashboard(){
   });
 
   // ── STAT CARDS ──
+  // Transport coverage across retreats arriving within 30 days
+  const transportTotals=soon.reduce((acc,bk)=>{
+    const ros=(typeof getTransportRoster==='function')?getTransportRoster(bk.id):null;
+    if(ros){acc.have+=ros.submittedCount;acc.total+=ros.roster.length;}
+    return acc;
+  },{have:0,total:0});
+  const transportColor=transportTotals.total===0?'#6b7280':transportTotals.have>=transportTotals.total?'#16a34a':'#dc2626';
+  const transportVal=transportTotals.total?`${transportTotals.have}/${transportTotals.total}`:'—';
   const statGrid=`<div class="db-stat-grid">
     ${dbStat('Active Retreats',active.length,'#2d6a6a','<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>')}
     ${dbStat('Arriving in 30 Days',soon.length,'#0891b2','<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>')}
+    ${dbStat('Transport (30 Days)',transportVal,transportColor,'<path d="M3 17h2l1.5-4.5A2 2 0 0 1 8.4 11h7.2a2 2 0 0 1 1.9 1.5L19 17h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M5 17V9a2 2 0 0 1 2-2h6l4 4v6"/>')}
     ${dbStat('Payment Alerts',urgent.length+warning.length,urgent.length?'#dc2626':warning.length?'#d97706':'#16a34a','<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>')}
     ${dbStat('Total Received',fmt$(grandTotalReceived),'#15803d','<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>')}
   </div>
