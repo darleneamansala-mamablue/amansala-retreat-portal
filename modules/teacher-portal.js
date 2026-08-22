@@ -996,6 +996,10 @@ function tsPopulateNights(bk){
 }
 
 function tsInit(bkId){
+  // Already editing this booking's schedule — don't re-initialize and discard in-progress edits.
+  // (This ran every time the Schedule tab was shown/re-rendered, even for the same booking,
+  // silently reverting any unsaved dropdown/field changes back to the last-saved database value.)
+  if(_tsBkId===bkId)return;
   _tsBkId=bkId;
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   _ts=bk.scheduleRequest
@@ -1513,13 +1517,7 @@ function tsRenderStatus(bk){
     } else if(!IS_TEACHER_MODE&&isPast){
       editWrap.innerHTML=`<button onclick="tsScrollToForm()" style="padding:7px 16px;background:#fff;border:1.5px solid #7c3aed;border-radius:8px;color:#7c3aed;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap">✏ Admin Edit</button>`;
     } else {
-      const daysUntil=Math.ceil((pd(bk.startDate)-new Date())/DAY_MS);
-      const locked=IS_TEACHER_MODE&&daysUntil<=42;
-      if(locked){
-        editWrap.innerHTML=`<span style="font-size:11.5px;color:#dc2626;font-weight:600;white-space:nowrap">🔒 Editing closed</span>`;
-      } else {
-        editWrap.innerHTML=`<button onclick="tsScrollToForm()" style="padding:7px 16px;background:#fff;border:1.5px solid var(--teal);border-radius:8px;color:var(--teal);font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap">✏ Edit Schedule</button>`;
-      }
+      editWrap.innerHTML=`<button onclick="tsScrollToForm()" style="padding:7px 16px;background:#fff;border:1.5px solid var(--teal);border-radius:8px;color:var(--teal);font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap">✏ Edit Schedule</button>`;
     }
   }
   // Hide schedule form cards for teachers viewing a past retreat
