@@ -2542,6 +2542,7 @@
           <button id="trViewRetreat" onclick="trSetView('retreat')" style="padding:7px 16px;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:#8a7e74">By Retreat</button>
           <button id="trViewAll" onclick="trSetView('all')" style="padding:7px 16px;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:#8a7e74">Day Detail</button>
           <button id="trViewIndividual" onclick="trSetView('individual')" style="padding:7px 16px;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:#8a7e74">Individual</button>
+          <button id="trViewDrivers" onclick="trSetView('drivers')" style="padding:7px 16px;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:#8a7e74">Drivers</button>
         </div>
       </div>
     </div>
@@ -2572,6 +2573,13 @@
       <label style="font-size:13px;font-weight:600;color:#5a5048">Date</label>
       <input type="date" id="trAllDate" onchange="trBuildAllArrivals()" style="padding:8px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;color:#2d2520">
       <button onclick="trBuildAllArrivals()" class="btn btn-secondary" style="font-size:12px">Refresh</button>
+    </div>
+
+    <!-- Driver view controls -->
+    <div id="trDriversControls" style="display:none;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
+      <label style="font-size:13px;font-weight:600;color:#5a5048">Date</label>
+      <input type="date" id="trDriversDate" onchange="trBuildDriverView()" style="padding:8px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;color:#2d2520">
+      <button onclick="trBuildDriverView()" class="btn btn-secondary" style="font-size:12px">Refresh</button>
     </div>
 
     <!-- Individual guest controls -->

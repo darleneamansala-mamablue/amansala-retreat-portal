@@ -87,12 +87,12 @@ async function refreshTransport(){
 
 function trSetView(v){
   trCurrentView=v;
-  const mBtn=document.getElementById('trViewMonth'),rBtn=document.getElementById('trViewRetreat'),aBtn=document.getElementById('trViewAll'),iBtn=document.getElementById('trViewIndividual');
-  const mCtrl=document.getElementById('trMonthControls'),rCtrl=document.getElementById('trRetreatControls'),aCtrl=document.getElementById('trAllControls'),iCtrl=document.getElementById('trIndividualControls');
+  const mBtn=document.getElementById('trViewMonth'),rBtn=document.getElementById('trViewRetreat'),aBtn=document.getElementById('trViewAll'),iBtn=document.getElementById('trViewIndividual'),dBtn=document.getElementById('trViewDrivers');
+  const mCtrl=document.getElementById('trMonthControls'),rCtrl=document.getElementById('trRetreatControls'),aCtrl=document.getElementById('trAllControls'),iCtrl=document.getElementById('trIndividualControls'),dCtrl=document.getElementById('trDriversControls');
   const activeStyle='background:#fff;color:#0e9494;box-shadow:0 1px 4px rgba(0,0,0,.08)';
   const inactiveStyle='background:transparent;color:#8a7e74;box-shadow:none';
-  [mBtn,rBtn,aBtn,iBtn].forEach(b=>{if(b)b.style.cssText=b.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+inactiveStyle;});
-  [mCtrl,rCtrl,aCtrl,iCtrl].forEach(c=>{if(c)c.style.display='none';});
+  [mBtn,rBtn,aBtn,iBtn,dBtn].forEach(b=>{if(b)b.style.cssText=b.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+inactiveStyle;});
+  [mCtrl,rCtrl,aCtrl,iCtrl,dCtrl].forEach(c=>{if(c)c.style.display='none';});
   if(v==='month'){
     if(mBtn)mBtn.style.cssText=mBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
     if(mCtrl)mCtrl.style.display='flex';
@@ -108,6 +108,13 @@ function trSetView(v){
     if(iCtrl)iCtrl.style.display='flex';
     trBuildIndividual();
     syncTransportFromSupabase().then(()=>trBuildIndividual());
+  } else if(v==='drivers'){
+    if(dBtn)dBtn.style.cssText=dBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
+    if(dCtrl)dCtrl.style.display='flex';
+    const ddEl=document.getElementById('trDriversDate');
+    if(ddEl&&!ddEl.value)ddEl.value=fmtISO(new Date());
+    trBuildDriverView();
+    syncTransportFromSupabase().then(()=>trBuildDriverView());
   } else {
     if(aBtn)aBtn.style.cssText=aBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
     if(aCtrl)aCtrl.style.display='flex';
@@ -714,6 +721,100 @@ function trBuildMonthView(){
     </div>`;
   });
   html+='</div>';
+  wrap.innerHTML=html;
+}
+
+// ── DRIVER ASSIGNMENT ────────────────────────────────────────────────────────
+// Default: Salamon covers Cancún airport ARRIVALS only. Irving covers all Tulum
+// airport arrivals and ALL departures (to either airport). Exception: if Salamon
+// is already at Cancún for an arrival and a Cancún-bound departure leaves within
+// 30 minutes after that arrival's flight lands, Salamon does that departure too
+// (round trip) instead of sending Irving out separately — this is uncommon.
+function trBuildDriverView(){
+  const wrap=document.getElementById('trContent');if(!wrap)return;
+  const dEl=document.getElementById('trDriversDate');
+  const date=dEl?dEl.value:fmtISO(new Date());
+  if(!date){wrap.innerHTML='<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0">Select a date to view driver assignments.</div>';return;}
+  const allSubs=loadTransport();
+  const arrivals=allSubs.filter(s=>s.arrivalDate===date&&s.arrivalTime&&s.arrivalAirport)
+    .map(s=>({...s,_kind:'arrival',room:trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName),
+      retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(AppData.bookings.find(b=>b.id===s.bookingId)?.leaderName||AppData.bookings.find(b=>b.id===s.bookingId)?.retreatName||'Unknown')}))
+    .sort((a,b)=>a.arrivalTime.localeCompare(b.arrivalTime));
+  const departures=allSubs.filter(s=>s.departureDate===date&&s.departureTime&&s.departureAirport)
+    .map(s=>({...s,_kind:'departure',room:trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName),
+      retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(AppData.bookings.find(b=>b.id===s.bookingId)?.leaderName||AppData.bookings.find(b=>b.id===s.bookingId)?.retreatName||'Unknown')}))
+    .sort((a,b)=>a.departureTime.localeCompare(b.departureTime));
+
+  const salamon=[],irving=[];
+  const claimedDepIds=new Set();
+
+  arrivals.forEach(a=>{
+    if(a.arrivalAirport==='cancun'){
+      salamon.push({...a,note:''});
+      // Check for a same-day Cancún departure within 30 min after this flight lands
+      const anchor=trTimeToMins(a.arrivalTime);
+      const match=departures.find(d=>!claimedDepIds.has(d.id)&&d.departureAirport==='cancun'&&
+        trTimeToMins(d.departureTime)>=anchor&&trTimeToMins(d.departureTime)<=anchor+30);
+      if(match){
+        claimedDepIds.add(match.id);
+        salamon.push({...match,note:`Round trip — combined with ${a.firstName} ${a.lastName}'s ${tsFmt(a.arrivalTime)} arrival`});
+      }
+    } else {
+      irving.push({...a,note:''});
+    }
+  });
+  departures.forEach(d=>{
+    if(!claimedDepIds.has(d.id))irving.push({...d,note:''});
+  });
+  salamon.sort((a,b)=>(a.arrivalTime||a.departureTime).localeCompare(b.arrivalTime||b.departureTime));
+  irving.sort((a,b)=>(a.arrivalTime||a.departureTime).localeCompare(b.arrivalTime||b.departureTime));
+
+  const dt=new Date(date+'T00:00:00');
+  const MNTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
+
+  function driverCard(name,sub,trips,color,bg){
+    if(!trips.length)return `<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;padding:20px;margin-bottom:16px;text-align:center;color:#8a7e74;font-size:13px">No trips for ${name} on ${dateLabel}.</div>`;
+    return `<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;margin-bottom:16px;overflow:hidden">
+      <div style="background:${bg};padding:12px 18px;border-bottom:1px solid ${color}44">
+        <span style="font-size:14px;font-weight:800;color:${color}">${name}</span>
+        <span style="font-size:11.5px;color:${color};opacity:.8;margin-left:8px">${sub}</span>
+        <span style="font-size:11px;background:${color};color:#fff;border-radius:99px;padding:1px 9px;font-weight:700;margin-left:8px">${trips.length} trip${trips.length!==1?'s':''}</span>
+      </div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+        <thead><tr style="background:#faf7f2">
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Type</th>
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Time</th>
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Guest</th>
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Room</th>
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Flight</th>
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Retreat</th>
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Notes</th>
+        </tr></thead>
+        <tbody>${trips.map((t,i)=>{
+          const isArr=t._kind==='arrival';
+          const time=isArr?t.arrivalTime:t.departureTime;
+          const airport=isArr?t.arrivalAirport:t.departureAirport;
+          const airChip=airport==='cancun'
+            ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
+            :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
+          return `<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
+            <td style="padding:8px 12px;font-weight:700;color:${isArr?'#0e9494':'#d97706'}">${isArr?'↓ Arrival':'↑ Departure'} ${airChip}</td>
+            <td style="padding:8px 12px;font-weight:700;color:#2d2520;white-space:nowrap">${tsFmt(time)}</td>
+            <td style="padding:8px 12px;font-weight:600;color:#2d2520;white-space:nowrap">${t.firstName} ${t.lastName}</td>
+            <td style="padding:8px 12px;white-space:nowrap">${t.room||'—'}</td>
+            <td style="padding:8px 12px;color:#5a5048">${t.flightNumber||'—'}</td>
+            <td style="padding:8px 12px;color:#8a7e74;font-size:11.5px">${t.retreatLabel}</td>
+            <td style="padding:8px 12px;color:${t.note?'#15803d':'#c0b8b0'};font-size:11.5px;font-weight:${t.note?700:400}">${t.note||'—'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  let html=`<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:12px">Driver Assignments · ${dateLabel}</div>`;
+  html+=driverCard('Salamon','Cancún arrivals · occasional round-trip departures',salamon,'#0e9494','#f0fdfb');
+  html+=driverCard('Irving','Tulum arrivals · all departures',irving,'#d97706','#fffbeb');
   wrap.innerHTML=html;
 }
 
