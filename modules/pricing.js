@@ -396,6 +396,7 @@ function settingDelRoom(rtId,room){
   if(!confirm(`Remove room "${room}" from inventory?\n\nThis will also remove any existing guest assignments for this room.`))return;
   const rt=AppData.roomTypes.find(r=>r.id===rtId);if(!rt)return;
   rt.rooms=rt.rooms.filter(r=>r!==room);
+  AppData.regs.filter(r=>r.room===room).forEach(r=>deletedRegIds.add(r.id));
   AppData.regs=AppData.regs.filter(r=>r.room!==room);
   saveAll();openSettings();showToast(`Room ${room} removed.`);
 }

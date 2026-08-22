@@ -318,6 +318,7 @@ function clearBlockRoomGuests(displayRoom){
   const item=document.querySelector(`.block-room-item[data-room="${CSS.escape(displayRoom)}"]`);
   const physical=item?JSON.parse(item.dataset.physical||'[]'):[displayRoom];
   if(!confirm(`Remove guest registrations from room ${displayRoom}? This cannot be undone.`))return;
+  AppData.regs.filter(r=>r.bookingId===blockEditBkId&&physical.includes(r.room)).forEach(r=>deletedRegIds.add(r.id));
   AppData.regs=AppData.regs.filter(r=>!(r.bookingId===blockEditBkId&&physical.includes(r.room)));
   saveAll();
   openBlockModal(blockEditBkId);
