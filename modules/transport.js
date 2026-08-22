@@ -265,24 +265,9 @@ function trSelectRetreat(bkId){
     </div>`;
   }
 
-  // Build 20-min ride groups for this retreat's arrivals
-  const trGroupMap={};
+  // Ride groups for this retreat's arrivals (shared logic — respects manual sharing overrides)
   const subsWithArrival=subs.filter(s=>s.arrivalDate&&s.arrivalTime&&s.arrivalAirport);
-  ['cancun','tulum'].forEach(airport=>{
-    const subset=subsWithArrival.filter(s=>s.arrivalAirport===airport)
-      .sort((a,b)=>a.arrivalTime.localeCompare(b.arrivalTime));
-    const used=new Set();
-    subset.forEach((s,i)=>{
-      if(used.has(i))return;
-      const grp=[s];used.add(i);
-      const anchor=trTimeToMins(s.arrivalTime);
-      subset.forEach((s2,j)=>{
-        if(j!==i&&!used.has(j)&&Math.abs(trTimeToMins(s2.arrivalTime)-anchor)<=20){grp.push(s2);used.add(j);}
-      });
-      const pp=trGetPrice(airport,grp.length);
-      grp.forEach(g=>{trGroupMap[g.email]={groupSize:grp.length,pricePerPax:pp};});
-    });
-  });
+  const trGroupMap=trGroupMapByEmail(trComputeRideGroups(subsWithArrival,'arrivalTime','arrivalAirport'));
 
   // All arrivals table — same columns as All Arrivals view
   if(subs.length){
@@ -307,7 +292,7 @@ function trSelectRetreat(bkId){
           <tbody>${sorted.map((s,i)=>{
             const gm=trGroupMap[s.email];
             const room=trGuestRoom(bkId,s.email,s.firstName,s.lastName);
-            const eta=s.arrivalAirport==='cancun'?trAddMins(s.arrivalTime,90):trAddMins(s.arrivalTime,45);
+            const eta=s.arrivalAirport==='cancun'?trAddMins(s.arrivalTime,120):trAddMins(s.arrivalTime,60);
             const airChip=s.arrivalAirport==='cancun'
               ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
               :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
@@ -319,7 +304,8 @@ function trSelectRetreat(bkId){
             const upg=trGetUpgrade(bkId,room);
             const upgCell=upg
               ?`<div style="display:inline-flex;flex-direction:column;gap:2px">
-                  <span style="font-size:11px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 8px;white-space:nowrap">↑ ${upg.toName}${upg.suggestedRoom?' · Rm '+upg.suggestedRoom:''}</span>
+                  <span style="font-size:11px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 8px;white-space:nowrap">↑ ${upg.toName}</span>
+                  <input type="text" placeholder="Room #" value="${s.upgradeRoomAssigned||''}" onchange="trSaveUpgradeRoom('${s.id}',this.value)" style="font-size:10px;width:56px;padding:2px 5px;border:1px solid #bbf7d0;border-radius:5px;color:#15803d;font-weight:700" />
                   <span style="font-size:10.5px;font-weight:700;color:#15803d">+$${upg.upgradeNightly}/night${upg.isSolo?'':' pp'} · ${upg.availableCount} avail.</span>
                 </div>`
               :'<span style="color:#c0b8b0;font-size:11px">—</span>';
@@ -359,21 +345,19 @@ function trBuildGroups(subs,direction,heading,showUpgrade=false){
     const dt=new Date(date+'T00:00:00');
     const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
     list.sort((a,b)=>a[timeKey].localeCompare(b[timeKey]));
-    const groups=[];let cur=[list[0]];
-    for(let i=1;i<list.length;i++){
-      const anchor=trTimeToMins(cur[0][timeKey]);
-      if(trTimeToMins(list[i][timeKey])-anchor<=30)cur.push(list[i]);
-      else{groups.push(cur);cur=[list[i]];}
-    }
-    groups.push(cur);
+    const rideGroups=trComputeRideGroups(list,timeKey,airportKey);
+    const groups=rideGroups.map(rg=>rg.guests);
+    const shareCandidates=direction==='arrival'?trFindShareCandidates(rideGroups,timeKey):[];
     out+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;margin-bottom:10px;overflow:hidden">
       <div style="background:#f2f8f6;padding:10px 16px;border-bottom:1px solid #c8d8d4;font-size:12.5px;font-weight:700;color:#0e9494">${airportLabel} · ${dateLabel}</div>
       <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+        ${shareCandidates.map(c=>trShareAlertHtml(c.a,c.b,c.gap)).join('')}
         ${groups.map((g,gi)=>{
           const pricePerPax=trGetPrice(airport,g.length);
           const soloPax=trGetPrice(airport,1);
           const saves=soloPax-pricePerPax;
           const isSolo=g.length===1;
+          const isManualShare=g.length>1&&g[0].shareGroupId&&g.every(x=>x.shareGroupId===g[0].shareGroupId);
           const priceLabel=isSolo?`$${pricePerPax} Private Transport`:`$${pricePerPax}/person`;
           return`<div style="background:${gi%2===0?'#faf7f2':'#f2f8f6'};border:1px solid ${g.length>1?'#9dd1d1':'#e8dfd4'};border-radius:9px;padding:10px 14px">
           <div style="font-size:11px;font-weight:700;color:#0e9494;margin-bottom:7px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -382,6 +366,7 @@ function trBuildGroups(subs,direction,heading,showUpgrade=false){
             <span style="color:#8a7e74;font-weight:400">${tsFmt(g[0][timeKey])}${g.length>1?' – '+tsFmt(g[g.length-1][timeKey]):''}</span>
             <span style="font-weight:700;color:${isSolo?'#5a5048':'#0e9494'};font-size:11px">${priceLabel}</span>
             ${saves>0?`<span style="background:#d1fae5;color:#065f46;border-radius:99px;padding:1px 8px;font-size:10px;font-weight:700">save $${saves} each</span>`:''}
+            ${isManualShare?`<button onclick="trUnshareGroup('${g.map(x=>x.id).join(',')}')" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;cursor:pointer">Undo Share</button>`:''}
           </div>
           <div style="overflow-x:auto">
           <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -396,11 +381,12 @@ function trBuildGroups(subs,direction,heading,showUpgrade=false){
             </tr></thead>
             <tbody>${g.map(s=>{
               const sRoom=trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName);
-              const sEta=s[airportKey]==='cancun'?trAddMins(s[timeKey],90):trAddMins(s[timeKey],45);
+              const sEta=s[airportKey]==='cancun'?trAddMins(s[timeKey],120):trAddMins(s[timeKey],60);
               const sUpg=showUpgrade?trGetUpgrade(s.bookingId,sRoom):null;
               const sUpgCell=sUpg
                 ?`<div style="display:inline-flex;flex-direction:column;gap:2px">
-                    <span style="font-size:10px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${sUpg.toName}${sUpg.suggestedRoom?' · Rm '+sUpg.suggestedRoom:''}</span>
+                    <span style="font-size:10px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${sUpg.toName}</span>
+                    <input type="text" placeholder="Room #" value="${s.upgradeRoomAssigned||''}" onchange="trSaveUpgradeRoom('${s.id}',this.value)" style="font-size:10px;width:56px;padding:2px 5px;border:1px solid #bbf7d0;border-radius:5px;color:#15803d;font-weight:700" />
                     <span style="font-size:10px;font-weight:700;color:#15803d">+$${sUpg.upgradeNightly}/night${sUpg.isSolo?'':' pp'} · ${sUpg.availableCount} avail.</span>
                   </div>`
                 :'<span style="color:#c0b8b0;font-size:11px">—</span>';
@@ -440,6 +426,116 @@ function trVehicleType(size){
   if(size<=4)return'SUV';
   if(size<=10)return'Van';
   return'Transfer';
+}
+
+// ── Ride sharing ─────────────────────────────────────────────────────────
+// Two subs auto-group within 20 min of each other. Staff can also force any
+// subs to share a ride via a common shareGroupId (trMarkSharing), which
+// overrides the time window — this is how "slide them together" works and
+// why the per-person price recalculates via trGetPrice(airport, grp.length).
+const TR_SHARE_WINDOW=40; // minutes — proximity threshold for the "ask about sharing?" alert
+
+function trComputeRideGroups(subs,timeKey,airportKey){
+  const groups=[];
+  ['cancun','tulum'].forEach(airport=>{
+    const subset=subs.filter(s=>s[airportKey]===airport&&s[timeKey]).sort((a,b)=>a[timeKey].localeCompare(b[timeKey]));
+    const used=new Set();
+    subset.forEach((s,i)=>{
+      if(used.has(i))return;
+      const grp=[s];used.add(i);
+      const anchor=trTimeToMins(s[timeKey]);
+      let changed=true;
+      while(changed){
+        changed=false;
+        subset.forEach((s2,j)=>{
+          if(used.has(j))return;
+          const withinAuto=Math.abs(trTimeToMins(s2[timeKey])-anchor)<=20;
+          const manualMatch=grp.some(g=>g.shareGroupId&&s2.shareGroupId&&g.shareGroupId===s2.shareGroupId);
+          if(withinAuto||manualMatch){grp.push(s2);used.add(j);changed=true;}
+        });
+      }
+      grp.sort((a,b)=>a[timeKey].localeCompare(b[timeKey]));
+      groups.push({airport,guests:grp,pricePerPax:trGetPrice(airport,grp.length),soloPrice:trGetPrice(airport,1)});
+    });
+  });
+  return groups.sort((a,b)=>a.guests[0][timeKey].localeCompare(b.guests[0][timeKey]));
+}
+
+function trGroupMapByEmail(groups){
+  const map={};
+  groups.forEach((g,gi)=>{g.guests.forEach(s=>{map[s.email]={gid:gi,groupSize:g.guests.length,pricePerPax:g.pricePerPax,soloPrice:g.soloPrice,airport:g.airport};});});
+  return map;
+}
+
+// Adjacent DIFFERENT groups (same airport) whose closest guests arrive within
+// TR_SHARE_WINDOW mins of each other — candidates to ask about sharing.
+function trFindShareCandidates(groups,timeKey){
+  const out=[];
+  ['cancun','tulum'].forEach(airport=>{
+    const list=groups.filter(g=>g.airport===airport).sort((a,b)=>a.guests[0][timeKey].localeCompare(b.guests[0][timeKey]));
+    for(let i=0;i<list.length-1;i++){
+      const aLast=list[i].guests[list[i].guests.length-1],bFirst=list[i+1].guests[0];
+      const gap=trTimeToMins(bFirst[timeKey])-trTimeToMins(aLast[timeKey]);
+      if(gap>=0&&gap<=TR_SHARE_WINDOW&&!(aLast.shareDismissedWith||[]).includes(bFirst.id)){
+        out.push({a:aLast,b:bFirst,gap});
+      }
+    }
+  });
+  return out;
+}
+
+function trShareAlertHtml(a,b,gap){
+  const idsCsv=a.id+','+b.id;
+  return`<div style="background:#fffbeb;border:1.5px dashed #fbbf24;border-radius:10px;padding:9px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <span style="font-size:12px;color:#92400e;flex:1;min-width:220px">🚐 <b>${b.firstName} ${b.lastName}</b> arrives ${gap} min after <b>${a.firstName} ${a.lastName}</b> — ask if they'd like to share a ride?</span>
+    <button onclick="trMarkSharing('${idsCsv}')" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:7px;border:none;background:#15803d;color:#fff;cursor:pointer">Mark as Sharing</button>
+    <button onclick="trDismissShare('${idsCsv}')" style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:7px;border:1px solid #d6c7ae;background:#fff;color:#8a7e74;cursor:pointer">Asked — Not Sharing</button>
+  </div>`;
+}
+
+function trMarkSharing(idsCsv){
+  const ids=idsCsv.split(',');
+  const data=loadTransport();
+  const subs=ids.map(id=>data.find(s=>s.id===id)).filter(Boolean);
+  if(subs.length<2)return;
+  const gid=subs.find(s=>s.shareGroupId)?.shareGroupId||('share_'+subs[0].id);
+  subs.forEach(s=>{s.shareGroupId=gid;s.updatedAt=new Date().toISOString();});
+  saveTransport(data);
+  refreshTransport();
+  showToast('Marked as sharing a ride — price updated.');
+}
+
+function trDismissShare(idsCsv){
+  const ids=idsCsv.split(',');
+  const data=loadTransport();
+  const subs=ids.map(id=>data.find(s=>s.id===id)).filter(Boolean);
+  if(subs.length<2)return;
+  subs.forEach(s=>{
+    s.shareDismissedWith=s.shareDismissedWith||[];
+    ids.forEach(id=>{if(id!==s.id&&!s.shareDismissedWith.includes(id))s.shareDismissedWith.push(id);});
+    s.updatedAt=new Date().toISOString();
+  });
+  saveTransport(data);
+  refreshTransport();
+  showToast('Noted — marked as asked.');
+}
+
+function trUnshareGroup(idsCsv){
+  const ids=idsCsv.split(',');
+  const data=loadTransport();
+  ids.forEach(id=>{const s=data.find(x=>x.id===id);if(s){delete s.shareGroupId;s.updatedAt=new Date().toISOString();}});
+  saveTransport(data);
+  refreshTransport();
+  showToast('Ride sharing undone.');
+}
+
+function trSaveUpgradeRoom(subId,val){
+  const data=loadTransport();
+  const sub=data.find(s=>s.id===subId);
+  if(!sub)return;
+  sub.upgradeRoomAssigned=val;
+  sub.updatedAt=new Date().toISOString();
+  saveTransport(data);
 }
 
 function trAddMins(t,mins){
@@ -613,7 +709,7 @@ function trBuildMonthView(){
     if(day.arrivals.length){
       const enriched=day.arrivals.map(s=>{
         const bk=AppData.bookings.find(b=>b.id===s.bookingId)||{};
-        const etaMins=s.arrivalAirport==='cancun'?90:45;
+        const etaMins=s.arrivalAirport==='cancun'?120:60;
         const room=trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName);
         return{...s,retreatLabel:bk.leaderName||bk.retreatName||'Unknown',eta:trAddMins(s.arrivalTime,etaMins),room};
       }).sort((a,b)=>a.arrivalTime.localeCompare(b.arrivalTime));
@@ -843,7 +939,7 @@ function trBuildAllArrivals(){
         const dayLabel=MNTHS[dt2.getMonth()]+' '+dt2.getDate()+', '+dt2.getFullYear();
         const enriched2=subs.map(s=>{
           const bk=AppData.bookings.find(b=>b.id===s.bookingId)||{};
-          const etaMins=s.arrivalAirport==='cancun'?90:45;
+          const etaMins=s.arrivalAirport==='cancun'?120:60;
           return{...s,retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(bk.leaderName||bk.retreatName||'Unknown Retreat'),
             room:trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName),
             eta:trAddMins(s.arrivalTime,etaMins)};
@@ -898,7 +994,7 @@ function trBuildAllArrivals(){
   // Enrich with retreat + room data
   const enriched=allSubs.map(s=>{
     const bk=AppData.bookings.find(b=>b.id===s.bookingId)||{};
-    const etaMins=s.arrivalAirport==='cancun'?90:45;
+    const etaMins=s.arrivalAirport==='cancun'?120:60;
     return{...s,
       retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(bk.leaderName||bk.retreatName||'Unknown Retreat'),
       room:trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName),
@@ -909,33 +1005,11 @@ function trBuildAllArrivals(){
   // Sort ALL arrivals chronologically
   enriched.sort((a,b)=>a.arrivalAirport===b.arrivalAirport?a.arrivalTime.localeCompare(b.arrivalTime):a.arrivalTime.localeCompare(b.arrivalTime));
 
-  // ── Group EVERYONE by airport into 20-minute ride windows ──────────────────
-  // Assign each person a groupId and pricePerPax
-  const groupMap={}; // email -> {groupId, groupSize, pricePerPax, soloPrice, airport}
-  const rideGroups=[]; // [{airport, airLabel, guests[], pricePerPax, soloPrice, eta}]
-
-  ['cancun','tulum'].forEach(airport=>{
-    const subset=enriched.filter(s=>s.arrivalAirport===airport).sort((a,b)=>a.arrivalTime.localeCompare(b.arrivalTime));
-    if(!subset.length)return;
-    // Greedy 20-min grouping
-    const used=new Set();
-    subset.forEach((s,i)=>{
-      if(used.has(i))return;
-      const grp=[s];used.add(i);
-      const anchor=trTimeToMins(s.arrivalTime);
-      subset.forEach((s2,j)=>{
-        if(j!==i&&!used.has(j)&&Math.abs(trTimeToMins(s2.arrivalTime)-anchor)<=20){
-          grp.push(s2);used.add(j);
-        }
-      });
-      const pricePax=trGetPrice(airport,grp.length);
-      const soloPax=trGetPrice(airport,1);
-      const airLabel=airport==='cancun'?'Cancún (CUN)':'Tulum (TQO)';
-      const gid='grp_'+rideGroups.length;
-      rideGroups.push({airport,airLabel,guests:grp,pricePerPax:pricePax,soloPrice:soloPax,eta:grp[0].eta,gid});
-      grp.forEach(g=>{groupMap[g.email]={gid,groupSize:grp.length,pricePerPax:pricePax,soloPrice:soloPax,airport};});
-    });
-  });
+  // ── Group EVERYONE by airport into ride groups (respects manual sharing) ───
+  const computedGroups=trComputeRideGroups(enriched,'arrivalTime','arrivalAirport');
+  const groupMap=trGroupMapByEmail(computedGroups);
+  const rideGroups=computedGroups.map((rg,gi)=>({...rg,airLabel:rg.airport==='cancun'?'Cancún (CUN)':'Tulum (TQO)',eta:rg.guests[0].eta,gid:'grp_'+gi}));
+  const shareCandidates=trFindShareCandidates(computedGroups,'arrivalTime');
 
   const dt=new Date(date+'T00:00:00');
   const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
@@ -945,9 +1019,11 @@ function trBuildAllArrivals(){
   let html=`<div style="margin-bottom:20px">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:12px">Ride Groups · ${dateLabel}</div>
     <div style="display:flex;flex-direction:column;gap:10px">
+    ${shareCandidates.map(c=>trShareAlertHtml(c.a,c.b,c.gap)).join('')}
     ${rideGroups.map((rg,gi)=>{
       const saves=rg.soloPrice-rg.pricePerPax;
       const bg=GROUP_COLORS[gi%GROUP_COLORS.length];
+      const isManualShare=rg.guests.length>1&&rg.guests[0].shareGroupId&&rg.guests.every(x=>x.shareGroupId===rg.guests[0].shareGroupId);
       return`<div style="background:${bg};border:1.5px solid #c8d8d4;border-radius:12px;padding:14px 18px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
           <span style="font-size:13px;font-weight:700;color:#0e9494">Ride ${gi+1}</span>
@@ -956,6 +1032,7 @@ function trBuildAllArrivals(){
           <span style="font-size:11.5px;color:#8a7e74">ETA ${rg.eta}</span>
           <span style="font-size:13px;font-weight:800;color:${rg.guests.length===1?'#5a5048':'#15803d'};margin-left:auto">$${rg.pricePerPax} <span style="font-size:10.5px;font-weight:500;color:#8a7e74">${rg.guests.length===1?'Private Transport':'per person'}</span></span>
           ${saves>0?`<span style="font-size:11px;background:#d1fae5;color:#065f46;border-radius:99px;padding:2px 10px;font-weight:700">save $${saves} vs solo</span>`:''}
+          ${isManualShare?`<button onclick="trUnshareGroup('${rg.guests.map(x=>x.id).join(',')}')" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;cursor:pointer">Undo Share</button>`:''}
         </div>
         <div style="overflow-x:auto">
           <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -977,7 +1054,8 @@ function trBuildAllArrivals(){
               const gUpg=trGetUpgrade(g.bookingId,g.room);
               const gUpgCell=gUpg
                 ?`<div style="display:inline-flex;flex-direction:column;gap:2px">
-                    <span style="font-size:10px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${gUpg.toName}${gUpg.suggestedRoom?' · Rm '+gUpg.suggestedRoom:''}</span>
+                    <span style="font-size:10px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${gUpg.toName}</span>
+                    <input type="text" placeholder="Room #" value="${g.upgradeRoomAssigned||''}" onchange="trSaveUpgradeRoom('${g.id}',this.value)" style="font-size:10px;width:56px;padding:2px 5px;border:1px solid #bbf7d0;border-radius:5px;color:#15803d;font-weight:700" />
                     <span style="font-size:10px;font-weight:700;color:#15803d">+$${gUpg.upgradeNightly}/night${gUpg.isSolo?'':' pp'} · ${gUpg.availableCount} avail.</span>
                   </div>`
                 :'<span style="color:#c0b8b0;font-size:11px">—</span>';
@@ -1034,7 +1112,8 @@ function trBuildAllArrivals(){
           const mUpg=trGetUpgrade(s.bookingId,s.room);
           const mUpgCell=mUpg
             ?`<div style="display:inline-flex;flex-direction:column;gap:2px">
-                <span style="font-size:10px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${mUpg.toName}${mUpg.suggestedRoom?' · Rm '+mUpg.suggestedRoom:''}</span>
+                <span style="font-size:10px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${mUpg.toName}</span>
+                <input type="text" placeholder="Room #" value="${s.upgradeRoomAssigned||''}" onchange="trSaveUpgradeRoom('${s.id}',this.value)" style="font-size:10px;width:56px;padding:2px 5px;border:1px solid #bbf7d0;border-radius:5px;color:#15803d;font-weight:700" />
                 <span style="font-size:10px;font-weight:700;color:#15803d">+$${mUpg.upgradeNightly}/night${mUpg.isSolo?'':' pp'} · ${mUpg.availableCount} avail.</span>
               </div>`
             :'<span style="color:#c0b8b0;font-size:11px">—</span>';
