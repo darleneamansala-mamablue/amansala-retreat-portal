@@ -1464,6 +1464,16 @@ function tsBuildMorningFields(){
 
 function tsT2M(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
 function tsM2T(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
+// Every valid 15-min start time across the two allotted morning windows — used to
+// stop a per-day time override from landing in the gap between windows.
+function tsAllMorningSlots(){
+  const out=[];
+  TS_WINDOWS.forEach(w=>{
+    const startM=tsT2M(w.start),endM=tsT2M(w.end);
+    for(let m=startM;m<endM;m+=15)out.push(tsM2T(m));
+  });
+  return out;
+}
 function tsFmt(t){const[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';return `${h%12||12}:${String(m).padStart(2,'0')} ${ap}`;}
 
 function tsCheckConflict(shalaId,period,bkId){
@@ -4079,12 +4089,20 @@ function skedClickEvent(evId,bkId,isRetreat,dateStr){
           }
         }
         if(confirm(`Change the start time for ${label}'s ${period} class on ${dateStr} only?\n\nEvery other day keeps the usual time — only this date changes.\n\nClick Cancel for other options (skip this day / view full schedule).`)){
-          const newTime=prompt(`New start time for ${dateStr} (24-hour, e.g. 09:30):`,existingOv?.start||'');
+          const isMorn=suffix==='morn';
+          const promptMsg=isMorn
+            ?`New start time for ${dateStr} — must fall within an allotted window (${TS_WINDOWS.map(w=>w.label).join(' or ')}):`
+            :`New start time for ${dateStr} (24-hour, e.g. 17:30):`;
+          const newTime=prompt(promptMsg,existingOv?.start||'');
           if(newTime===null)return;
           const t=newTime.trim();
           if(!/^([01]?\d|2[0-3]):[0-5]\d$/.test(t)){showToast('Please enter a time like 09:30.');return;}
           const[h,m]=t.split(':');
           const norm=h.padStart(2,'0')+':'+m;
+          if(isMorn&&!tsAllMorningSlots().includes(norm)){
+            showToast(`That time isn't within an allotted window. Choose a time within ${TS_WINDOWS.map(w=>w.label).join(' or ')}.`);
+            return;
+          }
           bk.scheduleTimeOverrides=timeOvs.filter(o=>!(o.date===dateStr&&o.period===suffix));
           bk.scheduleTimeOverrides.push({date:dateStr,period:suffix,start:norm});
           saveAll();skedBuild();showToast('Time updated for '+dateStr+'.');
