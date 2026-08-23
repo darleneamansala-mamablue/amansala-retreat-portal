@@ -1266,6 +1266,48 @@
         <div class="ts-shala-grid" id="tsShalaBrowseGrid"></div>
       </div>
 
+      <!-- Sunrise Activity -->
+      <div class="ts-card">
+        <div class="ts-card-title">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/></svg>
+          Sunrise Activity
+        </div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">Would you like to hold an early sunrise activity, before your regular morning class?</div>
+        <label class="ts-toggle" id="tsSunriseToggle">
+          <input type="checkbox" id="tsHasSunrise" onchange="tsToggleSunrise()">
+          <span>I will hold a sunrise activity</span>
+        </label>
+        <div id="tsSunriseSection" style="display:none;margin-top:16px">
+          <div class="ts-fields">
+            <div class="ts-field">
+              <label>Start Time</label>
+              <select id="tsSunriseStart" onchange="_ts.sunriseStart=this.value"></select>
+            </div>
+            <div class="ts-field">
+              <label>Duration</label>
+              <select id="tsSunriseDur" onchange="_ts.sunriseDur=parseInt(this.value)">
+                <option value="30">30 minutes</option>
+                <option value="45">45 minutes</option>
+                <option value="60">60 minutes</option>
+              </select>
+            </div>
+            <div class="ts-field">
+              <label>Location</label>
+              <select id="tsSunriseLocation" onchange="_ts.sunriseLocation=this.value">
+                <option value="">— Choose —</option>
+                <option value="chica_beach">Chica Beach</option>
+                <option value="grande_beach">Grande Beach</option>
+                <option value="chica_rooftop">Chica Rooftop</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:14px;padding:12px 14px;background:#fffbeb;border:1.5px solid #fbbf24;border-radius:9px;font-size:12.5px;color:#92400e;line-height:1.6">
+            Sunrise activities aren't assigned a shala — please be mindful that other guests may still be sleeping, and keep to these public areas quietly.<br>
+            <b>No music is permitted during sunrise classes.</b>
+          </div>
+        </div>
+      </div>
+
       <!-- Arrival Day Class -->
       <div class="ts-card">
         <div class="ts-card-title">
