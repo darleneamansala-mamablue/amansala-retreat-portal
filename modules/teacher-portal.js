@@ -1092,7 +1092,7 @@ function tsSaveManualActivity(aoId){
   if(!dateEl?.value){showToast('Please pick a date first.');return;}
   if(!bk.retreatActivities)bk.retreatActivities=[];
   bk.retreatActivities=bk.retreatActivities.filter(a=>a.aoId!==aoId);
-  bk.retreatActivities.push({aoId,date:dateEl.value,time:timeEl?.value||'11:45',prepaid:true});
+  bk.retreatActivities.push({aoId,date:dateEl.value,time:timeEl?.value||'11:45',prepaid:true,requestedTime:true});
   saveAll();
   showToast('Saved.');
   tsRenderPrepaidActivities(bk);
@@ -1824,7 +1824,7 @@ function tsRenderCalSection(bk){
         const dur=ACTS_DUR[a.aoId]||90;
         const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
         if(a.prepaid){
-          prepaidActs.push({time:timeRange,name:ao.name,cat,tag,shala:ACT_SHALA[a.aoId]||''});
+          prepaidActs.push({time:timeRange,name:ao.name,cat,tag,shala:ACT_SHALA[a.aoId]||'',requestedTime:!!a.requestedTime});
         } else {
           rows.push({time:timeRange,desc:ao.name+(ao.price?' — $'+ao.price+'/person':''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:'Optional',prepaid:false,sk:a.time||'99:99'});
         }
@@ -1887,7 +1887,7 @@ function tsRenderCalSection(bk){
             <div style="font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">✦ Pre-Paid Activity</div>
             ${day.prepaidActs.map((a,ai)=>`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;${ai>0?'border-top:1px solid #d1fae5;':''}">
               ${a.time?`<span style="min-width:95px;flex-shrink:0;font-size:11px;color:#4b7070;font-weight:600;font-family:'Jost',sans-serif">${a.time}</span>`:''}
-              <span style="flex:1;font-size:12.5px;color:#15803d;font-weight:600">${a.name}</span>
+              <span style="flex:1;font-size:12.5px;color:#15803d;font-weight:600">${a.name}${a.requestedTime?' <span style="font-weight:600;font-style:italic;color:#4b7070">(requested this time)</span>':''}</span>
               ${a.shala?`<span class="sched-shala" style="flex-shrink:0">${a.shala}</span>`:''}
               <span class="sched-act-tag prepaid" style="flex-shrink:0">${a.tag}</span>
             </div>`).join('')}
@@ -3330,7 +3330,7 @@ function openPrintSchedule(bkId){
         const ao=printActMap[a.aoId]||{name:a.aoId,price:0};
         const dur=ACTS_DUR[a.aoId]||90;
         const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
-        const desc=a.prepaid?ao.name:('Optional '+ao.name+(ao.price?' — $'+ao.price+' USD per person':''));
+        const desc=a.prepaid?(ao.name+(a.requestedTime?' (requested this time)':'')):('Optional '+ao.name+(ao.price?' — $'+ao.price+' USD per person':''));
         rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99'});
       });
       const isOffsite=sr?.offsiteNight&&(()=>{
