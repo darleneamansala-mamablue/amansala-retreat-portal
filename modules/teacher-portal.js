@@ -3732,14 +3732,23 @@ function skedGetRetreatEvents(dateStr){
       const skips=bk.scheduleSkips||[];
       const mornSkipped=skips.some(s=>s.date===dateStr&&s.period==='morn');
       const aftSkipped=skips.some(s=>s.date===dateStr&&s.period==='aft');
-      if(effMornStart&&effMornShala&&!mornSkipped){
-        const mEnd=skedMinToTime(skedTimeToMin(effMornStart)+effMornDur);
-        evs.push({id:'ret_'+bk.id+'_morn',resourceId:effMornShala,date:dateStr,startTime:effMornStart,endTime:mEnd,title,subtitle:'Morning Class'+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+      // Per-day time overrides — some teachers start/finish at different times on
+      // different days rather than the same time every day.
+      const timeOvs=bk.scheduleTimeOverrides||[];
+      const mornOv=timeOvs.find(o=>o.date===dateStr&&o.period==='morn');
+      const aftOv=timeOvs.find(o=>o.date===dateStr&&o.period==='aft');
+      const dayMornStart=mornOv?mornOv.start:effMornStart;
+      const dayMornDur=mornOv?(mornOv.dur||effMornDur):effMornDur;
+      const dayAfSlot=aftOv?aftOv.start:effAfSlot;
+      const dayAfDur=aftOv?(aftOv.dur||effAfDur):effAfDur;
+      if(dayMornStart&&effMornShala&&!mornSkipped){
+        const mEnd=skedMinToTime(skedTimeToMin(dayMornStart)+dayMornDur);
+        evs.push({id:'ret_'+bk.id+'_morn',resourceId:effMornShala,date:dateStr,startTime:dayMornStart,endTime:mEnd,title,subtitle:'Morning Class'+(mornOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
       const hasAf=sr.hasAfternoon||(ov.afternoonStart&&(ov.afternoonShala1||sr.afternoonShala1||sr.morningShala1));
-      if(hasAf&&effAfSlot&&effAfShala&&!aftSkipped){
-        const aEnd=skedMinToTime(skedTimeToMin(effAfSlot)+effAfDur);
-        evs.push({id:'ret_'+bk.id+'_aft',resourceId:effAfShala,date:dateStr,startTime:effAfSlot,endTime:aEnd,title,subtitle:'Evening Class',color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+      if(hasAf&&dayAfSlot&&effAfShala&&!aftSkipped){
+        const aEnd=skedMinToTime(skedTimeToMin(dayAfSlot)+dayAfDur);
+        evs.push({id:'ret_'+bk.id+'_aft',resourceId:effAfShala,date:dateStr,startTime:dayAfSlot,endTime:aEnd,title,subtitle:'Evening Class'+(aftOv?' (time changed)':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
     // Workshops — only shala1
@@ -4012,6 +4021,27 @@ function skedClickEvent(evId,bkId,isRetreat,dateStr){
             bk.scheduleSkips=(bk.scheduleSkips||[]).filter(s=>!(s.date===dateStr&&s.period===suffix));
             saveAll();skedBuild();showToast('Class restored for '+dateStr+'.');
           }
+          return;
+        }
+        const timeOvs=bk.scheduleTimeOverrides||[];
+        const existingOv=timeOvs.find(o=>o.date===dateStr&&o.period===suffix);
+        if(existingOv){
+          if(confirm(`${label}'s ${period} class on ${dateStr} is set to start at ${existingOv.start} instead of the usual time. Reset to the usual time?\n\nClick Cancel to enter a different time instead.`)){
+            bk.scheduleTimeOverrides=timeOvs.filter(o=>!(o.date===dateStr&&o.period===suffix));
+            saveAll();skedBuild();showToast('Reset to usual time for '+dateStr+'.');
+            return;
+          }
+        }
+        if(confirm(`Change the start time for ${label}'s ${period} class on ${dateStr} only?\n\nEvery other day keeps the usual time — only this date changes.\n\nClick Cancel for other options (skip this day / view full schedule).`)){
+          const newTime=prompt(`New start time for ${dateStr} (24-hour, e.g. 09:30):`,existingOv?.start||'');
+          if(newTime===null)return;
+          const t=newTime.trim();
+          if(!/^([01]?\d|2[0-3]):[0-5]\d$/.test(t)){showToast('Please enter a time like 09:30.');return;}
+          const[h,m]=t.split(':');
+          const norm=h.padStart(2,'0')+':'+m;
+          bk.scheduleTimeOverrides=timeOvs.filter(o=>!(o.date===dateStr&&o.period===suffix));
+          bk.scheduleTimeOverrides.push({date:dateStr,period:suffix,start:norm});
+          saveAll();skedBuild();showToast('Time updated for '+dateStr+'.');
           return;
         }
         if(confirm(`Skip ${label}'s ${period} class on ${dateStr} only?\n\nThis removes it from the calendar and meal timing for that date only — every other day is unaffected.\n\nClick Cancel to view the full schedule instead.`)){
