@@ -3425,6 +3425,11 @@ async function syncToSupabase(){
           const supaSubAt=sb.scheduleRequest?.submittedAt||'';
           const localSubAt=bk.scheduleRequest?.submittedAt||'';
           if(supaSubAt>localSubAt)bk.scheduleRequest=sb.scheduleRequest;
+          // retreatActivities changes independently of scheduleRequest (e.g. admin
+          // auto-assign) — don't let a stale local copy overwrite a newer Supabase one.
+          const supaActUp=sb.retreatActivitiesUpdatedAt||'';
+          const localActUp=bk.retreatActivitiesUpdatedAt||'';
+          if(supaActUp>localActUp)bk.retreatActivities=sb.retreatActivities;
           if(bkRank(sb.status)>bkRank(bk.status)){
             bk.status=sb.status;
             bk.statusChangedAt=sb.statusChangedAt||bk.statusChangedAt;
@@ -3528,7 +3533,13 @@ async function loadFromSupabase(){
         const localSubAt=local.scheduleRequest?.submittedAt||'';
         const statusRank=s=>({confirmed:3,changes:2,pending:1}[s]||0);
         // Pick the schedule with the newer teacher submission; if equal, prefer local
-        let chosen=supaSubAt>localSubAt?{...sb}:{...sb,scheduleRequest:{...(local.scheduleRequest||{})},retreatActivities:local.retreatActivities||sb.retreatActivities};
+        let chosen=supaSubAt>localSubAt?{...sb}:{...sb,scheduleRequest:{...(local.scheduleRequest||{})}};
+        // retreatActivities has its own timestamp — it changes independently of
+        // scheduleRequest (e.g. admin auto-assign), so it must not ride on submittedAt.
+        const supaActUp=sb.retreatActivitiesUpdatedAt||'';
+        const localActUp=local.retreatActivitiesUpdatedAt||'';
+        if(localActUp>supaActUp)chosen.retreatActivities=local.retreatActivities;
+        else if(!chosen.retreatActivities)chosen.retreatActivities=local.retreatActivities||sb.retreatActivities;
         // Always keep the highest adminStatus from either source (never downgrade a confirmation)
         const bestStatus=statusRank(sb.scheduleRequest?.adminStatus)>=statusRank(local.scheduleRequest?.adminStatus)?sb.scheduleRequest?.adminStatus:local.scheduleRequest?.adminStatus;
         if(chosen.scheduleRequest&&bestStatus)chosen.scheduleRequest.adminStatus=bestStatus;
@@ -4102,7 +4113,10 @@ function importData(e){
 // ===== HELPERS =====
 function fmt$(n){return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function pd(s){return new Date(s+'T00:00:00');}
-function fmtISO(d){return d.toISOString().split('T')[0];}
+// Local calendar date, NOT UTC — d.toISOString() converts to UTC first, which
+// silently shifts the date by a day for any user whose local timezone is ahead
+// of UTC (pd() above builds dates from local midnight, so this must match).
+function fmtISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function addDays(d,n){return new Date(d.getTime()+n*DAY_MS);}
 function fmtDate(s){if(!s)return'';return pd(s).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
 function fmtShort(d){return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}

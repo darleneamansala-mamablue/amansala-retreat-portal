@@ -713,6 +713,7 @@ function actSummarySetDate(aoId, bkIds, dateInputId, timeInputId) {
       bk.retreatActivities.push({aoId, date:newDate, time:newTime, prepaid});
       updated++;
     }
+    bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   });
   saveAll();
   showToast('Date saved for ' + updated + ' group' + (updated!==1?'s':'') + '.');

@@ -1083,6 +1083,7 @@ function tsAutoAssignPrepaid(){
     bk.retreatActivities.push({aoId:id,date:fmtISO(d),time:'11:45',prepaid:true});
     added++;
   });
+  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();
   showToast(added?`Assigned ${added} activit${added!==1?'ies':'y'} to your schedule.`:'Nothing to assign.');
   tsRenderPrepaidActivities(bk);
@@ -1095,6 +1096,7 @@ function tsSaveManualActivity(aoId){
   if(!bk.retreatActivities)bk.retreatActivities=[];
   bk.retreatActivities=bk.retreatActivities.filter(a=>a.aoId!==aoId);
   bk.retreatActivities.push({aoId,date:dateEl.value,time:timeEl?.value||'11:45',prepaid:true,requestedTime:true});
+  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();
   showToast('Saved.');
   tsRenderPrepaidActivities(bk);
@@ -1184,6 +1186,7 @@ function tsInit(bkId){
       const ds=fmtISO(d);
       tmpls.forEach(t=>bk.retreatActivities.push({aoId:t.aoId,date:ds,time:t.time,prepaid:!!(bk.packages||[]).includes(t.aoId)}));
     }
+    bk.retreatActivitiesUpdatedAt=new Date().toISOString();
     saveAll();
   }
   tsRenderCalSection(bk);
@@ -1766,6 +1769,7 @@ function tsSubmitSchedule(){
       // Teacher chose onsite or undecided — remove Gitano from packages
       if(bk.packages)bk.packages=bk.packages.filter(p=>p!=='ao13');
     }
+    bk.retreatActivitiesUpdatedAt=new Date().toISOString();
     saveAll();
   }
   tsRenderStatus(bk);
@@ -1839,23 +1843,25 @@ function tsRenderCalSection(bk){
       if(ws)rows.push({time:fmtT(ws.start)+' – '+fmtT(addMin(ws.start,ws.dur||90)),desc:'Mid-Afternoon Class'+(ws.notes?' — '+ws.notes:''),shala:snm(ws.shala1),cat:'yoga',sk:ws.start||'16:00'});
       const _afSlot=sr.afternoonSlot||sr.afternoonStart;
       if(sr.hasAfternoon&&_afSlot)rows.push({time:fmtT(_afSlot)+' – '+fmtT(addMin(_afSlot,sr.afternoonDur||60)),desc:'Afternoon Class',shala:aShala,cat:'yoga',sk:_afSlot});
-      (bk.retreatActivities||[]).filter(a=>a.date===dateStr).forEach(a=>{
-        const ao=getAct(a.aoId);
-        const cat=TOUR_IDS.includes(a.aoId)?'tour':CEREMONY_IDS.includes(a.aoId)?'ceremony':(ao.cat||'ceremony');
-        const tag=cat==='tour'?'Tour':cat==='entertainment'?'Group Salsa Class':'Ceremony';
-        const dur=ACTS_DUR[a.aoId]||90;
-        const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
-        if(a.prepaid){
-          prepaidActs.push({time:timeRange,name:ao.name,cat,tag,shala:ACT_SHALA[a.aoId]||'',requestedTime:!!a.requestedTime});
-        } else {
-          rows.push({time:timeRange,desc:ao.name+(ao.price?' — $'+ao.price+'/person':''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:'Optional',prepaid:false,sk:a.time||'99:99'});
-        }
-      });
       const isOffsite=sr.offsiteNight&&(()=>{const ofNight=pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS;return Math.abs(d.getTime()-ofNight)<DAY_MS/2;})();
       const hasGitanoToday=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
       if(!hasGitanoToday)rows.push({time:'7:30 PM',desc:isOffsite?'Dinner (Off-site)':'Dinner',shala:'',cat:'meal',sk:'19:30'});
-      rows.sort((a,b)=>sk(a.sk).localeCompare(sk(b.sk)));
     }
+    // Tours/ceremonies/prepaid activities can land on ANY day — including arrival
+    // and departure days — so this runs for every day, not just the middle ones.
+    (bk.retreatActivities||[]).filter(a=>a.date===dateStr).forEach(a=>{
+      const ao=getAct(a.aoId);
+      const cat=TOUR_IDS.includes(a.aoId)?'tour':CEREMONY_IDS.includes(a.aoId)?'ceremony':(ao.cat||'ceremony');
+      const tag=cat==='tour'?'Tour':cat==='entertainment'?'Group Salsa Class':'Ceremony';
+      const dur=ACTS_DUR[a.aoId]||90;
+      const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
+      if(a.prepaid){
+        prepaidActs.push({time:timeRange,name:ao.name,cat,tag,shala:ACT_SHALA[a.aoId]||'',requestedTime:!!a.requestedTime});
+      } else {
+        rows.push({time:timeRange,desc:ao.name+(ao.price?' — $'+ao.price+'/person':''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:'Optional',prepaid:false,sk:a.time||'99:99'});
+      }
+    });
+    rows.sort((a,b)=>sk(a.sk).localeCompare(sk(b.sk)));
     days.push({lbl,dayName:DAY_NAMES[d.getDay()],dateNum:d.getDate(),month:MON_NAMES[d.getMonth()],rows,prepaidActs});
   }
   const st=sr.adminStatus||'pending';
@@ -2197,6 +2203,7 @@ function tsAdminStatus(bkId,status){
       else{const tmpl=Object.values(SKED_AUTO_TEMPLATE).flat().find(t=>t.aoId===aoId);bk.retreatActivities.push({aoId,date:reqDate,time:tmpl?.time||'',prepaid:true});}
     });
     logActivity('Activities auto-assigned',`${bk.leaderName||bk.retreatName} — tours & ceremonies set`,bkId);
+    bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   }
   saveAll();buildDashboard();venBuild();
   logActivity('Schedule '+(status==='confirmed'?'confirmed':status==='changes'?'changes requested':'marked pending'),`${bk.leaderName||bk.retreatName}`,bkId);
@@ -2240,17 +2247,20 @@ function svAddActivity(bkId){
       }
     }
   }
+  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();openScheduleViewer(bkId);
 }
 function svRemoveActivity(bkId,idx){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
   bk.retreatActivities.splice(idx,1);
+  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();openScheduleViewer(bkId);
 }
 function svToggleActivityPrepaid(bkId,idx){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
   const act=bk.retreatActivities[idx];if(!act)return;
   act.prepaid=!act.prepaid;
+  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();openScheduleViewer(bkId);
 }
 
@@ -2381,6 +2391,7 @@ function svAutoAssignActivities(bkId){
     if(existing){existing.date=reqDate;}
     else{const tmpl=Object.values(SKED_AUTO_TEMPLATE).flat().find(t=>t.aoId===aoId);bk.retreatActivities.push({aoId,date:reqDate,time:tmpl?.time||'',prepaid:true});added++;}
   });
+  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();
   showToast(`Activities assigned — ${added} tour${added!==1?'s/ceremonies':'/ceremony'} across retreat dates.`);
   openScheduleViewer(bkId);
@@ -2394,6 +2405,7 @@ function svSyncPrepaidFlags(bkId){
     const shouldBe=pkgs.has(a.aoId);
     if(a.prepaid!==shouldBe){a.prepaid=shouldBe;changed++;}
   });
+  if(changed)bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();
   openScheduleViewer(bkId);
   showToast(changed?`Prepaid flags updated — ${changed} activit${changed!==1?'ies':'y'} corrected.`:'All prepaid flags already match packages.');
@@ -3351,22 +3363,24 @@ function openPrintSchedule(bkId){
         const aEnd=fmtT(addMin(_afSlotP,sr.afternoonDur||60));
         rows.push({time:fmtT(_afSlotP)+' – '+aEnd,desc:'Afternoon Class',shala:aShala,cls:'shala',sk:_afSlotP||'16:30'});
       }
-      const printActMap={};ADD_ONS.forEach(a=>printActMap[a.id]=a);printActMap['ao12']={id:'ao12',name:'Group Salsa Class',price:0};
-      (bk.retreatActivities||[]).filter(a=>a.date===dateStr).forEach(a=>{
-        const ao=printActMap[a.aoId]||{name:a.aoId,price:0};
-        const dur=ACTS_DUR[a.aoId]||90;
-        const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
-        const desc=a.prepaid?(ao.name+(a.requestedTime?' (requested this time)':'')):('Optional '+ao.name+(ao.price?' — $'+ao.price+' USD per person':''));
-        rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99'});
-      });
       const isOffsite=sr?.offsiteNight&&(()=>{
         const ofNight=pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS;
         return Math.abs(d.getTime()-ofNight)<DAY_MS/2;
       })();
       const hasGitanoPrint=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
       if(!hasGitanoPrint)rows.push({time:'7:30 PM',desc:isOffsite?'Dinner | Off-site':'Dinner',shala:'',cls:'',sk:'19:30'});
-      rows.sort((a,b)=>(a.sk||'99:99').localeCompare(b.sk||'99:99'));
     }
+    // Tours/ceremonies/prepaid activities can land on ANY day — including arrival
+    // and departure days — so this runs for every day, not just the middle ones.
+    const printActMap={};ADD_ONS.forEach(a=>printActMap[a.id]=a);printActMap['ao12']={id:'ao12',name:'Group Salsa Class',price:0};
+    (bk.retreatActivities||[]).filter(a=>a.date===dateStr).forEach(a=>{
+      const ao=printActMap[a.aoId]||{name:a.aoId,price:0};
+      const dur=ACTS_DUR[a.aoId]||90;
+      const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
+      const desc=a.prepaid?(ao.name+(a.requestedTime?' (requested this time)':'')):('Optional '+ao.name+(ao.price?' — $'+ao.price+' USD per person':''));
+      rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99'});
+    });
+    rows.sort((a,b)=>(a.sk||'99:99').localeCompare(b.sk||'99:99'));
     days.push({label:dayLabel,rows});
   }
   // Store for add-row
