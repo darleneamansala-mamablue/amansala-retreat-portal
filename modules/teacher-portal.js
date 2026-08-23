@@ -1011,25 +1011,35 @@ function tsPopulateNights(bk){
 
 // Activities the retreat already paid for as part of a package (tours, ice bath,
 // cooking class, etc.) that aren't already handled by the Offsite Dinner section.
-const TS_PREPAID_EXCLUDE=new Set(['ao11','ao13']);
+// Massage (ao8) is also excluded — clients book those onsite individually rather
+// than the teacher scheduling one slot for the whole group.
+const TS_PREPAID_EXCLUDE=new Set(['ao11','ao13','ao8']);
 
 function tsRenderPrepaidActivities(bk){
   const wrap=document.getElementById('tsPrepaidSection');if(!wrap)return;
   const pkgs=(bk.packages||[]).filter(id=>!TS_PREPAID_EXCLUDE.has(id));
-  if(!pkgs.length){wrap.style.display='none';wrap.innerHTML='';return;}
+  const hasMassage=(bk.packages||[]).includes('ao8');
+  const massageNote=hasMassage?`<div class="ts-card" style="background:#f0fdf4;border-color:#6ee7b7;margin-bottom:${pkgs.length?'16px':'0'}">
+    <div style="font-size:13px;color:#065f46;line-height:1.6">✦ Your clients can book their massages once onsite. We look forward to hosting your group!</div>
+  </div>`:'';
+  if(!pkgs.length){
+    if(hasMassage){wrap.style.display='block';wrap.innerHTML=massageNote;}
+    else{wrap.style.display='none';wrap.innerHTML='';}
+    return;
+  }
   const assignedIds=new Set((bk.retreatActivities||[]).map(a=>a.aoId));
   const unassigned=pkgs.filter(id=>!assignedIds.has(id));
   const addOns=loadAddOns();
   const nameOf=id=>addOns.find(a=>a.id===id)?.name||id;
   wrap.style.display='block';
   if(!unassigned.length){
-    wrap.innerHTML=`<div class="ts-card" style="background:#f0fdf4;border-color:#6ee7b7">
+    wrap.innerHTML=massageNote+`<div class="ts-card" style="background:#f0fdf4;border-color:#6ee7b7">
       <div style="font-size:13px;color:#065f46;line-height:1.6">✓ Your pre-paid activities (${pkgs.map(nameOf).join(', ')}) are already placed on your schedule.</div>
     </div>`;
     return;
   }
   if(_tsPrepaidMode==='manual'){
-    wrap.innerHTML=`<div class="ts-card">
+    wrap.innerHTML=massageNote+`<div class="ts-card">
       <div class="ts-card-title">Assign Your Pre-Paid Activities</div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Pick a day and time for each — we'll lock it into your printed schedule.</div>
       <div style="display:flex;flex-direction:column;gap:12px">
@@ -1048,7 +1058,7 @@ function tsRenderPrepaidActivities(bk){
     </div>`;
     return;
   }
-  wrap.innerHTML=`<div class="ts-card" style="background:#fffbeb;border-color:#fbbf24">
+  wrap.innerHTML=massageNote+`<div class="ts-card" style="background:#fffbeb;border-color:#fbbf24">
     <div style="font-size:13.5px;color:#92400e;line-height:1.7">
       <b>⚠ Attention:</b> You've pre-paid for <b>${unassigned.map(nameOf).join(', ')}</b>. Would you like us to assign ${unassigned.length>1?'them':'it'} where ${unassigned.length>1?'they':'it'} best fit${unassigned.length>1?'':'s'} your schedule, or would you rather choose the day/time yourself?
     </div>
