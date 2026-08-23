@@ -1303,7 +1303,7 @@ function tsBuildMorningFields(){
     </div>`;
     return;
   }
-  const win=TS_WINDOWS.find(w=>w.id===_ts.window);
+  const win=TS_WINDOWS.find(w=>w.id===_ts.window)||TS_WINDOWS[0];
   const startM=tsT2M(win.start),endM=tsT2M(win.end),dur=_ts.morningDur||60;
   const opts=[];
   for(let m=startM;m+dur<=endM;m+=15){const t=tsM2T(m);opts.push(`<option value="${t}"${_ts.morningStart===t?' selected':''}>${tsFmt(t)}</option>`);}
@@ -1557,6 +1557,20 @@ function tsApplySuggestedTimes(){
   showToast('Suggested times applied — review and save your schedule.');
 }
 
+// Scrolls to and briefly highlights a missing required field so a blocked
+// submit is impossible to miss — clicking Save on a long form otherwise just
+// shows a toast the teacher may not be looking at.
+function tsFlagRequired(elId,message){
+  showToast(message);
+  const el=document.getElementById(elId);
+  if(!el)return;
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+  el.style.transition='outline .15s';
+  el.style.outline='3px solid #dc2626';
+  el.style.outlineOffset='3px';
+  setTimeout(()=>{el.style.outline='';el.style.outlineOffset='';},2500);
+}
+
 function tsSubmitSchedule(){
   const savedId=(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id'));
   const bk=AppData.bookings.find(b=>b.id===savedId);if(!bk)return;
@@ -1595,12 +1609,12 @@ function tsSubmitSchedule(){
   const bowlCb=document.getElementById('tsBowlRental');if(bowlCb)_ts.bowlRental=bowlCb.checked;
   const bowlQtyEl=document.getElementById('tsBowlQty');if(bowlQtyEl)_ts.bowlQty=parseInt(bowlQtyEl.value)||1;
   if(!_ts.bowlRental)_ts.bowlDays=[];
-  if(!_ts.window){showToast('Please select a morning time window.');return;}
-  if(_ts.window==='special'&&!_ts.morningSpecialReason){showToast('Please tell us why your class needs a special time.');return;}
-  if(!_ts.morningStart){showToast('Please select a morning start time.');return;}
-  if(!_ts.morningShala1){showToast('Please select at least a 1st choice shala.');return;}
-  if(!_ts.offsiteNight){showToast('Please select which night your group will dine offsite — this is required.');return;}
-  if(!_ts.offsiteChoice){showToast('Please select your offsite dinner preference (Onsite, Gitano, or Undecided).');return;}
+  if(!_ts.window){tsFlagRequired('tsWindowRow','Please select a morning time window.');return;}
+  if(_ts.window==='special'&&!_ts.morningSpecialReason){tsFlagRequired('tsMorningSpecialReason','Please tell us why your class needs a special time.');return;}
+  if(!_ts.morningStart){tsFlagRequired('tsMorningStart','Please select a morning start time.');return;}
+  if(!_ts.morningShala1){tsFlagRequired('tsMorningShalaGrid','Please select at least a 1st choice shala.');return;}
+  if(!_ts.offsiteNight){tsFlagRequired('tsOffsiteNight','Please select which night your group will dine offsite — this is required.');return;}
+  if(!_ts.offsiteChoice){tsFlagRequired('tsOffsiteChoiceWrap','Please select your offsite dinner preference (Onsite, Gitano, or Undecided).');return;}
   bk.scheduleRequest={..._ts,submittedAt:new Date().toISOString(),adminStatus:'pending',adminNote:bk.scheduleRequest?.adminNote||''};
   saveAll();
   // Auto-populate tours & ceremonies on first submission only
