@@ -874,6 +874,7 @@ const TS_SPECIAL_TIME_SLOTS=(()=>{
 
 let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:''};
 let _tsBkId=null;
+let _tsPrepaidMode='choice'; // 'choice' | 'manual' — for the pre-paid activities assignment card
 
 function tsRenderSetupDays(){
   const wrap=document.getElementById('tsSetupDaysWrap');
@@ -977,6 +978,17 @@ function tsBowlCalcTotal(){
   el.textContent=`${qty} bowl${qty>1?'s':''} × ${classSlots} class${classSlots>1?'es':''} × $15 = $${total} USD added to your room account`;
 }
 
+// Fills a time <select> with every 15-min slot in a range, so teachers aren't
+// limited to a handful of fixed preset times (e.g. a requested 5:45 PM class
+// used to have no matching option).
+function tsPopulateTimeSlots(selId,startTime,endTime){
+  const sel=document.getElementById(selId);if(!sel)return;
+  const startM=tsT2M(startTime),endM=tsT2M(endTime);
+  const opts=[];
+  for(let m=startM;m<=endM;m+=15){const t=tsM2T(m);opts.push(`<option value="${t}">${tsFmt(t)}</option>`);}
+  sel.innerHTML=opts.join('');
+}
+
 function tsPopulateNights(bk){
   const sel=document.getElementById('tsOffsiteNight');if(!sel)return;
   sel.innerHTML='<option value="">— Select a night —</option>';
@@ -995,6 +1007,97 @@ function tsPopulateNights(bk){
   }
 }
 
+// Activities the retreat already paid for as part of a package (tours, ice bath,
+// cooking class, etc.) that aren't already handled by the Offsite Dinner section.
+const TS_PREPAID_EXCLUDE=new Set(['ao11','ao13']);
+
+function tsRenderPrepaidActivities(bk){
+  const wrap=document.getElementById('tsPrepaidSection');if(!wrap)return;
+  const pkgs=(bk.packages||[]).filter(id=>!TS_PREPAID_EXCLUDE.has(id));
+  if(!pkgs.length){wrap.style.display='none';wrap.innerHTML='';return;}
+  const assignedIds=new Set((bk.retreatActivities||[]).map(a=>a.aoId));
+  const unassigned=pkgs.filter(id=>!assignedIds.has(id));
+  const addOns=loadAddOns();
+  const nameOf=id=>addOns.find(a=>a.id===id)?.name||id;
+  wrap.style.display='block';
+  if(!unassigned.length){
+    wrap.innerHTML=`<div class="ts-card" style="background:#f0fdf4;border-color:#6ee7b7">
+      <div style="font-size:13px;color:#065f46;line-height:1.6">✓ Your pre-paid activities (${pkgs.map(nameOf).join(', ')}) are already placed on your schedule.</div>
+    </div>`;
+    return;
+  }
+  if(_tsPrepaidMode==='manual'){
+    wrap.innerHTML=`<div class="ts-card">
+      <div class="ts-card-title">Assign Your Pre-Paid Activities</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Pick a day and time for each — we'll lock it into your printed schedule.</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        ${unassigned.map(id=>{
+          const ao=addOns.find(a=>a.id===id);
+          const tmpl=Object.values(SKED_AUTO_TEMPLATE).flat().find(t=>t.aoId===id);
+          return`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;background:var(--sand);border-radius:9px">
+            <div style="flex:1;min-width:160px;font-weight:600;font-size:13.5px">${ao?ao.name:id}</div>
+            <input type="date" id="tsPrepaidDate_${id}" min="${bk.startDate}" max="${bk.endDate}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
+            <input type="time" id="tsPrepaidTime_${id}" value="${tmpl?.time||'11:45'}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
+            <button class="btn btn-secondary" style="padding:7px 16px;font-size:12.5px" onclick="tsSaveManualActivity('${id}')">Save</button>
+          </div>`;
+        }).join('')}
+      </div>
+      <button class="btn btn-secondary" style="margin-top:14px;font-size:12.5px" onclick="tsPrepaidMode('choice')">← Back</button>
+    </div>`;
+    return;
+  }
+  wrap.innerHTML=`<div class="ts-card" style="background:#fffbeb;border-color:#fbbf24">
+    <div style="font-size:13.5px;color:#92400e;line-height:1.7">
+      <b>⚠ Attention:</b> You've pre-paid for <b>${unassigned.map(nameOf).join(', ')}</b>. Would you like us to assign ${unassigned.length>1?'them':'it'} where ${unassigned.length>1?'they':'it'} best fit${unassigned.length>1?'':'s'} your schedule, or would you rather choose the day/time yourself?
+    </div>
+    <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-primary" style="font-size:12.5px" onclick="tsAutoAssignPrepaid()">Assign automatically for me</button>
+      <button class="btn btn-secondary" style="font-size:12.5px" onclick="tsPrepaidMode('manual')">I'll choose the day/time</button>
+    </div>
+  </div>`;
+}
+
+function tsPrepaidMode(mode){
+  _tsPrepaidMode=mode;
+  const bk=AppData.bookings.find(b=>b.id===_tsBkId);
+  if(bk)tsRenderPrepaidActivities(bk);
+}
+
+function tsAutoAssignPrepaid(){
+  const bk=AppData.bookings.find(b=>b.id===_tsBkId);if(!bk)return;
+  const pkgs=(bk.packages||[]).filter(id=>!TS_PREPAID_EXCLUDE.has(id));
+  const assignedIds=new Set((bk.retreatActivities||[]).map(a=>a.aoId));
+  const nights=getNights(bk);
+  if(!bk.retreatActivities)bk.retreatActivities=[];
+  let added=0;
+  pkgs.filter(id=>!assignedIds.has(id)).forEach(id=>{
+    for(let i=0;i<nights;i++){
+      const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
+      const tmpl=(SKED_AUTO_TEMPLATE[d.getDay()]||[]).find(t=>t.aoId===id);
+      if(tmpl){bk.retreatActivities.push({aoId:id,date:fmtISO(d),time:tmpl.time,prepaid:true});added++;return;}
+    }
+    // No day-of-week template covers this add-on — fall back to the first full day
+    const d=new Date(pd(bk.startDate).getTime()+DAY_MS);
+    bk.retreatActivities.push({aoId:id,date:fmtISO(d),time:'11:45',prepaid:true});
+    added++;
+  });
+  saveAll();
+  showToast(added?`Assigned ${added} activit${added!==1?'ies':'y'} to your schedule.`:'Nothing to assign.');
+  tsRenderPrepaidActivities(bk);
+}
+
+function tsSaveManualActivity(aoId){
+  const bk=AppData.bookings.find(b=>b.id===_tsBkId);if(!bk)return;
+  const dateEl=document.getElementById('tsPrepaidDate_'+aoId),timeEl=document.getElementById('tsPrepaidTime_'+aoId);
+  if(!dateEl?.value){showToast('Please pick a date first.');return;}
+  if(!bk.retreatActivities)bk.retreatActivities=[];
+  bk.retreatActivities=bk.retreatActivities.filter(a=>a.aoId!==aoId);
+  bk.retreatActivities.push({aoId,date:dateEl.value,time:timeEl?.value||'11:45',prepaid:true});
+  saveAll();
+  showToast('Saved.');
+  tsRenderPrepaidActivities(bk);
+}
+
 function tsInit(bkId){
   // Already editing this booking's schedule — don't re-initialize and discard in-progress edits.
   // (This ran every time the Schedule tab was shown/re-rendered, even for the same booking,
@@ -1002,6 +1105,8 @@ function tsInit(bkId){
   if(_tsBkId===bkId)return;
   _tsBkId=bkId;
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  _tsPrepaidMode='choice';
+  tsRenderPrepaidActivities(bk);
   _ts=bk.scheduleRequest
     ?{..._ts,...bk.scheduleRequest}
     :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:''};
@@ -1015,6 +1120,7 @@ function tsInit(bkId){
   // Restore arrival class
   const arrCb=document.getElementById('tsHasArrivalClass');if(arrCb)arrCb.checked=!!_ts.hasArrivalClass;
   const arrSec=document.getElementById('tsArrivalSection');if(arrSec)arrSec.style.display=_ts.hasArrivalClass?'block':'none';
+  tsPopulateTimeSlots('tsArrivalSlot','12:00','21:00');
   const arrSlot=document.getElementById('tsArrivalSlot');if(arrSlot)arrSlot.value=_ts.arrivalSlot||'16:00';
   const arrDur=document.getElementById('tsArrivalDur');if(arrDur)arrDur.value=_ts.arrivalDurRequest?'custom':String(_ts.arrivalDur||60);
   const arrDurC=document.getElementById('tsArrivalDurCustom');if(arrDurC){arrDurC.value=_ts.arrivalDurRequest||'';arrDurC.style.display=_ts.arrivalDurRequest?'block':'none';}
@@ -1023,6 +1129,7 @@ function tsInit(bkId){
   // Restore departure class
   const depCb=document.getElementById('tsHasDepartureClass');if(depCb)depCb.checked=!!_ts.hasDepartureClass;
   const depSec=document.getElementById('tsDepartureSection');if(depSec)depSec.style.display=_ts.hasDepartureClass?'block':'none';
+  tsPopulateTimeSlots('tsDepartureSlot','05:30','10:30');
   const depSlot=document.getElementById('tsDepartureSlot');if(depSlot)depSlot.value=_ts.departureSlot||'08:00';
   const depDur=document.getElementById('tsDepartureDur');if(depDur)depDur.value=_ts.departureDurRequest?'custom':String(_ts.departureDur||60);
   const depDurC=document.getElementById('tsDepartureDurCustom');if(depDurC){depDurC.value=_ts.departureDurRequest||'';depDurC.style.display=_ts.departureDurRequest?'block':'none';}
@@ -1031,6 +1138,7 @@ function tsInit(bkId){
   // Restore form values
   const hasCb=document.getElementById('tsHasAfternoon');if(hasCb)hasCb.checked=!!_ts.hasAfternoon;
   const afSec=document.getElementById('tsAfternoonSection');if(afSec)afSec.style.display=_ts.hasAfternoon?'block':'none';
+  tsPopulateTimeSlots('tsAfternoonSlot','13:00','19:45');
   const afSlot=document.getElementById('tsAfternoonSlot');if(afSlot)afSlot.value=_ts.afternoonSlot||'16:30';
   const afDur=document.getElementById('tsAfternoonDur');if(afDur)afDur.value=_ts.afternoonDurRequest?'custom':String(_ts.afternoonDur||60);
   const afDurC=document.getElementById('tsAfternoonDurCustom');if(afDurC){afDurC.value=_ts.afternoonDurRequest||'';afDurC.style.display=_ts.afternoonDurRequest?'block':'none';}
