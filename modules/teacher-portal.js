@@ -3446,6 +3446,7 @@ const SKED_SHALAS=[
   {id:'skye',      name:'Skye'},
 ];
 const SKED_ACTIVITIES=[
+  {id:'sunrise',  name:'Sunrise Activity'},
   {id:'ruins',    name:'Tulum Ruins Tour'},
   {id:'atik',     name:'Atik Cenote Tour'},
   {id:'cenote',   name:'Grande Cenote Tour'},
@@ -3755,6 +3756,11 @@ function skedGetRetreatEvents(dateStr){
     }
     // Middle days — morning class + evening class
     else {
+      if(sr.hasSunrise&&sr.sunriseStart){
+        const srEnd=skedMinToTime(skedTimeToMin(sr.sunriseStart)+(sr.sunriseDur||45));
+        const srLoc=TS_SUNRISE_LOCATIONS[sr.sunriseLocation]||sr.sunriseLocation||'';
+        evs.push({id:'ret_'+bk.id+'_sunrise_'+dateStr,resourceId:'sunrise',date:dateStr,startTime:sr.sunriseStart,endTime:srEnd,title,subtitle:'Sunrise Activity'+(srLoc?' — '+srLoc:'')+' (no music)',color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+      }
       const skips=bk.scheduleSkips||[];
       const mornSkipped=skips.some(s=>s.date===dateStr&&s.period==='morn');
       const aftSkipped=skips.some(s=>s.date===dateStr&&s.period==='aft');
