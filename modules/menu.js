@@ -28,19 +28,19 @@ const WEEKLY_MENU = {
     snack:  ['Hummus con Veggies y Chips'],
     dinner: {protein:'Pescado',dishes:['Sopa de Calabaza','Quinoa Verduras'],dessert:'Vegan Choco Mouse'}
   },
-  4: { // Jueves (Thursday) — Day 4
-    lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
-    brunch: ['Huevos Rancheros','Omelette de Espinaca','Protein Pancakes','Kebabs Pollo/Tofu ★','Ensalada Griega','Babaganoush Tostada'],
-    lunch:  ['Kebabs Pollo/Tofu ★','Ensalada Griega','Babaganoush Tostada'],
-    snack:  ['Quesadillas con Brócoli y Queso'],
-    dinner: {protein:'Salmon',dishes:['Cabbage Steak con Tahini','Camote al Horno'],dessert:'Pie de Manzana'}
-  },
-  5: { // Viernes (Friday) — Day 5
+  4: { // Jueves (Thursday) — Day 4 (swapped with what was Friday's menu)
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
     brunch: ['Chilaquiles','Huevos Duros','Pan de Platano','Pescado Congelado ★','Ensalada Mexicana'],
     lunch:  ['Pescado Congelado ★','Ensalada Mexicana'],
     snack:  ['Protein Balls con Fruta Fresca'],
     dinner: {protein:'Pollo',dishes:['Corn Ribs','Sopa de Tortilla','Tostada Bar'],dessert:'Pay de Manzana · Brownie'}
+  },
+  5: { // Viernes (Friday) — Day 5 (swapped with what was Thursday's menu)
+    lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
+    brunch: ['Huevos Rancheros','Omelette de Espinaca','Protein Pancakes','Kebabs Pollo/Tofu ★','Ensalada Griega','Babaganoush Tostada'],
+    lunch:  ['Kebabs Pollo/Tofu ★','Ensalada Griega','Babaganoush Tostada'],
+    snack:  ['Quesadillas con Brócoli y Queso'],
+    dinner: {protein:'Salmon',dishes:['Cabbage Steak con Tahini','Camote al Horno'],dessert:'Pie de Manzana'}
   },
   6: { // Sábado (Saturday) — Day 6
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
@@ -170,6 +170,19 @@ function menuRenderWeek(){
   meals.forEach(m=>{
     maxRows[m]=Math.max(0,...days.map(ds=>(menuSchedule[ds]?.[m]||[]).length));
   });
+  // Pre-compute max dish-list line count per meal too — otherwise the Hora/Grupo/#
+  // table starts at a different height in every column, since brunches/dinners
+  // don't all have the same number of dish lines above it.
+  const dinnerLineCount=dinner=>(dinner?.protein?1:0)+(dinner?.dishes||[]).length+(dinner?.dessert?2:0);
+  const maxDishLines={};
+  meals.forEach(meal=>{
+    maxDishLines[meal]=Math.max(0,...days.map(ds=>{
+      const mData=WEEKLY_MENU[menuDayIndex(ds)]||{};
+      if(meal==='dinner')return dinnerLineCount(mData.dinner);
+      if(meal==='lunch'&&(menuSchedule[ds]?.lunch||[]).length===0)return 0;
+      return (mData[meal]||[]).length;
+    }));
+  });
   // One full row per meal (7 cells per row)
   meals.forEach(meal=>{
     days.forEach(ds=>{
@@ -180,8 +193,8 @@ function menuRenderWeek(){
       const dayHasLunch=meal==='lunch'&&(sData.lunch||[]).length===0;
       const dishes=dayHasLunch?[]:mData[meal]||[];
       const content=meal==='dinner'
-        ?menuRenderDinner(ds,mData.dinner||{},sData.dinner||[],maxRows.dinner)
-        :menuRenderMealSection(ds,meal,dishes,sData[meal]||[],maxRows[meal]);
+        ?menuRenderDinner(ds,mData.dinner||{},sData.dinner||[],maxRows.dinner,maxDishLines.dinner)
+        :menuRenderMealSection(ds,meal,dishes,sData[meal]||[],maxRows[meal],maxDishLines[meal]);
       html+=`<div class="menu-grid-cell">${content}</div>`;
     });
   });
@@ -211,7 +224,7 @@ function menuRenderDay(dateStr,today){
   </div>`;
 }
 
-function menuRenderMealSection(dateStr,mealKey,dishes,rows,padTo=0){
+function menuRenderMealSection(dateStr,mealKey,dishes,rows,padTo=0,dishPadTo=0){
   const cfg=MENU_MEAL_CFG[mealKey]||{label:mealKey,bg:'#f5f3ee',color:'#555'};
   const total=rows.reduce((n,r)=>n+(parseInt(r.pax)||0),0);
   const dishesHtml=dishes.map((d,i)=>{
@@ -221,6 +234,9 @@ function menuRenderMealSection(dateStr,mealKey,dishes,rows,padTo=0){
       ?`<div class="menu-dish" style="font-weight:700;color:#78350f;background:#fef9e7;margin:-5px -8px 3px;padding:4px 8px;border-bottom:1px solid #fde8c8">★ ${label}</div>`
       :`<div class="menu-dish">${d}</div>`;
   }).join('');
+  // Invisible spacer lines so the Hora/Grupo/# table starts at the same height
+  // in every column, regardless of how many dishes this particular day has.
+  const dishSpacers='<div class="menu-dish" style="visibility:hidden">—</div>'.repeat(Math.max(0,dishPadTo-dishes.length));
   const rowsHtml=rows.map((r,i)=>`<tr>
     <td><input class="menu-inp" style="width:42px" value="${menuEsc(r.time)}" placeholder="--:--" onchange="menuUpdateRow('${dateStr}','${mealKey}',${i},'time',this.value)"></td>
     <td><input class="menu-inp" style="min-width:60px" value="${menuEsc(r.group)}" placeholder="Grupo" onchange="menuUpdateRow('${dateStr}','${mealKey}',${i},'group',this.value)"></td>
@@ -231,19 +247,21 @@ function menuRenderMealSection(dateStr,mealKey,dishes,rows,padTo=0){
   const spacers=ghostRow.repeat(Math.max(0,padTo-rows.length));
   return `<div class="menu-section">
     <div class="menu-sec-hdr" style="background:${cfg.bg};color:${cfg.color}">${cfg.label}</div>
-    <div class="menu-dish-list">${dishesHtml||'<div class="menu-dish" style="color:#aaa">—</div>'}</div>
+    <div class="menu-dish-list">${dishesHtml||'<div class="menu-dish" style="color:#aaa">—</div>'}${dishSpacers}</div>
     <table class="menu-sched-tbl"><thead><tr><th>Hora</th><th>Grupo</th><th>#</th><th></th></tr></thead><tbody>${rowsHtml}${spacers}</tbody></table>
     <div class="menu-total-row"><span>Total: <b>${total||'—'}</b></span><button class="menu-add-btn" onclick="menuAddRow('${dateStr}','${mealKey}')">+ Add</button></div>
   </div>`;
 }
 
-function menuRenderDinner(dateStr,dinner,rows,padTo=0){
+function menuRenderDinner(dateStr,dinner,rows,padTo=0,dishPadTo=0){
   const cfg=MENU_MEAL_CFG.dinner;
   const total=rows.reduce((n,r)=>n+(parseInt(r.pax)||0),0);
   const proteinHtml=dinner.protein?`<div class="menu-dish" style="font-weight:700;color:#1e3a5f;background:#eff6ff;margin:-5px -8px 3px;padding:4px 8px;border-bottom:1px solid #bfdbfe">★ ${dinner.protein}</div>`:'';
   const sidesHtml=(dinner.dishes||[]).map(d=>`<div class="menu-dish">${d}</div>`).join('');
   const dessertHtml=dinner.dessert?`<div class="menu-dinner-sub">Postre</div><div class="menu-dish">${dinner.dessert}</div>`:'';
-  const parts=proteinHtml+sidesHtml+dessertHtml;
+  const dinnerLines=(dinner.protein?1:0)+(dinner.dishes||[]).length+(dinner.dessert?2:0);
+  const dishSpacers='<div class="menu-dish" style="visibility:hidden">—</div>'.repeat(Math.max(0,dishPadTo-dinnerLines));
+  const parts=proteinHtml+sidesHtml+dessertHtml+dishSpacers;
   const rowsHtml=rows.map((r,i)=>`<tr>
     <td><input class="menu-inp" style="width:36px" value="${menuEsc(r.time)}" placeholder="--:--" onchange="menuUpdateRow('${dateStr}','dinner',${i},'time',this.value)"></td>
     <td><input class="menu-inp" style="min-width:52px" value="${menuEsc(r.group)}" placeholder="Grupo" onchange="menuUpdateRow('${dateStr}','dinner',${i},'group',this.value)"></td>
@@ -574,27 +592,29 @@ function menuTrEn(s){return MENU_EN[s]||s;}
 // real menu wording provided — the app's own dish list is unchanged, this
 // only dresses up how each existing item reads on the printed poster.
 const MENU_DETAIL={
-  'Chilaquiles':{name:'Chilaquiles',desc:'Crispy tortilla chips simmered in salsa, topped with cream and cheese.'},
-  'Protein Pancakes':{name:'Hotcakes',desc:'Fluffy golden hotcakes with fresh fruit and local honey.'},
-  'Tinga de Pollo':{name:'Chicken Tinga',desc:'Slow-simmered shredded chicken in a smoky chipotle-tomato sauce.'},
-  'Ensalada Amansala':{name:'Amansala Salad',desc:'Our signature garden salad with fresh greens, seeds and citrus vinaigrette.'},
-  'Huevos Rancheros':{name:'Huevos Rancheros',desc:'Sunny eggs over warm tortillas with ranchero salsa and fresh cheese.'},
-  'Avocado Toast':{name:'Avocado Toast',desc:'Toasted artisan bread with smashed avocado, lime and a touch of chili.'},
-  'Pan de Platano':{name:'Banana Bread',desc:'Warm, house-baked banana bread.'},
-  'Ensalada Edamame':{name:'Edamame & Avocado Salad',desc:'Protein-rich edamame with creamy avocado.'},
-  'Poke Bowl':{name:'Salmon Poke Bowl',desc:'Fresh salmon over sushi rice with crisp vegetables.'},
-  'Huevos Verdes':{name:'Green Eggs',desc:'A vibrant twist on eggs with fresh green herbs and salsa verde.'},
-  'Blackened Tacos':{name:'Blackened Fish Tacos',desc:'Spiced fish in warm tortillas with cabbage slaw and lime.'},
-  'Ensalada Mexicana':{name:'Mexican Salad',desc:'Crisp lettuce, tomato, avocado and corn in a zesty lime dressing.'},
-  'Kebabs Pollo/Tofu':{name:'Chicken & Tofu Kebabs',desc:'Marinated skewers grilled until charred and juicy.'},
-  'Ensalada Griega':{name:'Greek Salad',desc:'Crisp cucumber, tomato, red onion, olives and feta in a lemon-oregano dressing.'},
-  'Babaganoush Tostada':{name:'Baba Ganoush',desc:'Silky smoke-roasted eggplant dip with olive oil and warm flatbread.'},
-  'Pescado Congelado':{name:'Grilled Fish',desc:'Catch of the day, grilled with herbs and lime.'},
-  'Fritatta':{name:'Frittata',desc:'Baked open-faced egg frittata with garden vegetables.'},
-  'Pan de Frances con Coco':{name:'Coconut French Bread',desc:'Golden toasted French bread with sweet coconut.'},
-  'Pollo con Ajo Asado':{name:'Grilled Chicken',desc:'Tender chicken breast, simply grilled.'},
-  'Fruta':{name:'Fresh Fruit',desc:'A bright platter of seasonal tropical fruit.'},
+  'Chilaquiles':{name:'Chilaquiles',desc:'Tortilla chips, salsa, cream, cheese.'},
+  'Protein Pancakes':{name:'Hotcakes',desc:'Hotcakes, fresh fruit, honey.'},
+  'Tinga de Pollo':{name:'Chicken Tinga',desc:'Shredded chicken, chipotle, tomato.'},
+  'Ensalada Amansala':{name:'Amansala Salad',desc:'Mixed greens, seeds, citrus vinaigrette.'},
+  'Huevos Rancheros':{name:'Huevos Rancheros',desc:'Eggs, tortilla, ranchero salsa, fresh cheese.'},
+  'Avocado Toast':{name:'Avocado Toast',desc:'Bread, avocado, lime, chili.'},
+  'Pan de Platano':{name:'Banana Bread',desc:'Banana bread.'},
+  'Ensalada Edamame':{name:'Edamame & Avocado Salad',desc:'Edamame, avocado.'},
+  'Poke Bowl':{name:'Salmon Poke Bowl',desc:'Salmon, sushi rice, vegetables.'},
+  'Huevos Verdes':{name:'Green Eggs',desc:'Eggs, green herbs, salsa verde.'},
+  'Blackened Tacos':{name:'Blackened Fish Tacos',desc:'Fish, tortillas, cabbage slaw, lime.'},
+  'Ensalada Mexicana':{name:'Mexican Salad',desc:'Lettuce, tomato, avocado, corn, lime.'},
+  'Kebabs Pollo/Tofu':{name:'Chicken & Tofu Kebabs',desc:'Chicken, tofu, spices.'},
+  'Ensalada Griega':{name:'Greek Salad',desc:'Cucumber, tomato, red onion, olives, feta.'},
+  'Babaganoush Tostada':{name:'Baba Ganoush',desc:'Eggplant, olive oil, flatbread.'},
+  'Pescado Congelado':{name:'Grilled Fish',desc:'Fish, herbs, lime.'},
+  'Fritatta':{name:'Frittata',desc:'Eggs, vegetables.'},
+  'Pan de Frances con Coco':{name:'Coconut French Bread',desc:'French bread, coconut.'},
+  'Pollo con Ajo Asado':{name:'Grilled Chicken',desc:'Chicken breast.'},
+  'Fruta':{name:'Fresh Fruit',desc:'Seasonal fruit.'},
   'Protein Balls con Fruta Fresca':{name:'Cacao Energy Bites',desc:'Mixed nuts, raw cacao, dates, coconut & Mayan honey.'},
+  'Huevos Revueltos':{name:'Scrambled Eggs',desc:'Eggs.'},
+  'Pan de Frances':{name:'French Bread',desc:'French bread.'},
 
   'Grilled Lemon Kebabs Pollo':{name:'Grilled Lemon Chicken Kebabs',desc:'Tender pieces of chicken marinated in fresh lemon juice, olive oil, and herbs, then perfectly grilled to achieve a juicy texture and a bright, zesty flavor.'},
   'Grilled Eggplant con Tahini':{name:'Grilled Eggplant with Tahini',desc:'Char-grilled eggplant, smoky and soft, finished with a creamy tahini drizzle.'},
@@ -609,7 +629,7 @@ const MENU_DETAIL={
   'Vegan Choco Mouse':{name:'Vegan Chocolate Mousse',desc:'Cocoa, avocado, and coconut milk mousse — rich and creamy, naturally dairy-free.'},
 
   'Cabbage Steak con Tahini':{name:'Cabbage Steak with Tahini & Nut Sauce',desc:'Thick-cut roasted cabbage steak, caramelized and topped with a creamy tahini and nut sauce.'},
-  'Camote al Horno':{name:'Oven-Roasted Sweet Potato',desc:'Golden oven-roasted camote, naturally sweet and caramelized.'},
+  'Camote al Horno':{name:'Roasted Sweet Potato',desc:'Sweet potato.'},
   'Pie de Manzana':{name:'Apple Pie',desc:'A classic apple pie made with warmly spiced apples in a buttery crust.'},
 
   'Corn Ribs':{name:'Charred Corn Ribs with Chili-Lime Butter',desc:'Grilled corn cut into rib-style pieces, charred and brushed with a zesty chili-lime butter.'},
@@ -693,7 +713,7 @@ function menuPrintDay(dateStr){
     ${section('Brunch',mData.brunch)}
     ${section('Afternoon Snack',mData.snack)}
     ${dinnerHtml}
-    <div class="menu-poster-footer">Please let the front desk know if you'll be dining off-site tonight.<br>For specific dietary requests, please speak with your waiter. If you have a severe allergy, please confirm ingredients with your host before ordering.</div>
+    <div class="menu-poster-footer">Please let the front desk know if you'll be dining off-site tonight.<br>For specific requests, please see your waiter. Please confirm any severe allergies with your host.</div>
   </body></html>`;
 
   const w=window.open('','_blank');

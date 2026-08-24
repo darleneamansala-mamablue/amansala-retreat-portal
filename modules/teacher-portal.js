@@ -857,7 +857,9 @@ const TS_SUNRISE_LOCATIONS={chica_beach:'Chica Beach',grande_beach:'Grande Beach
 
 const TS_WINDOWS=[
   {id:'1',label:'7:45 – 9:20 AM', start:'07:45',end:'09:20'},
-  {id:'2',label:'9:30 – 11:00 AM',start:'09:30',end:'11:00'},
+  // Open-ended — start any time from 9:20 on, and the class can run as long as
+  // needed (the end here is just a generous outer bound, not a real cutoff).
+  {id:'2',label:'9:15 AM onward',start:'09:15',end:'14:30'},
 ];
 
 const TS_SPECIAL_TIME_SLOTS=(()=>{
@@ -1479,12 +1481,12 @@ function tsM2T(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%6
 // Every valid 15-min start time across the two allotted morning windows — used to
 // stop a per-day time override from landing in the gap between windows.
 function tsAllMorningSlots(){
-  const out=[];
+  const out=new Set();
   TS_WINDOWS.forEach(w=>{
     const startM=tsT2M(w.start),endM=tsT2M(w.end);
-    for(let m=startM;m<endM;m+=15)out.push(tsM2T(m));
+    for(let m=startM;m<endM;m+=15)out.add(tsM2T(m));
   });
-  return out;
+  return [...out].sort();
 }
 function tsFmt(t){const[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';return `${h%12||12}:${String(m).padStart(2,'0')} ${ap}`;}
 
@@ -4092,8 +4094,8 @@ const SKED_CLASS_SUFFIX_INFO={
   morn_arr:{kind:'daily',   period:'morn'},
   morn_dep:{kind:'daily',   period:'morn'},
   aft:     {kind:'daily',   period:'aft'},
-  arr:     {kind:'oneoff',  field:'arrivalSlot',   label:'Arrival Evening Class',   rangeStart:'12:00',rangeEnd:'21:00'},
-  dep:     {kind:'oneoff',  field:'departureSlot', label:'Departure Morning Class', rangeStart:'05:30',rangeEnd:'10:30'},
+  arr:     {kind:'oneoff',  field:'arrivalSlot',   durField:'arrivalDur',   label:'Arrival Evening Class',   rangeStart:'12:00',rangeEnd:'21:00'},
+  dep:     {kind:'oneoff',  field:'departureSlot', durField:'departureDur', label:'Departure Morning Class', rangeStart:'05:30',rangeEnd:'10:30'},
 };
 
 function skedClickEvent(evId,bkId,isRetreat,dateStr){
@@ -4125,6 +4127,7 @@ function openSkedEditClassModal(bkId,suffix,dateStr){
   const resetBtn=document.getElementById('skedEditClassResetBtn');
   const skipBtn=document.getElementById('skedEditClassSkipBtn');
   const sel=document.getElementById('skedEditClassTime');
+  const durSel=document.getElementById('skedEditClassDur');
   const sr=bk.scheduleRequest||{};
 
   if(info.kind==='oneoff'){
@@ -4133,6 +4136,7 @@ function openSkedEditClassModal(bkId,suffix,dateStr){
     for(let m=tsT2M(info.rangeStart);m<=tsT2M(info.rangeEnd);m+=15)opts.push(tsM2T(m));
     sel.innerHTML=opts.map(t=>`<option value="${t}">${tsFmt(t)}</option>`).join('');
     sel.value=sr[info.field]||opts[0];
+    durSel.value=String(sr[info.durField]||60);
     scopeWrap.style.display='none';
     resetBtn.style.display='none';
     skipBtn.style.display='none';
@@ -4153,7 +4157,9 @@ function openSkedEditClassModal(bkId,suffix,dateStr){
     sel.innerHTML=opts.map(t=>`<option value="${t}">${tsFmt(t)}</option>`).join('');
     const ov=sr.adminOverride||{};
     const usualStart=isMorn?(ov.morningStart||sr.morningStart):(ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart);
+    const usualDur=isMorn?(ov.morningDur||sr.morningDur):(ov.afternoonDur||sr.afternoonDur);
     sel.value=existingOv?existingOv.start:(usualStart||opts[0]);
+    durSel.value=String(existingOv?.dur||usualDur||60);
     scopeWrap.style.display='';
     resetBtn.style.display=existingOv?'inline-flex':'none';
     skipBtn.style.display='inline-flex';
@@ -4172,10 +4178,12 @@ function skedSaveClassEdit(){
   const info=SKED_CLASS_SUFFIX_INFO[suffix];
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!info)return;
   const newTime=document.getElementById('skedEditClassTime').value;
+  const newDur=parseInt(document.getElementById('skedEditClassDur').value)||60;
 
   if(info.kind==='oneoff'){
     if(!bk.scheduleRequest)bk.scheduleRequest={};
     bk.scheduleRequest[info.field]=newTime;
+    bk.scheduleRequest[info.durField]=newDur;
     saveAll();skedBuild();closeModal('skedEditClassModal');
     showToast('Time updated.');
     return;
@@ -4186,15 +4194,15 @@ function skedSaveClassEdit(){
   if(scope==='week'){
     if(!bk.scheduleRequest)bk.scheduleRequest={};
     if(!bk.scheduleRequest.adminOverride)bk.scheduleRequest.adminOverride={};
-    if(period==='morn')bk.scheduleRequest.adminOverride.morningStart=newTime;
-    else bk.scheduleRequest.adminOverride.afternoonStart=newTime;
+    if(period==='morn'){bk.scheduleRequest.adminOverride.morningStart=newTime;bk.scheduleRequest.adminOverride.morningDur=newDur;}
+    else{bk.scheduleRequest.adminOverride.afternoonStart=newTime;bk.scheduleRequest.adminOverride.afternoonDur=newDur;}
     bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===period));
     saveAll();skedBuild();closeModal('skedEditClassModal');
     showToast('Schedule updated for the whole retreat.');
     return;
   }
   bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===period));
-  bk.scheduleTimeOverrides.push({date:dateStr,period,start:newTime});
+  bk.scheduleTimeOverrides.push({date:dateStr,period,start:newTime,dur:newDur});
   saveAll();skedBuild();closeModal('skedEditClassModal');
   showToast('Time updated for '+dateStr+'.');
 }
