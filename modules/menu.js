@@ -513,6 +513,62 @@ function menuPrint(){
 
 // Guest-facing poster for a single day — put up each morning so guests can see
 // the day's dinner ahead of time and let us know if they'll go off-site instead.
+// English translations for the guest-facing poster — the kitchen's working
+// list (WEEKLY_MENU, above) stays in Spanish; only the printed poster is
+// translated. Well-known dish names (Chilaquiles, Huevos Rancheros, etc.)
+// are kept as-is, matching how they'd read on any English menu.
+const MENU_EN={
+  'Chilaquiles':'Chilaquiles',
+  'Omelette de Espinaca':'Spinach Omelette',
+  'Tinga de Pollo':'Chicken Tinga',
+  'Ensalada Amansala':'Amansala Salad',
+  'Summer Rolls con Gazpacho':'Summer Rolls with Gazpacho',
+  'Grilled Lemon Kebabs Pollo':'Grilled Lemon Chicken Kebabs',
+  'Grilled Eggplant con Tahini':'Grilled Eggplant with Tahini',
+  'Deconstructed Cheesecake':'Deconstructed Cheesecake',
+  'Huevos Rancheros':'Huevos Rancheros',
+  'Pan de Platano':'Banana Bread',
+  'Salmon con Miel y Ajo':'Honey Garlic Salmon',
+  'Ensalada Edamame':'Edamame Salad',
+  'Guacamole con Veggies y Chips':'Guacamole with Veggies & Chips',
+  'Pollo':'Chicken',
+  'Ensalada Verde':'Green Salad',
+  'Risotto de Espinaca':'Spinach Risotto',
+  'Flan de Cafe':'Coffee Flan',
+  'Huevos Verdes':'Eggs in Green Salsa',
+  'Pan de Frances':'French Toast',
+  'Ensalada Mexicana':'Mexican Salad',
+  'Hummus con Veggies y Chips':'Hummus with Veggies & Chips',
+  'Pescado':'Fish',
+  'Sopa de Calabaza':'Pumpkin Soup',
+  'Quinoa Verduras':'Quinoa with Vegetables',
+  'Vegan Choco Mouse':'Vegan Chocolate Mousse',
+  'Kebabs Pollo/Tofu':'Chicken/Tofu Kebabs',
+  'Ensalada Griega':'Greek Salad',
+  'Babaganoush Tostada':'Baba Ganoush Tostada',
+  'Quesadillas con Brócoli y Queso':'Broccoli & Cheese Quesadillas',
+  'Cabbage Steak con Tahini':'Cabbage Steak with Tahini',
+  'Camote al Horno':'Roasted Sweet Potato',
+  'Pie de Manzana':'Apple Pie',
+  'Huevos Duros':'Hard-Boiled Eggs',
+  'Pescado Congelado':'Fish',
+  'Protein Balls con Fruta Fresca':'Protein Balls with Fresh Fruit',
+  'Sopa de Tortilla':'Tortilla Soup',
+  'Pay de Manzana · Brownie':'Apple Pie · Brownie',
+  'Huevos Revueltos':'Scrambled Eggs',
+  'Pescado en Hoja de Platano':'Fish in Banana Leaf',
+  'Ensalada de Pepino':'Cucumber Salad',
+  'Spinach con Ajo':'Garlic Spinach',
+  'Fritatta':'Frittata',
+  'Pan de Frances con Coco':'Coconut French Toast',
+  'Pollo con Ajo Asado':'Roasted Garlic Chicken',
+  'Fruta':'Fresh Fruit',
+  'Plant Based Night — Phad Thai':'Plant-Based Night — Pad Thai',
+  'Fruta · Granola · Chia · Pan de Platano':'Fruit · Granola · Chia · Banana Bread',
+  'Fruta · Granola · Chia · Pan de Zucchini':'Fruit · Granola · Chia · Zucchini Bread',
+};
+function menuTrEn(s){return MENU_EN[s]||s;}
+
 function menuPrintDay(dateStr){
   const mi=menuDayIndex(dateStr);
   const mData=WEEKLY_MENU[mi]||{};
@@ -527,7 +583,7 @@ function menuPrintDay(dateStr){
       <div class="menu-poster-items">${items.map(it=>{
         const isStar=it.includes('★');
         const clean=it.replace(' ★','').replace('★ ','');
-        return `<div class="menu-poster-item${isStar?' starred':''}">${clean}</div>`;
+        return `<div class="menu-poster-item${isStar?' starred':''}">${menuTrEn(clean)}</div>`;
       }).join('')}</div>
     </div>`;
   };
@@ -535,9 +591,9 @@ function menuPrintDay(dateStr){
   const dinnerHtml=mData.dinner?`<div class="menu-poster-section">
     <div class="menu-poster-label">Dinner</div>
     <div class="menu-poster-items">
-      ${mData.dinner.protein?`<div class="menu-poster-item starred">${mData.dinner.protein}</div>`:''}
-      ${(mData.dinner.dishes||[]).map(d2=>`<div class="menu-poster-item">${d2}</div>`).join('')}
-      ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${mData.dinner.dessert}</div>`:''}
+      ${mData.dinner.protein?`<div class="menu-poster-item starred">${menuTrEn(mData.dinner.protein)}</div>`:''}
+      ${(mData.dinner.dishes||[]).map(d2=>`<div class="menu-poster-item">${menuTrEn(d2)}</div>`).join('')}
+      ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${menuTrEn(mData.dinner.dessert)}</div>`:''}
     </div>
   </div>`:'';
 
