@@ -158,7 +158,12 @@ function menuRenderWeek(){
     const mi=menuDayIndex(ds);
     const d=new Date(ds+'T12:00:00');
     const isToday=ds===today;
-    html+=`<div class="menu-day-header${isToday?' menu-day-today':''}"><div class="menu-day-name">${d.toLocaleDateString('en-US',{weekday:'long'})}</div><div class="menu-day-date">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div><div style="font-size:9px;opacity:.6;margin-top:2px">Day ${mi}</div></div>`;
+    html+=`<div class="menu-day-header${isToday?' menu-day-today':''}" onclick="menuPrintDay('${ds}')" title="Click to print today's menu for the wall" style="cursor:pointer;position:relative">
+      <div class="menu-day-name">${d.toLocaleDateString('en-US',{weekday:'long'})}</div>
+      <div class="menu-day-date">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
+      <div style="font-size:9px;opacity:.6;margin-top:2px">Day ${mi}</div>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:absolute;top:6px;right:6px;opacity:.55"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    </div>`;
   });
   // Pre-compute max schedule rows per meal so every cell gets padded to the same height
   const maxRows={};
@@ -504,5 +509,74 @@ function menuPrint(){
   <link rel="icon" type="image/png" href="/favicon.png"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:16px;font-size:11px;}h1{font-size:15px;margin:0 0 10px;text-align:center;}@media print{@page{size:landscape}}</style></head><body><h1>${title}</h1>${gridHtml}</body></html>`);
   w.document.close();
   setTimeout(()=>w.print(),400);
+}
+
+// Guest-facing poster for a single day — put up each morning so guests can see
+// the day's dinner ahead of time and let us know if they'll go off-site instead.
+function menuPrintDay(dateStr){
+  const mi=menuDayIndex(dateStr);
+  const mData=WEEKLY_MENU[mi]||{};
+  const d=new Date(dateStr+'T12:00:00');
+  const dayName=d.toLocaleDateString('en-US',{weekday:'long'});
+  const dateFmt=d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+  const section=(label,items)=>{
+    if(!items||!items.length)return'';
+    return `<div class="menu-poster-section">
+      <div class="menu-poster-label">${label}</div>
+      <div class="menu-poster-items">${items.map(it=>{
+        const isStar=it.includes('★');
+        const clean=it.replace(' ★','').replace('★ ','');
+        return `<div class="menu-poster-item${isStar?' starred':''}">${clean}</div>`;
+      }).join('')}</div>
+    </div>`;
+  };
+
+  const dinnerHtml=mData.dinner?`<div class="menu-poster-section">
+    <div class="menu-poster-label">Dinner</div>
+    <div class="menu-poster-items">
+      ${mData.dinner.protein?`<div class="menu-poster-item starred">${mData.dinner.protein}</div>`:''}
+      ${(mData.dinner.dishes||[]).map(d2=>`<div class="menu-poster-item">${d2}</div>`).join('')}
+      ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${mData.dinner.dessert}</div>`:''}
+    </div>
+  </div>`:'';
+
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <title>Menu — ${dayName}, ${dateFmt}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    @page{size:portrait;margin:0.6in}
+    *{box-sizing:border-box}
+    body{font-family:'Jost',sans-serif;margin:0;padding:56px 64px;color:#2d2520;background:#fdfbf7}
+    .menu-poster-brand{text-align:center;font-family:'Cormorant Garamond',serif;font-size:22px;letter-spacing:4px;text-transform:uppercase;color:#8a7e74;margin-bottom:4px}
+    .menu-poster-day{text-align:center;font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:600;color:#2d2520;margin:0 0 2px}
+    .menu-poster-date{text-align:center;font-size:15px;letter-spacing:1px;color:#8a7e74;text-transform:uppercase;margin-bottom:44px}
+    .menu-poster-divider{width:60px;height:2px;background:#c9a876;margin:0 auto 44px}
+    .menu-poster-section{margin-bottom:36px}
+    .menu-poster-label{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:#8a5a2e;letter-spacing:.5px;border-bottom:1.5px solid #e8dfd4;padding-bottom:8px;margin-bottom:14px;text-align:center}
+    .menu-poster-items{display:flex;flex-direction:column;gap:8px}
+    .menu-poster-item{font-size:18px;color:#3a332c;text-align:center}
+    .menu-poster-item.starred{font-weight:700;color:#2d2520;font-size:20px}
+    .menu-poster-dessert{margin-top:10px;font-size:15px;font-style:italic;color:#8a7e74;text-align:center}
+    .menu-poster-footer{text-align:center;margin-top:50px;font-size:12px;color:#b8ab9e;letter-spacing:.4px;line-height:1.7}
+    @media print{body{padding:20px 40px}}
+  </style></head>
+  <body>
+    <div class="menu-poster-brand">Amansala</div>
+    <div class="menu-poster-day">${dayName}</div>
+    <div class="menu-poster-date">${dateFmt}</div>
+    <div class="menu-poster-divider"></div>
+    ${section('Brunch',mData.brunch)}
+    ${section('Afternoon Snack',mData.snack)}
+    ${dinnerHtml}
+    <div class="menu-poster-footer">Please let the front desk know if you'll be dining off-site tonight.</div>
+  </body></html>`;
+
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>w.print(),500);
 }
 
