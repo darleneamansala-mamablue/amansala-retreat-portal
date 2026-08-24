@@ -4484,6 +4484,7 @@ function switchTab(id,btn){
 <script>
 // ===== TRANSPORTATION — moved to modules/transport.js =====
 </script>
+<script src="modules/driver-portal.js"></script>
 <script src="modules/cloudbeds-extra.js"></script>
 <script>
 // ===== CLOUDBEDS INTEGRATION (functions) — moved to modules/cloudbeds-extra.js =====
@@ -4937,6 +4938,22 @@ if(location.protocol!=='file:'){
     <div style="font-size:13.5px;color:var(--muted);margin-bottom:8px" id="teacherLoginErr">Loading your portal…</div>
   </div>
 </div>
+
+<!-- DRIVER LOGIN SCREEN — separate from staff/teacher login, for Irving & Salamon -->
+<div id="driverLoginOverlay" class="staff-login-overlay" style="display:none">
+  <div class="staff-login-card">
+    <div class="staff-login-brand">Amansala</div>
+    <div class="staff-login-sub">Driver Portal</div>
+    <input type="text" class="staff-login-field" id="driverLoginUser" placeholder="Username" autocomplete="username">
+    <input type="password" class="staff-login-field" id="driverLoginPass" placeholder="Password" autocomplete="current-password">
+    <div class="staff-login-err" id="driverLoginErr"></div>
+    <button class="btn btn-primary" style="width:100%;padding:13px;font-size:14px;border-radius:10px" onclick="driverLoginSubmit()">Sign In</button>
+    <div style="margin-top:20px;font-size:11.5px;color:var(--muted)">Need access? Contact <a href="mailto:darlene@amansala.com" style="color:var(--teal)">darlene@amansala.com</a></div>
+  </div>
+</div>
+
+<!-- DRIVER DASHBOARD — shown after driver login, scoped to that driver's own rides only -->
+<div id="driverDashboard" style="display:none;position:fixed;inset:0;background:#f0ece4;z-index:9998;overflow-y:auto"></div>
 
 <!-- ===== POST-SIGNING DEPOSIT REMINDER MODAL ===== -->
 <div class="modal-overlay" id="depositReminderModal" style="z-index:3000">

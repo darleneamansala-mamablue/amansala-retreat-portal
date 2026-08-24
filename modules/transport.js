@@ -159,7 +159,7 @@ function trSetView(v){
     const ddEl=document.getElementById('trDriversDate');
     if(ddEl&&!ddEl.value)ddEl.value=fmtISO(new Date());
     trBuildDriverView();
-    syncTransportFromSupabase().then(()=>trBuildDriverView());
+    Promise.all([syncTransportFromSupabase(),typeof syncDriverConfirmationsFromSupabase==='function'?syncDriverConfirmationsFromSupabase():null]).then(()=>trBuildDriverView());
   } else {
     if(aBtn)aBtn.style.cssText=aBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
     if(aCtrl)aCtrl.style.display='flex';
@@ -961,6 +961,7 @@ function trBuildDriverView(){
           <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Flight</th>
           <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Retreat</th>
           <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Notes</th>
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Driver</th>
         </tr></thead>
         <tbody>${trips.map((t,i)=>{
           const isArr=t._kind==='arrival';
@@ -969,6 +970,10 @@ function trBuildDriverView(){
           const airChip=airport==='cancun'
             ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
             :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
+          const conf=(typeof driverConfirmations!=='undefined'&&driverConfirmations)?driverConfirmations[t.id+'_'+t._kind]:null;
+          const confBadge=conf
+            ?`<span style="font-size:10.5px;font-weight:700;color:#15803d;background:#dcfce7;border-radius:99px;padding:2px 9px;white-space:nowrap">&#10003; ${tsFmt(new Date(conf.confirmedAt).toTimeString().slice(0,5))}</span>`
+            :`<span style="font-size:10.5px;font-weight:600;color:#b45309;background:#fef3c7;border-radius:99px;padding:2px 9px;white-space:nowrap">Pending</span>`;
           return `<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
             <td style="padding:8px 12px;font-weight:700;color:${isArr?'#0e9494':'#d97706'}">${isArr?'↓ Arrival':'↑ Departure'} ${airChip}</td>
             <td style="padding:8px 12px;font-weight:700;color:#2d2520;white-space:nowrap">${tsFmt(time)}</td>
@@ -977,6 +982,7 @@ function trBuildDriverView(){
             <td style="padding:8px 12px;color:#5a5048">${t.flightNumber||'—'}</td>
             <td style="padding:8px 12px;color:#8a7e74;font-size:11.5px">${t.retreatLabel}</td>
             <td style="padding:8px 12px;color:${t.note?'#15803d':'#c0b8b0'};font-size:11.5px;font-weight:${t.note?700:400}">${t.note||'—'}</td>
+            <td style="padding:8px 12px">${confBadge}</td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
