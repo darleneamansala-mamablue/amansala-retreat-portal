@@ -1889,9 +1889,11 @@ function tsRenderCalSection(bk){
       const hasGitanoToday=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
       if(!hasGitanoToday)rows.push({time:'7:30 PM',desc:isOffsite?'Dinner (Off-site)':'Dinner',shala:'',cat:'meal',sk:'19:30'});
     }
-    // Tours/ceremonies/prepaid activities can land on ANY day — including arrival
-    // and departure days — so this runs for every day, not just the middle ones.
-    (bk.retreatActivities||[]).filter(a=>a.date===dateStr).forEach(a=>{
+    // Tours/ceremonies/prepaid activities can land on any day EXCEPT the arrival
+    // day — hard backstop here regardless of how a stale/mis-dated entry got
+    // into bk.retreatActivities (e.g. dates shifting after the retreat's
+    // startDate was edited without re-running auto-assign).
+    (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&dateStr!==bk.startDate).forEach(a=>{
       const ao=getAct(a.aoId);
       const cat=TOUR_IDS.includes(a.aoId)?'tour':CEREMONY_IDS.includes(a.aoId)?'ceremony':(ao.cat||'ceremony');
       const tag=cat==='tour'?'Tour':cat==='entertainment'?'Group Salsa Class':'Ceremony';
@@ -3440,10 +3442,9 @@ function openPrintSchedule(bkId){
       const hasGitanoPrint=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
       if(!hasGitanoPrint)rows.push({time:'7:30 PM',desc:isOffsite?'Dinner | Off-site':'Dinner',shala:'',cls:'',sk:'19:30'});
     }
-    // Tours/ceremonies/prepaid activities can land on ANY day — including arrival
-    // and departure days — so this runs for every day, not just the middle ones.
+    // Tours/ceremonies/prepaid activities can land on any day EXCEPT arrival.
     const printActMap={};ADD_ONS.forEach(a=>printActMap[a.id]=a);printActMap['ao12']={id:'ao12',name:'Group Salsa Class',price:0};
-    (bk.retreatActivities||[]).filter(a=>a.date===dateStr).forEach(a=>{
+    (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&dateStr!==bk.startDate).forEach(a=>{
       const ao=printActMap[a.aoId]||{name:a.aoId,price:0};
       const dur=ACTS_DUR[a.aoId]||90;
       const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
@@ -3660,7 +3661,7 @@ function buildRetreatSchedulesPanel(){
           const aEnd=fmtT(addMin(_afSlotQ,sr.afternoonDur||60));
           rows.push({time:fmtT(_afSlotQ)+' – '+aEnd,desc:'Afternoon Class',note:shalaName(sr.afternoonShala1),type:'class'});
         }
-        (bk.retreatActivities||[]).filter(a=>a.date===dateStr).forEach(a=>{
+        (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&dateStr!==bk.startDate).forEach(a=>{
           const ao=ADD_ONS.find(x=>x.id===a.aoId);if(!ao)return;
           const isTour=['ao1','ao2','ao3','ao6','ao7'].includes(a.aoId);
           const desc=a.prepaid
@@ -3817,6 +3818,22 @@ function skedPickDate(val){
 
 function skedGetRetreatEvents(dateStr){
   const evs=[];
+  // Opening Circle — every confirmed retreat gets one on its arrival day, 15
+  // minutes before its first (arrival) yoga class, or at a fixed 8:30 PM in
+  // Grande if it has no arrival class. Ryan leads by default; if two retreats
+  // land on the exact same Opening Circle time, only the first keeps Ryan —
+  // the rest go to Darlene since Ryan can't be in two places at once.
+  const openingCircleLeaders={};
+  {
+    const candidates=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.scheduleRequest?.adminStatus==='confirmed'&&b.startDate===dateStr);
+    const timeCounts={};
+    candidates.forEach(bk=>{
+      const sr=bk.scheduleRequest;
+      const ocTime=(sr.hasArrivalClass&&sr.arrivalSlot)?skedMinToTime(skedTimeToMin(sr.arrivalSlot)-15):'20:30';
+      timeCounts[ocTime]=(timeCounts[ocTime]||0)+1;
+      openingCircleLeaders[bk.id]=timeCounts[ocTime]===1?'Ryan':'Darlene';
+    });
+  }
   AppData.bookings.filter(b=>b.status!=='cancelled'&&b.scheduleRequest?.adminStatus==='confirmed').forEach(bk=>{
     const sr=bk.scheduleRequest;
     if(!sr)return;
@@ -3837,14 +3854,21 @@ function skedGetRetreatEvents(dateStr){
     const musicNote=(Array.isArray(sr.music)?sr.music:[sr.music]).includes('system')?' 🎵':'';
     // Arrival day — show arrival evening class if set, otherwise fall back to opening morning class
     if(isArrivalDay){
+      const ocLeader=openingCircleLeaders[bk.id]||'Ryan';
       if(sr.hasArrivalClass&&sr.arrivalSlot){
         const arShala=sr.arrivalShala1||effMornShala;
+        const ocTime=skedMinToTime(skedTimeToMin(sr.arrivalSlot)-15);
+        const ocEnd=sr.arrivalSlot;
+        evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:arShala||'grande',date:dateStr,startTime:ocTime,endTime:ocEnd,title,subtitle:'Opening Circle — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         if(arShala){
           const arDur=sr.arrivalDur||60;
           const arEnd=skedMinToTime(skedTimeToMin(sr.arrivalSlot)+arDur);
           evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:'Arrival Evening Class',color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
-      } else if(effMornStart&&effMornShala){
+      } else {
+        evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:'grande',date:dateStr,startTime:'20:30',endTime:'20:45',title,subtitle:'Opening Circle — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+      }
+      if(effMornStart&&effMornShala){
         // No arrival class — show opening morning class (respects a one-off override for this date)
         const arrOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
         const arrStart=arrOv?arrOv.start:effMornStart;
@@ -3907,8 +3931,8 @@ function skedGetRetreatEvents(dateStr){
         evs.push({id:'ret_'+bk.id+'_ws_'+dateStr,resourceId:w.shala1,date:dateStr,startTime:w.start||'',endTime:wEnd,title,subtitle:'Mid-Afternoon Class'+(w.notes?' — '+w.notes.slice(0,24):''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       });
     }
-    // Activities assigned by admin
-    (bk.retreatActivities||[]).filter(a=>a.date===dateStr).forEach(a=>{
+    // Activities assigned by admin — never on the arrival day
+    (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&dateStr!==bk.startDate).forEach(a=>{
       const ao=ADD_ONS.find(x=>x.id===a.aoId);if(!ao)return;
       const aoMap={ao1:'ruins',ao6:'cenote',ao7:'mangroves',ao2:'muyil',ao3:'atik',ao4:'cacao',ao5:'temazcal',ao9:'clay',ao10:'icebath',ao12:'salsa',ao8:'ruins',ao11:'ruins',ao13:'gitano',ao14:'cooking'};
       const startT=a.time||'09:00';

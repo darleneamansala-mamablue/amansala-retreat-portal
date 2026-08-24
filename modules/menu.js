@@ -749,7 +749,16 @@ const DEF_MENU_PROTEIN_PRICES=[
   {id:'salmon',    name:'Filete de Salmón Natural',          unit:'KG', price:350, portionG:220},
   {id:'camaron15', name:'Camarón U15',                       unit:'KG', price:450, portionG:220},
   {id:'camaronpz', name:'Camarón Pelado y Desvenado 21/25',  unit:'PZA',price:250, portionG:null},
-  {id:'entero',    name:'Pescado Fresco Entero',             unit:'KG', price:310, portionG:220},
+  {id:'entero',    name:'Pescado Fresco Entero',             unit:'KG', price:310, portionG:220}, // June 2026 catalog lists no price for this cut — worth reconfirming with the supplier
+  // Added from the June 2026 supplier catalog (CATALOGO JUNIO2026 ACT):
+  {id:'salmonlonja',name:'Salmón Fresco Lonja',              unit:'KG', price:340, portionG:220},
+  {id:'arracheraCh',name:'Arrachera Choice',                 unit:'KG', price:368, portionG:220},
+  {id:'pulpo',     name:'Pulpo',                             unit:'KG', price:230, portionG:220},
+  {id:'camaronsc',  name:'Camarón 21-25 Sin Cabeza Con Cáscara',unit:'KG',price:270, portionG:220},
+  {id:'langosta',  name:'Cola de Langosta',                  unit:'KG', price:1300,portionG:220},
+  {id:'molida',    name:'Carne Molida 80/20',                unit:'KG', price:225, portionG:220},
+  {id:'ribeye',    name:'Rib Eye Sterling',                  unit:'KG', price:606, portionG:220},
+  {id:'chicharra', name:'Chicharra',                         unit:'KG', price:350, portionG:220},
 ];
 const DEF_MENU_RECIPE_COSTS=[
   {name:'Pan de Plátano',                portions:48, totalCost:417.48},
@@ -788,23 +797,237 @@ const DEF_MENU_PROTEIN_ASSIGN={
   7:{midday:'pollo',  dinner:''},         // Sunday dinner is plant-based — no protein cost
 };
 const MENU_DAY_NAMES={1:'Monday',2:'Tuesday',3:'Wednesday',4:'Thursday',5:'Friday',6:'Saturday',7:'Sunday'};
+// Full supplier catalog (June 2026) — a growing reference for costing more
+// recipes over time; not everything here is used in the menu yet.
+const DEF_MENU_INGREDIENT_CATALOG=[
+  {category:'Pantry & Dry Goods',name:'ACEITE VEGETAL PATRONA 20 Lt',price:692},
+  {category:'Pantry & Dry Goods',name:'ACEITE DE AJONJOLI LATA DE 1.657',price:779},
+  {category:'Pantry & Dry Goods',name:'ACEITE DE TRUFA BLANCA DE 100 ML ROLAND',price:353},
+  {category:'Pantry & Dry Goods',name:'ACEITE OLIVA BLEND PET 1/3.785 L GLOSS',price:396.9},
+  {category:'Pantry & Dry Goods',name:'ACEITUNAS EX LARGE KALAMATA 3.3KGS WHOL ACEITUNAS',price:503.04},
+  {category:'Pantry & Dry Goods',name:'ARROZ ARBORIO KG',price:179},
+  {category:'Pantry & Dry Goods',name:'ARROZ P/SUSHI 2.270 KG KOKUHO',price:119},
+  {category:'Pantry & Dry Goods',name:'ARROZ SUPER EXTRA GRANO 1KG DE ORO',price:34},
+  {category:'Pantry & Dry Goods',name:'AZUCAR DOLCHE KG',price:30.72},
+  {category:'Pantry & Dry Goods',name:'AZUCAR ESTANDAR 1 KG PREVE',price:38},
+  {category:'Pantry & Dry Goods',name:'AZUCAR MASCABADO 1/1 KG METCO',price:59},
+  {category:'Pantry & Dry Goods',name:'AZUCAR SPLENDA CAJA 700 SOBRES',price:275.1},
+  {category:'Pantry & Dry Goods',name:'BEBIDA DE AVENA 1L GUD',price:73},
+  {category:'Pantry & Dry Goods',name:'CHICHAROS HERDEZ LATA DE 400 GRS',price:22.6},
+  {category:'Pantry & Dry Goods',name:'CHILES JALAPEÑOS EN RODAJAS 2.8 KG CLEMENTE JACQ',price:129},
+  {category:'Pantry & Dry Goods',name:'CHILE MACHACADO CRUSHED 1/340.2 G BADIA',price:138.7},
+  {category:'Pantry & Dry Goods',name:'CHOCOLATE BLANCO WAFER 1 KG SICAO',price:415.8},
+  {category:'Pantry & Dry Goods',name:'CHOCOLATE SEMIAMARGO 52% WAFER 1KG SICAO',price:415.8},
+  {category:'Pantry & Dry Goods',name:'COCOA BOLSA 1 KG HERSHEYS',price:318.06},
+  {category:'Pantry & Dry Goods',name:'CONCENTRADO D/HORCHATA 1.890L DELICIOSA',price:151.2},
+  {category:'Pantry & Dry Goods',name:'CONCENTRADO D/TAMARINDO 1.890L DELICIOSA',price:175.8},
+  {category:'Pantry & Dry Goods',name:'CREMA DE CACAHUATE 1.13 KG SKIPPY',price:224.53},
+  {category:'Pantry & Dry Goods',name:'CREMA DE COCO 1 LT CALAHUA',price:64},
+  {category:'Pantry & Dry Goods',name:'FIDEOS ARROZ NOODLES-HSINCH 396GR ROLAND',price:160.8},
+  {category:'Pantry & Dry Goods',name:'FRIJOL BAYO 1 KG EL LABRADOR',price:48},
+  {category:'Pantry & Dry Goods',name:'FRIJOL NEGRO BOLA 1 KG GRANO DE ORO',price:48},
+  {category:'Pantry & Dry Goods',name:'GALLETA MARIAS 18 PAQ 3.06 KG GAMESA',price:19.44},
+  {category:'Pantry & Dry Goods',name:'GALLETAS SALADAS 200/12GR GAMESA',price:271.2},
+  {category:'Pantry & Dry Goods',name:'GARBANZOS EN LATA DE 400 GR HERD',price:22.6},
+  {category:'Pantry & Dry Goods',name:'HARINA GLUTEN FREE ROLLS Y PIZZA BOLSA 3 KG (TENDENCIA GAS)',price:781},
+  {category:'Pantry & Dry Goods',name:'HARINA GLUTEN FREE BROWNIE 3 kg BOLSA(TENDENCIA GASTRONOMICA)',price:694},
+  {category:'Pantry & Dry Goods',name:'HARINA P/ HOT CAKES 4.53KG KRUSTEAZ',price:220},
+  {category:'Pantry & Dry Goods',name:'HIERBAS DE PROVENZA 1/224 G BADIA',price:109.4},
+  {category:'Pantry & Dry Goods',name:'JALAPEÑOS ROD/NACHOS 2.8KG CLEM JACQ',price:null},
+  {category:'Pantry & Dry Goods',name:'JAMON VIRGINIA DE PAVO 3.95KG FUD (PIEZA DE 3.95 KG)',price:600.4},
+  {category:'Pantry & Dry Goods',name:'JARABE AGAVE CLARO ORGAN 0.33GR AGAVICA',price:64},
+  {category:'Pantry & Dry Goods',name:'JARABE NAT 1/1 L MADRILEÑA',price:62.06},
+  {category:'Pantry & Dry Goods',name:'JUGO DE MANZANA JUMEX 960 ML',price:35},
+  {category:'Pantry & Dry Goods',name:'JUGO MAGGI SAZONADOR 1/1.9 L NESTLE',price:421.8},
+  {category:'Pantry & Dry Goods',name:'CAFE AMERICANO MOLIDO 1KG',price:345},
+  {category:'Pantry & Dry Goods',name:'CAFÉ CLASICO EN GRANO KG',price:355},
+  {category:'Pantry & Dry Goods',name:'CAFÉ DESCAFEINADO MOLIDO KG',price:405},
+  {category:'Pantry & Dry Goods',name:'KNORR SUIZA BOTE 3.5 KG',price:423},
+  {category:'Pantry & Dry Goods',name:'LECHE CONDENSADA LATA 375GR LA LECHERA',price:33.8},
+  {category:'Pantry & Dry Goods',name:'LECHE DE ALMENDRA 1L GUD',price:68.1},
+  {category:'Pantry & Dry Goods',name:'LECHE DE COCO 400 ML ROLAND',price:62},
+  {category:'Pantry & Dry Goods',name:'LECHE DE COCO SIN AZUCAR 1/1 L GUD',price:55},
+  {category:'Pantry & Dry Goods',name:'LECHE DE SOYA ADES NATURAL',price:48.7},
+  {category:'Pantry & Dry Goods',name:'LECHE ENTERA 1L LALA',price:38},
+  {category:'Pantry & Dry Goods',name:'LECHE EVAPORADA CARNATION 360 ML',price:24.5},
+  {category:'Pantry & Dry Goods',name:'LENTEJA 1KG EL LABRADOR',price:41},
+  {category:'Pantry & Dry Goods',name:'MASA P/ROLLO PRIMAVERA 25CT WEI CHUAN',price:59.3},
+  {category:'Pantry & Dry Goods',name:'MAYONESA 3.4 KG McCORMICK',price:350.2},
+  {category:'Pantry & Dry Goods',name:'MAYONESA 1GALON KEMPIE',price:630.16},
+  {category:'Pantry & Dry Goods',name:'MEDIA CREMA 1 LT NESTLE',price:92.5},
+  {category:'Pantry & Dry Goods',name:'MERMELADA FRESA 980GRS McCORMICK',price:96.34},
+  {category:'Pantry & Dry Goods',name:'MIEL MAPLE 1/3.6 L KARO',price:404.35},
+  {category:'Pantry & Dry Goods',name:'MIEL MAPLE DE 3.78 LTS H& H',price:185.7},
+  {category:'Pantry & Dry Goods',name:'NUTELLA 950 GR',price:194.94},
+  {category:'Pantry & Dry Goods',name:'PALITOS ARROZ PAD THAI 1/0.395 KG ROLAND',price:160.8},
+  {category:'Pantry & Dry Goods',name:'PAN BLANCO 640GR BIMBO',price:51.2},
+  {category:'Pantry & Dry Goods',name:'PAN PITA GRIEGO 7IN 1-12 CT OLYMPIA',price:95},
+  {category:'Pantry & Dry Goods',name:'PAN INTEGRAL 675GR BIMBO PAN INTEGRAL 675GR BIMBO',price:57.9},
+  {category:'Pantry & Dry Goods',name:'PAPA FRANCESA C/CASC 3/8" 2.27KG LW #32L',price:173.7},
+  {category:'Pantry & Dry Goods',name:'PAPEL ARRZ ROL PRIMA8"22CM 44PZA CIRC',price:92},
+  {category:'Pantry & Dry Goods',name:'PAPRIKA MOLIDA ESPAÑOLA Bote 454 GR BADIA',price:168.9},
+  {category:'Pantry & Dry Goods',name:'PASTA PENNE RIGATE 500GRS BARILLA',price:28.5},
+  {category:'Pantry & Dry Goods',name:'PASTA DE CURRY ROJO MAE PLOY KG',price:191.24},
+  {category:'Pantry & Dry Goods',name:'PIMIENTA NEGRA ENTERA 1/454 G BADIA',price:null},
+  {category:'Pantry & Dry Goods',name:'PLUMA PENNE RIGATE 500GRS BARILLA',price:28.5},
+  {category:'Pantry & Dry Goods',name:'SAL MARINA DE MESA REF 1KG SOL',price:23.5},
+  {category:'Pantry & Dry Goods',name:'SALCHICHA PAVO 2.16 KG',price:152.3},
+  {category:'Pantry & Dry Goods',name:'SALSA CATSUP PET 1/3.23KG HEINZ SALSA CATSUP PET',price:216.4},
+  {category:'Pantry & Dry Goods',name:'SALSA DE CHILE 1 /0.920 KG MAE PLOY',price:98.66},
+  {category:'Pantry & Dry Goods',name:'SALSA DE SOYA 1/3.79 L KIKKOMAN',price:431.5},
+  {category:'Pantry & Dry Goods',name:'SALSA SIRACHA 12/28 OZ ROLAND',price:127},
+  {category:'Pantry & Dry Goods',name:'SALSA TERIYAKI 1/3.79 L KIKKOMAN',price:513},
+  {category:'Pantry & Dry Goods',name:'SALSA TIPO INGLESA CROSSE & BLACKWELL 4',price:264},
+  {category:'Pantry & Dry Goods',name:'SAZONADOR CAJUN 1/652 G BADIA',price:216.5},
+  {category:'Pantry & Dry Goods',name:'SYRUP CHOCOLATE 24/589 G',price:73.3},
+  {category:'Pantry & Dry Goods',name:'TE MENTA 40 GRS C/20 SOBRES',price:76},
+  {category:'Pantry & Dry Goods',name:'TE ENGLISH BREAKFAST 50 GRS C/25 SOBRES',price:78},
+  {category:'Pantry & Dry Goods',name:'TE CAMOMILE 30 GRS. C/20 SOBRES',price:76},
+  {category:'Pantry & Dry Goods',name:'TE VERDE 30 GRS. C/20 SOBRES',price:76},
+  {category:'Pantry & Dry Goods',name:'TOMATE ENTERO PELADO 2.5KG ITALIA MIA',price:140.3},
+  {category:'Pantry & Dry Goods',name:'TORTILLA HARINA NATU 30CM 12" 12PZS TACOMEX PARA BURRITO',price:131.1},
+  {category:'Pantry & Dry Goods',name:'VAINILLA LT GARY',price:33},
+  {category:'Pantry & Dry Goods',name:'VINAGRE BALSAMICO ROLAND 1 LT',price:86},
+  {category:'Pantry & Dry Goods',name:'VINAGRE BLANCO GALON 3.8 LT',price:45},
+  {category:'Pantry & Dry Goods',name:'VINAGRE DE ARROZ 3.785L ROLAND',price:367.1},
+  {category:'Ice Cream (Helados)',name:'HELADO DE FERRERO 4 lTS',price:750},
+  {category:'Ice Cream (Helados)',name:'HELADO DE MAIZ 4 LTS.',price:750},
+  {category:'Ice Cream (Helados)',name:'HELADO DE MANDARINA 4 LTS.',price:750},
+  {category:'Ice Cream (Helados)',name:'HELADO DE COCO 4 LTS',price:750},
+  {category:'Ice Cream (Helados)',name:'HELADO DE VAINILLA 4 LTS',price:750},
+  {category:'Ice Cream (Helados)',name:'HELADO DE PIESTACHE 4 LTS',price:750},
+  {category:'Dairy (Lácteos)',name:'MANTEQUILLA SIN SAL GLORIA KG',price:227},
+  {category:'Dairy (Lácteos)',name:'QUESO FETA NAT CUB 1.81KG ODYSSEY',price:541.14},
+  {category:'Dairy (Lácteos)',name:'QUESO MANCHEGO GRANEL LVI PZA',price:648},
+  {category:'Dairy (Lácteos)',name:'QUESO MOZARELLA BELGIOSO 454GR',price:170},
+  {category:'Dairy (Lácteos)',name:'QUESO MOZZAR BARRA 1/2.3 KG APROX AWIPAC (PRECIO XKG)',price:175},
+  {category:'Dairy (Lácteos)',name:'QUESO MOZZARELLA FRES 2/454G BELGIOSO',price:231},
+  {category:'Dairy (Lácteos)',name:'QUESO OAXACA PZA 3 KG',price:465},
+  {category:'Dairy (Lácteos)',name:'QUESO PARMESANO CERA AMARILLA KG',price:222},
+  {category:'Dairy (Lácteos)',name:'QUESO SOPERO FRESCO SANTA CECILIA 850 GR',price:63.8},
+  {category:'Dairy (Lácteos)',name:'TOCINO REBANADO FUD',price:423.6},
+  {category:'Dairy (Lácteos)',name:'TOFU FIRM EXTRA FIRME 349GR MORI',price:41},
+  {category:'Dairy (Lácteos)',name:'TOFU 280GR (TENDENCIA GAS)',price:97},
+  {category:'Dairy (Lácteos)',name:'YOGHURT BATIDO NATURAL 1 KG YPT',price:null},
+  {category:'Proteins (Proteínas)',name:'PULPO 2/4',price:230},
+  {category:'Proteins (Proteínas)',name:'CAMARON 21-25 SIN CABEZA CON CASCARA',price:270},
+  {category:'Proteins (Proteínas)',name:'CAMARON U15',price:450},
+  {category:'Proteins (Proteínas)',name:'COLA DE LANGOSTA KG',price:1300},
+  {category:'Proteins (Proteínas)',name:'SALMON FRESCO LONJA',price:340},
+  {category:'Proteins (Proteínas)',name:'FILETE ROBALO FRESCO',price:440},
+  {category:'Proteins (Proteínas)',name:'FILETE BASA',price:98},
+  {category:'Proteins (Proteínas)',name:'PESCADO FRESCO (ENTERO)',price:null},
+  {category:'Proteins (Proteínas)',name:'PECHUGA DE POLLO PREMIUM',price:104},
+  {category:'Proteins (Proteínas)',name:'ARRACHERA CHOICE',price:368},
+  {category:'Proteins (Proteínas)',name:'CARNE MOLIDA 80/20',price:225},
+  {category:'Proteins (Proteínas)',name:'RIB EYE STERLING KG',price:606},
+  {category:'Proteins (Proteínas)',name:'CHICHARRA',price:350},
+  {category:'Produce (Frutas y Verduras)',name:'AGUACATE HAAS',price:102},
+  {category:'Produce (Frutas y Verduras)',name:'AJO MACHO',price:350},
+  {category:'Produce (Frutas y Verduras)',name:'ALBAHACAR ITALIANA',price:200},
+  {category:'Produce (Frutas y Verduras)',name:'APIO',price:17},
+  {category:'Produce (Frutas y Verduras)',name:'BETABEL',price:15},
+  {category:'Produce (Frutas y Verduras)',name:'BROCOLI',price:25},
+  {category:'Produce (Frutas y Verduras)',name:'CALABAZA ITALIANA',price:20},
+  {category:'Produce (Frutas y Verduras)',name:'CALABAZA LOCAL',price:45},
+  {category:'Produce (Frutas y Verduras)',name:'CEBOLLA BLANCA',price:29},
+  {category:'Produce (Frutas y Verduras)',name:'CEBOLLA CAMBRAY',price:12},
+  {category:'Produce (Frutas y Verduras)',name:'CEBOLLA MORADA',price:20},
+  {category:'Produce (Frutas y Verduras)',name:'CEBOLLINA',price:160},
+  {category:'Produce (Frutas y Verduras)',name:'CHAMPIÑON BLANCO',price:125},
+  {category:'Produce (Frutas y Verduras)',name:'CHAYOTE LISO',price:14},
+  {category:'Produce (Frutas y Verduras)',name:'CHILA HABANERO',price:126},
+  {category:'Produce (Frutas y Verduras)',name:'CHILE ANCHO',price:245},
+  {category:'Produce (Frutas y Verduras)',name:'CHILE CHIPOTLE',price:31},
+  {category:'Produce (Frutas y Verduras)',name:'CHILE DE ARBOL',price:200},
+  {category:'Produce (Frutas y Verduras)',name:'CHILE GUAJILLO',price:212},
+  {category:'Produce (Frutas y Verduras)',name:'CHILE JALAPEÑO',price:80},
+  {category:'Produce (Frutas y Verduras)',name:'CHILE POBLANO',price:125},
+  {category:'Produce (Frutas y Verduras)',name:'CHILE SERRANO',price:75},
+  {category:'Produce (Frutas y Verduras)',name:'CHILE XCATIC',price:115},
+  {category:'Produce (Frutas y Verduras)',name:'CHILES PASILLA',price:360},
+  {category:'Produce (Frutas y Verduras)',name:'CHIPOTLE LATA 220GR',price:31},
+  {category:'Produce (Frutas y Verduras)',name:'CHOCO MILK 350GR',price:68},
+  {category:'Produce (Frutas y Verduras)',name:'CHOCO MILK 350GR',price:68},
+  {category:'Produce (Frutas y Verduras)',name:'CHOCO MILK 350GR',price:38},
+  {category:'Produce (Frutas y Verduras)',name:'CILANTRO',price:45},
+  {category:'Produce (Frutas y Verduras)',name:'COCO RAYADO',price:150},
+  {category:'Produce (Frutas y Verduras)',name:'COL BLANCA',price:10},
+  {category:'Produce (Frutas y Verduras)',name:'COL MORADA',price:25},
+  {category:'Produce (Frutas y Verduras)',name:'COLIFLOR',price:35},
+  {category:'Produce (Frutas y Verduras)',name:'ESPINACA',price:38},
+  {category:'Produce (Frutas y Verduras)',name:'FRIJOL NEGRO',price:40},
+  {category:'Produce (Frutas y Verduras)',name:'FRIJOL NEGRO',price:40},
+  {category:'Produce (Frutas y Verduras)',name:'GALLETAS MARIAS',price:25.002},
+  {category:'Produce (Frutas y Verduras)',name:'HOJA DE AGUACATILLO',price:115},
+  {category:'Produce (Frutas y Verduras)',name:'JAMAICA',price:136},
+  {category:'Produce (Frutas y Verduras)',name:'JAMON VIRGINIA FUD',price:205},
+  {category:'Produce (Frutas y Verduras)',name:'JENGIBRE',price:140},
+  {category:'Produce (Frutas y Verduras)',name:'JICAMA',price:20},
+  {category:'Produce (Frutas y Verduras)',name:'KIWI',price:120},
+  {category:'Produce (Frutas y Verduras)',name:'LECHUGA ARUGULA',price:85},
+  {category:'Produce (Frutas y Verduras)',name:'LECHUGA OREJONA',price:28},
+  {category:'Produce (Frutas y Verduras)',name:'LECHUGA ROMANA',price:24},
+  {category:'Produce (Frutas y Verduras)',name:'LECHUGA SANGRIA',price:21},
+  {category:'Produce (Frutas y Verduras)',name:'LIMON',price:20},
+  {category:'Produce (Frutas y Verduras)',name:'MANGO ATAULFO',price:50},
+  {category:'Produce (Frutas y Verduras)',name:'MANGO ATAULFO',price:50},
+  {category:'Produce (Frutas y Verduras)',name:'MANTECA DE CERDO',price:108},
+  {category:'Produce (Frutas y Verduras)',name:'MANTEQUILLA GLORIA 90 GR',price:31},
+  {category:'Produce (Frutas y Verduras)',name:'MANZANA GALA',price:88},
+  {category:'Produce (Frutas y Verduras)',name:'MANZANA VERDE',price:74},
+  {category:'Produce (Frutas y Verduras)',name:'MARACUYA',price:135},
+  {category:'Produce (Frutas y Verduras)',name:'MAYONESA 3.4KG',price:425},
+  {category:'Produce (Frutas y Verduras)',name:'MEDIA CREMA LALA 480 ML',price:35},
+  {category:'Produce (Frutas y Verduras)',name:'MELON CHINO',price:39},
+  {category:'Produce (Frutas y Verduras)',name:'MENTA',price:75},
+  {category:'Produce (Frutas y Verduras)',name:'MORRON AMARILLO',price:100},
+  {category:'Produce (Frutas y Verduras)',name:'MORRON ROJO',price:104},
+  {category:'Produce (Frutas y Verduras)',name:'MORRON VERDE',price:120},
+  {category:'Produce (Frutas y Verduras)',name:'NARANJA DULCE',price:30},
+  {category:'Produce (Frutas y Verduras)',name:'PAPA',price:63},
+  {category:'Produce (Frutas y Verduras)',name:'PAPAYA MARADOL',price:35},
+  {category:'Produce (Frutas y Verduras)',name:'PASITAS',price:95},
+  {category:'Produce (Frutas y Verduras)',name:'PEPINO VERDE',price:45},
+  {category:'Produce (Frutas y Verduras)',name:'PEPITA PELADA',price:141},
+  {category:'Produce (Frutas y Verduras)',name:'PEREJIL LISO',price:60},
+  {category:'Produce (Frutas y Verduras)',name:'PILONCILLO',price:38},
+  {category:'Produce (Frutas y Verduras)',name:'PIMIENTA MOLIDA NEGRA',price:305},
+  {category:'Produce (Frutas y Verduras)',name:'PIÑA',price:50},
+  {category:'Produce (Frutas y Verduras)',name:'PLATANO TABASCO',price:29},
+  {category:'Produce (Frutas y Verduras)',name:'QUESO MANCHEGO',price:285},
+  {category:'Produce (Frutas y Verduras)',name:'QUESO OAXACA',price:160},
+  {category:'Produce (Frutas y Verduras)',name:'RABANO CAMBRAY',price:56},
+  {category:'Produce (Frutas y Verduras)',name:'ROMERO FRESCO',price:130},
+  {category:'Produce (Frutas y Verduras)',name:'SANDIA',price:15},
+  {category:'Produce (Frutas y Verduras)',name:'TOMATE GUAJE',price:31},
+  {category:'Produce (Frutas y Verduras)',name:'TOMATE VERDE',price:25},
+  {category:'Produce (Frutas y Verduras)',name:'TOMILLO',price:175},
+  {category:'Produce (Frutas y Verduras)',name:'TORONJA',price:24},
+  {category:'Produce (Frutas y Verduras)',name:'VINAGRE BLANCO LT',price:20},
+  {category:'Produce (Frutas y Verduras)',name:'ZANAHORIA',price:20},
+];
 
 let menuProteinPrices=[];
 let menuRecipeCosts=[];
 let menuProteinAssign={};
+let menuIngredientCatalog=[];
+let menuCatalogFilter='';
 
 function menuLoadCostData(){
   try{menuProteinPrices=JSON.parse(localStorage.getItem('amansala_menu_protein_prices')||'null')||DEF_MENU_PROTEIN_PRICES.map(p=>({...p}));}catch{menuProteinPrices=DEF_MENU_PROTEIN_PRICES.map(p=>({...p}));}
   try{menuRecipeCosts=JSON.parse(localStorage.getItem('amansala_menu_recipe_costs')||'null')||DEF_MENU_RECIPE_COSTS.map(r=>({...r}));}catch{menuRecipeCosts=DEF_MENU_RECIPE_COSTS.map(r=>({...r}));}
   try{menuProteinAssign=JSON.parse(localStorage.getItem('amansala_menu_protein_assign')||'null')||JSON.parse(JSON.stringify(DEF_MENU_PROTEIN_ASSIGN));}catch{menuProteinAssign=JSON.parse(JSON.stringify(DEF_MENU_PROTEIN_ASSIGN));}
+  try{menuIngredientCatalog=JSON.parse(localStorage.getItem('amansala_menu_ingredient_catalog')||'null')||DEF_MENU_INGREDIENT_CATALOG.map(c=>({...c}));}catch{menuIngredientCatalog=DEF_MENU_INGREDIENT_CATALOG.map(c=>({...c}));}
 }
 async function menuSyncCostDataFromSupabase(){
   try{
-    const{data}=await db.from('app_store').select('key,value').in('key',['menuProteinPrices','menuRecipeCosts','menuProteinAssign']);
+    const{data}=await db.from('app_store').select('key,value').in('key',['menuProteinPrices','menuRecipeCosts','menuProteinAssign','menuIngredientCatalog']);
     (data||[]).forEach(row=>{
       if(row.key==='menuProteinPrices'&&Array.isArray(row.value))menuProteinPrices=row.value;
       if(row.key==='menuRecipeCosts'&&Array.isArray(row.value))menuRecipeCosts=row.value;
       if(row.key==='menuProteinAssign'&&row.value)menuProteinAssign=row.value;
+      if(row.key==='menuIngredientCatalog'&&Array.isArray(row.value))menuIngredientCatalog=row.value;
     });
   }catch(e){}
 }
@@ -819,6 +1042,37 @@ function menuSaveRecipeCosts(){
 function menuSaveProteinAssign(){
   localStorage.setItem('amansala_menu_protein_assign',JSON.stringify(menuProteinAssign));
   (async()=>{try{await db.from('app_store').upsert({key:'menuProteinAssign',value:menuProteinAssign,updated_at:new Date().toISOString()});}catch(e){}})();
+}
+function menuSaveCatalog(){
+  localStorage.setItem('amansala_menu_ingredient_catalog',JSON.stringify(menuIngredientCatalog));
+  (async()=>{try{await db.from('app_store').upsert({key:'menuIngredientCatalog',value:menuIngredientCatalog,updated_at:new Date().toISOString()});}catch(e){}})();
+}
+function menuFilterCatalog(val){
+  menuCatalogFilter=val;
+  menuRenderCatalogBody();
+}
+function menuRenderCatalogBody(){
+  const body=document.getElementById('menuCatalogBody');if(!body)return;
+  const q=menuCatalogFilter.trim().toLowerCase();
+  const groups=[];
+  menuIngredientCatalog.forEach((item,idx)=>{
+    if(q&&!item.name.toLowerCase().includes(q))return;
+    let g=groups.find(x=>x.category===item.category);
+    if(!g){g={category:item.category,items:[]};groups.push(g);}
+    g.items.push({...item,idx});
+  });
+  if(!groups.length){body.innerHTML='<div style="color:#8a7e74;font-size:12.5px;padding:16px 0;text-align:center">No matches.</div>';return;}
+  body.innerHTML=groups.map(g=>`
+    <details${q?' open':''} style="margin-bottom:8px;border:1px solid #f0ece4;border-radius:8px;overflow:hidden">
+      <summary style="padding:8px 12px;background:#faf7f2;cursor:pointer;font-weight:700;font-size:12px;color:var(--dark)">${menuEsc(g.category)} <span style="color:#8a7e74;font-weight:400">(${g.items.length})</span></summary>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <tbody>${g.items.map(it=>`
+          <tr style="border-top:1px solid #f5f1eb">
+            <td style="padding:5px 12px;color:#3a332c">${menuEsc(it.name)}</td>
+            <td style="padding:5px 12px;white-space:nowrap">$<input type="number" step="0.01" value="${it.price==null?'':it.price}" placeholder="—" onchange="menuIngredientCatalog[${it.idx}].price=this.value===''?null:(parseFloat(this.value)||0);menuSaveCatalog()" style="width:80px;border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-family:'Jost',sans-serif;font-size:12px"></td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </details>`).join('');
 }
 
 function menuNormalizeDishName(s){return(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/★/g,'').trim();}
@@ -924,33 +1178,12 @@ function menuRenderCostPanel(){
 
   panel.innerHTML=`
     <div style="max-width:1100px;margin:0 auto">
-      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:22px">
-        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Protein Prices (MXN)</span>
-          <button onclick="menuProteinPrices.push({id:'p'+Date.now(),name:'New Product',unit:'KG',price:0,portionG:220});menuSaveProteinPrices();menuRenderCostPanel()" style="border:1.5px solid var(--teal,#2d6a6a);background:#fff;color:var(--teal,#2d6a6a);border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">+ Add Product</button>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
-          <thead><tr style="background:#faf7f2"><th style="padding:7px 10px;text-align:left;color:#5a5048">Product</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Unit</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Price</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Portion</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Cost/person</th><th></th></tr></thead>
-          <tbody>${proteinRows}</tbody>
-        </table>
-      </div>
+      <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:10px;padding:10px 16px;margin-bottom:18px;font-size:12.5px;color:#92400e;font-weight:600">All prices on this page are in Mexican pesos (MXN), matching your supplier price lists — not USD.</div>
 
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:22px">
         <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Recipe Costs</span>
-          <button onclick="menuRecipeCosts.push({name:'New Recipe',portions:20,totalCost:0});menuSaveRecipeCosts();menuRenderCostPanel()" style="border:1.5px solid var(--teal,#2d6a6a);background:#fff;color:var(--teal,#2d6a6a);border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">+ Add Recipe</button>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
-          <thead><tr style="background:#faf7f2"><th style="padding:7px 10px;text-align:left;color:#5a5048">Recipe</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Portions</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Total Cost</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Cost/portion</th><th></th></tr></thead>
-          <tbody>${recipeRows}</tbody>
-        </table>
-        <div style="padding:10px 18px;font-size:11.5px;color:#8a7e74;background:#faf7f2;border-top:1px solid var(--border)">We'll keep adding recipes here over time — anything not yet costed shows as "no cost yet" below.</div>
-      </div>
-
-      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
-        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Weekly Menu Cost Estimate — per person</span>
-          <span style="font-size:12.5px;font-weight:700;color:var(--teal,#2d6a6a)">Week total: $${weeklyTotal.toFixed(2)}</span>
+          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Weekly Menu Cost Estimate — per person (MXN)</span>
+          <span style="font-size:12.5px;font-weight:700;color:var(--teal,#2d6a6a)">Week total: $${weeklyTotal.toFixed(2)} MXN</span>
         </div>
         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
           <thead><tr style="background:#faf7f2">
@@ -964,6 +1197,39 @@ function menuRenderCostPanel(){
         </table></div>
         <div style="padding:10px 18px;font-size:11.5px;color:#8a7e74;background:#faf7f2;border-top:1px solid var(--border)">Protein assignments are best guesses from the dish names — double-check the dropdowns above match what's actually served, especially generic "Pescado" days.</div>
       </div>
+
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:22px">
+        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Protein Prices (MXN)</span>
+          <button onclick="menuProteinPrices.push({id:'p'+Date.now(),name:'New Product',unit:'KG',price:0,portionG:220});menuSaveProteinPrices();menuRenderCostPanel()" style="border:1.5px solid var(--teal,#2d6a6a);background:#fff;color:var(--teal,#2d6a6a);border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">+ Add Product</button>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="background:#faf7f2"><th style="padding:7px 10px;text-align:left;color:#5a5048">Product</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Unit</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Price</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Portion</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Cost/person</th><th></th></tr></thead>
+          <tbody>${proteinRows}</tbody>
+        </table>
+      </div>
+
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Recipe Costs (MXN)</span>
+          <button onclick="menuRecipeCosts.push({name:'New Recipe',portions:20,totalCost:0});menuSaveRecipeCosts();menuRenderCostPanel()" style="border:1.5px solid var(--teal,#2d6a6a);background:#fff;color:var(--teal,#2d6a6a);border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">+ Add Recipe</button>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="background:#faf7f2"><th style="padding:7px 10px;text-align:left;color:#5a5048">Recipe</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Portions</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Total Cost</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Cost/portion</th><th></th></tr></thead>
+          <tbody>${recipeRows}</tbody>
+        </table>
+        <div style="padding:10px 18px;font-size:11.5px;color:#8a7e74;background:#faf7f2;border-top:1px solid var(--border)">We'll keep adding recipes here over time — anything not yet costed shows as "no cost yet" below.</div>
+      </div>
+
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Ingredient Catalog (MXN, reference)</span>
+          <input type="text" placeholder="Search ingredients…" oninput="menuFilterCatalog(this.value)" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;min-width:220px">
+        </div>
+        <div id="menuCatalogBody" style="padding:14px 18px;max-height:480px;overflow-y:auto"></div>
+        <div style="padding:10px 18px;font-size:11.5px;color:#8a7e74;background:#faf7f2;border-top:1px solid var(--border)">Full supplier price list — a growing reference for costing more recipes over time. Not all of it is used in the menu yet.</div>
+      </div>
     </div>`;
+  menuRenderCatalogBody();
 }
 
