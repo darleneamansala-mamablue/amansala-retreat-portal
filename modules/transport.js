@@ -50,6 +50,46 @@ function getTransportRoster(bkId){
     orphanSubs:allSubs.filter((_,i)=>!usedIdx.has(i))
   };
 }
+// Shared red/orange/green coding for "how much of this retreat's transport is
+// filled out" — used on the Transport tab's Status view and the Dashboard.
+function trCompletionColor(have,total){
+  if(total===0)return'#6b7280';
+  if(have===0)return'#dc2626';
+  if(have<total)return'#d97706';
+  return'#16a34a';
+}
+function trCompletionLabel(have,total){
+  if(total===0)return'No guests on room list yet';
+  if(have===0)return'Nobody filled out';
+  if(have<total)return'Partially filled out';
+  return'All filled out';
+}
+function trBuildStatusView(){
+  const wrap=document.getElementById('trContent');if(!wrap)return;
+  const today=fmtISO(new Date());
+  const bookings=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate>=today)
+    .sort((a,b)=>a.startDate.localeCompare(b.startDate));
+  const rowsHtml=bookings.map(bk=>{
+    const ros=getTransportRoster(bk.id);
+    const have=ros.submittedCount,total=ros.roster.length;
+    const color=trCompletionColor(have,total);
+    return`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 18px;border-bottom:1px solid #f0ece4">
+      <div>
+        <div style="font-weight:600;font-size:13px;color:#2d2520">${bk.leaderName||bk.retreatName||'Untitled Retreat'}</div>
+        <div style="font-size:11px;color:#8a7e74">${fmtDate(bk.startDate)}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:800;font-size:14px;color:${color}">${total?have+'/'+total:'—'}</div>
+        <div style="font-size:10.5px;color:${color};font-weight:600">${trCompletionLabel(have,total)}</div>
+      </div>
+    </div>`;
+  }).join('');
+  wrap.innerHTML=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;overflow:hidden">
+    <div style="padding:12px 18px;border-bottom:1px solid #c8d8d4;background:#f2f8f6;font-size:12.5px;font-weight:700;color:#0e9494">Transport Completion — All Upcoming Retreats</div>
+    ${rowsHtml||'<div style="padding:24px;text-align:center;color:#8a7e74;font-size:13px">No upcoming retreats found.</div>'}
+  </div>`;
+}
+
 function saveTransport(data){
   localStorage.setItem(TRANSPORT_KEY,JSON.stringify(data));
   // Sync each entry to Supabase
@@ -82,18 +122,23 @@ async function refreshTransport(){
   if(trCurrentView==='month')trBuildMonthView();
   else if(trCurrentView==='all')trBuildAllArrivals();
   else if(trCurrentView==='individual')trBuildIndividual();
+  else if(trCurrentView==='status')trBuildStatusView();
   else if(trSelBkId)trSelectRetreat(trSelBkId);
 }
 
 function trSetView(v){
   trCurrentView=v;
-  const mBtn=document.getElementById('trViewMonth'),rBtn=document.getElementById('trViewRetreat'),aBtn=document.getElementById('trViewAll'),iBtn=document.getElementById('trViewIndividual'),dBtn=document.getElementById('trViewDrivers');
+  const mBtn=document.getElementById('trViewMonth'),rBtn=document.getElementById('trViewRetreat'),aBtn=document.getElementById('trViewAll'),iBtn=document.getElementById('trViewIndividual'),dBtn=document.getElementById('trViewDrivers'),sBtn=document.getElementById('trViewStatus');
   const mCtrl=document.getElementById('trMonthControls'),rCtrl=document.getElementById('trRetreatControls'),aCtrl=document.getElementById('trAllControls'),iCtrl=document.getElementById('trIndividualControls'),dCtrl=document.getElementById('trDriversControls');
   const activeStyle='background:#fff;color:#0e9494;box-shadow:0 1px 4px rgba(0,0,0,.08)';
   const inactiveStyle='background:transparent;color:#8a7e74;box-shadow:none';
-  [mBtn,rBtn,aBtn,iBtn,dBtn].forEach(b=>{if(b)b.style.cssText=b.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+inactiveStyle;});
+  [mBtn,rBtn,aBtn,iBtn,dBtn,sBtn].forEach(b=>{if(b)b.style.cssText=b.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+inactiveStyle;});
   [mCtrl,rCtrl,aCtrl,iCtrl,dCtrl].forEach(c=>{if(c)c.style.display='none';});
-  if(v==='month'){
+  if(v==='status'){
+    if(sBtn)sBtn.style.cssText=sBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
+    trBuildStatusView();
+    syncTransportFromSupabase().then(()=>trBuildStatusView());
+  } else if(v==='month'){
     if(mBtn)mBtn.style.cssText=mBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
     if(mCtrl)mCtrl.style.display='flex';
     trBuildMonthView();
