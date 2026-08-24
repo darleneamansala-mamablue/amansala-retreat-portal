@@ -3591,7 +3591,7 @@ function buildRetreatSchedulesPanel(){
     const submitted=!!b.scheduleRequest?.submittedAt;
     const label=b.leaderName||b.retreatName||'Untitled Retreat';
     return `<tr style="${submitted?'':'background:#fef2f2'}">
-      <td style="padding:8px 12px;border-bottom:1px solid #eee2d4;font-weight:600;color:${submitted?'var(--dark)':'#dc2626'}">${label}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee2d4;font-weight:600;color:${submitted?'var(--dark)':'#dc2626'}"><span onclick="enterTeacherModeDirectly('${b.id}')" style="cursor:pointer;text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color .15s" onmouseover="this.style.textDecorationColor='currentColor'" onmouseout="this.style.textDecorationColor='transparent'" title="Open ${escHtml(label)}'s teacher portal">${label}</span></td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee2d4;color:var(--muted);white-space:nowrap">${fmtDate(b.startDate)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee2d4">${submitted
         ?`<span style="color:#15803d;font-weight:700;font-size:12.5px">✓ Submitted</span> ${statusBadge(b.scheduleRequest.adminStatus||'pending')}`
@@ -3831,7 +3831,8 @@ function skedGetRetreatEvents(dateStr){
         // No arrival class — show opening morning class (respects a one-off override for this date)
         const arrOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
         const arrStart=arrOv?arrOv.start:effMornStart;
-        const mEnd=skedMinToTime(skedTimeToMin(arrStart)+effMornDur);
+        const arrDur=arrOv?.dur||effMornDur;
+        const mEnd=skedMinToTime(skedTimeToMin(arrStart)+arrDur);
         evs.push({id:'ret_'+bk.id+'_morn_arr',resourceId:effMornShala,date:dateStr,startTime:arrStart,endTime:mEnd,title,subtitle:'Opening Class'+(arrOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
@@ -3847,7 +3848,8 @@ function skedGetRetreatEvents(dateStr){
       } else if(effMornStart&&effMornShala){
         const depOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
         const depStart=depOv?depOv.start:effMornStart;
-        const mEnd=skedMinToTime(skedTimeToMin(depStart)+effMornDur);
+        const depDur=depOv?.dur||effMornDur;
+        const mEnd=skedMinToTime(skedTimeToMin(depStart)+depDur);
         evs.push({id:'ret_'+bk.id+'_morn_dep',resourceId:effMornShala,date:dateStr,startTime:depStart,endTime:mEnd,title,subtitle:'Morning Class'+(depOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
