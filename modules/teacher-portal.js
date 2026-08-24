@@ -1083,7 +1083,8 @@ function tsAutoAssignPrepaid(){
   if(!bk.retreatActivities)bk.retreatActivities=[];
   let added=0;
   pkgs.filter(id=>!assignedIds.has(id)).forEach(id=>{
-    for(let i=0;i<nights;i++){
+    // Start at i=1 — arrival day never gets tours/ceremonies, only check-in/snack/arrival class.
+    for(let i=1;i<nights;i++){
       const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
       const tmpl=(SKED_AUTO_TEMPLATE[d.getDay()]||[]).find(t=>t.aoId===id);
       if(tmpl){bk.retreatActivities.push({aoId:id,date:fmtISO(d),time:tmpl.time,prepaid:true});added++;return;}
@@ -1189,7 +1190,8 @@ function tsInit(bkId){
     const prepaidMap={};
     bk.retreatActivities=[];
     const nights=getNights(bk);
-    for(let i=0;i<nights;i++){
+    // Start at i=1 — arrival day never gets tours/ceremonies, only check-in/snack/arrival class.
+    for(let i=1;i<nights;i++){
       const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
       const tmpls=SKED_AUTO_TEMPLATE[d.getDay()];
       if(!tmpls)continue;
@@ -1771,7 +1773,8 @@ function tsSubmitSchedule(){
   if(!bk.retreatActivities||!bk.retreatActivities.length){
     bk.retreatActivities=[];
     const nts=getNights(bk);
-    for(let i=0;i<nts;i++){
+    // Start at i=1 — arrival day never gets tours/ceremonies, only check-in/snack/arrival class.
+    for(let i=1;i<nts;i++){
       const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
       const tmpls=SKED_AUTO_TEMPLATE[d.getDay()];
       if(!tmpls)continue;
@@ -2195,7 +2198,8 @@ function tsAdminStatus(bkId,status){
     const gitanoNight=sr?.offsiteChoice==='gitano'&&sr.offsiteNight&&bk.startDate
       ?fmtISO(new Date(pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS)):null;
     const addedAoIds=new Set();
-    for(let i=0;i<nights;i++){
+    // Start at i=1 — arrival day never gets tours/ceremonies, only check-in/snack/arrival class.
+    for(let i=1;i<nights;i++){
       const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
       const tmpls=SKED_AUTO_TEMPLATE[d.getDay()];
       if(!tmpls)continue;
@@ -2313,12 +2317,12 @@ const SKED_AUTO_TEMPLATE={
   ],
   2:[ // Tuesday
     {aoId:'ao6',  time:'11:45'}, // Grande Cenote, 11:45 AM
+    {aoId:'ao14', time:'17:00'}, // Cooking Class, 5:00 PM
     {aoId:'ao5',  time:'19:15'}, // Temazcal, 7:15 PM
   ],
   3:[ // Wednesday
     {aoId:'ao3',  time:'11:45'}, // Atik Cenote, 11:45 AM
     {aoId:'ao9',  time:'15:00'}, // Mayan Clay, 3:00 PM
-    {aoId:'ao14', time:'17:00'}, // Cooking Class, 5:00 PM
     {aoId:'ao12', time:'20:30'}, // Salsa Night, post-dinner
   ],
   4:[ // Thursday
@@ -2327,6 +2331,7 @@ const SKED_AUTO_TEMPLATE={
   ],
   5:[ // Friday
     {aoId:'ao3',  time:'11:45'}, // Atik Cenote, 11:45 AM
+    {aoId:'ao14', time:'17:00'}, // Cooking Class, 5:00 PM
     {aoId:'ao4',  time:'19:15'}, // Cacao & Sound Healing, 7:15 PM
   ],
   6:[ // Saturday
@@ -2381,7 +2386,8 @@ function svAutoAssignActivities(bkId){
   const gitanoNight=sr?.offsiteChoice==='gitano'&&sr.offsiteNight&&bk.startDate
     ?fmtISO(new Date(pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS)):null;
   const addedAoIds=new Set();
-  for(let i=0;i<nights;i++){
+  // Start at i=1 — arrival day never gets tours/ceremonies, only check-in/snack/arrival class.
+  for(let i=1;i<nights;i++){
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
     const dow=d.getDay();
     const tmpls=SKED_AUTO_TEMPLATE[dow];
