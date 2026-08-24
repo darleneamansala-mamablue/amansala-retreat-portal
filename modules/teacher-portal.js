@@ -1860,14 +1860,28 @@ function tsRenderCalSection(bk){
         rows.push({time:fmtT(sr.sunriseStart)+' – '+fmtT(addMin(sr.sunriseStart,sr.sunriseDur||45)),desc:'Sunrise Activity'+(sr.sunriseLocation?' — '+(TS_SUNRISE_LOCATIONS[sr.sunriseLocation]||sr.sunriseLocation):'')+' (no shala, no music — quiet hours)',shala:'',cat:'yoga',sk:sr.sunriseStart});
       }
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea',shala:'',cat:'meal',sk:'07:00'});
-      rows.push({time:fmtT(sr.morningStart)+' – '+fmtT(addMin(sr.morningStart,sr.morningDur||60)),desc:'Morning Class',shala:mShala,cat:'yoga',sk:sr.morningStart||'08:00'});
-      const _bOv=sr.adminOverride||{};const _bMStart=_bOv.morningStart||sr.morningStart||'';const _bMDur=parseInt(_bOv.morningDur||sr.morningDur||90);const _brunchT=_bMStart?addMin(_bMStart,_bMDur+15):'09:45';
+      // Retreat-wide admin override, then a per-day override on top of that —
+      // must be applied here too, not just on the admin's own master calendar,
+      // or the teacher's itinerary goes stale the moment either one is used.
+      const _ov=sr.adminOverride||{};
+      const _effMornStart=_ov.morningStart||sr.morningStart;
+      const _effMornDur=_ov.morningDur||sr.morningDur||60;
+      const _effAfSlot=_ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart;
+      const _effAfDur=_ov.afternoonDur||sr.afternoonDur||60;
+      const _timeOvs=bk.scheduleTimeOverrides||[];
+      const _mornOv=_timeOvs.find(o=>o.date===dateStr&&o.period==='morn');
+      const _aftOv=_timeOvs.find(o=>o.date===dateStr&&o.period==='aft');
+      const dayMornStart=_mornOv?_mornOv.start:_effMornStart;
+      const dayMornDur=_mornOv?(_mornOv.dur||_effMornDur):_effMornDur;
+      const dayAfSlot=_aftOv?_aftOv.start:_effAfSlot;
+      const dayAfDur=_aftOv?(_aftOv.dur||_effAfDur):_effAfDur;
+      rows.push({time:fmtT(dayMornStart)+' – '+fmtT(addMin(dayMornStart,dayMornDur)),desc:'Morning Class',shala:mShala,cat:'yoga',sk:dayMornStart||'08:00'});
+      const _bMStart=dayMornStart||'';const _bMDur=dayMornDur;const _brunchT=_bMStart?addMin(_bMStart,_bMDur+15):'09:45';
       rows.push({time:fmtT(_brunchT),desc:_brunchT<'09:45'?'Breakfast':'Brunch',shala:'',cat:'meal',sk:_brunchT});
       rows.push({time:'3:00 PM',desc:'Snack',shala:'',cat:'meal',sk:'15:00'});
       const ws=(sr.workshops||[]).find(w=>w.enabled&&w.date===dateStr);
       if(ws)rows.push({time:fmtT(ws.start)+' – '+fmtT(addMin(ws.start,ws.dur||90)),desc:'Mid-Afternoon Class'+(ws.notes?' — '+ws.notes:''),shala:snm(ws.shala1),cat:'yoga',sk:ws.start||'16:00'});
-      const _afSlot=sr.afternoonSlot||sr.afternoonStart;
-      if(sr.hasAfternoon&&_afSlot)rows.push({time:fmtT(_afSlot)+' – '+fmtT(addMin(_afSlot,sr.afternoonDur||60)),desc:'Afternoon Class',shala:aShala,cat:'yoga',sk:_afSlot});
+      if(sr.hasAfternoon&&dayAfSlot)rows.push({time:fmtT(dayAfSlot)+' – '+fmtT(addMin(dayAfSlot,dayAfDur)),desc:'Afternoon Class',shala:aShala,cat:'yoga',sk:dayAfSlot});
       const isOffsite=sr.offsiteNight&&(()=>{const ofNight=pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS;return Math.abs(d.getTime()-ofNight)<DAY_MS/2;})();
       const hasGitanoToday=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
       if(!hasGitanoToday)rows.push({time:'7:30 PM',desc:isOffsite?'Dinner (Off-site)':'Dinner',shala:'',cat:'meal',sk:'19:30'});
