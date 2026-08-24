@@ -1050,7 +1050,7 @@ function tsRenderPrepaidActivities(bk){
           const tmpl=Object.values(SKED_AUTO_TEMPLATE).flat().find(t=>t.aoId===id);
           return`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;background:var(--sand);border-radius:9px">
             <div style="flex:1;min-width:160px;font-weight:600;font-size:13.5px">${ao?ao.name:id}</div>
-            <input type="date" id="tsPrepaidDate_${id}" min="${bk.startDate}" max="${bk.endDate}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
+            <input type="date" id="tsPrepaidDate_${id}" min="${fmtISO(new Date(pd(bk.startDate).getTime()+DAY_MS))}" max="${bk.endDate}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
             <input type="time" id="tsPrepaidTime_${id}" value="${tmpl?.time||'11:45'}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
             <button class="btn btn-secondary" style="padding:7px 16px;font-size:12.5px" onclick="tsSaveManualActivity('${id}')">Save</button>
           </div>`;
@@ -1106,6 +1106,7 @@ function tsSaveManualActivity(aoId){
   const bk=AppData.bookings.find(b=>b.id===_tsBkId);if(!bk)return;
   const dateEl=document.getElementById('tsPrepaidDate_'+aoId),timeEl=document.getElementById('tsPrepaidTime_'+aoId);
   if(!dateEl?.value){showToast('Please pick a date first.');return;}
+  if(dateEl.value===bk.startDate){showToast('Activities can\'t be scheduled on the arrival day — please pick a later date.');return;}
   if(!bk.retreatActivities)bk.retreatActivities=[];
   bk.retreatActivities=bk.retreatActivities.filter(a=>a.aoId!==aoId);
   bk.retreatActivities.push({aoId,date:dateEl.value,time:timeEl?.value||'11:45',prepaid:true,requestedTime:true});
