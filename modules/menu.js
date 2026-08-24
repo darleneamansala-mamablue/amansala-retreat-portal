@@ -594,6 +594,7 @@ const MENU_DETAIL={
   'Pan de Frances con Coco':{name:'Coconut French Bread',desc:'Golden toasted French bread with sweet coconut.'},
   'Pollo con Ajo Asado':{name:'Grilled Chicken',desc:'Tender chicken breast, simply grilled.'},
   'Fruta':{name:'Fresh Fruit',desc:'A bright platter of seasonal tropical fruit.'},
+  'Protein Balls con Fruta Fresca':{name:'Cacao Energy Bites',desc:'Mixed nuts, raw cacao, dates, coconut & Mayan honey.'},
 
   'Grilled Lemon Kebabs Pollo':{name:'Grilled Lemon Chicken Kebabs',desc:'Tender pieces of chicken marinated in fresh lemon juice, olive oil, and herbs, then perfectly grilled to achieve a juicy texture and a bright, zesty flavor.'},
   'Grilled Eggplant con Tahini':{name:'Grilled Eggplant with Tahini',desc:'Char-grilled eggplant, smoky and soft, finished with a creamy tahini drizzle.'},
