@@ -4660,6 +4660,45 @@ if(location.protocol!=='file:'){
   </div>
 </div>
 
+<div class="modal-overlay" id="skedEditClassModal">
+  <div class="modal" style="width:440px;max-width:94vw">
+    <div class="modal-hdr">
+      <div><h2 id="skedEditClassTitle">Edit Class</h2><div class="modal-sub" id="skedEditClassSub"></div></div>
+      <button class="modal-x" onclick="closeModal('skedEditClassModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="skedEditClassBkId">
+      <input type="hidden" id="skedEditClassDate">
+      <input type="hidden" id="skedEditClassSuffix">
+      <div style="margin-bottom:16px">
+        <label style="font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Start Time</label>
+        <select id="skedEditClassTime" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13.5px;background:var(--sand)"></select>
+      </div>
+      <div>
+        <label style="font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:8px">Apply this change to</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13.5px">
+            <input type="radio" name="skedEditScope" value="once" checked style="width:15px;height:15px;accent-color:var(--teal)"> Just this one day
+          </label>
+          <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13.5px">
+            <input type="radio" name="skedEditScope" value="week" style="width:15px;height:15px;accent-color:var(--teal)"> Every day this retreat (changes the whole schedule)
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="l" style="display:flex;gap:8px">
+        <button class="btn btn-secondary" id="skedEditClassResetBtn" style="display:none;font-size:12px" onclick="skedResetOverrideFromModal()">Reset to usual time</button>
+        <button class="btn btn-secondary" id="skedEditClassSkipBtn" style="font-size:12px" onclick="skedSkipFromModal()">Skip this day</button>
+      </div>
+      <div class="r">
+        <button class="btn btn-secondary" onclick="closeModal('skedEditClassModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="skedSaveClassEdit()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- SCHEDULE PRINT MODAL -->
 <div id="printScheduleModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;overflow:auto">
   <div class="sched-modal-chrome" style="display:flex;justify-content:flex-end;align-items:center;padding:12px 24px;background:var(--dark);gap:10px;position:sticky;top:0;z-index:1">

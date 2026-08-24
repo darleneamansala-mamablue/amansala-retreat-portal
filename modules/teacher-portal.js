@@ -4083,58 +4083,107 @@ function skedClickEvent(evId,bkId,isRetreat,dateStr){
     const prefix='ret_'+bkId+'_';
     const suffix=evId.indexOf(prefix)===0?evId.slice(prefix.length):'';
     if((suffix==='morn'||suffix==='aft')&&dateStr){
-      const period=suffix==='morn'?'morning':'evening';
-      const bk=AppData.bookings.find(b=>b.id===bkId);
-      if(bk){
-        const label=bk.leaderName||bk.retreatName||'This teacher';
-        const already=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period===suffix);
-        if(already){
-          if(confirm(`Restore ${label}'s ${period} class on ${dateStr}?`)){
-            bk.scheduleSkips=(bk.scheduleSkips||[]).filter(s=>!(s.date===dateStr&&s.period===suffix));
-            saveAll();skedBuild();showToast('Class restored for '+dateStr+'.');
-          }
-          return;
-        }
-        const timeOvs=bk.scheduleTimeOverrides||[];
-        const existingOv=timeOvs.find(o=>o.date===dateStr&&o.period===suffix);
-        if(existingOv){
-          if(confirm(`${label}'s ${period} class on ${dateStr} is set to start at ${existingOv.start} instead of the usual time. Reset to the usual time?\n\nClick Cancel to enter a different time instead.`)){
-            bk.scheduleTimeOverrides=timeOvs.filter(o=>!(o.date===dateStr&&o.period===suffix));
-            saveAll();skedBuild();showToast('Reset to usual time for '+dateStr+'.');
-            return;
-          }
-        }
-        if(confirm(`Change the start time for ${label}'s ${period} class on ${dateStr} only?\n\nEvery other day keeps the usual time — only this date changes.\n\nClick Cancel for other options (skip this day / view full schedule).`)){
-          const isMorn=suffix==='morn';
-          const promptMsg=isMorn
-            ?`New start time for ${dateStr} — must fall within an allotted window (${TS_WINDOWS.map(w=>w.label).join(' or ')}):`
-            :`New start time for ${dateStr} (24-hour, e.g. 17:30):`;
-          const newTime=prompt(promptMsg,existingOv?.start||'');
-          if(newTime===null)return;
-          const t=newTime.trim();
-          if(!/^([01]?\d|2[0-3]):[0-5]\d$/.test(t)){showToast('Please enter a time like 09:30.');return;}
-          const[h,m]=t.split(':');
-          const norm=h.padStart(2,'0')+':'+m;
-          if(isMorn&&!tsAllMorningSlots().includes(norm)){
-            showToast(`That time isn't within an allotted window. Choose a time within ${TS_WINDOWS.map(w=>w.label).join(' or ')}.`);
-            return;
-          }
-          bk.scheduleTimeOverrides=timeOvs.filter(o=>!(o.date===dateStr&&o.period===suffix));
-          bk.scheduleTimeOverrides.push({date:dateStr,period:suffix,start:norm});
-          saveAll();skedBuild();showToast('Time updated for '+dateStr+'.');
-          return;
-        }
-        if(confirm(`Skip ${label}'s ${period} class on ${dateStr} only?\n\nThis removes it from the calendar and meal timing for that date only — every other day is unaffected.\n\nClick Cancel to view the full schedule instead.`)){
-          if(!bk.scheduleSkips)bk.scheduleSkips=[];
-          bk.scheduleSkips.push({date:dateStr,period:suffix});
-          saveAll();skedBuild();showToast('Class skipped for '+dateStr+'.');
-          return;
-        }
-      }
+      openSkedEditClassModal(bkId,suffix,dateStr);
+      return;
     }
     openScheduleViewer(bkId);
   }
   else{openSkedEditModal(evId);}
+}
+
+// Click-to-edit modal for a teacher's morning/evening class box on the master
+// calendar — lets admin change the time for just one day, or the whole retreat's
+// repeating schedule, without the old confirm()/prompt() dialog chain.
+function openSkedEditClassModal(bkId,suffix,dateStr){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const isMorn=suffix==='morn';
+  const label=bk.leaderName||bk.retreatName||'This teacher';
+  document.getElementById('skedEditClassBkId').value=bkId;
+  document.getElementById('skedEditClassDate').value=dateStr;
+  document.getElementById('skedEditClassSuffix').value=suffix;
+  document.getElementById('skedEditClassTitle').textContent=(isMorn?'Morning':'Evening')+' Class';
+  document.getElementById('skedEditClassSub').textContent=label+' · '+dateStr;
+
+  const already=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period===suffix);
+  const timeOvs=bk.scheduleTimeOverrides||[];
+  const existingOv=timeOvs.find(o=>o.date===dateStr&&o.period===suffix);
+
+  const sel=document.getElementById('skedEditClassTime');
+  let opts;
+  if(isMorn){
+    opts=tsAllMorningSlots();
+  } else {
+    opts=[];
+    for(let m=tsT2M('13:00');m<=tsT2M('19:45');m+=15)opts.push(tsM2T(m));
+  }
+  sel.innerHTML=opts.map(t=>`<option value="${t}">${tsFmt(t)}</option>`).join('');
+
+  const sr=bk.scheduleRequest||{};
+  const ov=sr.adminOverride||{};
+  const usualStart=isMorn?(ov.morningStart||sr.morningStart):(ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart);
+  sel.value=existingOv?existingOv.start:(usualStart||opts[0]);
+
+  document.getElementById('skedEditClassResetBtn').style.display=existingOv?'inline-flex':'none';
+  const skipBtn=document.getElementById('skedEditClassSkipBtn');
+  skipBtn.textContent=already?'Restore this day':'Skip this day';
+  skipBtn.setAttribute('data-skipped',already?'1':'0');
+  document.querySelector('input[name="skedEditScope"][value="once"]').checked=true;
+
+  openModal('skedEditClassModal');
+}
+
+function skedSaveClassEdit(){
+  const bkId=document.getElementById('skedEditClassBkId').value;
+  const dateStr=document.getElementById('skedEditClassDate').value;
+  const suffix=document.getElementById('skedEditClassSuffix').value;
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const newTime=document.getElementById('skedEditClassTime').value;
+  const scope=document.querySelector('input[name="skedEditScope"]:checked')?.value||'once';
+  const isMorn=suffix==='morn';
+
+  if(scope==='week'){
+    if(!bk.scheduleRequest)bk.scheduleRequest={};
+    if(!bk.scheduleRequest.adminOverride)bk.scheduleRequest.adminOverride={};
+    if(isMorn)bk.scheduleRequest.adminOverride.morningStart=newTime;
+    else bk.scheduleRequest.adminOverride.afternoonStart=newTime;
+    bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===suffix));
+    saveAll();skedBuild();closeModal('skedEditClassModal');
+    showToast('Schedule updated for the whole retreat.');
+    return;
+  }
+  bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===suffix));
+  bk.scheduleTimeOverrides.push({date:dateStr,period:suffix,start:newTime});
+  saveAll();skedBuild();closeModal('skedEditClassModal');
+  showToast('Time updated for '+dateStr+'.');
+}
+
+function skedResetOverrideFromModal(){
+  const bkId=document.getElementById('skedEditClassBkId').value;
+  const dateStr=document.getElementById('skedEditClassDate').value;
+  const suffix=document.getElementById('skedEditClassSuffix').value;
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===suffix));
+  saveAll();skedBuild();closeModal('skedEditClassModal');
+  showToast('Reset to usual time for '+dateStr+'.');
+}
+
+function skedSkipFromModal(){
+  const bkId=document.getElementById('skedEditClassBkId').value;
+  const dateStr=document.getElementById('skedEditClassDate').value;
+  const suffix=document.getElementById('skedEditClassSuffix').value;
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const btn=document.getElementById('skedEditClassSkipBtn');
+  const already=btn.getAttribute('data-skipped')==='1';
+  if(already){
+    bk.scheduleSkips=(bk.scheduleSkips||[]).filter(s=>!(s.date===dateStr&&s.period===suffix));
+    saveAll();skedBuild();closeModal('skedEditClassModal');
+    showToast('Class restored for '+dateStr+'.');
+  } else {
+    if(!bk.scheduleSkips)bk.scheduleSkips=[];
+    bk.scheduleSkips.push({date:dateStr,period:suffix});
+    saveAll();skedBuild();closeModal('skedEditClassModal');
+    showToast('Class skipped for '+dateStr+'.');
+  }
 }
 
 function skedClickCol(e,resourceId,dateStr){
