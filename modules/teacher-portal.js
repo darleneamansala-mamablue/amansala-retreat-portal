@@ -2371,7 +2371,7 @@ function parseRequestedDates(specialReq,bk){
     const mon=MO[m[1].slice(0,3)];
     if(mon===undefined)return;
     const date=new Date(year,mon,parseInt(m[2]));
-    if(date>=pd(bk.startDate)&&date<=pd(bk.endDate))result[aoId]=fmtISO(date);
+    if(date>pd(bk.startDate)&&date<=pd(bk.endDate))result[aoId]=fmtISO(date);
   });
   return result;
 }

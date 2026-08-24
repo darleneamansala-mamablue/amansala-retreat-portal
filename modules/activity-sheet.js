@@ -697,9 +697,11 @@ function actSummarySetDate(aoId, bkIds, dateInputId, timeInputId) {
   const newTime = document.getElementById(timeInputId)?.value || '';
   if (!newDate) { showToast('Please select a date.'); return; }
   let updated = 0;
+  let skippedArrival = 0;
   bkIds.forEach(bkId => {
     const bk = AppData.bookings.find(b => b.id === bkId);
     if (!bk) return;
+    if (newDate === bk.startDate) { skippedArrival++; return; } // never schedule activities on the arrival day
     // Update existing entry
     const act = (bk.retreatActivities||[]).find(a => a.aoId === aoId);
     if (act) {
@@ -716,7 +718,7 @@ function actSummarySetDate(aoId, bkIds, dateInputId, timeInputId) {
     bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   });
   saveAll();
-  showToast('Date saved for ' + updated + ' group' + (updated!==1?'s':'') + '.');
+  showToast('Date saved for ' + updated + ' group' + (updated!==1?'s':'') + '.' + (skippedArrival?' Skipped '+skippedArrival+' — can\'t schedule on the arrival day.':''));
   actSheetRenderSummary();
 }
 
