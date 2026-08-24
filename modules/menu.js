@@ -224,15 +224,28 @@ function menuRenderDay(dateStr,today){
   </div>`;
 }
 
+// Color-code each protein type so the week's spread is scannable at a
+// glance — chicken, salmon, and other fish/seafood each get their own color;
+// a plant-based night (or any day with no protein) gets its own too.
+function menuProteinColor(text){
+  const s=(text||'').toLowerCase();
+  if(!s||s.includes('plant')||s.includes('phad thai')||s.includes('vegan')||s.includes('tofu'))return{bg:'#dcfce7',color:'#166534',border:'#86efac'};
+  if(s.includes('salmon')||s.includes('salmón'))return{bg:'#ffe4e6',color:'#9f1239',border:'#fda4af'};
+  if(s.includes('pollo')||s.includes('chicken')||s.includes('kebab'))return{bg:'#fef3c7',color:'#92400e',border:'#fde68a'};
+  if(s.includes('pescado')||s.includes('camaron')||s.includes('camarón')||s.includes('robalo')||s.includes('basa')||s.includes('fish')||s.includes('shrimp'))return{bg:'#dbeafe',color:'#1e40af',border:'#93c5fd'};
+  if(s.includes('res')||s.includes('beef')||s.includes('arrachera'))return{bg:'#fee2e2',color:'#991b1b',border:'#fca5a5'};
+  return{bg:'#fef9e7',color:'#78350f',border:'#fde8c8'};
+}
+
 function menuRenderMealSection(dateStr,mealKey,dishes,rows,padTo=0,dishPadTo=0){
   const cfg=MENU_MEAL_CFG[mealKey]||{label:mealKey,bg:'#f5f3ee',color:'#555'};
   const total=rows.reduce((n,r)=>n+(parseInt(r.pax)||0),0);
   const dishesHtml=dishes.map((d,i)=>{
     const isProtein=(mealKey==='brunch'||mealKey==='lunch')&&d.includes('★');
     const label=d.replace(' ★','');
-    return isProtein
-      ?`<div class="menu-dish" style="font-weight:700;color:#78350f;background:#fef9e7;margin:-5px -8px 3px;padding:4px 8px;border-bottom:1px solid #fde8c8">★ ${label}</div>`
-      :`<div class="menu-dish">${d}</div>`;
+    if(!isProtein)return`<div class="menu-dish">${d}</div>`;
+    const pc=menuProteinColor(label);
+    return `<div class="menu-dish" style="font-weight:700;color:${pc.color};background:${pc.bg};margin:-5px -8px 3px;padding:4px 8px;border-bottom:1px solid ${pc.border}">★ ${label}</div>`;
   }).join('');
   // Invisible spacer lines so the Hora/Grupo/# table starts at the same height
   // in every column, regardless of how many dishes this particular day has.
@@ -256,7 +269,8 @@ function menuRenderMealSection(dateStr,mealKey,dishes,rows,padTo=0,dishPadTo=0){
 function menuRenderDinner(dateStr,dinner,rows,padTo=0,dishPadTo=0){
   const cfg=MENU_MEAL_CFG.dinner;
   const total=rows.reduce((n,r)=>n+(parseInt(r.pax)||0),0);
-  const proteinHtml=dinner.protein?`<div class="menu-dish" style="font-weight:700;color:#1e3a5f;background:#eff6ff;margin:-5px -8px 3px;padding:4px 8px;border-bottom:1px solid #bfdbfe">★ ${dinner.protein}</div>`:'';
+  const dpc=menuProteinColor(dinner.protein);
+  const proteinHtml=dinner.protein?`<div class="menu-dish" style="font-weight:700;color:${dpc.color};background:${dpc.bg};margin:-5px -8px 3px;padding:4px 8px;border-bottom:1px solid ${dpc.border}">★ ${dinner.protein}</div>`:'';
   const sidesHtml=(dinner.dishes||[]).map(d=>`<div class="menu-dish">${d}</div>`).join('');
   const dessertHtml=dinner.dessert?`<div class="menu-dinner-sub">Postre</div><div class="menu-dish">${dinner.dessert}</div>`:'';
   const dinnerLines=(dinner.protein?1:0)+(dinner.dishes||[]).length+(dinner.dessert?2:0);
@@ -719,5 +733,237 @@ function menuPrintDay(dateStr){
   w.document.write(html);
   w.document.close();
   setTimeout(()=>w.print(),500);
+}
+
+// ===== MENU COSTS =====
+// Raw protein pricing (from Darlene's supplier price list, pesos/kg) and a
+// growing library of full recipe costs (marinades, sides, dressings, breads —
+// from the kitchen's own costing sheet). Together these give a per-day food
+// cost estimate. Both lists are starting points she'll keep filling in over
+// time, so everything here is editable and persists like any other admin data.
+const DEF_MENU_PROTEIN_PRICES=[
+  {id:'pollo',     name:'Pechuga de Pollo sin Hueso',        unit:'KG', price:104, portionG:220},
+  {id:'res',       name:'Arrachera de Res Marinado Texana',  unit:'KG', price:390, portionG:220},
+  {id:'robalo',    name:'Filete Fresco de Róbalo Nacional',  unit:'KG', price:440, portionG:220},
+  {id:'basa',      name:'Filete Congelado de Basa',          unit:'KG', price:98,  portionG:220},
+  {id:'salmon',    name:'Filete de Salmón Natural',          unit:'KG', price:350, portionG:220},
+  {id:'camaron15', name:'Camarón U15',                       unit:'KG', price:450, portionG:220},
+  {id:'camaronpz', name:'Camarón Pelado y Desvenado 21/25',  unit:'PZA',price:250, portionG:null},
+  {id:'entero',    name:'Pescado Fresco Entero',             unit:'KG', price:310, portionG:220},
+];
+const DEF_MENU_RECIPE_COSTS=[
+  {name:'Pan de Plátano',                portions:48, totalCost:417.48},
+  {name:'Brownie Vegano',                portions:24, totalCost:359.60},
+  {name:'Hot Cakes Veganos',             portions:12, totalCost:135.90},
+  {name:'Aderezo Mediterráneo',          portions:25, totalCost:104.50},
+  {name:'Green Goddess',                 portions:35, totalCost:58.00},
+  {name:'Aderezo Tahini',                portions:30, totalCost:158.00},
+  {name:'Pesto',                         portions:60, totalCost:403.50},
+  {name:'Aderezo Curry',                 portions:30, totalCost:88.95},
+  {name:'Aderezo Comensal',              portions:40, totalCost:108.50},
+  {name:'Marinación Pollo',              portions:20, totalCost:110.85},
+  {name:'Marinación Pescado',            portions:20, totalCost:107.53},
+  {name:'Curry Rojo',                    portions:20, totalCost:1172.00},
+  {name:'Arroz Con Coco',                portions:20, totalCost:1025.00},
+  {name:'Ensalada Bang Bang',            portions:20, totalCost:567.20},
+  {name:'Aderezo de Cacahuate',          portions:20, totalCost:259.20},
+  {name:'Pescado en Hoja de Plátano',    portions:20, totalCost:1931.80},
+  {name:'Ensalada de Pepino',            portions:20, totalCost:207.30},
+  {name:'Ensalada China',                portions:20, totalCost:226.50},
+  {name:'Aderezo Asiático',              portions:20, totalCost:229.50},
+  {name:'Masa para Pizza Napolitana',    portions:20, totalCost:112.45},
+  {name:'Salsa de Tomate para Pizza',    portions:20, totalCost:136.65},
+  {name:'Aderezo para Poke Bowl',        portions:20, totalCost:129.84},
+];
+// Best-guess mapping of each day's ★ protein to a priced product — clearly
+// editable in the panel since some of these (e.g. plain "Pescado") are
+// genuinely ambiguous until Darlene confirms which fish is actually used.
+const DEF_MENU_PROTEIN_ASSIGN={
+  1:{midday:'pollo',  dinner:'pollo'},
+  2:{midday:'salmon', dinner:'entero'},   // Tue dinner is now "Pescado" after the Tue/Wed swap
+  3:{midday:'pollo',  dinner:'pollo'},    // Wed dinner is now "Pollo" after the Tue/Wed swap
+  4:{midday:'basa',   dinner:'pollo'},
+  5:{midday:'pollo',  dinner:'salmon'},
+  6:{midday:'pollo',  dinner:'entero'},
+  7:{midday:'pollo',  dinner:''},         // Sunday dinner is plant-based — no protein cost
+};
+const MENU_DAY_NAMES={1:'Monday',2:'Tuesday',3:'Wednesday',4:'Thursday',5:'Friday',6:'Saturday',7:'Sunday'};
+
+let menuProteinPrices=[];
+let menuRecipeCosts=[];
+let menuProteinAssign={};
+
+function menuLoadCostData(){
+  try{menuProteinPrices=JSON.parse(localStorage.getItem('amansala_menu_protein_prices')||'null')||DEF_MENU_PROTEIN_PRICES.map(p=>({...p}));}catch{menuProteinPrices=DEF_MENU_PROTEIN_PRICES.map(p=>({...p}));}
+  try{menuRecipeCosts=JSON.parse(localStorage.getItem('amansala_menu_recipe_costs')||'null')||DEF_MENU_RECIPE_COSTS.map(r=>({...r}));}catch{menuRecipeCosts=DEF_MENU_RECIPE_COSTS.map(r=>({...r}));}
+  try{menuProteinAssign=JSON.parse(localStorage.getItem('amansala_menu_protein_assign')||'null')||JSON.parse(JSON.stringify(DEF_MENU_PROTEIN_ASSIGN));}catch{menuProteinAssign=JSON.parse(JSON.stringify(DEF_MENU_PROTEIN_ASSIGN));}
+}
+async function menuSyncCostDataFromSupabase(){
+  try{
+    const{data}=await db.from('app_store').select('key,value').in('key',['menuProteinPrices','menuRecipeCosts','menuProteinAssign']);
+    (data||[]).forEach(row=>{
+      if(row.key==='menuProteinPrices'&&Array.isArray(row.value))menuProteinPrices=row.value;
+      if(row.key==='menuRecipeCosts'&&Array.isArray(row.value))menuRecipeCosts=row.value;
+      if(row.key==='menuProteinAssign'&&row.value)menuProteinAssign=row.value;
+    });
+  }catch(e){}
+}
+function menuSaveProteinPrices(){
+  localStorage.setItem('amansala_menu_protein_prices',JSON.stringify(menuProteinPrices));
+  (async()=>{try{await db.from('app_store').upsert({key:'menuProteinPrices',value:menuProteinPrices,updated_at:new Date().toISOString()});}catch(e){}})();
+}
+function menuSaveRecipeCosts(){
+  localStorage.setItem('amansala_menu_recipe_costs',JSON.stringify(menuRecipeCosts));
+  (async()=>{try{await db.from('app_store').upsert({key:'menuRecipeCosts',value:menuRecipeCosts,updated_at:new Date().toISOString()});}catch(e){}})();
+}
+function menuSaveProteinAssign(){
+  localStorage.setItem('amansala_menu_protein_assign',JSON.stringify(menuProteinAssign));
+  (async()=>{try{await db.from('app_store').upsert({key:'menuProteinAssign',value:menuProteinAssign,updated_at:new Date().toISOString()});}catch(e){}})();
+}
+
+function menuNormalizeDishName(s){return(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/★/g,'').trim();}
+function menuFindRecipeCostPerPortion(dishName){
+  const norm=menuNormalizeDishName(dishName);
+  const found=menuRecipeCosts.find(r=>menuNormalizeDishName(r.name)===norm);
+  return found&&found.portions?found.totalCost/found.portions:null;
+}
+function menuProteinCost(id){
+  const p=menuProteinPrices.find(x=>x.id===id);
+  if(!p||!p.portionG)return null;
+  return p.price*(p.portionG/1000);
+}
+
+function menuToggleCostView(){
+  const grid=document.getElementById('menuGridWrap');
+  const panel=document.getElementById('menuCostPanel');
+  const btn=document.getElementById('menuCostBtn');
+  if(!grid||!panel)return;
+  const showingCosts=panel.style.display==='none'||!panel.style.display;
+  grid.style.display=showingCosts?'none':'block';
+  panel.style.display=showingCosts?'block':'none';
+  if(btn){btn.style.background=showingCosts?'var(--teal,#2d6a6a)':'#f0f9f9';btn.style.color=showingCosts?'#fff':'var(--teal,#2d6a6a)';}
+  if(showingCosts){
+    menuLoadCostData();
+    menuRenderCostPanel();
+    menuSyncCostDataFromSupabase().then(()=>menuRenderCostPanel());
+  }
+}
+
+function menuRenderCostPanel(){
+  const panel=document.getElementById('menuCostPanel');if(!panel)return;
+
+  const proteinRows=menuProteinPrices.map((p,i)=>`
+    <tr style="border-bottom:1px solid #f0ece4">
+      <td style="padding:7px 10px"><input value="${menuEsc(p.name)}" onchange="menuProteinPrices[${i}].name=this.value;menuSaveProteinPrices()" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:'Jost',sans-serif;font-size:12.5px"></td>
+      <td style="padding:7px 10px"><select onchange="menuProteinPrices[${i}].unit=this.value;menuSaveProteinPrices();menuRenderCostPanel()" style="border:1px solid var(--border);border-radius:6px;padding:5px 6px;font-family:'Jost',sans-serif;font-size:12.5px"><option value="KG"${p.unit==='KG'?' selected':''}>KG</option><option value="PZA"${p.unit==='PZA'?' selected':''}>PZA</option></select></td>
+      <td style="padding:7px 10px;white-space:nowrap">$<input type="number" step="0.01" value="${p.price}" onchange="menuProteinPrices[${i}].price=parseFloat(this.value)||0;menuSaveProteinPrices();menuRenderCostPanel()" style="width:80px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:'Jost',sans-serif;font-size:12.5px"></td>
+      <td style="padding:7px 10px">${p.unit==='KG'?`<input type="number" value="${p.portionG||220}" onchange="menuProteinPrices[${i}].portionG=parseInt(this.value)||220;menuSaveProteinPrices();menuRenderCostPanel()" style="width:70px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:'Jost',sans-serif;font-size:12.5px"> g`:'<span style="color:#bbb;font-size:12px">— (per piece)</span>'}</td>
+      <td style="padding:7px 10px;font-weight:700;color:var(--teal,#2d6a6a)">${p.unit==='KG'?('$'+menuProteinCost(p.id).toFixed(2)+'/person'):'—'}</td>
+      <td style="padding:7px 10px"><button onclick="menuProteinPrices.splice(${i},1);menuSaveProteinPrices();menuRenderCostPanel()" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:15px" title="Remove">&times;</button></td>
+    </tr>`).join('');
+
+  const recipeRows=menuRecipeCosts.map((r,i)=>`
+    <tr style="border-bottom:1px solid #f0ece4">
+      <td style="padding:7px 10px"><input value="${menuEsc(r.name)}" onchange="menuRecipeCosts[${i}].name=this.value;menuSaveRecipeCosts()" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:'Jost',sans-serif;font-size:12.5px"></td>
+      <td style="padding:7px 10px"><input type="number" value="${r.portions}" onchange="menuRecipeCosts[${i}].portions=parseInt(this.value)||1;menuSaveRecipeCosts();menuRenderCostPanel()" style="width:70px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:'Jost',sans-serif;font-size:12.5px"></td>
+      <td style="padding:7px 10px;white-space:nowrap">$<input type="number" step="0.01" value="${r.totalCost}" onchange="menuRecipeCosts[${i}].totalCost=parseFloat(this.value)||0;menuSaveRecipeCosts();menuRenderCostPanel()" style="width:90px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:'Jost',sans-serif;font-size:12.5px"></td>
+      <td style="padding:7px 10px;font-weight:700;color:var(--teal,#2d6a6a)">$${(r.totalCost/(r.portions||1)).toFixed(2)}/portion</td>
+      <td style="padding:7px 10px"><button onclick="menuRecipeCosts.splice(${i},1);menuSaveRecipeCosts();menuRenderCostPanel()" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:15px" title="Remove">&times;</button></td>
+    </tr>`).join('');
+
+  const proteinOptions=(selId)=>`<option value="">— none —</option>`+menuProteinPrices.filter(p=>p.unit==='KG').map(p=>`<option value="${p.id}"${p.id===selId?' selected':''}>${menuEsc(p.name)}</option>`).join('');
+
+  let weeklyTotal=0;
+  const dayRows=[1,2,3,4,5,6,7].map(di=>{
+    const day=WEEKLY_MENU[di]||{};
+    const assign=menuProteinAssign[di]||{};
+    const middayCost=assign.midday?menuProteinCost(assign.midday):null;
+    const dinnerCost=assign.dinner?menuProteinCost(assign.dinner):null;
+
+    // Every non-protein dish across brunch/snack/dinner that has a matching recipe cost
+    const otherDishes=[...(day.brunch||[]).filter(d=>!d.includes('★')&&d!=='Tostada Bar'),...(day.snack||[]),...(day.dinner?.dishes||[])];
+    let matchedTotal=0;const matchedList=[];const unmatchedList=[];
+    otherDishes.forEach(name=>{
+      const c=menuFindRecipeCostPerPortion(name);
+      if(c!=null){matchedTotal+=c;matchedList.push(`${name} ($${c.toFixed(2)})`);}
+      else unmatchedList.push(name);
+    });
+    if(day.dinner?.dessert){
+      const c=menuFindRecipeCostPerPortion(day.dinner.dessert);
+      if(c!=null){matchedTotal+=c;matchedList.push(`${day.dinner.dessert} ($${c.toFixed(2)})`);}
+      else unmatchedList.push(day.dinner.dessert);
+    }
+
+    const dayTotal=(middayCost||0)+(dinnerCost||0)+matchedTotal;
+    weeklyTotal+=dayTotal;
+
+    const middayLabel=((day.lunch||[]).find(d=>d.includes('★'))||day.brunch?.find(d=>d.includes('★'))||'—').replace(' ★','');
+    const dinnerLabel=day.dinner?.protein||'—';
+    const middayPc=menuProteinColor(middayLabel);
+    const dinnerPc=menuProteinColor(dinnerLabel);
+
+    return `<tr style="border-bottom:1px solid #f0ece4;vertical-align:top">
+      <td style="padding:9px 10px;font-weight:700;color:var(--dark)">${MENU_DAY_NAMES[di]}</td>
+      <td style="padding:9px 10px">
+        <div style="display:inline-block;font-size:11.5px;font-weight:700;color:${middayPc.color};background:${middayPc.bg};border:1px solid ${middayPc.border};border-radius:6px;padding:2px 8px;margin-bottom:4px">${menuEsc(middayLabel)}</div>
+        <div><select onchange="menuProteinAssign[${di}]=menuProteinAssign[${di}]||{};menuProteinAssign[${di}].midday=this.value;menuSaveProteinAssign();menuRenderCostPanel()" style="border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-family:'Jost',sans-serif;font-size:12px;max-width:170px">${proteinOptions(assign.midday)}</select></div>
+        <div style="font-size:12px;font-weight:700;color:var(--teal,#2d6a6a);margin-top:3px">${middayCost!=null?'$'+middayCost.toFixed(2):'—'}</div>
+      </td>
+      <td style="padding:9px 10px">
+        <div style="display:inline-block;font-size:11.5px;font-weight:700;color:${dinnerPc.color};background:${dinnerPc.bg};border:1px solid ${dinnerPc.border};border-radius:6px;padding:2px 8px;margin-bottom:4px">${menuEsc(dinnerLabel)}</div>
+        <div><select onchange="menuProteinAssign[${di}]=menuProteinAssign[${di}]||{};menuProteinAssign[${di}].dinner=this.value;menuSaveProteinAssign();menuRenderCostPanel()" style="border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-family:'Jost',sans-serif;font-size:12px;max-width:170px">${proteinOptions(assign.dinner)}</select></div>
+        <div style="font-size:12px;font-weight:700;color:var(--teal,#2d6a6a);margin-top:3px">${dinnerCost!=null?'$'+dinnerCost.toFixed(2):'—'}</div>
+      </td>
+      <td style="padding:9px 10px;font-size:11.5px;color:#5a5048;max-width:220px">
+        ${matchedList.length?matchedList.join('<br>'):'<span style="color:#bbb">none matched</span>'}
+        ${unmatchedList.length?`<div style="margin-top:4px;color:#c8a468;font-style:italic">no cost yet: ${unmatchedList.map(menuEsc).join(', ')}</div>`:''}
+      </td>
+      <td style="padding:9px 10px;font-weight:800;color:var(--dark);white-space:nowrap">$${dayTotal.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  panel.innerHTML=`
+    <div style="max-width:1100px;margin:0 auto">
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:22px">
+        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Protein Prices (MXN)</span>
+          <button onclick="menuProteinPrices.push({id:'p'+Date.now(),name:'New Product',unit:'KG',price:0,portionG:220});menuSaveProteinPrices();menuRenderCostPanel()" style="border:1.5px solid var(--teal,#2d6a6a);background:#fff;color:var(--teal,#2d6a6a);border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">+ Add Product</button>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="background:#faf7f2"><th style="padding:7px 10px;text-align:left;color:#5a5048">Product</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Unit</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Price</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Portion</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Cost/person</th><th></th></tr></thead>
+          <tbody>${proteinRows}</tbody>
+        </table>
+      </div>
+
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:22px">
+        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Recipe Costs</span>
+          <button onclick="menuRecipeCosts.push({name:'New Recipe',portions:20,totalCost:0});menuSaveRecipeCosts();menuRenderCostPanel()" style="border:1.5px solid var(--teal,#2d6a6a);background:#fff;color:var(--teal,#2d6a6a);border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">+ Add Recipe</button>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="background:#faf7f2"><th style="padding:7px 10px;text-align:left;color:#5a5048">Recipe</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Portions</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Total Cost</th><th style="padding:7px 10px;text-align:left;color:#5a5048">Cost/portion</th><th></th></tr></thead>
+          <tbody>${recipeRows}</tbody>
+        </table>
+        <div style="padding:10px 18px;font-size:11.5px;color:#8a7e74;background:#faf7f2;border-top:1px solid var(--border)">We'll keep adding recipes here over time — anything not yet costed shows as "no cost yet" below.</div>
+      </div>
+
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Weekly Menu Cost Estimate — per person</span>
+          <span style="font-size:12.5px;font-weight:700;color:var(--teal,#2d6a6a)">Week total: $${weeklyTotal.toFixed(2)}</span>
+        </div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="background:#faf7f2">
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Day</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Midday Protein</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Dinner Protein</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Other Costed Dishes</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Day Total</th>
+          </tr></thead>
+          <tbody>${dayRows}</tbody>
+        </table></div>
+        <div style="padding:10px 18px;font-size:11.5px;color:#8a7e74;background:#faf7f2;border-top:1px solid var(--border)">Protein assignments are best guesses from the dish names — double-check the dropdowns above match what's actually served, especially generic "Pescado" days.</div>
+      </div>
+    </div>`;
 }
 

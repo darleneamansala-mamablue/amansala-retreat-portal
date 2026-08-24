@@ -2738,12 +2738,14 @@
         <input type="date" id="menuPrintTo" style="border:none;font-size:11.5px;font-family:'Jost',sans-serif;color:#374151;outline:none;cursor:pointer;padding:0">
         <button onclick="menuPrint()" style="border:none;background:var(--teal,#2d6a6a);color:#fff;font-family:'Jost',sans-serif;font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:5px;cursor:pointer">Print</button>
       </div>
+      <button id="menuCostBtn" onclick="menuToggleCostView()" style="padding:7px 14px;background:#f0f9f9;color:var(--teal,#2d6a6a);border:1.5px solid #b2d8d8;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">💰 Menu Costs</button>
     </div>
   </div>
   <!-- grid -->
   <div id="menuGridWrap" style="flex:1;overflow:auto;padding:20px;background:#f5f1eb">
     <div id="menuGrid"></div>
   </div>
+  <div id="menuCostPanel" style="display:none;flex:1;overflow:auto;padding:20px;background:#f5f1eb"></div>
 </div>
 
 <!-- ===== ACTIVITY SHEET TAB ===== -->
