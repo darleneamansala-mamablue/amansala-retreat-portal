@@ -2629,6 +2629,30 @@ const CL_ITEMS=[
 function getChecklist(bkId){return JSON.parse(localStorage.getItem('amansala_cl_'+bkId)||'{}');}
 function saveChecklist(bkId,obj){localStorage.setItem('amansala_cl_'+bkId,JSON.stringify(obj));}
 function toggleCheck(bkId,key){const c=getChecklist(bkId);c[key]=!c[key];saveChecklist(bkId,c);renderChecklist(bkId);}
+// Shown on the teacher's own Dashboard whenever their retreat is within 6
+// weeks and their guests haven't all submitted travel details yet.
+function tdRenderTransportReminder(bkId){
+  const el=document.getElementById('tdTransportReminder');if(!el)return;
+  const bk=AppData.bookings.find(b=>b.id===bkId);
+  if(!bk||!bk.startDate){el.style.display='none';return;}
+  const today=new Date();today.setHours(0,0,0,0);
+  const daysUntil=Math.floor((pd(bk.startDate)-today)/DAY_MS);
+  if(daysUntil>42||daysUntil<0){el.style.display='none';return;}
+  const ros=(typeof getTransportRoster==='function')?getTransportRoster(bkId):null;
+  if(!ros||!ros.missing.length){el.style.display='none';return;}
+  const link=location.origin+'/transport-form.html?bk='+bkId;
+  const n=ros.missing.length;
+  el.style.display='block';
+  el.innerHTML=`<div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div style="font-size:22px">⚠️</div>
+    <div style="flex:1;min-width:220px">
+      <div style="font-weight:700;color:#991b1b;font-size:14px">Transportation Reminder</div>
+      <div style="font-size:13px;color:#7f1d1d;margin-top:2px">Your retreat is ${daysUntil<=0?'about to start':`in ${daysUntil} day${daysUntil!==1?'s':''}`} and <b>${n} guest${n!==1?'s':''}</b> ${n!==1?"haven't":"hasn't"} submitted their travel details yet.</div>
+    </div>
+    <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${link}');showToast('Link copied!')" style="padding:9px 16px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Copy Transport Link</button>
+  </div>`;
+}
+
 function renderChecklist(bkId){
   const c=getChecklist(bkId);
   const bk=AppData.bookings.find(b=>b.id===bkId);
@@ -3218,6 +3242,7 @@ function enterTeacherView(bkId){
       const lbl=document.getElementById('td-retreat-label');
       if(lbl)lbl.textContent=`${bkr.leaderName||bkr.retreatName} · ${fmtDate(bkr.startDate)} – ${fmtDate(bkr.endDate)} · ${getNights(bkr)} nights`;
       renderChecklist(bkId);
+      tdRenderTransportReminder(bkId);
       renderYogiLetter(bkr);
       renderPlanningGuide();
       loadWhatsappField(bkr);
