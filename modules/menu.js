@@ -9,10 +9,10 @@ let menuCurrentMonday = null;
 const WEEKLY_MENU = {
   1: { // Lunes (Monday) — Day 1
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
-    brunch: ['Chilaquiles','Omelette de Espinaca','Protein Pancakes','Tinga de Pollo ★','Ensalada Amansala','Tostada Bar'],
-    lunch:  ['Tinga de Pollo ★','Ensalada Amansala','Tostada Bar'],
+    brunch: ['Chilaquiles','Omelette de Espinaca','Protein Pancakes','Tinga de Pollo ★','Ensalada Amansala'],
+    lunch:  ['Tinga de Pollo ★','Ensalada Amansala'],
     snack:  ['Summer Rolls con Gazpacho'],
-    dinner: {protein:'Grilled Lemon Kebabs Pollo',dishes:['Grilled Eggplant con Tahini'],dessert:'Deconstructed Cheesecake'}
+    dinner: {protein:'Grilled Lemon Kebabs Pollo',dishes:['Grilled Eggplant con Tahini','Tostada Bar'],dessert:'Deconstructed Cheesecake'}
   },
   2: { // Martes (Tuesday) — Day 2
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
@@ -37,10 +37,10 @@ const WEEKLY_MENU = {
   },
   5: { // Viernes (Friday) — Day 5
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
-    brunch: ['Chilaquiles','Huevos Duros','Pan de Platano','Pescado Congelado ★','Ensalada Mexicana','Tostada Bar'],
-    lunch:  ['Pescado Congelado ★','Ensalada Mexicana','Tostada Bar'],
+    brunch: ['Chilaquiles','Huevos Duros','Pan de Platano','Pescado Congelado ★','Ensalada Mexicana'],
+    lunch:  ['Pescado Congelado ★','Ensalada Mexicana'],
     snack:  ['Protein Balls con Fruta Fresca'],
-    dinner: {protein:'Pollo',dishes:['Sopa de Tortilla'],dessert:'Pay de Manzana · Brownie'}
+    dinner: {protein:'Pollo',dishes:['Corn Ribs','Sopa de Tortilla','Tostada Bar'],dessert:'Pay de Manzana · Brownie'}
   },
   6: { // Sábado (Saturday) — Day 6
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
