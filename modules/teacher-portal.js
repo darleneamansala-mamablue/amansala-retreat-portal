@@ -3550,13 +3550,39 @@ function buildRetreatSchedulesPanel(){
   const hasSched=AppData.bookings.filter(b=>b.scheduleRequest?.submittedAt);
   hasSched.sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
   const el=document.getElementById('rspContent');
-  if(!hasSched.length){el.innerHTML='<p style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0">No retreat schedules submitted yet.</p>';return;}
   const statusBadge=s=>{
     const cfg={pending:{bg:'#fef3c7',c:'#92400e',lbl:'Pending'},confirmed:{bg:'#dcfce7',c:'#15803d',lbl:'Confirmed'},changes:{bg:'#fee2e2',c:'#dc2626',lbl:'Changes Requested'}};
     const r=cfg[s]||cfg.pending;
     return`<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:700;background:${r.bg};color:${r.c}">${r.lbl}</span>`;
   };
-  el.innerHTML=hasSched.map((bk,idx)=>{
+  // Completion overview — every upcoming retreat in chronological order, with
+  // who has and hasn't submitted a schedule flagged in red so it's obvious
+  // at a glance who still needs to be chased.
+  const todayStr=fmtISO(new Date());
+  const upcoming=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.startDate&&b.startDate>=todayStr)
+    .sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
+  const missingCount=upcoming.filter(b=>!b.scheduleRequest?.submittedAt).length;
+  const overviewRows=upcoming.map(b=>{
+    const submitted=!!b.scheduleRequest?.submittedAt;
+    const label=b.leaderName||b.retreatName||'Untitled Retreat';
+    return `<tr style="${submitted?'':'background:#fef2f2'}">
+      <td style="padding:8px 12px;border-bottom:1px solid #eee2d4;font-weight:600;color:${submitted?'var(--dark)':'#dc2626'}">${label}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee2d4;color:var(--muted);white-space:nowrap">${fmtDate(b.startDate)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee2d4">${submitted
+        ?`<span style="color:#15803d;font-weight:700;font-size:12.5px">✓ Submitted</span> ${statusBadge(b.scheduleRequest.adminStatus||'pending')}`
+        :`<span style="color:#dc2626;font-weight:700;font-size:12.5px">✗ Not Filled Out</span>`}</td>
+    </tr>`;
+  }).join('');
+  const overviewHtml=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;overflow:hidden;margin-bottom:24px">
+    <div style="padding:12px 18px;border-bottom:1px solid #e8dfd4;display:flex;align-items:center;gap:10px;background:#f8f5f0">
+      <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Schedule Completion — Upcoming Retreats</span>
+      <span style="font-size:11.5px;color:${missingCount?'#dc2626':'#15803d'};font-weight:700">${missingCount} of ${upcoming.length} still missing</span>
+    </div>
+    ${upcoming.length?`<table style="width:100%;border-collapse:collapse;font-size:12.5px"><tbody>${overviewRows}</tbody></table>`
+      :'<p style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">No upcoming retreats found.</p>'}
+  </div>`;
+  if(!hasSched.length){el.innerHTML=overviewHtml+'<p style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0">No retreat schedules submitted yet.</p>';return;}
+  el.innerHTML=overviewHtml+hasSched.map((bk,idx)=>{
     const sr=bk.scheduleRequest;
     const st=sr.adminStatus||'pending';
     const nights=Math.max(1,Math.round((pd(bk.endDate)-pd(bk.startDate))/DAY_MS));
