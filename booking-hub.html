@@ -898,6 +898,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.5H2M17 3H7L3 16.5h18L17 3z"/><circle cx="7.5" cy="20" r="1.5"/><circle cx="16.5" cy="20" r="1.5"/></svg>
     <span class="tab-label">Transport</span>
   </button>
+  <button class="tab-btn" id="housekeepingTabBtn" onclick="switchTab('housekeeping',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>
+    <span class="tab-label">Housekeeping</span>
+  </button>
   <button class="tab-btn" id="eventsTabBtn" onclick="switchTab('events',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
     <span class="tab-label">Events</span>
@@ -2568,6 +2572,54 @@
 </div>
 
 <!-- ===== TRANSPORTATION TAB ===== -->
+<div class="tab-panel" id="tab-housekeeping" style="flex-direction:column">
+  <div id="hkRoot" style="flex:1;overflow-y:auto;padding:28px 36px;background:#f5f1eb">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+      <div>
+        <h2 style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:#2d2520;margin:0">Housekeeping</h2>
+        <p style="font-size:12.5px;color:#8a7e74;margin:4px 0 0">Room cleaning status — arrivals, departures &amp; stays default to needing a clean each day</p>
+      </div>
+      <button onclick="hkRefresh()" style="padding:7px 14px;border:1.5px solid #2d6a6a;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;font-weight:600;cursor:pointer;color:#2d6a6a;margin-left:auto">↻ Refresh</button>
+      <div id="hkFilters" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+    <div id="hkSummary" style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap"></div>
+    <div id="hkBody">
+      <div style="color:#8a7e74;text-align:center;padding:60px 0">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<!-- HOUSEKEEPING STATUS MODAL -->
+<div class="modal-overlay" id="hkStatusModal">
+  <div class="modal" style="width:380px">
+    <div class="modal-hdr">
+      <div><h2 id="hkModalRoom" style="margin:0"></h2><div class="modal-sub" id="hkModalType"></div></div>
+      <button class="modal-x" onclick="closeModal('hkStatusModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:16px">
+        <button onclick="hkSetPendingStatus('clean')" id="hkOpt-clean" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:9px;border:1.5px solid #86efac;background:#dcfce7;cursor:pointer;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;color:#16a34a">
+          <span style="width:10px;height:10px;border-radius:50%;background:#16a34a;flex-shrink:0"></span>Clean
+        </button>
+        <button onclick="hkSetPendingStatus('dirty')" id="hkOpt-dirty" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:9px;border:1.5px solid #fca5a5;background:#fef2f2;cursor:pointer;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;color:#dc2626">
+          <span style="width:10px;height:10px;border-radius:50%;background:#dc2626;flex-shrink:0"></span>Dirty
+        </button>
+        <button onclick="hkSetPendingStatus('maintenance')" id="hkOpt-maintenance" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:9px;border:1.5px solid #cbd5e1;background:#f1f5f9;cursor:pointer;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;color:#475569">
+          <span style="width:10px;height:10px;border-radius:50%;background:#64748b;flex-shrink:0"></span>Maintenance
+        </button>
+      </div>
+      <textarea id="hkModalNotes" placeholder="Notes (optional)…" rows="2" style="width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;font-family:'Jost',sans-serif;resize:none"></textarea>
+    </div>
+    <div class="modal-foot">
+      <div class="l"></div>
+      <div class="r" style="gap:8px">
+        <button class="btn btn-secondary" onclick="closeModal('hkStatusModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="hkSaveModal()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="tab-panel" id="tab-transport" style="flex-direction:column">
   <div style="flex:1;overflow-y:auto;padding:28px 36px;background:#f5f1eb">
 
@@ -4424,6 +4476,7 @@ function switchTab(id,btn){
   if(id==='events')    evtBuild();
   if(id==='menu')      menuBuild();
   if(id==='transport') syncTransportFromSupabase().then(()=>trInit());
+  if(id==='housekeeping') hkInit();
 }
 
 </script>
@@ -4485,6 +4538,7 @@ function switchTab(id,btn){
 // ===== TRANSPORTATION — moved to modules/transport.js =====
 </script>
 <script src="modules/driver-portal.js"></script>
+<script src="modules/housekeeping.js"></script>
 <script src="modules/cloudbeds-extra.js"></script>
 <script>
 // ===== CLOUDBEDS INTEGRATION (functions) — moved to modules/cloudbeds-extra.js =====
@@ -4683,6 +4737,8 @@ if(location.protocol!=='file:'){
             <option value="60">60 min</option>
             <option value="75">75 min</option>
             <option value="90">90 min</option>
+            <option value="120">2 hours</option>
+            <option value="150">2.5 hours</option>
           </select>
         </div>
       </div>
