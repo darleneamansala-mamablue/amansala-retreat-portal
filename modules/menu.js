@@ -569,6 +569,46 @@ const MENU_EN={
 };
 function menuTrEn(s){return MENU_EN[s]||s;}
 
+// Dinner-only: nicer English names + a short guest-facing description for each
+// dish currently on the app's 7-day dinner rotation, matched from the real
+// menu wording provided — the app's own dish list is unchanged, this only
+// dresses up how each existing item reads on the printed poster.
+const DINNER_DETAIL={
+  'Grilled Lemon Kebabs Pollo':{name:'Grilled Lemon Chicken Kebabs',desc:'Tender pieces of chicken marinated in fresh lemon juice, olive oil, and herbs, then perfectly grilled to achieve a juicy texture and a bright, zesty flavor.'},
+  'Grilled Eggplant con Tahini':{name:'Grilled Eggplant with Tahini',desc:'Char-grilled eggplant, smoky and soft, finished with a creamy tahini drizzle.'},
+  'Tostada Bar':{name:'Tostada Bar',desc:'A vibrant build-your-own tostada station with crunchy tostadas and flavorful beans, allowing guests to create their perfect bite with fresh toppings and bold Mexican flavors.'},
+
+  'Ensalada Verde':{name:'Green Salad',desc:'Mixed greens with a light house dressing.'},
+  'Risotto de Espinaca':{name:'Spinach Risotto',desc:'Slow-cooked to perfection, infused with fresh spinach, a touch of Parmesan cheese, and bright notes of fresh lemon zest.'},
+  'Flan de Cafe':{name:'Coffee Flan',desc:'Silky coffee-infused flan with a rich caramel finish.'},
+
+  'Sopa de Calabaza':{name:'Pumpkin Soup',desc:'Creamy roasted pumpkin soup with a hint of warm spices.'},
+  'Quinoa Verduras':{name:'Quinoa with Seasonal Vegetables',desc:'Nutritious quinoa tossed with fresh seasonal vegetables for a wholesome, colorful side.'},
+  'Vegan Choco Mouse':{name:'Vegan Chocolate Mousse',desc:'Cocoa, avocado, and coconut milk mousse — rich and creamy, naturally dairy-free.'},
+
+  'Cabbage Steak con Tahini':{name:'Cabbage Steak with Tahini & Nut Sauce',desc:'Thick-cut roasted cabbage steak, caramelized and topped with a creamy tahini and nut sauce.'},
+  'Camote al Horno':{name:'Oven-Roasted Sweet Potato',desc:'Golden oven-roasted camote, naturally sweet and caramelized.'},
+  'Pie de Manzana':{name:'Apple Pie',desc:'A classic apple pie made with warmly spiced apples in a buttery crust.'},
+
+  'Corn Ribs':{name:'Charred Corn Ribs with Chili-Lime Butter',desc:'Grilled corn cut into rib-style pieces, charred and brushed with a zesty chili-lime butter.'},
+  'Sopa de Tortilla':{name:'Tortilla Soup',desc:'Tomato-based soup with crispy tortilla strips, jicama, and avocado.'},
+  'Pay de Manzana · Brownie':{name:'Apple Pie · Gluten-Free Chocolate Brownie',desc:''},
+
+  'Pescado en Hoja de Platano':{name:'Banana Leaf-Wrapped Fish',desc:'Fresh fish fillet delicately seasoned and wrapped in a fragrant banana leaf, then gently steamed to lock in moisture and subtle herbal aromas.'},
+  'Ensalada de Pepino':{name:'Cucumber Salad with Sesame',desc:'Crisp cucumber slices tossed in a light sesame dressing, finished with toasted sesame seeds for a nutty aroma and delicate crunch.'},
+  'Spinach con Ajo':{name:'Garlic Spinach',desc:'Fresh spinach lightly sautéed with garlic and olive oil for a simple, nourishing balance.'},
+
+  'Plant Based Night — Phad Thai':{name:'Plant-Based Night — Pad Thai',desc:'Classic Thai stir-fried rice noodles with tofu, egg, and fresh vegetables, tossed in a sweet and tangy tamarind sauce, topped with crushed peanuts, bean sprouts, and fresh lime.'},
+  'Thai Slaw':{name:'Thai Slaw',desc:'Fresh shredded cabbage tossed with cilantro, sesame, and a light tangy dressing.'},
+  'Coconut Ice Cream':{name:'Coconut Ice Cream',desc:'Cool, creamy coconut ice cream — a refreshing finish to the evening.'},
+
+  'Pollo':{name:'Grilled Chicken',desc:'Tender grilled chicken, seasoned with herbs and spices and cooked to juicy perfection.'},
+  'Pescado':{name:'Fish Fillet with Pineapple & Red Pepper Salsa',desc:'Fresh fish fillet topped with a vibrant pineapple and red pepper salsa, bringing a bright and tropical balance to every bite.'},
+  'Salmon':{name:'Salmon',desc:'Fresh salmon fillet, simply seasoned and perfectly cooked to highlight its natural flavor.'},
+  'Brownie':{name:'Brownie',desc:'A rich, fudgy chocolate brownie with deep cocoa flavor.'},
+};
+function menuDinnerDetail(s){return DINNER_DETAIL[s]||{name:menuTrEn(s),desc:''};}
+
 function menuPrintDay(dateStr){
   const mi=menuDayIndex(dateStr);
   const mData=WEEKLY_MENU[mi]||{};
@@ -588,12 +628,16 @@ function menuPrintDay(dateStr){
     </div>`;
   };
 
+  const dinnerItemHtml=(s,starred)=>{
+    const {name,desc}=menuDinnerDetail(s);
+    return `<div class="menu-poster-item${starred?' starred':''}">${name}</div>${desc?`<div class="menu-poster-item-desc">${desc}</div>`:''}`;
+  };
   const dinnerHtml=mData.dinner?`<div class="menu-poster-section">
     <div class="menu-poster-label">Dinner</div>
     <div class="menu-poster-items">
-      ${mData.dinner.protein?`<div class="menu-poster-item starred">${menuTrEn(mData.dinner.protein)}</div>`:''}
-      ${(mData.dinner.dishes||[]).map(d2=>`<div class="menu-poster-item">${menuTrEn(d2)}</div>`).join('')}
-      ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${menuTrEn(mData.dinner.dessert)}</div>`:''}
+      ${mData.dinner.protein?dinnerItemHtml(mData.dinner.protein,true):''}
+      ${(mData.dinner.dishes||[]).map(d2=>dinnerItemHtml(d2,false)).join('')}
+      ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${menuDinnerDetail(mData.dinner.dessert).name}</div>`:''}
     </div>
   </div>`:'';
 
@@ -612,9 +656,10 @@ function menuPrintDay(dateStr){
     .menu-poster-divider{width:60px;height:2px;background:#c9a876;margin:0 auto 44px}
     .menu-poster-section{margin-bottom:36px}
     .menu-poster-label{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:#8a5a2e;letter-spacing:.5px;border-bottom:1.5px solid #e8dfd4;padding-bottom:8px;margin-bottom:14px;text-align:center}
-    .menu-poster-items{display:flex;flex-direction:column;gap:8px}
-    .menu-poster-item{font-size:18px;color:#3a332c;text-align:center}
+    .menu-poster-items{display:flex;flex-direction:column;gap:4px}
+    .menu-poster-item{font-size:18px;color:#3a332c;text-align:center;margin-top:6px}
     .menu-poster-item.starred{font-weight:700;color:#2d2520;font-size:20px}
+    .menu-poster-item-desc{font-size:12.5px;color:#9a8f83;text-align:center;font-style:italic;line-height:1.55;max-width:480px;margin:2px auto 0}
     .menu-poster-dessert{margin-top:10px;font-size:15px;font-style:italic;color:#8a7e74;text-align:center}
     .menu-poster-footer{text-align:center;margin-top:50px;font-size:12px;color:#b8ab9e;letter-spacing:.4px;line-height:1.7}
     @media print{body{padding:20px 40px}}
