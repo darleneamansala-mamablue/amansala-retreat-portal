@@ -9,24 +9,24 @@ let menuCurrentMonday = null;
 const WEEKLY_MENU = {
   1: { // Lunes (Monday) — Day 1
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
-    brunch: ['Chilaquiles','Omelette de Espinaca','Protein Pancakes','Tinga de Pollo ★','Ensalada Amansala'],
+    brunch: ['Chilaquiles','Omelette de Espinaca','Protein Pancakes','Tinga de Pollo ★','Ensalada Amansala','Tostada Bar'],
     lunch:  ['Tinga de Pollo ★','Ensalada Amansala'],
     snack:  ['Summer Rolls con Gazpacho'],
-    dinner: {protein:'Grilled Lemon Kebabs Pollo',dishes:['Grilled Eggplant con Tahini','Tostada Bar'],dessert:'Deconstructed Cheesecake'}
+    dinner: {protein:'Grilled Lemon Kebabs Pollo',dishes:['Grilled Eggplant con Tahini'],dessert:'Deconstructed Cheesecake'}
   },
   2: { // Martes (Tuesday) — Day 2
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
     brunch: ['Huevos Rancheros','Avocado Toast','Pan de Platano','Salmon con Miel y Ajo ★','Ensalada Edamame','Poke Bowl'],
     lunch:  ['Salmon con Miel y Ajo ★','Ensalada Edamame','Poke Bowl'],
     snack:  ['Guacamole con Veggies y Chips'],
-    dinner: {protein:'Pollo',dishes:['Ensalada Verde','Risotto de Espinaca'],dessert:'Flan de Cafe'}
+    dinner: {protein:'Pescado',dishes:['Sopa de Calabaza','Quinoa Verduras'],dessert:'Vegan Choco Mouse'}
   },
   3: { // Miércoles (Wednesday) — Day 3
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
     brunch: ['Chilaquiles','Huevos Verdes','Pan de Frances','Blackened Tacos ★','Ensalada Mexicana'],
     lunch:  ['Blackened Tacos ★','Ensalada Mexicana'],
     snack:  ['Hummus con Veggies y Chips'],
-    dinner: {protein:'Pescado',dishes:['Sopa de Calabaza','Quinoa Verduras'],dessert:'Vegan Choco Mouse'}
+    dinner: {protein:'Pollo',dishes:['Ensalada Verde','Risotto de Espinaca'],dessert:'Flan de Cafe'}
   },
   4: { // Jueves (Thursday) — Day 4 (swapped with what was Friday's menu)
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
@@ -658,26 +658,25 @@ function menuPrintDay(dateStr){
   const dayName=d.toLocaleDateString('en-US',{weekday:'long'});
   const dateFmt=d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
 
-  const itemHtml=(s,starred)=>{
-    const isStar=s.includes('★');
+  const itemHtml=(s)=>{
     const clean=s.replace(' ★','').replace('★ ','');
     const {name,desc}=menuItemDetail(clean);
-    return `<div class="menu-poster-item${(starred||isStar)?' starred':''}">${name}</div>${desc?`<div class="menu-poster-item-desc">${desc}</div>`:''}`;
+    return `<div class="menu-poster-item">${name}</div>${desc?`<div class="menu-poster-item-desc">${desc}</div>`:''}`;
   };
 
   const section=(label,items)=>{
     if(!items||!items.length)return'';
     return `<div class="menu-poster-section">
       <div class="menu-poster-label">${label}</div>
-      <div class="menu-poster-items">${items.map(it=>itemHtml(it,false)).join('')}</div>
+      <div class="menu-poster-items">${items.map(it=>itemHtml(it)).join('')}</div>
     </div>`;
   };
 
   const dinnerHtml=mData.dinner?`<div class="menu-poster-section">
     <div class="menu-poster-label">Dinner</div>
     <div class="menu-poster-items">
-      ${mData.dinner.protein?itemHtml(mData.dinner.protein,true):''}
-      ${(mData.dinner.dishes||[]).map(d2=>itemHtml(d2,false)).join('')}
+      ${mData.dinner.protein?itemHtml(mData.dinner.protein):''}
+      ${(mData.dinner.dishes||[]).map(d2=>itemHtml(d2)).join('')}
       ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${menuItemDetail(mData.dinner.dessert).name}</div>`:''}
     </div>
   </div>`:'';
