@@ -894,11 +894,9 @@ function trBuildMonthView(){
 // is already at Cancún for an arrival and a Cancún-bound departure leaves within
 // 30 minutes after that arrival's flight lands, Salamon does that departure too
 // (round trip) instead of sending Irving out separately — this is uncommon.
-function trBuildDriverView(){
-  const wrap=document.getElementById('trContent');if(!wrap)return;
-  const dEl=document.getElementById('trDriversDate');
-  const date=dEl?dEl.value:fmtISO(new Date());
-  if(!date){wrap.innerHTML='<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0">Select a date to view driver assignments.</div>';return;}
+// Shared by the staff Drivers view and the drivers' own login-gated view —
+// keeps the Salamon/Irving assignment logic in exactly one place.
+function trComputeDriverAssignments(date){
   const allSubs=loadTransport();
   const arrivals=allSubs.filter(s=>s.arrivalDate===date&&s.arrivalTime&&s.arrivalAirport)
     .map(s=>({...s,_kind:'arrival',room:trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName),
@@ -932,6 +930,15 @@ function trBuildDriverView(){
   });
   salamon.sort((a,b)=>(a.arrivalTime||a.departureTime).localeCompare(b.arrivalTime||b.departureTime));
   irving.sort((a,b)=>(a.arrivalTime||a.departureTime).localeCompare(b.arrivalTime||b.departureTime));
+  return{salamon,irving};
+}
+
+function trBuildDriverView(){
+  const wrap=document.getElementById('trContent');if(!wrap)return;
+  const dEl=document.getElementById('trDriversDate');
+  const date=dEl?dEl.value:fmtISO(new Date());
+  if(!date){wrap.innerHTML='<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0">Select a date to view driver assignments.</div>';return;}
+  const{salamon,irving}=trComputeDriverAssignments(date);
 
   const dt=new Date(date+'T00:00:00');
   const MNTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
