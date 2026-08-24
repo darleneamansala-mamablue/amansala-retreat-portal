@@ -569,11 +569,32 @@ const MENU_EN={
 };
 function menuTrEn(s){return MENU_EN[s]||s;}
 
-// Dinner-only: nicer English names + a short guest-facing description for each
-// dish currently on the app's 7-day dinner rotation, matched from the real
-// menu wording provided — the app's own dish list is unchanged, this only
-// dresses up how each existing item reads on the printed poster.
-const DINNER_DETAIL={
+// Nicer English names + a short guest-facing description for each dish
+// currently on the app's 7-day brunch/snack/dinner rotation, matched from the
+// real menu wording provided — the app's own dish list is unchanged, this
+// only dresses up how each existing item reads on the printed poster.
+const MENU_DETAIL={
+  'Chilaquiles':{name:'Chilaquiles',desc:'Crispy tortilla chips simmered in salsa, topped with cream and cheese.'},
+  'Protein Pancakes':{name:'Hotcakes',desc:'Fluffy golden hotcakes with fresh fruit and local honey.'},
+  'Tinga de Pollo':{name:'Chicken Tinga',desc:'Slow-simmered shredded chicken in a smoky chipotle-tomato sauce.'},
+  'Ensalada Amansala':{name:'Amansala Salad',desc:'Our signature garden salad with fresh greens, seeds and citrus vinaigrette.'},
+  'Huevos Rancheros':{name:'Huevos Rancheros',desc:'Sunny eggs over warm tortillas with ranchero salsa and fresh cheese.'},
+  'Avocado Toast':{name:'Avocado Toast',desc:'Toasted artisan bread with smashed avocado, lime and a touch of chili.'},
+  'Pan de Platano':{name:'Banana Bread',desc:'Warm, house-baked banana bread.'},
+  'Ensalada Edamame':{name:'Edamame & Avocado Salad',desc:'Protein-rich edamame with creamy avocado.'},
+  'Poke Bowl':{name:'Salmon Poke Bowl',desc:'Fresh salmon over sushi rice with crisp vegetables.'},
+  'Huevos Verdes':{name:'Green Eggs',desc:'A vibrant twist on eggs with fresh green herbs and salsa verde.'},
+  'Blackened Tacos':{name:'Blackened Fish Tacos',desc:'Spiced fish in warm tortillas with cabbage slaw and lime.'},
+  'Ensalada Mexicana':{name:'Mexican Salad',desc:'Crisp lettuce, tomato, avocado and corn in a zesty lime dressing.'},
+  'Kebabs Pollo/Tofu':{name:'Chicken & Tofu Kebabs',desc:'Marinated skewers grilled until charred and juicy.'},
+  'Ensalada Griega':{name:'Greek Salad',desc:'Crisp cucumber, tomato, red onion, olives and feta in a lemon-oregano dressing.'},
+  'Babaganoush Tostada':{name:'Baba Ganoush',desc:'Silky smoke-roasted eggplant dip with olive oil and warm flatbread.'},
+  'Pescado Congelado':{name:'Grilled Fish',desc:'Catch of the day, grilled with herbs and lime.'},
+  'Fritatta':{name:'Frittata',desc:'Baked open-faced egg frittata with garden vegetables.'},
+  'Pan de Frances con Coco':{name:'Coconut French Bread',desc:'Golden toasted French bread with sweet coconut.'},
+  'Pollo con Ajo Asado':{name:'Grilled Chicken',desc:'Tender chicken breast, simply grilled.'},
+  'Fruta':{name:'Fresh Fruit',desc:'A bright platter of seasonal tropical fruit.'},
+
   'Grilled Lemon Kebabs Pollo':{name:'Grilled Lemon Chicken Kebabs',desc:'Tender pieces of chicken marinated in fresh lemon juice, olive oil, and herbs, then perfectly grilled to achieve a juicy texture and a bright, zesty flavor.'},
   'Grilled Eggplant con Tahini':{name:'Grilled Eggplant with Tahini',desc:'Char-grilled eggplant, smoky and soft, finished with a creamy tahini drizzle.'},
   'Tostada Bar':{name:'Tostada Bar',desc:'A vibrant build-your-own tostada station with crunchy tostadas and flavorful beans, allowing guests to create their perfect bite with fresh toppings and bold Mexican flavors.'},
@@ -607,7 +628,7 @@ const DINNER_DETAIL={
   'Salmon':{name:'Salmon',desc:'Fresh salmon fillet, simply seasoned and perfectly cooked to highlight its natural flavor.'},
   'Brownie':{name:'Brownie',desc:'A rich, fudgy chocolate brownie with deep cocoa flavor.'},
 };
-function menuDinnerDetail(s){return DINNER_DETAIL[s]||{name:menuTrEn(s),desc:''};}
+function menuItemDetail(s){return MENU_DETAIL[s]||{name:menuTrEn(s),desc:''};}
 
 function menuPrintDay(dateStr){
   const mi=menuDayIndex(dateStr);
@@ -616,28 +637,27 @@ function menuPrintDay(dateStr){
   const dayName=d.toLocaleDateString('en-US',{weekday:'long'});
   const dateFmt=d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
 
+  const itemHtml=(s,starred)=>{
+    const isStar=s.includes('★');
+    const clean=s.replace(' ★','').replace('★ ','');
+    const {name,desc}=menuItemDetail(clean);
+    return `<div class="menu-poster-item${(starred||isStar)?' starred':''}">${name}</div>${desc?`<div class="menu-poster-item-desc">${desc}</div>`:''}`;
+  };
+
   const section=(label,items)=>{
     if(!items||!items.length)return'';
     return `<div class="menu-poster-section">
       <div class="menu-poster-label">${label}</div>
-      <div class="menu-poster-items">${items.map(it=>{
-        const isStar=it.includes('★');
-        const clean=it.replace(' ★','').replace('★ ','');
-        return `<div class="menu-poster-item${isStar?' starred':''}">${menuTrEn(clean)}</div>`;
-      }).join('')}</div>
+      <div class="menu-poster-items">${items.map(it=>itemHtml(it,false)).join('')}</div>
     </div>`;
   };
 
-  const dinnerItemHtml=(s,starred)=>{
-    const {name,desc}=menuDinnerDetail(s);
-    return `<div class="menu-poster-item${starred?' starred':''}">${name}</div>${desc?`<div class="menu-poster-item-desc">${desc}</div>`:''}`;
-  };
   const dinnerHtml=mData.dinner?`<div class="menu-poster-section">
     <div class="menu-poster-label">Dinner</div>
     <div class="menu-poster-items">
-      ${mData.dinner.protein?dinnerItemHtml(mData.dinner.protein,true):''}
-      ${(mData.dinner.dishes||[]).map(d2=>dinnerItemHtml(d2,false)).join('')}
-      ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${menuDinnerDetail(mData.dinner.dessert).name}</div>`:''}
+      ${mData.dinner.protein?itemHtml(mData.dinner.protein,true):''}
+      ${(mData.dinner.dishes||[]).map(d2=>itemHtml(d2,false)).join('')}
+      ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${menuItemDetail(mData.dinner.dessert).name}</div>`:''}
     </div>
   </div>`:'';
 
@@ -672,7 +692,7 @@ function menuPrintDay(dateStr){
     ${section('Brunch',mData.brunch)}
     ${section('Afternoon Snack',mData.snack)}
     ${dinnerHtml}
-    <div class="menu-poster-footer">Please let the front desk know if you'll be dining off-site tonight.</div>
+    <div class="menu-poster-footer">Please let the front desk know if you'll be dining off-site tonight.<br>For specific dietary requests, please speak with your waiter. If you have a severe allergy, please confirm ingredients with your host before ordering.</div>
   </body></html>`;
 
   const w=window.open('','_blank');
