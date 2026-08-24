@@ -861,7 +861,7 @@
     <span class="tab-label">Dashboard</span>
     <span id="inquiryDot" style="display:none;background:#ef4444;color:#fff;border-radius:20px;padding:0 5px;height:16px;font-size:9px;font-weight:800;line-height:16px;min-width:16px;text-align:center"></span>
   </button>
-  <button class="tab-btn" id="menuTabBtn" onclick="switchTab('menu',this)" style="display:none">
+  <button class="tab-btn" id="menuTabBtn" onclick="switchTab('menu',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h12"/><circle cx="19" cy="18" r="2"/><path d="M19 16v-4"/></svg>
     <span class="tab-label">Menu</span>
   </button>
@@ -925,10 +925,6 @@
     <button class="tab-btn tab-btn-sub" onclick="openCbSyncAllModal()" style="color:#60a5fa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       <span class="tab-label">CB Sync All</span>
-    </button>
-    <button class="tab-btn tab-btn-sub" id="menuSideBtn" onclick="switchTab('menu',document.getElementById('menuTabBtn'));document.getElementById('menuTabBtn').style.display='flex'">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h12"/><circle cx="19" cy="18" r="2"/><path d="M19 16v-4"/></svg>
-      <span class="tab-label">Menu</span>
     </button>
     <button class="tab-btn tab-btn-sub" id="actLogSideBtn" onclick="switchTab('activity',document.getElementById('activityTabBtn'));document.getElementById('activityTabBtn').style.display='flex'">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -4674,7 +4670,7 @@ if(location.protocol!=='file:'){
         <label style="font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Start Time</label>
         <select id="skedEditClassTime" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13.5px;background:var(--sand)"></select>
       </div>
-      <div>
+      <div id="skedEditClassScopeWrap">
         <label style="font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:8px">Apply this change to</label>
         <div style="display:flex;flex-direction:column;gap:8px">
           <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13.5px">
@@ -4833,11 +4829,11 @@ if(location.protocol!=='file:'){
       <div class="frow">
         <div class="fg">
           <label>Start Time</label>
-          <input type="time" id="skedEvStart" class="finp" style="width:100%">
+          <input type="time" id="skedEvStart" class="finp" step="900" style="width:100%">
         </div>
         <div class="fg">
           <label>End Time</label>
-          <input type="time" id="skedEvEnd" class="finp" style="width:100%">
+          <input type="time" id="skedEvEnd" class="finp" step="900" style="width:100%">
         </div>
       </div>
       <div class="frow">

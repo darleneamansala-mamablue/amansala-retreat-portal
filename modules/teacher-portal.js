@@ -3775,9 +3775,11 @@ function skedGetRetreatEvents(dateStr){
           evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:'Arrival Evening Class',color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
       } else if(effMornStart&&effMornShala){
-        // No arrival class — show opening morning class
-        const mEnd=skedMinToTime(skedTimeToMin(effMornStart)+effMornDur);
-        evs.push({id:'ret_'+bk.id+'_morn_arr',resourceId:effMornShala,date:dateStr,startTime:effMornStart,endTime:mEnd,title,subtitle:'Opening Class'+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        // No arrival class — show opening morning class (respects a one-off override for this date)
+        const arrOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
+        const arrStart=arrOv?arrOv.start:effMornStart;
+        const mEnd=skedMinToTime(skedTimeToMin(arrStart)+effMornDur);
+        evs.push({id:'ret_'+bk.id+'_morn_arr',resourceId:effMornShala,date:dateStr,startTime:arrStart,endTime:mEnd,title,subtitle:'Opening Class'+(arrOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
     // Departure day — show departure morning class if set, otherwise fall back to regular morning class
@@ -3790,8 +3792,10 @@ function skedGetRetreatEvents(dateStr){
           evs.push({id:'ret_'+bk.id+'_dep',resourceId:depShala,date:dateStr,startTime:sr.departureSlot,endTime:depEnd,title,subtitle:'Departure Morning Class',color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
       } else if(effMornStart&&effMornShala){
-        const mEnd=skedMinToTime(skedTimeToMin(effMornStart)+effMornDur);
-        evs.push({id:'ret_'+bk.id+'_morn_dep',resourceId:effMornShala,date:dateStr,startTime:effMornStart,endTime:mEnd,title,subtitle:'Morning Class'+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        const depOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
+        const depStart=depOv?depOv.start:effMornStart;
+        const mEnd=skedMinToTime(skedTimeToMin(depStart)+effMornDur);
+        evs.push({id:'ret_'+bk.id+'_morn_dep',resourceId:effMornShala,date:dateStr,startTime:depStart,endTime:mEnd,title,subtitle:'Morning Class'+(depOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
     // Middle days — morning class + evening class
@@ -4078,11 +4082,25 @@ function skedBuildList(days,DAYS_LONG,MONTHS_LONG){
 
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
+// Every event id suffix that represents a clickable, editable class box, and
+// what kind of edit it needs: 'daily' (the repeating morning/evening class —
+// also shown as a fallback on arrival/departure days) vs 'oneoff' (the
+// dedicated Arrival Evening / Departure Morning class, which only ever exists
+// on that one specific day, so there's no "whole retreat" scope to offer).
+const SKED_CLASS_SUFFIX_INFO={
+  morn:    {kind:'daily',   period:'morn'},
+  morn_arr:{kind:'daily',   period:'morn'},
+  morn_dep:{kind:'daily',   period:'morn'},
+  aft:     {kind:'daily',   period:'aft'},
+  arr:     {kind:'oneoff',  field:'arrivalSlot',   label:'Arrival Evening Class',   rangeStart:'12:00',rangeEnd:'21:00'},
+  dep:     {kind:'oneoff',  field:'departureSlot', label:'Departure Morning Class', rangeStart:'05:30',rangeEnd:'10:30'},
+};
+
 function skedClickEvent(evId,bkId,isRetreat,dateStr){
   if(isRetreat){
     const prefix='ret_'+bkId+'_';
     const suffix=evId.indexOf(prefix)===0?evId.slice(prefix.length):'';
-    if((suffix==='morn'||suffix==='aft')&&dateStr){
+    if(SKED_CLASS_SUFFIX_INFO[suffix]&&dateStr){
       openSkedEditClassModal(bkId,suffix,dateStr);
       return;
     }
@@ -4091,43 +4109,58 @@ function skedClickEvent(evId,bkId,isRetreat,dateStr){
   else{openSkedEditModal(evId);}
 }
 
-// Click-to-edit modal for a teacher's morning/evening class box on the master
-// calendar — lets admin change the time for just one day, or the whole retreat's
-// repeating schedule, without the old confirm()/prompt() dialog chain.
+// Click-to-edit modal for a teacher's class box on the master calendar — lets
+// admin change the time for just one day, or the whole retreat's repeating
+// schedule, without the old confirm()/prompt() dialog chain.
 function openSkedEditClassModal(bkId,suffix,dateStr){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
-  const isMorn=suffix==='morn';
+  const info=SKED_CLASS_SUFFIX_INFO[suffix];if(!info)return;
   const label=bk.leaderName||bk.retreatName||'This teacher';
   document.getElementById('skedEditClassBkId').value=bkId;
   document.getElementById('skedEditClassDate').value=dateStr;
   document.getElementById('skedEditClassSuffix').value=suffix;
-  document.getElementById('skedEditClassTitle').textContent=(isMorn?'Morning':'Evening')+' Class';
   document.getElementById('skedEditClassSub').textContent=label+' · '+dateStr;
 
-  const already=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period===suffix);
-  const timeOvs=bk.scheduleTimeOverrides||[];
-  const existingOv=timeOvs.find(o=>o.date===dateStr&&o.period===suffix);
-
-  const sel=document.getElementById('skedEditClassTime');
-  let opts;
-  if(isMorn){
-    opts=tsAllMorningSlots();
-  } else {
-    opts=[];
-    for(let m=tsT2M('13:00');m<=tsT2M('19:45');m+=15)opts.push(tsM2T(m));
-  }
-  sel.innerHTML=opts.map(t=>`<option value="${t}">${tsFmt(t)}</option>`).join('');
-
-  const sr=bk.scheduleRequest||{};
-  const ov=sr.adminOverride||{};
-  const usualStart=isMorn?(ov.morningStart||sr.morningStart):(ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart);
-  sel.value=existingOv?existingOv.start:(usualStart||opts[0]);
-
-  document.getElementById('skedEditClassResetBtn').style.display=existingOv?'inline-flex':'none';
+  const scopeWrap=document.getElementById('skedEditClassScopeWrap');
+  const resetBtn=document.getElementById('skedEditClassResetBtn');
   const skipBtn=document.getElementById('skedEditClassSkipBtn');
-  skipBtn.textContent=already?'Restore this day':'Skip this day';
-  skipBtn.setAttribute('data-skipped',already?'1':'0');
-  document.querySelector('input[name="skedEditScope"][value="once"]').checked=true;
+  const sel=document.getElementById('skedEditClassTime');
+  const sr=bk.scheduleRequest||{};
+
+  if(info.kind==='oneoff'){
+    document.getElementById('skedEditClassTitle').textContent=info.label;
+    const opts=[];
+    for(let m=tsT2M(info.rangeStart);m<=tsT2M(info.rangeEnd);m+=15)opts.push(tsM2T(m));
+    sel.innerHTML=opts.map(t=>`<option value="${t}">${tsFmt(t)}</option>`).join('');
+    sel.value=sr[info.field]||opts[0];
+    scopeWrap.style.display='none';
+    resetBtn.style.display='none';
+    skipBtn.style.display='none';
+  } else {
+    const period=info.period;
+    const isMorn=period==='morn';
+    document.getElementById('skedEditClassTitle').textContent=(isMorn?'Morning':'Evening')+' Class';
+    const already=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period===period);
+    const timeOvs=bk.scheduleTimeOverrides||[];
+    const existingOv=timeOvs.find(o=>o.date===dateStr&&o.period===period);
+    let opts;
+    if(isMorn){
+      opts=tsAllMorningSlots();
+    } else {
+      opts=[];
+      for(let m=tsT2M('13:00');m<=tsT2M('19:45');m+=15)opts.push(tsM2T(m));
+    }
+    sel.innerHTML=opts.map(t=>`<option value="${t}">${tsFmt(t)}</option>`).join('');
+    const ov=sr.adminOverride||{};
+    const usualStart=isMorn?(ov.morningStart||sr.morningStart):(ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart);
+    sel.value=existingOv?existingOv.start:(usualStart||opts[0]);
+    scopeWrap.style.display='';
+    resetBtn.style.display=existingOv?'inline-flex':'none';
+    skipBtn.style.display='inline-flex';
+    skipBtn.textContent=already?'Restore this day':'Skip this day';
+    skipBtn.setAttribute('data-skipped',already?'1':'0');
+    document.querySelector('input[name="skedEditScope"][value="once"]').checked=true;
+  }
 
   openModal('skedEditClassModal');
 }
@@ -4136,23 +4169,32 @@ function skedSaveClassEdit(){
   const bkId=document.getElementById('skedEditClassBkId').value;
   const dateStr=document.getElementById('skedEditClassDate').value;
   const suffix=document.getElementById('skedEditClassSuffix').value;
-  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const info=SKED_CLASS_SUFFIX_INFO[suffix];
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!info)return;
   const newTime=document.getElementById('skedEditClassTime').value;
-  const scope=document.querySelector('input[name="skedEditScope"]:checked')?.value||'once';
-  const isMorn=suffix==='morn';
 
+  if(info.kind==='oneoff'){
+    if(!bk.scheduleRequest)bk.scheduleRequest={};
+    bk.scheduleRequest[info.field]=newTime;
+    saveAll();skedBuild();closeModal('skedEditClassModal');
+    showToast('Time updated.');
+    return;
+  }
+
+  const period=info.period;
+  const scope=document.querySelector('input[name="skedEditScope"]:checked')?.value||'once';
   if(scope==='week'){
     if(!bk.scheduleRequest)bk.scheduleRequest={};
     if(!bk.scheduleRequest.adminOverride)bk.scheduleRequest.adminOverride={};
-    if(isMorn)bk.scheduleRequest.adminOverride.morningStart=newTime;
+    if(period==='morn')bk.scheduleRequest.adminOverride.morningStart=newTime;
     else bk.scheduleRequest.adminOverride.afternoonStart=newTime;
-    bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===suffix));
+    bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===period));
     saveAll();skedBuild();closeModal('skedEditClassModal');
     showToast('Schedule updated for the whole retreat.');
     return;
   }
-  bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===suffix));
-  bk.scheduleTimeOverrides.push({date:dateStr,period:suffix,start:newTime});
+  bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===period));
+  bk.scheduleTimeOverrides.push({date:dateStr,period,start:newTime});
   saveAll();skedBuild();closeModal('skedEditClassModal');
   showToast('Time updated for '+dateStr+'.');
 }
@@ -4161,8 +4203,9 @@ function skedResetOverrideFromModal(){
   const bkId=document.getElementById('skedEditClassBkId').value;
   const dateStr=document.getElementById('skedEditClassDate').value;
   const suffix=document.getElementById('skedEditClassSuffix').value;
-  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
-  bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===suffix));
+  const period=SKED_CLASS_SUFFIX_INFO[suffix]?.period;
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!period)return;
+  bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===period));
   saveAll();skedBuild();closeModal('skedEditClassModal');
   showToast('Reset to usual time for '+dateStr+'.');
 }
@@ -4171,16 +4214,17 @@ function skedSkipFromModal(){
   const bkId=document.getElementById('skedEditClassBkId').value;
   const dateStr=document.getElementById('skedEditClassDate').value;
   const suffix=document.getElementById('skedEditClassSuffix').value;
-  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const period=SKED_CLASS_SUFFIX_INFO[suffix]?.period;
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!period)return;
   const btn=document.getElementById('skedEditClassSkipBtn');
   const already=btn.getAttribute('data-skipped')==='1';
   if(already){
-    bk.scheduleSkips=(bk.scheduleSkips||[]).filter(s=>!(s.date===dateStr&&s.period===suffix));
+    bk.scheduleSkips=(bk.scheduleSkips||[]).filter(s=>!(s.date===dateStr&&s.period===period));
     saveAll();skedBuild();closeModal('skedEditClassModal');
     showToast('Class restored for '+dateStr+'.');
   } else {
     if(!bk.scheduleSkips)bk.scheduleSkips=[];
-    bk.scheduleSkips.push({date:dateStr,period:suffix});
+    bk.scheduleSkips.push({date:dateStr,period});
     saveAll();skedBuild();closeModal('skedEditClassModal');
     showToast('Class skipped for '+dateStr+'.');
   }
