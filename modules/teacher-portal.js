@@ -1837,8 +1837,7 @@ function tsRenderCalSection(bk){
     const prepaidActs=[]; // prepaid activities shown in their own section per day
     const sk=t=>t||'99:99'; // sort key: raw 24h time, empty items sort to end
     if(i===0){
-      // Arrival day — no morning classes, check-in at 3 PM
-      rows.push({time:'3:00 PM',desc:'Check-in',shala:'',cat:'meal',sk:'15:00'});
+      // Arrival day — no morning classes
       rows.push({time:'4:00 PM',desc:'Welcome Snack',shala:'',cat:'meal',sk:'16:00'});
       if(sr.hasArrivalClass&&sr.arrivalSlot){
         const arShala=snm(sr.arrivalShala1||sr.morningShala1);
