@@ -218,7 +218,7 @@ function regRender(){
     gitanoNotice.style.display=isGitano?'block':'none';
     if(isGitano){
       // Add to retreatActivities as optional (not prepaid) — does NOT go into packages
-      if(offsiteISODate){
+      if(offsiteISODate&&offsiteISODate!==regSelBk.startDate){
         if(!regSelBk.retreatActivities)regSelBk.retreatActivities=[];
         // Remove stale entries where date is a night-number instead of ISO date
         const before=regSelBk.retreatActivities.length;
@@ -1001,7 +1001,10 @@ function tsPopulateNights(bk){
   const nights=Math.max(1,Math.round((pd(bk.endDate)-start)/DAY_MS));
   const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  for(let i=0;i<nights;i++){
+  // Start at i=1 — night 1 is the arrival night; guests are still arriving
+  // throughout the day, and an offsite dinner (or any activity) never gets
+  // scheduled on the arrival day.
+  for(let i=1;i<nights;i++){
     const d=new Date(start.getTime()+i*DAY_MS);
     const label=days[d.getDay()]+', '+months[d.getMonth()]+' '+d.getDate();
     const opt=document.createElement('option');
@@ -1788,7 +1791,7 @@ function tsSubmitSchedule(){
     if(_ts.offsiteChoice==='gitano'&&_ts.offsiteNight&&bk.startDate){
       const gitanoDate=fmtISO(new Date(pd(bk.startDate).getTime()+(parseInt(_ts.offsiteNight)-1)*DAY_MS));
       const alreadyHas=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13');
-      if(!alreadyHas)bk.retreatActivities.push({aoId:'ao13',date:gitanoDate,time:'19:30',prepaid:true});
+      if(!alreadyHas&&gitanoDate!==bk.startDate)bk.retreatActivities.push({aoId:'ao13',date:gitanoDate,time:'19:30',prepaid:true});
       if(!bk.packages)bk.packages=[];
       if(!bk.packages.includes('ao13'))bk.packages.push('ao13');
     } else {
@@ -2231,7 +2234,7 @@ function tsAdminStatus(bkId,status){
     if(sr.offsiteChoice==='gitano'&&sr.offsiteNight&&bk.startDate){
       const gitanoDate=fmtISO(new Date(pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS));
       const alreadyHasGitano=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13');
-      if(!alreadyHasGitano)bk.retreatActivities.push({aoId:'ao13',date:gitanoDate,time:'19:30',prepaid:false});
+      if(!alreadyHasGitano&&gitanoDate!==bk.startDate)bk.retreatActivities.push({aoId:'ao13',date:gitanoDate,time:'19:30',prepaid:false});
     }
     // Honor specific date requests for prepaid activities
     const reqDates=parseRequestedDates(sr.specialReq,bk);
@@ -2422,7 +2425,7 @@ function svAutoAssignActivities(bkId){
   if(sr?.offsiteChoice==='gitano'&&sr.offsiteNight&&bk.startDate){
     const gitanoDate=fmtISO(new Date(pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS));
     const alreadyHasGitano=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13');
-    if(!alreadyHasGitano){bk.retreatActivities.push({aoId:'ao13',date:gitanoDate,time:'19:30',prepaid:false});added++;}
+    if(!alreadyHasGitano&&gitanoDate!==bk.startDate){bk.retreatActivities.push({aoId:'ao13',date:gitanoDate,time:'19:30',prepaid:false});added++;}
   }
   // Honor specific date requests for prepaid activities
   const reqDates=parseRequestedDates(sr?.specialReq,bk);
