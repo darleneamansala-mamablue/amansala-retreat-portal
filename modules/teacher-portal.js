@@ -1030,6 +1030,7 @@ function tsPopulateTimeSlots(selId,startTime,endTime){
 function tsPopulateNights(bk){
   const sel=document.getElementById('tsOffsiteNight');if(!sel)return;
   sel.innerHTML='<option value="">— Select a night —</option>';
+  sel.disabled=false;
   if(!bk||!bk.startDate||!bk.endDate)return;
   const start=pd(bk.startDate);
   const nights=Math.max(1,Math.round((pd(bk.endDate)-start)/DAY_MS));
@@ -1045,6 +1046,13 @@ function tsPopulateNights(bk){
     opt.value=String(i+1);
     opt.textContent=label;
     sel.appendChild(opt);
+  }
+  // A 1-night retreat has no night besides the arrival night — there's
+  // nothing to offer, so say so instead of leaving a mysteriously empty
+  // dropdown that's also not required to submit.
+  if(nights<=1){
+    sel.innerHTML='<option value="">— Not applicable (1-night retreat) —</option>';
+    sel.disabled=true;
   }
 }
 
@@ -1911,8 +1919,12 @@ function tsSubmitSchedule(){
   if(!_ts.morningShala1){tsFlagRequired('tsMorningShalaGrid','Please select at least a 1st choice shala.');return;}
   if(_ts.hasSunrise&&!_ts.sunriseStart){tsFlagRequired('tsSunriseStart','Please select a start time for your sunrise activity.');return;}
   if(_ts.hasSunrise&&!_ts.sunriseLocation){tsFlagRequired('tsSunriseLocation','Please select a location for your sunrise activity.');return;}
-  if(!_ts.offsiteNight){tsFlagRequired('tsOffsiteNight','Please select which night your group will dine offsite — this is required.');return;}
-  if(!_ts.offsiteChoice){tsFlagRequired('tsOffsiteChoiceWrap','Please select your offsite dinner preference (Onsite, Gitano, or Undecided).');return;}
+  // A 1-night retreat has no night that isn't the arrival night, so there's
+  // no valid offsite-dinner night to offer — don't require the impossible.
+  if(getNights(bk)>1){
+    if(!_ts.offsiteNight){tsFlagRequired('tsOffsiteNight','Please select which night your group will dine offsite — this is required.');return;}
+    if(!_ts.offsiteChoice){tsFlagRequired('tsOffsiteChoiceWrap','Please select your offsite dinner preference (Onsite, Gitano, or Undecided).');return;}
+  }
   // Fold the day-by-day overrides into bk.scheduleTimeOverrides — the same
   // array admin's own per-day edit modal reads/writes — replacing whatever
   // was there before for this retreat's morn/aft days. Only keep an entry
