@@ -707,20 +707,20 @@ function menuPrintDay(dateStr){
     @page{size:portrait;margin:0.6in}
     *{box-sizing:border-box}
     body{font-family:'Jost',sans-serif;margin:0;padding:56px 64px;color:#2d2520;background:#fdfbf7}
-    .menu-poster-brand{text-align:center;font-family:'Cormorant Garamond',serif;font-size:22px;letter-spacing:4px;text-transform:uppercase;color:#8a7e74;margin-bottom:4px}
-    .menu-poster-day{text-align:center;font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:600;color:#2d2520;margin:0 0 2px}
-    .menu-poster-date{text-align:center;font-size:15px;letter-spacing:1px;color:#8a7e74;text-transform:uppercase;margin-bottom:44px}
+    .menu-poster-brand{text-align:center;font-family:'Cormorant Garamond',serif;font-size:25px;letter-spacing:4px;text-transform:uppercase;color:#8a7e74;margin-bottom:4px}
+    .menu-poster-day{text-align:center;font-family:'Cormorant Garamond',serif;font-size:58px;font-weight:600;color:#2d2520;margin:0 0 2px}
+    .menu-poster-date{text-align:center;font-size:17px;letter-spacing:1px;color:#8a7e74;text-transform:uppercase;margin-bottom:44px}
     .menu-poster-divider{width:60px;height:2px;background:#c9a876;margin:0 auto 44px}
     .menu-poster-section{margin-bottom:36px}
-    .menu-poster-label{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:#8a5a2e;letter-spacing:.5px;border-bottom:1.5px solid #e8dfd4;padding-bottom:8px;margin-bottom:14px;text-align:center}
+    .menu-poster-label{font-family:'Cormorant Garamond',serif;font-size:27px;font-weight:600;color:#8a5a2e;letter-spacing:.5px;border-bottom:1.5px solid #e8dfd4;padding-bottom:8px;margin-bottom:14px;text-align:center}
     .menu-poster-items{display:flex;flex-direction:column;gap:4px}
-    .menu-poster-item{font-size:18px;color:#3a332c;text-align:center;margin-top:6px}
-    .menu-poster-item.starred{font-weight:700;color:#2d2520;font-size:20px}
-    .menu-poster-item-desc{font-size:12.5px;color:#9a8f83;text-align:center;font-style:italic;line-height:1.55;max-width:480px;margin:2px auto 0}
-    .menu-poster-dessert{margin-top:10px;font-size:15px;font-style:italic;color:#8a7e74;text-align:center}
-    .menu-poster-footer{text-align:center;margin-top:50px;font-size:12px;color:#b8ab9e;letter-spacing:.4px;line-height:1.7}
+    .menu-poster-item{font-size:21px;color:#3a332c;text-align:center;margin-top:6px}
+    .menu-poster-item.starred{font-weight:700;color:#2d2520;font-size:23px}
+    .menu-poster-item-desc{font-size:14.5px;color:#9a8f83;text-align:center;font-style:italic;line-height:1.55;max-width:520px;margin:2px auto 0}
+    .menu-poster-dessert{margin-top:10px;font-size:17px;font-style:italic;color:#8a7e74;text-align:center}
+    .menu-poster-footer{text-align:center;margin-top:50px;font-size:13px;color:#b8ab9e;letter-spacing:.4px;line-height:1.7}
     .menu-poster-page2{page-break-before:always;padding-top:40px}
-    @media print{body{padding:20px 40px}.menu-poster-page2{padding-top:20px}}
+    @media print{body{padding:130px 40px 20px}.menu-poster-page2{padding-top:100px}}
   </style></head>
   <body>
     <div class="menu-poster-brand">Amansala</div>

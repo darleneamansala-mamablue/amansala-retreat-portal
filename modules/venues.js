@@ -536,6 +536,7 @@ function openVenAdd(){
   document.getElementById('vm-retreat').value='';
   document.getElementById('vm-email').value='';
   document.getElementById('vm-phone').value='';
+  const _tpBanner=document.getElementById('tpMatchBanner');if(_tpBanner){_tpBanner.style.display='none';_tpBanner.innerHTML='';}
   const defStart=`${venYear}-01-01`,defEnd=`${venYear}-01-07`;
   document.getElementById('vm-start').value=defStart;
   document.getElementById('vm-end').value=defEnd;
@@ -743,7 +744,7 @@ function openVenEdit(id){const bk=AppData.bookings.find(b=>b.id===id);if(!bk)ret
   document.getElementById('vm-leader').value=bk.leaderName||'';document.getElementById('vm-retreat').value=bk.retreatName||'';document.getElementById('vm-email').value=bk.leaderEmail||'';document.getElementById('vm-phone').value=bk.leaderPhone||'';document.getElementById('vm-start').value=bk.startDate||'';document.getElementById('vm-end').value=bk.endDate||'';document.getElementById('vm-pax').value=bk.pax||'';document.getElementById('vm-status').value=bk.status||'requested';document.getElementById('vm-notes').value=bk.notes||'';document.getElementById('vm-doc-link').value=bk.docLink||'';const mpEl=document.getElementById('vm-mealplan');if(mpEl)mpEl.value=bk.mealPlan||'standard';
   venUpdateRowOptions(bk.startDate,bk.endDate,bk.row,id);
   ['vm-start','vm-end'].forEach(fid=>{const el=document.getElementById(fid);if(!el)return;el.onchange=()=>{const s=document.getElementById('vm-start').value,e=document.getElementById('vm-end').value;if(s&&e)venUpdateRowOptions(s,e,document.getElementById('vm-row').value,id);};});
-  renderVmPaymentWidget(bk);renderVmHistory(id);openModal('venModal');}
+  renderVmPaymentWidget(bk);renderVmHistory(id);openModal('venModal');if(typeof tpCheckMatch==='function')tpCheckMatch();}
 
 function renderVmHistory(bkId){
   const wrap=document.getElementById('vm-history');

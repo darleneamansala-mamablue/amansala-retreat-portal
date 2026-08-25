@@ -881,6 +881,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     <span class="tab-label">Teachers</span>
   </button>
+  <button class="tab-btn" onclick="switchTab('teacherprofiles',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>
+    <span class="tab-label">Teacher Profiles</span>
+  </button>
   <button class="tab-btn" onclick="switchTab('builder',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
     <span class="tab-label">Builder</span>
@@ -1938,6 +1942,45 @@
 
 </div>
 
+<!-- ============================= TEACHER PROFILES ============================= -->
+<div class="tab-panel" id="tab-teacherprofiles" style="flex-direction:column">
+  <div style="flex:1;overflow-y:auto;padding:28px 36px;background:#f5f1eb">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+      <div>
+        <h2 style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:#2d2520;margin:0">Teacher Profiles</h2>
+        <p style="font-size:12.5px;color:#8a7e74;margin:4px 0 0">Notes that follow a teacher or group across every retreat they bring — dietary, preferences, activities they love</p>
+      </div>
+      <input type="text" id="tpSearch" placeholder="Search profiles…" oninput="tpRender()" style="padding:8px 14px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;min-width:220px">
+      <button onclick="tpOpenEdit(null)" style="margin-left:auto;padding:9px 18px;background:#2d6a6a;color:#fff;border:none;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">+ New Profile</button>
+    </div>
+    <div id="tpList"></div>
+  </div>
+</div>
+
+<!-- TEACHER PROFILE EDIT MODAL -->
+<div class="modal-overlay" id="tpModal">
+  <div class="modal" style="width:560px">
+    <div class="modal-hdr">
+      <div><h2 id="tpModalTitle">New Profile</h2></div>
+      <button class="modal-x" onclick="closeModal('tpModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="tp-id">
+      <div class="frow"><div class="fg"><label>Name / Group</label><input type="text" id="tp-name" placeholder="e.g. Awaken Retreats"></div><div class="fg"><label>Email <span style="font-weight:400;color:var(--muted)">(optional, helps auto-match)</span></label><input type="email" id="tp-email" placeholder="leader@example.com"></div></div>
+      <div class="fg" style="margin-top:12px"><label>Also known as <span style="font-weight:400;color:var(--muted)">(comma-separated — other names this teacher/group books under)</span></label><input type="text" id="tp-aliases" placeholder="e.g. Megan Aaron, Flow Studio"></div>
+      <div class="fg" style="margin-top:12px"><label>Notes</label><textarea id="tp-notes" placeholder="Dietary notes, preferences, personality, anything worth remembering next time they book..." style="width:100%;height:120px;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;line-height:1.6;background:var(--sand);outline:none;resize:vertical;box-sizing:border-box"></textarea></div>
+      <div class="fg" style="margin-top:12px">
+        <label>Recommended Activities</label>
+        <div id="tpActivityGrid" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:6px"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="l"><button class="btn btn-danger btn-sm" id="tpDeleteBtn" style="display:none" onclick="tpDelete()">🗑 Delete Profile</button></div>
+      <div class="r"><button class="btn btn-secondary" onclick="closeModal('tpModal')">Cancel</button><button class="btn btn-primary" onclick="tpSave()">Save Profile</button></div>
+    </div>
+  </div>
+</div>
+
 <!-- ============================= TAB 4: RETREAT BUILDER ============================= -->
 <div class="tab-panel" id="tab-builder">
 
@@ -2066,7 +2109,8 @@
   <div class="modal">
     <div class="modal-hdr"><div><h2 id="venModalTitle">Add Booking</h2></div><button class="modal-x" onclick="closeModal('venModal')">&times;</button></div>
     <div class="modal-body">
-      <div class="frow"><div class="fg"><label>Leader / Group</label><input type="text" id="vm-leader" placeholder="e.g. Megan Aaron"></div><div class="fg"><label>Retreat Name</label><input type="text" id="vm-retreat" placeholder="e.g. Flow Studio"></div></div>
+      <div class="frow"><div class="fg"><label>Leader / Group</label><input type="text" id="vm-leader" placeholder="e.g. Megan Aaron" oninput="tpCheckMatch()"></div><div class="fg"><label>Retreat Name</label><input type="text" id="vm-retreat" placeholder="e.g. Flow Studio" oninput="tpCheckMatch()"></div></div>
+      <div id="tpMatchBanner" style="display:none"></div>
       <div class="frow"><div class="fg"><label>Leader Email</label><input type="email" id="vm-email" placeholder="leader@example.com"></div><div class="fg"><label>Leader Phone</label><input type="text" id="vm-phone" placeholder="+1 555 000 0000"></div></div>
       <div class="frow"><div class="fg"><label>Arrival</label><input type="date" id="vm-start" onchange="autoSetEnd('vm-start','vm-end')"></div><div class="fg"><label>Departure</label><input type="date" id="vm-end"></div></div>
       <div id="venRoomCalBanner" style="display:none;cursor:pointer;align-items:center;justify-content:space-between;gap:10px;padding:11px 16px;margin:2px 0 10px;border-radius:10px;background:#f0f7f7;border:1.5px solid #bfe0e0" onclick="venOpenRoomCalendar()" onmouseover="this.style.background='#e0efef'" onmouseout="this.style.background='#f0f7f7'">
@@ -4510,6 +4554,7 @@ function switchTab(id,btn){
   if(id==='menu')      menuBuild();
   if(id==='transport') syncTransportFromSupabase().then(()=>trInit());
   if(id==='housekeeping') hkInit();
+  if(id==='teacherprofiles') tpInit();
 }
 
 </script>
@@ -4572,6 +4617,7 @@ function switchTab(id,btn){
 </script>
 <script src="modules/driver-portal.js"></script>
 <script src="modules/housekeeping.js"></script>
+<script src="modules/teacher-profiles.js"></script>
 <script src="modules/cloudbeds-extra.js"></script>
 <script>
 // ===== CLOUDBEDS INTEGRATION (functions) — moved to modules/cloudbeds-extra.js =====
