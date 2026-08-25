@@ -541,7 +541,7 @@ function menuPrint(){
   const title=fromVal===toVal?`Menu — ${fromFmt}`:`Menu — ${fromFmt} to ${toFmt}`;
   const w=window.open('','_blank');
   w.document.write(`<!DOCTYPE html><html><head>
-  <link rel="icon" type="image/png" href="/favicon.png"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:16px;font-size:11px;}h1{font-size:15px;margin:0 0 10px;text-align:center;}@media print{@page{size:landscape}}</style></head><body><h1>${title}</h1>${gridHtml}</body></html>`);
+  <link rel="icon" type="image/png" href="/favicon.png"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:16px;font-size:11px;}h1{font-size:15px;margin:0 0 10px;text-align:center;}@media print{@page{size:landscape}body{padding-top:60px}}</style></head><body><h1>${title}</h1>${gridHtml}</body></html>`);
   w.document.close();
   setTimeout(()=>w.print(),400);
 }
@@ -716,11 +716,11 @@ function menuPrintDay(dateStr){
     .menu-poster-items{display:flex;flex-direction:column;gap:4px}
     .menu-poster-item{font-size:21px;color:#3a332c;text-align:center;margin-top:6px}
     .menu-poster-item.starred{font-weight:700;color:#2d2520;font-size:23px}
-    .menu-poster-item-desc{font-size:14.5px;color:#9a8f83;text-align:center;font-style:italic;line-height:1.55;max-width:520px;margin:2px auto 0}
+    .menu-poster-item-desc{font-size:18px;color:#9a8f83;text-align:center;font-style:italic;line-height:1.55;max-width:560px;margin:2px auto 0}
     .menu-poster-dessert{margin-top:10px;font-size:17px;font-style:italic;color:#8a7e74;text-align:center}
     .menu-poster-footer{text-align:center;margin-top:50px;font-size:13px;color:#b8ab9e;letter-spacing:.4px;line-height:1.7}
     .menu-poster-page2{page-break-before:always;padding-top:40px}
-    @media print{body{padding:130px 40px 20px}.menu-poster-page2{padding-top:100px}}
+    @media print{body{padding:170px 40px 20px}.menu-poster-page2{padding-top:140px}}
   </style></head>
   <body>
     <div class="menu-poster-brand">Amansala</div>
