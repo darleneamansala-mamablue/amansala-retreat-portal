@@ -876,9 +876,19 @@ const TS_SPECIAL_TIME_SLOTS=(()=>{
   return slots;
 })();
 
-let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',hasSunrise:false,sunriseStart:'',sunriseDur:45,sunriseLocation:''};
+let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseStart:'',sunriseDur:45,sunriseLocation:''};
 let _tsBkId=null;
 let _tsPrepaidMode='choice'; // 'choice' | 'manual' — for the pre-paid activities assignment card
+
+// Lets a teacher rename a generic class ("Morning Class") to whatever it
+// actually is (Pilates, Dance, a named workshop) and credit a co-teacher —
+// used everywhere a class label renders: the teacher's own itinerary, the
+// printed schedule, the admin schedule viewer/list, and the master calendar.
+function tsEffClassLabel(sr,period,fallback){
+  const label=(sr?.[period+'Label']||'').trim();
+  const co=(sr?.[period+'CoTeacher']||'').trim();
+  return (label||fallback)+(co?' — with '+co:'');
+}
 
 function tsRenderSetupDays(){
   const wrap=document.getElementById('tsSetupDaysWrap');
@@ -1130,7 +1140,7 @@ function tsInit(bkId){
   tsRenderPrepaidActivities(bk);
   _ts=bk.scheduleRequest
     ?{..._ts,...bk.scheduleRequest}
-    :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',hasSunrise:false,sunriseStart:'',sunriseDur:45,sunriseLocation:''};
+    :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseStart:'',sunriseDur:45,sunriseLocation:''};
   // Migrate old field name: afternoonStart → afternoonSlot
   if(!_ts.afternoonSlot&&_ts.afternoonStart)_ts.afternoonSlot=_ts.afternoonStart;
   tsRenderBrowseGrid();
@@ -1153,6 +1163,8 @@ function tsInit(bkId){
   const arrDur=document.getElementById('tsArrivalDur');if(arrDur)arrDur.value=_ts.arrivalDurRequest?'custom':String(_ts.arrivalDur||60);
   const arrDurC=document.getElementById('tsArrivalDurCustom');if(arrDurC){arrDurC.value=_ts.arrivalDurRequest||'';arrDurC.style.display=_ts.arrivalDurRequest?'block':'none';}
   const arrNotes=document.getElementById('tsArrivalNotes');if(arrNotes)arrNotes.value=_ts.arrivalNotes||'';
+  const arrLbl=document.getElementById('tsArrivalLabel');if(arrLbl)arrLbl.value=_ts.arrivalLabel||'';
+  const arrCoT=document.getElementById('tsArrivalCoTeacher');if(arrCoT)arrCoT.value=_ts.arrivalCoTeacher||'';
   if(_ts.hasArrivalClass)tsRenderShalaGrid('arrival');
   // Restore departure class
   const depCb=document.getElementById('tsHasDepartureClass');if(depCb)depCb.checked=!!_ts.hasDepartureClass;
@@ -1162,6 +1174,8 @@ function tsInit(bkId){
   const depDur=document.getElementById('tsDepartureDur');if(depDur)depDur.value=_ts.departureDurRequest?'custom':String(_ts.departureDur||60);
   const depDurC=document.getElementById('tsDepartureDurCustom');if(depDurC){depDurC.value=_ts.departureDurRequest||'';depDurC.style.display=_ts.departureDurRequest?'block':'none';}
   const depNotes=document.getElementById('tsDepartureNotes');if(depNotes)depNotes.value=_ts.departureNotes||'';
+  const depLbl=document.getElementById('tsDepartureLabel');if(depLbl)depLbl.value=_ts.departureLabel||'';
+  const depCoT=document.getElementById('tsDepartureCoTeacher');if(depCoT)depCoT.value=_ts.departureCoTeacher||'';
   if(_ts.hasDepartureClass)tsRenderShalaGrid('departure');
   // Restore form values
   const hasCb=document.getElementById('tsHasAfternoon');if(hasCb)hasCb.checked=!!_ts.hasAfternoon;
@@ -1171,6 +1185,8 @@ function tsInit(bkId){
   const afDur=document.getElementById('tsAfternoonDur');if(afDur)afDur.value=_ts.afternoonDurRequest?'custom':String(_ts.afternoonDur||60);
   const afDurC=document.getElementById('tsAfternoonDurCustom');if(afDurC){afDurC.value=_ts.afternoonDurRequest||'';afDurC.style.display=_ts.afternoonDurRequest?'block':'none';}
   const afNotes=document.getElementById('tsAfternoonNotes');if(afNotes)afNotes.value=_ts.afternoonNotes||'';
+  const afLbl=document.getElementById('tsAfternoonLabel');if(afLbl)afLbl.value=_ts.afternoonLabel||'';
+  const afCoT=document.getElementById('tsAfternoonCoTeacher');if(afCoT)afCoT.value=_ts.afternoonCoTeacher||'';
   tsBuildAfternoonFlags();
   // Restore workshop
   const wsCb=document.getElementById('tsHasWorkshop');if(wsCb)wsCb.checked=!!_ts.hasWorkshop;
@@ -1438,6 +1454,16 @@ function tsBuildMorningFields(){
         <input type="text" id="tsMorningDurCustom" placeholder="e.g. 2 hours, for a workshop" value="${_ts.morningDurRequest||''}" style="display:${_ts.morningDurRequest?'block':'none'};margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.morningDurRequest=this.value">
       </div>
     </div>
+    <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <div class="ts-section-lbl">Class Type <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — e.g. Pilates, Dance, Workshop on Love)</span></div>
+        <input type="text" id="tsMorningLabel" value="${_ts.morningLabel||''}" placeholder="Leave blank for the default" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.morningLabel=this.value">
+      </div>
+      <div style="flex:1;min-width:180px">
+        <div class="ts-section-lbl">Co-Teacher <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional)</span></div>
+        <input type="text" id="tsMorningCoTeacher" value="${_ts.morningCoTeacher||''}" placeholder="e.g. Jane Smith" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.morningCoTeacher=this.value">
+      </div>
+    </div>
     <div style="margin-top:16px">
       <div class="ts-section-lbl">Why doesn't this fit the standard windows? <span style="font-size:11px;font-weight:400;color:var(--muted)">(required — helps Amansala plan around it)</span></div>
       <textarea id="tsMorningSpecialReason" placeholder="e.g. My group needs an earlier sunrise class at 6:00 AM..." style="width:100%;height:70px;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;line-height:1.6;background:var(--sand);outline:none;resize:vertical;box-sizing:border-box;margin-top:6px" onchange="_ts.morningSpecialReason=this.value">${_ts.morningSpecialReason||''}</textarea>
@@ -1465,6 +1491,16 @@ function tsBuildMorningFields(){
         <option value="custom"${![45,60,75,90].includes(dur)?' selected':''}>Other (request longer)</option>
       </select>
       <input type="text" id="tsMorningDurCustom" placeholder="e.g. 2 hours, for a workshop" value="${_ts.morningDurRequest||''}" style="display:${_ts.morningDurRequest?'block':'none'};margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.morningDurRequest=this.value">
+    </div>
+  </div>
+  <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:180px">
+      <div class="ts-section-lbl">Class Type <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — e.g. Pilates, Dance, Workshop on Love)</span></div>
+      <input type="text" id="tsMorningLabel" value="${_ts.morningLabel||''}" placeholder="Leave blank for the default" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.morningLabel=this.value">
+    </div>
+    <div style="flex:1;min-width:180px">
+      <div class="ts-section-lbl">Co-Teacher <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional)</span></div>
+      <input type="text" id="tsMorningCoTeacher" value="${_ts.morningCoTeacher||''}" placeholder="e.g. Jane Smith" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.morningCoTeacher=this.value">
     </div>
   </div>
   <div style="margin-top:16px">
@@ -1737,18 +1773,26 @@ function tsSubmitSchedule(){
   const arrDurEl=document.getElementById('tsArrivalDur');if(arrDurEl&&arrDurEl.value!=='custom')_ts.arrivalDur=parseInt(arrDurEl.value);
   const arrDurCEl=document.getElementById('tsArrivalDurCustom');if(arrDurCEl)_ts.arrivalDurRequest=arrDurEl&&arrDurEl.value==='custom'?arrDurCEl.value.trim():'';
   const arrNotesEl=document.getElementById('tsArrivalNotes');if(arrNotesEl)_ts.arrivalNotes=arrNotesEl.value.trim();
+  const arrLblEl=document.getElementById('tsArrivalLabel');if(arrLblEl)_ts.arrivalLabel=arrLblEl.value.trim();
+  const arrCoTEl=document.getElementById('tsArrivalCoTeacher');if(arrCoTEl)_ts.arrivalCoTeacher=arrCoTEl.value.trim();
   const depCbEl=document.getElementById('tsHasDepartureClass');if(depCbEl)_ts.hasDepartureClass=depCbEl.checked;
   const depSlotEl=document.getElementById('tsDepartureSlot');if(depSlotEl)_ts.departureSlot=depSlotEl.value;
   const depDurEl=document.getElementById('tsDepartureDur');if(depDurEl&&depDurEl.value!=='custom')_ts.departureDur=parseInt(depDurEl.value);
   const depDurCEl=document.getElementById('tsDepartureDurCustom');if(depDurCEl)_ts.departureDurRequest=depDurEl&&depDurEl.value==='custom'?depDurCEl.value.trim():'';
   const depNotesEl=document.getElementById('tsDepartureNotes');if(depNotesEl)_ts.departureNotes=depNotesEl.value.trim();
+  const depLblEl=document.getElementById('tsDepartureLabel');if(depLblEl)_ts.departureLabel=depLblEl.value.trim();
+  const depCoTEl=document.getElementById('tsDepartureCoTeacher');if(depCoTEl)_ts.departureCoTeacher=depCoTEl.value.trim();
   const mStartEl=document.getElementById('tsMorningStart');if(mStartEl)_ts.morningStart=mStartEl.value;
   const mDurEl=document.getElementById('tsMorningDur');if(mDurEl&&mDurEl.value!=='custom')_ts.morningDur=parseInt(mDurEl.value);
   const mDurCEl=document.getElementById('tsMorningDurCustom');if(mDurCEl)_ts.morningDurRequest=mDurEl&&mDurEl.value==='custom'?mDurCEl.value.trim():'';
+  const mLblEl=document.getElementById('tsMorningLabel');if(mLblEl)_ts.morningLabel=mLblEl.value.trim();
+  const mCoTEl=document.getElementById('tsMorningCoTeacher');if(mCoTEl)_ts.morningCoTeacher=mCoTEl.value.trim();
   const afSlotEl=document.getElementById('tsAfternoonSlot');if(afSlotEl)_ts.afternoonSlot=afSlotEl.value;
   const afDurEl=document.getElementById('tsAfternoonDur');if(afDurEl&&afDurEl.value!=='custom')_ts.afternoonDur=parseInt(afDurEl.value);
   const afDurCEl=document.getElementById('tsAfternoonDurCustom');if(afDurCEl)_ts.afternoonDurRequest=afDurEl&&afDurEl.value==='custom'?afDurCEl.value.trim():'';
   const afNotesEl=document.getElementById('tsAfternoonNotes');if(afNotesEl)_ts.afternoonNotes=afNotesEl.value.trim();
+  const afLblEl=document.getElementById('tsAfternoonLabel');if(afLblEl)_ts.afternoonLabel=afLblEl.value.trim();
+  const afCoTEl=document.getElementById('tsAfternoonCoTeacher');if(afCoTEl)_ts.afternoonCoTeacher=afCoTEl.value.trim();
   const mNotesEl=document.getElementById('tsMorningNotes');if(mNotesEl)_ts.morningNotes=mNotesEl.value.trim();
   const mSpecialEl=document.getElementById('tsMorningSpecialReason');if(mSpecialEl)_ts.morningSpecialReason=mSpecialEl.value.trim();
   const hasCb=document.getElementById('tsHasAfternoon');if(hasCb)_ts.hasAfternoon=hasCb.checked;
@@ -1845,7 +1889,7 @@ function tsRenderCalSection(bk){
       rows.push({time:'4:00 PM',desc:'Welcome Snack',shala:'',cat:'meal',sk:'16:00'});
       if(sr.hasArrivalClass&&sr.arrivalSlot){
         const arShala=snm(sr.arrivalShala1||sr.morningShala1);
-        rows.push({time:fmtT(sr.arrivalSlot)+' – '+fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60)),desc:'Opening Yoga &amp; Orientation',shala:arShala,cat:'yoga',sk:sr.arrivalSlot});
+        rows.push({time:fmtT(sr.arrivalSlot)+' – '+fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60)),desc:tsEffClassLabel(sr,'arrival','Opening Yoga &amp; Orientation'),shala:arShala,cat:'yoga',sk:sr.arrivalSlot});
       }
       rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cat:'meal',sk:'19:30'});
     } else if(i===nights){
@@ -1853,9 +1897,9 @@ function tsRenderCalSection(bk){
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea',shala:'',cat:'meal',sk:'07:00'});
       if(sr.hasDepartureClass&&sr.departureSlot){
         const depShala=snm(sr.departureShala1||sr.morningShala1);
-        rows.push({time:fmtT(sr.departureSlot)+' – '+fmtT(addMin(sr.departureSlot,sr.departureDur||60)),desc:'Departure Morning Class',shala:depShala,cat:'yoga',sk:sr.departureSlot});
+        rows.push({time:fmtT(sr.departureSlot)+' – '+fmtT(addMin(sr.departureSlot,sr.departureDur||60)),desc:tsEffClassLabel(sr,'departure','Departure Morning Class'),shala:depShala,cat:'yoga',sk:sr.departureSlot});
       } else {
-        rows.push({time:fmtT(sr.morningStart)+' – '+fmtT(addMin(sr.morningStart,sr.morningDur||60)),desc:'Morning Class',shala:mShala,cat:'yoga',sk:sr.morningStart||'08:00'});
+        rows.push({time:fmtT(sr.morningStart)+' – '+fmtT(addMin(sr.morningStart,sr.morningDur||60)),desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cat:'yoga',sk:sr.morningStart||'08:00'});
       }
       rows.push({time:'9:30 AM',desc:'Brunch &amp; Departures',shala:'',cat:'meal',sk:'09:30'});
     } else {
@@ -1878,13 +1922,13 @@ function tsRenderCalSection(bk){
       const dayMornDur=_mornOv?(_mornOv.dur||_effMornDur):_effMornDur;
       const dayAfSlot=_aftOv?_aftOv.start:_effAfSlot;
       const dayAfDur=_aftOv?(_aftOv.dur||_effAfDur):_effAfDur;
-      rows.push({time:fmtT(dayMornStart)+' – '+fmtT(addMin(dayMornStart,dayMornDur)),desc:'Morning Class',shala:mShala,cat:'yoga',sk:dayMornStart||'08:00'});
+      rows.push({time:fmtT(dayMornStart)+' – '+fmtT(addMin(dayMornStart,dayMornDur)),desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cat:'yoga',sk:dayMornStart||'08:00'});
       const _bMStart=dayMornStart||'';const _bMDur=dayMornDur;const _brunchT=_bMStart?addMin(_bMStart,_bMDur+15):'09:45';
       rows.push({time:fmtT(_brunchT),desc:_brunchT<'09:45'?'Breakfast':'Brunch',shala:'',cat:'meal',sk:_brunchT});
       rows.push({time:'3:00 PM',desc:'Snack',shala:'',cat:'meal',sk:'15:00'});
       const ws=(sr.workshops||[]).find(w=>w.enabled&&w.date===dateStr);
       if(ws)rows.push({time:fmtT(ws.start)+' – '+fmtT(addMin(ws.start,ws.dur||90)),desc:'Mid-Afternoon Class'+(ws.notes?' — '+ws.notes:''),shala:snm(ws.shala1),cat:'yoga',sk:ws.start||'16:00'});
-      if(sr.hasAfternoon&&dayAfSlot)rows.push({time:fmtT(dayAfSlot)+' – '+fmtT(addMin(dayAfSlot,dayAfDur)),desc:'Afternoon Class',shala:aShala,cat:'yoga',sk:dayAfSlot});
+      if(sr.hasAfternoon&&dayAfSlot)rows.push({time:fmtT(dayAfSlot)+' – '+fmtT(addMin(dayAfSlot,dayAfDur)),desc:tsEffClassLabel(sr,'afternoon','Afternoon Class'),shala:aShala,cat:'yoga',sk:dayAfSlot});
       const isOffsite=sr.offsiteNight&&(()=>{const ofNight=pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS;return Math.abs(d.getTime()-ofNight)<DAY_MS/2;})();
       const hasGitanoToday=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
       if(!hasGitanoToday)rows.push({time:'7:30 PM',desc:isOffsite?'Dinner (Off-site)':'Dinner',shala:'',cat:'meal',sk:'19:30'});
@@ -2020,20 +2064,20 @@ function openScheduleViewer(bkId){
   const fmtT=t=>t?tsFmt(t):'—';
   const durReq=txt=>txt?`<br><span style="color:#b45309;font-weight:700">⚠️ Requested longer: ${txt} — adjust the schedule to match</span>`:'';
   let html=`<div style="font-size:13px;line-height:1.8;color:var(--dark)">`;
-  if(sr.hasArrivalClass&&sr.arrivalSlot){html+=`<div style="margin-bottom:14px"><b>Arrival Evening Class</b><br>
+  if(sr.hasArrivalClass&&sr.arrivalSlot){html+=`<div style="margin-bottom:14px"><b>${tsEffClassLabel(sr,'arrival','Arrival Evening Class')}</b><br>
     Start: ${fmtT(sr.arrivalSlot)} · Duration: ${dur(sr.arrivalDur)}<br>
     Shala: ${shalaName(sr.arrivalShala1)}${sr.arrivalNotes?'<br><span style="color:var(--muted)">'+sr.arrivalNotes+'</span>':''}${durReq(sr.arrivalDurRequest)}
   </div>`;}
-  html+=`<div style="margin-bottom:14px"><b>Daily Morning Class</b><br>
+  html+=`<div style="margin-bottom:14px"><b>Daily ${tsEffClassLabel(sr,'morning','Morning Class')}</b><br>
       Window: ${sr.window==='special'?'⚠️ Special Request (outside standard windows)':(win?win.label:'—')}<br>
       Start: ${fmtT(sr.morningStart)} · Duration: ${dur(sr.morningDur)}<br>
       Shala: ${shalaName(sr.morningShala1)}${durReq(sr.morningDurRequest)}${sr.window==='special'&&sr.morningSpecialReason?'<br><span style="color:#b45309;font-weight:700">Reason: '+sr.morningSpecialReason+'</span>':''}
     </div>`;
-  if(sr.hasAfternoon){html+=`<div style="margin-bottom:14px"><b>Daily Afternoon Class</b><br>
+  if(sr.hasAfternoon){html+=`<div style="margin-bottom:14px"><b>Daily ${tsEffClassLabel(sr,'afternoon','Afternoon Class')}</b><br>
     Start: ${fmtT(sr.afternoonSlot||sr.afternoonStart)} · Duration: ${dur(sr.afternoonDur)}<br>
     Shala: ${shalaName(sr.afternoonShala1)}${durReq(sr.afternoonDurRequest)}
   </div>`;}
-  if(sr.hasDepartureClass&&sr.departureSlot){html+=`<div style="margin-bottom:14px"><b>Departure Morning Class</b><br>
+  if(sr.hasDepartureClass&&sr.departureSlot){html+=`<div style="margin-bottom:14px"><b>${tsEffClassLabel(sr,'departure','Departure Morning Class')}</b><br>
     Start: ${fmtT(sr.departureSlot)} · Duration: ${dur(sr.departureDur)}<br>
     Shala: ${shalaName(sr.departureShala1)}${sr.departureNotes?'<br><span style="color:var(--muted)">'+sr.departureNotes+'</span>':''}${durReq(sr.departureDurRequest)}
   </div>`;}
@@ -3399,14 +3443,14 @@ function openPrintSchedule(bkId){
       rows.push({time:'4:00 PM',desc:'Welcome Snack',shala:'',cls:'',sk:'16:00'});
       if(sr?.hasArrivalClass&&sr?.arrivalSlot){
         const end=fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60));
-        rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:'Opening Yoga | Orientation w Amansala',shala:mShala,cls:'shala',sk:sr.arrivalSlot});
+        rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Yoga | Orientation w Amansala'),shala:mShala,cls:'shala',sk:sr.arrivalSlot});
       }
       rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cls:'',sk:'19:30'});
     } else if(i===nights-1){
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea — Closing Comments',shala:'',cls:'',sk:'07:00'});
       if(sr?.morningStart){
         const end=fmtT(addMin(sr.morningStart,sr.morningDur||60));
-        rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:'Morning Class',shala:mShala,cls:'shala',sk:sr.morningStart});
+        rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cls:'shala',sk:sr.morningStart});
       }
       rows.push({time:'9:30 AM',desc:'Full Breakfast',shala:'',cls:'',sk:'09:30'});
       rows.push({time:'',desc:'Departures',shala:'',cls:'',sk:'99:99'});
@@ -3418,7 +3462,7 @@ function openPrintSchedule(bkId){
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea',shala:'',cls:'',sk:'07:00'});
       if(sr?.morningStart){
         const end=fmtT(addMin(sr.morningStart,sr.morningDur||60));
-        rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:'Morning Class',shala:mShala,cls:'shala',sk:sr.morningStart});
+        rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cls:'shala',sk:sr.morningStart});
       }
       const _pOv=sr?.adminOverride||{};const _pMStart=_pOv.morningStart||sr?.morningStart||'';const _pMDur=parseInt(_pOv.morningDur||sr?.morningDur||90);const _pBrunchT=_pMStart?addMin(_pMStart,_pMDur+15):'09:45';
       rows.push({time:fmtT(_pBrunchT),desc:_pBrunchT<'09:45'?'Breakfast':'Brunch',shala:'',cls:'',sk:_pBrunchT});
@@ -3433,7 +3477,7 @@ function openPrintSchedule(bkId){
       const _afSlotP=sr?.afternoonSlot||sr?.afternoonStart;
       if(sr?.hasAfternoon&&_afSlotP){
         const aEnd=fmtT(addMin(_afSlotP,sr.afternoonDur||60));
-        rows.push({time:fmtT(_afSlotP)+' – '+aEnd,desc:'Afternoon Class',shala:aShala,cls:'shala',sk:_afSlotP||'16:30'});
+        rows.push({time:fmtT(_afSlotP)+' – '+aEnd,desc:tsEffClassLabel(sr,'afternoon','Afternoon Class'),shala:aShala,cls:'shala',sk:_afSlotP||'16:30'});
       }
       const isOffsite=sr?.offsiteNight&&(()=>{
         const ofNight=pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS;
@@ -3639,17 +3683,17 @@ function buildRetreatSchedulesPanel(){
       if(i===0){
         if(sr.morningStart){
           const end=fmtT(addMin(sr.morningStart,sr.morningDur||60));
-          rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:'Opening Class',note:shalaName(sr.morningShala1),type:'class'});
+          rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),note:shalaName(sr.morningShala1),type:'class'});
         }
       } else if(i===nights-1){
         if(sr.morningStart){
           const end=fmtT(addMin(sr.morningStart,sr.morningDur||60));
-          rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:'Morning Class',note:shalaName(sr.morningShala1),type:'class'});
+          rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),note:shalaName(sr.morningShala1),type:'class'});
         }
       } else {
         if(sr.morningStart){
           const end=fmtT(addMin(sr.morningStart,sr.morningDur||60));
-          rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:'Morning Class',note:shalaName(sr.morningShala1),type:'class'});
+          rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),note:shalaName(sr.morningShala1),type:'class'});
         }
         const ws=(sr.workshops||[]).find(w=>w.enabled&&w.date===dateStr);
         if(ws){
@@ -3659,7 +3703,7 @@ function buildRetreatSchedulesPanel(){
         const _afSlotQ=sr.afternoonSlot||sr.afternoonStart;
         if(sr.hasAfternoon&&_afSlotQ){
           const aEnd=fmtT(addMin(_afSlotQ,sr.afternoonDur||60));
-          rows.push({time:fmtT(_afSlotQ)+' – '+aEnd,desc:'Afternoon Class',note:shalaName(sr.afternoonShala1),type:'class'});
+          rows.push({time:fmtT(_afSlotQ)+' – '+aEnd,desc:tsEffClassLabel(sr,'afternoon','Afternoon Class'),note:shalaName(sr.afternoonShala1),type:'class'});
         }
         (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&dateStr!==bk.startDate).forEach(a=>{
           const ao=ADD_ONS.find(x=>x.id===a.aoId);if(!ao)return;
@@ -3863,7 +3907,7 @@ function skedGetRetreatEvents(dateStr){
         if(arShala){
           const arDur=sr.arrivalDur||60;
           const arEnd=skedMinToTime(skedTimeToMin(sr.arrivalSlot)+arDur);
-          evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:'Arrival Evening Class',color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+          evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:tsEffClassLabel(sr,'arrival','Arrival Evening Class'),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
       } else {
         evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:'grande',date:dateStr,startTime:'20:30',endTime:'20:45',title,subtitle:'Opening Circle — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
@@ -3874,7 +3918,7 @@ function skedGetRetreatEvents(dateStr){
         const arrStart=arrOv?arrOv.start:effMornStart;
         const arrDur=arrOv?.dur||effMornDur;
         const mEnd=skedMinToTime(skedTimeToMin(arrStart)+arrDur);
-        evs.push({id:'ret_'+bk.id+'_morn_arr',resourceId:effMornShala,date:dateStr,startTime:arrStart,endTime:mEnd,title,subtitle:'Opening Class'+(arrOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_morn_arr',resourceId:effMornShala,date:dateStr,startTime:arrStart,endTime:mEnd,title,subtitle:tsEffClassLabel(sr,'arrival','Opening Class')+(arrOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
     // Departure day — show departure morning class if set, otherwise fall back to regular morning class
@@ -3884,14 +3928,14 @@ function skedGetRetreatEvents(dateStr){
         if(depShala){
           const depDurVal=sr.departureDur||60;
           const depEnd=skedMinToTime(skedTimeToMin(sr.departureSlot)+depDurVal);
-          evs.push({id:'ret_'+bk.id+'_dep',resourceId:depShala,date:dateStr,startTime:sr.departureSlot,endTime:depEnd,title,subtitle:'Departure Morning Class',color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+          evs.push({id:'ret_'+bk.id+'_dep',resourceId:depShala,date:dateStr,startTime:sr.departureSlot,endTime:depEnd,title,subtitle:tsEffClassLabel(sr,'departure','Departure Morning Class'),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
       } else if(effMornStart&&effMornShala){
         const depOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
         const depStart=depOv?depOv.start:effMornStart;
         const depDur=depOv?.dur||effMornDur;
         const mEnd=skedMinToTime(skedTimeToMin(depStart)+depDur);
-        evs.push({id:'ret_'+bk.id+'_morn_dep',resourceId:effMornShala,date:dateStr,startTime:depStart,endTime:mEnd,title,subtitle:'Morning Class'+(depOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_morn_dep',resourceId:effMornShala,date:dateStr,startTime:depStart,endTime:mEnd,title,subtitle:tsEffClassLabel(sr,'departure','Morning Class')+(depOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
     // Middle days — morning class + evening class
@@ -3915,12 +3959,12 @@ function skedGetRetreatEvents(dateStr){
       const dayAfDur=aftOv?(aftOv.dur||effAfDur):effAfDur;
       if(dayMornStart&&effMornShala&&!mornSkipped){
         const mEnd=skedMinToTime(skedTimeToMin(dayMornStart)+dayMornDur);
-        evs.push({id:'ret_'+bk.id+'_morn',resourceId:effMornShala,date:dateStr,startTime:dayMornStart,endTime:mEnd,title,subtitle:'Morning Class'+(mornOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_morn',resourceId:effMornShala,date:dateStr,startTime:dayMornStart,endTime:mEnd,title,subtitle:tsEffClassLabel(sr,'morning','Morning Class')+(mornOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
       const hasAf=sr.hasAfternoon||(ov.afternoonStart&&(ov.afternoonShala1||sr.afternoonShala1||sr.morningShala1));
       if(hasAf&&dayAfSlot&&effAfShala&&!aftSkipped){
         const aEnd=skedMinToTime(skedTimeToMin(dayAfSlot)+dayAfDur);
-        evs.push({id:'ret_'+bk.id+'_aft',resourceId:effAfShala,date:dateStr,startTime:dayAfSlot,endTime:aEnd,title,subtitle:'Evening Class'+(aftOv?' (time changed)':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_aft',resourceId:effAfShala,date:dateStr,startTime:dayAfSlot,endTime:aEnd,title,subtitle:tsEffClassLabel(sr,'afternoon','Evening Class')+(aftOv?' (time changed)':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
     // Workshops — only shala1
@@ -4225,7 +4269,7 @@ function openSkedEditClassModal(bkId,suffix,dateStr){
   const sr=bk.scheduleRequest||{};
 
   if(info.kind==='oneoff'){
-    document.getElementById('skedEditClassTitle').textContent=info.label;
+    document.getElementById('skedEditClassTitle').textContent=tsEffClassLabel(sr,suffix==='arr'?'arrival':'departure',info.label);
     const opts=[];
     for(let m=tsT2M(info.rangeStart);m<=tsT2M(info.rangeEnd);m+=15)opts.push(tsM2T(m));
     sel.innerHTML=opts.map(t=>`<option value="${t}">${tsFmt(t)}</option>`).join('');
@@ -4237,7 +4281,8 @@ function openSkedEditClassModal(bkId,suffix,dateStr){
   } else {
     const period=info.period;
     const isMorn=period==='morn';
-    document.getElementById('skedEditClassTitle').textContent=(isMorn?'Morning':'Evening')+' Class';
+    const labelKey=suffix==='morn_arr'?'arrival':suffix==='morn_dep'?'departure':isMorn?'morning':'afternoon';
+    document.getElementById('skedEditClassTitle').textContent=tsEffClassLabel(sr,labelKey,(isMorn?'Morning':'Evening')+' Class');
     const already=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period===period);
     const timeOvs=bk.scheduleTimeOverrides||[];
     const existingOv=timeOvs.find(o=>o.date===dateStr&&o.period===period);

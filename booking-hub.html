@@ -1307,6 +1307,16 @@
               <input type="text" id="tsArrivalDurCustom" placeholder="e.g. 2 hours, for a workshop" style="display:none;margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.arrivalDurRequest=this.value">
             </div>
           </div>
+          <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <div class="ts-section-lbl">Class Type <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — e.g. Pilates, Dance, Workshop on Love)</span></div>
+              <input type="text" id="tsArrivalLabel" placeholder="Leave blank for the default" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.arrivalLabel=this.value">
+            </div>
+            <div style="flex:1;min-width:180px">
+              <div class="ts-section-lbl">Co-Teacher <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional)</span></div>
+              <input type="text" id="tsArrivalCoTeacher" placeholder="e.g. Jane Smith" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.arrivalCoTeacher=this.value">
+            </div>
+          </div>
           <div style="margin-top:16px">
             <div class="ts-section-lbl">Notes <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional)</span></div>
             <textarea id="tsArrivalNotes" placeholder="Any special requests for your arrival class..." style="width:100%;height:70px;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;line-height:1.6;background:var(--sand);outline:none;resize:vertical;box-sizing:border-box;margin-top:6px" onchange="_ts.arrivalNotes=this.value"></textarea>
@@ -1427,6 +1437,16 @@
             <div class="ts-section-lbl">Class Characteristics <span style="font-size:11px;font-weight:400;color:var(--muted)">(select all that apply)</span></div>
             <div id="tsAfternoonFlagsContainer" style="display:flex;flex-direction:column;gap:8px;margin-top:8px"></div>
           </div>
+          <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <div class="ts-section-lbl">Class Type <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — e.g. Pilates, Dance, Workshop on Love)</span></div>
+              <input type="text" id="tsAfternoonLabel" placeholder="Leave blank for the default" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.afternoonLabel=this.value">
+            </div>
+            <div style="flex:1;min-width:180px">
+              <div class="ts-section-lbl">Co-Teacher <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional)</span></div>
+              <input type="text" id="tsAfternoonCoTeacher" placeholder="e.g. Jane Smith" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.afternoonCoTeacher=this.value">
+            </div>
+          </div>
           <div style="margin-top:16px">
             <div class="ts-section-lbl">Notes <span style="font-size:11px;font-weight:400;color:var(--muted)">(special requests for your afternoon class)</span></div>
             <textarea id="tsAfternoonNotes" placeholder="e.g. specific equipment, props, room temperature preferences..." style="width:100%;height:80px;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;line-height:1.6;background:var(--sand);outline:none;resize:vertical;box-sizing:border-box;margin-top:6px" onchange="_ts.afternoonNotes=this.value"></textarea>
@@ -1473,6 +1493,16 @@
                 <option value="custom">Other (request longer)</option>
               </select>
               <input type="text" id="tsDepartureDurCustom" placeholder="e.g. 2 hours, for a workshop" style="display:none;margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.departureDurRequest=this.value">
+            </div>
+          </div>
+          <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px">
+              <div class="ts-section-lbl">Class Type <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — e.g. Pilates, Dance, Workshop on Love)</span></div>
+              <input type="text" id="tsDepartureLabel" placeholder="Leave blank for the default" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.departureLabel=this.value">
+            </div>
+            <div style="flex:1;min-width:180px">
+              <div class="ts-section-lbl">Co-Teacher <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional)</span></div>
+              <input type="text" id="tsDepartureCoTeacher" placeholder="e.g. Jane Smith" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.departureCoTeacher=this.value">
             </div>
           </div>
           <div style="margin-top:16px">
