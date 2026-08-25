@@ -2018,7 +2018,7 @@ function tsRenderCalSection(bk){
       if(snackTime)rows.push({time:fmtT(snackTime),desc:'Welcome Snack',shala:'',cat:'meal',sk:snackTime});
       if(sr.hasArrivalClass&&sr.arrivalSlot){
         const arShala=snm(sr.arrivalShala1||sr.morningShala1);
-        rows.push({time:fmtT(sr.arrivalSlot)+' – '+fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60)),desc:tsEffClassLabel(sr,'arrival','Opening Yoga &amp; Orientation'),shala:arShala,cat:'yoga',sk:sr.arrivalSlot});
+        rows.push({time:fmtT(sr.arrivalSlot)+' – '+fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60)),desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:arShala,cat:'yoga',sk:sr.arrivalSlot});
       }
       rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cat:'meal',sk:'19:30'});
     } else if(i===nights){
@@ -3573,7 +3573,7 @@ function openPrintSchedule(bkId){
       if(snackTimeP)rows.push({time:fmtT(snackTimeP),desc:'Welcome Snack',shala:'',cls:'',sk:snackTimeP});
       if(sr?.hasArrivalClass&&sr?.arrivalSlot){
         const end=fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60));
-        rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Yoga | Orientation w Amansala'),shala:mShala,cls:'shala',sk:sr.arrivalSlot});
+        rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:mShala,cls:'shala',sk:sr.arrivalSlot});
       }
       rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cls:'',sk:'19:30'});
     } else if(i===nights-1){
