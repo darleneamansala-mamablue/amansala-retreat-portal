@@ -925,7 +925,7 @@ function confirmCancellation(bkId,within16){
   showToast(`Retreat cancelled.${within16?' $750 retained in Cancellation Bank.':''}`);
 }
 
-function venOpenTeacherPortal(){const bk=AppData.bookings.find(b=>b.id===venEditId);if(!bk)return;closeModal('venModal');enterTeacherModeDirectly(bk.id);}
+function venOpenTeacherPortal(){const bk=AppData.bookings.find(b=>b.id===venEditId);if(!bk)return;openTeacherPortal(bk.id);}
 function venOpenContract(){const id=venEditId;closeModal('venModal');setTimeout(()=>openContractModal(id),120);}
 function venSendRoomList(){const bk=AppData.bookings.find(b=>b.id===venEditId);if(!bk)return;bk.roomListSentViaPortal=true;bk.roomListSentAt=new Date().toISOString();bk.status='room_list_sent';bk.statusChangedAt=new Date().toISOString();adminDone[bk.id+'_roomListSent']={ts:new Date().toISOString(),label:'Room List Sent'};saveAdminDone();saveAll();closeModal('venModal');buildDashboard();venBuild();logActivity('Room list sent to teacher portal',`${bk.leaderName||bk.retreatName} — room assignments now visible in portal`,bk.id);sendTeacherEmail(bk,'room_list_sent');openRoomListEmailModal(bk);showToast('Room list sent to teacher portal.');}
 function venAcceptDates(){const bk=AppData.bookings.find(b=>b.id===venEditId);if(!bk)return;bk.datesAccepted=true;bk.datesAcceptedAt=new Date().toISOString();saveAll();const btn=document.getElementById('venAcceptDatesBtn');if(btn){btn.textContent='✓ Dates Accepted';btn.style.background='#059669';btn.style.color='#fff';btn.style.borderColor='#059669';btn.style.opacity='.7';btn.style.pointerEvents='none';}logActivity('Dates accepted',`${bk.leaderName||bk.retreatName} · ${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}`,venEditId);showToast('Dates accepted.');}

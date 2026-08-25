@@ -2240,10 +2240,11 @@ function openScheduleViewer(bkId){
   if(sr.specialReq)html+=`<div style="margin-bottom:14px"><b>Special Requests:</b><br>${sr.specialReq}</div>`;
   const actCount=(bk.retreatActivities||[]).length;
   html+=`<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-size:12.5px;color:var(--muted);flex:1">${actCount?`${actCount} tour${actCount!==1?'s/ceremonies':'/ceremony'} auto-assigned to retreat days`:'No activities assigned yet'}</span>
+    <span style="font-size:12.5px;color:var(--muted);flex:1">${actCount?`${actCount} tour${actCount!==1?'s/ceremonies':'/ceremony'} assigned to retreat days`:'No activities assigned yet'}</span>
     ${actCount?`<button class="btn" style="font-size:12px;white-space:nowrap;background:#fff;border:1.5px solid #7c3aed;color:#7c3aed" onclick="svSyncPrepaidFlags('${bkId}')">✓ Sync Prepaid</button>`:''}
     <button class="btn btn-primary" style="font-size:12px;white-space:nowrap;background:#059669;border-color:#059669" onclick="svAutoAssignActivities('${bkId}')">⚡ Auto-Assign Activities</button>
   </div>`;
+  html+=svActivityEditorHtml(bk,bkId);
   html+=`</div>
   <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
     <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px">Status</div>
@@ -2444,12 +2445,62 @@ function tsAdminStatus(bkId,status){
 }
 
 // ── Activity management inside schedule viewer ──
+// Every day of the retreat EXCEPT arrival and departure — the only days a
+// tour/ceremony/optional activity may ever be scheduled on, matching the
+// day-of-week auto-assign template and the hard arrival-day backstops
+// enforced everywhere else in the app.
+function svValidActivityDays(bk){
+  if(!bk?.startDate||!bk?.endDate)return[];
+  const DAY_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const MON_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const nights=Math.max(1,Math.round((pd(bk.endDate)-pd(bk.startDate))/DAY_MS));
+  const out=[];
+  for(let i=1;i<nights;i++){
+    const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
+    out.push({date:fmtISO(d),label:DAY_NAMES[d.getDay()]+' '+MON_NAMES[d.getMonth()]+' '+d.getDate()});
+  }
+  return out;
+}
+function svActivityEditorHtml(bk,bkId){
+  const acts=bk.retreatActivities||[];
+  const days=svValidActivityDays(bk);
+  const dayOptions=(selected)=>days.map(d=>`<option value="${d.date}"${d.date===selected?' selected':''}>${d.label}</option>`).join('');
+  const sorted=acts.map((a,idx)=>({a,idx})).sort((x,y)=>(x.a.date+x.a.time).localeCompare(y.a.date+y.a.time));
+  const rows=sorted.map(({a,idx})=>{
+    const ao=(typeof ADD_ONS!=='undefined'?ADD_ONS:[]).find(x=>x.id===a.aoId);
+    const name=ao?.name||a.aoId;
+    const invalidDay=a.date===bk.startDate||a.date===bk.endDate;
+    return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid var(--border)">
+      <span style="flex:1;min-width:140px;font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(name)}</span>
+      <select onchange="svChangeActivityDate('${bkId}',${idx},this.value)" style="padding:5px 8px;border:1.5px solid ${invalidDay?'#dc2626':'var(--border)'};border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:var(--sand)">
+        ${invalidDay?`<option value="${a.date}" selected>⚠ Invalid day — pick one</option>`:''}
+        ${dayOptions(a.date)}
+      </select>
+      <input type="time" value="${a.time||''}" onchange="svChangeActivityTime('${bkId}',${idx},this.value)" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:var(--sand)">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);cursor:pointer;white-space:nowrap"><input type="checkbox" ${a.prepaid?'checked':''} onchange="svToggleActivityPrepaid('${bkId}',${idx})">Prepaid</label>
+      <button onclick="svRemoveActivity('${bkId}',${idx})" title="Remove" style="border:none;background:none;color:#dc2626;font-size:16px;cursor:pointer;line-height:1;padding:2px 6px">&times;</button>
+    </div>`;
+  }).join('');
+  const aoOptions=(typeof ADD_ONS!=='undefined'?ADD_ONS:[]).map(a=>`<option value="${a.id}">${escHtml(a.name)}</option>`).join('');
+  return `<div style="margin-top:14px;border:1.5px solid var(--border);border-radius:10px;overflow:hidden">
+    <div style="padding:8px 10px;background:#f8f5f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Assigned Activities — edit day, time, or remove</div>
+    ${rows||'<div style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px">None assigned yet.</div>'}
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px">
+      <select id="svAddAoId" style="flex:1;min-width:150px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff"><option value="">+ Add an activity…</option>${aoOptions}</select>
+      <select id="svAddAoDate" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff">${dayOptions()}</select>
+      <input type="time" id="svAddAoTime" value="11:45" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff">
+      <button class="btn btn-primary" style="font-size:12px;white-space:nowrap" onclick="svAddActivity('${bkId}')">+ Add</button>
+    </div>
+  </div>`;
+}
 function svAddActivity(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   const aoId=document.getElementById('svAddAoId')?.value;
   const date=document.getElementById('svAddAoDate')?.value;
   const time=document.getElementById('svAddAoTime')?.value||'';
   if(!aoId){showToast('Please select an activity.');return;}
+  if(!date){showToast('Please pick a day — activities can\'t be scheduled on the arrival or departure day.');return;}
+  if(date===bk.startDate||date===bk.endDate){showToast('Activities can\'t be scheduled on the arrival or departure day.');return;}
   if(!bk.retreatActivities)bk.retreatActivities=[];
   const isGitano=aoId==='ao13';
   const defaultTime=isGitano?'19:30':time;
@@ -2471,6 +2522,21 @@ function svAddActivity(bkId){
 function svRemoveActivity(bkId,idx){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
   bk.retreatActivities.splice(idx,1);
+  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  saveAll();openScheduleViewer(bkId);
+}
+function svChangeActivityDate(bkId,idx,newDate){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
+  const act=bk.retreatActivities[idx];if(!act)return;
+  if(!newDate||newDate===bk.startDate||newDate===bk.endDate){showToast('Activities can\'t be scheduled on the arrival or departure day.');openScheduleViewer(bkId);return;}
+  act.date=newDate;
+  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  saveAll();openScheduleViewer(bkId);
+}
+function svChangeActivityTime(bkId,idx,newTime){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
+  const act=bk.retreatActivities[idx];if(!act)return;
+  act.time=newTime;
   bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();openScheduleViewer(bkId);
 }
@@ -2763,6 +2829,25 @@ function enterTeacherModeDirectly(bkId){
   if(_bk?.allLocked)sessionStorage.setItem('ama_preview_locked_bk',bkId);
   else sessionStorage.removeItem('ama_preview_locked_bk');
   location.reload();
+}
+// Opens a booking's teacher portal in a NEW tab instead of taking over this
+// one — used by every "Teacher Portal"/"Preview as Teacher" button so admin
+// keeps their dashboard tab open. window.open() creates an auxiliary
+// browsing context that inherits a COPY of this tab's sessionStorage at the
+// moment it opens, so briefly setting the same admin-preview flags
+// enterTeacherModeDirectly uses (then clearing them back out of this tab
+// right after) hands the new tab a real admin-preview session without ever
+// touching localStorage (which IS shared across tabs and would otherwise
+// leak into "always reopen as teacher X" on this admin's next reload).
+function openTeacherPortal(bkId){
+  if(!bkId)return;
+  sessionStorage.setItem('ama_admin_viewing','1');
+  const bk=AppData.bookings.find(b=>b.id===bkId);
+  if(bk?.allLocked)sessionStorage.setItem('ama_preview_locked_bk',bkId);
+  else sessionStorage.removeItem('ama_preview_locked_bk');
+  window.open(`${location.origin}/booking-hub.html?mode=teacher&bk=${bkId}`,'_blank');
+  sessionStorage.removeItem('ama_admin_viewing');
+  sessionStorage.removeItem('ama_preview_locked_bk');
 }
 function exitTeacherModeFully(){
   const returnBkId=(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id'))||localStorage.getItem('teacher_bk_id');
@@ -3783,7 +3868,7 @@ function buildRetreatSchedulesPanel(){
     const submitted=!!b.scheduleRequest?.submittedAt;
     const label=b.leaderName||b.retreatName||'Untitled Retreat';
     return `<tr style="${submitted?'':'background:#fef2f2'}">
-      <td style="padding:8px 12px;border-bottom:1px solid #eee2d4;font-weight:600;color:${submitted?'var(--dark)':'#dc2626'}"><span onclick="enterTeacherModeDirectly('${b.id}')" style="cursor:pointer;text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color .15s" onmouseover="this.style.textDecorationColor='currentColor'" onmouseout="this.style.textDecorationColor='transparent'" title="Open ${escHtml(label)}'s teacher portal">${label}</span></td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee2d4;font-weight:600;color:${submitted?'var(--dark)':'#dc2626'}"><span onclick="openTeacherPortal('${b.id}')" style="cursor:pointer;text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color .15s" onmouseover="this.style.textDecorationColor='currentColor'" onmouseout="this.style.textDecorationColor='transparent'" title="Open ${escHtml(label)}'s teacher portal">${label}</span></td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee2d4;color:var(--muted);white-space:nowrap">${fmtDate(b.startDate)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee2d4">${submitted
         ?`<span style="color:#15803d;font-weight:700;font-size:12.5px">✓ Submitted</span> ${statusBadge(b.scheduleRequest.adminStatus||'pending')}`

@@ -719,7 +719,8 @@ function menuPrintDay(dateStr){
     .menu-poster-item-desc{font-size:12.5px;color:#9a8f83;text-align:center;font-style:italic;line-height:1.55;max-width:480px;margin:2px auto 0}
     .menu-poster-dessert{margin-top:10px;font-size:15px;font-style:italic;color:#8a7e74;text-align:center}
     .menu-poster-footer{text-align:center;margin-top:50px;font-size:12px;color:#b8ab9e;letter-spacing:.4px;line-height:1.7}
-    @media print{body{padding:20px 40px}}
+    .menu-poster-page2{page-break-before:always;padding-top:40px}
+    @media print{body{padding:20px 40px}.menu-poster-page2{padding-top:20px}}
   </style></head>
   <body>
     <div class="menu-poster-brand">Amansala</div>
@@ -728,7 +729,13 @@ function menuPrintDay(dateStr){
     <div class="menu-poster-divider"></div>
     ${section('Brunch',mData.brunch)}
     ${section('Afternoon Snack',mData.snack)}
-    ${dinnerHtml}
+    ${dinnerHtml?`<div class="menu-poster-page2">
+      <div class="menu-poster-brand">Amansala</div>
+      <div class="menu-poster-day">${dayName}</div>
+      <div class="menu-poster-date">${dateFmt}</div>
+      <div class="menu-poster-divider"></div>
+      ${dinnerHtml}
+    </div>`:''}
     <div class="menu-poster-footer">Please let the front desk know if you'll be dining off-site tonight.<br>For specific requests, please see your waiter. Please confirm any severe allergies with your host.</div>
   </body></html>`;
 
