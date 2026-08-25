@@ -3992,11 +3992,12 @@ function skedPickDate(val){
 
 function skedGetRetreatEvents(dateStr){
   const evs=[];
-  // Opening Circle — every confirmed retreat gets one on its arrival day, 15
-  // minutes before its first (arrival) yoga class, or at a fixed 8:30 PM in
-  // Grande if it has no arrival class. Ryan leads by default; if two retreats
-  // land on the exact same Opening Circle time, only the first keeps Ryan —
-  // the rest go to Darlene since Ryan can't be in two places at once.
+  // Orientation with Amansala — every confirmed retreat gets one on its
+  // arrival day, 15 minutes before its first (arrival) yoga class, or at a
+  // fixed 8:30 PM (after dinner) in Grande if it has no arrival class. Ryan
+  // leads by default; if two retreats land on the exact same Orientation
+  // time, only the first keeps Ryan — the rest go to Max since Ryan can't
+  // be in two places at once.
   const openingCircleLeaders={};
   {
     const candidates=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.scheduleRequest?.adminStatus==='confirmed'&&b.startDate===dateStr);
@@ -4005,7 +4006,7 @@ function skedGetRetreatEvents(dateStr){
       const sr=bk.scheduleRequest;
       const ocTime=(sr.hasArrivalClass&&sr.arrivalSlot)?skedMinToTime(skedTimeToMin(sr.arrivalSlot)-15):'20:30';
       timeCounts[ocTime]=(timeCounts[ocTime]||0)+1;
-      openingCircleLeaders[bk.id]=timeCounts[ocTime]===1?'Ryan':'Darlene';
+      openingCircleLeaders[bk.id]=timeCounts[ocTime]===1?'Ryan':'Max';
     });
   }
   AppData.bookings.filter(b=>b.status!=='cancelled'&&b.scheduleRequest?.adminStatus==='confirmed').forEach(bk=>{
@@ -4033,14 +4034,14 @@ function skedGetRetreatEvents(dateStr){
         const arShala=sr.arrivalShala1||effMornShala;
         const ocTime=skedMinToTime(skedTimeToMin(sr.arrivalSlot)-15);
         const ocEnd=sr.arrivalSlot;
-        evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:arShala||'grande',date:dateStr,startTime:ocTime,endTime:ocEnd,title,subtitle:'Opening Circle — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:arShala||'grande',date:dateStr,startTime:ocTime,endTime:ocEnd,title,subtitle:'Orientation with Amansala — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         if(arShala){
           const arDur=sr.arrivalDur||60;
           const arEnd=skedMinToTime(skedTimeToMin(sr.arrivalSlot)+arDur);
           evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:tsEffClassLabel(sr,'arrival','Arrival Evening Class'),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
       } else {
-        evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:'grande',date:dateStr,startTime:'20:30',endTime:'20:45',title,subtitle:'Opening Circle — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:'grande',date:dateStr,startTime:'20:30',endTime:'20:45',title,subtitle:'Orientation with Amansala — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
       if(effMornStart&&effMornShala){
         // No arrival class — show opening morning class (respects a one-off override for this date)
