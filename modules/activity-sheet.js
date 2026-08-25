@@ -262,6 +262,7 @@ function actByRetreatBuildEntries(bkId) {
   const bk = AppData.bookings.find(b=>b.id===bkId); if (!bk) return [];
   const aoMap = {}; (ADD_ONS||[]).forEach(a=>aoMap[a.id]=a);
   const sups = actSheetSignups[bkId]||[];
+  const roster = actRosterForBk(bkId);
   const seen = new Set();
   const entries = (bk.retreatActivities||[]).filter(a=>{
     if (!a.aoId) return false;
@@ -271,12 +272,16 @@ function actByRetreatBuildEntries(bkId) {
     return true;
   }).map(a=>{
     const ao = aoMap[a.aoId]||{name:a.aoId,price:0};
-    const guests = a.prepaid ? actRosterForBk(bkId) : sups.filter(s=>(s.activities||[]).includes(a.aoId))
-      .map(s=>({first:s.firstName||'',last:s.lastName||'',room:s.roomNumber||''}))
-      .sort((x,y)=>(x.last||x.first).localeCompare(y.last||y.first)||x.first.localeCompare(y.first));
+    // Every retreat guest — pulled straight from the room list — appears on
+    // every activity's sheet. Prepaid activities mark everyone as attending;
+    // optional ones mark only whoever already signed up online, leaving the
+    // rest as open checkboxes for a walk-in paper sign-up.
+    const signedNames = new Set(sups.filter(s=>(s.activities||[]).includes(a.aoId))
+      .map(s=>((s.firstName||'')+' '+(s.lastName||'')).trim().toLowerCase()));
+    const guests = roster.map(g=>({...g, signedUp: a.prepaid || signedNames.has((g.first+' '+g.last).trim().toLowerCase())}));
     return {ao, date:a.date||'', time:a.time||'', prepaid:!!a.prepaid, guests};
   });
-  entries.sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999')||(a.time||'99:99').localeCompare(b.time||'99:99'));
+  entries.sort((a,b)=>(b.prepaid-a.prepaid)||(a.date||'9999').localeCompare(b.date||'9999')||(a.time||'99:99').localeCompare(b.time||'99:99'));
   return entries;
 }
 
@@ -318,24 +323,33 @@ function actByRetreatRender() {
   } else {
     const fmtDLong = ds=>{if(!ds)return'Date TBD';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});};
     const fmtT = t=>{if(!t)return'Time TBD';const[h,m]=t.split(':').map(Number);return((h%12)||12)+':'+String(m).padStart(2,'0')+(h>=12?' PM':' AM');};
-    entries.forEach(e=>{
+    const renderCard = e=>{
       const border = e.prepaid?'#059669':'#3b82f6';
       const bg = e.prepaid?'#f0fdf4':'#eff6ff';
       const priceTxt = e.prepaid?'Included':(e.ao.price?'$'+e.ao.price+'/person':'');
-      const guestList = e.guests.map((g,i)=>`<div style="font-size:12.5px;color:var(--dark);padding:2px 0">${i+1}. ${g.last?g.last+', '+g.first:g.first}${g.room?` <span style="color:#9ca3af;font-size:11px">(Rm ${g.room})</span>`:''}</div>`).join('');
-      html += `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden">
+      const signedCount = e.guests.filter(g=>g.signedUp).length;
+      const guestList = e.guests.map((g,i)=>{
+        const box = e.prepaid ? '' : `<span style="display:inline-block;width:13px;height:13px;border:1.5px solid ${g.signedUp?'#059669':'#c8bfb5'};border-radius:3px;background:${g.signedUp?'#059669':'#fff'};margin-right:7px;vertical-align:middle;text-align:center;line-height:12px;font-size:10px;color:#fff">${g.signedUp?'✓':''}</span>`;
+        return `<div style="font-size:12.5px;color:var(--dark);padding:2px 0">${box}${g.last?g.last+', '+g.first:g.first}${g.room?` <span style="color:#9ca3af;font-size:11px">(Rm ${g.room})</span>`:''}</div>`;
+      }).join('');
+      return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden">
         <div style="background:${bg};border-bottom:1px solid ${border}30;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
           <div>
             <div style="font-size:14.5px;font-weight:700;color:var(--dark)">${e.ao.name}</div>
-            <div style="font-size:12px;color:#6b7280;margin-top:2px">${fmtDLong(e.date)} · ${fmtT(e.time)}</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:2px">${fmtDLong(e.date)} · ${fmtT(e.time)}${!e.prepaid?' · '+signedCount+' of '+e.guests.length+' signed up':''}</div>
           </div>
           <div style="font-size:13px;font-weight:700;color:${e.prepaid?'#059669':'#7c3aed'}">${priceTxt}</div>
         </div>
         <div style="padding:12px 18px">
-          ${guestList||'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No sign-ups yet.</div>'}
+          ${guestList||'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No guests on the room list yet.</div>'}
         </div>
       </div>`;
-    });
+    };
+    const sectionHdr = txt=>`<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;margin:18px 0 8px">${txt}</div>`;
+    const prepaidEntries = entries.filter(e=>e.prepaid);
+    const optionalEntries = entries.filter(e=>!e.prepaid);
+    if (prepaidEntries.length) html += sectionHdr('✦ Included in the Package') + prepaidEntries.map(renderCard).join('');
+    if (optionalEntries.length) html += sectionHdr('Optional Add-Ons — Sign Up') + optionalEntries.map(renderCard).join('');
   }
   html += '</div>';
   wrap.innerHTML = html;
@@ -351,15 +365,14 @@ function actByRetreatPrint(bkId) {
   const retreatName = bk.retreatName||bk.leaderName||'Retreat';
   const dateRange = fmt2(bk.startDate)+' – '+fmt2(bk.endDate);
 
-  let body = '';
-  if (!entries.length) {
-    body = '<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No activities scheduled for this retreat yet.</p>';
-  }
-  entries.forEach(e=>{
-    const guestRows = e.guests.map((g,i)=>`<tr><td class="num">${i+1}.</td><td class="name">${g.last?g.last+', '+g.first:g.first}</td><td class="room">${g.room?'Rm '+g.room:''}</td></tr>`).join('');
-    const blanks = (!e.prepaid && e.guests.length<4) ? Array(4-e.guests.length).fill('<tr><td class="num"></td><td class="name blank"></td><td class="room"></td></tr>').join('') : '';
+  const renderEntry = e=>{
+    const guestRows = e.guests.map((g,i)=>{
+      const box = e.prepaid ? '' : `<span class="chk ${g.signedUp?'on':''}">${g.signedUp?'&#10003;':''}</span>`;
+      return `<tr><td class="num">${i+1}.</td><td class="name">${box}${g.last?g.last+', '+g.first:g.first}</td><td class="room">${g.room?'Rm '+g.room:''}</td></tr>`;
+    }).join('');
     const priceTxt = e.prepaid ? 'Included in Package' : (e.ao.price ? '$'+e.ao.price+' / person' : '');
-    body += `<div class="act-sheet-card">
+    const signedCount = e.guests.filter(g=>g.signedUp).length;
+    return `<div class="act-sheet-card">
       <div class="act-sheet-head">
         <div>
           <div class="act-sheet-name">${e.ao.name}</div>
@@ -369,11 +382,21 @@ function actByRetreatPrint(bkId) {
       </div>
       <table class="act-sheet-table">
         <thead><tr><th class="num">#</th><th>Guest Name</th><th>Room</th></tr></thead>
-        <tbody>${guestRows}${blanks}</tbody>
+        <tbody>${guestRows||'<tr><td colspan="3" class="empty">No guests on the room list yet.</td></tr>'}</tbody>
       </table>
-      <div class="act-sheet-count">${e.guests.length} ${e.prepaid?'guests in package':'signed up'}</div>
+      <div class="act-sheet-count">${e.prepaid?e.guests.length+' guests in package':signedCount+' of '+e.guests.length+' signed up'}</div>
     </div>`;
-  });
+  };
+
+  let body = '';
+  if (!entries.length) {
+    body = '<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No activities scheduled for this retreat yet.</p>';
+  } else {
+    const prepaidEntries = entries.filter(e=>e.prepaid);
+    const optionalEntries = entries.filter(e=>!e.prepaid);
+    if (prepaidEntries.length) body += '<div class="section-hdr">Included in the Package</div>' + prepaidEntries.map(renderEntry).join('');
+    if (optionalEntries.length) body += '<div class="section-hdr">Optional Add-Ons — Sign Up</div>' + optionalEntries.map(renderEntry).join('');
+  }
 
   const win = window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head>
@@ -398,9 +421,13 @@ function actByRetreatPrint(bkId) {
       .act-sheet-table td{padding:6px 14px;font-size:13px;border-top:1px solid #f0ebe0}
       td.num{width:30px;color:#9ca3af}
       td.room{color:#6b7280;font-size:12px}
-      td.blank{height:22px}
+      td.empty{color:#c8bfb5;font-style:italic;font-size:12.5px}
+      .chk{display:inline-block;width:12px;height:12px;border:1.5px solid #b8ab9e;border-radius:3px;margin-right:8px;vertical-align:middle;text-align:center;line-height:11px;font-size:10px}
+      .chk.on{background:#059669;border-color:#059669;color:#fff}
       .act-sheet-count{padding:6px 18px 10px;font-size:11.5px;font-weight:600;color:#6b7280;background:#fafaf8}
-      @media print{.no-print{display:none}body{padding:24px 32px}}
+      .section-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin:24px 0 12px;padding-bottom:6px;border-bottom:1px solid #e8dfd4}
+      .section-hdr:first-of-type{margin-top:0}
+      @media print{.no-print{display:none}body{padding:24px 32px}.act-sheet-card{page-break-inside:avoid}}
     </style>
   </head><body>
     <div class="hdr">
