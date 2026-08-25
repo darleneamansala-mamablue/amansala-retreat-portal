@@ -2848,11 +2848,15 @@ function enterTeacherModeDirectly(bkId){
 function openTeacherPortal(bkId){
   if(!bkId)return;
   sessionStorage.setItem('ama_admin_viewing','1');
+  // Also clone ama_teacher_mode into the new tab — it's what drives the
+  // "← Back to Admin" button's visibility (enterTeacherView checks it).
+  sessionStorage.setItem('ama_teacher_mode','1');
   const bk=AppData.bookings.find(b=>b.id===bkId);
   if(bk?.allLocked)sessionStorage.setItem('ama_preview_locked_bk',bkId);
   else sessionStorage.removeItem('ama_preview_locked_bk');
   window.open(`${location.origin}/booking-hub.html?mode=teacher&bk=${bkId}`,'_blank');
   sessionStorage.removeItem('ama_admin_viewing');
+  sessionStorage.removeItem('ama_teacher_mode');
   sessionStorage.removeItem('ama_preview_locked_bk');
 }
 function exitTeacherModeFully(){
@@ -2875,6 +2879,13 @@ function initTeacherMode(){
   const persistedId=!sessionStorage.getItem('ama_admin_viewing')?(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id')):sessionStorage.getItem('teacher_bk_id');
   const _loginWith=(bk)=>{
     if(!sessionStorage.getItem('ama_admin_viewing')){localStorage.setItem('teacher_bk_id',bk.id);localStorage.setItem('ama_teacher_persist','1');}
+    // Admin preview — never persist to localStorage (would "stick" on this
+    // admin's next real reload), but DO persist to sessionStorage, scoped to
+    // just this preview tab. Every nav-tab click (Schedule, Room List,
+    // Transport, Financial, Activities, Contract) looks up the booking via
+    // localStorage.teacher_bk_id||sessionStorage.teacher_bk_id — without this,
+    // that lookup comes back empty and those tabs silently render nothing.
+    else{sessionStorage.setItem('teacher_bk_id',bk.id);}
     enterTeacherView(bk.id);
   };
   const _findLocal=()=>{
