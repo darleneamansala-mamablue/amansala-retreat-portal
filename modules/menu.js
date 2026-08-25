@@ -68,7 +68,10 @@ const MENU_MEAL_CFG = {
 
 function menuJumpToDate(val){
   if(!val)return;
-  menuCurrentMonday=menuGetSunday(new Date(val+'T12:00:00'));
+  // Unlike week-arrow navigation (which stays Sunday-anchored to match the
+  // kitchen's weekly spreadsheet), jumping to a specific date should show
+  // exactly that date as the first day — not snap back to that week's Sunday.
+  menuCurrentMonday=val;
   menuRenderWeek();
 }
 
