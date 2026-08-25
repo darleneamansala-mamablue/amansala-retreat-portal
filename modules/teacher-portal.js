@@ -894,6 +894,20 @@ function tsEffClassLabel(sr,period,fallback){
 // Day-specific version — checks that one date's scheduleTimeOverrides entry
 // (morn/aft only; arrival & departure are inherently single-day already)
 // before falling back to the retreat-wide label above.
+// Welcome Snack defaults to 3pm on arrival day — but if every guest's actual
+// property-arrival time (flight time + transfer buffer: 2h from Cancún,
+// 1h from Tulum) lands after 3pm, nobody would be there yet, so skip it
+// entirely rather than putting out a snack no one eats. Returns the snack's
+// 24h start time to show it, or null to skip it for that retreat.
+function tsArrivalSnackTime(bk){
+  if(typeof loadTransport!=='function')return'15:00';
+  const subs=loadTransport().filter(s=>s.bookingId===bk.id&&s.status!=='cancelled'&&s.arrivalDate===bk.startDate&&s.arrivalTime&&s.arrivalAirport);
+  if(!subs.length)return'15:00'; // no flight info submitted yet — default to showing it
+  const bufferMin=s=>s.arrivalAirport==='cancun'?120:60;
+  const earliestPropertyArrival=Math.min(...subs.map(s=>trTimeToMins(s.arrivalTime)+bufferMin(s)));
+  return earliestPropertyArrival<=15*60?'15:00':null;
+}
+
 function tsEffClassLabelDay(sr,bk,dateStr,ovPeriod,labelKey,fallback){
   const dayOv=(bk?.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period===ovPeriod);
   if(dayOv?.label)return dayOv.label+(dayOv.coTeacher?' — with '+dayOv.coTeacher:'');
@@ -1988,7 +2002,8 @@ function tsRenderCalSection(bk){
     const sk=t=>t||'99:99'; // sort key: raw 24h time, empty items sort to end
     if(i===0){
       // Arrival day — no morning classes
-      rows.push({time:'4:00 PM',desc:'Welcome Snack',shala:'',cat:'meal',sk:'16:00'});
+      const snackTime=tsArrivalSnackTime(bk);
+      if(snackTime)rows.push({time:fmtT(snackTime),desc:'Welcome Snack',shala:'',cat:'meal',sk:snackTime});
       if(sr.hasArrivalClass&&sr.arrivalSlot){
         const arShala=snm(sr.arrivalShala1||sr.morningShala1);
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60)),desc:tsEffClassLabel(sr,'arrival','Opening Yoga &amp; Orientation'),shala:arShala,cat:'yoga',sk:sr.arrivalSlot});
@@ -3542,7 +3557,8 @@ function openPrintSchedule(bkId){
     const rows=[];
     if(i===0){
       rows.push({time:'3:00 PM',desc:'Check-in',shala:'',cls:'',sk:'15:00'});
-      rows.push({time:'4:00 PM',desc:'Welcome Snack',shala:'',cls:'',sk:'16:00'});
+      const snackTimeP=tsArrivalSnackTime(bk);
+      if(snackTimeP)rows.push({time:fmtT(snackTimeP),desc:'Welcome Snack',shala:'',cls:'',sk:snackTimeP});
       if(sr?.hasArrivalClass&&sr?.arrivalSlot){
         const end=fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60));
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Yoga | Orientation w Amansala'),shala:mShala,cls:'shala',sk:sr.arrivalSlot});
