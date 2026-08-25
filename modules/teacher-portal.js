@@ -884,10 +884,20 @@ let _tsPrepaidMode='choice'; // 'choice' | 'manual' — for the pre-paid activit
 // actually is (Pilates, Dance, a named workshop) and credit a co-teacher —
 // used everywhere a class label renders: the teacher's own itinerary, the
 // printed schedule, the admin schedule viewer/list, and the master calendar.
+// adminOverride wins over the teacher's own value, same precedence as time.
 function tsEffClassLabel(sr,period,fallback){
-  const label=(sr?.[period+'Label']||'').trim();
-  const co=(sr?.[period+'CoTeacher']||'').trim();
+  const ov=sr?.adminOverride||{};
+  const label=(ov[period+'Label']||sr?.[period+'Label']||'').trim();
+  const co=(ov[period+'CoTeacher']||sr?.[period+'CoTeacher']||'').trim();
   return (label||fallback)+(co?' — with '+co:'');
+}
+// Day-specific version — checks that one date's scheduleTimeOverrides entry
+// (morn/aft only; arrival & departure are inherently single-day already)
+// before falling back to the retreat-wide label above.
+function tsEffClassLabelDay(sr,bk,dateStr,ovPeriod,labelKey,fallback){
+  const dayOv=(bk?.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period===ovPeriod);
+  if(dayOv?.label)return dayOv.label+(dayOv.coTeacher?' — with '+dayOv.coTeacher:'');
+  return tsEffClassLabel(sr,labelKey,fallback);
 }
 
 function tsRenderSetupDays(){
@@ -1143,9 +1153,24 @@ function tsInit(bkId){
     :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseStart:'',sunriseDur:45,sunriseLocation:''};
   // Migrate old field name: afternoonStart → afternoonSlot
   if(!_ts.afternoonSlot&&_ts.afternoonStart)_ts.afternoonSlot=_ts.afternoonStart;
+  // Load any day-specific overrides (start/duration/type/co-teacher) that
+  // already exist for this retreat — whether set by the teacher previously
+  // or by admin via the master calendar's per-day edit — into the draft so
+  // the daily schedule editor below shows what's actually there.
+  // Only true middle days — arrival/departure have their own dedicated
+  // sections and are never part of this daily list, so an old orphaned
+  // override for either (e.g. from before an arrival class existed) must
+  // not get pulled back in here.
+  _ts.dailyMorning={};_ts.dailyAfternoon={};
+  (bk.scheduleTimeOverrides||[]).forEach(o=>{
+    if(o.date<=bk.startDate||o.date>=bk.endDate)return;
+    if(o.period==='morn')_ts.dailyMorning[o.date]={start:o.start,dur:o.dur,label:o.label||'',coTeacher:o.coTeacher||''};
+    else if(o.period==='aft')_ts.dailyAfternoon[o.date]={start:o.start,dur:o.dur,label:o.label||'',coTeacher:o.coTeacher||''};
+  });
   tsRenderBrowseGrid();
   tsRenderWindows();
   tsBuildMorningFields();
+  tsBuildDailySchedule();
   tsRenderShalaGrid('morning');
   tsRenderShalaGrid('afternoon');
   // Restore sunrise activity
@@ -1239,7 +1264,7 @@ function tsRenderWindows(){
     </div>`;
 }
 
-function tsPickWindow(id){_ts.window=id;_ts.morningStart='';tsRenderWindows();tsBuildMorningFields();tsRenderShalaGrid('morning');}
+function tsPickWindow(id){_ts.window=id;_ts.morningStart='';tsRenderWindows();tsBuildMorningFields();tsBuildDailySchedule();tsRenderShalaGrid('morning');}
 function tsToggleFlag(period,val,on){
   const k=period==='morning'?'morningFlags':'afternoonFlags';
   if(!_ts[k])_ts[k]=[];
@@ -1417,6 +1442,7 @@ function tsDurSelect(type,value){
   _ts[type+'DurRequest']='';
   _ts[type+'Dur']=parseInt(value);
   tsRenderShalaGrid(type);
+  tsBuildDailySchedule();
 }
 
 function tsMorningDurSelect(value){
@@ -1429,6 +1455,7 @@ function tsMorningDurSelect(value){
   _ts.morningDurRequest='';
   _ts.morningDur=parseInt(value);
   tsBuildMorningFields();
+  tsBuildDailySchedule();
 }
 
 function tsBuildMorningFields(){
@@ -1514,6 +1541,60 @@ function tsBuildMorningFields(){
     <textarea id="tsMorningNotes" placeholder="Any special requests for your morning class..." style="width:100%;height:80px;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;line-height:1.6;background:var(--sand);outline:none;resize:vertical;box-sizing:border-box;margin-top:6px" onchange="_ts.morningNotes=this.value">${_ts.morningNotes||''}</textarea>
   </div>
   `;
+}
+
+// Per-day schedule — some teachers teach something different every day
+// rather than the same class at the same time all retreat. This lists each
+// middle day (arrival/departure have their own dedicated sections above)
+// with its own Start Time, Duration, Class Type & Co-Teacher, defaulting to
+// the retreat-wide values above but individually editable. Saved into
+// bk.scheduleTimeOverrides on submit — the same array admin's own per-day
+// edit (on the master calendar) reads and writes, so either side can
+// customize a day and both see the result.
+function tsBuildDailySchedule(){
+  const el=document.getElementById('tsDailyScheduleFields');if(!el)return;
+  const bk=AppData.bookings.find(b=>b.id===_tsBkId);
+  if(!bk||!bk.startDate||!bk.endDate){el.innerHTML='';return;}
+  const nights=Math.max(1,Math.round((pd(bk.endDate)-pd(bk.startDate))/DAY_MS));
+  if(nights<2){el.innerHTML='<div style="font-size:12.5px;color:var(--muted);font-style:italic">Not enough nights for a day-by-day schedule.</div>';return;}
+  const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const MON_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if(!_ts.dailyMorning)_ts.dailyMorning={};
+  if(!_ts.dailyAfternoon)_ts.dailyAfternoon={};
+  const durOpts=[30,45,60,75,90,120,150];
+  const row=(period,dateStr,dayLbl)=>{
+    const store=period==='morn'?_ts.dailyMorning:_ts.dailyAfternoon;
+    const o=store[dateStr]||{};
+    const defStart=period==='morn'?(_ts.morningStart||'08:00'):(_ts.afternoonSlot||'16:30');
+    const defDur=period==='morn'?(_ts.morningDur||60):(_ts.afternoonDur||60);
+    const startVal=o.start||defStart;
+    const durVal=o.dur||defDur;
+    return `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="min-width:130px;font-size:12.5px;font-weight:700;color:var(--dark)">${dayLbl}</div>
+      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Start</label><input type="time" value="${startVal}" onchange="tsSetDaily('${period}','${dateStr}','start',this.value)" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)"></div>
+      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Duration</label><select onchange="tsSetDaily('${period}','${dateStr}','dur',parseInt(this.value))" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)">${durOpts.map(m=>`<option value="${m}"${durVal===m?' selected':''}>${m} min</option>`).join('')}</select></div>
+      <div style="flex:1;min-width:150px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Class Type</label><input type="text" value="${o.label||''}" placeholder="e.g. Pilates" onchange="tsSetDaily('${period}','${dateStr}','label',this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)"></div>
+      <div style="flex:1;min-width:130px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Co-Teacher</label><input type="text" value="${o.coTeacher||''}" placeholder="optional" onchange="tsSetDaily('${period}','${dateStr}','coTeacher',this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)"></div>
+    </div>`;
+  };
+  let morningRows='',afternoonRows='';
+  for(let i=1;i<nights;i++){
+    const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
+    const dateStr=fmtISO(d);
+    const dayLbl=DAY_NAMES[d.getDay()]+', '+MON_NAMES[d.getMonth()]+' '+d.getDate();
+    morningRows+=row('morn',dateStr,dayLbl);
+    if(_ts.hasAfternoon)afternoonRows+=row('aft',dateStr,dayLbl);
+  }
+  el.innerHTML=`<div style="margin-top:16px;padding:16px;background:#f8f5f0;border:1.5px solid var(--border);border-radius:12px">
+    <div class="ts-section-lbl">Day-by-Day Schedule <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — override any specific day's morning class time/type; defaults to what you set above)</span></div>
+    ${morningRows}
+    ${_ts.hasAfternoon?`<div class="ts-section-lbl" style="margin-top:16px">Afternoon Class — Day by Day</div>${afternoonRows}`:''}
+  </div>`;
+}
+function tsSetDaily(period,dateStr,field,val){
+  const store=period==='morn'?(_ts.dailyMorning||(_ts.dailyMorning={})):(_ts.dailyAfternoon||(_ts.dailyAfternoon={}));
+  if(!store[dateStr])store[dateStr]={};
+  store[dateStr][field]=val;
 }
 
 function tsT2M(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
@@ -1662,6 +1743,7 @@ function tsToggleAfternoon(){
   _ts.hasAfternoon=cb?.checked||false;
   const sec=document.getElementById('tsAfternoonSection');
   if(sec)sec.style.display=_ts.hasAfternoon?'block':'none';
+  tsBuildDailySchedule();
 }
 
 function tsRenderStatus(bk){
@@ -1817,7 +1899,27 @@ function tsSubmitSchedule(){
   if(_ts.hasSunrise&&!_ts.sunriseLocation){tsFlagRequired('tsSunriseLocation','Please select a location for your sunrise activity.');return;}
   if(!_ts.offsiteNight){tsFlagRequired('tsOffsiteNight','Please select which night your group will dine offsite — this is required.');return;}
   if(!_ts.offsiteChoice){tsFlagRequired('tsOffsiteChoiceWrap','Please select your offsite dinner preference (Onsite, Gitano, or Undecided).');return;}
-  bk.scheduleRequest={..._ts,submittedAt:new Date().toISOString(),adminStatus:'pending',adminNote:bk.scheduleRequest?.adminNote||''};
+  // Fold the day-by-day overrides into bk.scheduleTimeOverrides — the same
+  // array admin's own per-day edit modal reads/writes — replacing whatever
+  // was there before for this retreat's morn/aft days. Only keep an entry
+  // when it actually differs from the retreat-wide default just submitted,
+  // or carries a custom type/co-teacher, so unedited days don't clutter it.
+  const keepOvs=(bk.scheduleTimeOverrides||[]).filter(o=>o.date<bk.startDate||o.date>=bk.endDate||(o.period!=='morn'&&o.period!=='aft'));
+  const isMiddleDay=dateStr=>dateStr>bk.startDate&&dateStr<bk.endDate;
+  const newOvs=[];
+  Object.entries(_ts.dailyMorning||{}).forEach(([dateStr,o])=>{
+    if(!isMiddleDay(dateStr))return;
+    const differs=(o.start&&o.start!==_ts.morningStart)||(o.dur&&o.dur!==_ts.morningDur)||o.label||o.coTeacher;
+    if(differs)newOvs.push({date:dateStr,period:'morn',start:o.start||_ts.morningStart,dur:o.dur||_ts.morningDur,label:o.label||'',coTeacher:o.coTeacher||''});
+  });
+  if(_ts.hasAfternoon)Object.entries(_ts.dailyAfternoon||{}).forEach(([dateStr,o])=>{
+    if(!isMiddleDay(dateStr))return;
+    const differs=(o.start&&o.start!==_ts.afternoonSlot)||(o.dur&&o.dur!==_ts.afternoonDur)||o.label||o.coTeacher;
+    if(differs)newOvs.push({date:dateStr,period:'aft',start:o.start||_ts.afternoonSlot,dur:o.dur||_ts.afternoonDur,label:o.label||'',coTeacher:o.coTeacher||''});
+  });
+  bk.scheduleTimeOverrides=[...keepOvs,...newOvs];
+  const{dailyMorning,dailyAfternoon,...srWithoutDaily}=_ts;
+  bk.scheduleRequest={...srWithoutDaily,submittedAt:new Date().toISOString(),adminStatus:'pending',adminNote:bk.scheduleRequest?.adminNote||''};
   saveAll();
   // Auto-populate tours & ceremonies on first submission only
   if(!bk.retreatActivities||!bk.retreatActivities.length){
@@ -1922,13 +2024,13 @@ function tsRenderCalSection(bk){
       const dayMornDur=_mornOv?(_mornOv.dur||_effMornDur):_effMornDur;
       const dayAfSlot=_aftOv?_aftOv.start:_effAfSlot;
       const dayAfDur=_aftOv?(_aftOv.dur||_effAfDur):_effAfDur;
-      rows.push({time:fmtT(dayMornStart)+' – '+fmtT(addMin(dayMornStart,dayMornDur)),desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cat:'yoga',sk:dayMornStart||'08:00'});
+      rows.push({time:fmtT(dayMornStart)+' – '+fmtT(addMin(dayMornStart,dayMornDur)),desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'),shala:mShala,cat:'yoga',sk:dayMornStart||'08:00'});
       const _bMStart=dayMornStart||'';const _bMDur=dayMornDur;const _brunchT=_bMStart?addMin(_bMStart,_bMDur+15):'09:45';
       rows.push({time:fmtT(_brunchT),desc:_brunchT<'09:45'?'Breakfast':'Brunch',shala:'',cat:'meal',sk:_brunchT});
       rows.push({time:'3:00 PM',desc:'Snack',shala:'',cat:'meal',sk:'15:00'});
       const ws=(sr.workshops||[]).find(w=>w.enabled&&w.date===dateStr);
       if(ws)rows.push({time:fmtT(ws.start)+' – '+fmtT(addMin(ws.start,ws.dur||90)),desc:'Mid-Afternoon Class'+(ws.notes?' — '+ws.notes:''),shala:snm(ws.shala1),cat:'yoga',sk:ws.start||'16:00'});
-      if(sr.hasAfternoon&&dayAfSlot)rows.push({time:fmtT(dayAfSlot)+' – '+fmtT(addMin(dayAfSlot,dayAfDur)),desc:tsEffClassLabel(sr,'afternoon','Afternoon Class'),shala:aShala,cat:'yoga',sk:dayAfSlot});
+      if(sr.hasAfternoon&&dayAfSlot)rows.push({time:fmtT(dayAfSlot)+' – '+fmtT(addMin(dayAfSlot,dayAfDur)),desc:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Afternoon Class'),shala:aShala,cat:'yoga',sk:dayAfSlot});
       const isOffsite=sr.offsiteNight&&(()=>{const ofNight=pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS;return Math.abs(d.getTime()-ofNight)<DAY_MS/2;})();
       const hasGitanoToday=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
       if(!hasGitanoToday)rows.push({time:'7:30 PM',desc:isOffsite?'Dinner (Off-site)':'Dinner',shala:'',cat:'meal',sk:'19:30'});
@@ -3959,12 +4061,12 @@ function skedGetRetreatEvents(dateStr){
       const dayAfDur=aftOv?(aftOv.dur||effAfDur):effAfDur;
       if(dayMornStart&&effMornShala&&!mornSkipped){
         const mEnd=skedMinToTime(skedTimeToMin(dayMornStart)+dayMornDur);
-        evs.push({id:'ret_'+bk.id+'_morn',resourceId:effMornShala,date:dateStr,startTime:dayMornStart,endTime:mEnd,title,subtitle:tsEffClassLabel(sr,'morning','Morning Class')+(mornOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_morn',resourceId:effMornShala,date:dateStr,startTime:dayMornStart,endTime:mEnd,title,subtitle:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class')+(mornOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
       const hasAf=sr.hasAfternoon||(ov.afternoonStart&&(ov.afternoonShala1||sr.afternoonShala1||sr.morningShala1));
       if(hasAf&&dayAfSlot&&effAfShala&&!aftSkipped){
         const aEnd=skedMinToTime(skedTimeToMin(dayAfSlot)+dayAfDur);
-        evs.push({id:'ret_'+bk.id+'_aft',resourceId:effAfShala,date:dateStr,startTime:dayAfSlot,endTime:aEnd,title,subtitle:tsEffClassLabel(sr,'afternoon','Evening Class')+(aftOv?' (time changed)':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_aft',resourceId:effAfShala,date:dateStr,startTime:dayAfSlot,endTime:aEnd,title,subtitle:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Evening Class')+(aftOv?' (time changed)':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
     // Workshops — only shala1
