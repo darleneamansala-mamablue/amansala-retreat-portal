@@ -227,9 +227,194 @@ function actSheetSetView(v) {
   document.getElementById('actViewWeek').style.color = v==='week' ? '#fff' : 'var(--dark)';
   document.getElementById('actViewSummary').style.background = v==='summary' ? 'var(--teal,#2d6a6a)' : '#fff';
   document.getElementById('actViewSummary').style.color = v==='summary' ? '#fff' : 'var(--dark)';
+  document.getElementById('actViewByRetreat').style.background = v==='byretreat' ? 'var(--teal,#2d6a6a)' : '#fff';
+  document.getElementById('actViewByRetreat').style.color = v==='byretreat' ? '#fff' : 'var(--dark)';
   document.getElementById('actSheetGrid').style.display = v==='week' ? '' : 'none';
   document.getElementById('actSheetSummary').style.display = v==='summary' ? '' : 'none';
+  document.getElementById('actSheetByRetreat').style.display = v==='byretreat' ? '' : 'none';
   if (v==='summary') actSheetRenderSummary();
+  if (v==='byretreat') actByRetreatRender();
+}
+
+// ===== BY-RETREAT ACTIVITY SHEET =====
+// The classic paper sign-up sheet, automated: pick a retreat, see (and print)
+// one clean sheet per activity — date, time, price, and every guest's name in
+// alphabetical order. Optional add-ons pull names from online sign-ups (with a
+// few blank lines for walk-ins); activities included in the package pull the
+// full room-list roster since every guest in the package attends.
+let actByRetreatBkId = '';
+
+function actRosterForBk(bkId) {
+  const list = [];
+  (AppData.regs||[]).filter(r=>r.bookingId===bkId&&!r.isTeacherRoom).forEach(r=>{
+    (r.guests||[]).forEach(g=>{
+      if (!g.name) return;
+      const parts = g.name.trim().split(/\s+/);
+      const first = parts[0]||'';
+      const last = parts.length>1 ? parts.slice(1).join(' ') : '';
+      list.push({first, last, room:r.room||''});
+    });
+  });
+  return list.sort((a,b)=>(a.last||a.first).localeCompare(b.last||b.first)||a.first.localeCompare(b.first));
+}
+
+function actByRetreatBuildEntries(bkId) {
+  const bk = AppData.bookings.find(b=>b.id===bkId); if (!bk) return [];
+  const aoMap = {}; (ADD_ONS||[]).forEach(a=>aoMap[a.id]=a);
+  const sups = actSheetSignups[bkId]||[];
+  const seen = new Set();
+  const entries = (bk.retreatActivities||[]).filter(a=>{
+    if (!a.aoId) return false;
+    const key = a.aoId+'|'+(a.date||'');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(a=>{
+    const ao = aoMap[a.aoId]||{name:a.aoId,price:0};
+    const guests = a.prepaid ? actRosterForBk(bkId) : sups.filter(s=>(s.activities||[]).includes(a.aoId))
+      .map(s=>({first:s.firstName||'',last:s.lastName||'',room:s.roomNumber||''}))
+      .sort((x,y)=>(x.last||x.first).localeCompare(y.last||y.first)||x.first.localeCompare(y.first));
+    return {ao, date:a.date||'', time:a.time||'', prepaid:!!a.prepaid, guests};
+  });
+  entries.sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999')||(a.time||'99:99').localeCompare(b.time||'99:99'));
+  return entries;
+}
+
+function actByRetreatSelect(bkId) {
+  actByRetreatBkId = bkId;
+  actByRetreatRender();
+}
+
+function actByRetreatRender() {
+  const wrap = document.getElementById('actSheetByRetreat');
+  if (!wrap) return;
+  const bks = AppData.bookings.filter(b=>b.status!=='cancelled').slice().sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
+  if (!actByRetreatBkId || !bks.some(b=>b.id===actByRetreatBkId)) {
+    const today = new Date().toISOString().slice(0,10);
+    const upcoming = bks.filter(b=>(b.endDate||'')>=today).sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''))[0];
+    actByRetreatBkId = (upcoming||bks[0])?.id||'';
+  }
+  const fmtD = ds=>{if(!ds)return'';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
+  const opts = bks.map(b=>`<option value="${b.id}" ${b.id===actByRetreatBkId?'selected':''}>${b.retreatName||b.leaderName||'Retreat'}${b.startDate?' · '+fmtD(b.startDate)+' – '+fmtD(b.endDate):''}</option>`).join('');
+
+  let html = `<div style="max-width:900px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;padding:14px 18px;background:#fff;border:1px solid var(--border);border-radius:10px">
+      <span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px">Retreat</span>
+      <select onchange="actByRetreatSelect(this.value)" style="flex:1;min-width:220px;max-width:420px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13.5px;color:var(--dark);background:#fff">
+        ${opts||'<option value="">No retreats found</option>'}
+      </select>
+      <button onclick="actByRetreatPrint(actByRetreatBkId)" style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">🖨 Print Activity Sheet</button>
+    </div>`;
+
+  if (!actByRetreatBkId) {
+    html += '<div style="text-align:center;padding:40px;color:#9ca3af;font-size:13px">No retreats found.</div></div>';
+    wrap.innerHTML = html;
+    return;
+  }
+
+  const entries = actByRetreatBuildEntries(actByRetreatBkId);
+  if (!entries.length) {
+    html += '<div style="text-align:center;padding:40px;color:#9ca3af;font-size:13px">No activities scheduled for this retreat yet. Assign activities in the <b>Venues</b> tab.</div>';
+  } else {
+    const fmtDLong = ds=>{if(!ds)return'Date TBD';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});};
+    const fmtT = t=>{if(!t)return'Time TBD';const[h,m]=t.split(':').map(Number);return((h%12)||12)+':'+String(m).padStart(2,'0')+(h>=12?' PM':' AM');};
+    entries.forEach(e=>{
+      const border = e.prepaid?'#059669':'#3b82f6';
+      const bg = e.prepaid?'#f0fdf4':'#eff6ff';
+      const priceTxt = e.prepaid?'Included':(e.ao.price?'$'+e.ao.price+'/person':'');
+      const guestList = e.guests.map((g,i)=>`<div style="font-size:12.5px;color:var(--dark);padding:2px 0">${i+1}. ${g.last?g.last+', '+g.first:g.first}${g.room?` <span style="color:#9ca3af;font-size:11px">(Rm ${g.room})</span>`:''}</div>`).join('');
+      html += `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden">
+        <div style="background:${bg};border-bottom:1px solid ${border}30;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:14.5px;font-weight:700;color:var(--dark)">${e.ao.name}</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:2px">${fmtDLong(e.date)} · ${fmtT(e.time)}</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:${e.prepaid?'#059669':'#7c3aed'}">${priceTxt}</div>
+        </div>
+        <div style="padding:12px 18px">
+          ${guestList||'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No sign-ups yet.</div>'}
+        </div>
+      </div>`;
+    });
+  }
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function actByRetreatPrint(bkId) {
+  const bk = AppData.bookings.find(b=>b.id===bkId);
+  if (!bk) { showToast('Select a retreat first.'); return; }
+  const entries = actByRetreatBuildEntries(bkId);
+  const fmtDLong = ds=>{if(!ds)return'Date TBD';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});};
+  const fmtT = t=>{if(!t)return'Time TBD';const[h,m]=t.split(':').map(Number);return((h%12)||12)+':'+String(m).padStart(2,'0')+(h>=12?' PM':' AM');};
+  const fmt2 = ds=>{if(!ds)return'';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
+  const retreatName = bk.retreatName||bk.leaderName||'Retreat';
+  const dateRange = fmt2(bk.startDate)+' – '+fmt2(bk.endDate);
+
+  let body = '';
+  if (!entries.length) {
+    body = '<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No activities scheduled for this retreat yet.</p>';
+  }
+  entries.forEach(e=>{
+    const guestRows = e.guests.map((g,i)=>`<tr><td class="num">${i+1}.</td><td class="name">${g.last?g.last+', '+g.first:g.first}</td><td class="room">${g.room?'Rm '+g.room:''}</td></tr>`).join('');
+    const blanks = (!e.prepaid && e.guests.length<4) ? Array(4-e.guests.length).fill('<tr><td class="num"></td><td class="name blank"></td><td class="room"></td></tr>').join('') : '';
+    const priceTxt = e.prepaid ? 'Included in Package' : (e.ao.price ? '$'+e.ao.price+' / person' : '');
+    body += `<div class="act-sheet-card">
+      <div class="act-sheet-head">
+        <div>
+          <div class="act-sheet-name">${e.ao.name}</div>
+          <div class="act-sheet-meta">${fmtDLong(e.date)} &middot; ${fmtT(e.time)}</div>
+        </div>
+        <div class="act-sheet-price ${e.prepaid?'included':''}">${priceTxt}</div>
+      </div>
+      <table class="act-sheet-table">
+        <thead><tr><th class="num">#</th><th>Guest Name</th><th>Room</th></tr></thead>
+        <tbody>${guestRows}${blanks}</tbody>
+      </table>
+      <div class="act-sheet-count">${e.guests.length} ${e.prepaid?'guests in package':'signed up'}</div>
+    </div>`;
+  });
+
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <link rel="icon" type="image/png" href="/favicon.png"><title>Activity Sheet · ${retreatName}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      *{box-sizing:border-box}
+      body{font-family:'Jost',sans-serif;margin:0;padding:40px 48px;color:#2d2520;background:#fff}
+      .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #2d6a6a;padding-bottom:14px;margin-bottom:28px}
+      .brand{font-family:'Cormorant Garamond',serif;font-size:15px;letter-spacing:3px;text-transform:uppercase;color:#8a7e74}
+      .title{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:700;color:#1a2332;margin:2px 0 0}
+      .sub{font-size:13px;color:#6b7280;margin-top:4px}
+      .print-btn{padding:8px 18px;background:#2d6a6a;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'Jost',sans-serif;font-size:13px;font-weight:600}
+      .act-sheet-card{break-inside:avoid;margin-bottom:26px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
+      .act-sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;background:#f9f7f4;padding:14px 18px;border-bottom:1px solid #e5e7eb}
+      .act-sheet-name{font-size:17px;font-weight:700;color:#1a2332}
+      .act-sheet-meta{font-size:12.5px;color:#6b7280;margin-top:3px}
+      .act-sheet-price{font-size:13px;font-weight:700;color:#7c3aed;white-space:nowrap}
+      .act-sheet-price.included{color:#059669}
+      .act-sheet-table{width:100%;border-collapse:collapse}
+      .act-sheet-table th{text-align:left;padding:6px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9ca3af;background:#fff;border-bottom:1px solid #f0ebe0}
+      .act-sheet-table td{padding:6px 14px;font-size:13px;border-top:1px solid #f0ebe0}
+      td.num{width:30px;color:#9ca3af}
+      td.room{color:#6b7280;font-size:12px}
+      td.blank{height:22px}
+      .act-sheet-count{padding:6px 18px 10px;font-size:11.5px;font-weight:600;color:#6b7280;background:#fafaf8}
+      @media print{.no-print{display:none}body{padding:24px 32px}}
+    </style>
+  </head><body>
+    <div class="hdr">
+      <div>
+        <div class="brand">Amansala · Tulum</div>
+        <div class="title">${retreatName}</div>
+        <div class="sub">Activity Sheet &middot; ${dateRange}</div>
+      </div>
+      <button class="print-btn no-print" onclick="window.print()">Print</button>
+    </div>
+    ${body}
+  </body></html>`);
+  win.document.close();
+  setTimeout(()=>win.print(), 400);
 }
 
 function actSheetRenderSummary() {
