@@ -1162,33 +1162,39 @@ function tsSaveManualActivity(aoId){
 }
 
 function tsInit(bkId){
-  // Already editing this booking's schedule — don't re-initialize and discard in-progress edits.
-  // (This ran every time the Schedule tab was shown/re-rendered, even for the same booking,
-  // silently reverting any unsaved dropdown/field changes back to the last-saved database value.)
-  if(_tsBkId===bkId)return;
-  _tsBkId=bkId;
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
-  _tsPrepaidMode='choice';
+  // Already editing this booking's schedule — don't reset the in-progress draft
+  // back to the last-saved database value. But still fall through and re-run
+  // every render call below unconditionally: this function also gets called
+  // whenever the Schedule tab is shown again (e.g. navigating away and back),
+  // and if the DOM was ever rebuilt in the meantime, skipping the renders here
+  // would leave the shala grids/day-by-day fields permanently blank even
+  // though the underlying data (_ts) is fine.
+  const isFreshBooking=_tsBkId!==bkId;
+  _tsBkId=bkId;
+  if(isFreshBooking){
+    _tsPrepaidMode='choice';
+    _ts=bk.scheduleRequest
+      ?{..._ts,...bk.scheduleRequest}
+      :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseStart:'',sunriseDur:45,sunriseLocation:''};
+    // Migrate old field name: afternoonStart → afternoonSlot
+    if(!_ts.afternoonSlot&&_ts.afternoonStart)_ts.afternoonSlot=_ts.afternoonStart;
+    // Load any day-specific overrides (start/duration/type/co-teacher) that
+    // already exist for this retreat — whether set by the teacher previously
+    // or by admin via the master calendar's per-day edit — into the draft so
+    // the daily schedule editor below shows what's actually there.
+    // Only true middle days — arrival/departure have their own dedicated
+    // sections and are never part of this daily list, so an old orphaned
+    // override for either (e.g. from before an arrival class existed) must
+    // not get pulled back in here.
+    _ts.dailyMorning={};_ts.dailyAfternoon={};
+    (bk.scheduleTimeOverrides||[]).forEach(o=>{
+      if(o.date<=bk.startDate||o.date>=bk.endDate)return;
+      if(o.period==='morn')_ts.dailyMorning[o.date]={start:o.start,dur:o.dur,label:o.label||'',coTeacher:o.coTeacher||''};
+      else if(o.period==='aft')_ts.dailyAfternoon[o.date]={start:o.start,dur:o.dur,label:o.label||'',coTeacher:o.coTeacher||''};
+    });
+  }
   tsRenderPrepaidActivities(bk);
-  _ts=bk.scheduleRequest
-    ?{..._ts,...bk.scheduleRequest}
-    :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseStart:'',sunriseDur:45,sunriseLocation:''};
-  // Migrate old field name: afternoonStart → afternoonSlot
-  if(!_ts.afternoonSlot&&_ts.afternoonStart)_ts.afternoonSlot=_ts.afternoonStart;
-  // Load any day-specific overrides (start/duration/type/co-teacher) that
-  // already exist for this retreat — whether set by the teacher previously
-  // or by admin via the master calendar's per-day edit — into the draft so
-  // the daily schedule editor below shows what's actually there.
-  // Only true middle days — arrival/departure have their own dedicated
-  // sections and are never part of this daily list, so an old orphaned
-  // override for either (e.g. from before an arrival class existed) must
-  // not get pulled back in here.
-  _ts.dailyMorning={};_ts.dailyAfternoon={};
-  (bk.scheduleTimeOverrides||[]).forEach(o=>{
-    if(o.date<=bk.startDate||o.date>=bk.endDate)return;
-    if(o.period==='morn')_ts.dailyMorning[o.date]={start:o.start,dur:o.dur,label:o.label||'',coTeacher:o.coTeacher||''};
-    else if(o.period==='aft')_ts.dailyAfternoon[o.date]={start:o.start,dur:o.dur,label:o.label||'',coTeacher:o.coTeacher||''};
-  });
   tsRenderBrowseGrid();
   tsRenderWindows();
   tsBuildMorningFields();
