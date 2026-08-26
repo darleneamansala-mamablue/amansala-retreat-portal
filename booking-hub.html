@@ -1379,8 +1379,8 @@
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           Daily Morning Class
         </div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">Applies to all days between your arrival and departure. Choose your preferred time window, then pick your start time within that window.</div>
-        <div class="ts-window-row" id="tsWindowRow"></div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">Set the time, shala, and class type for each day in the Day-by-Day Schedule below — some teachers don't do the same class every day.</div>
+        <div class="ts-window-row" id="tsWindowRow" style="display:none"></div>
         <div id="tsMorningFields"></div>
         <div id="tsDailyScheduleFields"></div>
         <div style="margin-top:20px">
@@ -1418,7 +1418,7 @@
           <span>I have an afternoon or evening class</span>
         </label>
         <div id="tsAfternoonSection" style="display:none">
-          <div class="ts-fields">
+          <div class="ts-fields" style="display:none">
             <div class="ts-field">
               <label>Time Slot</label>
               <select id="tsAfternoonSlot" onchange="_ts.afternoonSlot=this.value;tsRenderShalaGrid('afternoon')">
@@ -1438,11 +1438,11 @@
               <input type="text" id="tsAfternoonDurCustom" placeholder="e.g. 2 hours, for a workshop" style="display:none;margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.afternoonDurRequest=this.value">
             </div>
           </div>
-          <div style="margin-top:16px" id="tsAfternoonFlagsWrap">
+          <div style="margin-top:16px;display:none" id="tsAfternoonFlagsWrap">
             <div class="ts-section-lbl">Class Characteristics <span style="font-size:11px;font-weight:400;color:var(--muted)">(select all that apply)</span></div>
             <div id="tsAfternoonFlagsContainer" style="display:flex;flex-direction:column;gap:8px;margin-top:8px"></div>
           </div>
-          <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
+          <div style="margin-top:16px;display:none;gap:12px;flex-wrap:wrap">
             <div style="flex:1;min-width:180px">
               <div class="ts-section-lbl">Class Type <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — e.g. Pilates, Dance, Workshop on Love)</span></div>
               <input type="text" id="tsAfternoonLabel" placeholder="Leave blank for the default" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.afternoonLabel=this.value">

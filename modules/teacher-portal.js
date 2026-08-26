@@ -1517,90 +1517,11 @@ function tsCapMorningDur(){
 
 function tsBuildMorningFields(){
   const el=document.getElementById('tsMorningFields');if(!el)return;
-  if(!_ts.window){el.innerHTML='<div style="font-size:13px;color:var(--muted);font-style:italic">Select a time window above first.</div>';return;}
-  if(_ts.window==='special'){
-    const dur=_ts.morningDur||60;
-    el.innerHTML=`<div class="ts-fields">
-      <div class="ts-field"><label>Start Time</label>
-        <select id="tsMorningStart" onchange="_ts.morningStart=this.value;tsRenderShalaGrid('morning')">
-          <option value="">— Choose —</option>
-          ${TS_SPECIAL_TIME_SLOTS.map(s=>`<option value="${s.val}"${_ts.morningStart===s.val?' selected':''}>${s.label}</option>`).join('')}
-        </select>
-      </div>
-      <div class="ts-field"><label>Duration</label>
-        <select id="tsMorningDur" onchange="tsMorningDurSelect(this.value)">
-          <option value="45"${dur===45?' selected':''}>45 minutes</option>
-          <option value="60"${dur===60?' selected':''}>60 minutes</option>
-          <option value="75"${dur===75?' selected':''}>75 minutes</option>
-          <option value="90"${dur===90?' selected':''}>90 minutes</option>
-          <option value="custom"${![45,60,75,90].includes(dur)?' selected':''}>Other (request longer)</option>
-        </select>
-        <input type="text" id="tsMorningDurCustom" placeholder="e.g. 2 hours, for a workshop" value="${_ts.morningDurRequest||''}" style="display:${_ts.morningDurRequest?'block':'none'};margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.morningDurRequest=this.value">
-      </div>
-    </div>
-    <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
-      <div style="flex:1;min-width:180px">
-        <div class="ts-section-lbl">Class Type <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — e.g. Pilates, Dance, Workshop on Love)</span></div>
-        <input type="text" id="tsMorningLabel" value="${_ts.morningLabel||''}" placeholder="Leave blank for the default" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.morningLabel=this.value">
-      </div>
-      <div style="flex:1;min-width:180px">
-        <div class="ts-section-lbl">Co-Teacher <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional)</span></div>
-        <input type="text" id="tsMorningCoTeacher" value="${_ts.morningCoTeacher||''}" placeholder="e.g. Jane Smith" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.morningCoTeacher=this.value">
-      </div>
-    </div>
-    <div style="margin-top:16px">
-      <div class="ts-section-lbl">Why doesn't this fit the standard windows? <span style="font-size:11px;font-weight:400;color:var(--muted)">(required — helps Amansala plan around it)</span></div>
-      <textarea id="tsMorningSpecialReason" placeholder="e.g. My group needs an earlier sunrise class at 6:00 AM..." style="width:100%;height:70px;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;line-height:1.6;background:var(--sand);outline:none;resize:vertical;box-sizing:border-box;margin-top:6px" onchange="_ts.morningSpecialReason=this.value">${_ts.morningSpecialReason||''}</textarea>
-      <div style="font-size:12px;color:var(--muted);font-style:italic;margin-top:8px">This time is based on availability — Amansala will confirm or follow up with you if it doesn't work.</div>
-    </div>`;
-    return;
-  }
-  const win=TS_WINDOWS.find(w=>w.id===_ts.window)||TS_WINDOWS[0];
-  const startM=tsT2M(win.start),endM=tsT2M(win.end),dur=_ts.morningDur||60;
-  // Offer every start time that leaves room for at least the shortest
-  // standard duration (45 min) — independent of whatever duration happens
-  // to be selected right now, so picking a later start never makes earlier
-  // valid ones disappear. The actual class length is capped separately
-  // (tsCapMorningDur) so it can never run past the window's end.
-  const MIN_DUR=45;
-  const opts=[];
-  for(let m=startM;m+MIN_DUR<=endM;m+=15){const t=tsM2T(m);opts.push(`<option value="${t}"${_ts.morningStart===t?' selected':''}>${tsFmt(t)}</option>`);}
-  const capNote=_ts._morningDurCapped?`<div style="font-size:11.5px;color:#92400e;margin-top:6px">Adjusted to ${_ts.morningDur} min so the class ends by ${tsFmt(win.end)}.</div>`:'';
-  el.innerHTML=`<div class="ts-fields">
-    <div class="ts-field"><label>Start Time</label>
-      <select id="tsMorningStart" onchange="_ts.morningStart=this.value;tsCapMorningDur();tsBuildMorningFields();tsBuildDailySchedule();tsRenderShalaGrid('morning')">
-        <option value="">— Choose —</option>${opts.join('')}
-      </select>
-    </div>
-    <div class="ts-field"><label>Duration</label>
-      <select id="tsMorningDur" onchange="tsMorningDurSelect(this.value)">
-        <option value="45"${dur===45?' selected':''}>45 minutes</option>
-        <option value="60"${dur===60?' selected':''}>60 minutes</option>
-        <option value="75"${dur===75?' selected':''}>75 minutes</option>
-        <option value="90"${dur===90?' selected':''}>90 minutes</option>
-        <option value="custom"${![45,60,75,90].includes(dur)?' selected':''}>Other (request longer)</option>
-      </select>
-      <input type="text" id="tsMorningDurCustom" placeholder="e.g. 2 hours, for a workshop" value="${_ts.morningDurRequest||''}" style="display:${_ts.morningDurRequest?'block':'none'};margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.morningDurRequest=this.value">
-      ${capNote}
-    </div>
-  </div>
-  <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
-    <div style="flex:1;min-width:180px">
-      <div class="ts-section-lbl">Class Type <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — e.g. Pilates, Dance, Workshop on Love)</span></div>
-      <input type="text" id="tsMorningLabel" value="${_ts.morningLabel||''}" placeholder="Leave blank for the default" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.morningLabel=this.value">
-    </div>
-    <div style="flex:1;min-width:180px">
-      <div class="ts-section-lbl">Co-Teacher <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional)</span></div>
-      <input type="text" id="tsMorningCoTeacher" value="${_ts.morningCoTeacher||''}" placeholder="e.g. Jane Smith" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;margin-top:6px" onchange="_ts.morningCoTeacher=this.value">
-    </div>
-  </div>
-  <div style="margin-top:16px">
-    <div class="ts-section-lbl">Class Characteristics <span style="font-size:11px;font-weight:400;color:var(--muted)">(select all that apply — helps us assign the right shala)</span></div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-      ${['standard:Your standard yoga class','loud_music:I use very loud music','fitness:This is a fitness class','jumping:We will be jumping','quiet:I prefer quiet'].map(f=>{const[val,lbl]=f.split(':');const chk=(_ts.morningFlags||[]).includes(val);return`<label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13px;color:var(--dark)"><input type="checkbox" value="${val}"${chk?' checked':''} style="width:15px;height:15px;accent-color:var(--teal)" onchange="tsToggleFlag('morning','${val}',this.checked)">${lbl}</label>`;}).join('')}
-    </div>
-  </div>
-  <div style="margin-top:16px">
+  // The retreat-wide time window / start time / duration / class type /
+  // co-teacher / class characteristics pickers were removed — the
+  // day-by-day schedule below is now the only place a teacher sets those,
+  // per individual day. Only the general Notes field stays here.
+  el.innerHTML=`<div style="margin-top:16px">
     <div class="ts-section-lbl">Notes <span style="font-size:11px;font-weight:400;color:var(--muted)">(special requests for your morning class)</span></div>
     <textarea id="tsMorningNotes" placeholder="Any special requests for your morning class..." style="width:100%;height:80px;padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;line-height:1.6;background:var(--sand);outline:none;resize:vertical;box-sizing:border-box;margin-top:6px" onchange="_ts.morningNotes=this.value">${_ts.morningNotes||''}</textarea>
   </div>
@@ -1629,15 +1550,29 @@ function tsBuildDailySchedule(){
   const durOpts=[30,45,60,75,90,120,150];
   const row=(period,dateStr,dayLbl)=>{
     const store=period==='morn'?_ts.dailyMorning:_ts.dailyAfternoon;
-    const o=store[dateStr]||{};
-    const defStart=period==='morn'?(_ts.morningStart||'08:00'):(_ts.afternoonSlot||'16:30');
+    if(!store[dateStr])store[dateStr]={};
+    const o=store[dateStr];
+    const defStart=period==='morn'?(TS_DAILY_MORNING_TIME_SLOTS[0].val):(TS_DAILY_AFTERNOON_TIME_SLOTS[0].val);
     const defDur=period==='morn'?(_ts.morningDur||60):(_ts.afternoonDur||60);
     const defShala=period==='morn'?_ts.morningShala1:_ts.afternoonShala1;
-    const startVal=o.start||defStart;
-    const durVal=o.dur||defDur;
-    const shalaVal=o.shala1!==undefined&&o.shala1!==''?o.shala1:(defShala||'');
-    const shalaOpts=`<option value="">— Same as above —</option>`+SHALAS.map(s=>`<option value="${s.id}"${shalaVal===s.id?' selected':''}>${s.name}</option>`).join('');
+    // Morning/afternoon start time now lives entirely day-by-day (no
+    // retreat-wide default to fall back to) — write a concrete value into
+    // the draft the moment a day first renders, so what's showing in the
+    // dropdown is always actually saved, not just a visual placeholder.
+    if(o.start===undefined)o.start=defStart;
+    if(o.dur===undefined)o.dur=defDur;
+    const startVal=o.start;
+    const durVal=o.dur;
     const dayFlags=o.flags||[];
+    // Beachfront has no jumping/fitness classes — same rule the retreat-wide
+    // shala grid enforces, applied per day since the characteristics are now
+    // set per day too.
+    const dayBfBlocked=dayFlags.includes('jumping')||dayFlags.includes('fitness');
+    const shalaVal=(dayBfBlocked&&(o.shala1==='beachfront'||(!o.shala1&&defShala==='beachfront')))?'':(o.shala1!==undefined&&o.shala1!==''?o.shala1:(defShala||''));
+    const shalaOpts=`<option value="">— Same as above —</option>`+SHALAS.map(s=>{
+      const blocked=dayBfBlocked&&s.id==='beachfront';
+      return `<option value="${s.id}"${shalaVal===s.id?' selected':''}${blocked?' disabled':''}>${s.name}${blocked?' — unavailable (jumping/fitness)':''}</option>`;
+    }).join('');
     const flagBoxes=['standard:Your standard yoga class','loud_music:I use very loud music','fitness:This is a fitness class','jumping:We will be jumping','quiet:I prefer quiet'].map(f=>{
       const[val,lbl]=f.split(':');const chk=dayFlags.includes(val);
       return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--dark)"><input type="checkbox" value="${val}"${chk?' checked':''} style="width:13px;height:13px;accent-color:var(--teal)" onchange="tsToggleDailyFlag('${period}','${dateStr}','${val}',this.checked)">${lbl}</label>`;
@@ -1663,12 +1598,12 @@ function tsBuildDailySchedule(){
     if(_ts.hasAfternoon)afternoonRows+=row('aft',dateStr,dayLbl);
   }
   el.innerHTML=`<div style="margin-top:16px;padding:16px;background:#f8f5f0;border:1.5px solid var(--border);border-radius:12px">
-    <div class="ts-section-lbl">Day-by-Day Schedule <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — override any specific day's morning class time/type/shala; defaults to what you set above)</span></div>
+    <div class="ts-section-lbl">Day-by-Day Schedule <span style="font-size:11px;font-weight:400;color:var(--muted)">(set the time, shala, and class type for each day — some teachers don't do the same class every day)</span></div>
     ${morningRows}
   </div>`;
   if(elAft){
     elAft.innerHTML=_ts.hasAfternoon?`<div style="margin-top:16px;padding:16px;background:#f8f5f0;border:1.5px solid var(--border);border-radius:12px">
-      <div class="ts-section-lbl">Day-by-Day Schedule <span style="font-size:11px;font-weight:400;color:var(--muted)">(optional — override any specific day's afternoon class time/type/shala; defaults to what you set above)</span></div>
+      <div class="ts-section-lbl">Day-by-Day Schedule <span style="font-size:11px;font-weight:400;color:var(--muted)">(set the time, shala, and class type for each day — some teachers don't do the same class every day)</span></div>
       ${afternoonRows}
     </div>`:'';
   }
@@ -1684,6 +1619,17 @@ function tsToggleDailyFlag(period,dateStr,val,on){
   if(!store[dateStr].flags)store[dateStr].flags=[];
   if(on){if(!store[dateStr].flags.includes(val))store[dateStr].flags.push(val);}
   else{store[dateStr].flags=store[dateStr].flags.filter(v=>v!==val);}
+  // Jumping/fitness affects which shala this day can use (no Beachfront) —
+  // always re-render on either toggle direction so the Shala dropdown's
+  // disabled state updates immediately, whether Beachfront was this day's
+  // own explicit pick or just inherited from the retreat-wide default (the
+  // dropdown showed "Beachfront" either way, but only an explicit pick had
+  // anything to clear — the inherited case needs a re-render too, since
+  // that's what actually recomputes and disables the option).
+  if(val==='jumping'||val==='fitness'){
+    if(store[dateStr].shala1==='beachfront')store[dateStr].shala1='';
+    tsBuildDailySchedule();
+  }
 }
 
 function tsT2M(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
@@ -1980,10 +1926,13 @@ function tsSubmitSchedule(){
   const bowlCb=document.getElementById('tsBowlRental');if(bowlCb)_ts.bowlRental=bowlCb.checked;
   const bowlQtyEl=document.getElementById('tsBowlQty');if(bowlQtyEl)_ts.bowlQty=parseInt(bowlQtyEl.value)||1;
   if(!_ts.bowlRental)_ts.bowlDays=[];
-  if(!_ts.window){tsFlagRequired('tsWindowRow','Please select a morning time window.');return;}
-  if(_ts.window==='special'&&!_ts.morningSpecialReason){tsFlagRequired('tsMorningSpecialReason','Please tell us why your class needs a special time.');return;}
-  if(!_ts.morningStart){tsFlagRequired('tsMorningStart','Please select a morning start time.');return;}
   if(!_ts.morningShala1){tsFlagRequired('tsMorningShalaGrid','Please select at least a 1st choice shala.');return;}
+  // Morning start time is now set entirely day-by-day (no retreat-wide
+  // default) — every middle day needs its own start time before submitting.
+  {
+    const missingDay=svValidActivityDays(bk).find(d=>!_ts.dailyMorning?.[d.date]?.start);
+    if(missingDay){tsFlagRequired('tsDailyScheduleFields',`Please set a morning start time for ${missingDay.label}.`);return;}
+  }
   if(_ts.hasSunrise&&!_ts.sunriseStart){tsFlagRequired('tsSunriseStart','Please select a start time for your sunrise activity.');return;}
   if(_ts.hasSunrise&&!_ts.sunriseLocation){tsFlagRequired('tsSunriseLocation','Please select a location for your sunrise activity.');return;}
   // A 1-night retreat has no night that isn't the arrival night, so there's
@@ -1997,22 +1946,21 @@ function tsSubmitSchedule(){
   // was there before for this retreat's morn/aft days. Only keep an entry
   // when it actually differs from the retreat-wide default just submitted,
   // or carries a custom type/co-teacher, so unedited days don't clutter it.
+  // Morning (and afternoon, if enabled) time/shala/type now live entirely
+  // day-by-day — every middle day gets a real override entry, not just the
+  // days that differ from some retreat-wide default (there isn't one for
+  // start time anymore).
   const keepOvs=(bk.scheduleTimeOverrides||[]).filter(o=>o.date<bk.startDate||o.date>=bk.endDate||(o.period!=='morn'&&o.period!=='aft'));
-  const isMiddleDay=dateStr=>dateStr>bk.startDate&&dateStr<bk.endDate;
   const newOvs=[];
-  Object.entries(_ts.dailyMorning||{}).forEach(([dateStr,o])=>{
-    if(!isMiddleDay(dateStr))return;
-    const shalaDiffers=o.shala1&&o.shala1!==_ts.morningShala1;
-    const flagsDiffer=(o.flags||[]).length>0;
-    const differs=(o.start&&o.start!==_ts.morningStart)||(o.dur&&o.dur!==_ts.morningDur)||o.label||o.coTeacher||shalaDiffers||flagsDiffer;
-    if(differs)newOvs.push({date:dateStr,period:'morn',start:o.start||_ts.morningStart,dur:o.dur||_ts.morningDur,label:o.label||'',coTeacher:o.coTeacher||'',shala1:o.shala1||'',flags:o.flags||[]});
+  svValidActivityDays(bk).forEach(({date:dateStr})=>{
+    const o=_ts.dailyMorning?.[dateStr];
+    if(!o||!o.start)return;
+    newOvs.push({date:dateStr,period:'morn',start:o.start,dur:o.dur||60,label:o.label||'',coTeacher:o.coTeacher||'',shala1:o.shala1||'',flags:o.flags||[]});
   });
-  if(_ts.hasAfternoon)Object.entries(_ts.dailyAfternoon||{}).forEach(([dateStr,o])=>{
-    if(!isMiddleDay(dateStr))return;
-    const shalaDiffers=o.shala1&&o.shala1!==_ts.afternoonShala1;
-    const flagsDiffer=(o.flags||[]).length>0;
-    const differs=(o.start&&o.start!==_ts.afternoonSlot)||(o.dur&&o.dur!==_ts.afternoonDur)||o.label||o.coTeacher||shalaDiffers||flagsDiffer;
-    if(differs)newOvs.push({date:dateStr,period:'aft',start:o.start||_ts.afternoonSlot,dur:o.dur||_ts.afternoonDur,label:o.label||'',coTeacher:o.coTeacher||'',shala1:o.shala1||'',flags:o.flags||[]});
+  if(_ts.hasAfternoon)svValidActivityDays(bk).forEach(({date:dateStr})=>{
+    const o=_ts.dailyAfternoon?.[dateStr];
+    if(!o||!o.start)return;
+    newOvs.push({date:dateStr,period:'aft',start:o.start,dur:o.dur||60,label:o.label||'',coTeacher:o.coTeacher||'',shala1:o.shala1||'',flags:o.flags||[]});
   });
   bk.scheduleTimeOverrides=[...keepOvs,...newOvs];
   const{dailyMorning,dailyAfternoon,...srWithoutDaily}=_ts;
@@ -2056,7 +2004,7 @@ function tsRenderCalSection(bk){
   const content=document.getElementById('tsCalContent');
   if(!sec||!content||!bk)return;
   const sr=bk.scheduleRequest;
-  if(!sr?.morningStart){sec.style.display='none';return;}
+  if(!sr?.submittedAt){sec.style.display='none';return;}
   sec.style.display='block';
   const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const MON_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -2099,7 +2047,8 @@ function tsRenderCalSection(bk){
         const depShala=snm(sr.departureShala1||sr.morningShala1);
         rows.push({time:fmtT(sr.departureSlot)+' – '+fmtT(addMin(sr.departureSlot,sr.departureDur||60)),desc:tsEffClassLabel(sr,'departure','Departure Morning Class'),shala:depShala,cat:'yoga',sk:sr.departureSlot});
       } else {
-        rows.push({time:fmtT(sr.morningStart)+' – '+fmtT(addMin(sr.morningStart,sr.morningDur||60)),desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cat:'yoga',sk:sr.morningStart||'08:00'});
+        const _usualMorn=tsUsualMorning(bk);
+        rows.push({time:fmtT(_usualMorn.start)+' – '+fmtT(addMin(_usualMorn.start,_usualMorn.dur)),desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cat:'yoga',sk:_usualMorn.start||'08:00'});
       }
       rows.push({time:'9:30 AM',desc:'Brunch &amp; Departures',shala:'',cat:'meal',sk:'09:30'});
     } else {
@@ -2111,8 +2060,9 @@ function tsRenderCalSection(bk){
       // must be applied here too, not just on the admin's own master calendar,
       // or the teacher's itinerary goes stale the moment either one is used.
       const _ov=sr.adminOverride||{};
-      const _effMornStart=_ov.morningStart||sr.morningStart;
-      const _effMornDur=_ov.morningDur||sr.morningDur||60;
+      const _usualMorn2=tsUsualMorning(bk);
+      const _effMornStart=_ov.morningStart||_usualMorn2.start;
+      const _effMornDur=_ov.morningDur||_usualMorn2.dur||60;
       const _effAfSlot=_ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart;
       const _effAfDur=_ov.afternoonDur||sr.afternoonDur||60;
       const _timeOvs=bk.scheduleTimeOverrides||[];
@@ -2270,14 +2220,18 @@ function openScheduleViewer(bkId){
     Start: ${fmtT(sr.arrivalSlot)} · Duration: ${dur(sr.arrivalDur)}<br>
     Shala: ${shalaName(sr.arrivalShala1)}${sr.arrivalNotes?'<br><span style="color:var(--muted)">'+sr.arrivalNotes+'</span>':''}${durReq(sr.arrivalDurRequest)}
   </div>`;}
-  html+=`<div style="margin-bottom:14px"><b>Daily ${tsEffClassLabel(sr,'morning','Morning Class')}</b><br>
-      Window: ${sr.window==='special'?'⚠️ Special Request (outside standard windows)':(win?win.label:'—')}<br>
-      Start: ${fmtT(sr.morningStart)} · Duration: ${dur(sr.morningDur)}<br>
-      Shala: ${shalaName(sr.morningShala1)}${durReq(sr.morningDurRequest)}${sr.window==='special'&&sr.morningSpecialReason?'<br><span style="color:#b45309;font-weight:700">Reason: '+sr.morningSpecialReason+'</span>':''}
+  {
+    const mornOvs=(bk.scheduleTimeOverrides||[]).filter(o=>o.period==='morn').sort((a,b)=>a.date.localeCompare(b.date));
+    const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});};
+    html+=`<div style="margin-bottom:14px"><b>Morning Class — Day by Day</b><br>
+      ${mornOvs.length?mornOvs.map(o=>`${fmtD(o.date)}: ${fmtT(o.start)} · ${dur(o.dur)} · ${shalaName(o.shala1||sr.morningShala1)}${o.label?' · '+o.label:''}${o.coTeacher?' · with '+o.coTeacher:''}`).join('<br>'):'<span style="color:var(--muted)">Not yet set</span>'}
     </div>`;
-  if(sr.hasAfternoon){html+=`<div style="margin-bottom:14px"><b>Daily ${tsEffClassLabel(sr,'afternoon','Afternoon Class')}</b><br>
-    Start: ${fmtT(sr.afternoonSlot||sr.afternoonStart)} · Duration: ${dur(sr.afternoonDur)}<br>
-    Shala: ${shalaName(sr.afternoonShala1)}${durReq(sr.afternoonDurRequest)}
+  }
+  if(sr.hasAfternoon){
+    const aftOvs=(bk.scheduleTimeOverrides||[]).filter(o=>o.period==='aft').sort((a,b)=>a.date.localeCompare(b.date));
+    const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});};
+    html+=`<div style="margin-bottom:14px"><b>Afternoon Class — Day by Day</b><br>
+    ${aftOvs.length?aftOvs.map(o=>`${fmtD(o.date)}: ${fmtT(o.start)} · ${dur(o.dur)} · ${shalaName(o.shala1||sr.afternoonShala1)}${o.label?' · '+o.label:''}${o.coTeacher?' · with '+o.coTeacher:''}`).join('<br>'):'<span style="color:var(--muted)">Not yet set</span>'}
   </div>`;}
   if(sr.hasDepartureClass&&sr.departureSlot){html+=`<div style="margin-bottom:14px"><b>${tsEffClassLabel(sr,'departure','Departure Morning Class')}</b><br>
     Start: ${fmtT(sr.departureSlot)} · Duration: ${dur(sr.departureDur)}<br>
@@ -2343,11 +2297,11 @@ function openScheduleViewer(bkId){
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <div style="flex:1;min-width:120px">
             <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:3px">Start Time</label>
-            <input type="time" id="svAdjMorningStart" class="finp" value="${sr.adminOverride?.morningStart||sr.morningStart||''}" style="width:100%">
+            <input type="time" id="svAdjMorningStart" class="finp" value="${sr.adminOverride?.morningStart||tsUsualMorning(bk).start||''}" style="width:100%">
           </div>
           <div style="flex:1;min-width:120px">
             <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:3px">Duration (min)</label>
-            <input type="number" id="svAdjMorningDur" class="finp" value="${sr.adminOverride?.morningDur||sr.morningDur||90}" min="30" max="180" step="15" style="width:100%">
+            <input type="number" id="svAdjMorningDur" class="finp" value="${sr.adminOverride?.morningDur||tsUsualMorning(bk).dur||90}" min="30" max="180" step="15" style="width:100%">
           </div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
@@ -2533,6 +2487,15 @@ function svValidActivityDays(bk){
     out.push({date:fmtISO(d),label:DAY_NAMES[d.getDay()]+' '+MON_NAMES[d.getMonth()]+' '+d.getDate()});
   }
   return out;
+}
+// Morning start time now lives entirely day-by-day (no retreat-wide
+// default) — arrival/departure days that don't have their own explicit
+// class fall back to "the usual morning time," which we derive from the
+// first day-by-day entry rather than a now-nonexistent sr.morningStart.
+function tsUsualMorning(bk){
+  const ov=(bk.scheduleTimeOverrides||[]).find(o=>o.period==='morn');
+  if(ov)return{start:ov.start,dur:ov.dur||60,shala1:ov.shala1||''};
+  return{start:'',dur:60,shala1:''};
 }
 function svActivityEditorHtml(bk,bkId){
   const acts=bk.retreatActivities||[];
@@ -3747,9 +3710,12 @@ function openPrintSchedule(bkId){
       rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cls:'',sk:'19:30'});
     } else if(i===nights-1){
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea — Closing Comments',shala:'',cls:'',sk:'07:00'});
-      if(sr?.morningStart){
-        const end=fmtT(addMin(sr.morningStart,sr.morningDur||60));
-        rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cls:'shala',sk:sr.morningStart});
+      {
+        const _usualDep=tsUsualMorning(bk);
+        if(_usualDep.start){
+          const end=fmtT(addMin(_usualDep.start,_usualDep.dur||60));
+          rows.push({time:fmtT(_usualDep.start)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cls:'shala',sk:_usualDep.start});
+        }
       }
       rows.push({time:'9:30 AM',desc:'Full Breakfast',shala:'',cls:'',sk:'09:30'});
       rows.push({time:'',desc:'Departures',shala:'',cls:'',sk:'99:99'});
@@ -3765,14 +3731,15 @@ function openPrintSchedule(bkId){
       const _pTimeOvs=bk.scheduleTimeOverrides||[];
       const _pMornOv=_pTimeOvs.find(o=>o.date===dateStr&&o.period==='morn');
       const _pAftOv=_pTimeOvs.find(o=>o.date===dateStr&&o.period==='aft');
-      const _pDayMornStart=_pMornOv?_pMornOv.start:sr?.morningStart;
-      const _pDayMornDur=_pMornOv?(_pMornOv.dur||sr?.morningDur||60):(sr?.morningDur||60);
+      const _pUsualMorn=tsUsualMorning(bk);
+      const _pDayMornStart=_pMornOv?_pMornOv.start:_pUsualMorn.start;
+      const _pDayMornDur=_pMornOv?(_pMornOv.dur||_pUsualMorn.dur||60):(_pUsualMorn.dur||60);
       const _pDayMornShala=shalaName(_pMornOv?.shala1||sr?.morningShala1);
       if(_pDayMornStart){
         const end=fmtT(addMin(_pDayMornStart,_pDayMornDur));
         rows.push({time:fmtT(_pDayMornStart)+' – '+end,desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class')+(_pMornOv?' (time changed)':''),shala:_pDayMornShala,cls:'shala',sk:_pDayMornStart});
       }
-      const _pOv=sr?.adminOverride||{};const _pMStart=_pOv.morningStart||sr?.morningStart||'';const _pMDur=parseInt(_pOv.morningDur||sr?.morningDur||90);const _pBrunchT=_pMStart?addMin(_pMStart,_pMDur+15):'09:45';
+      const _pOv=sr?.adminOverride||{};const _pMStart=_pOv.morningStart||_pUsualMorn.start||'';const _pMDur=parseInt(_pOv.morningDur||_pUsualMorn.dur||90);const _pBrunchT=_pMStart?addMin(_pMStart,_pMDur+15):'09:45';
       rows.push({time:fmtT(_pBrunchT),desc:_pBrunchT<'09:45'?'Breakfast':'Brunch',shala:'',cls:'',sk:_pBrunchT});
       rows.push({time:'3:00 PM',desc:'Snack',shala:'',cls:'',sk:'15:00'});
       if(sr?.workshops){
@@ -3990,20 +3957,26 @@ function buildRetreatSchedulesPanel(){
       const dateStr=d.toISOString().slice(0,10);
       const dayLbl=DAY_NAMES[d.getDay()]+', '+MON_NAMES[d.getMonth()]+' '+d.getDate();
       const rows=[];
+      const _rspMornOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
+      const _rspUsual=tsUsualMorning(bk);
       if(i===0){
-        if(sr.morningStart){
-          const end=fmtT(addMin(sr.morningStart,sr.morningDur||60));
-          rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),note:shalaName(sr.morningShala1),type:'class'});
+        const us=_rspUsual;
+        if(us.start){
+          const end=fmtT(addMin(us.start,us.dur||60));
+          rows.push({time:fmtT(us.start)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),note:shalaName(us.shala1||sr.morningShala1),type:'class'});
         }
       } else if(i===nights-1){
-        if(sr.morningStart){
-          const end=fmtT(addMin(sr.morningStart,sr.morningDur||60));
-          rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),note:shalaName(sr.morningShala1),type:'class'});
+        const us=_rspUsual;
+        if(us.start){
+          const end=fmtT(addMin(us.start,us.dur||60));
+          rows.push({time:fmtT(us.start)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),note:shalaName(us.shala1||sr.morningShala1),type:'class'});
         }
       } else {
-        if(sr.morningStart){
-          const end=fmtT(addMin(sr.morningStart,sr.morningDur||60));
-          rows.push({time:fmtT(sr.morningStart)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),note:shalaName(sr.morningShala1),type:'class'});
+        const dayStart=_rspMornOv?.start;
+        if(dayStart){
+          const dayDur=_rspMornOv?.dur||60;
+          const end=fmtT(addMin(dayStart,dayDur));
+          rows.push({time:fmtT(dayStart)+' – '+end,desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'),note:shalaName(_rspMornOv?.shala1||sr.morningShala1),type:'class'});
         }
         const ws=(sr.workshops||[]).find(w=>w.enabled&&w.date===dateStr);
         if(ws){
@@ -4197,8 +4170,9 @@ function skedGetRetreatEvents(dateStr){
     const title=bk.leaderName||bk.retreatName||'Retreat';
     // Merge adminOverride into effective schedule values (admin-assigned shala wins)
     const ov=sr.adminOverride||{};
-    const effMornStart=ov.morningStart||sr.morningStart;
-    const effMornDur=ov.morningDur||sr.morningDur||90;
+    const usualMorn=tsUsualMorning(bk);
+    const effMornStart=ov.morningStart||usualMorn.start;
+    const effMornDur=ov.morningDur||usualMorn.dur||90;
     const effMornShala=ov.morningShala1||sr.morningShala1;
     const effAfSlot=ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart;
     const effAfDur=ov.afternoonDur||sr.afternoonDur||75;
@@ -4608,8 +4582,8 @@ function openSkedEditClassModal(bkId,suffix,dateStr){
     }
     sel.innerHTML=opts.map(t=>`<option value="${t}">${tsFmt(t)}</option>`).join('');
     const ov=sr.adminOverride||{};
-    const usualStart=isMorn?(ov.morningStart||sr.morningStart):(ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart);
-    const usualDur=isMorn?(ov.morningDur||sr.morningDur):(ov.afternoonDur||sr.afternoonDur);
+    const usualStart=isMorn?(ov.morningStart||tsUsualMorning(bk).start):(ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart);
+    const usualDur=isMorn?(ov.morningDur||tsUsualMorning(bk).dur):(ov.afternoonDur||sr.afternoonDur);
     sel.value=existingOv?existingOv.start:(usualStart||opts[0]);
     durSel.value=String(existingOv?.dur||usualDur||60);
     scopeWrap.style.display='';
@@ -4653,8 +4627,12 @@ function skedSaveClassEdit(){
     showToast('Schedule updated for the whole retreat.');
     return;
   }
+  // Preserve any class type/co-teacher/shala/characteristics the teacher
+  // already set for this exact day — this modal only edits time/duration,
+  // so it must not silently wipe out the rest of that day's override.
+  const existingOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period===period)||{};
   bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===period));
-  bk.scheduleTimeOverrides.push({date:dateStr,period,start:newTime,dur:newDur});
+  bk.scheduleTimeOverrides.push({...existingOv,date:dateStr,period,start:newTime,dur:newDur});
   saveAll();skedBuild();closeModal('skedEditClassModal');
   showToast('Time updated for '+dateStr+'.');
 }
