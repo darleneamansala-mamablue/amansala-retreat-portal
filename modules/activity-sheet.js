@@ -229,11 +229,15 @@ function actSheetSetView(v) {
   document.getElementById('actViewSummary').style.color = v==='summary' ? '#fff' : 'var(--dark)';
   document.getElementById('actViewByRetreat').style.background = v==='byretreat' ? 'var(--teal,#2d6a6a)' : '#fff';
   document.getElementById('actViewByRetreat').style.color = v==='byretreat' ? '#fff' : 'var(--dark)';
+  document.getElementById('actViewImport').style.background = v==='import' ? 'var(--teal,#2d6a6a)' : '#fff';
+  document.getElementById('actViewImport').style.color = v==='import' ? '#fff' : 'var(--dark)';
   document.getElementById('actSheetGrid').style.display = v==='week' ? '' : 'none';
   document.getElementById('actSheetSummary').style.display = v==='summary' ? '' : 'none';
   document.getElementById('actSheetByRetreat').style.display = v==='byretreat' ? '' : 'none';
+  document.getElementById('actSheetImport').style.display = v==='import' ? '' : 'none';
   if (v==='summary') actSheetRenderSummary();
   if (v==='byretreat') actByRetreatRender();
+  if (v==='import' && typeof aiRender==='function') aiRender();
 }
 
 // ===== BY-RETREAT ACTIVITY SHEET =====

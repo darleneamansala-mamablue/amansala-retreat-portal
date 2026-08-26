@@ -2841,6 +2841,7 @@
         <button id="actViewWeek" onclick="actSheetSetView('week')" style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:'Jost',sans-serif;background:#fff;color:var(--dark)">Weekly</button>
         <button id="actViewSummary" onclick="actSheetSetView('summary')" style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:'Jost',sans-serif;background:var(--teal,#2d6a6a);color:#fff">Sign-Up Summary <span id="actSignupBadge" style="display:none;background:rgba(255,255,255,.25);border-radius:10px;padding:0 6px;margin-left:2px;font-size:10px"></span></button>
         <button id="actViewByRetreat" onclick="actSheetSetView('byretreat')" style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:'Jost',sans-serif;background:#fff;color:var(--dark)">By Retreat</button>
+        <button id="actViewImport" onclick="actSheetSetView('import')" style="padding:6px 14px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:'Jost',sans-serif;background:#fff;color:var(--dark)">Import Sheet</button>
       </div>
       <button onclick="actSheetPopulate()" style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:#f0f9f9;color:var(--teal,#2d6a6a);border:1.5px solid #b2d8d8;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -2864,6 +2865,7 @@
     <div id="actSheetGrid"></div>
     <div id="actSheetSummary" style="display:none"></div>
     <div id="actSheetByRetreat" style="display:none"></div>
+    <div id="actSheetImport" style="display:none"></div>
   </div>
 </div>
 
@@ -5187,6 +5189,8 @@ if(location.protocol!=='file:'){
 <script>
 // ===== ACTIVITY SHEET TAB — moved to modules/activity-sheet.js =====
 </script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="modules/activity-sheet-import.js"></script>
 <script src="modules/bbc-schedule.js"></script>
 <script>
 // ===== BBC SCHEDULE MODULE — moved to modules/bbc-schedule.js =====
