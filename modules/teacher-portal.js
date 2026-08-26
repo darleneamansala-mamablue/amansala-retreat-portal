@@ -1383,7 +1383,7 @@ function tsDailyTimeSlots(startM,endM){
   return slots;
 }
 const TS_DAILY_MORNING_TIME_SLOTS=tsDailyTimeSlots(7*60+30,8*60+45);   // 7:30 – 8:45 AM
-const TS_DAILY_AFTERNOON_TIME_SLOTS=tsDailyTimeSlots(16*60,18*60+30); // 4:00 – 6:30 PM
+const TS_DAILY_AFTERNOON_TIME_SLOTS=tsDailyTimeSlots(15*60+30,21*60); // 3:30 – 9:00 PM (covers both the 3:30–5:30 and 5:45-onward blocks, back to back in 15-min steps)
 
 function tsRenderWorkshopDays(){
   const el=document.getElementById('tsWorkshopDaysList');if(!el)return;
@@ -4578,7 +4578,7 @@ function openSkedEditClassModal(bkId,suffix,dateStr){
       opts=tsAllMorningSlots();
     } else {
       opts=[];
-      for(let m=tsT2M('13:00');m<=tsT2M('19:45');m+=15)opts.push(tsM2T(m));
+      for(let m=tsT2M('13:00');m<=tsT2M('21:00');m+=15)opts.push(tsM2T(m));
     }
     sel.innerHTML=opts.map(t=>`<option value="${t}">${tsFmt(t)}</option>`).join('');
     const ov=sr.adminOverride||{};
