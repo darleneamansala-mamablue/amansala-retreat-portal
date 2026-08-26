@@ -358,45 +358,57 @@ function actByRetreatRender() {
 function actByRetreatPrint(bkId) {
   const bk = AppData.bookings.find(b=>b.id===bkId);
   if (!bk) { showToast('Select a retreat first.'); return; }
-  const entries = actByRetreatBuildEntries(bkId);
-  const fmtDLong = ds=>{if(!ds)return'Date TBD';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});};
-  const fmtT = t=>{if(!t)return'Time TBD';const[h,m]=t.split(':').map(Number);return((h%12)||12)+':'+String(m).padStart(2,'0')+(h>=12?' PM':' AM');};
-  const fmt2 = ds=>{if(!ds)return'';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
-  const retreatName = bk.retreatName||bk.leaderName||'Retreat';
-  const dateRange = fmt2(bk.startDate)+' – '+fmt2(bk.endDate);
+  // Chronological (not prepaid-first) — this is a sign-up grid organized by
+  // when each activity actually happens, matching the paper sheet this
+  // replaces: one column per tour/ceremony occurrence, one row per guest.
+  const entries = actByRetreatBuildEntries(bkId).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.time||'').localeCompare(b.time||''));
+  const retreatName = bk.leaderName||bk.retreatName||'Retreat';
 
-  const renderEntry = e=>{
-    const guestRows = e.guests.map((g,i)=>{
-      const box = e.prepaid ? '' : `<span class="chk ${g.signedUp?'on':''}">${g.signedUp?'&#10003;':''}</span>`;
-      return `<tr><td class="num">${i+1}.</td><td class="name">${box}${g.last?g.last+', '+g.first:g.first}</td><td class="room">${g.room?'Rm '+g.room:''}</td></tr>`;
-    }).join('');
-    const priceTxt = e.prepaid ? 'Included in Package' : (e.ao.price ? '$'+e.ao.price+' / person' : '');
-    const signedCount = e.guests.filter(g=>g.signedUp).length;
-    return `<div class="act-sheet-card">
-      <div class="act-sheet-head">
-        <div>
-          <div class="act-sheet-name">${e.ao.name}</div>
-          <div class="act-sheet-meta">${fmtDLong(e.date)} &middot; ${fmtT(e.time)}</div>
-        </div>
-        <div class="act-sheet-price ${e.prepaid?'included':''}">${priceTxt}</div>
-      </div>
-      <table class="act-sheet-table">
-        <thead><tr><th class="num">#</th><th>Guest Name</th><th>Room</th></tr></thead>
-        <tbody>${guestRows||'<tr><td colspan="3" class="empty">No guests on the room list yet.</td></tr>'}</tbody>
-      </table>
-      <div class="act-sheet-count">${e.prepaid?e.guests.length+' guests in package':signedCount+' of '+e.guests.length+' signed up'}</div>
-    </div>`;
-  };
+  const ordinal = n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
+  const startD = new Date(bk.startDate+'T12:00:00'), endD = new Date(bk.endDate+'T12:00:00');
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dateRangeLbl = startD.getMonth()===endD.getMonth()
+    ? MON[startD.getMonth()]+' '+ordinal(startD.getDate())+' - '+ordinal(endD.getDate())
+    : MON[startD.getMonth()]+' '+ordinal(startD.getDate())+' - '+MON[endD.getMonth()]+' '+ordinal(endD.getDate());
+  const fmtDay = ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'long'});};
+  const fmtDate = ds=>{const d=new Date(ds+'T12:00:00');return MON[d.getMonth()]+' '+ordinal(d.getDate());};
+  const fmtT = t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);return((h%12)||12)+':'+String(m).padStart(2,'0')+' '+(h>=12?'pm':'am');};
+  const cap = s=>s?s.charAt(0).toUpperCase()+s.slice(1):'';
 
-  let body = '';
-  if (!entries.length) {
-    body = '<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No activities scheduled for this retreat yet.</p>';
-  } else {
-    const prepaidEntries = entries.filter(e=>e.prepaid);
-    const optionalEntries = entries.filter(e=>!e.prepaid);
-    if (prepaidEntries.length) body += '<div class="section-hdr">Included in the Package</div>' + prepaidEntries.map(renderEntry).join('');
-    if (optionalEntries.length) body += '<div class="section-hdr">Optional Add-Ons — Sign Up</div>' + optionalEntries.map(renderEntry).join('');
-  }
+  // Full roster, alphabetical by first name (matching the paper sheet this
+  // replaces) — every guest gets a row whether or not they've signed up for
+  // anything yet, so staff/guests can mark an X in person for whatever
+  // wasn't already submitted online.
+  const roster = actRosterForBk(bkId).slice().sort((a,b)=>a.first.localeCompare(b.first)||(a.last||'').localeCompare(b.last||''));
+  const signedFor = (g,e)=>e.guests.some(x=>x.first===g.first&&x.last===g.last&&x.signedUp);
+
+  const colHeaders = entries.map(e=>{
+    const priceTxt = e.prepaid ? 'Included' : (e.ao.price?'$'+e.ao.price:'');
+    const nameTxt = e.prepaid ? e.ao.name : 'Optional '+e.ao.name;
+    return `<th>
+      <div class="col-day">${fmtDay(e.date)}</div>
+      <div class="col-date">${fmtDate(e.date)}</div>
+      <div class="col-name">${nameTxt}</div>
+      <div class="col-time">${fmtT(e.time)}</div>
+      <div class="col-price">${priceTxt}</div>
+    </th>`;
+  }).join('');
+
+  const guestRows = roster.map(g=>{
+    const cells = entries.map(e=>`<td class="mark">${signedFor(g,e)?'X':''}</td>`).join('');
+    return `<tr><td class="name-cell">${g.first}${g.last?' '+g.last:''}</td>${cells}</tr>`;
+  }).join('');
+
+  const paxRow = `<tr class="tally"><td class="name-cell"># of Pax</td>${entries.map(e=>{
+    const cnt=roster.filter(g=>signedFor(g,e)).length;
+    return `<td class="mark">${cnt||''}</td>`;
+  }).join('')}</tr>`;
+  const opsRow = (label,field)=>`<tr class="tally"><td class="name-cell">${label}</td>${entries.map(e=>{
+    const val=(actOpsData[e.ao.id+'|'+e.date]||{})[field]||'';
+    return `<td class="mark">${cap(val)}</td>`;
+  }).join('')}</tr>`;
+
+  const signupLink = location.origin+'/activity-signup.html?id='+bkId;
 
   const win = window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head>
@@ -404,41 +416,44 @@ function actByRetreatPrint(bkId) {
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       *{box-sizing:border-box}
-      body{font-family:'Jost',sans-serif;margin:0;padding:40px 48px;color:#2d2520;background:#fff}
-      .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #2d6a6a;padding-bottom:14px;margin-bottom:28px}
-      .brand{font-family:'Cormorant Garamond',serif;font-size:15px;letter-spacing:3px;text-transform:uppercase;color:#8a7e74}
-      .title{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:700;color:#1a2332;margin:2px 0 0}
-      .sub{font-size:13px;color:#6b7280;margin-top:4px}
-      .print-btn{padding:8px 18px;background:#2d6a6a;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'Jost',sans-serif;font-size:13px;font-weight:600}
-      .act-sheet-card{break-inside:avoid;margin-bottom:26px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
-      .act-sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;background:#f9f7f4;padding:14px 18px;border-bottom:1px solid #e5e7eb}
-      .act-sheet-name{font-size:17px;font-weight:700;color:#1a2332}
-      .act-sheet-meta{font-size:12.5px;color:#6b7280;margin-top:3px}
-      .act-sheet-price{font-size:13px;font-weight:700;color:#7c3aed;white-space:nowrap}
-      .act-sheet-price.included{color:#059669}
-      .act-sheet-table{width:100%;border-collapse:collapse}
-      .act-sheet-table th{text-align:left;padding:6px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9ca3af;background:#fff;border-bottom:1px solid #f0ebe0}
-      .act-sheet-table td{padding:6px 14px;font-size:13px;border-top:1px solid #f0ebe0}
-      td.num{width:30px;color:#9ca3af}
-      td.room{color:#6b7280;font-size:12px}
-      td.empty{color:#c8bfb5;font-style:italic;font-size:12.5px}
-      .chk{display:inline-block;width:12px;height:12px;border:1.5px solid #b8ab9e;border-radius:3px;margin-right:8px;vertical-align:middle;text-align:center;line-height:11px;font-size:10px}
-      .chk.on{background:#059669;border-color:#059669;color:#fff}
-      .act-sheet-count{padding:6px 18px 10px;font-size:11.5px;font-weight:600;color:#6b7280;background:#fafaf8}
-      .section-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin:24px 0 12px;padding-bottom:6px;border-bottom:1px solid #e8dfd4}
-      .section-hdr:first-of-type{margin-top:0}
-      @media print{.no-print{display:none}body{padding:24px 32px}.act-sheet-card{page-break-inside:avoid}}
+      body{font-family:'Jost',sans-serif;margin:0;padding:32px;color:#1a1a1a;background:#fff;font-size:13pt}
+      .print-btn{padding:8px 18px;background:#2d6a6a;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'Jost',sans-serif;font-size:13pt;font-weight:600;float:right;margin-bottom:14px}
+      table{width:100%;border-collapse:collapse;font-size:13pt;clear:both}
+      caption{caption-side:top;text-align:center;padding-bottom:2px}
+      .title{font-family:'Cormorant Garamond',serif;font-size:25pt;font-weight:700;text-align:center;padding:8px 0 4px;border:1px solid #333;border-bottom:none}
+      .sub{text-align:center;font-size:13pt;border:1px solid #333;border-top:none;border-bottom:none;padding-bottom:6px}
+      .instr{text-align:center;font-size:13pt;font-weight:600;border:1px solid #333;border-top:none;border-bottom:none;padding:4px 0}
+      .warn{text-align:center;font-size:13pt;font-weight:700;color:#c0392b;border:1px solid #333;border-top:none;border-bottom:none;padding:4px 0}
+      .pax{text-align:center;font-size:13pt;border:1px solid #333;border-top:none;padding:4px 0}
+      th{border:1px solid #333;padding:5px 6px;font-size:13pt;font-weight:600;vertical-align:top;min-width:88px;font-family:'Jost',sans-serif}
+      .col-day,.col-date{font-size:13pt}
+      .col-name{margin-top:4px;font-weight:700}
+      .col-time,.col-price{margin-top:2px}
+      td{border:1px solid #333;padding:4px 8px;font-size:13pt}
+      td.name-cell{font-weight:600;white-space:nowrap;text-align:left}
+      td.mark{text-align:center;font-weight:700}
+      tr.tally td{font-weight:700;background:#f7f5f1}
+      .footer{text-align:center;font-size:12pt;color:#1d4ed8;margin-top:10px;line-height:1.6}
+      .footer a{color:#1d4ed8}
+      @media print{.no-print{display:none}body{padding:14px}}
     </style>
   </head><body>
-    <div class="hdr">
-      <div>
-        <div class="brand">Amansala · Tulum</div>
-        <div class="title">${retreatName}</div>
-        <div class="sub">Activity Sheet &middot; ${dateRange}</div>
-      </div>
-      <button class="print-btn no-print" onclick="window.print()">Print</button>
+    <button class="print-btn no-print" onclick="window.print()">Print</button>
+    <table>
+      <tr><th class="title" colspan="${entries.length+1}" style="border-bottom:none">${retreatName}</th></tr>
+      <tr><td class="sub" colspan="${entries.length+1}">${dateRangeLbl}</td></tr>
+      <tr><td class="instr" colspan="${entries.length+1}">Please mark an X by your name if you will participate in the activities</td></tr>
+      <tr><td class="warn" colspan="${entries.length+1}">Minimum of 6 people required for activities</td></tr>
+      <tr><td class="pax" colspan="${entries.length+1}">#${roster.length} of pax</td></tr>
+      <tr><th style="text-align:left">Name</th>${colHeaders}</tr>
+      ${guestRows||`<tr><td class="name-cell" colspan="${entries.length+1}" style="text-align:center;font-style:italic">No guests on the room list yet.</td></tr>`}
+      ${entries.length?paxRow+opsRow('Guide 1','guide1')+opsRow('Guide 2','guide2')+opsRow('Van','driver'):''}
+    </table>
+    <div class="footer">
+      All services must be cancelled at least 12 hours before your service otherwise you will be charged for it.<br>
+      <a href="${signupLink}">${signupLink}</a><br>
+      Please follow this link for your Schedule
     </div>
-    ${body}
   </body></html>`);
   win.document.close();
   setTimeout(()=>win.print(), 400);

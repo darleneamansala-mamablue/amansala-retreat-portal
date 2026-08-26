@@ -3794,19 +3794,19 @@ function renderSchedulePrint(bk,days){
     const dayName=parts[0]||day.label;
     const dayDate=parts[1]||'';
     return`<div class="sched-day-block" data-day="${di}" style="margin-bottom:26px;break-inside:avoid">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#9ca3af;font-family:'Jost',sans-serif;margin-bottom:2px">${dayName}</div>
-      <div style="font-size:20px;font-weight:700;color:#1a2332;margin-bottom:7px;font-family:'Cormorant Garamond',Georgia,serif">${dayDate}</div>
+      <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#9ca3af;font-family:'Jost',sans-serif;margin-bottom:2px">${dayName}</div>
+      <div style="font-size:22px;font-weight:700;color:#1a2332;margin-bottom:7px;font-family:'Cormorant Garamond',Georgia,serif">${dayDate}</div>
       <div style="height:1px;background:#e0d8cc;margin-bottom:10px"></div>
       ${day.rows.map((r,ri)=>`
         <div style="display:flex;align-items:baseline;padding:5px 0;border-bottom:1px solid #f2ede8" data-ri="${ri}">
           <span style="min-width:130px;flex-shrink:0;padding-right:14px">
-            <input class="sched-item-editable" value="${r.time}" placeholder="Time" onchange="schedEdit(${di},${ri},'time',this.value)" style="width:120px;font-size:11.5px;color:#6b7280;font-weight:600;font-family:'Jost',sans-serif">
+            <input class="sched-item-editable" value="${r.time}" placeholder="Time" onchange="schedEdit(${di},${ri},'time',this.value)" style="width:120px;font-size:14px;color:#6b7280;font-weight:600;font-family:'Jost',sans-serif">
           </span>
           <span style="flex:1">
-            <input class="sched-item-editable" value="${r.desc}" placeholder="Activity" onchange="schedEdit(${di},${ri},'desc',this.value)" style="width:100%;font-size:13.5px;color:#1a2332;font-family:'Cormorant Garamond',Georgia,serif">
+            <input class="sched-item-editable" value="${r.desc}" placeholder="Activity" onchange="schedEdit(${di},${ri},'desc',this.value)" style="width:100%;font-size:14px;color:#1a2332;font-family:'Cormorant Garamond',Georgia,serif">
           </span>
           <span style="flex-shrink:0;margin-left:8px">
-            <input class="sched-item-editable" value="${r.shala||''}" placeholder="" onchange="schedEdit(${di},${ri},'shala',this.value)" style="width:${r.shala?'90px':'0px'};font-size:12px;color:#4a7070;font-style:italic;font-family:'Cormorant Garamond',Georgia,serif">
+            <input class="sched-item-editable" value="${r.shala||''}" placeholder="" onchange="schedEdit(${di},${ri},'shala',this.value)" style="width:${r.shala?'90px':'0px'};font-size:14px;color:#4a7070;font-style:italic;font-family:'Cormorant Garamond',Georgia,serif">
           </span>
         </div>`).join('')}
     </div>`;
@@ -3814,13 +3814,13 @@ function renderSchedulePrint(bk,days){
   const printPrepaidIds=[...new Set([...(bk.packages||[]),...(bk.retreatActivities||[]).filter(a=>a.prepaid).map(a=>a.aoId)])];
   const printPrepaidItems=ADD_ONS.filter(a=>printPrepaidIds.includes(a.id));
   const printPrepaidHtml=printPrepaidItems.length?`<div style="background:#f0fdf4;border:1.5px solid #6ee7b7;border-radius:10px;padding:12px 16px;margin-bottom:22px;text-align:left">
-    <div style="font-family:'Jost',sans-serif;font-size:10.5px;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">✦ Prepaid Package</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px">${printPrepaidItems.map(ao=>`<span style="background:#dcfce7;color:#15803d;border:1px solid #6ee7b7;padding:3px 12px;border-radius:99px;font-size:11.5px;font-weight:600;font-family:'Jost',sans-serif">${ao.name}</span>`).join('')}</div>
+    <div style="font-family:'Jost',sans-serif;font-size:14px;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">✦ Prepaid Package</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">${printPrepaidItems.map(ao=>`<span style="background:#dcfce7;color:#15803d;border:1px solid #6ee7b7;padding:3px 12px;border-radius:99px;font-size:14px;font-weight:600;font-family:'Jost',sans-serif">${ao.name}</span>`).join('')}</div>
   </div>`:'';
   document.getElementById('schedPrintArea').innerHTML=`
     <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:2px solid #e0d8cc">
-      <div style="font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:700;color:#1a2332;margin-bottom:5px;letter-spacing:-.3px">${bk.leaderName||bk.retreatName}</div>
-      <div style="font-family:'Jost',sans-serif;font-size:13px;color:#6b7280;font-weight:500;letter-spacing:.3px">${dateRange}${pax?' &nbsp;·&nbsp; '+pax+' guests':''}</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:700;color:#1a2332;margin-bottom:5px;letter-spacing:-.3px">${bk.leaderName||bk.retreatName}</div>
+      <div style="font-family:'Jost',sans-serif;font-size:14px;color:#6b7280;font-weight:500;letter-spacing:.3px">${dateRange}${pax?' &nbsp;·&nbsp; '+pax+' guests':''}</div>
     </div>
     ${printPrepaidHtml}
     <div class="sched-days-grid">
