@@ -859,7 +859,7 @@ const TS_WINDOWS=[
   {id:'1',label:'7:45 – 9:20 AM', start:'07:45',end:'09:20'},
   // Open-ended — start any time from 9:20 on, and the class can run as long as
   // needed (the end here is just a generous outer bound, not a real cutoff).
-  {id:'2',label:'9:15 AM onward',start:'09:15',end:'14:30'},
+  {id:'2',label:'9:30 AM onward',start:'09:30',end:'14:30'},
 ];
 
 const TS_SPECIAL_TIME_SLOTS=(()=>{
@@ -1368,6 +1368,23 @@ const WS_TIME_SLOTS=(()=>{
   return slots;
 })();
 
+// 15-minute-increment options for the day-by-day schedule editor, scoped to
+// the actual window each period runs in (morning classes 7:30–8:45 AM,
+// afternoon/evening classes 4:00–6:30 PM) rather than the whole day.
+function tsDailyTimeSlots(startM,endM){
+  const slots=[];
+  for(let m=startM;m<=endM;m+=15){
+    const hh=String(Math.floor(m/60)).padStart(2,'0');
+    const mm=String(m%60).padStart(2,'0');
+    const h=Math.floor(m/60);
+    const disp=(h%12===0?12:h%12)+':'+mm+' '+(h<12?'AM':'PM');
+    slots.push({val:`${hh}:${mm}`,label:disp});
+  }
+  return slots;
+}
+const TS_DAILY_MORNING_TIME_SLOTS=tsDailyTimeSlots(7*60+30,8*60+45);   // 7:30 – 8:45 AM
+const TS_DAILY_AFTERNOON_TIME_SLOTS=tsDailyTimeSlots(16*60,18*60+30); // 4:00 – 6:30 PM
+
 function tsRenderWorkshopDays(){
   const el=document.getElementById('tsWorkshopDaysList');if(!el)return;
   const timeOpts=WS_TIME_SLOTS.map(s=>`<option value="${s.val}">${s.label}</option>`).join('');
@@ -1482,8 +1499,20 @@ function tsMorningDurSelect(value){
   if(customEl){customEl.style.display='none';customEl.value='';}
   _ts.morningDurRequest='';
   _ts.morningDur=parseInt(value);
+  tsCapMorningDur();
   tsBuildMorningFields();
   tsBuildDailySchedule();
+}
+// A late start time can't always fit every duration within the standard
+// window (e.g. an 8:30 start with 90 minutes selected would run past the
+// window's 9:20 end) — rather than blocking the start time, silently
+// shorten the class so it always ends right at the window's edge.
+function tsCapMorningDur(){
+  _ts._morningDurCapped=false;
+  if(_ts.window==='special'||!_ts.morningStart)return;
+  const win=TS_WINDOWS.find(w=>w.id===_ts.window);if(!win)return;
+  const maxDur=tsT2M(win.end)-tsT2M(_ts.morningStart);
+  if((_ts.morningDur||60)>maxDur&&maxDur>0){_ts.morningDur=maxDur;_ts._morningDurCapped=true;}
 }
 
 function tsBuildMorningFields(){
@@ -1528,12 +1557,18 @@ function tsBuildMorningFields(){
   }
   const win=TS_WINDOWS.find(w=>w.id===_ts.window)||TS_WINDOWS[0];
   const startM=tsT2M(win.start),endM=tsT2M(win.end),dur=_ts.morningDur||60;
+  // Offer every start time that leaves room for at least the shortest
+  // standard duration (45 min) — independent of whatever duration happens
+  // to be selected right now, so picking a later start never makes earlier
+  // valid ones disappear. The actual class length is capped separately
+  // (tsCapMorningDur) so it can never run past the window's end.
+  const MIN_DUR=45;
   const opts=[];
-  for(let m=startM;m+dur<=endM;m+=15){const t=tsM2T(m);opts.push(`<option value="${t}"${_ts.morningStart===t?' selected':''}>${tsFmt(t)}</option>`);}
-  if(!opts.length){el.innerHTML='<div style="font-size:13px;color:#dc2626">The selected duration does not fit within this window. Please choose a shorter duration or a different window.</div>';return;}
+  for(let m=startM;m+MIN_DUR<=endM;m+=15){const t=tsM2T(m);opts.push(`<option value="${t}"${_ts.morningStart===t?' selected':''}>${tsFmt(t)}</option>`);}
+  const capNote=_ts._morningDurCapped?`<div style="font-size:11.5px;color:#92400e;margin-top:6px">Adjusted to ${_ts.morningDur} min so the class ends by ${tsFmt(win.end)}.</div>`:'';
   el.innerHTML=`<div class="ts-fields">
     <div class="ts-field"><label>Start Time</label>
-      <select id="tsMorningStart" onchange="_ts.morningStart=this.value;tsRenderShalaGrid('morning')">
+      <select id="tsMorningStart" onchange="_ts.morningStart=this.value;tsCapMorningDur();tsBuildMorningFields();tsBuildDailySchedule();tsRenderShalaGrid('morning')">
         <option value="">— Choose —</option>${opts.join('')}
       </select>
     </div>
@@ -1546,6 +1581,7 @@ function tsBuildMorningFields(){
         <option value="custom"${![45,60,75,90].includes(dur)?' selected':''}>Other (request longer)</option>
       </select>
       <input type="text" id="tsMorningDurCustom" placeholder="e.g. 2 hours, for a workshop" value="${_ts.morningDurRequest||''}" style="display:${_ts.morningDurRequest?'block':'none'};margin-top:8px;width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none;box-sizing:border-box" onchange="_ts.morningDurRequest=this.value">
+      ${capNote}
     </div>
   </div>
   <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
@@ -1609,7 +1645,7 @@ function tsBuildDailySchedule(){
     return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
     <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
       <div style="min-width:130px;font-size:12.5px;font-weight:700;color:var(--dark)">${dayLbl}</div>
-      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Start</label><input type="time" value="${startVal}" onchange="tsSetDaily('${period}','${dateStr}','start',this.value)" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)"></div>
+      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Start</label><select onchange="tsSetDaily('${period}','${dateStr}','start',this.value)" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)">${(period==='morn'?TS_DAILY_MORNING_TIME_SLOTS:TS_DAILY_AFTERNOON_TIME_SLOTS).map(s=>`<option value="${s.val}"${startVal===s.val?' selected':''}>${s.label}</option>`).join('')}</select></div>
       <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Duration</label><select onchange="tsSetDaily('${period}','${dateStr}','dur',parseInt(this.value))" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)">${durOpts.map(m=>`<option value="${m}"${durVal===m?' selected':''}>${m} min</option>`).join('')}</select></div>
       <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Shala</label><select onchange="tsSetDaily('${period}','${dateStr}','shala1',this.value)" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand);max-width:150px">${shalaOpts}</select></div>
       <div style="flex:1;min-width:150px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Class Type</label><input type="text" value="${o.label||''}" placeholder="e.g. Pilates" onchange="tsSetDaily('${period}','${dateStr}','label',this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)"></div>
