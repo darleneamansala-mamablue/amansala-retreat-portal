@@ -3692,9 +3692,11 @@ function openPrintSchedule(bkId){
   // Format time
   const fmtT=t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';return`${h%12||12}:${String(m).padStart(2,'0')} ${ap}`;};
   const addMin=(t,mins)=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const tot=h*60+m+mins;const hh=Math.floor(tot/60)%24;return`${String(hh).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
-  // Build days
+  // Build days — a retreat with N nights has N+1 calendar days (arrival day,
+  // then each night, then the departure/checkout day), so this must loop
+  // through nights INCLUSIVE or the departure day silently never appears.
   const days=[];
-  for(let i=0;i<nights;i++){
+  for(let i=0;i<=nights;i++){
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
     const dateStr=d.toISOString().slice(0,10);
     const dayLabel=DAY_NAMES[d.getDay()]+' | '+MON_NAMES[d.getMonth()]+' '+(d.getDate())+(i===0?'st':i===1?'nd':i===2?'rd':'th');
@@ -3708,9 +3710,13 @@ function openPrintSchedule(bkId){
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:mShala,cls:'shala',sk:sr.arrivalSlot});
       }
       rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cls:'',sk:'19:30'});
-    } else if(i===nights-1){
+    } else if(i===nights){
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea — Closing Comments',shala:'',cls:'',sk:'07:00'});
-      {
+      if(sr?.hasDepartureClass&&sr?.departureSlot){
+        const depShala=shalaName(sr.departureShala1||sr.morningShala1);
+        const end=fmtT(addMin(sr.departureSlot,sr.departureDur||60));
+        rows.push({time:fmtT(sr.departureSlot)+' – '+end,desc:tsEffClassLabel(sr,'departure','Departure Morning Class'),shala:depShala,cls:'shala',sk:sr.departureSlot});
+      } else {
         const _usualDep=tsUsualMorning(bk);
         if(_usualDep.start){
           const end=fmtT(addMin(_usualDep.start,_usualDep.dur||60));
@@ -3952,7 +3958,7 @@ function buildRetreatSchedulesPanel(){
     const nights=Math.max(1,Math.round((pd(bk.endDate)-pd(bk.startDate))/DAY_MS));
     // Build schedule rows excluding meals
     const dayBlocks=[];
-    for(let i=0;i<nights;i++){
+    for(let i=0;i<=nights;i++){
       const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
       const dateStr=d.toISOString().slice(0,10);
       const dayLbl=DAY_NAMES[d.getDay()]+', '+MON_NAMES[d.getMonth()]+' '+d.getDate();
@@ -3965,7 +3971,7 @@ function buildRetreatSchedulesPanel(){
           const end=fmtT(addMin(us.start,us.dur||60));
           rows.push({time:fmtT(us.start)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),note:shalaName(us.shala1||sr.morningShala1),type:'class'});
         }
-      } else if(i===nights-1){
+      } else if(i===nights){
         const us=_rspUsual;
         if(us.start){
           const end=fmtT(addMin(us.start,us.dur||60));

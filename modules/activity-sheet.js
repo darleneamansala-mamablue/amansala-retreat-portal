@@ -381,10 +381,12 @@ function actByRetreatPrint(bkId) {
 
   // Full roster, alphabetical by first name (matching the paper sheet this
   // replaces) — every guest gets a row whether or not they've signed up for
-  // anything yet, so staff/guests can mark an X in person for whatever
-  // wasn't already submitted online.
+  // anything yet. This is the physical, pen-and-paper sheet — every mark
+  // cell prints blank regardless of online sign-ups, so guests can write
+  // their own X at check-in; the completed sheet later gets reconciled via
+  // Import Sheet. (The on-screen By Retreat view still shows who's already
+  // signed up online — only the print output stays blank.)
   const roster = actRosterForBk(bkId).slice().sort((a,b)=>a.first.localeCompare(b.first)||(a.last||'').localeCompare(b.last||''));
-  const signedFor = (g,e)=>e.guests.some(x=>x.first===g.first&&x.last===g.last&&x.signedUp);
 
   const colHeaders = entries.map(e=>{
     const priceTxt = e.prepaid ? 'Included' : (e.ao.price?'$'+e.ao.price:'');
@@ -399,14 +401,11 @@ function actByRetreatPrint(bkId) {
   }).join('');
 
   const guestRows = roster.map(g=>{
-    const cells = entries.map(e=>`<td class="mark">${signedFor(g,e)?'X':''}</td>`).join('');
+    const cells = entries.map(()=>`<td class="mark"></td>`).join('');
     return `<tr><td class="name-cell">${g.first}${g.last?' '+g.last:''}</td>${cells}</tr>`;
   }).join('');
 
-  const paxRow = `<tr class="tally"><td class="name-cell"># of Pax</td>${entries.map(e=>{
-    const cnt=roster.filter(g=>signedFor(g,e)).length;
-    return `<td class="mark">${cnt||''}</td>`;
-  }).join('')}</tr>`;
+  const paxRow = `<tr class="tally"><td class="name-cell"># of Pax</td>${entries.map(()=>`<td class="mark"></td>`).join('')}</tr>`;
   const opsRow = (label,field)=>`<tr class="tally"><td class="name-cell">${label}</td>${entries.map(e=>{
     const val=(actOpsData[e.ao.id+'|'+e.date]||{})[field]||'';
     return `<td class="mark">${cap(val)}</td>`;
