@@ -1382,7 +1382,7 @@ function tsDailyTimeSlots(startM,endM){
   }
   return slots;
 }
-const TS_DAILY_MORNING_TIME_SLOTS=tsDailyTimeSlots(7*60+30,8*60+45);   // 7:30 – 8:45 AM
+const TS_DAILY_MORNING_TIME_SLOTS=tsDailyTimeSlots(7*60+30,10*60);   // 7:30 – 10:00 AM
 const TS_DAILY_AFTERNOON_TIME_SLOTS=tsDailyTimeSlots(15*60+30,21*60); // 3:30 – 9:00 PM (covers both the 3:30–5:30 and 5:45-onward blocks, back to back in 15-min steps)
 
 function tsRenderWorkshopDays(){
