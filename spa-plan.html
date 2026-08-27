@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Spa Module Plan — Amansala Staff</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Jost:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cream:#faf7f0; --cream-2:#f4efe4; --card:#ffffff;
+  --ink:#2d2520; --ink-soft:#6b5f52; --muted:#a89a86;
+  --teal:#2d6a6a; --teal-deep:#1e4f4f; --teal-tint:#eaf3f1;
+  --gold:#c9a876; --gold-tint:#f8f1e2;
+  --terracotta:#a05a35; --terracotta-tint:#faf0ea;
+  --border:#e8dfd0; --border-soft:#f0ebe0;
+  --shadow: 0 1px 3px rgba(45,37,32,.06), 0 8px 24px rgba(45,37,32,.05);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--cream);color:var(--ink);font-family:'Jost',sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:'Cormorant Garamond',serif;font-weight:600;color:var(--ink);letter-spacing:.2px}
+a{color:var(--teal)}
+
+/* ── LOGIN GATE ── */
+#gate{max-width:380px;margin:140px auto;text-align:center;padding:0 20px}
+#gate h2{font-style:italic;font-size:1.7rem;margin-bottom:6px}
+#gate .gate-sub{font-size:13px;color:var(--muted);margin-bottom:22px}
+#gate input{width:100%;padding:13px 15px;font-size:15px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;font-family:'Jost',sans-serif;background:#fff}
+#gate button{width:100%;padding:13px;background:var(--teal);color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-weight:600;font-size:14px;cursor:pointer}
+#gate button:hover{background:var(--teal-deep)}
+#gateError{color:var(--terracotta);font-size:13px;margin-top:10px;display:none}
+
+/* ── DOC ── */
+#doc{display:none}
+.shell{display:grid;grid-template-columns:260px minmax(0,780px);gap:56px;max-width:1180px;margin:0 auto;padding:56px 32px 120px}
+@media (max-width:900px){.shell{grid-template-columns:1fr;padding:32px 20px 80px}.toc{display:none}}
+
+.toc{position:sticky;top:40px;align-self:start;height:fit-content}
+.toc-label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:14px}
+.toc a{display:block;font-size:13.5px;color:var(--ink-soft);text-decoration:none;padding:6px 0 6px 14px;border-left:2px solid var(--border);transition:color .15s,border-color .15s}
+.toc a:hover{color:var(--teal);border-color:var(--teal)}
+.toc .toc-num{color:var(--muted);font-variant-numeric:tabular-nums;margin-right:8px;font-size:12px}
+
+.doc-header{margin-bottom:56px}
+.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.eyebrow::before{content:'';width:22px;height:1px;background:var(--gold)}
+.doc-header h1{font-size:2.6rem;font-style:italic;line-height:1.08;margin:0 0 14px}
+.doc-header .sub{color:var(--ink-soft);font-size:16px;max-width:60ch}
+.meta-row{display:flex;gap:20px;flex-wrap:wrap;margin-top:22px;font-size:12.5px;color:var(--muted)}
+.meta-row b{color:var(--ink-soft);font-weight:600}
+
+section{margin-bottom:64px;scroll-margin-top:32px}
+section h2{font-size:1.7rem;font-style:italic;margin:0 0 6px;display:flex;align-items:baseline;gap:12px}
+section h2 .snum{font-family:'Jost',sans-serif;font-style:normal;font-size:12px;letter-spacing:.1em;color:var(--gold);font-weight:600;font-variant-numeric:tabular-nums}
+.section-intro{color:var(--ink-soft);font-size:14.5px;margin:0 0 26px;max-width:64ch}
+h3{font-size:1.15rem;font-style:italic;margin:28px 0 12px}
+
+p{margin:0 0 14px;color:var(--ink)}
+.small{font-size:13.5px;color:var(--ink-soft)}
+
+.callout{border-radius:12px;padding:18px 22px;margin:18px 0;border:1px solid var(--border);background:var(--card);box-shadow:var(--shadow)}
+.callout.decision{border-color:var(--gold);background:var(--gold-tint)}
+.callout.open{border-color:var(--terracotta);background:var(--terracotta-tint)}
+.callout-label{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.callout.decision .callout-label{color:#8a6a2a}
+.callout.open .callout-label{color:var(--terracotta)}
+.callout p:last-child{margin-bottom:0}
+
+.findings{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:640px){.findings{grid-template-columns:1fr}}
+.finding{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+.finding .f-title{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-dot.has{background:#5a9c6e}
+.status-dot.missing{background:var(--terracotta)}
+.status-dot.partial{background:var(--gold)}
+.finding p{font-size:13.5px;margin:0;color:var(--ink-soft)}
+.finding code{background:var(--cream-2);padding:1px 6px;border-radius:4px;font-size:12px;color:var(--teal-deep)}
+
+.schema-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.table-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+.table-card h4{font-family:'Jost',sans-serif;font-size:13px;font-weight:700;color:var(--teal-deep);margin:0 0 3px;letter-spacing:.02em}
+.table-card .t-desc{font-size:11.5px;color:var(--muted);margin-bottom:10px}
+.table-card ul{margin:0;padding:0;list-style:none}
+.table-card li{font-size:12px;color:var(--ink-soft);padding:3px 0;border-top:1px solid var(--border-soft)}
+.table-card li:first-child{border-top:none}
+.table-card .fkey{color:var(--gold)}
+
+.phase{display:grid;grid-template-columns:52px 1fr;gap:18px;margin-bottom:6px}
+.phase-num-col{display:flex;flex-direction:column;align-items:center}
+.phase-num{width:38px;height:38px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;flex-shrink:0}
+.phase-line{width:2px;flex:1;background:var(--border);margin:4px 0}
+.phase:last-child .phase-line{display:none}
+.phase-body{padding-bottom:34px}
+.phase-body h4{font-family:'Cormorant Garamond',serif;font-size:1.2rem;font-style:italic;margin:2px 0 6px;color:var(--ink)}
+.phase-body p{font-size:13.5px;color:var(--ink-soft);margin-bottom:8px}
+.phase-files{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.phase-files span{font-size:11px;background:var(--teal-tint);color:var(--teal-deep);padding:3px 10px;border-radius:99px;font-family:'Jost',sans-serif}
+
+.flow{border:1px solid var(--border);border-radius:12px;background:var(--card);box-shadow:var(--shadow);overflow:hidden;margin-bottom:16px}
+.flow-head{background:var(--cream-2);padding:12px 20px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--teal-deep)}
+.flow-steps{padding:6px 20px 16px}
+.flow-step{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--border-soft)}
+.flow-step:first-child{border-top:none}
+.flow-step .fs-num{font-family:'Cormorant Garamond',serif;font-size:15px;color:var(--gold);font-weight:600;flex-shrink:0;width:20px}
+.flow-step .fs-text{font-size:13.5px;color:var(--ink-soft)}
+.flow-step .fs-text b{color:var(--ink);font-weight:600}
+
+.need-list{list-style:none;margin:0;padding:0}
+.need-list li{display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--border-soft);font-size:13.5px;color:var(--ink-soft)}
+.need-list li:first-child{border-top:none}
+.need-list .need-icon{color:var(--terracotta);flex-shrink:0;font-size:15px;line-height:1.4}
+.need-list b{color:var(--ink)}
+
+footer{margin-top:60px;padding-top:24px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h2>Staff Access</h2>
+  <div class="gate-sub">Spa Module Plan</div>
+  <input type="text" id="gateUser" placeholder="Username" autocomplete="username">
+  <input type="password" id="gatePass" placeholder="Password" autocomplete="current-password">
+  <button onclick="tryUnlock()">Enter</button>
+  <p id="gateError">Incorrect username or password.</p>
+</div>
+
+<div id="doc">
+<div class="shell">
+
+  <nav class="toc">
+    <div class="toc-label">On this page</div>
+    <a href="#current-state"><span class="toc-num">01</span>Current state</a>
+    <a href="#decision"><span class="toc-num">02</span>The auth decision</a>
+    <a href="#architecture"><span class="toc-num">03</span>Proposed architecture</a>
+    <a href="#schema"><span class="toc-num">04</span>Data model</a>
+    <a href="#booking-flows"><span class="toc-num">05</span>Booking flows</a>
+    <a href="#concurrency"><span class="toc-num">06</span>Concurrency &amp; payments</a>
+    <a href="#phases"><span class="toc-num">07</span>Build phases</a>
+    <a href="#needed"><span class="toc-num">08</span>What I need from you</a>
+    <a href="#risks"><span class="toc-num">09</span>Open risks</a>
+  </nav>
+
+  <main>
+    <header class="doc-header">
+      <div class="eyebrow">Amansala Retreat Portal · New Module</div>
+      <h1>Spa Booking &amp; Management — Technical Plan</h1>
+      <p class="sub">A standalone <code style="background:var(--cream-2);padding:1px 6px;border-radius:4px;font-size:14px">spa</code> module covering guest booking, therapist scheduling, Stripe payments, Cloudbeds folio posting, payroll and profitability — planned before any code is written, per your spec.</p>
+      <div class="meta-row">
+        <span><b>Scope</b> Full spec, 9 phases</span>
+        <span><b>Status</b> Plan for review — no code yet</span>
+        <span><b>Existing app touched</b> None (new files only)</span>
+      </div>
+    </header>
+
+    <section id="current-state">
+      <h2><span class="snum">01</span>Current state</h2>
+      <p class="section-intro">What's actually in the repository today, checked directly — not assumed.</p>
+      <div class="findings">
+        <div class="finding"><div class="f-title"><span class="status-dot has"></span>Cloudbeds client</div><p>Real, deployed Netlify Function at <code>/.netlify/functions/cloudbeds</code>. Supports <code>getRooms</code>, <code>getExternalReservations</code>, <code>postItem</code>, <code>updateReservationGuest</code>, <code>moveReservationRoom</code>, <code>cancelReservation</code>. Credentials live server-side only. Source code not found on disk — deployed another way; I can call it, not edit it.</p></div>
+        <div class="finding"><div class="f-title"><span class="status-dot has"></span>Email notifications</div><p>Real, deployed Netlify Function <code>/.netlify/functions/send-email</code>, backed by a live Resend API key. Reusable as-is for spa confirmations.</p></div>
+        <div class="finding"><div class="f-title"><span class="status-dot missing"></span>Stripe</div><p>Not installed anywhere. No code, no API keys in Netlify. Needs to be added from scratch.</p></div>
+        <div class="finding"><div class="f-title"><span class="status-dot missing"></span>Real user auth</div><p>No per-person accounts. Staff/driver "logins" are a shared password checked in the browser, then a session flag — not a server-verified identity.</p></div>
+        <div class="finding"><div class="f-title"><span class="status-dot missing"></span>Role-based data access</div><p>Nothing restricts who can query what — the database is reached with one shared, publicly-readable key. Visibility today is "hidden in the UI," not actually enforced.</p></div>
+        <div class="finding"><div class="f-title"><span class="status-dot partial"></span>Database</div><p>Supabase (Postgres), reached directly from the browser. Good foundation — just needs real accounts and Row Level Security added for this module.</p></div>
+        <div class="finding"><div class="f-title"><span class="status-dot missing"></span>Calendar library</div><p>None installed. The existing venue calendar is hand-built — the spa calendar will follow that same pattern, no new dependency.</p></div>
+        <div class="finding"><div class="f-title"><span class="status-dot has"></span>Framework</div><p>Plain HTML + classic scripts, no build step. The spa module will follow the same pattern: new files, no new tooling required to run it.</p></div>
+      </div>
+    </section>
+
+    <section id="decision">
+      <h2><span class="snum">02</span>The one decision I need before Phase 1</h2>
+      <p class="section-intro">Everything else in this plan can proceed on my judgment. This one changes the shape of the build, so it's yours to make.</p>
+      <div class="callout decision">
+        <div class="callout-label">⬥ Needs your call</div>
+        <p><b>Your spec requires that therapists never see each other's pay rates, tips, profit, or performance notes.</b> The way every other login in this app works today (shared password, hidden in the UI) cannot actually guarantee that — anyone who opens their browser's developer tools can query the database directly with the same key the app uses. It would <i>look</i> restricted, but wouldn't <i>be</i> restricted.</p>
+        <p>The correct fix is to give each therapist a real account (Supabase Auth) and add database-level rules (Row Level Security) so the restriction is enforced by the database itself, not just by what buttons are on screen. This is new infrastructure for this app — more setup than the shared-password pattern used elsewhere — but it's the only way to honestly meet that requirement once real pay and tip data is involved.</p>
+        <p><b>If that's more than you need right now</b>, the alternative is to launch with UI-only hiding (matching today's pattern everywhere else) and treat the payroll/pay-rate privacy as "trusted staff only, not adversarial" — faster, but not a real guarantee. I'd recommend real accounts given this handles people's pay.</p>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <h2><span class="snum">03</span>Proposed architecture</h2>
+      <p class="section-intro">New pieces only — nothing here touches hotel booking, Cloudbeds sync, or any existing module.</p>
+      <div class="flow">
+        <div class="flow-head">New files</div>
+        <div class="flow-steps">
+          <div class="flow-step"><span class="fs-num">1</span><span class="fs-text"><b>modules/spa-booking.js</b> — guest-facing flow: service → guest type → verification/payment → scheduling</span></div>
+          <div class="flow-step"><span class="fs-num">2</span><span class="fs-text"><b>modules/spa-calendar.js</b> — day/week practitioner &amp; room views, drag/reschedule, 15-minute grid (hand-built, matching the existing venue calendar's approach)</span></div>
+          <div class="flow-step"><span class="fs-num">3</span><span class="fs-text"><b>modules/spa-admin.js</b> — services, therapists, rooms, rates, service costs — all editable without touching code</span></div>
+          <div class="flow-step"><span class="fs-num">4</span><span class="fs-text"><b>modules/spa-therapist-portal.js</b> — each therapist's own login, schedule, available-request queue, notes visible to them</span></div>
+          <div class="flow-step"><span class="fs-num">5</span><span class="fs-text"><b>modules/spa-payroll.js</b> — weekly pay report, profitability, therapist report cards</span></div>
+          <div class="flow-step"><span class="fs-num">6</span><span class="fs-text"><b>netlify/functions/spa-stripe.js</b> — Checkout session creation + webhook (secret key stays server-side)</span></div>
+          <div class="flow-step"><span class="fs-num">7</span><span class="fs-text"><b>netlify/functions/spa-cloudbeds.js</b> — a new, separate function for reservation verification + folio posting, so the existing hotel Cloudbeds function is never touched. <b>Deferred</b> — building when you're ready to connect Cloudbeds</span></div>
+        </div>
+      </div>
+      <p class="small">Reused as-is: Supabase (new tables only), the existing <code>send-email</code> function, and the same Cloudbeds account credentials already stored in Netlify's environment.</p>
+    </section>
+
+    <section id="schema">
+      <h2><span class="snum">04</span>Data model</h2>
+      <p class="section-intro">New Supabase tables, scoped to the spa module. Field lists are the essentials, not full column definitions.</p>
+      <div class="schema-grid">
+        <div class="table-card"><h4>spa_services</h4><div class="t-desc">Bookable treatments</div><ul><li>name, description, category</li><li>duration_minutes, buffer_minutes</li><li>price, currency, active</li><li>room_required, gender_pref_enabled</li></ul></div>
+        <div class="table-card"><h4>spa_therapists</h4><div class="t-desc">Practitioners</div><ul><li>name, email, phone, gender</li><li><span class="fkey">auth_user_id</span> (Supabase Auth)</li><li>default_room_id, primary_location</li><li>working_hours, time_off (json)</li></ul></div>
+        <div class="table-card"><h4>spa_therapist_services</h4><div class="t-desc">Who can do what, at what rate</div><ul><li><span class="fkey">therapist_id, service_id</span></li><li>compensation_type, value</li><li>effective_from / effective_to</li></ul></div>
+        <div class="table-card"><h4>spa_rooms</h4><div class="t-desc">Treatment rooms</div><ul><li>name, location</li><li>dedicated_therapist_id (optional — Maria Luisa)</li></ul></div>
+        <div class="table-card"><h4>spa_clients</h4><div class="t-desc">Guest profiles</div><ul><li>name, email, phone, guest_type</li><li>cloudbeds_guest_id (optional)</li><li>preferred_practitioner_id</li></ul></div>
+        <div class="table-card"><h4>spa_appointments</h4><div class="t-desc">The core booking record</div><ul><li><span class="fkey">client_id, service_id</span></li><li>therapist_id, room_id (nullable until assigned)</li><li>start_time, end_time (15-min aligned)</li><li>status, payment_status, folio_status</li><li>compensation snapshot (rate frozen at completion)</li><li>tip_amount, tip_recipient_id</li></ul></div>
+        <div class="table-card"><h4>spa_therapist_notes</h4><div class="t-desc">Performance / feedback log</div><ul><li>therapist_id, author_id, category, sentiment</li><li>visibility (management / ops / shared)</li></ul></div>
+        <div class="table-card"><h4>spa_payroll_periods</h4><div class="t-desc">Weekly pay runs</div><ul><li>therapist_id, period range</li><li>status (unpaid/approved/paid)</li><li>approved_by, paid_at</li></ul></div>
+        <div class="table-card"><h4>spa_audit_log</h4><div class="t-desc">Who did what, when</div><ul><li>actor_id, action, entity, timestamp</li></ul></div>
+      </div>
+      <div class="callout" style="margin-top:20px">
+        <div class="callout-label" style="color:var(--teal-deep)">◆ 15-minute rule, enforced twice</div>
+        <p>A database check constraint rejects any <code>start_time</code>/<code>end_time</code> not on :00/:15/:30/:45 — so even a direct API call can't violate it. The frontend also snaps drag/drop and dropdowns to the grid, but the database is the real gate, not the browser.</p>
+      </div>
+    </section>
+
+    <section id="booking-flows">
+      <h2><span class="snum">05</span>Booking flows</h2>
+      <div class="flow">
+        <div class="flow-head">Hotel guest — deferred until Cloudbeds is connected</div>
+        <div class="flow-steps">
+          <div class="flow-step"><span class="fs-num">·</span><span class="fs-text">You've said to hold off on Cloudbeds for now — it'll be connected later. Until then, the module launches with the <b>offsite guest</b> flow live, and hotel guests can be booked manually by reception (same as today) or added to the calendar directly without folio posting.</span></div>
+          <div class="flow-step"><span class="fs-num">1</span><span class="fs-text">Once connected: guest picks a service, enters <b>last name + room number</b></span></div>
+          <div class="flow-step"><span class="fs-num">2</span><span class="fs-text">New <code>spa-cloudbeds</code> function checks Cloudbeds for a matching <b>active</b> reservation — room number alone is never trusted</span></div>
+          <div class="flow-step"><span class="fs-num">3</span><span class="fs-text">Guest confirms name/room/stay dates, picks a time, no Stripe involved</span></div>
+          <div class="flow-step"><span class="fs-num">4</span><span class="fs-text">On confirmation, the charge posts to the room's folio with reference <code>AMANSALA-SPA-{appointmentId}</code> — duplicate-safe by design</span></div>
+        </div>
+      </div>
+      <div class="flow">
+        <div class="flow-head">Offsite guest</div>
+        <div class="flow-steps">
+          <div class="flow-step"><span class="fs-num">1</span><span class="fs-text">Sees the required notice — advance payment, $20 beach club credit, cancellation policy — and must accept it (timestamp + policy version stored)</span></div>
+          <div class="flow-step"><span class="fs-num">2</span><span class="fs-text">Picks a time — the slot is <b>held for 10 minutes</b> while they pay</span></div>
+          <div class="flow-step"><span class="fs-num">3</span><span class="fs-text">Pays via Stripe Checkout, including an optional tip (10/15/20%/custom)</span></div>
+          <div class="flow-step"><span class="fs-num">4</span><span class="fs-text">Appointment only becomes <code>CONFIRMED</code> when Stripe's <b>webhook</b> confirms payment — never from the browser alone. If payment fails or the hold expires, the slot releases automatically</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="concurrency">
+      <h2><span class="snum">06</span>Concurrency &amp; payment integrity</h2>
+      <h3>Two therapists claim the same request</h3>
+      <p>When a booking has no assigned therapist yet (<code>AWAITING_PRACTITIONER</code>), eligible therapists see it in their queue. Claiming it is a single conditional database update — <i>"assign me, but only if it's still unassigned"</i> — so if two people tap Accept at the same instant, the database itself guarantees exactly one wins; the other sees it disappear from their queue immediately. No separate locking mechanism needed — Postgres does this natively and correctly.</p>
+      <h3>Payment can never lie</h3>
+      <p>The browser reporting "payment succeeded" is never trusted on its own — Stripe's server-to-server webhook is the only thing allowed to mark an appointment paid. This is what stops a closed tab, a flaky connection, or a tampered request from ever producing a confirmed-but-unpaid booking.</p>
+      <h3>Folio posting can't double-charge</h3>
+      <p>Each appointment gets one fixed reference (<code>AMANSALA-SPA-{appointmentId}</code>) used for every attempt. If Cloudbeds posting fails, the appointment is flagged <code>FOLIO_POST_FAILED</code> visibly (never silently marked successful), and admin's "Retry" reuses that same reference — so retries can't create a second charge.</p>
+    </section>
+
+    <section id="phases">
+      <h2><span class="snum">07</span>Build phases</h2>
+      <p class="section-intro">Matches the order in your spec. Each phase ends with something you can look at before the next one starts.</p>
+
+      <div class="phase">
+        <div class="phase-num-col"><div class="phase-num">1</div><div class="phase-line"></div></div>
+        <div class="phase-body"><h4>Foundation</h4><p>Services, therapists, rooms, rates — admin CRUD screens. Real therapist accounts (Supabase Auth) + Row Level Security policies set up here, since every later phase depends on this being right.</p>
+          <div class="phase-files"><span>spa_services</span><span>spa_therapists</span><span>spa_rooms</span><span>spa_therapist_services</span><span>modules/spa-admin.js</span></div></div>
+      </div>
+      <div class="phase">
+        <div class="phase-num-col"><div class="phase-num">2</div><div class="phase-line"></div></div>
+        <div class="phase-body"><h4>Calendar &amp; availability</h4><p>Day/week practitioner and room views, 15-minute grid, drag-to-reschedule with server-side revalidation.</p>
+          <div class="phase-files"><span>modules/spa-calendar.js</span><span>spa_appointments (read)</span></div></div>
+      </div>
+      <div class="phase">
+        <div class="phase-num-col"><div class="phase-num">3</div><div class="phase-line"></div></div>
+        <div class="phase-body"><h4>Guest booking &amp; client profiles</h4><p>The full service → guest-type → schedule flow, therapist preference handling, client history.</p>
+          <div class="phase-files"><span>spa_clients</span><span>spa_appointments (write)</span><span>modules/spa-booking.js</span></div></div>
+      </div>
+      <div class="phase">
+        <div class="phase-num-col"><div class="phase-num">4</div><div class="phase-line"></div></div>
+        <div class="phase-body"><h4>Stripe &amp; tips</h4><p>Offsite payment flow, 10-minute holds, webhook-driven confirmation, tip capture.</p>
+          <div class="phase-files"><span>netlify/functions/spa-stripe.js</span><span>Stripe account setup (needs you)</span></div></div>
+      </div>
+      <div class="phase">
+        <div class="phase-num-col"><div class="phase-num">5</div><div class="phase-line"></div></div>
+        <div class="phase-body"><h4>Cloudbeds hotel-guest flow <span style="font-family:'Jost',sans-serif;font-style:normal;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--terracotta);background:var(--terracotta-tint);padding:3px 10px;border-radius:99px;vertical-align:middle;margin-left:8px">Deferred</span></h4><p>On hold at your request — connecting later. Reservation verification, folio posting with duplicate-safe references, retry-on-failure, whenever you're ready.</p>
+          <div class="phase-files"><span>netlify/functions/spa-cloudbeds.js</span><span>Cloudbeds item setup (needs you, later)</span></div></div>
+      </div>
+      <div class="phase">
+        <div class="phase-num-col"><div class="phase-num">6</div><div class="phase-line"></div></div>
+        <div class="phase-body"><h4>Therapist portal</h4><p>Own login, own schedule, the fair-rotation claim queue, block time, mark complete.</p>
+          <div class="phase-files"><span>modules/spa-therapist-portal.js</span></div></div>
+      </div>
+      <div class="phase">
+        <div class="phase-num-col"><div class="phase-num">7</div><div class="phase-line"></div></div>
+        <div class="phase-body"><h4>Payroll &amp; profitability</h4><p>Compensation snapshots, weekly pay reports, service costs, gross margin, management dashboard.</p>
+          <div class="phase-files"><span>spa_payroll_periods</span><span>modules/spa-payroll.js</span></div></div>
+      </div>
+      <div class="phase">
+        <div class="phase-num-col"><div class="phase-num">8</div><div class="phase-line"></div></div>
+        <div class="phase-body"><h4>Notes, report cards, feedback</h4><p>Therapist notes with visibility rules, report cards, post-service guest feedback.</p>
+          <div class="phase-files"><span>spa_therapist_notes</span></div></div>
+      </div>
+      <div class="phase">
+        <div class="phase-num-col"><div class="phase-num">9</div></div>
+        <div class="phase-body"><h4>QA — concurrency &amp; permissions</h4><p>Deliberately test the double-claim race, webhook failure/retry, and that a therapist genuinely cannot query another's pay data.</p></div>
+      </div>
+    </section>
+
+    <section id="needed">
+      <h2><span class="snum">08</span>What I need from you</h2>
+      <p class="section-intro">Things only you can provide — I can't guess these.</p>
+      <ul class="need-list">
+        <li><span class="need-icon">●</span><span><b>Stripe account access</b> — either an existing Amansala Stripe account's API keys, or confirmation to create a new one.</span></li>
+        <li><span class="need-icon">○</span><span><b>Cloudbeds item setup decision</b> — <i>not needed yet, deferred with Cloudbeds connection.</i> When you're ready: either create one matching item per spa service in Cloudbeds' own admin panel, or I confirm whether Cloudbeds' API accepts arbitrary custom charges instead.</span></li>
+        <li><span class="need-icon">●</span><span><b>Real therapist list</b> — names, emails, genders, which services each performs, and their pay rate per service — to seed the first real accounts.</span></li>
+        <li><span class="need-icon">●</span><span><b>Missing prices/durations</b> from your spec: Reflexology, Facial, Thai Massage duration, Tarot Card Reading duration, Aura Reading duration, Private Yoga/Fitness/Pilates duration.</span></li>
+        <li><span class="need-icon">●</span><span><b>The auth decision above</b> — real per-therapist accounts with enforced privacy, or faster UI-only hiding.</span></li>
+      </ul>
+    </section>
+
+    <section id="risks">
+      <h2><span class="snum">09</span>Open risks</h2>
+      <div class="callout open">
+        <div class="callout-label">⚠ Flagged, not blocking</div>
+        <p><b>The existing Cloudbeds function's source is missing.</b> I'm building a separate new function rather than editing it, so this doesn't block the spa module — but if the existing hotel Cloudbeds sync ever needs a fix, that source will need to be recovered from Netlify directly first.</p>
+        <p><b>Whether Cloudbeds accepts an arbitrary-amount custom charge</b> (vs. only pre-registered items) is unconfirmed until Phase 5, when I'd test against the real API.</p>
+        <p><b>This is a large, multi-session build.</b> Phases 4–5 involve real money and guest PII — I'll deploy to a draft URL and verify each one before anything touches production, same as every other change in this project.</p>
+      </div>
+    </section>
+
+    <footer>Amansala Retreat Portal — Spa Module Plan · prepared for review, no code written against this plan yet</footer>
+  </main>
+</div>
+</div>
+
+<script>
+const GATE_USER = 'darlene';
+const GATE_PASS = 'amansala2024';
+function tryUnlock(){
+  const u = document.getElementById('gateUser').value.trim().toLowerCase();
+  const p = document.getElementById('gatePass').value;
+  if (u === GATE_USER && p === GATE_PASS) {
+    sessionStorage.setItem('spa_plan_unlocked','1');
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('doc').style.display = 'block';
+  } else {
+    document.getElementById('gateError').style.display = 'block';
+  }
+}
+document.getElementById('gatePass').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+if (sessionStorage.getItem('spa_plan_unlocked') === '1') {
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('doc').style.display = 'block';
+}
+</script>
+</body>
+</html>
