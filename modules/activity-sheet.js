@@ -419,24 +419,24 @@ function actByRetreatPrint(bkId) {
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       *{box-sizing:border-box}
-      body{font-family:'Jost',sans-serif;margin:0;padding:32px;color:#1a1a1a;background:#fff;font-size:13pt}
-      .print-btn{padding:8px 18px;background:#2d6a6a;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'Jost',sans-serif;font-size:13pt;font-weight:600;float:right;margin-bottom:14px}
-      table{width:100%;border-collapse:collapse;font-size:13pt;clear:both}
+      body{font-family:'Jost',sans-serif;margin:0;padding:32px;color:#1a1a1a;background:#fff;font-size:14pt}
+      .print-btn{padding:8px 18px;background:#2d6a6a;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'Jost',sans-serif;font-size:14pt;font-weight:600;float:right;margin-bottom:14px}
+      table{width:100%;border-collapse:collapse;font-size:14pt;clear:both}
       caption{caption-side:top;text-align:center;padding-bottom:2px}
       .title{font-family:'Cormorant Garamond',serif;font-size:25pt;font-weight:700;text-align:center;padding:8px 0 4px;border:1px solid #333;border-bottom:none}
-      .sub{text-align:center;font-size:13pt;border:1px solid #333;border-top:none;border-bottom:none;padding-bottom:6px}
-      .instr{text-align:center;font-size:13pt;font-weight:600;border:1px solid #333;border-top:none;border-bottom:none;padding:4px 0}
-      .warn{text-align:center;font-size:13pt;font-weight:700;color:#c0392b;border:1px solid #333;border-top:none;border-bottom:none;padding:4px 0}
-      .pax{text-align:center;font-size:13pt;border:1px solid #333;border-top:none;padding:4px 0}
-      th{border:1px solid #333;padding:5px 6px;font-size:13pt;font-weight:600;vertical-align:top;min-width:88px;font-family:'Jost',sans-serif}
-      .col-day,.col-date{font-size:13pt}
+      .sub{text-align:center;font-size:14pt;border:1px solid #333;border-top:none;border-bottom:none;padding-bottom:6px}
+      .instr{text-align:center;font-size:14pt;font-weight:600;border:1px solid #333;border-top:none;border-bottom:none;padding:4px 0}
+      .warn{text-align:center;font-size:14pt;font-weight:700;color:#c0392b;border:1px solid #333;border-top:none;border-bottom:none;padding:4px 0}
+      .pax{text-align:center;font-size:14pt;border:1px solid #333;border-top:none;padding:4px 0}
+      th{border:1px solid #333;padding:5px 6px;font-size:14pt;font-weight:600;vertical-align:top;min-width:88px;font-family:'Jost',sans-serif}
+      .col-day,.col-date{font-size:14pt}
       .col-name{margin-top:4px;font-weight:700}
       .col-time,.col-price{margin-top:2px}
-      td{border:1px solid #333;padding:4px 8px;font-size:13pt}
+      td{border:1px solid #333;padding:4px 8px;font-size:14pt}
       td.name-cell{font-weight:600;white-space:nowrap;text-align:left}
       td.mark{text-align:center;font-weight:700}
       tr.tally td{font-weight:700;background:#f7f5f1}
-      .footer{text-align:center;font-size:12pt;color:#1d4ed8;margin-top:10px;line-height:1.6}
+      .footer{text-align:center;font-size:14pt;color:#1d4ed8;margin-top:10px;line-height:1.6}
       .footer a{color:#1d4ed8}
       @media print{.no-print{display:none}body{padding:14px}}
     </style>
