@@ -392,11 +392,20 @@ function actByRetreatPrint(bkId) {
   const roster = actRosterForBk(bkId).slice().sort((a,b)=>a.first.localeCompare(b.first)||(a.last||'').localeCompare(b.last||''));
 
   const addMin = (t,mins)=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const tot=h*60+m+mins;const hh=Math.floor(tot/60)%24;return`${String(hh).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
+  // Both ends of a range share am/pm most of the time — drop the first
+  // suffix in that case so the whole range fits on one printed line.
+  const fmtRange = (start,end)=>{
+    if(!start)return'';
+    const parts=t=>{const[h,m]=t.split(':').map(Number);return{h12:(h%12)||12,m:String(m).padStart(2,'0'),ap:h>=12?'pm':'am'};};
+    const a=parts(start), b=parts(end);
+    const startTxt = a.ap===b.ap ? `${a.h12}:${a.m}` : `${a.h12}:${a.m} ${a.ap}`;
+    return `${startTxt} – ${b.h12}:${b.m} ${b.ap}`;
+  };
   const colHeaders = entries.map(e=>{
     const priceTxt = e.prepaid ? 'Included' : (e.ao.price?'$'+e.ao.price:'');
     const nameTxt = e.prepaid ? e.ao.name : 'Optional '+e.ao.name;
     const dur = (typeof ACTS_DUR!=='undefined'&&ACTS_DUR[e.ao.id])||90;
-    const timeTxt = e.time ? fmtT(e.time)+' – '+fmtT(addMin(e.time,dur)) : '';
+    const timeTxt = e.time ? fmtRange(e.time,addMin(e.time,dur)) : '';
     return `<th>
       <div class="col-day">${fmtDay(e.date)}</div>
       <div class="col-date">${fmtDate(e.date)}</div>
@@ -441,7 +450,7 @@ function actByRetreatPrint(bkId) {
       body{font-family:'Jost',sans-serif;margin:0;padding:44px 48px;color:#2d2520;background:#fdfbf7;font-size:14pt;line-height:1.5}
       .print-btn{padding:9px 20px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;font-size:13pt;font-weight:600;float:right;margin-bottom:18px}
       .hdr{text-align:center;margin-bottom:8px}
-      .brand{font-family:'Cormorant Garamond',serif;font-size:13pt;letter-spacing:5px;text-transform:uppercase;color:#a89a86;margin-bottom:10px}
+      .logo-mark{height:56px;margin-bottom:8px}
       .title{font-family:'Cormorant Garamond',serif;font-size:32pt;font-weight:700;color:#1a2332;margin-bottom:6px;clear:both;letter-spacing:.3px}
       .sub{font-size:12.5pt;letter-spacing:2px;color:#a89a86;text-transform:uppercase;margin-bottom:20px}
       .divider{width:54px;height:1px;background:#c9a876;margin:0 auto 22px;position:relative}
@@ -451,12 +460,13 @@ function actByRetreatPrint(bkId) {
       .warn-pill{display:inline-block;font-size:11.5pt;font-weight:600;letter-spacing:.3px;color:#a05a35;background:transparent;border:1px solid #d9b696;border-radius:99px;padding:5px 18px}
       .pax-pill{display:inline-block;font-size:11.5pt;font-weight:600;letter-spacing:.3px;color:#1e4f4f;background:transparent;border:1px solid #9cc9c2;border-radius:99px;padding:5px 18px}
       table{width:100%;border-collapse:collapse;font-size:14pt;margin-top:30px}
-      th{border-bottom:2px solid #2d6a6a;border-top:none;border-left:none;border-right:none;padding:10px 8px 12px;font-size:11.5pt;font-weight:700;vertical-align:top;min-width:88px;font-family:'Jost',sans-serif;background:#f4efe4;color:#1e4f4f}
+      th{border-bottom:2px solid #2d6a6a;border-top:none;border-left:none;border-right:none;padding:10px 6px 12px;font-size:11.5pt;font-weight:700;vertical-align:top;min-width:96px;font-family:'Jost',sans-serif;background:#f4efe4;color:#1e4f4f}
       th:first-child{background:#efe8d8}
       .col-day{font-size:9pt;text-transform:uppercase;letter-spacing:1px;color:#a89a86;font-weight:600}
       .col-date{font-size:12pt;font-family:'Cormorant Garamond',serif;font-weight:700;color:#1a2332}
       .col-name{margin-top:6px;font-weight:600;font-size:11pt;line-height:1.35;color:#2d6a6a}
-      .col-time,.col-price{margin-top:4px;font-size:10.5pt;color:#8a7e74}
+      .col-time{margin-top:4px;font-size:9.5pt;color:#8a7e74;white-space:nowrap}
+      .col-price{margin-top:4px;font-size:10.5pt;color:#8a7e74}
       .col-price{color:#a05a35;font-weight:600}
       td{border-bottom:1px solid #ece4d4;padding:9px 9px;font-size:13pt}
       td.name-cell{font-weight:500;white-space:nowrap;text-align:left;font-family:'Cormorant Garamond',serif;font-size:14.5pt;color:#1a2332}
@@ -477,7 +487,7 @@ function actByRetreatPrint(bkId) {
   </head><body>
     <button class="print-btn no-print" onclick="window.print()">Print</button>
     <div class="hdr">
-      <div class="brand">Amansala &middot; Tulum</div>
+      <img class="logo-mark" src="/logo-amansala.png" alt="Amansala">
       <div class="title">${retreatName}</div>
       <div class="sub">${dateRangeLbl}</div>
       <div class="divider"></div>

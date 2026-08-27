@@ -3825,6 +3825,7 @@ function renderSchedulePrint(bk,days){
   </div>`:'';
   document.getElementById('schedPrintArea').innerHTML=`
     <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:2px solid #e0d8cc">
+      <img src="/logo-amansala.png" alt="Amansala" style="height:50px;margin-bottom:8px">
       <div style="font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:700;color:#1a2332;margin-bottom:5px;letter-spacing:-.3px">${bk.leaderName||bk.retreatName}</div>
       <div style="font-family:'Jost',sans-serif;font-size:14px;color:#6b7280;font-weight:500;letter-spacing:.3px">${dateRange}${pax?' &nbsp;·&nbsp; '+pax+' guests':''}</div>
     </div>
