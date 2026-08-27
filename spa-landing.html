@@ -144,8 +144,10 @@ const SUPA_URL='https://fzresosiqafiyxfgeyvk.supabase.co';
 const SUPA_KEY='sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
 const db=supabase.createClient(SUPA_URL,SUPA_KEY);
 
-const CAT_ORDER=['massage','spirit','fitness','yoga'];
-const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga & Pilates'};
+const CAT_ORDER=['massage','spirit','fitness','yoga','pilates'];
+const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates'};
+const CAT_ICON={massage:'🪷',spirit:'🦋',fitness:'💪',yoga:'🧘',pilates:'🤸'};
+const THER_GROUP_LABEL={massage:'Body Workers',spirit:'Spirit Workers',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates'};
 function esc(s){return (s||'').replace(/</g,'&lt;');}
 
 (async function init(){
@@ -174,17 +176,33 @@ function esc(s){return (s||'').replace(/</g,'&lt;');}
     }).join('');
   }
 
-  // Therapists — active only, alphabetical, photo+bio portfolio
+  // Therapists — grouped by what they practice, same categories as the menu
+  // above, so a guest sees "who does yoga" or "who does spirit work" at a
+  // glance. A therapist spanning categories (e.g. massage + meditation)
+  // appears in each relevant group.
   const therEl=document.getElementById('therGrid');
   const activeTher=SpaData.therapists.filter(t=>t.active).sort((a,b)=>a.firstName.localeCompare(b.firstName));
+  const therCategories=t=>new Set((t.services||[]).map(s=>SpaData.services.find(sv=>sv.id===s.serviceId)?.category).filter(Boolean));
+  const cardHtml=(t,icon)=>`<div class="ther-card">
+    ${t.photoDataUrl?`<img class="ther-photo" src="${t.photoDataUrl}">`:`<div class="ther-photo-ph">${icon}</div>`}
+    <div class="ther-name">${esc(t.firstName)} ${esc(t.lastName||'')}</div>
+    ${t.bio?`<div class="ther-bio">${esc(t.bio)}</div>`:''}
+  </div>`;
   if(!activeTher.length){
     therEl.innerHTML='<p class="loading-note">Meet our team soon.</p>';
   }else{
-    therEl.innerHTML=activeTher.map(t=>`<div class="ther-card">
-      ${t.photoDataUrl?`<img class="ther-photo" src="${t.photoDataUrl}">`:`<div class="ther-photo-ph">🧑</div>`}
-      <div class="ther-name">${esc(t.firstName)} ${esc(t.lastName||'')}</div>
-      ${t.bio?`<div class="ther-bio">${esc(t.bio)}</div>`:''}
+    const groups=CAT_ORDER.map(cat=>({cat,list:activeTher.filter(t=>therCategories(t).has(cat))})).filter(g=>g.list.length);
+    const classified=new Set(groups.flatMap(g=>g.list.map(t=>t.id)));
+    const other=activeTher.filter(t=>!classified.has(t.id));
+    let html=groups.map(g=>`<div style="margin-bottom:36px">
+      <div class="svc-group-title">${THER_GROUP_LABEL[g.cat]}</div>
+      <div class="ther-grid">${g.list.map(t=>cardHtml(t,CAT_ICON[g.cat])).join('')}</div>
     </div>`).join('');
+    if(other.length) html+=`<div style="margin-bottom:36px">
+      <div class="svc-group-title">Team</div>
+      <div class="ther-grid">${other.map(t=>cardHtml(t,'🧑')).join('')}</div>
+    </div>`;
+    therEl.innerHTML=html;
   }
 })();
 </script>

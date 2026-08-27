@@ -21,11 +21,13 @@ function spaNewId(prefix) {
 // who does both a massage and a private class (e.g. Thai Massage +
 // Meditation) legitimately shows up in more than one group.
 const SPA_THER_GROUPS = [
-  { key: 'massage', label: 'Body Workers' },
-  { key: 'spirit', label: 'Spirit Workers' },
-  { key: 'fitness', label: 'Fitness' },
-  { key: 'yoga', label: 'Yoga' },
+  { key: 'massage', label: 'Body Workers', icon: '🪷' },
+  { key: 'spirit', label: 'Spirit Workers', icon: '🦋' },
+  { key: 'fitness', label: 'Fitness', icon: '💪' },
+  { key: 'yoga', label: 'Yoga', icon: '🧘' },
+  { key: 'pilates', label: 'Pilates', icon: '🤸' },
 ];
+const SPA_GROUP_ICON = Object.fromEntries(SPA_THER_GROUPS.map(g => [g.key, g.icon]));
 function spaTherCategories(t) {
   return new Set((t.services || []).map(s => SpaData.services.find(sv => sv.id === s.serviceId)?.category).filter(Boolean));
 }
@@ -42,17 +44,21 @@ function spaTherGroupList(therapists) {
 // Therapists views: massage = Body Work, spirit = Spirit Work, fitness, yoga.
 const SPA_DEFAULT_SERVICES = [
   { name: 'Mayan Healing Service', duration: 90, price: 165, category: 'massage' },
-  { name: '90 Minute Massage', duration: 90, price: 145, category: 'massage' },
-  { name: '60 Minute Massage', duration: 60, price: 95, category: 'massage' },
+  { name: '90 Minute Massage', duration: 90, price: 165, category: 'massage' },
+  { name: '60 Minute Massage', duration: 60, price: 111, category: 'massage' },
   { name: 'Reflexology', duration: null, price: null, category: 'massage' },
   { name: 'Facial', duration: null, price: null, category: 'massage' },
   { name: 'Thai Massage', duration: null, price: 125, category: 'massage' },
   { name: 'Tarot Card Reading', duration: null, price: 95, category: 'spirit' },
   { name: 'Private Breathwork', duration: 45, price: 80, category: 'spirit' },
   { name: 'Aura Reading', duration: null, price: 85, category: 'spirit' },
+  { name: 'Mayan Temazcal', duration: null, price: null, category: 'spirit' },
+  { name: 'Cacao and Sound Healing', duration: null, price: null, category: 'spirit' },
+  { name: 'Mayan Clay Ceremony', duration: null, price: null, category: 'spirit' },
+  { name: 'Ice Bath and Breathwork', duration: null, price: null, category: 'spirit' },
   { name: 'Private Yoga', duration: null, price: 95, category: 'yoga' },
   { name: 'Private Fitness', duration: null, price: 95, category: 'fitness' },
-  { name: 'Private Pilates', duration: null, price: 95, category: 'yoga' },
+  { name: 'Private Pilates', duration: null, price: 95, category: 'pilates' },
 ];
 const SPA_DEFAULT_ROOMS = [
   'Spa Room 1', 'Spa Room 2', 'Spa Room 3', 'Spa Room 4', 'Spa Room 5', 'Spa Room 6',
@@ -120,6 +126,44 @@ function spaRender() {
   if (spaCurView === 'rooms') { addWrap.innerHTML = addBtn('New Room', 'spaShowRoomForm(null)'); spaRenderRooms(); }
 }
 
+// ── COSTS & PROFIT ───────────────────────────────────────────────────────
+// Non-therapist direct costs (laundry, supplies, staff meals, other) live on
+// the service. Therapist pay varies per therapist, so it's factored in
+// separately wherever a specific therapist+service rate is shown, not baked
+// into a single service-level "profit" number.
+function spaSvcDirectCostTotal(s) {
+  const c = s.costs || {};
+  return (c.laundry || 0) + (c.supplies || 0) + (c.staffMeals || 0) + (c.other || 0);
+}
+function spaSvcMarginHtml(s) {
+  const cost = spaSvcDirectCostTotal(s);
+  if (!cost || s.price == null) return '';
+  const margin = s.price - cost;
+  return `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0ebe0;font-size:11.5px;color:#6b7280;display:flex;gap:12px">
+    <span>Costs: <b style="color:#a05a35">$${cost}</b></span>
+    <span>Margin before therapist pay: <b style="color:${margin >= 0 ? '#059669' : '#dc2626'}">$${margin}</b></span>
+  </div>`;
+}
+// Staff are paid in pesos, guests are priced in dollars — this rate is
+// approximate and only used to fold MXN pay into the USD margin math; it's
+// not a live feed. Update SPA_MXN_PER_USD if it drifts noticeably.
+const SPA_MXN_PER_USD = 18;
+
+// A therapist's actual take for one service, given their compensation row —
+// converted to USD so it can be compared against the (USD) service price.
+function spaTherapistCompAmount(rate, service) {
+  if (!rate || !service) return null;
+  let amountLocal;
+  if (rate.compensationType === 'FIXED') amountLocal = rate.compensationValue || 0;
+  else if (rate.compensationType === 'PERCENTAGE') amountLocal = service.price != null ? service.price * (rate.compensationValue || 0) / 100 : null;
+  else if (rate.compensationType === 'HOURLY') amountLocal = service.duration ? (rate.compensationValue || 0) * service.duration / 60 : null;
+  else return null;
+  if (amountLocal == null) return null;
+  // PERCENTAGE/HOURLY are always computed in the same currency as the input rate value.
+  const isMXN = rate.compensationCurrency === 'MXN';
+  return Math.round(isMXN ? amountLocal / SPA_MXN_PER_USD : amountLocal);
+}
+
 // ── SERVICES ─────────────────────────────────────────────────────────────
 function spaRenderServices() {
   const el = document.getElementById('spaContent');
@@ -141,6 +185,7 @@ function spaRenderServices() {
         <span>${s.price != null ? '$' + s.price : '<span style="color:#d97706;font-weight:600">Price TBD</span>'}</span>
         ${s.roomRequired ? '<span style="color:#9ca3af">Room required</span>' : ''}
       </div>
+      ${spaSvcMarginHtml(s)}
     </div>`;
   };
   el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">${active.map(card).join('')}</div>` +
@@ -159,6 +204,10 @@ function spaShowServiceForm(id) {
   document.getElementById('spaSvcCategory').value = s?.category || 'massage';
   document.getElementById('spaSvcRoomRequired').value = s ? (s.roomRequired ? '1' : '0') : '1';
   document.getElementById('spaSvcGenderPref').checked = s ? !!s.genderPrefEnabled : true;
+  document.getElementById('spaSvcCostLaundry').value = s?.costs?.laundry ?? '';
+  document.getElementById('spaSvcCostSupplies').value = s?.costs?.supplies ?? '';
+  document.getElementById('spaSvcCostMeals').value = s?.costs?.staffMeals ?? '';
+  document.getElementById('spaSvcCostOther').value = s?.costs?.other ?? '';
   const delWrap = document.getElementById('spaSvcDeleteWrap');
   delWrap.style.display = s ? 'block' : 'none';
   delWrap.querySelector('button').textContent = s?.active === false ? 'Reactivate Service' : 'Deactivate Service';
@@ -182,6 +231,12 @@ function spaSaveService() {
     category: document.getElementById('spaSvcCategory').value,
     roomRequired: document.getElementById('spaSvcRoomRequired').value === '1',
     genderPrefEnabled: document.getElementById('spaSvcGenderPref').checked,
+    costs: {
+      laundry: parseFloat(document.getElementById('spaSvcCostLaundry').value) || 0,
+      supplies: parseFloat(document.getElementById('spaSvcCostSupplies').value) || 0,
+      staffMeals: parseFloat(document.getElementById('spaSvcCostMeals').value) || 0,
+      other: parseFloat(document.getElementById('spaSvcCostOther').value) || 0,
+    },
   };
   if (id) {
     const s = SpaData.services.find(x => x.id === id);
@@ -204,12 +259,13 @@ function spaDeleteService(id) {
 }
 
 // ── THERAPISTS ───────────────────────────────────────────────────────────
-function spaTherapistCardHtml(t) {
+function spaTherapistCardHtml(t, groupKey) {
   const svcCount = (t.services || []).length;
   const roomName = t.defaultRoomId ? (SpaData.rooms.find(r => r.id === t.defaultRoomId)?.name || '') : '';
+  const placeholderIcon = SPA_GROUP_ICON[groupKey] || '🧑';
   const photo = t.photoDataUrl
     ? `<img src="${t.photoDataUrl}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">`
-    : `<div style="width:44px;height:44px;border-radius:50%;background:#f0ebe0;color:#c8bfb5;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🧑</div>`;
+    : `<div style="width:44px;height:44px;border-radius:50%;background:#f0ebe0;color:#c8bfb5;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${placeholderIcon}</div>`;
   return `<div onclick="spaShowTherapistForm('${t.id}')" style="background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;padding:16px 18px;cursor:pointer;opacity:${t.active ? 1 : .55};transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
     <div style="display:flex;gap:12px;align-items:flex-start">
       ${photo}
@@ -234,11 +290,11 @@ function spaRenderTherapists() {
   if (!SpaData.therapists.length) { el.innerHTML = '<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No therapists yet — add your first one.</p>'; return; }
   const active = SpaData.therapists.filter(t => t.active).sort((a, b) => a.firstName.localeCompare(b.firstName));
   const inactive = SpaData.therapists.filter(t => !t.active).sort((a, b) => a.firstName.localeCompare(b.firstName));
-  const grid = list => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">${list.map(spaTherapistCardHtml).join('')}</div>`;
+  const grid = (list, groupKey) => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">${list.map(t => spaTherapistCardHtml(t, groupKey)).join('')}</div>`;
   let html = spaTherGroupList(active).map(g => `
     <div style="margin-bottom:26px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#a89a86;margin-bottom:10px">${g.label}</div>
-      ${grid(g.list)}
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#a89a86;margin-bottom:10px">${SPA_GROUP_ICON[g.key] || ''} ${g.label}</div>
+      ${grid(g.list, g.key)}
     </div>`).join('');
   if (inactive.length) {
     html += `<div style="margin-bottom:10px">
@@ -256,17 +312,24 @@ function spaTherapistServicesHtml(t) {
   return SpaData.services.filter(s => s.active).map(s => {
     const r = rates[s.id];
     const checked = !!r;
-    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#f5f1eb;border-radius:8px">
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#2d2520;flex:1;cursor:pointer">
-        <input type="checkbox" class="spa-ther-svc-chk" data-svc="${s.id}" ${checked ? 'checked' : ''} onchange="spaToggleTherSvcRow('${s.id}')">
-        ${s.name}
-      </label>
-      <select id="spaTherRateType_${s.id}" style="padding:5px 8px;font-size:12px;border:1.5px solid #c8bfb5;border-radius:6px;font-family:'Jost',sans-serif;background:#fff" ${checked ? '' : 'disabled'}>
-        <option value="FIXED" ${r?.compensationType === 'FIXED' ? 'selected' : ''}>Fixed $</option>
-        <option value="PERCENTAGE" ${r?.compensationType === 'PERCENTAGE' ? 'selected' : ''}>% of price</option>
-        <option value="HOURLY" ${r?.compensationType === 'HOURLY' ? 'selected' : ''}>Hourly $</option>
-      </select>
-      <input id="spaTherRateVal_${s.id}" type="number" min="0" step="1" placeholder="rate" value="${r?.compensationValue ?? ''}" style="width:80px;padding:5px 8px;font-size:12px;border:1.5px solid #c8bfb5;border-radius:6px;font-family:'Jost',sans-serif" ${checked ? '' : 'disabled'}>
+    return `<div style="padding:8px 10px;background:#f5f1eb;border-radius:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#2d2520;flex:1;cursor:pointer">
+          <input type="checkbox" class="spa-ther-svc-chk" data-svc="${s.id}" ${checked ? 'checked' : ''} onchange="spaToggleTherSvcRow('${s.id}')">
+          ${s.name}
+        </label>
+        <select id="spaTherRateType_${s.id}" onchange="spaUpdateTherProfitDisplay('${s.id}')" style="padding:5px 8px;font-size:12px;border:1.5px solid #c8bfb5;border-radius:6px;font-family:'Jost',sans-serif;background:#fff" ${checked ? '' : 'disabled'}>
+          <option value="FIXED" ${r?.compensationType === 'FIXED' ? 'selected' : ''}>Fixed</option>
+          <option value="PERCENTAGE" ${r?.compensationType === 'PERCENTAGE' ? 'selected' : ''}>% of price</option>
+          <option value="HOURLY" ${r?.compensationType === 'HOURLY' ? 'selected' : ''}>Hourly</option>
+        </select>
+        <input id="spaTherRateVal_${s.id}" type="number" min="0" step="1" placeholder="rate" value="${r?.compensationValue ?? ''}" oninput="spaUpdateTherProfitDisplay('${s.id}')" style="width:70px;padding:5px 8px;font-size:12px;border:1.5px solid #c8bfb5;border-radius:6px;font-family:'Jost',sans-serif" ${checked ? '' : 'disabled'}>
+        <select id="spaTherRateCur_${s.id}" onchange="spaUpdateTherProfitDisplay('${s.id}')" style="padding:5px 6px;font-size:12px;border:1.5px solid #c8bfb5;border-radius:6px;font-family:'Jost',sans-serif;background:#fff" ${checked ? '' : 'disabled'}>
+          <option value="MXN" ${(r?.compensationCurrency || 'MXN') === 'MXN' ? 'selected' : ''}>MXN</option>
+          <option value="USD" ${r?.compensationCurrency === 'USD' ? 'selected' : ''}>USD</option>
+        </select>
+      </div>
+      <div id="spaTherProfit_${s.id}" style="font-size:11px;color:#6b7280;margin-top:5px;padding-left:2px"></div>
     </div>`;
   }).join('');
 }
@@ -276,6 +339,25 @@ function spaToggleTherSvcRow(svcId) {
   const on = chk.checked;
   document.getElementById('spaTherRateType_' + svcId).disabled = !on;
   document.getElementById('spaTherRateVal_' + svcId).disabled = !on;
+  document.getElementById('spaTherRateCur_' + svcId).disabled = !on;
+  spaUpdateTherProfitDisplay(svcId);
+}
+
+function spaUpdateTherProfitDisplay(svcId) {
+  const el = document.getElementById('spaTherProfit_' + svcId);
+  if (!el) return;
+  const chk = document.querySelector(`.spa-ther-svc-chk[data-svc="${svcId}"]`);
+  const s = SpaData.services.find(x => x.id === svcId);
+  if (!chk.checked || !s || s.price == null) { el.textContent = ''; return; }
+  const rateVal = parseFloat(document.getElementById('spaTherRateVal_' + svcId).value) || 0;
+  const rateCur = document.getElementById('spaTherRateCur_' + svcId).value;
+  const rate = { compensationType: document.getElementById('spaTherRateType_' + svcId).value, compensationValue: rateVal, compensationCurrency: rateCur };
+  const payUSD = spaTherapistCompAmount(rate, s);
+  if (payUSD == null) { el.textContent = ''; return; }
+  const payLabel = rateCur === 'MXN' ? `$${rateVal} MXN (≈$${payUSD} USD)` : `$${payUSD} USD`;
+  const otherCosts = spaSvcDirectCostTotal(s);
+  const profit = s.price - payUSD - otherCosts;
+  el.innerHTML = `Price $${s.price} − pay ${payLabel}${otherCosts ? ' − other costs $' + otherCosts : ''} = <b style="color:${profit >= 0 ? '#059669' : '#dc2626'}">$${profit} profit</b>`;
 }
 
 function spaShowTherapistForm(id) {
@@ -295,6 +377,7 @@ function spaShowTherapistForm(id) {
   const roomSel = document.getElementById('spaTherDefaultRoom');
   roomSel.innerHTML = '<option value="">— None —</option>' + SpaData.rooms.map(r => `<option value="${r.id}" ${t?.defaultRoomId === r.id ? 'selected' : ''}>${r.name}</option>`).join('');
   document.getElementById('spaTherServicesWrap').innerHTML = spaTherapistServicesHtml(t);
+  (t?.services || []).forEach(r => spaUpdateTherProfitDisplay(r.serviceId));
   openModal('spaTherapistModal');
 }
 
@@ -346,7 +429,8 @@ function spaSaveTherapist() {
     const svcId = chk.dataset.svc;
     const compensationType = document.getElementById('spaTherRateType_' + svcId).value;
     const compensationValue = parseFloat(document.getElementById('spaTherRateVal_' + svcId).value) || 0;
-    services.push({ serviceId: svcId, compensationType, compensationValue, effectiveFrom: new Date().toISOString() });
+    const compensationCurrency = document.getElementById('spaTherRateCur_' + svcId).value;
+    services.push({ serviceId: svcId, compensationType, compensationValue, compensationCurrency, effectiveFrom: new Date().toISOString() });
   });
   const fields = {
     firstName, lastName: document.getElementById('spaTherLast').value.trim(),
