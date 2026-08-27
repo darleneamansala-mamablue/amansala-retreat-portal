@@ -400,7 +400,7 @@ function actByRetreatPrint(bkId) {
   };
   // Shortened labels for the print header only — the full names (used
   // everywhere else in the app) stay as-is in ADD_ONS.
-  const ACT_SHEET_SHORT_NAMES = {ao4:'Sound', ao9:'Mayan Clay'};
+  const ACT_SHEET_SHORT_NAMES = {ao4:'Sound Healing', ao9:'Mayan Clay'};
   const colHeaders = entries.map(e=>{
     const priceTxt = e.prepaid ? 'Included' : (e.ao.price?'$'+e.ao.price:'');
     const displayName = ACT_SHEET_SHORT_NAMES[e.ao.id] || e.ao.name;
