@@ -392,14 +392,11 @@ function actByRetreatPrint(bkId) {
   const roster = actRosterForBk(bkId).slice().sort((a,b)=>a.first.localeCompare(b.first)||(a.last||'').localeCompare(b.last||''));
 
   const addMin = (t,mins)=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const tot=h*60+m+mins;const hh=Math.floor(tot/60)%24;return`${String(hh).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
-  // Both ends of a range share am/pm most of the time — drop the first
-  // suffix in that case so the whole range fits on one printed line.
   const fmtRange = (start,end)=>{
     if(!start)return'';
-    const parts=t=>{const[h,m]=t.split(':').map(Number);return{h12:(h%12)||12,m:String(m).padStart(2,'0'),ap:h>=12?'pm':'am'};};
+    const parts=t=>{const[h,m]=t.split(':').map(Number);return{h12:(h%12)||12,m:String(m).padStart(2,'0')};};
     const a=parts(start), b=parts(end);
-    const startTxt = a.ap===b.ap ? `${a.h12}:${a.m}` : `${a.h12}:${a.m} ${a.ap}`;
-    return `${startTxt} – ${b.h12}:${b.m} ${b.ap}`;
+    return `${a.h12}:${a.m} – ${b.h12}:${b.m}`;
   };
   const colHeaders = entries.map(e=>{
     const priceTxt = e.prepaid ? 'Included' : (e.ao.price?'$'+e.ao.price:'');
@@ -476,7 +473,7 @@ function actByRetreatPrint(bkId) {
       .ops-panel{margin-top:26px;border:1px solid #e8dfd0;border-radius:10px;overflow:hidden}
       .ops-panel-title{font-size:9.5pt;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#a89a86;background:#f4efe4;padding:9px 16px;border-bottom:1px solid #e8dfd0}
       .ops-panel table{margin-top:0;font-size:11.5pt}
-      .ops-panel td{border-bottom:1px solid #ece4d4;border-right:1px solid #f0ebe0;padding:7px 9px;font-size:11pt;color:#4a4038}
+      .ops-panel td{border-bottom:1px solid #ece4d4;padding:7px 9px;font-size:11pt;color:#4a4038}
       .ops-panel tr:last-child td{border-bottom:none}
       .ops-label{font-weight:700;color:#1e4f4f;background:#faf7f0;white-space:nowrap;font-size:10.5pt;text-transform:uppercase;letter-spacing:.4px}
       .footer{text-align:center;font-size:11pt;color:#4a7070;margin-top:30px;line-height:1.8}
