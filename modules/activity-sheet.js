@@ -398,9 +398,13 @@ function actByRetreatPrint(bkId) {
     const a=parts(start), b=parts(end);
     return `${a.h12}:${a.m} – ${b.h12}:${b.m}`;
   };
+  // Shortened labels for the print header only — the full names (used
+  // everywhere else in the app) stay as-is in ADD_ONS.
+  const ACT_SHEET_SHORT_NAMES = {ao4:'Sound', ao9:'Mayan Clay'};
   const colHeaders = entries.map(e=>{
     const priceTxt = e.prepaid ? 'Included' : (e.ao.price?'$'+e.ao.price:'');
-    const nameTxt = e.prepaid ? e.ao.name : 'Optional '+e.ao.name;
+    const displayName = ACT_SHEET_SHORT_NAMES[e.ao.id] || e.ao.name;
+    const nameTxt = e.prepaid ? displayName : `<span class="col-optional-tag">Optional</span>${displayName}`;
     const dur = (typeof ACTS_DUR!=='undefined'&&ACTS_DUR[e.ao.id])||90;
     const timeTxt = e.time ? fmtRange(e.time,addMin(e.time,dur)) : '';
     return `<th>
@@ -462,6 +466,7 @@ function actByRetreatPrint(bkId) {
       .col-day{font-size:9pt;text-transform:uppercase;letter-spacing:1px;color:#a89a86;font-weight:600}
       .col-date{font-size:12pt;font-family:'Cormorant Garamond',serif;font-weight:700;color:#1a2332}
       .col-name{margin-top:6px;font-weight:600;font-size:11pt;line-height:1.35;color:#2d6a6a}
+      .col-optional-tag{display:block;font-size:8.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#a89a86}
       .col-time{margin-top:4px;font-size:9.5pt;color:#8a7e74;white-space:nowrap}
       .col-price{margin-top:4px;font-size:10.5pt;color:#8a7e74}
       .col-price{color:#a05a35;font-weight:600}
