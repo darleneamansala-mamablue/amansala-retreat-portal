@@ -377,7 +377,6 @@ function actByRetreatPrint(bkId) {
   const fmtDay = ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'long'});};
   const fmtDate = ds=>{const d=new Date(ds+'T12:00:00');return MON[d.getMonth()]+' '+ordinal(d.getDate());};
   const fmtT = t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);return((h%12)||12)+':'+String(m).padStart(2,'0')+' '+(h>=12?'pm':'am');};
-  const cap = s=>s?s.charAt(0).toUpperCase()+s.slice(1):'';
   // Room-list names are entered inconsistently (all-lowercase, etc.) — always
   // title-case each word so the printed sheet reads properly regardless.
   const titleCase = s=>(s||'').trim().split(/\s+/).filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
@@ -426,17 +425,18 @@ function actByRetreatPrint(bkId) {
   // own small panel below the guest grid rather than embedded as extra rows
   // in the sign-up table — keeps the part guests actually read clean, and
   // reads as a considered, separate "for staff use" reference the way a
-  // boutique property's ops sheet would.
-  const opsPanelRow = (label,field)=>`<tr><td class="ops-label">${label}</td>${entries.map(e=>{
-    const val=(actOpsData[e.ao.id+'|'+e.date]||{})[field]||'';
-    return `<td>${cap(val)||'—'}</td>`;
-  }).join('')}</tr>`;
+  // boutique property's ops sheet would. Printed blank on purpose — staff
+  // write the assignment in by hand rather than it being pre-filled from
+  // whatever the Operations panel happens to hold at print time.
+  const opsPanelRow = (label)=>`<tr><td class="ops-label">${label}</td>${entries.map(()=>
+    `<td><span class="write-line"></span></td>`
+  ).join('')}</tr>`;
   const opsPanel = entries.length ? `<div class="ops-panel">
       <div class="ops-panel-title">For Staff Use</div>
       <table>
-        ${opsPanelRow('Guide 1','guide1')}
-        ${opsPanelRow('Guide 2','guide2')}
-        ${opsPanelRow('Van','driver')}
+        ${opsPanelRow('Guide 1')}
+        ${opsPanelRow('Guide 2')}
+        ${opsPanelRow('Van')}
       </table>
     </div>` : '';
 
@@ -479,6 +479,7 @@ function actByRetreatPrint(bkId) {
       .ops-panel-title{font-size:9.5pt;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#a89a86;background:#f4efe4;padding:9px 16px;border-bottom:1px solid #e8dfd0}
       .ops-panel table{margin-top:0;font-size:11.5pt}
       .ops-panel td{border-bottom:1px solid #ece4d4;padding:7px 9px;font-size:11pt;color:#4a4038}
+      .write-line{display:block;width:100%;min-width:70px;height:1px;background:#cabfaa;margin-top:14px}
       .ops-panel tr:last-child td{border-bottom:none}
       .ops-label{font-weight:700;color:#1e4f4f;background:#faf7f0;white-space:nowrap;font-size:10.5pt;text-transform:uppercase;letter-spacing:.4px}
       .footer{text-align:center;font-size:11pt;color:#4a7070;margin-top:30px;line-height:1.8}
