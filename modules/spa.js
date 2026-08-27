@@ -106,7 +106,7 @@ async function spaInit() {
 
 function spaSetView(v) {
   spaCurView = v;
-  ['calendar', 'services', 'therapists', 'rooms'].forEach(id => {
+  ['calendar', 'services', 'therapists', 'rooms', 'public'].forEach(id => {
     const btn = document.getElementById('spaView' + id.charAt(0).toUpperCase() + id.slice(1));
     if (btn) {
       btn.style.background = id === v ? 'var(--teal,#2d6a6a)' : 'transparent';
@@ -117,6 +117,9 @@ function spaSetView(v) {
 }
 
 function spaRender() {
+  const contentEl = document.getElementById('spaContent');
+  contentEl.style.padding = '';
+  contentEl.style.textAlign = '';
   const addWrap = document.getElementById('spaAddBtnWrap');
   const addBtn = (label, onclick) => `<button onclick="${onclick}" style="display:flex;align-items:center;gap:6px;padding:9px 18px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>${label}</button>`;
@@ -124,6 +127,25 @@ function spaRender() {
   if (spaCurView === 'services') { addWrap.innerHTML = addBtn('New Service', 'spaShowServiceForm(null)'); spaRenderServices(); }
   if (spaCurView === 'therapists') { addWrap.innerHTML = addBtn('New Therapist', 'spaShowTherapistForm(null)'); spaRenderTherapists(); }
   if (spaCurView === 'rooms') { addWrap.innerHTML = addBtn('New Room', 'spaShowRoomForm(null)'); spaRenderRooms(); }
+  if (spaCurView === 'public') { addWrap.innerHTML = ''; spaRenderPublicPage(); }
+}
+
+// Live preview of the guest-facing landing page, right inside the admin —
+// fully interactive (it's a real iframe), so a booking made in here is a
+// real booking, same as if a guest did it from the actual link.
+function spaRenderPublicPage() {
+  const el = document.getElementById('spaContent');
+  const url = location.origin + '/spa-landing.html';
+  el.style.padding = '0';
+  el.style.textAlign = 'left';
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;background:#fff;border:1px solid #e8dfd4;border-radius:12px 12px 0 0;flex-wrap:wrap">
+      <span style="font-size:12px;color:#6b7280;font-family:'Jost',sans-serif">This is the real public page — anything booked below is a real booking.</span>
+      <span style="flex:1"></span>
+      <button onclick="navigator.clipboard.writeText('${url}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy Link',1500)" style="padding:7px 14px;font-size:12px;font-weight:600;border:1.5px solid #c8bfb5;border-radius:8px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">Copy Link</button>
+      <a href="${url}" target="_blank" style="padding:7px 14px;font-size:12px;font-weight:600;border:none;border-radius:8px;background:var(--teal,#2d6a6a);color:#fff;cursor:pointer;font-family:'Jost',sans-serif;text-decoration:none">Open in New Tab ↗</a>
+    </div>
+    <iframe src="${url}" style="width:100%;height:calc(100vh - 220px);border:1px solid #e8dfd4;border-top:none;border-radius:0 0 12px 12px;background:#fff"></iframe>`;
 }
 
 // ── COSTS & PROFIT ───────────────────────────────────────────────────────
