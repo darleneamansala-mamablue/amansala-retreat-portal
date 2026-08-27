@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Book a Spa Treatment · Amansala</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Jost',sans-serif;background:#faf7f0;color:#2d2520;min-height:100vh}
+.header{background:#2d6a6a;padding:20px;text-align:center}
+.header-logo{color:#fff;font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;letter-spacing:.5px}
+.header-sub{color:rgba(255,255,255,.7);font-size:12.5px;margin-top:3px;letter-spacing:.3px}
+.wrap{max-width:520px;margin:0 auto;padding:26px 16px 70px}
+.step-dots{display:flex;justify-content:center;gap:6px;margin-bottom:22px}
+.step-dot{width:7px;height:7px;border-radius:50%;background:#e0d5c4}
+.step-dot.on{background:#2d6a6a}
+.card{background:#fff;border-radius:14px;border:1px solid #e8dfd4;padding:22px 20px;margin-bottom:14px}
+.section-title{font-size:19px;font-weight:600;font-family:'Cormorant Garamond',serif;color:#2d2520;margin-bottom:4px}
+.section-sub{font-size:13px;color:#8a7e74;margin-bottom:16px;line-height:1.5}
+.svc-card{background:#fff;border-radius:12px;border:1.5px solid #e8dfd4;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.svc-card:hover{border-color:#2d6a6a;box-shadow:0 2px 8px rgba(45,106,106,.1)}
+.svc-name{font-size:15px;font-weight:600;color:#2d2520}
+.svc-desc{font-size:12px;color:#8a7e74;margin-top:2px}
+.svc-meta{display:flex;gap:10px;margin-top:6px;font-size:12px;color:#4a4038}
+.svc-price{font-weight:700;color:#a05a35}
+.cat-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#a89a86;margin:18px 0 8px}
+.cat-label:first-child{margin-top:0}
+.choice-btn{width:100%;text-align:left;background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer;font-family:'Jost',sans-serif;font-size:14px;font-weight:600;color:#2d2520;transition:border-color .15s,background .15s}
+.choice-btn:hover{border-color:#2d6a6a;background:#f0f9f9}
+.choice-btn .cd{font-size:12px;font-weight:400;color:#8a7e74;margin-top:2px}
+.form-group{margin-bottom:14px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.form-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;display:block;margin-bottom:5px}
+.form-input,.form-select{width:100%;padding:10px 12px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:14px;color:#2d2520;outline:none;background:#fff}
+.form-input:focus,.form-select:focus{border-color:#2d6a6a}
+.btn-primary{width:100%;padding:14px;background:#2d6a6a;color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
+.btn-primary:hover{background:#245858}
+.btn-primary:disabled{background:#9ca3af;cursor:not-allowed}
+.btn-back{background:none;border:none;color:#8a7e74;font-family:'Jost',sans-serif;font-size:13px;cursor:pointer;margin-bottom:14px;display:flex;align-items:center;gap:4px}
+.policy-box{background:#f5f1eb;border-radius:10px;padding:14px 16px;font-size:13px;line-height:1.7;color:#4a4038;margin-bottom:16px}
+.policy-box b{color:#2d2520}
+.chk-row{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:#2d2520;margin-bottom:16px;cursor:pointer}
+.chk-row input{margin-top:2px}
+.date-scroller{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:16px}
+.date-pill{flex-shrink:0;text-align:center;background:#fff;border:1.5px solid #e8dfd4;border-radius:10px;padding:8px 12px;cursor:pointer;font-family:'Jost',sans-serif}
+.date-pill.on{background:#2d6a6a;border-color:#2d6a6a;color:#fff}
+.date-pill .dow{font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.7}
+.date-pill .dnum{font-size:15px;font-weight:700;margin-top:2px}
+.slot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.slot-btn{padding:10px 6px;border:1.5px solid #e8dfd4;border-radius:9px;background:#fff;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;color:#2d2520;cursor:pointer;text-align:center}
+.slot-btn:hover{border-color:#2d6a6a;background:#f0f9f9}
+.no-slots{color:#9ca3af;font-size:13px;font-style:italic;text-align:center;padding:20px 0}
+.summary-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f0ebe0;font-size:13.5px}
+.summary-row:last-child{border-bottom:none}
+.summary-row .lbl{color:#8a7e74}
+.summary-row .val{color:#2d2520;font-weight:600;text-align:right}
+.msg{text-align:center;padding:50px 20px}
+.msg-icon{font-size:44px;margin-bottom:12px}
+.msg-title{font-size:20px;font-weight:700;font-family:'Cormorant Garamond',serif;color:#2d2520;margin-bottom:8px}
+.msg-sub{font-size:13.5px;color:#8a7e74;line-height:1.6}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a2332;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;text-align:center;max-width:90vw}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">Amansala</div>
+  <div class="header-sub">Book a Spa Treatment</div>
+</div>
+
+<div class="wrap">
+  <div class="step-dots" id="stepDots"></div>
+  <div id="mainContent">
+    <div class="msg"><div class="msg-icon">⏳</div><div class="msg-title">Loading…</div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPA_URL='https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPA_KEY='sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
+const db=supabase.createClient(SUPA_URL,SUPA_KEY);
+
+const SB_START_H=7, SB_END_H=21;
+const CAT_ORDER=['massage','spa','wellness','fitness'];
+const CAT_LABEL={massage:'Massage',spa:'Spa',wellness:'Wellness',fitness:'Private Classes'};
+
+let SpaData={services:[],rooms:[],therapists:[]};
+let SpaAppointments=[];
+let SB={step:1,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
+        policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null};
+
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
+function esc(s){return (s||'').replace(/</g,'&lt;');}
+function minToHHMM(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
+function hhmmToMin(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
+function fmtT(t){const[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';return((h%12)||12)+':'+String(m).padStart(2,'0')+' '+ap;}
+function fmtDateLong(ds){const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});}
+
+async function init(){
+  try{
+    const [{data:sd},{data:ad}]=await Promise.all([
+      db.from('app_store').select('value').eq('key','spa_data').single(),
+      db.from('app_store').select('value').eq('key','spa_appointments').single(),
+    ]);
+    if(sd?.value) SpaData=sd.value;
+    SpaAppointments=(ad?.value)||[];
+  }catch(e){}
+  renderStep();
+}
+
+function setStep(n){SB.step=n;renderStep();window.scrollTo({top:0,behavior:'smooth'});}
+
+function renderDots(total){
+  document.getElementById('stepDots').innerHTML=Array.from({length:total},(_,i)=>
+    `<div class="step-dot ${i+1<=SB.step?'on':''}"></div>`).join('');
+}
+
+function renderStep(){
+  const el=document.getElementById('mainContent');
+  if(SB.step===1) return renderStep1_Service(el);
+  if(SB.step===2) return renderStep2_GuestType(el);
+  if(SB.step===3) return SB.guestType==='hotel' ? renderStep3_Hotel(el) : renderStep3_Offsite(el);
+  if(SB.step===4) return renderStep4_Preference(el);
+  if(SB.step===5) return renderStep5_DateTime(el);
+  if(SB.step===6) return renderStep6_Confirm(el);
+}
+
+// ── STEP 1 — SERVICE ─────────────────────────────────────────────────────
+function renderStep1_Service(el){
+  renderDots(6);
+  const active=SpaData.services.filter(s=>s.active && s.price!=null && s.duration!=null);
+  let html=`<div class="card"><div class="section-title">Choose a Treatment</div><div class="section-sub">Select the service you'd like to book.</div>`;
+  CAT_ORDER.forEach(cat=>{
+    const list=active.filter(s=>s.category===cat);
+    if(!list.length) return;
+    html+=`<div class="cat-label">${CAT_LABEL[cat]}</div>`;
+    list.forEach(s=>{
+      html+=`<div class="svc-card" onclick="sbPickService('${s.id}')">
+        <div class="svc-name">${esc(s.name)}</div>
+        ${s.description?`<div class="svc-desc">${esc(s.description)}</div>`:''}
+        <div class="svc-meta"><span>${s.duration} min</span><span class="svc-price">$${s.price} USD</span></div>
+      </div>`;
+    });
+  });
+  html+=`</div>`;
+  el.innerHTML=html;
+}
+function sbPickService(id){SB.serviceId=id;setStep(2);}
+
+// ── STEP 2 — GUEST TYPE ──────────────────────────────────────────────────
+function renderStep2_GuestType(el){
+  renderDots(6);
+  el.innerHTML=`
+    <button class="btn-back" onclick="setStep(1)">&#8249; Back</button>
+    <div class="card">
+      <div class="section-title">Are you staying at Amansala?</div>
+      <div class="section-sub">This helps us arrange payment for your treatment.</div>
+      <div class="choice-btn" onclick="sbPickGuestType('hotel')">I am staying at Amansala<div class="cd">Charged to your room — no payment needed now</div></div>
+      <div class="choice-btn" onclick="sbPickGuestType('offsite')">I am not staying at Amansala<div class="cd">Advance payment required to reserve your spot</div></div>
+    </div>`;
+}
+function sbPickGuestType(t){SB.guestType=t;setStep(3);}
+
+// ── STEP 3a — HOTEL GUEST ────────────────────────────────────────────────
+function renderStep3_Hotel(el){
+  renderDots(6);
+  el.innerHTML=`
+    <button class="btn-back" onclick="setStep(2)">&#8249; Back</button>
+    <div class="card">
+      <div class="section-title">Your Stay</div>
+      <div class="section-sub">Our front desk will confirm your reservation and charge your room folio.</div>
+      <div class="form-row">
+        <div><label class="form-label">First Name *</label><input class="form-input" id="sbFirst" value="${esc(SB.firstName)}"></div>
+        <div><label class="form-label">Last Name *</label><input class="form-input" id="sbLast" value="${esc(SB.lastName)}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Room Number *</label><input class="form-input" id="sbRoom" placeholder="e.g. GV3" value="${esc(SB.roomNumber)}"></div>
+      <button class="btn-primary" onclick="sbSubmitHotel()">Continue</button>
+    </div>`;
+}
+function sbSubmitHotel(){
+  const first=document.getElementById('sbFirst').value.trim();
+  const last=document.getElementById('sbLast').value.trim();
+  const room=document.getElementById('sbRoom').value.trim();
+  if(!first||!last){showToast('Please enter your name.');return;}
+  if(!room){showToast('Please enter your room number.');return;}
+  SB.firstName=first;SB.lastName=last;SB.roomNumber=room;
+  setStep(4);
+}
+
+// ── STEP 3b — OFFSITE GUEST ──────────────────────────────────────────────
+function renderStep3_Offsite(el){
+  renderDots(6);
+  el.innerHTML=`
+    <button class="btn-back" onclick="setStep(2)">&#8249; Back</button>
+    <div class="card">
+      <div class="section-title">Welcome to Amansala</div>
+      <div class="policy-box">
+        Advance payment is required to reserve your service.<br><br>
+        <b>Spa guests receive $20 USD off entrance to the Amansala Beach Club</b> on the day of their appointment.<br><br>
+        Please review our cancellation policy: services must be cancelled at least 12 hours in advance, or the full charge applies.
+      </div>
+      <label class="chk-row"><input type="checkbox" id="sbPolicyChk"> I agree to the cancellation policy above</label>
+      <div class="form-row">
+        <div><label class="form-label">First Name *</label><input class="form-input" id="sbFirst" value="${esc(SB.firstName)}"></div>
+        <div><label class="form-label">Last Name *</label><input class="form-input" id="sbLast" value="${esc(SB.lastName)}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="sbEmail" type="email" value="${esc(SB.email)}"></div>
+      <div class="form-group"><label class="form-label">Phone *</label><input class="form-input" id="sbPhone" type="tel" value="${esc(SB.phone)}"></div>
+      <button class="btn-primary" onclick="sbSubmitOffsite()">Continue</button>
+    </div>`;
+}
+function sbSubmitOffsite(){
+  if(!document.getElementById('sbPolicyChk').checked){showToast('Please agree to the cancellation policy to continue.');return;}
+  const first=document.getElementById('sbFirst').value.trim();
+  const last=document.getElementById('sbLast').value.trim();
+  const email=document.getElementById('sbEmail').value.trim();
+  const phone=document.getElementById('sbPhone').value.trim();
+  if(!first||!last){showToast('Please enter your name.');return;}
+  if(!email||!phone){showToast('Please enter your email and phone.');return;}
+  SB.firstName=first;SB.lastName=last;SB.email=email;SB.phone=phone;
+  SB.policyAccepted=true;SB.policyAcceptedAt=new Date().toISOString();SB.policyVersion='2026-08-27';
+  setStep(4);
+}
+
+// ── STEP 4 — THERAPIST PREFERENCE ────────────────────────────────────────
+function sbEligibleTherapists(){
+  return SpaData.therapists.filter(t=>t.active && (t.services||[]).some(s=>s.serviceId===SB.serviceId));
+}
+function renderStep4_Preference(el){
+  const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  if(!svc.genderPrefEnabled){SB.prefType='none';return setStep(5);}
+  renderDots(6);
+  const eligible=sbEligibleTherapists();
+  el.innerHTML=`
+    <button class="btn-back" onclick="setStep(3)">&#8249; Back</button>
+    <div class="card">
+      <div class="section-title">Therapist Preference</div>
+      <div class="section-sub">Do you have a preference for your ${esc(svc.name)}?</div>
+      <div class="choice-btn" onclick="sbPickPref('none')">No preference</div>
+      <div class="choice-btn" onclick="sbPickPref('female')">Female therapist</div>
+      <div class="choice-btn" onclick="sbPickPref('male')">Male therapist</div>
+      <div class="choice-btn" onclick="sbShowTherapistList()">Choose a specific therapist</div>
+      <div id="sbTherapistList" style="display:none;margin-top:10px">
+        ${eligible.map(t=>`<div class="choice-btn" onclick="sbPickPref('specific','${t.id}')">${esc(t.firstName)} ${esc(t.lastName||'')}</div>`).join('')}
+      </div>
+    </div>`;
+}
+function sbShowTherapistList(){document.getElementById('sbTherapistList').style.display='block';}
+function sbPickPref(type,therapistId){
+  SB.prefType=type;SB.requestedTherapistId=therapistId||null;
+  setStep(5);
+}
+
+// ── STEP 5 — DATE & TIME ─────────────────────────────────────────────────
+function sbCandidateTherapists(){
+  let list=sbEligibleTherapists();
+  if(SB.prefType==='specific') list=list.filter(t=>t.id===SB.requestedTherapistId);
+  else if(SB.prefType==='female'||SB.prefType==='male') list=list.filter(t=>t.gender===SB.prefType);
+  return list;
+}
+function sbSlotFree(therapistId,roomId,dateStr,startMin,duration){
+  const endMin=startMin+duration;
+  return !SpaAppointments.some(a=>{
+    if(a.date!==dateStr||a.status==='CANCELLED') return false;
+    const sameTher=a.therapistId===therapistId;
+    const sameRoom=roomId&&a.roomId===roomId;
+    if(!sameTher&&!sameRoom) return false;
+    const aStart=hhmmToMin(a.start), aEnd=aStart+(a.duration||60);
+    return startMin<aEnd && endMin>aStart;
+  });
+}
+// Simple stand-in for the fair-rotation queue (full claim/accept flow is a
+// later phase): among eligible+free therapists, prefer whoever has fewest
+// upcoming appointments, so bookings don't pile onto the first name in the list.
+function sbAutoAssign(candidates,dateStr,startMin,duration){
+  const free=candidates.filter(t=>sbSlotFree(t.id,null,dateStr,startMin,duration));
+  if(!free.length) return null;
+  const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  const freeRoom=svc.roomRequired ? SpaData.rooms.find(r=>!SpaAppointments.some(a=>a.date===dateStr&&a.roomId===r.id&&a.status!=='CANCELLED'&&startMin<hhmmToMin(a.start)+(a.duration||60)&&(startMin+duration)>hhmmToMin(a.start))) : null;
+  if(svc.roomRequired && !freeRoom) return null;
+  const counts=free.map(t=>({t,n:SpaAppointments.filter(a=>a.therapistId===t.id&&a.status!=='CANCELLED').length}));
+  counts.sort((a,b)=>a.n-b.n);
+  return {therapist:counts[0].t, room:freeRoom};
+}
+function sbNextDays(n){
+  const out=[];
+  const today=new Date();today.setHours(0,0,0,0);
+  for(let i=0;i<n;i++){const d=new Date(today.getTime()+i*86400000);out.push(d);}
+  return out;
+}
+function renderStep5_DateTime(el){
+  renderDots(6);
+  const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  const candidates=sbCandidateTherapists();
+  if(!SB.date) SB.date=sbNextDays(14)[0].toISOString().slice(0,10);
+  const days=sbNextDays(14);
+  el.innerHTML=`
+    <button class="btn-back" onclick="setStep(4)">&#8249; Back</button>
+    <div class="card">
+      <div class="section-title">Pick a Date &amp; Time</div>
+      <div class="section-sub">${esc(svc.name)} · ${svc.duration} min</div>
+      <div class="date-scroller" id="sbDateScroller">
+        ${days.map(d=>{
+          const ds=d.toISOString().slice(0,10);
+          return `<div class="date-pill ${ds===SB.date?'on':''}" onclick="sbPickDate('${ds}')">
+            <div class="dow">${d.toLocaleDateString('en-US',{weekday:'short'})}</div>
+            <div class="dnum">${d.getDate()}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div id="sbSlots"></div>
+    </div>`;
+  sbRenderSlots(candidates,svc);
+}
+function sbPickDate(ds){SB.date=ds;renderStep5_DateTime(document.getElementById('mainContent'));}
+function sbRenderSlots(candidates,svc){
+  const wrap=document.getElementById('sbSlots');
+  if(!candidates.length){wrap.innerHTML=`<div class="no-slots">No therapists available for this service yet. Please try a different preference or contact us directly.</div>`;return;}
+  const slots=[];
+  for(let m=SB_START_H*60;m<=SB_END_H*60-svc.duration;m+=15){
+    const assign=sbAutoAssign(candidates,SB.date,m,svc.duration);
+    if(assign) slots.push({start:m,assign});
+  }
+  if(!slots.length){wrap.innerHTML=`<div class="no-slots">No open times on this day — try another date.</div>`;return;}
+  wrap.innerHTML=`<div class="slot-grid">${slots.map(s=>
+    `<button class="slot-btn" onclick="sbPickSlot(${s.start},'${s.assign.therapist.id}','${s.assign.room?s.assign.room.id:''}')">${fmtT(minToHHMM(s.start))}</button>`
+  ).join('')}</div>`;
+}
+function sbPickSlot(startMin,therapistId,roomId){
+  SB.start=minToHHMM(startMin);
+  SB.therapistId=therapistId;
+  SB.roomId=roomId||null;
+  setStep(6);
+}
+
+// ── STEP 6 — CONFIRM ─────────────────────────────────────────────────────
+function renderStep6_Confirm(el){
+  renderDots(6);
+  const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  const ther=SpaData.therapists.find(t=>t.id===SB.therapistId);
+  el.innerHTML=`
+    <button class="btn-back" onclick="setStep(5)">&#8249; Back</button>
+    <div class="card">
+      <div class="section-title">Confirm Your Booking</div>
+      <div class="summary-row"><span class="lbl">Service</span><span class="val">${esc(svc.name)}</span></div>
+      <div class="summary-row"><span class="lbl">Date</span><span class="val">${fmtDateLong(SB.date)}</span></div>
+      <div class="summary-row"><span class="lbl">Time</span><span class="val">${fmtT(SB.start)}</span></div>
+      <div class="summary-row"><span class="lbl">Therapist</span><span class="val">${esc(ther.firstName)} ${esc(ther.lastName||'')}</span></div>
+      <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc.price} USD</span></div>
+      <div class="summary-row"><span class="lbl">${SB.guestType==='hotel'?'Room':'Contact'}</span><span class="val">${SB.guestType==='hotel'?esc(SB.roomNumber):esc(SB.email)}</span></div>
+      <button class="btn-primary" style="margin-top:16px" id="sbConfirmBtn" onclick="sbFinalConfirm()">${SB.guestType==='hotel'?'Confirm Booking':'Reserve — Payment Required'}</button>
+    </div>`;
+}
+
+async function sbFinalConfirm(){
+  const btn=document.getElementById('sbConfirmBtn');
+  btn.disabled=true;btn.textContent='Confirming…';
+  try{
+    // Revalidate against the latest data right before writing — someone else
+    // may have booked this exact slot in the time since it was shown.
+    const {data:ad}=await db.from('app_store').select('value').eq('key','spa_appointments').single();
+    const latest=(ad?.value)||[];
+    const conflict=latest.some(a=>{
+      if(a.date!==SB.date||a.status==='CANCELLED') return false;
+      const sameTher=a.therapistId===SB.therapistId;
+      const sameRoom=SB.roomId&&a.roomId===SB.roomId;
+      if(!sameTher&&!sameRoom) return false;
+      const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+      const aStart=hhmmToMin(a.start),aEnd=aStart+(a.duration||60);
+      const start=hhmmToMin(SB.start),end=start+svc.duration;
+      return start<aEnd && end>aStart;
+    });
+    if(conflict){
+      showToast('That time was just booked by someone else — please pick another.');
+      btn.disabled=false;btn.textContent='Confirm Booking';
+      SpaAppointments=latest;
+      setStep(5);
+      return;
+    }
+    const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+    const isHotel=SB.guestType==='hotel';
+    const appt={
+      id:'ap_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+      clientName:SB.firstName+' '+SB.lastName,
+      guestType:SB.guestType,
+      email:SB.email||null, phone:SB.phone||null, roomNumber:SB.roomNumber||null,
+      serviceId:SB.serviceId, therapistId:SB.therapistId, roomId:SB.roomId||null,
+      date:SB.date, start:SB.start, duration:svc.duration,
+      status:isHotel?'CONFIRMED':'PAYMENT_PENDING',
+      paymentStatus:isHotel?'NOT_REQUIRED':'PENDING',
+      folioStatus:isHotel?'PENDING':'NOT_REQUIRED',
+      therapistPreference:{type:SB.prefType,requestedTherapistId:SB.requestedTherapistId||null},
+      cancellationPolicyAcceptedAt:SB.policyAcceptedAt||null,
+      cancellationPolicyVersion:SB.policyVersion||null,
+      source:'guest_booking',
+      notes:'',
+      createdAt:new Date().toISOString(),
+    };
+    latest.push(appt);
+    await db.from('app_store').upsert({key:'spa_appointments',value:latest,updated_at:new Date().toISOString()});
+    const el=document.getElementById('mainContent');
+    document.getElementById('stepDots').style.display='none';
+    if(isHotel){
+      el.innerHTML=`<div class="msg">
+        <div class="msg-icon">🌴</div>
+        <div class="msg-title">You're Booked!</div>
+        <div class="msg-sub">See you for your <b>${esc(svc.name)}</b> on ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>The charge will appear on your room folio. Our team will confirm your reservation.</div>
+      </div>`;
+    }else{
+      el.innerHTML=`<div class="msg">
+        <div class="msg-icon">🌴</div>
+        <div class="msg-title">Almost There!</div>
+        <div class="msg-sub">Your <b>${esc(svc.name)}</b> is reserved for ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>Our team will reach out to <b>${esc(SB.email)}</b> shortly to collect payment and confirm your appointment.</div>
+      </div>`;
+    }
+  }catch(e){
+    showToast('Something went wrong — please try again.');
+    btn.disabled=false;btn.textContent='Confirm Booking';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
