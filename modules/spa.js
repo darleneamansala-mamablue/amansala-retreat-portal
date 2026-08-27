@@ -9,7 +9,7 @@
 
 let SpaData = { services: [], rooms: [], therapists: [] };
 let spaLoaded = false;
-let spaCurView = 'services';
+let spaCurView = 'calendar';
 
 function spaNewId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -69,12 +69,13 @@ async function spaSave() {
 
 async function spaInit() {
   if (!spaLoaded) await spaLoad();
+  if (typeof spaCalLoad === 'function' && !spaCalLoaded) await spaCalLoad();
   spaRender();
 }
 
 function spaSetView(v) {
   spaCurView = v;
-  ['services', 'therapists', 'rooms'].forEach(id => {
+  ['calendar', 'services', 'therapists', 'rooms'].forEach(id => {
     const btn = document.getElementById('spaView' + id.charAt(0).toUpperCase() + id.slice(1));
     if (btn) {
       btn.style.background = id === v ? 'var(--teal,#2d6a6a)' : 'transparent';
@@ -88,6 +89,7 @@ function spaRender() {
   const addWrap = document.getElementById('spaAddBtnWrap');
   const addBtn = (label, onclick) => `<button onclick="${onclick}" style="display:flex;align-items:center;gap:6px;padding:9px 18px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>${label}</button>`;
+  if (spaCurView === 'calendar') { spaCalRenderToolbar(); spaCalRender(); }
   if (spaCurView === 'services') { addWrap.innerHTML = addBtn('New Service', 'spaShowServiceForm(null)'); spaRenderServices(); }
   if (spaCurView === 'therapists') { addWrap.innerHTML = addBtn('New Therapist', 'spaShowTherapistForm(null)'); spaRenderTherapists(); }
   if (spaCurView === 'rooms') { addWrap.innerHTML = addBtn('New Room', 'spaShowRoomForm(null)'); spaRenderRooms(); }

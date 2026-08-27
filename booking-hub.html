@@ -2794,13 +2794,14 @@
 <div class="tab-panel" id="tab-spa" style="flex-direction:column">
   <div style="background:#fff;border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;flex-shrink:0">
     <div style="display:flex;gap:4px;background:#f5f1eb;border-radius:10px;padding:3px">
-      <button id="spaViewServices" onclick="spaSetView('services')" style="padding:7px 16px;font-size:12.5px;font-weight:600;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;background:var(--teal,#2d6a6a);color:#fff">Services</button>
+      <button id="spaViewCalendar" onclick="spaSetView('calendar')" style="padding:7px 16px;font-size:12.5px;font-weight:600;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;background:var(--teal,#2d6a6a);color:#fff">Calendar</button>
+      <button id="spaViewServices" onclick="spaSetView('services')" style="padding:7px 16px;font-size:12.5px;font-weight:600;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;background:transparent;color:var(--dark)">Services</button>
       <button id="spaViewTherapists" onclick="spaSetView('therapists')" style="padding:7px 16px;font-size:12.5px;font-weight:600;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;background:transparent;color:var(--dark)">Therapists</button>
       <button id="spaViewRooms" onclick="spaSetView('rooms')" style="padding:7px 16px;font-size:12.5px;font-weight:600;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;background:transparent;color:var(--dark)">Rooms</button>
     </div>
     <div id="spaAddBtnWrap"></div>
   </div>
-  <div style="flex:1;overflow-y:auto;padding:28px 36px;background:#f5f1eb">
+  <div id="spaContentOuter" style="flex:1;overflow:auto;padding:28px 36px;background:#f5f1eb">
     <div id="spaContent" style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0">Loading…</div>
   </div>
 </div>
@@ -3204,6 +3205,80 @@
     <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid #e8dfd4">
       <button onclick="closeModal('spaRoomModal')" class="btn btn-secondary">Cancel</button>
       <button onclick="spaSaveRoom()" style="padding:10px 24px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Save Room</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SPA APPOINTMENT MODAL ===== -->
+<div class="modal-overlay" id="spaApptModal">
+  <div class="modal" style="width:560px;max-width:96vw;max-height:90vh;overflow-y:auto">
+    <div class="modal-hdr">
+      <div><h2 id="spaApptModalTitle">New Appointment</h2><div class="modal-sub" id="spaApptConflictWarn" style="color:#dc2626;display:none">Time conflict — see below</div></div>
+      <button class="modal-x" onclick="closeModal('spaApptModal')">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px">
+      <input type="hidden" id="spaApptId">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Client Name *</label>
+          <input id="spaApptClientName" type="text" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Guest Type</label>
+          <select id="spaApptGuestType" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff">
+            <option value="hotel">Hotel Guest</option>
+            <option value="offsite">Offsite Guest</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Service *</label>
+        <select id="spaApptService" onchange="spaApptOnServiceChange()" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff"></select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Therapist *</label>
+          <select id="spaApptTherapist" onchange="spaApptOnTherapistChange()" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff"></select>
+        </div>
+        <div>
+          <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Room</label>
+          <select id="spaApptRoom" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff"></select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Date *</label>
+          <input id="spaApptDate" type="date" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Start Time *</label>
+          <select id="spaApptStart" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff"></select>
+        </div>
+        <div>
+          <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Duration (min)</label>
+          <input id="spaApptDuration" type="number" min="15" step="15" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;box-sizing:border-box">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Status</label>
+        <select id="spaApptStatus" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff">
+          <option value="CONFIRMED">Confirmed</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="NO_SHOW">No Show</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Notes</label>
+        <textarea id="spaApptNotes" rows="2" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
+      <div id="spaApptDeleteWrap" style="display:none;border-top:1px solid #e8dfd4;padding-top:14px">
+        <button onclick="spaApptDelete()" style="background:#fef2f2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:8px;padding:8px 16px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Delete Appointment</button>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid #e8dfd4">
+      <button onclick="closeModal('spaApptModal')" class="btn btn-secondary">Cancel</button>
+      <button onclick="spaApptSave()" style="padding:10px 24px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Save Appointment</button>
     </div>
   </div>
 </div>
@@ -4786,6 +4861,7 @@ function switchTab(id,btn){
 // ===== ADMIN DONE TASKS — moved to modules/admin-staff.js =====
 </script>
 <script src="modules/spa.js"></script>
+<script src="modules/spa-calendar.js"></script>
 <script src="modules/demo-seed.js"></script>
 <script>
 // ===== SEED DEMO — moved to modules/demo-seed.js =====
