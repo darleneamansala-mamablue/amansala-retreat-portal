@@ -405,11 +405,23 @@ function actByRetreatPrint(bkId) {
     return `<tr><td class="name-cell">${g.first}${g.last?' '+g.last:''}</td>${cells}</tr>`;
   }).join('');
 
-  const paxRow = `<tr class="tally"><td class="name-cell"># of Pax</td>${entries.map(()=>`<td class="mark"></td>`).join('')}</tr>`;
-  const opsRow = (label,field)=>`<tr class="tally"><td class="name-cell">${label}</td>${entries.map(e=>{
+  // Staff-only info (headcount tally, guide/driver assignments) lives in its
+  // own small panel below the guest grid rather than embedded as extra rows
+  // in the sign-up table — keeps the part guests actually read clean, and
+  // reads as a considered, separate "for staff use" reference the way a
+  // boutique property's ops sheet would.
+  const opsPanelRow = (label,field)=>`<tr><td class="ops-label">${label}</td>${entries.map(e=>{
     const val=(actOpsData[e.ao.id+'|'+e.date]||{})[field]||'';
-    return `<td class="mark">${cap(val)}</td>`;
+    return `<td>${cap(val)||'—'}</td>`;
   }).join('')}</tr>`;
+  const opsPanel = entries.length ? `<div class="ops-panel">
+      <div class="ops-panel-title">For Staff Use</div>
+      <table>
+        ${opsPanelRow('Guide 1','guide1')}
+        ${opsPanelRow('Guide 2','guide2')}
+        ${opsPanelRow('Van','driver')}
+      </table>
+    </div>` : '';
 
   const signupLink = location.origin+'/activity-signup.html?id='+bkId;
 
@@ -419,36 +431,41 @@ function actByRetreatPrint(bkId) {
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       *{box-sizing:border-box}
-      body{font-family:'Jost',sans-serif;margin:0;padding:36px 40px;color:#2d2520;background:#fdfbf7;font-size:14pt}
+      body{font-family:'Jost',sans-serif;margin:0;padding:44px 48px;color:#2d2520;background:#fdfbf7;font-size:14pt;line-height:1.5}
       .print-btn{padding:9px 20px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;font-size:13pt;font-weight:600;float:right;margin-bottom:18px}
-      .hdr{text-align:center;margin-bottom:22px}
-      .brand{font-family:'Cormorant Garamond',serif;font-size:14pt;letter-spacing:4px;text-transform:uppercase;color:#8a7e74;margin-bottom:6px}
-      .title{font-family:'Cormorant Garamond',serif;font-size:29pt;font-weight:700;color:#1a2332;margin-bottom:4px;clear:both}
-      .sub{font-size:13pt;letter-spacing:.5px;color:#8a7e74;text-transform:uppercase;margin-bottom:14px}
-      .divider{width:70px;height:2px;background:#c9a876;margin:0 auto 16px}
-      .instr{font-size:14pt;font-weight:600;color:#2d2520;margin-bottom:8px}
-      .meta-row{display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px}
-      .warn-pill{display:inline-block;font-size:12.5pt;font-weight:700;color:#8a4a2e;background:#fbe9dd;border:1px solid #e8c4a8;border-radius:99px;padding:4px 16px}
-      .pax-pill{display:inline-block;font-size:12.5pt;font-weight:700;color:#1e4f4f;background:#e5f2f0;border:1px solid #bcdcd6;border-radius:99px;padding:4px 16px}
-      table{width:100%;border-collapse:collapse;font-size:14pt;margin-top:22px}
-      th{border:1px solid #ddd2c2;padding:7px 7px;font-size:12.5pt;font-weight:700;vertical-align:top;min-width:88px;font-family:'Jost',sans-serif;background:#2d6a6a;color:#fdfbf7}
-      th:first-child{background:#1e4f4f}
-      .col-day{font-size:9.5pt;text-transform:uppercase;letter-spacing:.5px;opacity:.75}
-      .col-date{font-size:12.5pt}
-      .col-name{margin-top:5px;font-weight:700;font-size:12.5pt;line-height:1.3}
-      .col-time,.col-price{margin-top:3px;font-size:11.5pt;opacity:.9}
-      .col-price{color:#e8d9b8}
-      td{border:1px solid #ddd2c2;padding:6px 9px;font-size:13pt}
-      td.name-cell{font-weight:600;white-space:nowrap;text-align:left;background:#faf7f1}
-      tbody tr:nth-child(even) td.mark{background:#fbf9f4}
-      td.mark{text-align:center;font-weight:700;color:#2d6a6a}
-      td.mark .box{display:inline-block;width:18px;height:18px;border:1.5px solid #c9bda8;border-radius:4px}
-      tr.tally td{font-weight:700;background:#f0ebe0;color:#1e4f4f}
-      tr.tally td.name-cell{background:#e5ddc9}
-      .footer{text-align:center;font-size:12pt;color:#4a7070;margin-top:22px;line-height:1.7}
+      .hdr{text-align:center;margin-bottom:8px}
+      .brand{font-family:'Cormorant Garamond',serif;font-size:13pt;letter-spacing:5px;text-transform:uppercase;color:#a89a86;margin-bottom:10px}
+      .title{font-family:'Cormorant Garamond',serif;font-size:32pt;font-weight:700;color:#1a2332;margin-bottom:6px;clear:both;letter-spacing:.3px}
+      .sub{font-size:12.5pt;letter-spacing:2px;color:#a89a86;text-transform:uppercase;margin-bottom:20px}
+      .divider{width:54px;height:1px;background:#c9a876;margin:0 auto 22px;position:relative}
+      .divider::before{content:'';position:absolute;left:50%;top:-3px;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:#c9a876}
+      .instr{font-size:13.5pt;font-weight:500;font-style:italic;color:#6b5f52;margin-bottom:14px}
+      .meta-row{display:flex;justify-content:center;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+      .warn-pill{display:inline-block;font-size:11.5pt;font-weight:600;letter-spacing:.3px;color:#a05a35;background:transparent;border:1px solid #d9b696;border-radius:99px;padding:5px 18px}
+      .pax-pill{display:inline-block;font-size:11.5pt;font-weight:600;letter-spacing:.3px;color:#1e4f4f;background:transparent;border:1px solid #9cc9c2;border-radius:99px;padding:5px 18px}
+      table{width:100%;border-collapse:collapse;font-size:14pt;margin-top:30px}
+      th{border-bottom:2px solid #2d6a6a;border-top:none;border-left:none;border-right:none;padding:10px 8px 12px;font-size:11.5pt;font-weight:700;vertical-align:top;min-width:88px;font-family:'Jost',sans-serif;background:#f4efe4;color:#1e4f4f}
+      th:first-child{background:#efe8d8}
+      .col-day{font-size:9pt;text-transform:uppercase;letter-spacing:1px;color:#a89a86;font-weight:600}
+      .col-date{font-size:12pt;font-family:'Cormorant Garamond',serif;font-weight:700;color:#1a2332}
+      .col-name{margin-top:6px;font-weight:600;font-size:11pt;line-height:1.35;color:#2d6a6a}
+      .col-time,.col-price{margin-top:4px;font-size:10.5pt;color:#8a7e74}
+      .col-price{color:#a05a35;font-weight:600}
+      td{border-bottom:1px solid #ece4d4;padding:9px 9px;font-size:13pt}
+      td.name-cell{font-weight:500;white-space:nowrap;text-align:left;font-family:'Cormorant Garamond',serif;font-size:14.5pt;color:#1a2332}
+      tbody tr:nth-child(even){background:#faf7f0}
+      td.mark{text-align:center}
+      td.mark .box{display:inline-block;width:16px;height:16px;border:1.5px solid #cabfaa;border-radius:4px}
+      .ops-panel{margin-top:26px;border:1px solid #e8dfd0;border-radius:10px;overflow:hidden}
+      .ops-panel-title{font-size:9.5pt;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#a89a86;background:#f4efe4;padding:9px 16px;border-bottom:1px solid #e8dfd0}
+      .ops-panel table{margin-top:0;font-size:11.5pt}
+      .ops-panel td{border-bottom:1px solid #ece4d4;border-right:1px solid #f0ebe0;padding:7px 9px;font-size:11pt;color:#4a4038}
+      .ops-panel tr:last-child td{border-bottom:none}
+      .ops-label{font-weight:700;color:#1e4f4f;background:#faf7f0;white-space:nowrap;font-size:10.5pt;text-transform:uppercase;letter-spacing:.4px}
+      .footer{text-align:center;font-size:11pt;color:#4a7070;margin-top:30px;line-height:1.8}
       .footer a{color:#2d6a6a;font-weight:600}
-      .footer .policy{color:#8a7e74;font-style:italic}
-      @media print{.no-print{display:none}body{padding:18px 20px}}
+      .footer .policy{color:#a89a86;font-style:italic}
+      @media print{.no-print{display:none}body{padding:22px 26px}}
     </style>
   </head><body>
     <button class="print-btn no-print" onclick="window.print()">Print</button>
@@ -459,15 +476,15 @@ function actByRetreatPrint(bkId) {
       <div class="divider"></div>
       <div class="instr">Please mark an X by your name if you will participate in the activities</div>
       <div class="meta-row">
-        <span class="warn-pill">Minimum of 6 people required for activities</span>
+        <span class="warn-pill">Minimum of 6 people required</span>
         <span class="pax-pill">${roster.length} guests total</span>
       </div>
     </div>
     <table>
-      <tr><th style="text-align:left;background:#1e4f4f">Name</th>${colHeaders}</tr>
+      <tr><th style="text-align:left">Name</th>${colHeaders}</tr>
       ${guestRows||`<tr><td class="name-cell" colspan="${entries.length+1}" style="text-align:center;font-style:italic">No guests on the room list yet.</td></tr>`}
-      ${entries.length?paxRow+opsRow('Guide 1','guide1')+opsRow('Guide 2','guide2')+opsRow('Van','driver'):''}
     </table>
+    ${opsPanel}
     <div class="footer">
       <span class="policy">All services must be cancelled at least 12 hours before your service otherwise you will be charged for it.</span><br>
       <a href="${signupLink}">${signupLink}</a><br>
