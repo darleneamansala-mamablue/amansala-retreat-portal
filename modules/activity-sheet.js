@@ -401,7 +401,7 @@ function actByRetreatPrint(bkId) {
   }).join('');
 
   const guestRows = roster.map(g=>{
-    const cells = entries.map(()=>`<td class="mark"></td>`).join('');
+    const cells = entries.map(()=>`<td class="mark"><span class="box"></span></td>`).join('');
     return `<tr><td class="name-cell">${g.first}${g.last?' '+g.last:''}</td>${cells}</tr>`;
   }).join('');
 
@@ -419,41 +419,57 @@ function actByRetreatPrint(bkId) {
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       *{box-sizing:border-box}
-      body{font-family:'Jost',sans-serif;margin:0;padding:32px;color:#1a1a1a;background:#fff;font-size:14pt}
-      .print-btn{padding:8px 18px;background:#2d6a6a;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'Jost',sans-serif;font-size:14pt;font-weight:600;float:right;margin-bottom:14px}
-      table{width:100%;border-collapse:collapse;font-size:14pt;clear:both}
-      caption{caption-side:top;text-align:center;padding-bottom:2px}
-      .title{font-family:'Cormorant Garamond',serif;font-size:25pt;font-weight:700;text-align:center;padding:8px 0 4px;border:1px solid #333;border-bottom:none}
-      .sub{text-align:center;font-size:14pt;border:1px solid #333;border-top:none;border-bottom:none;padding-bottom:6px}
-      .instr{text-align:center;font-size:14pt;font-weight:600;border:1px solid #333;border-top:none;border-bottom:none;padding:4px 0}
-      .warn{text-align:center;font-size:14pt;font-weight:700;color:#c0392b;border:1px solid #333;border-top:none;border-bottom:none;padding:4px 0}
-      .pax{text-align:center;font-size:14pt;border:1px solid #333;border-top:none;padding:4px 0}
-      th{border:1px solid #333;padding:5px 6px;font-size:14pt;font-weight:600;vertical-align:top;min-width:88px;font-family:'Jost',sans-serif}
-      .col-day,.col-date{font-size:14pt}
-      .col-name{margin-top:4px;font-weight:700}
-      .col-time,.col-price{margin-top:2px}
-      td{border:1px solid #333;padding:4px 8px;font-size:14pt}
-      td.name-cell{font-weight:600;white-space:nowrap;text-align:left}
-      td.mark{text-align:center;font-weight:700}
-      tr.tally td{font-weight:700;background:#f7f5f1}
-      .footer{text-align:center;font-size:14pt;color:#1d4ed8;margin-top:10px;line-height:1.6}
-      .footer a{color:#1d4ed8}
-      @media print{.no-print{display:none}body{padding:14px}}
+      body{font-family:'Jost',sans-serif;margin:0;padding:36px 40px;color:#2d2520;background:#fdfbf7;font-size:14pt}
+      .print-btn{padding:9px 20px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;font-size:13pt;font-weight:600;float:right;margin-bottom:18px}
+      .hdr{text-align:center;margin-bottom:22px}
+      .brand{font-family:'Cormorant Garamond',serif;font-size:14pt;letter-spacing:4px;text-transform:uppercase;color:#8a7e74;margin-bottom:6px}
+      .title{font-family:'Cormorant Garamond',serif;font-size:29pt;font-weight:700;color:#1a2332;margin-bottom:4px;clear:both}
+      .sub{font-size:13pt;letter-spacing:.5px;color:#8a7e74;text-transform:uppercase;margin-bottom:14px}
+      .divider{width:70px;height:2px;background:#c9a876;margin:0 auto 16px}
+      .instr{font-size:14pt;font-weight:600;color:#2d2520;margin-bottom:8px}
+      .meta-row{display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+      .warn-pill{display:inline-block;font-size:12.5pt;font-weight:700;color:#8a4a2e;background:#fbe9dd;border:1px solid #e8c4a8;border-radius:99px;padding:4px 16px}
+      .pax-pill{display:inline-block;font-size:12.5pt;font-weight:700;color:#1e4f4f;background:#e5f2f0;border:1px solid #bcdcd6;border-radius:99px;padding:4px 16px}
+      table{width:100%;border-collapse:collapse;font-size:14pt;margin-top:22px}
+      th{border:1px solid #ddd2c2;padding:7px 7px;font-size:12.5pt;font-weight:700;vertical-align:top;min-width:88px;font-family:'Jost',sans-serif;background:#2d6a6a;color:#fdfbf7}
+      th:first-child{background:#1e4f4f}
+      .col-day{font-size:9.5pt;text-transform:uppercase;letter-spacing:.5px;opacity:.75}
+      .col-date{font-size:12.5pt}
+      .col-name{margin-top:5px;font-weight:700;font-size:12.5pt;line-height:1.3}
+      .col-time,.col-price{margin-top:3px;font-size:11.5pt;opacity:.9}
+      .col-price{color:#e8d9b8}
+      td{border:1px solid #ddd2c2;padding:6px 9px;font-size:13pt}
+      td.name-cell{font-weight:600;white-space:nowrap;text-align:left;background:#faf7f1}
+      tbody tr:nth-child(even) td.mark{background:#fbf9f4}
+      td.mark{text-align:center;font-weight:700;color:#2d6a6a}
+      td.mark .box{display:inline-block;width:18px;height:18px;border:1.5px solid #c9bda8;border-radius:4px}
+      tr.tally td{font-weight:700;background:#f0ebe0;color:#1e4f4f}
+      tr.tally td.name-cell{background:#e5ddc9}
+      .footer{text-align:center;font-size:12pt;color:#4a7070;margin-top:22px;line-height:1.7}
+      .footer a{color:#2d6a6a;font-weight:600}
+      .footer .policy{color:#8a7e74;font-style:italic}
+      @media print{.no-print{display:none}body{padding:18px 20px}}
     </style>
   </head><body>
     <button class="print-btn no-print" onclick="window.print()">Print</button>
+    <div class="hdr">
+      <div class="brand">Amansala &middot; Tulum</div>
+      <div class="title">${retreatName}</div>
+      <div class="sub">${dateRangeLbl}</div>
+      <div class="divider"></div>
+      <div class="instr">Please mark an X by your name if you will participate in the activities</div>
+      <div class="meta-row">
+        <span class="warn-pill">Minimum of 6 people required for activities</span>
+        <span class="pax-pill">${roster.length} guests total</span>
+      </div>
+    </div>
     <table>
-      <tr><th class="title" colspan="${entries.length+1}" style="border-bottom:none">${retreatName}</th></tr>
-      <tr><td class="sub" colspan="${entries.length+1}">${dateRangeLbl}</td></tr>
-      <tr><td class="instr" colspan="${entries.length+1}">Please mark an X by your name if you will participate in the activities</td></tr>
-      <tr><td class="warn" colspan="${entries.length+1}">Minimum of 6 people required for activities</td></tr>
-      <tr><td class="pax" colspan="${entries.length+1}">#${roster.length} of pax</td></tr>
-      <tr><th style="text-align:left">Name</th>${colHeaders}</tr>
+      <tr><th style="text-align:left;background:#1e4f4f">Name</th>${colHeaders}</tr>
       ${guestRows||`<tr><td class="name-cell" colspan="${entries.length+1}" style="text-align:center;font-style:italic">No guests on the room list yet.</td></tr>`}
       ${entries.length?paxRow+opsRow('Guide 1','guide1')+opsRow('Guide 2','guide2')+opsRow('Van','driver'):''}
     </table>
     <div class="footer">
-      All services must be cancelled at least 12 hours before your service otherwise you will be charged for it.<br>
+      <span class="policy">All services must be cancelled at least 12 hours before your service otherwise you will be charged for it.</span><br>
       <a href="${signupLink}">${signupLink}</a><br>
       Please follow this link for your Schedule
     </div>
