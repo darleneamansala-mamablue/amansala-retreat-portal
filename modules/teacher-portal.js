@@ -2589,11 +2589,11 @@ const ACTS_DUR={
   ao1:150, // Tulum Ruins — 2.5 hrs
   ao2:180, // Muyil Float Tour — 3 hrs
   ao3:150, // Atik Cenote — 2.5 hrs
-  ao4:90,  // Cacao & Sound Healing — 1.5 hrs
-  ao5:120, // Temazcal — 2 hrs
+  ao4:60,  // Sound Healing & Cacao Ceremony — 1 hr
+  ao5:90,  // Temazcal — 1.5 hrs
   ao6:150, // Grande Cenote — 2.5 hrs
   ao7:150, // Mangrove Tour — 2.5 hrs
-  ao9:90,  // Mayan Clay — 1.5 hrs
+  ao9:45,  // Mayan Clay — 45 min
   ao10:60, // Ice Bath & Breathwork — 1 hr
   ao12:90, // Salsa Night — 1.5 hrs
   ao13:120, // Gitano Dinner — 2 hrs

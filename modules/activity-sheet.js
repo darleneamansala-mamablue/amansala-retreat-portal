@@ -378,6 +378,9 @@ function actByRetreatPrint(bkId) {
   const fmtDate = ds=>{const d=new Date(ds+'T12:00:00');return MON[d.getMonth()]+' '+ordinal(d.getDate());};
   const fmtT = t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);return((h%12)||12)+':'+String(m).padStart(2,'0')+' '+(h>=12?'pm':'am');};
   const cap = s=>s?s.charAt(0).toUpperCase()+s.slice(1):'';
+  // Room-list names are entered inconsistently (all-lowercase, etc.) — always
+  // title-case each word so the printed sheet reads properly regardless.
+  const titleCase = s=>(s||'').trim().split(/\s+/).filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
 
   // Full roster, alphabetical by first name (matching the paper sheet this
   // replaces) — every guest gets a row whether or not they've signed up for
@@ -388,21 +391,25 @@ function actByRetreatPrint(bkId) {
   // signed up online — only the print output stays blank.)
   const roster = actRosterForBk(bkId).slice().sort((a,b)=>a.first.localeCompare(b.first)||(a.last||'').localeCompare(b.last||''));
 
+  const addMin = (t,mins)=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const tot=h*60+m+mins;const hh=Math.floor(tot/60)%24;return`${String(hh).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
   const colHeaders = entries.map(e=>{
     const priceTxt = e.prepaid ? 'Included' : (e.ao.price?'$'+e.ao.price:'');
     const nameTxt = e.prepaid ? e.ao.name : 'Optional '+e.ao.name;
+    const dur = (typeof ACTS_DUR!=='undefined'&&ACTS_DUR[e.ao.id])||90;
+    const timeTxt = e.time ? fmtT(e.time)+' – '+fmtT(addMin(e.time,dur)) : '';
     return `<th>
       <div class="col-day">${fmtDay(e.date)}</div>
       <div class="col-date">${fmtDate(e.date)}</div>
       <div class="col-name">${nameTxt}</div>
-      <div class="col-time">${fmtT(e.time)}</div>
+      <div class="col-time">${timeTxt}</div>
       <div class="col-price">${priceTxt}</div>
     </th>`;
   }).join('');
 
   const guestRows = roster.map(g=>{
     const cells = entries.map(()=>`<td class="mark"><span class="box"></span></td>`).join('');
-    return `<tr><td class="name-cell">${g.first}${g.last?' '+g.last:''}</td>${cells}</tr>`;
+    const first=titleCase(g.first), last=titleCase(g.last);
+    return `<tr><td class="name-cell">${first}${last?' '+last:''}</td>${cells}</tr>`;
   }).join('');
 
   // Staff-only info (headcount tally, guide/driver assignments) lives in its
@@ -486,9 +493,7 @@ function actByRetreatPrint(bkId) {
     </table>
     ${opsPanel}
     <div class="footer">
-      <span class="policy">All services must be cancelled at least 12 hours before your service otherwise you will be charged for it.</span><br>
-      <a href="${signupLink}">${signupLink}</a><br>
-      Please follow this link for your Schedule
+      <span class="policy">All services must be cancelled at least 12 hours before your service otherwise you will be charged for it.</span>
     </div>
   </body></html>`);
   win.document.close();
