@@ -3089,10 +3089,10 @@
         <div>
           <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Category</label>
           <select id="spaSvcCategory" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff">
-            <option value="massage">Massage</option>
-            <option value="spa">Spa</option>
-            <option value="wellness">Wellness</option>
+            <option value="massage">Body Work (massage, facial, etc.)</option>
+            <option value="spirit">Spirit Work (aura, tarot, breathwork, etc.)</option>
             <option value="fitness">Fitness</option>
+            <option value="yoga">Yoga &amp; Pilates</option>
           </select>
         </div>
         <div>
@@ -3144,6 +3144,19 @@
         <div>
           <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Phone</label>
           <input id="spaTherPhone" type="text" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;box-sizing:border-box">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:8px">Photo &amp; Bio <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9ca3af">— for the spa portfolio</span></label>
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div style="flex-shrink:0;text-align:center">
+            <img id="spaTherPhotoPreview" src="" style="width:76px;height:76px;border-radius:50%;object-fit:cover;background:#f0ebe0;display:none;border:1.5px solid #e8dfd4">
+            <div id="spaTherPhotoPlaceholder" style="width:76px;height:76px;border-radius:50%;background:#f0ebe0;display:flex;align-items:center;justify-content:center;color:#c8bfb5;font-size:24px">🧑</div>
+            <input type="file" id="spaTherPhotoInput" accept="image/*" style="display:none" onchange="spaTherPhotoSelected(this)">
+            <button type="button" onclick="document.getElementById('spaTherPhotoInput').click()" style="margin-top:6px;font-size:11px;padding:4px 10px;border:1.5px solid #c8bfb5;border-radius:7px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">Upload</button>
+            <button type="button" id="spaTherPhotoRemoveBtn" onclick="spaTherPhotoRemove()" style="display:none;margin-top:4px;font-size:11px;padding:4px 10px;border:none;background:none;color:#dc2626;cursor:pointer;font-family:'Jost',sans-serif">Remove</button>
+          </div>
+          <textarea id="spaTherBio" rows="4" placeholder="A short bio guests can see when choosing a specific therapist…" style="flex:1;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">

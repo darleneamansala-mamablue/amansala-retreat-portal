@@ -86,8 +86,8 @@ const SUPA_KEY='sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
 const db=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 const SB_START_H=7, SB_END_H=21;
-const CAT_ORDER=['massage','spa','wellness','fitness'];
-const CAT_LABEL={massage:'Massage',spa:'Spa',wellness:'Wellness',fitness:'Private Classes'};
+const CAT_ORDER=['massage','spirit','fitness','yoga'];
+const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga & Pilates'};
 
 let SpaData={services:[],rooms:[],therapists:[]};
 let SpaAppointments=[];
@@ -246,7 +246,10 @@ function renderStep4_Preference(el){
       <div class="choice-btn" onclick="sbPickPref('male')">Male therapist</div>
       <div class="choice-btn" onclick="sbShowTherapistList()">Choose a specific therapist</div>
       <div id="sbTherapistList" style="display:none;margin-top:10px">
-        ${eligible.map(t=>`<div class="choice-btn" onclick="sbPickPref('specific','${t.id}')">${esc(t.firstName)} ${esc(t.lastName||'')}</div>`).join('')}
+        ${eligible.map(t=>`<div class="choice-btn" style="display:flex;gap:12px;align-items:center" onclick="sbPickPref('specific','${t.id}')">
+          ${t.photoDataUrl?`<img src="${t.photoDataUrl}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<div style="width:42px;height:42px;border-radius:50%;background:#f0ebe0;color:#c8bfb5;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">🧑</div>`}
+          <div>${esc(t.firstName)} ${esc(t.lastName||'')}${t.bio?`<div class="cd" style="font-weight:400">${esc(t.bio)}</div>`:''}</div>
+        </div>`).join('')}
       </div>
     </div>`;
 }

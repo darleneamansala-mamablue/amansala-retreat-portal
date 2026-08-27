@@ -15,19 +15,44 @@ function spaNewId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+// Shared by the Therapists admin list and the Calendar view — grouping is
+// derived from each therapist's actual assigned services, not a hardcoded
+// name list, so it stays correct as services/assignments change. Someone
+// who does both a massage and a private class (e.g. Thai Massage +
+// Meditation) legitimately shows up in more than one group.
+const SPA_THER_GROUPS = [
+  { key: 'massage', label: 'Body Workers' },
+  { key: 'spirit', label: 'Spirit Workers' },
+  { key: 'fitness', label: 'Fitness' },
+  { key: 'yoga', label: 'Yoga' },
+];
+function spaTherCategories(t) {
+  return new Set((t.services || []).map(s => SpaData.services.find(sv => sv.id === s.serviceId)?.category).filter(Boolean));
+}
+function spaTherGroupList(therapists) {
+  const groups = SPA_THER_GROUPS.map(g => ({ label: g.label, key: g.key, list: therapists.filter(t => spaTherCategories(t).has(g.key)) }));
+  const classified = new Set(groups.flatMap(g => g.list.map(t => t.id)));
+  const other = therapists.filter(t => !classified.has(t.id));
+  if (other.length) groups.push({ label: 'Other', key: 'other', list: other });
+  return groups.filter(g => g.list.length);
+}
+
+// Four categories drive both the service form and the therapist groupings
+// (Body Workers / Spirit Workers / Fitness / Yoga) seen on the Calendar and
+// Therapists views: massage = Body Work, spirit = Spirit Work, fitness, yoga.
 const SPA_DEFAULT_SERVICES = [
   { name: 'Mayan Healing Service', duration: 90, price: 165, category: 'massage' },
   { name: '90 Minute Massage', duration: 90, price: 145, category: 'massage' },
   { name: '60 Minute Massage', duration: 60, price: 95, category: 'massage' },
   { name: 'Reflexology', duration: null, price: null, category: 'massage' },
-  { name: 'Facial', duration: null, price: null, category: 'spa' },
+  { name: 'Facial', duration: null, price: null, category: 'massage' },
   { name: 'Thai Massage', duration: null, price: 125, category: 'massage' },
-  { name: 'Tarot Card Reading', duration: null, price: 95, category: 'wellness' },
-  { name: 'Private Breathwork', duration: 45, price: 80, category: 'wellness' },
-  { name: 'Aura Reading', duration: null, price: 85, category: 'wellness' },
-  { name: 'Private Yoga', duration: null, price: 95, category: 'fitness' },
+  { name: 'Tarot Card Reading', duration: null, price: 95, category: 'spirit' },
+  { name: 'Private Breathwork', duration: 45, price: 80, category: 'spirit' },
+  { name: 'Aura Reading', duration: null, price: 85, category: 'spirit' },
+  { name: 'Private Yoga', duration: null, price: 95, category: 'yoga' },
   { name: 'Private Fitness', duration: null, price: 95, category: 'fitness' },
-  { name: 'Private Pilates', duration: null, price: 95, category: 'fitness' },
+  { name: 'Private Pilates', duration: null, price: 95, category: 'yoga' },
 ];
 const SPA_DEFAULT_ROOMS = [
   'Spa Room 1', 'Spa Room 2', 'Spa Room 3', 'Spa Room 4', 'Spa Room 5', 'Spa Room 6',
@@ -179,25 +204,49 @@ function spaDeleteService(id) {
 }
 
 // ── THERAPISTS ───────────────────────────────────────────────────────────
+function spaTherapistCardHtml(t) {
+  const svcCount = (t.services || []).length;
+  const roomName = t.defaultRoomId ? (SpaData.rooms.find(r => r.id === t.defaultRoomId)?.name || '') : '';
+  const photo = t.photoDataUrl
+    ? `<img src="${t.photoDataUrl}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+    : `<div style="width:44px;height:44px;border-radius:50%;background:#f0ebe0;color:#c8bfb5;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🧑</div>`;
+  return `<div onclick="spaShowTherapistForm('${t.id}')" style="background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;padding:16px 18px;cursor:pointer;opacity:${t.active ? 1 : .55};transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      ${photo}
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;color:#2d2520">${t.firstName} ${t.lastName || ''}</div>
+          ${!t.active ? '<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:#9ca3af;background:#f3f4f6;border-radius:6px;padding:2px 8px;flex-shrink:0">Inactive</span>' : ''}
+        </div>
+        <div style="font-size:12px;color:#8a7e74;margin-top:2px;text-transform:capitalize">${t.gender || ''}</div>
+      </div>
+    </div>
+    ${t.bio ? `<div style="font-size:12px;color:#6b7280;margin-top:10px;line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${t.bio}</div>` : ''}
+    <div style="display:flex;gap:14px;margin-top:10px;font-size:12.5px;color:#4a4038">
+      <span>${svcCount} service${svcCount === 1 ? '' : 's'}</span>
+      ${roomName ? `<span style="color:#9ca3af">${roomName}</span>` : ''}
+    </div>
+  </div>`;
+}
+
 function spaRenderTherapists() {
   const el = document.getElementById('spaContent');
   if (!SpaData.therapists.length) { el.innerHTML = '<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No therapists yet — add your first one.</p>'; return; }
-  const list = SpaData.therapists.slice().sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1) || a.firstName.localeCompare(b.firstName));
-  el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">${list.map(t => {
-    const svcCount = (t.services || []).length;
-    const roomName = t.defaultRoomId ? (SpaData.rooms.find(r => r.id === t.defaultRoomId)?.name || '') : '';
-    return `<div onclick="spaShowTherapistForm('${t.id}')" style="background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;padding:16px 18px;cursor:pointer;opacity:${t.active ? 1 : .55};transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-        <div style="font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;color:#2d2520">${t.firstName} ${t.lastName || ''}</div>
-        ${!t.active ? '<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:#9ca3af;background:#f3f4f6;border-radius:6px;padding:2px 8px">Inactive</span>' : ''}
-      </div>
-      <div style="font-size:12px;color:#8a7e74;margin-top:4px;text-transform:capitalize">${t.gender || ''}</div>
-      <div style="display:flex;gap:14px;margin-top:10px;font-size:12.5px;color:#4a4038">
-        <span>${svcCount} service${svcCount === 1 ? '' : 's'}</span>
-        ${roomName ? `<span style="color:#9ca3af">${roomName}</span>` : ''}
-      </div>
+  const active = SpaData.therapists.filter(t => t.active).sort((a, b) => a.firstName.localeCompare(b.firstName));
+  const inactive = SpaData.therapists.filter(t => !t.active).sort((a, b) => a.firstName.localeCompare(b.firstName));
+  const grid = list => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">${list.map(spaTherapistCardHtml).join('')}</div>`;
+  let html = spaTherGroupList(active).map(g => `
+    <div style="margin-bottom:26px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#a89a86;margin-bottom:10px">${g.label}</div>
+      ${grid(g.list)}
+    </div>`).join('');
+  if (inactive.length) {
+    html += `<div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#a89a86;margin-bottom:10px">Inactive / Muted</div>
+      ${grid(inactive)}
     </div>`;
-  }).join('')}</div>`;
+  }
+  el.innerHTML = html;
 }
 
 function spaTherapistServicesHtml(t) {
@@ -240,11 +289,52 @@ function spaShowTherapistForm(id) {
   document.getElementById('spaTherGender').value = t?.gender || 'female';
   document.getElementById('spaTherNotes').value = t?.notes || '';
   document.getElementById('spaTherActive').checked = t ? t.active !== false : true;
+  document.getElementById('spaTherBio').value = t?.bio || '';
+  spaTherPhotoValue = t?.photoDataUrl || null;
+  spaTherRenderPhotoPreview();
   const roomSel = document.getElementById('spaTherDefaultRoom');
   roomSel.innerHTML = '<option value="">— None —</option>' + SpaData.rooms.map(r => `<option value="${r.id}" ${t?.defaultRoomId === r.id ? 'selected' : ''}>${r.name}</option>`).join('');
   document.getElementById('spaTherServicesWrap').innerHTML = spaTherapistServicesHtml(t);
   openModal('spaTherapistModal');
 }
+
+// Resized client-side and stored inline as a data URI (same pattern as every
+// other value in this record) rather than standing up Supabase Storage for
+// what's currently ~15 headshots — capped small enough to keep spa_data light.
+let spaTherPhotoValue = null;
+function spaTherRenderPhotoPreview() {
+  const img = document.getElementById('spaTherPhotoPreview');
+  const placeholder = document.getElementById('spaTherPhotoPlaceholder');
+  const removeBtn = document.getElementById('spaTherPhotoRemoveBtn');
+  if (spaTherPhotoValue) {
+    img.src = spaTherPhotoValue; img.style.display = 'block'; placeholder.style.display = 'none'; removeBtn.style.display = 'inline-block';
+  } else {
+    img.style.display = 'none'; placeholder.style.display = 'flex'; removeBtn.style.display = 'none';
+  }
+}
+function spaTherPhotoSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const size = 300; // square headshot, capped so the JSON blob stays small
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const scale = Math.max(size / img.width, size / img.height);
+      const w = img.width * scale, h = img.height * scale;
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      spaTherPhotoValue = canvas.toDataURL('image/jpeg', 0.82);
+      spaTherRenderPhotoPreview();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+function spaTherPhotoRemove() { spaTherPhotoValue = null; spaTherRenderPhotoPreview(); }
 
 function spaSaveTherapist() {
   const id = document.getElementById('spaTherId').value;
@@ -265,6 +355,8 @@ function spaSaveTherapist() {
     gender: document.getElementById('spaTherGender').value,
     defaultRoomId: document.getElementById('spaTherDefaultRoom').value || null,
     notes: document.getElementById('spaTherNotes').value.trim(),
+    bio: document.getElementById('spaTherBio').value.trim(),
+    photoDataUrl: spaTherPhotoValue,
     active: document.getElementById('spaTherActive').checked,
     services,
   };

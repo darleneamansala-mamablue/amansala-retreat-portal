@@ -75,13 +75,36 @@ function spaCalRender() {
   const el = document.getElementById('spaContent');
   const dateStr = spaCalFmtDateStr(spaCalDate);
   const isTher = spaCalMode === 'therapist';
-  const cols = isTher
-    ? SpaData.therapists.filter(t => t.active).sort((a, b) => a.firstName.localeCompare(b.firstName))
-    : SpaData.rooms;
-  if (!cols.length) {
-    el.innerHTML = `<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">${isTher ? 'No active therapists yet — add one in the Therapists tab.' : 'No rooms yet.'}</p>`;
+
+  if (!isTher) {
+    if (!SpaData.rooms.length) { el.innerHTML = '<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No rooms yet.</p>'; return; }
+    el.innerHTML = spaCalPanelHtml(SpaData.rooms, false, dateStr);
     return;
   }
+
+  const activeTher = SpaData.therapists.filter(t => t.active).sort((a, b) => a.firstName.localeCompare(b.firstName));
+  const muted = SpaData.therapists.filter(t => !t.active);
+  if (!activeTher.length) { el.innerHTML = '<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No active therapists yet — add one in the Therapists tab.</p>'; return; }
+
+  let html = '';
+  if (muted.length) {
+    html += `<div style="margin-bottom:14px;font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span>🔇 Muted:</span>
+      ${muted.map(t => `<button onclick="spaCalMuteToggle('${t.id}')" style="border:1px solid #e0d8cc;background:#fff;border-radius:99px;padding:3px 10px;font-size:11.5px;color:#6b7280;cursor:pointer;font-family:'Jost',sans-serif">${t.firstName} · tap to unmute</button>`).join('')}
+    </div>`;
+  }
+  spaTherGroupList(activeTher).forEach(g => { html += spaCalSectionHtml(g.label, g.list, dateStr); });
+  el.innerHTML = html;
+}
+
+function spaCalSectionHtml(title, cols, dateStr) {
+  return `<div style="margin-bottom:22px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#a89a86;margin-bottom:8px">${title}</div>
+    <div style="overflow-x:auto">${spaCalPanelHtml(cols, true, dateStr)}</div>
+  </div>`;
+}
+
+function spaCalPanelHtml(cols, isTher, dateStr) {
   const gridH = (SPA_CAL_END_H - SPA_CAL_START_H) * SPA_CAL_PX_HR;
   let html = `<div style="display:flex;min-width:${SPA_CAL_TIME_W + cols.length * SPA_CAL_COL_W}px;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e8dfd4">`;
 
@@ -97,7 +120,10 @@ function spaCalRender() {
   cols.forEach(col => {
     const dayAppts = SpaAppointments.filter(a => a.date === dateStr && a.status !== 'CANCELLED' && (isTher ? a.therapistId === col.id : a.roomId === col.id));
     html += `<div style="width:${SPA_CAL_COL_W}px;min-width:${SPA_CAL_COL_W}px;border-right:1px solid #e8e8e8">`;
-    html += `<div style="height:40px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#374151;border-bottom:1px solid #e8dfd4;background:#f9f7f4;text-align:center;padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${isTher ? col.firstName + ' ' + (col.lastName || '') : col.name}</div>`;
+    html += `<div style="height:40px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:12px;font-weight:700;color:#374151;border-bottom:1px solid #e8dfd4;background:#f9f7f4;text-align:center;padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">
+      <span style="overflow:hidden;text-overflow:ellipsis">${isTher ? col.firstName + ' ' + (col.lastName || '') : col.name}</span>
+      ${isTher ? `<span onclick="event.stopPropagation();spaCalMuteToggle('${col.id}')" title="Mute ${col.firstName}" style="cursor:pointer;opacity:.4;flex-shrink:0;font-size:12px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.4'">🔇</span>` : ''}
+    </div>`;
     html += `<div class="spa-cal-col" style="position:relative;height:${gridH}px;background:repeating-linear-gradient(to bottom, transparent, transparent ${SPA_CAL_PX_HR - 1}px, #f1f5f9 ${SPA_CAL_PX_HR - 1}px, #f1f5f9 ${SPA_CAL_PX_HR}px)" onclick="spaCalCellClick(event,'${col.id}')" ondragover="event.preventDefault()" ondrop="spaCalDrop(event,'${col.id}')">`;
     dayAppts.forEach(a => {
       const svc = SpaData.services.find(s => s.id === a.serviceId);
@@ -114,7 +140,15 @@ function spaCalRender() {
     html += `</div></div>`;
   });
   html += `</div>`;
-  el.innerHTML = html;
+  return html;
+}
+
+function spaCalMuteToggle(therapistId) {
+  const t = SpaData.therapists.find(x => x.id === therapistId);
+  if (!t) return;
+  t.active = !t.active;
+  spaSave();
+  spaCalRender();
 }
 
 function spaCalCellClick(evt, colId) {
