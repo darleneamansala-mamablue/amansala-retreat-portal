@@ -182,7 +182,7 @@ function esc(s){return (s||'').replace(/</g,'&lt;');}
   // appears in each relevant group.
   const therEl=document.getElementById('therGrid');
   const activeTher=SpaData.therapists.filter(t=>t.active).sort((a,b)=>a.firstName.localeCompare(b.firstName));
-  const therCategories=t=>new Set((t.services||[]).map(s=>SpaData.services.find(sv=>sv.id===s.serviceId)?.category).filter(Boolean));
+  const therCategories=t=>t.primaryCategory?new Set([t.primaryCategory]):new Set((t.services||[]).map(s=>SpaData.services.find(sv=>sv.id===s.serviceId)?.category).filter(Boolean));
   const cardHtml=(t,icon)=>`<div class="ther-card">
     ${t.photoDataUrl?`<img class="ther-photo" src="${t.photoDataUrl}">`:`<div class="ther-photo-ph">${icon}</div>`}
     <div class="ther-name">${esc(t.firstName)} ${esc(t.lastName||'')}</div>

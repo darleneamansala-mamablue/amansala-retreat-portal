@@ -30,6 +30,10 @@ const SPA_THER_GROUPS = [
 ];
 const SPA_GROUP_ICON = Object.fromEntries(SPA_THER_GROUPS.map(g => [g.key, g.icon]));
 function spaTherCategories(t) {
+  // An explicit primaryCategory (set on the therapist's profile) means they
+  // show under that one group only, even if their services span several —
+  // otherwise falls back to every category their assigned services touch.
+  if (t.primaryCategory) return new Set([t.primaryCategory]);
   return new Set((t.services || []).map(s => SpaData.services.find(sv => sv.id === s.serviceId)?.category).filter(Boolean));
 }
 function spaTherGroupList(therapists) {
@@ -107,7 +111,7 @@ async function spaInit() {
 
 function spaSetView(v) {
   spaCurView = v;
-  ['calendar', 'services', 'therapists', 'rooms', 'public'].forEach(id => {
+  ['calendar', 'services', 'therapists', 'rooms', 'public', 'payroll'].forEach(id => {
     const btn = document.getElementById('spaView' + id.charAt(0).toUpperCase() + id.slice(1));
     if (btn) {
       btn.style.background = id === v ? 'var(--teal,#2d6a6a)' : 'transparent';
@@ -129,6 +133,82 @@ function spaRender() {
   if (spaCurView === 'therapists') { addWrap.innerHTML = addBtn('New Therapist', 'spaShowTherapistForm(null)'); spaRenderTherapists(); }
   if (spaCurView === 'rooms') { addWrap.innerHTML = addBtn('New Room', 'spaShowRoomForm(null)'); spaRenderRooms(); }
   if (spaCurView === 'public') { addWrap.innerHTML = ''; spaRenderPublicPage(); }
+  if (spaCurView === 'payroll') { addWrap.innerHTML = ''; spaRenderPayroll(); }
+}
+
+// ── PAYROLL (code-gated) ─────────────────────────────────────────────────
+// Not real per-user authentication — a separate access code from the
+// general staff login, same lightweight-gate pattern used elsewhere in this
+// app (driver logins, schedule-editor password). Share it only with people
+// who should see pay data. Change it any time by editing this constant.
+const SPA_PAYROLL_CODE = 'amansala-pay-2026';
+
+function spaRenderPayroll() {
+  const el = document.getElementById('spaContent');
+  if (sessionStorage.getItem('spa_payroll_unlocked') === '1') { spaRenderPayrollTable(); return; }
+  el.innerHTML = `<div style="max-width:360px;margin:60px auto;text-align:center;background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;padding:32px 28px">
+    <div style="font-size:32px;margin-bottom:10px">🔒</div>
+    <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:#2d2520;margin-bottom:6px">Payroll Access</div>
+    <div style="font-size:12.5px;color:#8a7e74;margin-bottom:18px">This shows what each therapist earns. Enter the access code to continue.</div>
+    <input type="password" id="spaPayrollCode" placeholder="Access code" style="width:100%;padding:10px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;box-sizing:border-box;margin-bottom:10px" onkeydown="if(event.key==='Enter')spaUnlockPayroll()">
+    <button onclick="spaUnlockPayroll()" style="width:100%;padding:10px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Unlock</button>
+    <div id="spaPayrollErr" style="display:none;color:#dc2626;font-size:12px;margin-top:10px">Incorrect code.</div>
+  </div>`;
+}
+
+function spaUnlockPayroll() {
+  const val = document.getElementById('spaPayrollCode').value;
+  if (val === SPA_PAYROLL_CODE) {
+    sessionStorage.setItem('spa_payroll_unlocked', '1');
+    spaRenderPayrollTable();
+  } else {
+    document.getElementById('spaPayrollErr').style.display = 'block';
+  }
+}
+
+// Real earnings from completed appointments only (not confirmed-but-not-yet-
+// performed) -- each appointment keeps the service+rate it actually used, so
+// this stays accurate even if prices/rates change later.
+function spaRenderPayrollTable() {
+  const el = document.getElementById('spaContent');
+  const completed = (typeof SpaAppointments !== 'undefined' ? SpaAppointments : []).filter(a => a.status === 'COMPLETED');
+  const rows = SpaData.therapists.map(t => {
+    const own = completed.filter(a => a.therapistId === t.id);
+    let total = 0;
+    const bySvc = {};
+    own.forEach(a => {
+      const svc = SpaData.services.find(s => s.id === a.serviceId);
+      const rate = (t.services || []).find(r => r.serviceId === a.serviceId);
+      const pay = spaTherapistCompAmount(rate, svc) || 0;
+      total += pay;
+      const name = svc?.name || a.serviceId;
+      bySvc[name] = (bySvc[name] || 0) + pay;
+    });
+    return { t, count: own.length, total, bySvc };
+  }).filter(r => r.count > 0).sort((a, b) => b.total - a.total);
+  const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+
+  let html = `<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+    <button onclick="sessionStorage.removeItem('spa_payroll_unlocked');spaRenderPayroll()" style="font-size:12px;padding:6px 12px;border:1.5px solid #c8bfb5;border-radius:8px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">Lock</button>
+  </div>`;
+  if (!rows.length) {
+    html += `<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No completed appointments yet — payroll fills in as services are marked Completed on the calendar.</p>`;
+  } else {
+    html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">`;
+    rows.forEach(r => {
+      html += `<div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;padding:16px 18px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:#2d2520">${r.t.firstName} ${r.t.lastName || ''}</div>
+          <div style="font-size:16px;font-weight:700;color:#059669">$${r.total}</div>
+        </div>
+        <div style="font-size:11.5px;color:#9ca3af;margin-bottom:8px">${r.count} completed</div>
+        ${Object.entries(r.bySvc).map(([name, amt]) => `<div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;padding:2px 0"><span>${name}</span><span>$${amt}</span></div>`).join('')}
+      </div>`;
+    });
+    html += `</div>
+    <div style="margin-top:18px;text-align:right;font-size:14px;font-weight:700;color:#1a2332">Total owed: $${grandTotal}</div>`;
+  }
+  el.innerHTML = html;
 }
 
 // Live preview of the guest-facing landing page, right inside the admin —
@@ -388,6 +468,7 @@ function spaShowTherapistForm(id) {
   document.getElementById('spaTherEmail').value = t?.email || '';
   document.getElementById('spaTherPhone').value = t?.phone || '';
   document.getElementById('spaTherGender').value = t?.gender || 'female';
+  document.getElementById('spaTherCategory').value = t?.primaryCategory || '';
   document.getElementById('spaTherNotes').value = t?.notes || '';
   document.getElementById('spaTherActive').checked = t ? t.active !== false : true;
   document.getElementById('spaTherBio').value = t?.bio || '';
@@ -456,6 +537,7 @@ function spaSaveTherapist() {
     email: document.getElementById('spaTherEmail').value.trim(),
     phone: document.getElementById('spaTherPhone').value.trim(),
     gender: document.getElementById('spaTherGender').value,
+    primaryCategory: document.getElementById('spaTherCategory').value || null,
     defaultRoomId: document.getElementById('spaTherDefaultRoom').value || null,
     notes: document.getElementById('spaTherNotes').value.trim(),
     bio: document.getElementById('spaTherBio').value.trim(),
