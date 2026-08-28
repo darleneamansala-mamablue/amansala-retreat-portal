@@ -14,6 +14,30 @@ const BBC_DANCE_ROTATION=[
 const BBC_INSTRUCTORS_LIST=['Ryan','Darlene','Adele','Sergio','Yolanda','Kun','Maya','Kiki','Fernando','Marco'];
 const BBC_LOCATIONS_LIST=['Beachfront','Grande','Heaven','Chica','Skye'];
 
+// Default excursion order when there's no yoga retreat running the same
+// week to match against — 1st tour day = Tulum Ruins, 2nd = Grande Cenote,
+// 3rd = Mangroves, then repeats.
+const BBC_DEFAULT_TOUR_ORDER=['Tulum Ruins','Grande Cenote Tour','Mangroves Tour'];
+// aoIds recognized as "tours" for cross-referencing a concurrent yoga
+// retreat's own scheduled activities (modules/teacher-portal.js ADD_ONS).
+const BBC_TOUR_AOID_NAME={ao1:'Tulum Ruins',ao6:'Grande Cenote Tour',ao7:'Mangroves Tour',ao3:'Atik Cenote Tour',ao2:'Muyil Float Tour'};
+
+// The two modules talk to each other here: if a yoga retreat is on the
+// books for this date with a tour already scheduled, BBC's excursion uses
+// that same tour (so both groups can go out together) instead of picking
+// independently from the default order.
+function bbcFindConcurrentTour(date){
+  const bookings=(typeof AppData!=='undefined'&&AppData.bookings)?AppData.bookings:[];
+  for(const bk of bookings){
+    if(bk.status==='cancelled')continue;
+    if(!bk.startDate||!bk.endDate)continue;
+    if(date<bk.startDate||date>bk.endDate)continue;
+    const match=(bk.retreatActivities||[]).find(a=>a.date===date&&BBC_TOUR_AOID_NAME[a.aoId]);
+    if(match)return BBC_TOUR_AOID_NAME[match.aoId];
+  }
+  return null;
+}
+
 function bbcLocToShalaId(loc){
   if(!loc)return null;
   const m={'beachfront':'beachfront','grande':'grande','heaven':'heaven','chica':'chica','skye':'skye'};
@@ -77,7 +101,7 @@ function bbcAddDays(ds,n){const d=new Date(ds+'T12:00:00');d.setDate(d.getDate()
 function bbcDayCount(s,e){return Math.round((new Date(e+'T12:00:00')-new Date(s+'T12:00:00'))/86400000)+1;}
 function bbcMakeSlot(time,activity,instructor,location,fixed,type){return{id:bbcUid(),time,activity,instructor:instructor||'',location:location||'',fixed:!!fixed,type:type||'class'};}
 
-function bbcGenDaySlots(di,total,excursionDays){
+function bbcGenDaySlots(di,total,excursionDays,tourName){
   const isFirst=di===0,isLast=di===total-1;
   const fullIdx=di-1; // 0-based index for full days (negative for arrival day)
   // Activation alternates by full-day index
@@ -117,7 +141,7 @@ function bbcGenDaySlots(di,total,excursionDays){
     // afternoon (old placeholder was 1:30-5:30), silently dropping the
     // dance/Pilates/Gentle Yoga block every excursion day. Real return time
     // leaves plenty of afternoon, so those classes still happen afterward.
-    slots.push(bbcMakeSlot('11:45 – 2:15','Excursion','','',false,'event'));
+    slots.push(bbcMakeSlot('11:45 – 2:15',tourName||'Excursion','','',false,'event'));
     slots.push(bbcMakeSlot('2:30','Late Lunch','','',true,'meal'));
     if(!isLast){
       slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
@@ -149,9 +173,20 @@ function bbcGenSchedule(name,start,nights,excursionDays){
   const total=nights+1; // arrival day + N nights; last day = departure morning
   const end=bbcAddDays(start,nights);
   const days=[];
+  const excDays=excursionDays||[];
+  // Match each excursion day to a concurrent yoga retreat's tour where one
+  // exists; otherwise fall back to the default Tulum Ruins -> Grande Cenote
+  // -> Mangroves order (repeating past the 3rd excursion day).
+  let defaultTourIdx=0;
+  const tourByDay={};
+  excDays.forEach(di=>{
+    const date=bbcAddDays(start,di);
+    const matched=bbcFindConcurrentTour(date);
+    tourByDay[di]=matched||BBC_DEFAULT_TOUR_ORDER[defaultTourIdx++%BBC_DEFAULT_TOUR_ORDER.length];
+  });
   for(let i=0;i<total;i++){
     const prompt=BBC_MORNING_PAGES[Math.min(i,BBC_MORNING_PAGES.length-1)];
-    days.push({date:bbcAddDays(start,i),prompt,note:'',slots:bbcGenDaySlots(i,total,excursionDays||[])});
+    days.push({date:bbcAddDays(start,i),prompt,note:'',slots:bbcGenDaySlots(i,total,excDays,tourByDay[i])});
   }
   return{id:bbcUid(),name,startDate:start,endDate:end,nights,status:'draft',createdAt:new Date().toISOString(),days};
 }
@@ -350,7 +385,7 @@ function bbcRenderSlotRow(schedId,di,slot,si,dups,date){
       const cfBorder=cfls.length?'#f87171':'#e5e7eb';
       const cfBg=cfls.length?'#fff5f5':'#fff';
       const cfHtml=cfls.length?'<div title="'+cfls.join(' | ').replace(/"/g,'&quot;')+'" style="font-size:9.5px;color:#dc2626;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help">⚠ '+cfls[0].substring(0,28)+(cfls[0].length>28||cfls.length>1?'…':'')+'</div>':'';
-      return'<input value="'+slot.location+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'location\',this.value)" list="bbcLocDl-'+schedId+'-'+di+'" style="width:100%;border:1px solid '+cfBorder+';border-radius:6px;padding:4px 7px;font-family:\'Jost\',sans-serif;font-size:12px;color:var(--dark);background:'+cfBg+';outline:none" placeholder="Location...">'+cfHtml;
+      return'<input value="'+slot.location+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'location\',this.value)" onchange="bbcCheckLocationConflict(\''+schedId+'\','+di+','+si+',this.value,\''+slot.location.replace(/'/g,"\\'")+'\')" list="bbcLocDl-'+schedId+'-'+di+'" style="width:100%;border:1px solid '+cfBorder+';border-radius:6px;padding:4px 7px;font-family:\'Jost\',sans-serif;font-size:12px;color:var(--dark);background:'+cfBg+';outline:none" placeholder="Location...">'+cfHtml;
     })())
     +'</div><div style="display:flex;align-items:center;justify-content:center;padding:4px">'
     +(slot.fixed?'<span style="font-size:10px;color:#d1d5db" title="Fixed slot">⚓</span>':'<button onclick="bbcRemoveSlot(\''+schedId+'\','+di+','+si+')" style="background:none;border:none;cursor:pointer;color:#d1d5db;font-size:15px;width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center" onmouseover="this.style.color=\'#ef4444\';this.style.background=\'#fef2f2\'" onmouseout="this.style.color=\'#d1d5db\';this.style.background=\'none\'" title="Remove">&#x2715;</button>')
@@ -395,6 +430,22 @@ function bbcSlotField(schedId,di,si,field,val){
       const nb=document.getElementById('bbcDayBody-'+schedId+'-'+di);
       if(nb&&wasOpen){nb.style.display='block';const ch=document.getElementById('bbcChev-'+schedId+'-'+di);if(ch)ch.style.transform='rotate(90deg)';}
     },900);
+  }
+}
+
+// Hard block, not just a warning: if a yoga retreat already has this shala
+// booked for this date, the location edit is rejected and reverted rather
+// than silently allowed (the red-border+tooltip on the input is a live
+// indicator of the same check, but this is what actually stops the save).
+function bbcCheckLocationConflict(schedId,di,si,val,prevVal){
+  const s=bbcSchedules.find(x=>x.id===schedId);
+  if(!s||!s.days[di]||!s.days[di].slots[si])return;
+  const cfls=bbcGetShalaConflicts(s.days[di].date,val);
+  if(cfls.length){
+    alert('That shala is already booked for this date:\n\n'+cfls.join('\n')+'\n\nPlease choose a different location.');
+    s.days[di].slots[si].location=prevVal||'';
+    bbcSaveData();
+    bbcRenderEditor();
   }
 }
 
