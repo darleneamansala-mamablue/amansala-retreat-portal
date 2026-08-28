@@ -2,3 +2,4 @@
 .netlify
 .netlify/
 deploy.log
+.DS_Store
