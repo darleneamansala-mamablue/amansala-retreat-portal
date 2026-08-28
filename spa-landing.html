@@ -17,9 +17,9 @@ a{text-decoration:none;color:inherit}
 /* ── NAV ── */
 nav{position:sticky;top:0;z-index:50;background:rgba(250,247,240,.92);backdrop-filter:blur(8px);border-bottom:1px solid #e8dfd4}
 nav .wrap{display:flex;align-items:center;justify-content:space-between;padding:16px 24px}
-.nav-logo{font-family:'Italiana',serif;font-size:22px;font-weight:700;color:#2d6a6a}
-.nav-cta{background:#2d6a6a;color:#fff;padding:10px 22px;border-radius:99px;font-size:13px;font-weight:600;letter-spacing:.3px}
-.nav-cta:hover{background:#245858}
+.nav-logo{height:34px;display:block}
+.nav-cta{background:#3AB7AE;color:#fff;padding:10px 22px;border-radius:99px;font-size:13px;font-weight:600;letter-spacing:.3px}
+.nav-cta:hover{background:#2F9990}
 
 /* ── HERO ── */
 .hero{position:relative;padding:90px 24px 80px;text-align:center;overflow:hidden;background:linear-gradient(160deg,#e9e0cc 0%,#d9c9a8 45%,#c9a876 100%)}
@@ -30,8 +30,8 @@ nav .wrap{display:flex;align-items:center;justify-content:space-between;padding:
 .hero-eyebrow{font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#4a5d4d;font-weight:600;margin-bottom:18px}
 .hero h1{font-family:'Italiana',serif;font-size:52px;font-weight:700;color:#2d2520;line-height:1.08;margin-bottom:18px}
 .hero p{font-size:16px;color:#4a4038;max-width:480px;margin:0 auto 32px}
-.btn-book{display:inline-block;background:#2d6a6a;color:#fff;padding:16px 38px;border-radius:99px;font-size:15px;font-weight:700;letter-spacing:.3px;box-shadow:0 10px 30px rgba(45,106,106,.3)}
-.btn-book:hover{background:#245858}
+.btn-book{display:inline-block;background:#3AB7AE;color:#fff;padding:16px 38px;border-radius:99px;font-size:15px;font-weight:700;letter-spacing:.3px;box-shadow:0 10px 30px rgba(45,106,106,.3)}
+.btn-book:hover{background:#2F9990}
 @media(max-width:640px){.hero h1{font-size:36px}}
 
 /* ── PHOTO STRIP (placeholder slots — drop real spa photography in as
@@ -41,7 +41,7 @@ nav .wrap{display:flex;align-items:center;justify-content:space-between;padding:
 .photo-slot{background-size:cover;background-position:center;position:relative}
 .photo-slot:nth-child(1){background:url('spa-images/spa-photo-1.jpg') center/cover no-repeat, linear-gradient(135deg,#c9a876,#e9dcc0)}
 .photo-slot:nth-child(2){background:url('spa-images/spa-photo-2.jpg') center/cover no-repeat, linear-gradient(135deg,#8fa68b,#c8d8c2)}
-.photo-slot:nth-child(3){background:url('spa-images/spa-photo-3.jpg') center/cover no-repeat, linear-gradient(135deg,#2d6a6a,#7fb3ac)}
+.photo-slot:nth-child(3){background:url('spa-images/spa-photo-3.jpg') center/cover no-repeat, linear-gradient(135deg,#3AB7AE,#7fb3ac)}
 @media(max-width:720px){.photo-strip{grid-template-columns:1fr;height:auto}.photo-slot{height:180px}}
 
 /* ── SECTION ── */
@@ -56,7 +56,7 @@ section{padding:70px 24px}
 
 /* ── SERVICE GROUPS ── */
 .svc-groups{display:flex;flex-direction:column;gap:36px}
-.svc-group-title{font-family:'Italiana',serif;font-size:22px;font-weight:600;color:#2d6a6a;margin-bottom:14px;text-align:center}
+.svc-group-title{font-family:'Italiana',serif;font-size:22px;font-weight:600;color:#3AB7AE;margin-bottom:14px;text-align:center}
 .svc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 .svc-item{background:#fff;border:1px solid #e8dfd4;border-radius:12px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .svc-item .n{font-size:14px;font-weight:600;color:#2d2520}
@@ -72,10 +72,10 @@ section{padding:70px 24px}
 .ther-bio{font-size:12px;color:#8a7e74;margin-top:4px;line-height:1.5}
 
 /* ── CTA BANNER ── */
-.cta-banner{background:#2d6a6a;color:#fff;text-align:center;padding:70px 24px}
+.cta-banner{background:#3AB7AE;color:#fff;text-align:center;padding:70px 24px}
 .cta-banner h2{font-family:'Italiana',serif;font-size:32px;font-weight:600;margin-bottom:14px}
 .cta-banner p{color:rgba(255,255,255,.75);font-size:14px;margin-bottom:28px}
-.cta-banner .btn-book{background:#fff;color:#2d6a6a}
+.cta-banner .btn-book{background:#fff;color:#3AB7AE}
 .cta-banner .btn-book:hover{background:#f0ebe0}
 
 footer{text-align:center;padding:30px 24px;font-size:12px;color:#a89a86}
@@ -86,7 +86,7 @@ footer{text-align:center;padding:30px 24px;font-size:12px;color:#a89a86}
 
 <nav>
   <div class="wrap">
-    <div class="nav-logo">Amansala Spa</div>
+    <img class="nav-logo" src="logo-amansala.png" alt="Amansala">
     <a class="nav-cta" href="spa-booking.html">Book Now</a>
   </div>
 </nav>
@@ -137,17 +137,17 @@ footer{text-align:center;padding:30px 24px;font-size:12px;color:#a89a86}
   <a class="btn-book" href="spa-booking.html">Book Your Treatment</a>
 </div>
 
-<footer>Amansala · Tulum &middot; <a href="spa-booking.html" style="color:#2d6a6a;font-weight:600">Book a Spa Treatment</a></footer>
+<footer>Amansala · Tulum &middot; <a href="spa-booking.html" style="color:#3AB7AE;font-weight:600">Book a Spa Treatment</a></footer>
 
 <script>
 const SUPA_URL='https://fzresosiqafiyxfgeyvk.supabase.co';
 const SUPA_KEY='sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
 const db=supabase.createClient(SUPA_URL,SUPA_KEY);
 
-const CAT_ORDER=['massage','spirit','fitness','yoga','pilates'];
-const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates'};
-const CAT_ICON={massage:'🪷',spirit:'🦋',fitness:'💪',yoga:'🧘',pilates:'🤸'};
-const THER_GROUP_LABEL={massage:'Body Workers',spirit:'Spirit Workers',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates'};
+const CAT_ORDER=['massage','spirit','fitness','yoga','pilates','dance'];
+const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates',dance:'Dance'};
+const CAT_ICON={massage:'🪷',spirit:'🦋',fitness:'💪',yoga:'🧘',pilates:'🤸',dance:'💃'};
+const THER_GROUP_LABEL={massage:'Body Workers',spirit:'Spirit Workers',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates',dance:'Dance'};
 function esc(s){return (s||'').replace(/</g,'&lt;');}
 
 (async function init(){

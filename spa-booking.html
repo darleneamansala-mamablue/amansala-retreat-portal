@@ -9,18 +9,18 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:#faf7f0;color:#2d2520;min-height:100vh}
-.header{background:#2d6a6a;padding:20px;text-align:center}
-.header-logo{color:#fff;font-family:'Italiana',serif;font-size:24px;font-weight:700;letter-spacing:.5px}
+.header{background:#3AB7AE;padding:20px;text-align:center}
+.header-logo{height:36px}
 .header-sub{color:rgba(255,255,255,.7);font-size:12.5px;margin-top:3px;letter-spacing:.3px}
 .wrap{max-width:520px;margin:0 auto;padding:26px 16px 70px}
 .step-dots{display:flex;justify-content:center;gap:6px;margin-bottom:22px}
 .step-dot{width:7px;height:7px;border-radius:50%;background:#e0d5c4}
-.step-dot.on{background:#2d6a6a}
+.step-dot.on{background:#3AB7AE}
 .card{background:#fff;border-radius:14px;border:1px solid #e8dfd4;padding:22px 20px;margin-bottom:14px}
 .section-title{font-size:19px;font-weight:600;font-family:'Italiana',serif;color:#2d2520;margin-bottom:4px}
 .section-sub{font-size:13px;color:#8a7e74;margin-bottom:16px;line-height:1.5}
 .svc-card{background:#fff;border-radius:12px;border:1.5px solid #e8dfd4;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
-.svc-card:hover{border-color:#2d6a6a;box-shadow:0 2px 8px rgba(45,106,106,.1)}
+.svc-card:hover{border-color:#3AB7AE;box-shadow:0 2px 8px rgba(45,106,106,.1)}
 .svc-name{font-size:15px;font-weight:600;color:#2d2520}
 .svc-desc{font-size:12px;color:#8a7e74;margin-top:2px}
 .svc-meta{display:flex;gap:10px;margin-top:6px;font-size:12px;color:#4a4038}
@@ -28,15 +28,15 @@ body{font-family:'DM Sans',sans-serif;background:#faf7f0;color:#2d2520;min-heigh
 .cat-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#a89a86;margin:18px 0 8px}
 .cat-label:first-child{margin-top:0}
 .choice-btn{width:100%;text-align:left;background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;color:#2d2520;transition:border-color .15s,background .15s}
-.choice-btn:hover{border-color:#2d6a6a;background:#f0f9f9}
+.choice-btn:hover{border-color:#3AB7AE;background:#f0f9f9}
 .choice-btn .cd{font-size:12px;font-weight:400;color:#8a7e74;margin-top:2px}
 .form-group{margin-bottom:14px}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
 .form-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;display:block;margin-bottom:5px}
 .form-input,.form-select{width:100%;padding:10px 12px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;color:#2d2520;outline:none;background:#fff}
-.form-input:focus,.form-select:focus{border-color:#2d6a6a}
-.btn-primary{width:100%;padding:14px;background:#2d6a6a;color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
-.btn-primary:hover{background:#245858}
+.form-input:focus,.form-select:focus{border-color:#3AB7AE}
+.btn-primary{width:100%;padding:14px;background:#3AB7AE;color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}
+.btn-primary:hover{background:#2F9990}
 .btn-primary:disabled{background:#9ca3af;cursor:not-allowed}
 .btn-back{background:none;border:none;color:#8a7e74;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;margin-bottom:14px;display:flex;align-items:center;gap:4px}
 .policy-box{background:#f5f1eb;border-radius:10px;padding:14px 16px;font-size:13px;line-height:1.7;color:#4a4038;margin-bottom:16px}
@@ -45,12 +45,12 @@ body{font-family:'DM Sans',sans-serif;background:#faf7f0;color:#2d2520;min-heigh
 .chk-row input{margin-top:2px}
 .date-scroller{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:16px}
 .date-pill{flex-shrink:0;text-align:center;background:#fff;border:1.5px solid #e8dfd4;border-radius:10px;padding:8px 12px;cursor:pointer;font-family:'DM Sans',sans-serif}
-.date-pill.on{background:#2d6a6a;border-color:#2d6a6a;color:#fff}
+.date-pill.on{background:#3AB7AE;border-color:#3AB7AE;color:#fff}
 .date-pill .dow{font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.7}
 .date-pill .dnum{font-size:15px;font-weight:700;margin-top:2px}
 .slot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .slot-btn{padding:10px 6px;border:1.5px solid #e8dfd4;border-radius:9px;background:#fff;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:#2d2520;cursor:pointer;text-align:center}
-.slot-btn:hover{border-color:#2d6a6a;background:#f0f9f9}
+.slot-btn:hover{border-color:#3AB7AE;background:#f0f9f9}
 .no-slots{color:#9ca3af;font-size:13px;font-style:italic;text-align:center;padding:20px 0}
 .summary-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f0ebe0;font-size:13.5px}
 .summary-row:last-child{border-bottom:none}
@@ -67,7 +67,7 @@ body{font-family:'DM Sans',sans-serif;background:#faf7f0;color:#2d2520;min-heigh
 <body>
 
 <div class="header">
-  <div class="header-logo">Amansala</div>
+  <img class="header-logo" src="logo-amansala-white.png" alt="Amansala">
   <div class="header-sub">Book a Spa Treatment</div>
 </div>
 
@@ -86,13 +86,13 @@ const SUPA_KEY='sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
 const db=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 const SB_START_H=7, SB_END_H=21;
-const CAT_ORDER=['massage','spirit','fitness','yoga','pilates'];
-const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates'};
-const CAT_ICON={massage:'🪷',spirit:'🦋',fitness:'💪',yoga:'🧘',pilates:'🤸'};
+const CAT_ORDER=['massage','spirit','fitness','yoga','pilates','dance'];
+const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates',dance:'Dance'};
+const CAT_ICON={massage:'🪷',spirit:'🦋',fitness:'💪',yoga:'🧘',pilates:'🤸',dance:'💃'};
 
 let SpaData={services:[],rooms:[],therapists:[]};
 let SpaAppointments=[];
-let SB={step:1,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
+let SB={step:1,sessionType:null,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
         policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null};
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
@@ -123,19 +123,35 @@ function renderDots(total){
 
 function renderStep(){
   const el=document.getElementById('mainContent');
-  if(SB.step===1) return renderStep1_Service(el);
-  if(SB.step===2) return renderStep2_GuestType(el);
-  if(SB.step===3) return SB.guestType==='hotel' ? renderStep3_Hotel(el) : renderStep3_Offsite(el);
-  if(SB.step===4) return renderStep4_Preference(el);
-  if(SB.step===5) return renderStep5_DateTime(el);
-  if(SB.step===6) return renderStep6_Confirm(el);
+  if(SB.step===1) return renderStep1_SessionType(el);
+  if(SB.step===2) return renderStep2_Service(el);
+  if(SB.step===3) return renderStep3_GuestType(el);
+  if(SB.step===4) return SB.guestType==='hotel' ? renderStep4_Hotel(el) : renderStep4_Offsite(el);
+  if(SB.step===5) return renderStep5_Preference(el);
+  if(SB.step===6) return renderStep6_DateTime(el);
+  if(SB.step===7) return renderStep7_Confirm(el);
 }
 
-// ── STEP 1 — SERVICE ─────────────────────────────────────────────────────
-function renderStep1_Service(el){
-  renderDots(6);
-  const active=SpaData.services.filter(s=>s.active && s.price!=null && s.duration!=null);
-  let html=`<div class="card"><div class="section-title">Choose a Treatment</div><div class="section-sub">Select the service you'd like to book.</div>`;
+// ── STEP 1 — ONE-ON-ONE OR GROUP CEREMONY ────────────────────────────────
+function renderStep1_SessionType(el){
+  renderDots(7);
+  el.innerHTML=`<div class="card">
+    <div class="section-title">What Would You Like to Book?</div>
+    <div class="section-sub">Choose the kind of experience you're looking for.</div>
+    <div class="choice-btn" onclick="sbPickSessionType('individual')">One-on-One Treatment<div class="cd">Massage, bodywork, private classes and readings — just for you</div></div>
+    <div class="choice-btn" onclick="sbPickSessionType('group')">Group Ceremony<div class="cd">Temazcal, Cacao &amp; Sound Healing, and other shared experiences</div></div>
+  </div>`;
+}
+function sbPickSessionType(t){SB.sessionType=t;setStep(2);}
+
+// ── STEP 2 — SERVICE ─────────────────────────────────────────────────────
+function renderStep2_Service(el){
+  renderDots(7);
+  const active=SpaData.services.filter(s=>s.active && s.price!=null && s.duration!=null && (s.sessionType||'individual')===SB.sessionType);
+  let html=`<button class="btn-back" onclick="setStep(1)">&#8249; Back</button><div class="card"><div class="section-title">Choose a Treatment</div><div class="section-sub">Select the service you'd like to book.</div>`;
+  if(!active.length){
+    html+=`<div class="no-slots">Nothing here is ready to book yet — please check back soon or contact us directly.</div>`;
+  }
   CAT_ORDER.forEach(cat=>{
     const list=active.filter(s=>s.category===cat);
     if(!list.length) return;
@@ -151,13 +167,13 @@ function renderStep1_Service(el){
   html+=`</div>`;
   el.innerHTML=html;
 }
-function sbPickService(id){SB.serviceId=id;setStep(2);}
+function sbPickService(id){SB.serviceId=id;setStep(3);}
 
-// ── STEP 2 — GUEST TYPE ──────────────────────────────────────────────────
-function renderStep2_GuestType(el){
-  renderDots(6);
+// ── STEP 3 — GUEST TYPE ──────────────────────────────────────────────────
+function renderStep3_GuestType(el){
+  renderDots(7);
   el.innerHTML=`
-    <button class="btn-back" onclick="setStep(1)">&#8249; Back</button>
+    <button class="btn-back" onclick="setStep(2)">&#8249; Back</button>
     <div class="card">
       <div class="section-title">Are you staying at Amansala?</div>
       <div class="section-sub">This helps us arrange payment for your treatment.</div>
@@ -165,13 +181,13 @@ function renderStep2_GuestType(el){
       <div class="choice-btn" onclick="sbPickGuestType('offsite')">I am not staying at Amansala<div class="cd">Advance payment required to reserve your spot</div></div>
     </div>`;
 }
-function sbPickGuestType(t){SB.guestType=t;setStep(3);}
+function sbPickGuestType(t){SB.guestType=t;setStep(4);}
 
-// ── STEP 3a — HOTEL GUEST ────────────────────────────────────────────────
-function renderStep3_Hotel(el){
-  renderDots(6);
+// ── STEP 4a — HOTEL GUEST ────────────────────────────────────────────────
+function renderStep4_Hotel(el){
+  renderDots(7);
   el.innerHTML=`
-    <button class="btn-back" onclick="setStep(2)">&#8249; Back</button>
+    <button class="btn-back" onclick="setStep(3)">&#8249; Back</button>
     <div class="card">
       <div class="section-title">Your Stay</div>
       <div class="section-sub">Our front desk will confirm your reservation and charge your room folio.</div>
@@ -190,14 +206,14 @@ function sbSubmitHotel(){
   if(!first||!last){showToast('Please enter your name.');return;}
   if(!room){showToast('Please enter your room number.');return;}
   SB.firstName=first;SB.lastName=last;SB.roomNumber=room;
-  setStep(4);
+  setStep(5);
 }
 
-// ── STEP 3b — OFFSITE GUEST ──────────────────────────────────────────────
-function renderStep3_Offsite(el){
-  renderDots(6);
+// ── STEP 4b — OFFSITE GUEST ──────────────────────────────────────────────
+function renderStep4_Offsite(el){
+  renderDots(7);
   el.innerHTML=`
-    <button class="btn-back" onclick="setStep(2)">&#8249; Back</button>
+    <button class="btn-back" onclick="setStep(3)">&#8249; Back</button>
     <div class="card">
       <div class="section-title">Welcome to Amansala</div>
       <div class="policy-box">
@@ -225,20 +241,20 @@ function sbSubmitOffsite(){
   if(!email||!phone){showToast('Please enter your email and phone.');return;}
   SB.firstName=first;SB.lastName=last;SB.email=email;SB.phone=phone;
   SB.policyAccepted=true;SB.policyAcceptedAt=new Date().toISOString();SB.policyVersion='2026-08-27';
-  setStep(4);
+  setStep(5);
 }
 
-// ── STEP 4 — THERAPIST PREFERENCE ────────────────────────────────────────
+// ── STEP 5 — THERAPIST PREFERENCE ────────────────────────────────────────
 function sbEligibleTherapists(){
   return SpaData.therapists.filter(t=>t.active && (t.services||[]).some(s=>s.serviceId===SB.serviceId));
 }
-function renderStep4_Preference(el){
+function renderStep5_Preference(el){
   const svc=SpaData.services.find(s=>s.id===SB.serviceId);
-  if(!svc.genderPrefEnabled){SB.prefType='none';return setStep(5);}
-  renderDots(6);
+  if(!svc.genderPrefEnabled){SB.prefType='none';return setStep(6);}
+  renderDots(7);
   const eligible=sbEligibleTherapists();
   el.innerHTML=`
-    <button class="btn-back" onclick="setStep(3)">&#8249; Back</button>
+    <button class="btn-back" onclick="setStep(4)">&#8249; Back</button>
     <div class="card">
       <div class="section-title">Therapist Preference</div>
       <div class="section-sub">Do you have a preference for your ${esc(svc.name)}?</div>
@@ -257,10 +273,10 @@ function renderStep4_Preference(el){
 function sbShowTherapistList(){document.getElementById('sbTherapistList').style.display='block';}
 function sbPickPref(type,therapistId){
   SB.prefType=type;SB.requestedTherapistId=therapistId||null;
-  setStep(5);
+  setStep(6);
 }
 
-// ── STEP 5 — DATE & TIME ─────────────────────────────────────────────────
+// ── STEP 6 — DATE & TIME ─────────────────────────────────────────────────
 function sbCandidateTherapists(){
   let list=sbEligibleTherapists();
   if(SB.prefType==='specific') list=list.filter(t=>t.id===SB.requestedTherapistId);
@@ -297,14 +313,14 @@ function sbNextDays(n){
   for(let i=0;i<n;i++){const d=new Date(today.getTime()+i*86400000);out.push(d);}
   return out;
 }
-function renderStep5_DateTime(el){
-  renderDots(6);
+function renderStep6_DateTime(el){
+  renderDots(7);
   const svc=SpaData.services.find(s=>s.id===SB.serviceId);
   const candidates=sbCandidateTherapists();
   if(!SB.date) SB.date=sbNextDays(14)[0].toISOString().slice(0,10);
   const days=sbNextDays(14);
   el.innerHTML=`
-    <button class="btn-back" onclick="setStep(4)">&#8249; Back</button>
+    <button class="btn-back" onclick="setStep(5)">&#8249; Back</button>
     <div class="card">
       <div class="section-title">Pick a Date &amp; Time</div>
       <div class="section-sub">${esc(svc.name)} · ${svc.duration} min</div>
@@ -321,7 +337,7 @@ function renderStep5_DateTime(el){
     </div>`;
   sbRenderSlots(candidates,svc);
 }
-function sbPickDate(ds){SB.date=ds;renderStep5_DateTime(document.getElementById('mainContent'));}
+function sbPickDate(ds){SB.date=ds;renderStep6_DateTime(document.getElementById('mainContent'));}
 function sbRenderSlots(candidates,svc){
   const wrap=document.getElementById('sbSlots');
   if(!candidates.length){wrap.innerHTML=`<div class="no-slots">No therapists available for this service yet. Please try a different preference or contact us directly.</div>`;return;}
@@ -339,16 +355,16 @@ function sbPickSlot(startMin,therapistId,roomId){
   SB.start=minToHHMM(startMin);
   SB.therapistId=therapistId;
   SB.roomId=roomId||null;
-  setStep(6);
+  setStep(7);
 }
 
-// ── STEP 6 — CONFIRM ─────────────────────────────────────────────────────
-function renderStep6_Confirm(el){
-  renderDots(6);
+// ── STEP 7 — CONFIRM ─────────────────────────────────────────────────────
+function renderStep7_Confirm(el){
+  renderDots(7);
   const svc=SpaData.services.find(s=>s.id===SB.serviceId);
   const ther=SpaData.therapists.find(t=>t.id===SB.therapistId);
   el.innerHTML=`
-    <button class="btn-back" onclick="setStep(5)">&#8249; Back</button>
+    <button class="btn-back" onclick="setStep(6)">&#8249; Back</button>
     <div class="card">
       <div class="section-title">Confirm Your Booking</div>
       <div class="summary-row"><span class="lbl">Service</span><span class="val">${esc(svc.name)}</span></div>
@@ -383,7 +399,7 @@ async function sbFinalConfirm(){
       showToast('That time was just booked by someone else — please pick another.');
       btn.disabled=false;btn.textContent='Confirm Booking';
       SpaAppointments=latest;
-      setStep(5);
+      setStep(6);
       return;
     }
     const svc=SpaData.services.find(s=>s.id===SB.serviceId);
@@ -392,6 +408,7 @@ async function sbFinalConfirm(){
       id:'ap_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
       clientName:SB.firstName+' '+SB.lastName,
       guestType:SB.guestType,
+      sessionType:SB.sessionType,
       email:SB.email||null, phone:SB.phone||null, roomNumber:SB.roomNumber||null,
       serviceId:SB.serviceId, therapistId:SB.therapistId, roomId:SB.roomId||null,
       date:SB.date, start:SB.start, duration:svc.duration,

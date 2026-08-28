@@ -26,6 +26,7 @@ const SPA_THER_GROUPS = [
   { key: 'fitness', label: 'Fitness', icon: '💪' },
   { key: 'yoga', label: 'Yoga', icon: '🧘' },
   { key: 'pilates', label: 'Pilates', icon: '🤸' },
+  { key: 'dance', label: 'Dance', icon: '💃' },
 ];
 const SPA_GROUP_ICON = Object.fromEntries(SPA_THER_GROUPS.map(g => [g.key, g.icon]));
 function spaTherCategories(t) {
@@ -52,10 +53,10 @@ const SPA_DEFAULT_SERVICES = [
   { name: 'Tarot Card Reading', duration: null, price: 95, category: 'spirit' },
   { name: 'Private Breathwork', duration: 45, price: 80, category: 'spirit' },
   { name: 'Aura Reading', duration: null, price: 85, category: 'spirit' },
-  { name: 'Mayan Temazcal', duration: null, price: null, category: 'spirit' },
-  { name: 'Cacao and Sound Healing', duration: null, price: null, category: 'spirit' },
-  { name: 'Mayan Clay Ceremony', duration: null, price: null, category: 'spirit' },
-  { name: 'Ice Bath and Breathwork', duration: null, price: null, category: 'spirit' },
+  { name: 'Mayan Temazcal', duration: null, price: null, category: 'spirit', sessionType: 'group' },
+  { name: 'Cacao and Sound Healing', duration: null, price: null, category: 'spirit', sessionType: 'group' },
+  { name: 'Mayan Clay Ceremony', duration: null, price: null, category: 'spirit', sessionType: 'group' },
+  { name: 'Ice Bath and Breathwork', duration: null, price: null, category: 'spirit', sessionType: 'group' },
   { name: 'Private Yoga', duration: null, price: 95, category: 'yoga' },
   { name: 'Private Fitness', duration: null, price: 95, category: 'fitness' },
   { name: 'Private Pilates', duration: null, price: 95, category: 'pilates' },
@@ -77,7 +78,7 @@ async function spaLoad() {
         services: SPA_DEFAULT_SERVICES.map(s => ({
           id: spaNewId('sv'), name: s.name, description: '', duration: s.duration, buffer: 0,
           price: s.price, currency: 'USD', category: s.category, active: true,
-          roomRequired: true, genderPrefEnabled: true,
+          roomRequired: true, genderPrefEnabled: true, sessionType: s.sessionType || 'individual',
         })),
         rooms: SPA_DEFAULT_ROOMS.map(name => ({ id: spaNewId('rm'), name, location: '' })),
         therapists: [],
@@ -138,14 +139,7 @@ function spaRenderPublicPage() {
   const url = location.origin + '/spa-landing.html';
   el.style.padding = '0';
   el.style.textAlign = 'left';
-  el.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;background:#fff;border:1px solid #e8dfd4;border-radius:12px 12px 0 0;flex-wrap:wrap">
-      <span style="font-size:12px;color:#6b7280;font-family:'Jost',sans-serif">This is the real public page — anything booked below is a real booking.</span>
-      <span style="flex:1"></span>
-      <button onclick="navigator.clipboard.writeText('${url}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy Link',1500)" style="padding:7px 14px;font-size:12px;font-weight:600;border:1.5px solid #c8bfb5;border-radius:8px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">Copy Link</button>
-      <a href="${url}" target="_blank" style="padding:7px 14px;font-size:12px;font-weight:600;border:none;border-radius:8px;background:var(--teal,#2d6a6a);color:#fff;cursor:pointer;font-family:'Jost',sans-serif;text-decoration:none">Open in New Tab ↗</a>
-    </div>
-    <iframe src="${url}" style="width:100%;height:calc(100vh - 220px);border:1px solid #e8dfd4;border-top:none;border-radius:0 0 12px 12px;background:#fff"></iframe>`;
+  el.innerHTML = `<iframe src="${url}" style="width:100%;height:calc(100vh - 160px);border:1px solid #e8dfd4;border-radius:12px;background:#fff"></iframe>`;
 }
 
 // ── COSTS & PROFIT ───────────────────────────────────────────────────────
@@ -206,6 +200,7 @@ function spaRenderServices() {
         <span>${s.duration ? s.duration + ' min' : '<span style="color:#d97706;font-weight:600">Duration TBD</span>'}</span>
         <span>${s.price != null ? '$' + s.price : '<span style="color:#d97706;font-weight:600">Price TBD</span>'}</span>
         ${s.roomRequired ? '<span style="color:#9ca3af">Room required</span>' : ''}
+        ${s.sessionType === 'group' ? '<span style="color:#7c3aed;font-weight:600">Group Ceremony</span>' : ''}
       </div>
       ${spaSvcMarginHtml(s)}
     </div>`;
@@ -225,6 +220,7 @@ function spaShowServiceForm(id) {
   document.getElementById('spaSvcPrice').value = s?.price ?? '';
   document.getElementById('spaSvcCategory').value = s?.category || 'massage';
   document.getElementById('spaSvcRoomRequired').value = s ? (s.roomRequired ? '1' : '0') : '1';
+  document.getElementById('spaSvcSessionType').value = s?.sessionType || 'individual';
   document.getElementById('spaSvcGenderPref').checked = s ? !!s.genderPrefEnabled : true;
   document.getElementById('spaSvcCostLaundry').value = s?.costs?.laundry ?? '';
   document.getElementById('spaSvcCostSupplies').value = s?.costs?.supplies ?? '';
@@ -253,6 +249,7 @@ function spaSaveService() {
     category: document.getElementById('spaSvcCategory').value,
     roomRequired: document.getElementById('spaSvcRoomRequired').value === '1',
     genderPrefEnabled: document.getElementById('spaSvcGenderPref').checked,
+    sessionType: document.getElementById('spaSvcSessionType').value,
     costs: {
       laundry: parseFloat(document.getElementById('spaSvcCostLaundry').value) || 0,
       supplies: parseFloat(document.getElementById('spaSvcCostSupplies').value) || 0,
