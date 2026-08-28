@@ -113,8 +113,17 @@ function bbcGenDaySlots(di,total,excursionDays){
   ];
 
   if(hasExcursion){
-    slots.push(bbcMakeSlot('1:30 – 5:30','Excursion','','',false,'event'));
-    slots.push(bbcMakeSlot('6:00','Late Lunch','','',true,'meal'));
+    // Excursion buses leave 11:45, return 2:15 — this used to block the whole
+    // afternoon (old placeholder was 1:30-5:30), silently dropping the
+    // dance/Pilates/Gentle Yoga block every excursion day. Real return time
+    // leaves plenty of afternoon, so those classes still happen afterward.
+    slots.push(bbcMakeSlot('11:45 – 2:15','Excursion','','',false,'event'));
+    slots.push(bbcMakeSlot('2:30','Late Lunch','','',true,'meal'));
+    if(!isLast){
+      slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
+      slots.push(bbcMakeSlot('4:45 – 5:30','Pilates','Adele',aftLoc,false,'class'));
+      slots.push(bbcMakeSlot('5:45 – 6:45','Gentle Yoga',eveningYoga,isFirst?'Heaven':'Beachfront',false,'class'));
+    }
   } else {
     slots.push(bbcMakeSlot('1:30','Lunch','','',true,'meal'));
     if(!isLast){
