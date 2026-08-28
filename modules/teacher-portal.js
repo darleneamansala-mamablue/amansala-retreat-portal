@@ -2538,6 +2538,11 @@ function svAddActivity(bkId){
   if(!date){showToast('Please pick a day — activities can\'t be scheduled on the arrival or departure day.');return;}
   if(date===bk.startDate||date===bk.endDate){showToast('Activities can\'t be scheduled on the arrival or departure day.');return;}
   if(!bk.retreatActivities)bk.retreatActivities=[];
+  if(bk.retreatActivities.some(a=>a.aoId===aoId)){
+    const name=(typeof ADD_ONS!=='undefined'?ADD_ONS.find(a=>a.id===aoId)?.name:null)||'This activity';
+    showToast(`${name} is already scheduled for this retreat — edit its existing date/time instead of adding it again.`);
+    return;
+  }
   const isGitano=aoId==='ao13';
   const defaultTime=isGitano?'19:30':time;
   bk.retreatActivities.push({aoId,date,time:defaultTime,prepaid:isGitano});
