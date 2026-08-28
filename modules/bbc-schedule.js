@@ -13,6 +13,17 @@ const BBC_DANCE_ROTATION=[
 ];
 const BBC_INSTRUCTORS_LIST=['Ryan','Darlene','Adele','Sergio','Yolanda','Kun','Maya','Kiki','Fernando','Marco'];
 const BBC_LOCATIONS_LIST=['Beachfront','Grande','Heaven','Chica','Skye'];
+// Pilates every 2nd day; the days in between alternate Absolution/Boxing.
+// Clamped (not cycled) past the 7th full day, same as the other rotations.
+const BBC_AFTERNOON_STRENGTH_ROTATION=[
+  {activity:'Pilates',   instructor:'Adele'},
+  {activity:'Absolution',instructor:'Sergio'},
+  {activity:'Pilates',   instructor:'Adele'},
+  {activity:'Boxing',    instructor:'Fernando'},
+  {activity:'Pilates',   instructor:'Adele'},
+  {activity:'Absolution',instructor:'Sergio'},
+  {activity:'Boxing',    instructor:'Fernando'},
+];
 
 // Default excursion order when there's no yoga retreat running the same
 // week to match against — 1st tour day = Tulum Ruins, 2nd = Grande Cenote,
@@ -21,6 +32,9 @@ const BBC_DEFAULT_TOUR_ORDER=['Tulum Ruins','Grande Cenote Tour','Mangroves Tour
 // aoIds recognized as "tours" for cross-referencing a concurrent yoga
 // retreat's own scheduled activities (modules/teacher-portal.js ADD_ONS).
 const BBC_TOUR_AOID_NAME={ao1:'Tulum Ruins',ao6:'Grande Cenote Tour',ao7:'Mangroves Tour',ao3:'Atik Cenote Tour',ao2:'Muyil Float Tour'};
+// Tours are off-site — no Amansala shala to assign, so the location field
+// is hidden for these rows instead of showing an always-empty input.
+const BBC_TOUR_NAMES=new Set([...Object.values(BBC_TOUR_AOID_NAME),'Excursion']);
 
 // The two modules talk to each other here: if a yoga retreat is on the
 // books for this date with a tour already scheduled, BBC's excursion uses
@@ -111,6 +125,7 @@ function bbcGenDaySlots(di,total,excursionDays,tourName){
   const eveningYoga=isFirst?'Kun':BBC_EVENING_YOGA_ROTATION[Math.min(fullIdx,BBC_EVENING_YOGA_ROTATION.length-1)];
   // Dance cycles Latin → Afro → Bollywood, always Sergio
   const dance=BBC_DANCE_ROTATION[(isFirst?0:fullIdx)%BBC_DANCE_ROTATION.length];
+  const strength=BBC_AFTERNOON_STRENGTH_ROTATION[Math.min(Math.max(fullIdx,0),BBC_AFTERNOON_STRENGTH_ROTATION.length-1)];
   const yogaLabel=(isFirst||isLast)?'Yoga Mala':'Yoga';
   const circuitLabel=(isFirst||isLast)?'BBC 20':'Circuit Training';
   const aftLoc=isFirst?'Heaven':'Grande';
@@ -127,15 +142,31 @@ function bbcGenDaySlots(di,total,excursionDays,tourName){
     return slots;
   }
 
+  // Departure day is also a half day — ends at breakfast, then guests leave.
+  // No circuit training, lunch, or closing dinner (that already happened
+  // the night before, on the 2nd-to-last night).
+  if(isLast){
+    return[
+      bbcMakeSlot('7:00','Coffee | Tea & Morning Pages','','',true,'meal'),
+      bbcMakeSlot('7:00 – 7:15','Grand Rising — '+activation,'Ryan','Beachfront',false,'class'),
+      bbcMakeSlot('7:30 – 8:15','Morning Beach Walk','Ryan','Beachfront',false,'class'),
+      bbcMakeSlot('8:30 – 9:30',yogaLabel,morningYoga,'Beachfront',false,'class'),
+      bbcMakeSlot('9:30','Breakfast','','',true,'meal'),
+      bbcMakeSlot('','Departures — we hope you had a great week! We will miss you.','','',true,'event'),
+    ];
+  }
+
   const slots=[
     bbcMakeSlot('7:00','Coffee | Tea & Morning Pages','','',true,'meal'),
     bbcMakeSlot('7:00 – 7:15','Grand Rising — '+activation,'Ryan','Beachfront',false,'class'),
     bbcMakeSlot('7:30 – 8:15','Morning Beach Walk','Ryan','Beachfront',false,'class'),
-    bbcMakeSlot('8:30 – 9:30',yogaLabel,morningYoga,isLast?'Beachfront':'Grande',false,'class'),
+    bbcMakeSlot('8:30 – 9:30',yogaLabel,morningYoga,'Grande',false,'class'),
     bbcMakeSlot('9:30','Breakfast','','',true,'meal'),
     bbcMakeSlot('10:45 – 11:30',circuitLabel,'Ryan','Grande',false,'class'),
   ];
 
+  // isFirst/isLast both early-return above, so every day reaching here is a
+  // regular full day.
   if(hasExcursion){
     // Excursion buses leave 11:45, return 2:15 — this used to block the whole
     // afternoon (old placeholder was 1:30-5:30), silently dropping the
@@ -143,29 +174,21 @@ function bbcGenDaySlots(di,total,excursionDays,tourName){
     // leaves plenty of afternoon, so those classes still happen afterward.
     slots.push(bbcMakeSlot('11:45 – 2:15',tourName||'Excursion','','',false,'event'));
     slots.push(bbcMakeSlot('2:30','Late Lunch','','',true,'meal'));
-    if(!isLast){
-      slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
-      slots.push(bbcMakeSlot('4:45 – 5:30','Pilates','Adele',aftLoc,false,'class'));
-      slots.push(bbcMakeSlot('5:45 – 6:45','Gentle Yoga',eveningYoga,isFirst?'Heaven':'Beachfront',false,'class'));
-    }
+    slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
+    slots.push(bbcMakeSlot('4:45 – 5:30',strength.activity,strength.instructor,aftLoc,false,'class'));
+    slots.push(bbcMakeSlot('5:45 – 6:45','Gentle Yoga',eveningYoga,'Beachfront',false,'class'));
   } else {
     slots.push(bbcMakeSlot('1:30','Lunch','','',true,'meal'));
-    if(!isLast){
-      slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
-      slots.push(bbcMakeSlot('4:45 – 5:30','Pilates','Adele',aftLoc,false,'class'));
-      slots.push(bbcMakeSlot('5:45 – 6:45','Gentle Yoga',eveningYoga,isFirst?'Heaven':'Beachfront',false,'class'));
-    }
+    slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
+    slots.push(bbcMakeSlot('4:45 – 5:30',strength.activity,strength.instructor,aftLoc,false,'class'));
+    slots.push(bbcMakeSlot('5:45 – 6:45','Gentle Yoga',eveningYoga,'Beachfront',false,'class'));
   }
 
-  if(isFirst){
-    slots.push(bbcMakeSlot('7:00','Opening Circle','Ryan','Heaven',false,'event'));
-    slots.push(bbcMakeSlot('7:45','Dinner','','',true,'meal'));
-  } else if(isLast){
-    slots.push(bbcMakeSlot('7:00','Closing Circle','Ryan','Heaven',false,'event'));
-    slots.push(bbcMakeSlot('7:30','Offsite Dinner','','',true,'meal'));
-  } else {
-    slots.push(bbcMakeSlot('7:30','Dinner','','',true,'meal'));
-  }
+  // Offsite dinner defaults to the 2nd-to-last night (departure day itself
+  // is a half day ending at breakfast, so it can't host a dinner) —
+  // editable per retreat from the schedule editor if the night needs to move.
+  const isSecondLast=di===total-2;
+  slots.push(bbcMakeSlot('7:30',isSecondLast?'Offsite Dinner':'Dinner','','',true,'meal'));
   return slots;
 }
 
@@ -369,6 +392,7 @@ function bbcRenderDayCard(s,day,di){
 
 function bbcRenderSlotRow(schedId,di,slot,si,dups,date){
   const isMeal=slot.type==='meal',isEvent=slot.type==='event';
+  const isTour=isEvent&&BBC_TOUR_NAMES.has(slot.activity);
   const isDup=slot.instructor&&slot.instructor.trim()!=='Ryan'&&slot.instructor.trim()!==''&&dups.includes(slot.instructor.trim());
   const bg=isMeal?'#fafaf9':isEvent?'#fdf4ff':'#fff';
   const actStyle=isMeal?'font-weight:600;color:var(--teal)':isEvent?'font-weight:600;color:#7c3aed':'color:var(--dark)';
@@ -380,7 +404,7 @@ function bbcRenderSlotRow(schedId,di,slot,si,dups,date){
     +'<div style="padding:5px 8px;display:flex;align-items:center;border-right:1px solid var(--border)">'
     +(isMeal?'<span style="font-size:11px;color:#d1d5db;padding-left:2px">—</span>':'<input value="'+slot.instructor+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'instructor\',this.value)" list="bbcInstDl-'+schedId+'-'+di+'" style="width:100%;border:1px solid '+(isDup?'#f59e0b':'#e5e7eb')+';border-radius:6px;padding:4px 7px;font-family:\'Jost\',sans-serif;font-size:12px;color:var(--dark);background:'+(isDup?'#fffbeb':'#fff')+';outline:none" placeholder="Instructor...">')
     +'</div><div style="padding:5px 8px;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--border)">'
-    +(isMeal?'<span style="font-size:11px;color:#d1d5db;padding-left:2px">—</span>':(function(){
+    +(isMeal||isTour?'<span style="font-size:11px;color:#d1d5db;padding-left:2px">—</span>':(function(){
       const cfls=bbcGetShalaConflicts(date,slot.location);
       const cfBorder=cfls.length?'#f87171':'#e5e7eb';
       const cfBg=cfls.length?'#fff5f5':'#fff';

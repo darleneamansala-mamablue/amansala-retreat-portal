@@ -725,9 +725,14 @@
     .ts-note-bar{margin-top:14px;font-size:12.5px;color:var(--muted);font-style:italic;padding:10px 14px;background:#f8fbfb;border-radius:8px;border-left:3px solid var(--teal);line-height:1.55;}
     @media print{
       body>*:not(#printScheduleModal){display:none!important;}
-      #printScheduleModal{position:fixed!important;inset:0!important;background:#fff!important;z-index:9999!important;display:block!important;overflow:auto!important;}
+      /* The on-screen modal is position:fixed + overflow:auto (a scrollable
+         box pinned to the viewport) so it can be reviewed on screen — but
+         that same combination clips print/PDF output to a single viewport
+         instead of flowing across pages. Print must switch it to normal
+         document flow (static + visible) so every day actually prints. */
+      #printScheduleModal{position:static!important;inset:auto!important;background:#fff!important;z-index:auto!important;display:block!important;overflow:visible!important;height:auto!important;max-height:none!important;width:auto!important}
       #printScheduleModal .modal-overlay, #printScheduleModal .sched-modal-chrome{display:none!important;}
-      #printScheduleModal .sched-print-area{box-shadow:none!important;max-width:100%!important;padding:20px!important;}
+      #printScheduleModal .sched-print-area{box-shadow:none!important;max-width:100%!important;padding:20px!important;overflow:visible!important;height:auto!important;max-height:none!important;}
       .sched-item-row input{border:none!important;background:transparent!important;font-size:inherit!important;}
     }
     .sched-print-area{font-family:'Cormorant Garamond',Georgia,serif;max-width:900px;margin:0 auto;padding:32px 40px;background:#fff;}
