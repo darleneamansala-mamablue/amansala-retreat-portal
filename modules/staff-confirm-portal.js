@@ -22,10 +22,59 @@ const DEF_STAFF_CONFIRM=[
   {id:'sc_maya',name:'Maya',username:'maya',password:'maya2026',active:true},
   {id:'sc_kiki',name:'Kiki',username:'kiki',password:'kiki2026',active:true},
   {id:'sc_marco',name:'Marco',username:'marco',password:'marco2026',active:true},
-  {id:'sc_rubi',name:'Rubi',username:'rubi',password:'rubi2026',active:true},
+  {id:'sc_rubi',name:'Rubi',username:'rubi',password:'rubi2026',active:true,isPayrollAdmin:true},
   {id:'sc_rosy',name:'Rosy',username:'rosy',password:'rosy2026',active:true},
   {id:'sc_kike',name:'Kike',username:'kike',password:'kike2026',active:true},
 ];
+// BBC pay rates per confirmed session — Darlene's spec (2026-08-29). Anything
+// not listed here (tours, ceremonies, meals, Opening Circle, Departures) has
+// no rate and shows as "no rate set" in payroll rather than being silently
+// skipped or paid $0 without explanation.
+const BBC_PAY_RATES={
+  'yoga':800,'yoga mala':800,'gentle yoga':800,
+  'circuit training':1000,'bbc 20':1000,'sculpt & tone':1000,'boxing':1000,'absolution':1000,'pilates':1000,
+  'latin grooves':1000,'afrobeats':1000,'bollywood':1000,'salsa':1000,'dance':1000,
+  'morning beach walk':500,
+};
+function bbcPayRateFor(activity){
+  if(!activity)return null;
+  const a=activity.trim().toLowerCase();
+  if(a.indexOf('grand rising')===0)return 250; // activation slot — Breathwork/Meditation
+  return BBC_PAY_RATES[a]!=null?BBC_PAY_RATES[a]:null;
+}
+// Only CONFIRMED sessions count toward pay — matches the spa payroll
+// convention of paying for completed work, not everything scheduled.
+function scComputeBbcPayroll(){
+  const byName={};
+  (typeof bbcSchedules!=='undefined'?bbcSchedules:[]).forEach(s=>{
+    if(s.status!=='confirmed')return;
+    (s.days||[]).forEach(day=>{
+      (day.slots||[]).forEach(slot=>{
+        if(!slot.confirmed||!slot.instructor)return;
+        const name=slot.instructor.trim();if(!name)return;
+        if(!byName[name])byName[name]={name,sessions:[],unrated:[],total:0};
+        const rate=bbcPayRateFor(slot.activity);
+        if(rate==null){byName[name].unrated.push(slot.activity);return;}
+        byName[name].sessions.push({date:day.date,activity:slot.activity,schedName:s.name,rate});
+        byName[name].total+=rate;
+      });
+    });
+  });
+  return Object.values(byName).sort((a,b)=>b.total-a.total);
+}
+function scPayrollTableHtml(){
+  const rows=scComputeBbcPayroll();
+  if(!rows.length)return'<div style="text-align:center;padding:30px;color:#c8bfb5;font-style:italic">No confirmed BBC sessions yet.</div>';
+  return`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <thead><tr style="background:#faf7f2"><th style="padding:8px 10px;text-align:left;color:#5a5048">Instructor</th><th style="padding:8px 10px;text-align:left;color:#5a5048">Confirmed Sessions</th><th style="padding:8px 10px;text-align:left;color:#5a5048">Unrated</th><th style="padding:8px 10px;text-align:right;color:#5a5048">Total</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr style="border-bottom:1px solid #f0ece4;vertical-align:top">
+      <td style="padding:9px 10px;font-weight:700;color:var(--dark)">${r.name}</td>
+      <td style="padding:9px 10px;font-size:11.5px;color:#5a5048">${r.sessions.map(s=>`${s.activity} — ${s.date} ($${s.rate})`).join('<br>')||'—'}</td>
+      <td style="padding:9px 10px;font-size:11.5px;color:#c8a468;font-style:italic">${r.unrated.length?'no rate set: '+r.unrated.join(', '):'—'}</td>
+      <td style="padding:9px 10px;font-weight:800;color:var(--teal,#2d6a6a);text-align:right;white-space:nowrap">$${r.total.toFixed(2)}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
 let staffConfirmAccounts=[];
 let currentStaffConfirmSession=null;
 
@@ -237,7 +286,7 @@ function scItemCardHtml(item,forAdmin){
   const onClick=item.domain==='bbc'?`scConfirmBbc('${item.schedId}',${item.di},${item.si},'${whoEsc}')`
     :item.domain==='spa'?`scConfirmSpa('${item.id}','${whoEsc}')`
     :`scConfirmTour('${item.opsKey}','${item.role}','${whoEsc}')`;
-  const refresh=forAdmin?';scRenderAdminBoard()':';scRenderDashboard()';
+  const refresh=forAdmin?';scRenderAdminBoard();scRenderPayrollBoardIfPresent()':';scRenderDashboard()';
   const confirmedLabel='&#10003; Confirmed'+(item.confirmedBy?' by '+scInitials(item.confirmedBy):'');
   return`<div style="background:#fff;border:1.5px solid ${item.confirmed?'#86efac':'#e8dfd4'};border-radius:12px;padding:16px 18px;margin-bottom:10px;opacity:${isPast&&!item.confirmed?'.55':'1'}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
@@ -262,6 +311,8 @@ function scRenderDashboard(){
   const tour=scTourItemsForName(name).sort((a,b)=>a.date.localeCompare(b.date));
   const section=(title,items)=>items.length?`<div style="margin-bottom:26px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">${title}</div>${items.map(i=>scItemCardHtml(i,false)).join('')}</div>`:'';
   const all=[...bbc,...spa,...tour];
+  const account=staffConfirmAccounts.find(a=>a.id===session.id);
+  const isPayrollAdmin=!!account?.isPayrollAdmin;
   root.innerHTML=`
     <div style="max-width:640px;margin:0 auto;padding:28px 20px 60px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
@@ -275,7 +326,15 @@ function scRenderDashboard(){
       ${section('Bikini Bootcamp',bbc)}
       ${section('Spa',spa)}
       ${section('Tours',tour)}
+      ${isPayrollAdmin?`<div style="margin-top:10px">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">Bikini Bootcamp Payroll — All Staff</div>
+        <div id="scStaffPayrollBoard" style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">${scPayrollTableHtml()}</div>
+      </div>`:''}
     </div>`;
+}
+function scRenderPayrollBoardIfPresent(){
+  const admin=document.getElementById('scPayrollBoard');if(admin)admin.innerHTML=scPayrollTableHtml();
+  const staff=document.getElementById('scStaffPayrollBoard');if(staff)staff.innerHTML=scPayrollTableHtml();
 }
 
 // ===== ADMIN — manage accounts + read/toggle every domain's confirm status =====
@@ -293,6 +352,12 @@ function scAdminAddAccount(){
 function scAdminToggleActive(id){
   const a=staffConfirmAccounts.find(x=>x.id===id);if(!a)return;
   a.active=!a.active;
+  saveStaffConfirmAccounts();
+  scRenderAdminAccounts();
+}
+function scAdminTogglePayrollAdmin(id){
+  const a=staffConfirmAccounts.find(x=>x.id===id);if(!a)return;
+  a.isPayrollAdmin=!a.isPayrollAdmin;
   saveStaffConfirmAccounts();
   scRenderAdminAccounts();
 }
@@ -315,6 +380,7 @@ function scRenderAdminAccounts(){
       <div style="flex:1;min-width:120px;font-weight:700;color:var(--dark);font-size:13px">${a.name}</div>
       <div style="font-size:12px;color:var(--muted);min-width:90px">@${a.username}</div>
       <div style="font-size:12px;color:var(--muted);font-family:monospace;min-width:100px">${a.password}</div>
+      <button onclick="scAdminTogglePayrollAdmin('${a.id}')" title="Can see everyone's hours + BBC payroll, not just their own" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid ${a.isPayrollAdmin?'#93c5fd':'#e8dfd4'};background:${a.isPayrollAdmin?'#dbeafe':'#f5f5f0'};color:${a.isPayrollAdmin?'#1d4ed8':'#9ca3af'};cursor:pointer">${a.isPayrollAdmin?'★ Payroll Admin':'Payroll Admin'}</button>
       <button onclick="scAdminToggleActive('${a.id}')" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid ${a.active?'#86efac':'#e8dfd4'};background:${a.active?'#dcfce7':'#f5f5f0'};color:${a.active?'#15803d':'#9ca3af'};cursor:pointer">${a.active?'Active':'Disabled'}</button>
       <button onclick="scAdminRemoveAccount('${a.id}')" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;cursor:pointer">Remove</button>
     </div>`).join('');
@@ -331,6 +397,8 @@ async function scAdminInit(){
     (typeof actOpsLoad==='function'?actOpsLoad():Promise.resolve()),
   ]);
   scRenderAdminBoard();
+  const payrollEl=document.getElementById('scPayrollBoard');
+  if(payrollEl)payrollEl.innerHTML=scPayrollTableHtml();
 }
 
 function scRenderAdminBoard(){
