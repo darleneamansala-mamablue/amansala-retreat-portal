@@ -412,8 +412,9 @@ function bbcUpdateNights(){
     excSec.style.display='none';
     return;
   }
+  const recNote=nights===4?' — 2 tours recommended for a 4-night camp':'';
   if(excLabel)excLabel.innerHTML='Special Activity Days <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">'
-    +(tourMode==='custom'?'(pick the tour or ceremony for each day)':'(auto-assigned; lunch served later on return)')+'</span>';
+    +(tourMode==='custom'?'(pick the tour or ceremony for each day)':'(auto-assigned; lunch served later on return)')+recNote+'</span>';
   let html='';
   for(let i=1;i<total-1;i++){
     const date=bbcAddDays(start,i);
