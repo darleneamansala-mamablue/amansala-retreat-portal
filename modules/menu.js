@@ -1029,7 +1029,15 @@ let menuActualKg={}; // { [dayIndex]: {midday: kg, dinner: kg} } — actual prot
 function menuSetGuestCount(val){
   menuCostGuestCount=parseInt(val)||1;
   localStorage.setItem('amansala_menu_guest_count',String(menuCostGuestCount));
+  const active=document.activeElement;
+  const wasGuestInput=active&&active.id==='menuCostGuestInput';
+  const selStart=wasGuestInput?active.selectionStart:null;
+  const selEnd=wasGuestInput?active.selectionEnd:null;
   menuRenderCostPanel();
+  if(wasGuestInput){
+    const el=document.getElementById('menuCostGuestInput');
+    if(el){el.focus();try{el.setSelectionRange(selStart,selEnd);}catch(e){}}
+  }
 }
 function menuSetActualKg(di,meal,val){
   if(!menuActualKg[di])menuActualKg[di]={};
@@ -1235,7 +1243,7 @@ function menuRenderCostPanel(){
         <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
           <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Weekly Menu Cost Estimate — per person (MXN)</span>
           <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--dark)">Guests: <input type="number" min="1" value="${menuCostGuestCount}" onchange="menuSetGuestCount(this.value)" style="width:60px;padding:4px 7px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px"></label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--dark)">Guests: <input id="menuCostGuestInput" type="number" min="1" value="${menuCostGuestCount}" oninput="menuSetGuestCount(this.value)" style="width:60px;padding:4px 7px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px"></label>
             <span style="font-size:12.5px;font-weight:700;color:var(--teal,#2d6a6a)">Week total: $${weeklyTotal.toFixed(2)}/person</span>
             <span style="font-size:12.5px;font-weight:700;color:var(--teal,#2d6a6a)">Group total (${menuCostGuestCount}): $${(weeklyTotal*menuCostGuestCount).toFixed(2)} MXN</span>
           </div>

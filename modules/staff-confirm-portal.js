@@ -384,6 +384,96 @@ function scCancelAssignment(domain,a,b,c){
   }
 }
 
+// Global availability check other modules (bbc-schedule.js) consult before
+// assigning an instructor — no account on file, or no date/name given, means
+// "don't block" (we can't know they're unavailable if we have no record).
+function scIsAvailable(name,date){
+  if(!name||!date)return true;
+  const list=(typeof staffConfirmAccounts!=='undefined'?staffConfirmAccounts:[]);
+  const acct=list.find(a=>a.name.trim().toLowerCase()===name.trim().toLowerCase());
+  if(!acct)return true;
+  return !(acct.unavailableDates||[]).includes(date);
+}
+
+function scAvailabilityHtml(account){
+  const dates=(account.unavailableDates||[]).slice().sort();
+  const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});};
+  return`<div style="margin-top:10px;margin-bottom:26px">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">My Availability</div>
+    <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:16px 18px">
+      <div style="font-size:12.5px;color:#8a7e74;margin-bottom:12px">Mark dates you're NOT available — you won't be scheduled for BBC classes on these days.</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <input type="date" id="scUnavailInput" style="flex:1;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+        <button onclick="scAddUnavailable()" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Mark Unavailable</button>
+      </div>
+      ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(d)}</span><button onclick="scRemoveUnavailable('${d}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked — you\'re available for everything.</div>'}
+    </div>
+  </div>`;
+}
+function scAddUnavailable(){
+  const val=document.getElementById('scUnavailInput').value;if(!val)return;
+  const session=getStaffConfirmSession();if(!session)return;
+  const account=staffConfirmAccounts.find(a=>a.id===session.id);if(!account)return;
+  account.unavailableDates=account.unavailableDates||[];
+  if(!account.unavailableDates.includes(val))account.unavailableDates.push(val);
+  saveStaffConfirmAccounts();
+  scRenderDashboard();
+}
+function scRemoveUnavailable(date){
+  const session=getStaffConfirmSession();if(!session)return;
+  const account=staffConfirmAccounts.find(a=>a.id===session.id);if(!account)return;
+  account.unavailableDates=(account.unavailableDates||[]).filter(d=>d!==date);
+  saveStaffConfirmAccounts();
+  scRenderDashboard();
+}
+
+// ===== Team availability editing — for Payroll Admin accounts (e.g. Rubi, Darlene) =====
+function scTeamAvailabilityHtml(){
+  const today=new Date().toISOString().slice(0,10);
+  const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});};
+  const staff=staffConfirmAccounts.filter(a=>a.active).slice().sort((a,b)=>a.name.localeCompare(b.name));
+  return`<div style="margin-top:10px;margin-bottom:26px">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">Team Availability — Edit Anyone's Dates</div>
+    <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
+      ${staff.map(a=>{
+        const dates=(a.unavailableDates||[]).slice().sort();
+        const upcoming=dates.filter(d=>d>=today);
+        return`<details style="border-bottom:1px solid #f0ece4">
+          <summary style="cursor:pointer;padding:12px 16px;font-size:13px;font-weight:700;color:#2d2520;display:flex;justify-content:space-between;align-items:center">
+            <span>${a.name}</span>
+            ${upcoming.length?`<span style="font-size:10.5px;font-weight:700;color:#dc2626">🚫 ${upcoming.length} date${upcoming.length>1?'s':''}</span>`:'<span style="font-size:10.5px;color:#c8bfb5;font-style:italic">available</span>'}
+          </summary>
+          <div style="padding:0 16px 14px">
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <input type="date" id="scTeamUnavailInput_${a.id}" style="flex:1;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+              <button onclick="scTeamAddUnavailable('${a.id}')" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Mark Unavailable</button>
+            </div>
+            ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(d)}</span><button onclick="scTeamRemoveUnavailable('${a.id}','${d}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked.</div>'}
+          </div>
+        </details>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+function scTeamRefreshWhicheverView(){
+  if(document.getElementById('scAccountsList'))scRenderAdminAccounts();
+  if(document.getElementById('staffConfirmDashboard'))scRenderDashboard();
+}
+function scTeamAddUnavailable(id){
+  const input=document.getElementById('scTeamUnavailInput_'+id);const val=input?input.value:'';if(!val)return;
+  const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
+  account.unavailableDates=account.unavailableDates||[];
+  if(!account.unavailableDates.includes(val))account.unavailableDates.push(val);
+  saveStaffConfirmAccounts();
+  scTeamRefreshWhicheverView();
+}
+function scTeamRemoveUnavailable(id,date){
+  const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
+  account.unavailableDates=(account.unavailableDates||[]).filter(d=>d!==date);
+  saveStaffConfirmAccounts();
+  scTeamRefreshWhicheverView();
+}
+
 function scRenderDashboard(){
   const root=document.getElementById('staffConfirmDashboard');if(!root)return;
   const session=getStaffConfirmSession();if(!session)return;
@@ -408,6 +498,8 @@ function scRenderDashboard(){
       ${section('Bikini Bootcamp',bbc)}
       ${section('Spa',spa)}
       ${section('Tours',tour)}
+      ${account?scAvailabilityHtml(account):''}
+      ${isPayrollAdmin?scTeamAvailabilityHtml():''}
       ${isPayrollAdmin?`<div style="margin-top:10px">
         <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">Bikini Bootcamp Payroll — All Staff</div>
         <div id="scStaffPayrollBoard" style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">${scPayrollTableHtml()}</div>
@@ -457,15 +549,30 @@ function scCopyLoginLink(){
 
 function scRenderAdminAccounts(){
   const el=document.getElementById('scAccountsList');if(!el)return;
-  el.innerHTML=staffConfirmAccounts.map(a=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;margin-bottom:7px;background:${a.active?'#fff':'#f5f5f0'}">
-      <div style="flex:1;min-width:120px;font-weight:700;color:var(--dark);font-size:13px">${a.name}</div>
-      <div style="font-size:12px;color:var(--muted);min-width:90px">@${a.username}</div>
-      <div style="font-size:12px;color:var(--muted);font-family:monospace;min-width:100px">${a.password}</div>
-      <button onclick="scAdminTogglePayrollAdmin('${a.id}')" title="Can see everyone's hours + BBC payroll, not just their own" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid ${a.isPayrollAdmin?'#93c5fd':'#e8dfd4'};background:${a.isPayrollAdmin?'#dbeafe':'#f5f5f0'};color:${a.isPayrollAdmin?'#1d4ed8':'#9ca3af'};cursor:pointer">${a.isPayrollAdmin?'★ Payroll Admin':'Payroll Admin'}</button>
-      <button onclick="scAdminToggleActive('${a.id}')" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid ${a.active?'#86efac':'#e8dfd4'};background:${a.active?'#dcfce7':'#f5f5f0'};color:${a.active?'#15803d':'#9ca3af'};cursor:pointer">${a.active?'Active':'Disabled'}</button>
-      <button onclick="scAdminRemoveAccount('${a.id}')" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;cursor:pointer">Remove</button>
-    </div>`).join('');
+  const today=new Date().toISOString().slice(0,10);
+  const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
+  el.innerHTML=staffConfirmAccounts.map(a=>{
+    const dates=(a.unavailableDates||[]).slice().sort();
+    const upcoming=dates.filter(d=>d>=today);
+    return`
+    <details style="border:1.5px solid var(--border);border-radius:9px;margin-bottom:7px;background:${a.active?'#fff':'#f5f5f0'}">
+      <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:9px 12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:120px;font-weight:700;color:var(--dark);font-size:13px">${a.name}${upcoming.length?`<div style="font-weight:600;color:#dc2626;font-size:10.5px;margin-top:2px">🚫 ${upcoming.map(fmtD).join(', ')}</div>`:''}</div>
+        <div style="font-size:12px;color:var(--muted);min-width:90px">@${a.username}</div>
+        <div style="font-size:12px;color:var(--muted);font-family:monospace;min-width:100px">${a.password}</div>
+        <button onclick="event.preventDefault();scAdminTogglePayrollAdmin('${a.id}')" title="Can see everyone's hours + BBC payroll, and edit everyone's availability" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid ${a.isPayrollAdmin?'#93c5fd':'#e8dfd4'};background:${a.isPayrollAdmin?'#dbeafe':'#f5f5f0'};color:${a.isPayrollAdmin?'#1d4ed8':'#9ca3af'};cursor:pointer">${a.isPayrollAdmin?'★ Payroll Admin':'Payroll Admin'}</button>
+        <button onclick="event.preventDefault();scAdminToggleActive('${a.id}')" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid ${a.active?'#86efac':'#e8dfd4'};background:${a.active?'#dcfce7':'#f5f5f0'};color:${a.active?'#15803d':'#9ca3af'};cursor:pointer">${a.active?'Active':'Disabled'}</button>
+        <button onclick="event.preventDefault();scAdminRemoveAccount('${a.id}')" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;cursor:pointer">Remove</button>
+      </summary>
+      <div style="padding:0 12px 12px;border-top:1px solid #f0ece4;margin-top:2px">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin:10px 0 8px">Edit Availability</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="date" id="scTeamUnavailInput_${a.id}" style="flex:1;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+          <button onclick="scTeamAddUnavailable('${a.id}')" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Mark Unavailable</button>
+        </div>
+        ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(d)}</span><button onclick="scTeamRemoveUnavailable('${a.id}','${d}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked.</div>'}
+      </div>
+    </details>`;}).join('');
 }
 
 async function scAdminInit(){
