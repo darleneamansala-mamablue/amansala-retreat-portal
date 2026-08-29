@@ -10,6 +10,7 @@ let actSummaryFilterBkId = '';
 let actSummaryShowUndated = false;
 const TOUR_GUIDE_NAMES=['Marco','Yolanda','Sergio','Ryan'];
 const TOUR_DRIVER_NAMES=['Rubi','Rosy','Kike'];
+const TEMAZCAL_FIRE_KEEPER_NAMES=['Golloy','Francisco'];
 
 function actSummarySetFilter(field, val) {
   if (field === 'bkId') actSummaryFilterBkId = val;
@@ -776,7 +777,7 @@ function actSheetRenderSummary() {
             ${ops.driverConfirmedAt?`<span style="font-size:10.5px;color:#2563eb">✓ Driver confirmed ${new Date(ops.driverConfirmedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>`:''}
           </div>
           ${ops.privateTour?`<div style="font-size:12px;color:#6d28d9;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:7px;padding:8px 12px;margin-bottom:10px">This group goes separately — assign a dedicated guide &amp; van below. Other groups can still book the same activity on a different van.</div>`:''}
-          <div id="${costElId}" data-signed="${totalSigned}" data-aoid="${e.ao.id}">${actOpsCostHtml(ops,totalSigned,e.ao.id)}</div>
+          <div id="${costElId}" data-signed="${totalSigned}" data-aoid="${e.ao.id}">${actOpsCostHtml(ops,totalSigned,e.ao.id,opsKey)}</div>
         </div>`;
       })()}
     </div>`;
@@ -815,19 +816,19 @@ function actOpsRefreshCost(opsKey) {
   const ops = actOpsData[opsKey]||{};
   const totalSigned = parseInt(el.dataset.signed||'0');
   const aoId = el.dataset.aoid||'';
-  el.innerHTML = actOpsCostHtml(ops, totalSigned, aoId);
+  el.innerHTML = actOpsCostHtml(ops, totalSigned, aoId, opsKey);
 }
 const ACT_COSTS = {
   ao1: {entrance:515, entranceLabel:'Tulum Ruins Entrance'},
   ao3: {entrance:1000, entranceLabel:'Atik Art Tour Entrance'},
   ao6: {entrance:350, entranceLabel:'Grande Cenote Entrance'},
   ao9: {guideMXN:800, clayUSDpp:6, clientUSDpp:65},
-  ao5: {golly:1500, ceremonyLead:2000, herbs:20},
+  ao5: {golly:1500, ceremonyLeadBase:2000, ceremonyLeadBasePax:10, ceremonyLeadExtraPP:100, herbs:20},
   ao4: {splitNote:true},
   ao10: {perPersonUSD:45, ryan:0.40, ice:0.10, melissa:0.50}
 };
 
-function actOpsCostHtml(ops, totalSigned, aoId) {
+function actOpsCostHtml(ops, totalSigned, aoId, opsKey) {
   const VAN_COST_MIGUEL=2000, VAN_COST_INHOUSE=170, VAN_CAP=11; // 170 MXN ≈ $10 USD gas
   const ac = ACT_COSTS[aoId]||{};
   // Count vans by type across van1/van2/van3
@@ -850,13 +851,21 @@ function actOpsCostHtml(ops, totalSigned, aoId) {
   // Temazcal: on-site ceremony — no transport
   if (aoId==='ao5') {
     const golly = ac.golly;
-    const lead = ac.ceremonyLead;
+    // $2000 covers up to 10 pax; +$100/extra person; e.g. 20 pax = $3000
+    const basePax = ac.ceremonyLeadBasePax||10;
+    const extraPax = Math.max(0, totalSigned - basePax);
+    const lead = ac.ceremonyLeadBase + extraPax*ac.ceremonyLeadExtraPP;
     const herbsCost = totalSigned>0 ? ac.herbs*totalSigned : 0;
     const total = golly+lead+herbsCost;
+    const fireKeeperOpts = ['',...TEMAZCAL_FIRE_KEEPER_NAMES].map(v=>`<option value="${v}" ${ops.fireKeeper===v?'selected':''}>${v||'— Fire Keeper —'}</option>`).join('');
+    const fireKeeperSel = opsKey?`<select onchange="actOpsSet('${opsKey}','fireKeeper',this.value)" style="padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:11.5px;color:var(--dark);background:#fff;margin-left:6px">${fireKeeperOpts}</select>`:'';
     return `<div>
       ${secHdr('Entry / Ceremony Costs')}
-      ${row('Golly — Fire Keeper',golly,'fixed')}
-      ${row('Ceremony Lead (María Luisa / Gaby)',lead,'fixed')}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12.5px;border-bottom:1px solid #f0ebe0">
+        <span style="color:#374151;display:flex;align-items:center">Fire Keeper${fireKeeperSel}</span>
+        <span style="font-weight:600;color:var(--dark)">${golly>0?golly.toLocaleString()+' MXN':'—'}</span>
+      </div>
+      ${row('Ceremony Lead (María Luisa / Gaby)',lead,totalSigned>basePax?basePax+' pax + '+extraPax+' extra × $'+ac.ceremonyLeadExtraPP:'up to '+basePax+' pax, fixed')}
       ${totalSigned>0?row('Herbs',herbsCost,totalSigned+' pax × $'+ac.herbs):''}
       ${total?totalRow(total):''}
     </div>`;
