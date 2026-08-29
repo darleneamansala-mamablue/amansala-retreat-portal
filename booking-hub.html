@@ -3013,25 +3013,27 @@
     <h3 style="margin:0 0 4px;font-size:22px;font-family:'Cormorant Garamond',serif;color:var(--dark)">Staff Confirmations</h3>
     <div style="font-size:12.5px;color:var(--muted);margin-bottom:20px">Instructors, therapists, and guides sign in on their own device to see just their hours and confirm them — no financials, no other tabs.</div>
 
-    <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:22px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Staff Logins</div>
-        <button onclick="scCopyLoginLink()" style="padding:6px 14px;background:#fff;color:#374151;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12px;font-weight:600;cursor:pointer">🔗 Copy Login Link</button>
-      </div>
-      <div id="scAccountsList" style="margin-bottom:14px"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:10px;border-top:1px solid var(--border)">
-        <input id="scNewName" placeholder="Name" style="flex:1;min-width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;outline:none">
-        <input id="scNewUser" placeholder="Username" style="flex:1;min-width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;outline:none">
-        <input id="scNewPass" placeholder="Password" style="flex:1;min-width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;outline:none">
-        <button onclick="scAdminAddAccount()" style="padding:8px 16px;background:var(--teal);color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer">+ Add</button>
-      </div>
-    </div>
-
     <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px">Confirmation Status — All Staff</div>
     <div id="scAdminBoard"></div>
 
     <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:26px 0 10px">Bikini Bootcamp Payroll <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10.5px">(confirmed sessions only)</span></div>
     <div id="scPayrollBoard" style="background:#fff;border:1.5px solid var(--border);border-radius:12px;overflow:hidden"></div>
+
+    <details style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:0;margin:26px 0 22px;overflow:hidden">
+      <summary style="cursor:pointer;list-style:none;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Staff Logins</span>
+        <button onclick="event.preventDefault();event.stopPropagation();scCopyLoginLink()" style="padding:6px 14px;background:#fff;color:#374151;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12px;font-weight:600;cursor:pointer">🔗 Copy Login Link</button>
+      </summary>
+      <div style="padding:0 22px 20px">
+        <div id="scAccountsList" style="margin-bottom:14px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:10px;border-top:1px solid var(--border)">
+          <input id="scNewName" placeholder="Name" style="flex:1;min-width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;outline:none">
+          <input id="scNewUser" placeholder="Username" style="flex:1;min-width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;outline:none">
+          <input id="scNewPass" placeholder="Password" style="flex:1;min-width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;outline:none">
+          <button onclick="scAdminAddAccount()" style="padding:8px 16px;background:var(--teal);color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer">+ Add</button>
+        </div>
+      </div>
+    </details>
   </div>
 </div>
 </div><!-- /appBody -->
