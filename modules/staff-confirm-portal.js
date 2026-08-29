@@ -128,6 +128,7 @@ function scSessionName(){return(getStaffConfirmSession()?.name||'').trim().toLow
 function scBbcItemsForName(name){
   const items=[];
   (typeof bbcSchedules!=='undefined'?bbcSchedules:[]).forEach(s=>{
+    if(s.status!=='confirmed')return; // still-changing drafts don't show to staff yet
     (s.days||[]).forEach((day,di)=>{
       (day.slots||[]).forEach((slot,si)=>{
         if(slot.type==='meal')return;

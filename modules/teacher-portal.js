@@ -4342,7 +4342,8 @@ function skedBuild(){
   const dateStr=fmtISO(skedViewDate);
   const retreatEvs=skedGetRetreatEvents(dateStr);
   const manualEvs=schedEvents.filter(e=>e.date===dateStr);
-  const allEvs=[...retreatEvs,...manualEvs];
+  const bbcEvs=typeof skedGetBbcEvents==='function'?skedGetBbcEvents(dateStr):[];
+  const allEvs=[...retreatEvs,...manualEvs,...bbcEvs];
 
   const allCols=[...SKED_SHALAS.map(s=>({...s,group:'shala'})),...SKED_ACTIVITIES.map(a=>({...a,group:'activity'}))];
   const gridH=(SKED_END_H-SKED_START_H)*SKED_PX_HR;
@@ -4444,7 +4445,7 @@ function skedBuild(){
 function skedBuildWeek(weekStart,DAYS_SHORT,MONTHS_LONG){
   const dates=[];for(let i=0;i<7;i++)dates.push(addDays(weekStart,i));
   const allEvs={};
-  dates.forEach(d=>{const ds=fmtISO(d);allEvs[ds]=[...skedGetRetreatEvents(ds),...schedEvents.filter(e=>e.date===ds)];});
+  dates.forEach(d=>{const ds=fmtISO(d);allEvs[ds]=[...skedGetRetreatEvents(ds),...schedEvents.filter(e=>e.date===ds),...(typeof skedGetBbcEvents==='function'?skedGetBbcEvents(ds):[])];});
   const allCols=[...SKED_SHALAS,...SKED_ACTIVITIES];
   const gridH=(SKED_END_H-SKED_START_H)*SKED_PX_HR;
   const DAY_COL_W=Math.max(100, Math.floor((SKED_COL_W*allCols.length)/7));
@@ -4494,7 +4495,7 @@ function skedBuildList(days,DAYS_LONG,MONTHS_LONG){
   for(let i=0;i<days;i++){
     const d=addDays(skedViewDate,i);
     const ds=fmtISO(d);
-    const evs=[...skedGetRetreatEvents(ds),...schedEvents.filter(e=>e.date===ds)].sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||''));
+    const evs=[...skedGetRetreatEvents(ds),...schedEvents.filter(e=>e.date===ds),...(typeof skedGetBbcEvents==='function'?skedGetBbcEvents(ds):[])].sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||''));
     if(!evs.length)continue;
     hasAny=true;
     const isToday=ds===fmtISO(new Date());
@@ -4536,6 +4537,11 @@ const SKED_CLASS_SUFFIX_INFO={
 };
 
 function skedClickEvent(evId,bkId,isRetreat,dateStr){
+  if(typeof evId==='string'&&evId.indexOf('bbc_')===0){
+    const schedId=evId.slice(4);
+    if(typeof bbcJumpToSchedule==='function')bbcJumpToSchedule(schedId);
+    return;
+  }
   if(isRetreat){
     const prefix='ret_'+bkId+'_';
     const suffix=evId.indexOf(prefix)===0?evId.slice(prefix.length):'';

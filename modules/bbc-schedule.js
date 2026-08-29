@@ -44,6 +44,12 @@ const BBC_TOUR_AOID_NAME={ao1:'Tulum Ruins',ao6:'Grande Cenote Tour',ao7:'Mangro
 // Tours are off-site — no Amansala shala to assign, so the location field
 // is hidden for these rows instead of showing an always-empty input.
 const BBC_TOUR_NAMES=new Set([...Object.values(BBC_TOUR_AOID_NAME),'Excursion']);
+// Ceremonies/rituals BBC can offer alongside tours — same set as the general
+// retreat add-ons list, so names/aoIds line up across both systems. Unlike
+// tours these happen on property, so they keep an editable location field.
+const BBC_CEREMONY_AOID_NAME={ao5:'Temazcal',ao4:'Sound Healing & Cacao Ceremony',ao9:'Mayan Clay Ceremony',ao10:'Ice Bath & Breathwork'};
+// Combined picker list for Custom mode — tours first, then ceremonies.
+const BBC_SPECIAL_ACTIVITY_OPTIONS=[...Object.values(BBC_TOUR_AOID_NAME),...Object.values(BBC_CEREMONY_AOID_NAME)];
 
 // The two modules talk to each other here: if a yoga retreat is on the
 // books for this date with a tour already scheduled, BBC's excursion uses
@@ -65,6 +71,65 @@ function bbcLocToShalaId(loc){
   if(!loc)return null;
   const m={'beachfront':'beachfront','grande':'grande','heaven':'heaven','chica':'chica','skye':'skye'};
   return m[loc.toLowerCase().trim()]||null;
+}
+
+// ── SHALA/ACTIVITY CALENDAR INTEGRATION ──
+// Confirmed BBC schedules show up as blocks on the Schedule tab's master
+// calendar (modules/teacher-portal.js skedBuild()), same as yoga retreat
+// classes and tours — so room usage is visible in one place either way.
+// Draft schedules stay BBC-tab-only until Darlene clicks Confirm Schedule.
+const BBC_SKED_AOID_TO_COL={ao1:'ruins',ao6:'cenote',ao7:'mangroves',ao2:'muyil',ao3:'atik',ao4:'cacao',ao5:'temazcal',ao9:'clay',ao10:'icebath'};
+function bbcActivityNameToSkedCol(name){
+  const all={...BBC_TOUR_AOID_NAME,...BBC_CEREMONY_AOID_NAME};
+  for(const aoId in all){if(all[aoId]===name)return BBC_SKED_AOID_TO_COL[aoId]||null;}
+  return null;
+}
+// BBC slot times are a contextual 12-hour clock with no am/pm marker — every
+// time string the generator produces falls in one of two bands: 7,8,9,10,11
+// are always morning; 12,1,2,3,4,5,6 are always afternoon/evening (nothing
+// runs before 7am, and nothing uses a bare "12:xx" as an event start).
+function bbcTimeTo24h(t){
+  const m=(t||'').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if(!m)return null;
+  let h=parseInt(m[1],10);const mins=m[2];
+  if(h<7)h+=12;
+  return String(h).padStart(2,'0')+':'+mins;
+}
+function bbcSlotTimeRange(timeStr,defaultDurMin){
+  if(!timeStr)return null;
+  const parts=timeStr.split('–').map(s=>s.trim());
+  const start=bbcTimeTo24h(parts[0]);
+  if(!start)return null;
+  let end=parts[1]?bbcTimeTo24h(parts[1]):null;
+  if(!end){
+    const[h,m]=start.split(':').map(Number);
+    const total=h*60+m+(defaultDurMin||45);
+    end=String(Math.floor(total/60)%24).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
+  }
+  return{start,end};
+}
+function skedGetBbcEvents(dateStr){
+  const evs=[];
+  (typeof bbcSchedules!=='undefined'?bbcSchedules:[]).forEach(s=>{
+    if(s.status!=='confirmed')return;
+    const day=(s.days||[]).find(d=>d.date===dateStr);
+    if(!day)return;
+    (day.slots||[]).forEach(slot=>{
+      if(slot.type==='meal')return;
+      const range=bbcSlotTimeRange(slot.time,45);
+      if(!range)return;
+      const isTour=BBC_TOUR_NAMES.has(slot.activity);
+      const isCeremony=Object.values(BBC_CEREMONY_AOID_NAME).includes(slot.activity);
+      const resourceId=(isTour||isCeremony)?bbcActivityNameToSkedCol(slot.activity):bbcLocToShalaId(slot.location);
+      if(!resourceId)return;
+      evs.push({
+        id:'bbc_'+s.id,resourceId,date:dateStr,startTime:range.start,endTime:range.end,
+        title:slot.activity,subtitle:'Bikini Bootcamp'+(slot.instructor?' — '+slot.instructor:''),
+        color:'#0e9494',bg:'#0e949422',textColor:'#0e7c7c',isRetreat:false,bkId:s.id,
+      });
+    });
+  });
+  return evs;
 }
 
 function bbcGetShalaConflicts(date,location){
@@ -121,11 +186,17 @@ function bbcLoadLocal(){try{bbcSchedules=JSON.parse(localStorage.getItem('bbc_sc
 // another — including a teacher's own confirmation of their classes.
 async function bbcLoadData(){
   bbcLoadLocal();
+  const localCount=bbcSchedules.length;
   try{
     const{data}=await db.from('app_store').select('value').eq('key','bbc_schedules').maybeSingle();
-    if(data?.value&&Array.isArray(data.value)){
+    if(data?.value&&Array.isArray(data.value)&&data.value.length){
       bbcSchedules=data.value;
       localStorage.setItem('bbc_schedules',JSON.stringify(bbcSchedules));
+    } else if(localCount>0){
+      // Supabase has nothing yet but this browser has real schedules —
+      // likely made before the sync fix. Push them up now so other
+      // devices/teachers can actually see them.
+      bbcSaveData();
     }
   }catch(e){}
   bbcLoaded=true;
@@ -231,26 +302,36 @@ function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount){
   return slots;
 }
 
-function bbcGenSchedule(name,start,nights,excursionDays,guestCount){
+function bbcGenSchedule(name,start,nights,excursionDays,guestCount,tourMode,customPicks){
   const total=nights+1; // arrival day + N nights; last day = departure morning
   const end=bbcAddDays(start,nights);
   const days=[];
-  const excDays=excursionDays||[];
-  // Match each excursion day to a concurrent yoga retreat's tour where one
-  // exists; otherwise fall back to the default Tulum Ruins -> Grande Cenote
-  // -> Mangroves order (repeating past the 3rd excursion day).
-  let defaultTourIdx=0;
+  const mode=tourMode||'auto';
+  // 'none' = no tours/ceremonies at all, regardless of what days were picked.
+  const excDays=mode==='none'?[]:(excursionDays||[]);
   const tourByDay={};
-  excDays.forEach(di=>{
-    const date=bbcAddDays(start,di);
-    const matched=bbcFindConcurrentTour(date);
-    tourByDay[di]=matched||BBC_DEFAULT_TOUR_ORDER[defaultTourIdx++%BBC_DEFAULT_TOUR_ORDER.length];
-  });
+  if(mode==='custom'){
+    // She picks the exact tour/ceremony per day — no auto-matching or
+    // default order involved.
+    excDays.forEach(di=>{tourByDay[di]=(customPicks&&customPicks[di])||null;});
+  } else {
+    // Match each excursion day to a concurrent yoga retreat's tour where one
+    // exists; otherwise fall back to the default Tulum Ruins -> Grande Cenote
+    // -> Mangroves order (repeating past the 3rd excursion day). Auto mode
+    // only ever picks real tours — there's no established default order for
+    // ceremonies, so those are Custom-only.
+    let defaultTourIdx=0;
+    excDays.forEach(di=>{
+      const date=bbcAddDays(start,di);
+      const matched=bbcFindConcurrentTour(date);
+      tourByDay[di]=matched||BBC_DEFAULT_TOUR_ORDER[defaultTourIdx++%BBC_DEFAULT_TOUR_ORDER.length];
+    });
+  }
   for(let i=0;i<total;i++){
     const prompt=BBC_MORNING_PAGES[Math.min(i,BBC_MORNING_PAGES.length-1)];
     days.push({date:bbcAddDays(start,i),prompt,note:'',slots:bbcGenDaySlots(i,total,excDays,tourByDay[i],guestCount)});
   }
-  return{id:bbcUid(),name,startDate:start,endDate:end,nights,guestCount:guestCount||null,status:'draft',createdAt:new Date().toISOString(),days};
+  return{id:bbcUid(),name,startDate:start,endDate:end,nights,guestCount:guestCount||null,tourMode:mode,status:'draft',createdAt:new Date().toISOString(),days};
 }
 
 function bbcDupInstructors(slots){
@@ -286,6 +367,7 @@ function bbcShowNewForm(){
   document.getElementById('bbcNewDayCount').style.display='none';
   document.getElementById('bbcExcursionSection').style.display='none';
   const r=document.querySelector('input[name="bbcNights"][value="5"]');if(r)r.checked=true;
+  const tm=document.querySelector('input[name="bbcTourMode"][value="auto"]');if(tm)tm.checked=true;
 }
 
 function bbcAutoName(){
@@ -302,20 +384,32 @@ function bbcAutoName(){
 function bbcUpdateNights(){
   const start=document.getElementById('bbcNewStart').value;
   const nights=parseInt((document.querySelector('input[name="bbcNights"]:checked')||{value:5}).value);
+  const tourMode=(document.querySelector('input[name="bbcTourMode"]:checked')||{value:'auto'}).value;
   const el=document.getElementById('bbcNewDayCount');
   const excSec=document.getElementById('bbcExcursionSection');
   const excDays=document.getElementById('bbcExcursionDays');
+  const excLabel=document.getElementById('bbcExcursionLabel');
   if(!start){el.style.display='none';excSec.style.display='none';return;}
   const end=bbcAddDays(start,nights);
   const total=nights+1;
   el.style.display='block';
   el.innerHTML='<span style="color:var(--teal);font-weight:700">'+total+' days / '+nights+' nights</span> &middot; '+bbcFmtDate(start)+' &rarr; '+bbcFmtDate(end);
   bbcAutoName();
+  if(tourMode==='none'){
+    excSec.style.display='none';
+    return;
+  }
+  if(excLabel)excLabel.innerHTML='Special Activity Days <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">'
+    +(tourMode==='custom'?'(pick the tour or ceremony for each day)':'(auto-assigned; lunch served later on return)')+'</span>';
   let html='';
   for(let i=1;i<total-1;i++){
     const date=bbcAddDays(start,i);
+    const picker=tourMode==='custom'
+      ?'<select id="bbcCustomPick_'+i+'" onclick="event.stopPropagation()" style="display:none;margin-left:6px;padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:\'Jost\',sans-serif;font-size:12px;color:var(--dark)"><option value="">— choose —</option>'
+        +BBC_SPECIAL_ACTIVITY_OPTIONS.map(n=>'<option value="'+n+'">'+n+'</option>').join('')+'</select>'
+      :'';
     html+='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:\'Jost\',sans-serif;font-size:12.5px;color:var(--dark)">'
-      +'<input type="checkbox" data-di="'+i+'" style="accent-color:var(--teal)"> Day '+i+' &mdash; '+bbcFmtDate(date)+'</label>';
+      +'<input type="checkbox" data-di="'+i+'"'+(tourMode==='custom'?' onchange="this.nextElementSibling.style.display=this.checked?\'inline-block\':\'none\'"':'')+' style="accent-color:var(--teal)"> Day '+i+' &mdash; '+bbcFmtDate(date)+picker+'</label>';
   }
   excDays.innerHTML=html;
   excSec.style.display=total>2?'':'none';
@@ -327,12 +421,36 @@ function bbcCreate(){
   const nights=parseInt((document.querySelector('input[name="bbcNights"]:checked')||{value:5}).value);
   const guestCount=parseInt(document.getElementById('bbcNewGuests').value)||0;
   if(!name||!start||!guestCount){alert('Please fill in all required fields.');return;}
+  const tourMode=(document.querySelector('input[name="bbcTourMode"]:checked')||{value:'auto'}).value;
   const excursionDays=[];
-  document.querySelectorAll('#bbcExcursionDays input[type=checkbox]:checked').forEach(cb=>{excursionDays.push(parseInt(cb.dataset.di));});
-  const sched=bbcGenSchedule(name,start,nights,excursionDays,guestCount);
+  const customPicks={};
+  if(tourMode!=='none'){
+    document.querySelectorAll('#bbcExcursionDays input[type=checkbox]:checked').forEach(cb=>{
+      const di=parseInt(cb.dataset.di);
+      excursionDays.push(di);
+      if(tourMode==='custom'){
+        const sel=document.getElementById('bbcCustomPick_'+di);
+        if(sel&&sel.value)customPicks[di]=sel.value;
+      }
+    });
+  }
+  const sched=bbcGenSchedule(name,start,nights,excursionDays,guestCount,tourMode,customPicks);
   bbcSchedules.unshift(sched);
   bbcSaveData();
   bbcOpenEditor(sched.id);
+}
+
+// Jump straight to a schedule's editor from outside the BBC tab (e.g. a
+// calendar click) — switches the panel WITHOUT going through switchTab's
+// bbcInit(), which is async and would call bbcShowList() moments later and
+// clobber the editor view this just opened.
+function bbcJumpToSchedule(schedId){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  const panel=document.getElementById('tab-bbcsched');if(panel)panel.classList.add('active');
+  const btn=document.getElementById('bbcSchedTabBtn');if(btn)btn.classList.add('active');
+  localStorage.setItem('ama_last_tab','bbcsched');
+  bbcOpenEditor(schedId);
 }
 
 function bbcOpenEditor(id){
