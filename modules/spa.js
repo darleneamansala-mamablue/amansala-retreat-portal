@@ -243,7 +243,7 @@ function spaSvcMarginHtml(s) {
 // Staff are paid in pesos, guests are priced in dollars — this rate is
 // approximate and only used to fold MXN pay into the USD margin math; it's
 // not a live feed. Update SPA_MXN_PER_USD if it drifts noticeably.
-const SPA_MXN_PER_USD = 18;
+const SPA_MXN_PER_USD = 17;
 
 // A therapist's actual take for one service, given their compensation row —
 // converted to USD so it can be compared against the (USD) service price.

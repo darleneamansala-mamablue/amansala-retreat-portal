@@ -121,10 +121,21 @@ function renderDots(total){
     `<div class="step-dot ${i+1<=SB.step?'on':''}"></div>`).join('');
 }
 
+// Group ceremonies price per-person once the minimum group size is met;
+// below that, specific flat prices per headcount (not a formula — these are
+// Darlene's real negotiated small-group rates, so no interpolation).
+function spaGroupPrice(s,n){
+  if(!s.groupPricing||!n||n<1)return null;
+  const gp=s.groupPricing;
+  if(n>=gp.minGroup)return gp.perPersonUSD*n;
+  return (gp.belowMin&&gp.belowMin[n]!=null)?gp.belowMin[n]:null;
+}
+
 function renderStep(){
   const el=document.getElementById('mainContent');
   if(SB.step===1) return renderStep1_SessionType(el);
   if(SB.step===2) return renderStep2_Service(el);
+  if(SB.step===2.5) return renderStep2b_GroupCount(el);
   if(SB.step===3) return renderStep3_GuestType(el);
   if(SB.step===4) return SB.guestType==='hotel' ? renderStep4_Hotel(el) : renderStep4_Offsite(el);
   if(SB.step===5) return renderStep5_Preference(el);
@@ -147,7 +158,7 @@ function sbPickSessionType(t){SB.sessionType=t;setStep(2);}
 // ── STEP 2 — SERVICE ─────────────────────────────────────────────────────
 function renderStep2_Service(el){
   renderDots(7);
-  const active=SpaData.services.filter(s=>s.active && s.price!=null && s.duration!=null && (s.sessionType||'individual')===SB.sessionType);
+  const active=SpaData.services.filter(s=>s.active && s.duration!=null && (s.groupPricing?true:s.price!=null) && (s.sessionType||'individual')===SB.sessionType);
   let html=`<button class="btn-back" onclick="setStep(1)">&#8249; Back</button><div class="card"><div class="section-title">Choose a Treatment</div><div class="section-sub">Select the service you'd like to book.</div>`;
   if(!active.length){
     html+=`<div class="no-slots">Nothing here is ready to book yet — please check back soon or contact us directly.</div>`;
@@ -157,17 +168,48 @@ function renderStep2_Service(el){
     if(!list.length) return;
     html+=`<div class="cat-label">${CAT_LABEL[cat]}</div>`;
     list.forEach(s=>{
+      const priceLbl=s.groupPricing?('from $'+spaGroupPrice(s,1)+' USD'):('$'+s.price+' USD');
       html+=`<div class="svc-card" onclick="sbPickService('${s.id}')">
         <div class="svc-name">${esc(s.name)}</div>
         ${s.description?`<div class="svc-desc">${esc(s.description)}</div>`:''}
-        <div class="svc-meta"><span>${s.duration} min</span><span class="svc-price">$${s.price} USD</span></div>
+        <div class="svc-meta"><span>${s.duration} min</span><span class="svc-price">${priceLbl}</span></div>
       </div>`;
     });
   });
   html+=`</div>`;
   el.innerHTML=html;
 }
-function sbPickService(id){SB.serviceId=id;setStep(3);}
+function sbPickService(id){
+  SB.serviceId=id;
+  const svc=SpaData.services.find(s=>s.id===id);
+  if(svc&&svc.groupPricing){SB.guestCount=SB.guestCount||svc.groupPricing.minGroup;SB.step=2.5;renderStep();return;}
+  setStep(3);
+}
+
+// ── STEP 2b — GROUP SIZE (group ceremonies only) ─────────────────────────
+function renderStep2b_GroupCount(el){
+  renderDots(7);
+  const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  const gp=svc.groupPricing;
+  const n=SB.guestCount||gp.minGroup;
+  const price=spaGroupPrice(svc,n);
+  const showWarn=gp.discourageSolo&&n>=1&&n<=2;
+  el.innerHTML=`<button class="btn-back" onclick="setStep(2)">&#8249; Back</button>
+    <div class="card">
+      <div class="section-title">${esc(svc.name)}</div>
+      <div class="section-sub">How many guests will be joining? (${gp.minGroup}+ gets the group rate of $${gp.perPersonUSD}/person)</div>
+      <div class="form-group"><label class="form-label">Number of Guests *</label><input class="form-input" type="number" min="1" id="sbGuestCountInput" value="${n}" oninput="sbUpdateGroupCount(this.value)"></div>
+      <div style="font-size:17px;font-weight:700;color:#2d6a6a;margin:16px 0">${price!=null?'Total: $'+price+' USD':'That group size isn\'t priced yet — please contact us directly.'}</div>
+      ${showWarn?`<div class="no-slots" style="color:#92400e;background:#fffbeb;border-color:#fde68a">We don't usually recommend booking this for 1–2 people unless you're a couple wanting a private experience — reach out to us to find out when we're hosting a group ${esc(svc.name)} you can join instead.</div>`:''}
+      <button class="btn-primary" onclick="sbConfirmGroupCount()" ${price==null?'disabled':''}>Continue</button>
+    </div>`;
+}
+function sbUpdateGroupCount(v){SB.guestCount=parseInt(v)||1;renderStep2b_GroupCount(document.getElementById('mainContent'));}
+function sbConfirmGroupCount(){
+  const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  SB.groupTotalPrice=spaGroupPrice(svc,SB.guestCount);
+  setStep(3);
+}
 
 // ── STEP 3 — GUEST TYPE ──────────────────────────────────────────────────
 function renderStep3_GuestType(el){
@@ -371,7 +413,8 @@ function renderStep7_Confirm(el){
       <div class="summary-row"><span class="lbl">Date</span><span class="val">${fmtDateLong(SB.date)}</span></div>
       <div class="summary-row"><span class="lbl">Time</span><span class="val">${fmtT(SB.start)}</span></div>
       <div class="summary-row"><span class="lbl">Therapist</span><span class="val">${esc(ther.firstName)} ${esc(ther.lastName||'')}</span></div>
-      <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc.price} USD</span></div>
+      ${svc.groupPricing?`<div class="summary-row"><span class="lbl">Guests</span><span class="val">${SB.guestCount}</span></div>`:''}
+      <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc.groupPricing?SB.groupTotalPrice:svc.price} USD</span></div>
       <div class="summary-row"><span class="lbl">${SB.guestType==='hotel'?'Room':'Contact'}</span><span class="val">${SB.guestType==='hotel'?esc(SB.roomNumber):esc(SB.email)}</span></div>
       <button class="btn-primary" style="margin-top:16px" id="sbConfirmBtn" onclick="sbFinalConfirm()">${SB.guestType==='hotel'?'Confirm Booking':'Reserve — Payment Required'}</button>
     </div>`;
@@ -419,7 +462,9 @@ async function sbFinalConfirm(){
       cancellationPolicyAcceptedAt:SB.policyAcceptedAt||null,
       cancellationPolicyVersion:SB.policyVersion||null,
       source:'guest_booking',
-      notes:'',
+      guestCount:svc.groupPricing?SB.guestCount:null,
+      groupTotalPriceUSD:svc.groupPricing?SB.groupTotalPrice:null,
+      notes:svc.groupPricing?(SB.guestCount+' guests · $'+SB.groupTotalPrice+' USD total'):'',
       createdAt:new Date().toISOString(),
     };
     latest.push(appt);
