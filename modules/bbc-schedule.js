@@ -625,17 +625,25 @@ function bbcRenderSlotRow(schedId,di,slot,si,dups,date){
   const isMeal=slot.type==='meal',isEvent=slot.type==='event';
   const isTour=isEvent&&BBC_TOUR_NAMES.has(slot.activity);
   const isDup=slot.instructor&&slot.instructor.trim()!=='Ryan'&&slot.instructor.trim()!==''&&dups.includes(slot.instructor.trim());
-  const bg=isMeal?'#fafaf9':isEvent?'#fdf4ff':'#fff';
+  // Once the assigned staff member has confirmed this slot, lock its fields
+  // so an edit here can't silently invalidate a confirmation they already
+  // gave — Darlene has to deliberately unlock it first (which also clears
+  // the confirmation, since the assignment may now be different).
+  const isLocked=!!slot.confirmed;
+  const bg=isLocked?'#f0fdf4':isMeal?'#fafaf9':isEvent?'#fdf4ff':'#fff';
   const actStyle=isMeal?'font-weight:600;color:var(--teal)':isEvent?'font-weight:600;color:#7c3aed':'color:var(--dark)';
+  const lockedSpan=(val,extraStyle)=>'<span style="font-size:12px;color:var(--dark);padding:4px 2px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'+(extraStyle||'')+'" title="Locked — confirmed by staff, click Unlock to edit">'+(val||'—')+'</span>';
   return'<div style="display:grid;grid-template-columns:120px 1fr 145px 125px 36px;align-items:stretch;border-top:1px solid var(--border);background:'+bg+'">'
     +'<div style="padding:5px 10px;display:flex;align-items:center;border-right:1px solid var(--border)">'
-    +'<input value="'+slot.time+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'time\',this.value)" style="width:100%;border:none;background:transparent;font-family:\'Jost\',sans-serif;font-size:11.5px;color:#6b7280;outline:none" placeholder="Time"></div>'
-    +'<div style="padding:5px 10px;display:flex;align-items:center;border-right:1px solid var(--border)">'
-    +'<input value="'+slot.activity.replace(/"/g,'&quot;')+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'activity\',this.value)" style="width:100%;border:none;background:transparent;font-family:\'Jost\',sans-serif;font-size:12.5px;'+actStyle+';outline:none" placeholder="Activity..."></div>'
-    +'<div style="padding:5px 8px;display:flex;align-items:center;border-right:1px solid var(--border)">'
-    +(isMeal?'<span style="font-size:11px;color:#d1d5db;padding-left:2px">—</span>':'<input value="'+slot.instructor+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'instructor\',this.value)" list="bbcInstDl-'+schedId+'-'+di+'" style="width:100%;border:1px solid '+(isDup?'#f59e0b':'#e5e7eb')+';border-radius:6px;padding:4px 7px;font-family:\'Jost\',sans-serif;font-size:12px;color:var(--dark);background:'+(isDup?'#fffbeb':'#fff')+';outline:none" placeholder="Instructor...">')
+    +(isLocked?lockedSpan(slot.time,';font-size:11.5px;color:#6b7280'):'<input value="'+slot.time+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'time\',this.value)" style="width:100%;border:none;background:transparent;font-family:\'Jost\',sans-serif;font-size:11.5px;color:#6b7280;outline:none" placeholder="Time">')
+    +'</div>'
+    +'<div style="padding:5px 10px;display:flex;align-items:center;gap:6px;border-right:1px solid var(--border)">'
+    +(isLocked?'<span title="Locked — confirmed by staff">🔒</span>':'')
+    +(isLocked?lockedSpan(slot.activity.replace(/"/g,'&quot;')):'<input value="'+slot.activity.replace(/"/g,'&quot;')+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'activity\',this.value)" style="width:100%;border:none;background:transparent;font-family:\'Jost\',sans-serif;font-size:12.5px;'+actStyle+';outline:none" placeholder="Activity...">')
+    +'</div><div style="padding:5px 8px;display:flex;align-items:center;border-right:1px solid var(--border)">'
+    +(isMeal?'<span style="font-size:11px;color:#d1d5db;padding-left:2px">—</span>':isLocked?lockedSpan(slot.instructor):'<input value="'+slot.instructor+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'instructor\',this.value)" list="bbcInstDl-'+schedId+'-'+di+'" style="width:100%;border:1px solid '+(isDup?'#f59e0b':'#e5e7eb')+';border-radius:6px;padding:4px 7px;font-family:\'Jost\',sans-serif;font-size:12px;color:var(--dark);background:'+(isDup?'#fffbeb':'#fff')+';outline:none" placeholder="Instructor...">')
     +'</div><div style="padding:5px 8px;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--border)">'
-    +(isMeal||isTour?'<span style="font-size:11px;color:#d1d5db;padding-left:2px">—</span>':(function(){
+    +(isMeal||isTour?'<span style="font-size:11px;color:#d1d5db;padding-left:2px">—</span>':isLocked?lockedSpan(slot.location):(function(){
       const cfls=bbcGetShalaConflicts(date,slot.location);
       const cfBorder=cfls.length?'#f87171':'#e5e7eb';
       const cfBg=cfls.length?'#fff5f5':'#fff';
@@ -643,8 +651,20 @@ function bbcRenderSlotRow(schedId,di,slot,si,dups,date){
       return'<input value="'+slot.location+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'location\',this.value)" onchange="bbcCheckLocationConflict(\''+schedId+'\','+di+','+si+',this.value,\''+slot.location.replace(/'/g,"\\'")+'\')" list="bbcLocDl-'+schedId+'-'+di+'" style="width:100%;border:1px solid '+cfBorder+';border-radius:6px;padding:4px 7px;font-family:\'Jost\',sans-serif;font-size:12px;color:var(--dark);background:'+cfBg+';outline:none" placeholder="Location...">'+cfHtml;
     })())
     +'</div><div style="display:flex;align-items:center;justify-content:center;padding:4px">'
-    +(slot.fixed?'<span style="font-size:10px;color:#d1d5db" title="Fixed slot">⚓</span>':'<button onclick="bbcRemoveSlot(\''+schedId+'\','+di+','+si+')" style="background:none;border:none;cursor:pointer;color:#d1d5db;font-size:15px;width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center" onmouseover="this.style.color=\'#ef4444\';this.style.background=\'#fef2f2\'" onmouseout="this.style.color=\'#d1d5db\';this.style.background=\'none\'" title="Remove">&#x2715;</button>')
+    +(isLocked?'<button onclick="bbcUnlockSlot(\''+schedId+'\','+di+','+si+')" style="background:none;border:none;cursor:pointer;color:#059669;font-size:14px;width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center" title="Unlock to edit (clears their confirmation)">🔓</button>'
+      :slot.fixed?'<span style="font-size:10px;color:#d1d5db" title="Fixed slot">⚓</span>':'<button onclick="bbcRemoveSlot(\''+schedId+'\','+di+','+si+')" style="background:none;border:none;cursor:pointer;color:#d1d5db;font-size:15px;width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center" onmouseover="this.style.color=\'#ef4444\';this.style.background=\'#fef2f2\'" onmouseout="this.style.color=\'#d1d5db\';this.style.background=\'none\'" title="Remove">&#x2715;</button>')
     +'</div></div>';
+}
+async function bbcUnlockSlot(schedId,di,si){
+  if(!confirm('Unlock this slot for editing? The staff member will need to reconfirm it afterward.'))return;
+  const s=bbcSchedules.find(x=>x.id===schedId);if(!s||!s.days[di]||!s.days[di].slots[si])return;
+  const slot=s.days[di].slots[si];
+  slot.confirmed=false;slot.confirmedAt=null;slot.confirmedBy=null;
+  await bbcSaveData();
+  const wasOpen=document.getElementById('bbcDayBody-'+schedId+'-'+di)&&document.getElementById('bbcDayBody-'+schedId+'-'+di).style.display==='block';
+  bbcRenderEditor();
+  const nb=document.getElementById('bbcDayBody-'+schedId+'-'+di);
+  if(nb&&wasOpen){nb.style.display='block';const ch=document.getElementById('bbcChev-'+schedId+'-'+di);if(ch)ch.style.transform='rotate(90deg)';}
 }
 
 function bbcToggleDay(schedId,di){
