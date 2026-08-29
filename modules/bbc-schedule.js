@@ -391,7 +391,10 @@ function bbcGenSchedule(name,start,nights,excursionDays,guestCount,tourMode,cust
 
 function bbcDupInstructors(slots){
   const c={};
-  slots.forEach(s=>{if(!s.instructor||s.instructor.trim()==='Ryan'||s.type==='meal')return;const k=s.instructor.trim();c[k]=(c[k]||0)+1;});
+  // Only flag someone teaching two classes at once — a tour guide (event-type
+  // slots, e.g. Excursion/Opening Circle/Departures) also teaching a class
+  // the same day is expected and fine, not a conflict.
+  slots.forEach(s=>{if(!s.instructor||s.instructor.trim()==='Ryan'||s.type!=='class')return;const k=s.instructor.trim();c[k]=(c[k]||0)+1;});
   return Object.keys(c).filter(k=>c[k]>1);
 }
 

@@ -80,6 +80,50 @@ function scPayrollTableHtml(){
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
+// One person's own BBC income — split into Confirmed (schedule + slot both
+// confirmed, matches scComputeBbcPayroll) vs Potential (assigned to them but
+// not confirmed yet, so it could still change). Shown to every staff member
+// on their own dashboard, not just Payroll Admins — this is just their own
+// numbers, not everyone else's.
+function scComputeMyIncome(name){
+  const norm=(name||'').trim().toLowerCase();
+  const confirmedSessions=[],potentialSessions=[];
+  let confirmedTotal=0,potentialTotal=0;
+  (typeof bbcSchedules!=='undefined'?bbcSchedules:[]).forEach(s=>{
+    (s.days||[]).forEach(day=>{
+      (day.slots||[]).forEach(slot=>{
+        if(!slot.instructor||slot.instructor.trim().toLowerCase()!==norm)return;
+        const rate=bbcPayRateFor(slot.activity,slot.instructor);
+        if(rate==null)return;
+        const entry={date:day.date,activity:slot.activity,schedName:s.name,rate};
+        if(s.status==='confirmed'&&slot.confirmed){confirmedSessions.push(entry);confirmedTotal+=rate;}
+        else{potentialSessions.push(entry);potentialTotal+=rate;}
+      });
+    });
+  });
+  confirmedSessions.sort((a,b)=>a.date.localeCompare(b.date));
+  potentialSessions.sort((a,b)=>a.date.localeCompare(b.date));
+  return{confirmedSessions,confirmedTotal,potentialSessions,potentialTotal};
+}
+function scMyIncomeSectionHtml(label,color,sessions,total,fmtD){
+  if(!sessions.length)return'';
+  return`<div style="margin-bottom:14px">
+    <div style="font-size:11.5px;font-weight:700;color:${color};margin-bottom:6px">${label} — $${total.toFixed(2)}</div>
+    ${sessions.map(s=>`<div style="font-size:12px;color:#5a5048;padding:3px 0">${s.activity} — ${fmtD(s.date)} ($${s.rate})</div>`).join('')}
+  </div>`;
+}
+function scMyIncomeHtml(name){
+  const inc=scComputeMyIncome(name);
+  if(!inc.confirmedSessions.length&&!inc.potentialSessions.length)return'';
+  const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});};
+  return`<div style="margin-top:10px;margin-bottom:26px">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">My Income — Bikini Bootcamp</div>
+    <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:16px 18px">
+      ${scMyIncomeSectionHtml('Confirmed','#15803d',inc.confirmedSessions,inc.confirmedTotal,fmtD)}
+      ${scMyIncomeSectionHtml('Potential — scheduled, not yet confirmed', '#b45309',inc.potentialSessions,inc.potentialTotal,fmtD)}
+    </div>
+  </div>`;
+}
 let staffConfirmAccounts=[];
 let currentStaffConfirmSession=null;
 
@@ -601,6 +645,7 @@ function scRenderDashboard(){
       ${section('Bikini Bootcamp',bbc)}
       ${section('Spa',spa)}
       ${section('Tours',tour)}
+      ${scMyIncomeHtml(name)}
       ${account?scAvailabilityHtml(account):''}
       ${isPayrollAdmin?scTeamAvailabilityHtml():''}
       ${isPayrollAdmin?`<div style="margin-top:10px">
