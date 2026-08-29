@@ -1024,11 +1024,22 @@ let menuProteinAssign={};
 let menuIngredientCatalog=[];
 let menuCatalogFilter='';
 let menuCostGuestCount=6;
+let menuActualKg={}; // { [dayIndex]: {midday: kg, dinner: kg} } — actual protein used, entered after the meal
 
 function menuSetGuestCount(val){
   menuCostGuestCount=parseInt(val)||1;
   localStorage.setItem('amansala_menu_guest_count',String(menuCostGuestCount));
   menuRenderCostPanel();
+}
+function menuSetActualKg(di,meal,val){
+  if(!menuActualKg[di])menuActualKg[di]={};
+  menuActualKg[di][meal]=val===''?null:(parseFloat(val)||0);
+  menuSaveActualKg();
+  menuRenderCostPanel();
+}
+function menuSaveActualKg(){
+  localStorage.setItem('amansala_menu_actual_kg',JSON.stringify(menuActualKg));
+  (async()=>{try{await db.from('app_store').upsert({key:'menuActualKg',value:menuActualKg,updated_at:new Date().toISOString()});}catch(e){}})();
 }
 
 function menuLoadCostData(){
@@ -1037,15 +1048,17 @@ function menuLoadCostData(){
   try{menuRecipeCosts=JSON.parse(localStorage.getItem('amansala_menu_recipe_costs')||'null')||DEF_MENU_RECIPE_COSTS.map(r=>({...r}));}catch{menuRecipeCosts=DEF_MENU_RECIPE_COSTS.map(r=>({...r}));}
   try{menuProteinAssign=JSON.parse(localStorage.getItem('amansala_menu_protein_assign')||'null')||JSON.parse(JSON.stringify(DEF_MENU_PROTEIN_ASSIGN));}catch{menuProteinAssign=JSON.parse(JSON.stringify(DEF_MENU_PROTEIN_ASSIGN));}
   try{menuIngredientCatalog=JSON.parse(localStorage.getItem('amansala_menu_ingredient_catalog')||'null')||DEF_MENU_INGREDIENT_CATALOG.map(c=>({...c}));}catch{menuIngredientCatalog=DEF_MENU_INGREDIENT_CATALOG.map(c=>({...c}));}
+  try{menuActualKg=JSON.parse(localStorage.getItem('amansala_menu_actual_kg')||'null')||{};}catch{menuActualKg={};}
 }
 async function menuSyncCostDataFromSupabase(){
   try{
-    const{data}=await db.from('app_store').select('key,value').in('key',['menuProteinPrices','menuRecipeCosts','menuProteinAssign','menuIngredientCatalog']);
+    const{data}=await db.from('app_store').select('key,value').in('key',['menuProteinPrices','menuRecipeCosts','menuProteinAssign','menuIngredientCatalog','menuActualKg']);
     (data||[]).forEach(row=>{
       if(row.key==='menuProteinPrices'&&Array.isArray(row.value))menuProteinPrices=row.value;
       if(row.key==='menuRecipeCosts'&&Array.isArray(row.value))menuRecipeCosts=row.value;
       if(row.key==='menuProteinAssign'&&row.value)menuProteinAssign=row.value;
       if(row.key==='menuIngredientCatalog'&&Array.isArray(row.value))menuIngredientCatalog=row.value;
+      if(row.key==='menuActualKg'&&row.value)menuActualKg=row.value;
     });
   }catch(e){}
 }
@@ -1144,8 +1157,15 @@ function menuRenderCostPanel(){
     </tr>`).join('');
 
   const proteinOptions=(selId)=>`<option value="">— none —</option>`+menuProteinPrices.filter(p=>p.unit==='KG').map(p=>`<option value="${p.id}"${p.id===selId?' selected':''}>${menuEsc(p.name)}</option>`).join('');
+  const menuPredictedKg=(proteinId)=>{
+    const p=menuProteinPrices.find(x=>x.id===proteinId);
+    if(!p||p.unit!=='KG'||!p.portionG)return null;
+    return menuCostGuestCount*(p.portionG/1000);
+  };
 
   let weeklyTotal=0;
+  let wkPredicted=0,wkActual=0,wkActualCount=0;
+  const usageRows=[];
   const dayRows=[1,2,3,4,5,6,7].map(di=>{
     const day=WEEKLY_MENU[di]||{};
     const assign=menuProteinAssign[di]||{};
@@ -1173,6 +1193,18 @@ function menuRenderCostPanel(){
     const dinnerLabel=day.dinner?.protein||'—';
     const middayPc=menuProteinColor(middayLabel);
     const dinnerPc=menuProteinColor(dinnerLabel);
+
+    // Predicted vs actual protein kilos — actual entered manually after the meal
+    const actual=menuActualKg[di]||{};
+    [['midday',middayLabel,assign.midday],['dinner',dinnerLabel,assign.dinner]].forEach(([meal,label,proteinId])=>{
+      if(!proteinId)return;
+      const predicted=menuPredictedKg(proteinId);
+      if(predicted==null)return; // priced per piece, not weight — nothing to predict
+      const actualVal=actual[meal];
+      wkPredicted+=predicted;
+      if(actualVal!=null){wkActual+=actualVal;wkActualCount++;}
+      usageRows.push({di,meal,label,predicted,actualVal});
+    });
 
     return `<tr style="border-bottom:1px solid #f0ece4;vertical-align:top">
       <td style="padding:9px 10px;font-weight:700;color:var(--dark)">${MENU_DAY_NAMES[di]}</td>
@@ -1220,6 +1252,42 @@ function menuRenderCostPanel(){
           <tbody>${dayRows}</tbody>
         </table></div>
         <div style="padding:10px 18px;font-size:11.5px;color:#8a7e74;background:#faf7f2;border-top:1px solid var(--border)">Protein assignments are best guesses from the dish names — double-check the dropdowns above match what's actually served, especially generic "Pescado" days.</div>
+      </div>
+
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:22px">
+        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Protein Usage — Predicted vs Actual (kg)</span>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12.5px;font-weight:700">
+            <span style="color:var(--dark)">Predicted: ${wkPredicted.toFixed(2)} kg</span>
+            <span style="color:var(--dark)">Actual: ${wkActualCount?wkActual.toFixed(2)+' kg':'— (not entered yet)'}</span>
+            ${wkActualCount?`<span style="color:${wkActual>wkPredicted?'#dc2626':wkActual<wkPredicted?'#2563eb':'#059669'}">Variance: ${wkActual>wkPredicted?'+':''}${(wkActual-wkPredicted).toFixed(2)} kg ${wkActual>wkPredicted?'(over)':wkActual<wkPredicted?'(under)':'(on target)'}</span>`:''}
+          </div>
+        </div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="background:#faf7f2">
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Day</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Meal</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Protein</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Predicted (kg)</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Actual Used (kg)</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Variance</th>
+          </tr></thead>
+          <tbody>${usageRows.map(u=>{
+            const hasActual=u.actualVal!=null;
+            const variance=hasActual?u.actualVal-u.predicted:null;
+            const vColor=!hasActual?'#bbb':variance>0.05?'#dc2626':variance<-0.05?'#2563eb':'#059669';
+            const vLabel=!hasActual?'—':(variance>0?'+':'')+variance.toFixed(2)+' kg '+(variance>0.05?'(over)':variance<-0.05?'(under)':'(on target)');
+            return`<tr style="border-bottom:1px solid #f0ece4">
+              <td style="padding:7px 10px;font-weight:700;color:var(--dark)">${MENU_DAY_NAMES[u.di]}</td>
+              <td style="padding:7px 10px;color:#5a5048;text-transform:capitalize">${u.meal}</td>
+              <td style="padding:7px 10px;color:#5a5048">${menuEsc(u.label)}</td>
+              <td style="padding:7px 10px;font-weight:700;color:var(--dark)">${u.predicted.toFixed(2)}</td>
+              <td style="padding:7px 10px"><input type="number" step="0.01" min="0" value="${u.actualVal!=null?u.actualVal:''}" placeholder="—" onchange="menuSetActualKg(${u.di},'${u.meal}',this.value)" style="width:80px;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:'Jost',sans-serif;font-size:12.5px"></td>
+              <td style="padding:7px 10px;font-weight:700;color:${vColor}">${vLabel}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>
+        <div style="padding:10px 18px;font-size:11.5px;color:#8a7e74;background:#faf7f2;border-top:1px solid var(--border)">Predicted = guest count × portion size for the protein assigned above. Enter the actual kilos used after each meal to track over/under usage and spot where to cut costs.</div>
       </div>
 
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:22px">
