@@ -24,6 +24,15 @@ const BBC_AFTERNOON_STRENGTH_ROTATION=[
   {activity:'Absolution',instructor:'Sergio'},
   {activity:'Boxing',    instructor:'Fernando'},
 ];
+// Groups under 3 guests get ONE afternoon fitness slot instead of two —
+// rotates Dance / Pilates / Boxing day to day (plus Gentle Yoga, unchanged).
+function bbcSmallGroupAfternoon(fullIdx,dance){
+  switch(((fullIdx%3)+3)%3){
+    case 0:return{activity:dance.activity,instructor:dance.instructor};
+    case 1:return{activity:'Pilates',instructor:'Adele'};
+    default:return{activity:'Boxing',instructor:'Fernando'};
+  }
+}
 
 // Default excursion order when there's no yoga retreat running the same
 // week to match against — 1st tour day = Tulum Ruins, 2nd = Grande Cenote,
@@ -175,15 +184,25 @@ function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount){
     // leaves plenty of afternoon, so those classes still happen afterward.
     slots.push(bbcMakeSlot('11:45 – 2:15',tourName||'Excursion','','',false,'event'));
     slots.push(bbcMakeSlot('2:30','Late Lunch','','',true,'meal'));
-    // Groups under 3 guests skip the Dance session — one fitness class plus
-    // yoga covers the afternoon instead of dance + fitness + yoga.
-    if(!smallGroup)slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
-    slots.push(bbcMakeSlot('4:45 – 5:30',strength.activity,strength.instructor,aftLoc,false,'class'));
+    // Groups under 3 guests get ONE rotating fitness slot (Dance/Pilates/
+    // Boxing) instead of a Dance + Strength double-header — plus Gentle Yoga.
+    if(smallGroup){
+      const sg=bbcSmallGroupAfternoon(fullIdx,dance);
+      slots.push(bbcMakeSlot('4:00 – 4:45',sg.activity,sg.instructor,aftLoc,false,'class'));
+    } else {
+      slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
+      slots.push(bbcMakeSlot('4:45 – 5:30',strength.activity,strength.instructor,aftLoc,false,'class'));
+    }
     slots.push(bbcMakeSlot('5:45 – 6:45','Gentle Yoga',eveningYoga,'Beachfront',false,'class'));
   } else {
     slots.push(bbcMakeSlot('1:30','Lunch','','',true,'meal'));
-    if(!smallGroup)slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
-    slots.push(bbcMakeSlot('4:45 – 5:30',strength.activity,strength.instructor,aftLoc,false,'class'));
+    if(smallGroup){
+      const sg=bbcSmallGroupAfternoon(fullIdx,dance);
+      slots.push(bbcMakeSlot('4:00 – 4:45',sg.activity,sg.instructor,aftLoc,false,'class'));
+    } else {
+      slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
+      slots.push(bbcMakeSlot('4:45 – 5:30',strength.activity,strength.instructor,aftLoc,false,'class'));
+    }
     slots.push(bbcMakeSlot('5:45 – 6:45','Gentle Yoga',eveningYoga,'Beachfront',false,'class'));
   }
 
