@@ -115,7 +115,8 @@ function bbcAddDays(ds,n){const d=new Date(ds+'T12:00:00');d.setDate(d.getDate()
 function bbcDayCount(s,e){return Math.round((new Date(e+'T12:00:00')-new Date(s+'T12:00:00'))/86400000)+1;}
 function bbcMakeSlot(time,activity,instructor,location,fixed,type){return{id:bbcUid(),time,activity,instructor:instructor||'',location:location||'',fixed:!!fixed,type:type||'class'};}
 
-function bbcGenDaySlots(di,total,excursionDays,tourName){
+function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount){
+  const smallGroup=!!guestCount&&guestCount<3;
   const isFirst=di===0,isLast=di===total-1;
   const fullIdx=di-1; // 0-based index for full days (negative for arrival day)
   // Activation alternates by full-day index
@@ -174,12 +175,14 @@ function bbcGenDaySlots(di,total,excursionDays,tourName){
     // leaves plenty of afternoon, so those classes still happen afterward.
     slots.push(bbcMakeSlot('11:45 – 2:15',tourName||'Excursion','','',false,'event'));
     slots.push(bbcMakeSlot('2:30','Late Lunch','','',true,'meal'));
-    slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
+    // Groups under 3 guests skip the Dance session — one fitness class plus
+    // yoga covers the afternoon instead of dance + fitness + yoga.
+    if(!smallGroup)slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
     slots.push(bbcMakeSlot('4:45 – 5:30',strength.activity,strength.instructor,aftLoc,false,'class'));
     slots.push(bbcMakeSlot('5:45 – 6:45','Gentle Yoga',eveningYoga,'Beachfront',false,'class'));
   } else {
     slots.push(bbcMakeSlot('1:30','Lunch','','',true,'meal'));
-    slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
+    if(!smallGroup)slots.push(bbcMakeSlot('4:00 – 4:45',dance.activity,dance.instructor,aftLoc,false,'class'));
     slots.push(bbcMakeSlot('4:45 – 5:30',strength.activity,strength.instructor,aftLoc,false,'class'));
     slots.push(bbcMakeSlot('5:45 – 6:45','Gentle Yoga',eveningYoga,'Beachfront',false,'class'));
   }
@@ -192,7 +195,7 @@ function bbcGenDaySlots(di,total,excursionDays,tourName){
   return slots;
 }
 
-function bbcGenSchedule(name,start,nights,excursionDays){
+function bbcGenSchedule(name,start,nights,excursionDays,guestCount){
   const total=nights+1; // arrival day + N nights; last day = departure morning
   const end=bbcAddDays(start,nights);
   const days=[];
@@ -209,9 +212,9 @@ function bbcGenSchedule(name,start,nights,excursionDays){
   });
   for(let i=0;i<total;i++){
     const prompt=BBC_MORNING_PAGES[Math.min(i,BBC_MORNING_PAGES.length-1)];
-    days.push({date:bbcAddDays(start,i),prompt,note:'',slots:bbcGenDaySlots(i,total,excDays,tourByDay[i])});
+    days.push({date:bbcAddDays(start,i),prompt,note:'',slots:bbcGenDaySlots(i,total,excDays,tourByDay[i],guestCount)});
   }
-  return{id:bbcUid(),name,startDate:start,endDate:end,nights,status:'draft',createdAt:new Date().toISOString(),days};
+  return{id:bbcUid(),name,startDate:start,endDate:end,nights,guestCount:guestCount||null,status:'draft',createdAt:new Date().toISOString(),days};
 }
 
 function bbcDupInstructors(slots){
@@ -240,6 +243,7 @@ function bbcShowNewForm(){
   if(bb)bb.style.display='flex';if(pb)pb.style.display='none';if(cb)cb.style.display='none';if(sb)sb.style.display='none';if(nb)bb&&(nb.style.display='none');
   document.getElementById('bbcNewName').value='';
   document.getElementById('bbcNewStart').value='';
+  document.getElementById('bbcNewGuests').value='';
   document.getElementById('bbcNewDayCount').style.display='none';
   document.getElementById('bbcExcursionSection').style.display='none';
   const r=document.querySelector('input[name="bbcNights"][value="5"]');if(r)r.checked=true;
@@ -282,10 +286,11 @@ function bbcCreate(){
   const name=document.getElementById('bbcNewName').value.trim();
   const start=document.getElementById('bbcNewStart').value;
   const nights=parseInt((document.querySelector('input[name="bbcNights"]:checked')||{value:5}).value);
-  if(!name||!start){alert('Please fill in all required fields.');return;}
+  const guestCount=parseInt(document.getElementById('bbcNewGuests').value)||0;
+  if(!name||!start||!guestCount){alert('Please fill in all required fields.');return;}
   const excursionDays=[];
   document.querySelectorAll('#bbcExcursionDays input[type=checkbox]:checked').forEach(cb=>{excursionDays.push(parseInt(cb.dataset.di));});
-  const sched=bbcGenSchedule(name,start,nights,excursionDays);
+  const sched=bbcGenSchedule(name,start,nights,excursionDays,guestCount);
   bbcSchedules.unshift(sched);
   bbcSaveData();
   bbcOpenEditor(sched.id);
@@ -352,7 +357,8 @@ function bbcRenderEditor(){
     +'<div style="flex-shrink:0;padding-top:18px"><span style="background:'+(sc?'#ecfdf5':'#fffbeb')+';color:'+(sc?'#059669':'#d97706')+';border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700">'+(sc?'✓ Confirmed':'Draft')+'</span></div></div>'
     +'<div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;font-size:12.5px;color:var(--muted)">'
     +'<span><b style="color:var(--dark)">Dates:</b> '+bbcFmtDate(s.startDate)+' – '+bbcFmtDate(s.endDate)+'</span>'
-    +'<span><b style="color:var(--dark)">Duration:</b> '+s.days.length+' day'+(s.days.length!==1?'s':'')+'</span></div></div>'
+    +'<span><b style="color:var(--dark)">Duration:</b> '+s.days.length+' day'+(s.days.length!==1?'s':'')+'</span>'
+    +(s.guestCount?'<span><b style="color:var(--dark)">Guests:</b> '+s.guestCount+'</span>':'')+'</div></div>'
     +s.days.map(function(day,di){return bbcRenderDayCard(s,day,di);}).join('')
     +'<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px;font-style:italic;font-family:\'Cormorant Garamond\',serif;letter-spacing:.3px">With Love, Team Amansala 💙</div>'
     +'</div>';
@@ -531,7 +537,7 @@ function bbcPrint(){
 function bbcScheduleAsText(s){
   const lines=[];
   lines.push(s.name);
-  lines.push(bbcFmtDate(s.startDate)+' - '+bbcFmtDate(s.endDate)+' ('+s.days.length+' days)');
+  lines.push(bbcFmtDate(s.startDate)+' - '+bbcFmtDate(s.endDate)+' ('+s.days.length+' days)'+(s.guestCount?' — '+s.guestCount+' guests':''));
   lines.push('');
   s.days.forEach(function(day){
     lines.push(bbcFmtDate(day.date).toUpperCase());
