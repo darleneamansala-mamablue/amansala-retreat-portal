@@ -2266,10 +2266,25 @@ function openScheduleViewer(bkId){
   }
   if(sr.specialReq)html+=`<div style="margin-bottom:14px"><b>Special Requests:</b><br>${sr.specialReq}</div>`;
   const actCount=(bk.retreatActivities||[]).length;
-  html+=`<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+  const tourMode=sr.tourMode||'auto';
+  html+=`<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:8px">Tours &amp; Ceremonies</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border:1.5px solid ${tourMode==='none'?'var(--teal)':'var(--border)'};border-radius:8px;font-size:12px;font-weight:600;color:var(--dark)">
+        <input type="radio" name="svTourMode_${bkId}" ${tourMode==='none'?'checked':''} onchange="svSetTourMode('${bkId}','none')" style="accent-color:var(--teal)"> Do Not Assign Any Tours
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border:1.5px solid ${tourMode==='custom'?'var(--teal)':'var(--border)'};border-radius:8px;font-size:12px;font-weight:600;color:var(--dark)">
+        <input type="radio" name="svTourMode_${bkId}" ${tourMode==='custom'?'checked':''} onchange="svSetTourMode('${bkId}','custom')" style="accent-color:var(--teal)"> Custom — I'll Pick Each One
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border:1.5px solid ${tourMode==='auto'?'var(--teal)':'var(--border)'};border-radius:8px;font-size:12px;font-weight:600;color:var(--dark)">
+        <input type="radio" name="svTourMode_${bkId}" ${tourMode==='auto'?'checked':''} onchange="svSetTourMode('${bkId}','auto')" style="accent-color:var(--teal)"> Auto-Assign
+      </label>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <span style="font-size:12.5px;color:var(--muted);flex:1">${actCount?`${actCount} tour${actCount!==1?'s/ceremonies':'/ceremony'} assigned to retreat days`:'No activities assigned yet'}</span>
     ${actCount?`<button class="btn" style="font-size:12px;white-space:nowrap;background:#fff;border:1.5px solid #7c3aed;color:#7c3aed" onclick="svSyncPrepaidFlags('${bkId}')">✓ Sync Prepaid</button>`:''}
     <button class="btn btn-primary" style="font-size:12px;white-space:nowrap;background:#059669;border-color:#059669" onclick="svAutoAssignActivities('${bkId}')">⚡ Auto-Assign Activities</button>
+    </div>
   </div>`;
   html+=svActivityEditorHtml(bk,bkId);
   html+=`</div>
@@ -2410,8 +2425,10 @@ function tsAdminStatus(bkId,status){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.scheduleRequest)return;
   bk.scheduleRequest.adminStatus=status;
   bk.scheduleRequest.adminNote=document.getElementById('tsAdminNoteInput')?.value||'';
-  // Auto-assign tours & ceremonies when schedule is confirmed
-  if(status==='confirmed'){
+  // Auto-assign tours & ceremonies when schedule is confirmed — unless the
+  // admin chose "Do Not Assign" or "Custom" (manual editor) for this retreat.
+  const tourModeOnConfirm=bk.scheduleRequest.tourMode||'auto';
+  if(status==='confirmed'&&tourModeOnConfirm==='auto'){
     const prepaidMap={};
     (bk.retreatActivities||[]).forEach(a=>{if(a.prepaid)prepaidMap[a.aoId+':'+a.date]=true;});
     bk.retreatActivities=[];
@@ -2721,6 +2738,13 @@ function svAutoAssignActivities(bkId){
   bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();
   showToast(`Activities assigned — ${added} tour${added!==1?'s/ceremonies':'/ceremony'} across retreat dates.`);
+  openScheduleViewer(bkId);
+}
+
+function svSetTourMode(bkId,mode){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.scheduleRequest)return;
+  bk.scheduleRequest.tourMode=mode;
+  saveAll();
   openScheduleViewer(bkId);
 }
 
