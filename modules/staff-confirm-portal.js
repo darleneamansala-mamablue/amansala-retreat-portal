@@ -409,6 +409,14 @@ function scIsAvailable(name,date){
 // (not-yet-added) rule so it survives re-render while picking days. =====
 const SC_DAY_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let scPendingDOW={};
+// Every pill/button click here re-renders the whole staff list, and a fresh
+// <details> element is closed by default -- without tracking which ones a
+// person had open, every click looked like it "kicked them out" of the row
+// they were editing.
+let scOpenAccountIds=new Set();
+function scTrackDetailsOpen(id,isOpen){
+  if(isOpen)scOpenAccountIds.add(id);else scOpenAccountIds.delete(id);
+}
 function scDowPending(id){return scPendingDOW[id]||(scPendingDOW[id]={start:'',end:'',days:[]});}
 function scSetDowStart(id,val){scDowPending(id).start=val;}
 function scSetDowEnd(id,val){scDowPending(id).end=val;}
@@ -502,7 +510,7 @@ function scTeamAvailabilityHtml(){
       ${staff.map(a=>{
         const dates=(a.unavailableDates||[]).slice().sort();
         const upcoming=dates.filter(d=>d>=today);
-        return`<details style="border-bottom:1px solid #f0ece4">
+        return`<details${scOpenAccountIds.has(a.id)?' open':''} ontoggle="scTrackDetailsOpen('${a.id}',this.open)" style="border-bottom:1px solid #f0ece4">
           <summary style="cursor:pointer;padding:12px 16px;font-size:13px;font-weight:700;color:#2d2520;display:flex;justify-content:space-between;align-items:center">
             <span>${a.name}</span>
             ${upcoming.length?`<span style="font-size:10.5px;font-weight:700;color:#dc2626">🚫 ${upcoming.length} date${upcoming.length>1?'s':''}</span>`:'<span style="font-size:10.5px;color:#c8bfb5;font-style:italic">available</span>'}
@@ -620,7 +628,7 @@ function scRenderAdminAccounts(){
     const dates=(a.unavailableDates||[]).slice().sort();
     const upcoming=dates.filter(d=>d>=today);
     return`
-    <details style="border:1.5px solid var(--border);border-radius:9px;margin-bottom:7px;background:${a.active?'#fff':'#f5f5f0'}">
+    <details${scOpenAccountIds.has(a.id)?' open':''} ontoggle="scTrackDetailsOpen('${a.id}',this.open)" style="border:1.5px solid var(--border);border-radius:9px;margin-bottom:7px;background:${a.active?'#fff':'#f5f5f0'}">
       <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:9px 12px;flex-wrap:wrap">
         <div style="flex:1;min-width:120px;font-weight:700;color:var(--dark);font-size:13px">${a.name}${upcoming.length?`<div style="font-weight:600;color:#dc2626;font-size:10.5px;margin-top:2px">🚫 ${upcoming.map(fmtD).join(', ')}</div>`:''}</div>
         <div style="font-size:12px;color:var(--muted);min-width:90px">@${a.username}</div>
