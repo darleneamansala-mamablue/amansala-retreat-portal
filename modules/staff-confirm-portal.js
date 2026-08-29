@@ -296,9 +296,10 @@ function scItemCardHtml(item,forAdmin){
   if(item.confirmed){
     actionHtml=`<button onclick="${onClick}${refresh}" title="Click to unconfirm" style="font-size:11.5px;font-weight:700;color:#15803d;background:#dcfce7;border:none;border-radius:99px;padding:6px 14px;white-space:nowrap;cursor:pointer">${confirmedLabel}</button>`;
   } else if(item.requestedChange){
-    actionHtml=`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+    const cancelBtn=forAdmin?`<button onclick="scCancelAssignment(${changeArgs})${refresh}" style="font-size:11px;font-weight:700;color:#dc2626;background:#fff;border:1.5px solid #fca5a5;border-radius:8px;padding:5px 12px;cursor:pointer;white-space:nowrap">Cancel It</button>`:'';
+    actionHtml=`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
       <span title="${noteEsc}" style="font-size:11px;font-weight:700;color:#b45309;background:#fef3c7;border-radius:99px;padding:6px 14px;white-space:nowrap">⚠ Change Requested${item.requestedChangeBy?' by '+scInitials(item.requestedChangeBy):''}</span>
-      <button onclick="scClearRequestChange(${changeArgs})${refresh}" style="font-size:10.5px;color:#8a7e74;background:none;border:none;cursor:pointer;text-decoration:underline">cancel request</button>
+      <div style="display:flex;gap:10px;align-items:center">${cancelBtn}<button onclick="scClearRequestChange(${changeArgs})${refresh}" style="font-size:10.5px;color:#8a7e74;background:none;border:none;cursor:pointer;text-decoration:underline">dismiss flag</button></div>
     </div>`;
   } else {
     actionHtml=`<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
@@ -348,6 +349,38 @@ function scClearRequestChange(domain,a,b,c){
     if(appt){appt.requestedChange=false;spaCalSave();}
   } else if(actOpsData[a]){
     actOpsData[a].requestedChange=false;actOpsSave();
+  }
+}
+// Actually cancels the thing itself, not just the flag — for when whoever
+// was assigned genuinely can't do it and it needs to come off the books,
+// not just be re-confirmed with someone else later. Admin-only.
+function scCancelAssignment(domain,a,b,c){
+  if(!confirm('Cancel this? This removes it, not just the confirmation flag.'))return;
+  if(domain==='bbc'){
+    if(typeof bbcSchedules==='undefined')return;
+    const s=bbcSchedules.find(x=>x.id===a);const slot=s&&s.days[b]?.slots[c];
+    if(!slot)return;
+    slot.instructor='';slot.confirmed=false;slot.confirmedAt=null;slot.confirmedBy=null;
+    slot.requestedChange=false;slot.requestedChangeNote='';slot.requestedChangeBy=null;
+    bbcSaveData();
+  } else if(domain==='spa'){
+    if(typeof SpaAppointments==='undefined')return;
+    const appt=SpaAppointments.find(x=>x.id===a);if(!appt)return;
+    appt.status='CANCELLED';
+    appt.requestedChange=false;appt.requestedChangeNote='';appt.requestedChangeBy=null;
+    spaCalSave();
+  } else {
+    if(!actOpsData[a])return;
+    if(b==='driver'){
+      actOpsData[a].driver='';actOpsData[a].driverConfirmed=false;actOpsData[a].driverConfirmedAt=null;actOpsData[a].driverConfirmedBy=null;
+    } else {
+      // b==='guide' — clear both guide slots; whichever one actually held
+      // this person is gone either way, and re-assigning starts fresh.
+      actOpsData[a].guide1='';actOpsData[a].guide2='';
+      actOpsData[a].guideConfirmed=false;actOpsData[a].guideConfirmedAt=null;actOpsData[a].guideConfirmedBy=null;
+    }
+    actOpsData[a].requestedChange=false;actOpsData[a].requestedChangeNote='';actOpsData[a].requestedChangeBy=null;
+    actOpsSave();
   }
 }
 
