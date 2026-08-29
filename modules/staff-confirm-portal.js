@@ -132,7 +132,7 @@ function scBbcItemsForName(name){
       (day.slots||[]).forEach((slot,si)=>{
         if(slot.type==='meal')return;
         if(!slot.instructor||slot.instructor.trim().toLowerCase()!==name)return;
-        items.push({domain:'bbc',schedId:s.id,schedName:s.name,di,si,date:day.date,time:slot.time,activity:slot.activity,location:slot.location,confirmed:!!slot.confirmed,confirmedAt:slot.confirmedAt});
+        items.push({domain:'bbc',schedId:s.id,schedName:s.name,di,si,date:day.date,time:slot.time,activity:slot.activity,location:slot.location,confirmed:!!slot.confirmed,confirmedAt:slot.confirmedAt,confirmedBy:slot.confirmedBy||null});
       });
     });
   });
@@ -148,7 +148,7 @@ function scSpaItemsForName(name){
   if(!ther)return[];
   return(typeof SpaAppointments!=='undefined'?SpaAppointments:[]).filter(a=>a.therapistId===ther.id&&a.status!=='CANCELLED').map(a=>{
     const svc=(SpaData.services||[]).find(s=>s.id===a.serviceId);
-    return{domain:'spa',id:a.id,date:a.date,time:a.start,duration:a.duration,activity:svc?svc.name:'Service',client:a.clientName,confirmed:!!a.confirmed,confirmedAt:a.confirmedAt};
+    return{domain:'spa',id:a.id,date:a.date,time:a.start,duration:a.duration,activity:svc?svc.name:'Service',client:a.clientName,confirmed:!!a.confirmed,confirmedAt:a.confirmedAt,confirmedBy:a.confirmedBy||null};
   });
 }
 
@@ -163,7 +163,8 @@ function scTourItemsForName(name){
     const ao=(typeof ADD_ONS!=='undefined'?ADD_ONS:[]).find(a=>a.id===aoId);
     const confirmed=role==='driver'?!!o.driverConfirmed:!!o.guideConfirmed;
     const confirmedAt=role==='driver'?o.driverConfirmedAt:o.guideConfirmedAt;
-    items.push({domain:'tour',opsKey,date,activity:ao?ao.name:aoId,role,confirmed,confirmedAt});
+    const confirmedBy=role==='driver'?o.driverConfirmedBy:o.guideConfirmedBy;
+    items.push({domain:'tour',opsKey,date,activity:ao?ao.name:aoId,role,confirmed,confirmedAt,confirmedBy:confirmedBy||null});
   });
   return items;
 }
@@ -173,24 +174,35 @@ function scAllItemsForName(name){
 }
 
 // ===== CONFIRM ACTIONS (reusable by the staff dashboard AND the admin board) =====
-function scConfirmBbc(schedId,di,si){
+// `who` is the confirming person's name — shown as initials on the badge so
+// it's clear who actually clicked Confirm, not just that "someone" did.
+function scInitials(name){
+  if(!name)return'';
+  return name.trim().split(/\s+/).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+}
+function scConfirmBbc(schedId,di,si,who){
   if(typeof bbcSchedules==='undefined')return;
   const s=bbcSchedules.find(x=>x.id===schedId);if(!s)return;
   const slot=s.days[di]?.slots[si];if(!slot)return;
   slot.confirmed=!slot.confirmed;
   slot.confirmedAt=slot.confirmed?new Date().toISOString():null;
+  slot.confirmedBy=slot.confirmed?(who||null):null;
   bbcSaveData();
 }
-function scConfirmSpa(apptId){
+function scConfirmSpa(apptId,who){
   if(typeof SpaAppointments==='undefined')return;
   const a=SpaAppointments.find(x=>x.id===apptId);if(!a)return;
   a.confirmed=!a.confirmed;
   a.confirmedAt=a.confirmed?new Date().toISOString():null;
+  a.confirmedBy=a.confirmed?(who||null):null;
   spaCalSave();
 }
-function scConfirmTour(opsKey,role){
+function scConfirmTour(opsKey,role,who){
   const field=role==='driver'?'driverConfirmed':'guideConfirmed';
+  const byField=role==='driver'?'driverConfirmedBy':'guideConfirmedBy';
   const cur=!!(actOpsData[opsKey]||{})[field];
+  if(!actOpsData[opsKey])actOpsData[opsKey]={};
+  actOpsData[opsKey][byField]=cur?null:(who||null);
   actOpsSet(opsKey,field,!cur); // reuses existing function — saves + timestamps + refreshes admin view
 }
 
@@ -216,10 +228,16 @@ function scItemCardHtml(item,forAdmin){
   const color=item.domain==='bbc'?'#0e9494':item.domain==='spa'?'#a855f7':'#d97706';
   const timeLabel=item.domain==='spa'&&item.time?spaCalFmtT(item.time):(item.time||'');
   const sub=item.domain==='spa'?(item.client?' · '+item.client:''):(item.location?' · '+item.location:'');
-  const onClick=item.domain==='bbc'?`scConfirmBbc('${item.schedId}',${item.di},${item.si})`
-    :item.domain==='spa'?`scConfirmSpa('${item.id}')`
-    :`scConfirmTour('${item.opsKey}','${item.role}')`;
+  // Who confirms: on the staff's own dashboard it's whoever is logged in;
+  // on the admin board it's the person the item belongs to (an admin
+  // confirming on someone's behalf still records that person's name).
+  const who=forAdmin?(item.instructorName||''):(getStaffConfirmSession()?.name||'');
+  const whoEsc=who.replace(/'/g,"\\'");
+  const onClick=item.domain==='bbc'?`scConfirmBbc('${item.schedId}',${item.di},${item.si},'${whoEsc}')`
+    :item.domain==='spa'?`scConfirmSpa('${item.id}','${whoEsc}')`
+    :`scConfirmTour('${item.opsKey}','${item.role}','${whoEsc}')`;
   const refresh=forAdmin?';scRenderAdminBoard()':';scRenderDashboard()';
+  const confirmedLabel='&#10003; Confirmed'+(item.confirmedBy?' by '+scInitials(item.confirmedBy):'');
   return`<div style="background:#fff;border:1.5px solid ${item.confirmed?'#86efac':'#e8dfd4'};border-radius:12px;padding:16px 18px;margin-bottom:10px;opacity:${isPast&&!item.confirmed?'.55':'1'}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
       <div>
@@ -228,7 +246,7 @@ function scItemCardHtml(item,forAdmin){
         <div style="font-size:12.5px;color:#8a7e74;margin-top:3px">${scFmtDate(item.date)}${timeLabel?' · '+timeLabel:''}${sub}</div>
       </div>
       ${item.confirmed
-        ?`<button onclick="${onClick}${refresh}" title="Click to unconfirm" style="font-size:11.5px;font-weight:700;color:#15803d;background:#dcfce7;border:none;border-radius:99px;padding:6px 14px;white-space:nowrap;cursor:pointer">&#10003; Confirmed</button>`
+        ?`<button onclick="${onClick}${refresh}" title="Click to unconfirm" style="font-size:11.5px;font-weight:700;color:#15803d;background:#dcfce7;border:none;border-radius:99px;padding:6px 14px;white-space:nowrap;cursor:pointer">${confirmedLabel}</button>`
         :`<button onclick="${onClick}${refresh}" style="background:#2d6a6a;color:#fff;border:none;padding:9px 18px;border-radius:9px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Confirm</button>`}
     </div>
   </div>`;

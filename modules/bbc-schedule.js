@@ -153,14 +153,16 @@ function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount){
   const strength=BBC_AFTERNOON_STRENGTH_ROTATION[Math.min(Math.max(fullIdx,0),BBC_AFTERNOON_STRENGTH_ROTATION.length-1)];
   const yogaLabel=(isFirst||isLast)?'Yoga Mala':'Yoga';
   const circuitLabel=(isFirst||isLast)?'BBC 20':'Circuit Training';
-  const aftLoc=isFirst?'Heaven':'Grande';
+  // Default locations unless told otherwise for a specific booking: yoga at
+  // Beachfront, fitness at Grande.
+  const aftLoc='Grande';
   const hasExcursion=!isFirst&&!isLast&&excursionDays&&excursionDays.includes(di);
 
   // Arrival day is a half day — starts at 4:45 with Sculpt & Tone
   if(isFirst){
     const slots=[
       bbcMakeSlot('4:45 – 5:30','Sculpt & Tone','Ryan','Grande',false,'class'),
-      bbcMakeSlot('5:45 – 6:45','Gentle Yoga','Kun','Heaven',false,'class'),
+      bbcMakeSlot('5:45 – 6:45','Gentle Yoga','Kun','Beachfront',false,'class'),
       bbcMakeSlot('7:00','Opening Circle','Ryan','Heaven',false,'event'),
       bbcMakeSlot('7:45','Dinner','','',true,'meal'),
     ];
@@ -185,7 +187,7 @@ function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount){
     bbcMakeSlot('7:00','Coffee | Tea & Morning Pages','','',true,'meal'),
     bbcMakeSlot('7:00 – 7:15','Grand Rising — '+activation,'Ryan','Beachfront',false,'class'),
     bbcMakeSlot('7:30 – 8:15','Morning Beach Walk','Ryan','Beachfront',false,'class'),
-    bbcMakeSlot('8:30 – 9:30',yogaLabel,morningYoga,'Grande',false,'class'),
+    bbcMakeSlot('8:30 – 9:30',yogaLabel,morningYoga,'Beachfront',false,'class'),
     bbcMakeSlot('9:30','Breakfast','','',true,'meal'),
     bbcMakeSlot('10:45 – 11:30',circuitLabel,'Ryan','Grande',false,'class'),
   ];
