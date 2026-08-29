@@ -136,6 +136,7 @@ function initStaffLogin(){
   if(IS_EVENT_MODE){initEventMode();return;}
   if(IS_TEACHER_MODE){initTeacherMode();return;}
   if(typeof IS_DRIVER_MODE!=='undefined'&&IS_DRIVER_MODE){initDriverMode();return;}
+  if(typeof IS_STAFF_CONFIRM_MODE!=='undefined'&&IS_STAFF_CONFIRM_MODE){initStaffConfirmMode();return;}
   loadStaff();
   let session=getCurrentSession();
   if(session){

@@ -920,6 +920,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
     <span class="tab-label">BBC Schedule</span>
   </button>
+  <button class="tab-btn" id="confirmationsTabBtn" onclick="switchTab('confirmations',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span class="tab-label">Confirmations</span>
+  </button>
   <button class="tab-btn" id="spaTabBtn" onclick="switchTab('spa',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c4.97 0 9-2.24 9-6 0-2.5-2-4-2-4s1-2 1-4c0-3-3-4-3-4s0 3-2 5-4 2-4 2-2 0-4-2-2-5-2-5-3 1-3 4c0 2 1 4 1 4s-2 1.5-2 4c0 3.76 4.03 6 9 6z"/></svg>
     <span class="tab-label">Spa</span>
@@ -2984,6 +2988,31 @@
     <div id="bbcEditorContent"></div>
   </div>
 </div>
+
+<!-- ===== CONFIRMATIONS TAB — staff logins + read-only board across BBC/Spa/Tours ===== -->
+<div class="tab-panel" id="tab-confirmations" style="flex-direction:column;overflow-y:auto;padding:24px 28px;background:#f5f1eb">
+  <div style="max-width:760px;margin:0 auto;width:100%">
+    <h3 style="margin:0 0 4px;font-size:22px;font-family:'Cormorant Garamond',serif;color:var(--dark)">Staff Confirmations</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:20px">Instructors, therapists, and guides sign in on their own device to see just their hours and confirm them — no financials, no other tabs.</div>
+
+    <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:22px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Staff Logins</div>
+        <button onclick="scCopyLoginLink()" style="padding:6px 14px;background:#fff;color:#374151;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12px;font-weight:600;cursor:pointer">🔗 Copy Login Link</button>
+      </div>
+      <div id="scAccountsList" style="margin-bottom:14px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:10px;border-top:1px solid var(--border)">
+        <input id="scNewName" placeholder="Name" style="flex:1;min-width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;outline:none">
+        <input id="scNewUser" placeholder="Username" style="flex:1;min-width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;outline:none">
+        <input id="scNewPass" placeholder="Password" style="flex:1;min-width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;outline:none">
+        <button onclick="scAdminAddAccount()" style="padding:8px 16px;background:var(--teal);color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer">+ Add</button>
+      </div>
+    </div>
+
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px">Confirmation Status — All Staff</div>
+    <div id="scAdminBoard"></div>
+  </div>
+</div>
 </div><!-- /appBody -->
 
 <!-- ===== SPECIAL EVENTS MODAL ===== -->
@@ -4869,6 +4898,8 @@ function switchTab(id,btn){
   if(id==='housekeeping') hkInit();
   if(id==='teacherprofiles') tpInit();
   if(id==='spa') spaInit();
+  if(id==='bbcsched') bbcInit();
+  if(id==='confirmations') scAdminInit();
 }
 
 </script>
@@ -5406,6 +5437,22 @@ if(location.protocol!=='file:'){
 <!-- DRIVER DASHBOARD — shown after driver login, scoped to that driver's own rides only -->
 <div id="driverDashboard" style="display:none;position:fixed;inset:0;background:#f0ece4;z-index:9998;overflow-y:auto"></div>
 
+<!-- STAFF CONFIRM LOGIN SCREEN — shared login for instructors/therapists/guides -->
+<div id="staffConfirmLoginOverlay" class="staff-login-overlay" style="display:none">
+  <div class="staff-login-card">
+    <div class="staff-login-brand">Amansala</div>
+    <div class="staff-login-sub">Staff Portal — Confirm Your Hours</div>
+    <input type="text" class="staff-login-field" id="staffConfirmLoginUser" placeholder="Username" autocomplete="username">
+    <input type="password" class="staff-login-field" id="staffConfirmLoginPass" placeholder="Password" autocomplete="current-password">
+    <div class="staff-login-err" id="staffConfirmLoginErr"></div>
+    <button class="btn btn-primary" style="width:100%;padding:13px;font-size:14px;border-radius:10px" onclick="staffConfirmLoginSubmit()">Sign In</button>
+    <div style="margin-top:20px;font-size:11.5px;color:var(--muted)">Need access? Contact <a href="mailto:darlene@amansala.com" style="color:var(--teal)">darlene@amansala.com</a></div>
+  </div>
+</div>
+
+<!-- STAFF CONFIRM DASHBOARD — scoped to that person's own hours only, across BBC/Spa/Tours -->
+<div id="staffConfirmDashboard" style="display:none;position:fixed;inset:0;background:#f0ece4;z-index:9998;overflow-y:auto"></div>
+
 <!-- ===== POST-SIGNING DEPOSIT REMINDER MODAL ===== -->
 <div class="modal-overlay" id="depositReminderModal" style="z-index:3000">
   <div class="modal" style="width:560px;max-width:96vw;border-radius:20px;overflow:hidden;padding:0">
@@ -5503,6 +5550,7 @@ if(location.protocol!=='file:'){
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="modules/activity-sheet-import.js"></script>
 <script src="modules/bbc-schedule.js"></script>
+<script src="modules/staff-confirm-portal.js"></script>
 <script>
 // ===== BBC SCHEDULE MODULE — moved to modules/bbc-schedule.js =====
 </script>

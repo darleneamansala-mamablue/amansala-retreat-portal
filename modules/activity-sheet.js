@@ -8,6 +8,8 @@ let actSheetSignups = {}; // { bookingId: [{firstName,lastName,activities,...}] 
 let actOpsData = {}; // { 'aoId|date': {guide, van1, van2, guideConfirmed, driverConfirmed, entranceMXN} }
 let actSummaryFilterBkId = '';
 let actSummaryShowUndated = false;
+const TOUR_GUIDE_NAMES=['Marco','Yolanda','Sergio','Ryan'];
+const TOUR_DRIVER_NAMES=['Rubi','Rosy','Kike'];
 
 function actSummarySetFilter(field, val) {
   if (field === 'bkId') actSummaryFilterBkId = val;
@@ -725,11 +727,9 @@ function actSheetRenderSummary() {
         const inp=(id,lbl,val,placeholder)=>`<div><label style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">${lbl}</label><input type="number" id="${id}" value="${val||''}" placeholder="${placeholder}" min="0" oninput="actOpsSetNum('${opsKey}','entranceMXN',+this.value)" style="width:140px;padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;color:var(--dark);background:var(--sand);outline:none"></div>`;
         const sel=(field,lbl,options)=>`<div><label style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">${lbl}</label><select onchange="actOpsSet('${opsKey}','${field}',this.value)" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;color:var(--dark);background:var(--sand);outline:none;min-width:150px">${options}</select></div>`;
         const chk=(field,lbl,checked,color)=>`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:${checked?color:'#6b7280'};background:${checked?color+'18':'#f5f5f0'};border:1.5px solid ${checked?color:'#e0dbd2'};border-radius:8px;padding:6px 12px;transition:all .15s"><input type="checkbox" onchange="actOpsSet('${opsKey}','${field}',this.checked)" ${checked?'checked':''} style="accent-color:${color};width:15px;height:15px;cursor:pointer">${lbl}</label>`;
-        const GUIDE_NAMES=['Marco','Yolanda','Sergio','Ryan'];
-        const DRIVER_NAMES=['Rubi','Rosy','Kike'];
-        const guide1Opts=['',...GUIDE_NAMES].map(v=>`<option value="${v.toLowerCase()}" ${ops.guide1===v.toLowerCase()?'selected':''}>${v||'— Guide 1 —'}</option>`).join('');
-        const guide2Opts=['',...GUIDE_NAMES].map(v=>`<option value="${v.toLowerCase()}" ${ops.guide2===v.toLowerCase()?'selected':''}>${v||'— Guide 2 (optional) —'}</option>`).join('');
-        const driverOpts=['',...DRIVER_NAMES].map(v=>`<option value="${v.toLowerCase()}" ${ops.driver===v.toLowerCase()?'selected':''}>${v||'— Assign Driver —'}</option>`).join('');
+        const guide1Opts=['',...TOUR_GUIDE_NAMES].map(v=>`<option value="${v.toLowerCase()}" ${ops.guide1===v.toLowerCase()?'selected':''}>${v||'— Guide 1 —'}</option>`).join('');
+        const guide2Opts=['',...TOUR_GUIDE_NAMES].map(v=>`<option value="${v.toLowerCase()}" ${ops.guide2===v.toLowerCase()?'selected':''}>${v||'— Guide 2 (optional) —'}</option>`).join('');
+        const driverOpts=['',...TOUR_DRIVER_NAMES].map(v=>`<option value="${v.toLowerCase()}" ${ops.driver===v.toLowerCase()?'selected':''}>${v||'— Assign Driver —'}</option>`).join('');
         const selectedGuides=[ops.guide1,ops.guide2].filter(Boolean).map(n=>n.charAt(0).toUpperCase()+n.slice(1));
         const guideConfirmLabel='✓ '+(selectedGuides.length?selectedGuides.join(' & ')+' Confirmed':'Guide Confirmed');
         const selectedDriver=ops.driver?ops.driver.charAt(0).toUpperCase()+ops.driver.slice(1):'';

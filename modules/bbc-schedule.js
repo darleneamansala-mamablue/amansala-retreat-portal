@@ -114,10 +114,25 @@ let bbcSchedules=[];
 let bbcCurrentId=null;
 
 function bbcUid(){return 'bbc'+Math.random().toString(36).substr(2,9);}
-function bbcLoadData(){try{bbcSchedules=JSON.parse(localStorage.getItem('bbc_schedules')||'[]');}catch(e){bbcSchedules=[];}}
-function bbcSaveData(){
+let bbcLoaded=false;
+function bbcLoadLocal(){try{bbcSchedules=JSON.parse(localStorage.getItem('bbc_schedules')||'[]');}catch(e){bbcSchedules=[];}}
+// Previously local-only: read localStorage but never actually fetched from
+// Supabase, so schedules made on one device/browser never showed up on
+// another — including a teacher's own confirmation of their classes.
+async function bbcLoadData(){
+  bbcLoadLocal();
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','bbc_schedules').maybeSingle();
+    if(data?.value&&Array.isArray(data.value)){
+      bbcSchedules=data.value;
+      localStorage.setItem('bbc_schedules',JSON.stringify(bbcSchedules));
+    }
+  }catch(e){}
+  bbcLoaded=true;
+}
+async function bbcSaveData(){
   localStorage.setItem('bbc_schedules',JSON.stringify(bbcSchedules));
-  try{db.from('app_store').upsert({key:'bbc_schedules',value:bbcSchedules},true);}catch(e){}
+  try{await db.from('app_store').upsert({key:'bbc_schedules',value:bbcSchedules,updated_at:new Date().toISOString()});}catch(e){console.warn('BBC schedule sync failed:',e);}
 }
 function bbcFmtDate(d){const dt=new Date(d+'T12:00:00');return dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});}
 function bbcAddDays(ds,n){const d=new Date(ds+'T12:00:00');d.setDate(d.getDate()+n);return d.toISOString().split('T')[0];}
@@ -242,7 +257,7 @@ function bbcDupInstructors(slots){
   return Object.keys(c).filter(k=>c[k]>1);
 }
 
-function bbcInit(){bbcLoadData();bbcShowList();}
+async function bbcInit(){await bbcLoadData();bbcShowList();}
 
 function bbcShowList(){
   bbcCurrentId=null;
@@ -252,6 +267,9 @@ function bbcShowList(){
   const bb=document.getElementById('bbcBackBtn'),pb=document.getElementById('bbcPrintBtn'),cb=document.getElementById('bbcCopyBtn'),sb=document.getElementById('bbcStatusBtn'),nb=document.getElementById('bbcNewBtn');
   if(bb)bb.style.display='none';if(pb)pb.style.display='none';if(cb)cb.style.display='none';if(sb)sb.style.display='none';if(nb)nb.style.display='flex';
   bbcRenderList();
+  // Refresh again once Supabase confirms current data, in case another
+  // device/teacher changed something since this browser last loaded it.
+  bbcLoadData().then(()=>{if(document.getElementById('bbcListView').style.display!=='none')bbcRenderList();});
 }
 
 function bbcShowNewForm(){

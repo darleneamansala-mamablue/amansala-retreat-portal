@@ -1,0 +1,330 @@
+// ===== staff-confirm-portal.js — shared login for instructors/therapists/guides =====
+// Loaded as a classic script; shares global scope (same pattern as cb-portal-sync.js).
+// Fully separate, additive system, mirroring driver-portal.js structurally — own
+// storage keys, own login/session, own dashboard. Must never modify or interfere
+// with staff login (admin-staff.js), teacher login (teacher-portal.js), or driver
+// login (driver-portal.js) mechanisms.
+//
+// One login covers everything assigned to that person by NAME across three
+// systems: BBC schedule slots (instructor), Spa appointments (therapist), and
+// Tour ops (guide/driver) — matched by name, not by domain, so someone like
+// Sergio (BBC classes + spa services) sees both under one sign-in. They can only
+// see their own hours and confirm/unconfirm them — no financials, no other tabs.
+
+// ===== ACCOUNTS =====
+const DEF_STAFF_CONFIRM=[
+  {id:'sc_ryan',name:'Ryan',username:'ryan',password:'ryan2026',active:true},
+  {id:'sc_adele',name:'Adele',username:'adele',password:'adele2026',active:true},
+  {id:'sc_sergio',name:'Sergio',username:'sergio',password:'sergio2026',active:true},
+  {id:'sc_fernando',name:'Fernando',username:'fernando',password:'fernando2026',active:true},
+  {id:'sc_kun',name:'Kun',username:'kun',password:'kun2026',active:true},
+  {id:'sc_yolanda',name:'Yolanda',username:'yolanda',password:'yolanda2026',active:true},
+  {id:'sc_maya',name:'Maya',username:'maya',password:'maya2026',active:true},
+  {id:'sc_kiki',name:'Kiki',username:'kiki',password:'kiki2026',active:true},
+  {id:'sc_marco',name:'Marco',username:'marco',password:'marco2026',active:true},
+  {id:'sc_rubi',name:'Rubi',username:'rubi',password:'rubi2026',active:true},
+  {id:'sc_rosy',name:'Rosy',username:'rosy',password:'rosy2026',active:true},
+  {id:'sc_kike',name:'Kike',username:'kike',password:'kike2026',active:true},
+];
+let staffConfirmAccounts=[];
+let currentStaffConfirmSession=null;
+
+function loadStaffConfirmAccountsLocal(){
+  const raw=localStorage.getItem('amansala_staff_confirm_accounts');
+  if(raw){try{staffConfirmAccounts=JSON.parse(raw);}catch{staffConfirmAccounts=DEF_STAFF_CONFIRM.map(a=>({...a}));}}
+  else{staffConfirmAccounts=DEF_STAFF_CONFIRM.map(a=>({...a}));localStorage.setItem('amansala_staff_confirm_accounts',JSON.stringify(staffConfirmAccounts));}
+  staffConfirmAccounts.forEach(a=>{if(a.active===undefined)a.active=true;});
+  if(!staffConfirmAccounts.length)staffConfirmAccounts=DEF_STAFF_CONFIRM.map(a=>({...a}));
+}
+async function loadStaffConfirmAccounts(){
+  loadStaffConfirmAccountsLocal();
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','staffConfirmAccounts').maybeSingle();
+    if(data?.value&&Array.isArray(data.value)&&data.value.length){staffConfirmAccounts=data.value;}
+  }catch(e){}
+}
+async function saveStaffConfirmAccounts(){
+  localStorage.setItem('amansala_staff_confirm_accounts',JSON.stringify(staffConfirmAccounts));
+  try{await db.from('app_store').upsert({key:'staffConfirmAccounts',value:staffConfirmAccounts,updated_at:new Date().toISOString()});}catch(e){console.warn('Staff confirm account sync failed:',e);}
+}
+
+// ===== MODE DETECTION (mirrors IS_DRIVER_MODE/IS_TEACHER_MODE pattern) =====
+const IS_STAFF_CONFIRM_MODE=new URLSearchParams(window.location.search).get('mode')==='confirm'||sessionStorage.getItem('ama_confirm_mode')==='1'||(!localStorage.getItem('ama_admin_device')&&localStorage.getItem('ama_confirm_persist')==='1');
+
+function getStaffConfirmSession(){
+  if(currentStaffConfirmSession)return currentStaffConfirmSession;
+  const raw=sessionStorage.getItem('amansala_staff_confirm_session');
+  if(raw){try{currentStaffConfirmSession=JSON.parse(raw);}catch{currentStaffConfirmSession=null;}}
+  return currentStaffConfirmSession;
+}
+
+function staffConfirmLoginSubmit(){
+  const username=document.getElementById('staffConfirmLoginUser').value.trim().toLowerCase();
+  const password=document.getElementById('staffConfirmLoginPass').value;
+  const errEl=document.getElementById('staffConfirmLoginErr');
+  errEl.textContent='';
+  if(!username||!password){errEl.textContent='Please enter your username and password.';return;}
+  function tryLogin(){
+    return staffConfirmAccounts.find(a=>a.active&&a.username.toLowerCase()===username&&a.password===password)||null;
+  }
+  let account=tryLogin();
+  if(!account){
+    errEl.textContent='Checking credentials…';
+    db.from('app_store').select('value').eq('key','staffConfirmAccounts').maybeSingle().then(({data})=>{
+      if(data?.value&&Array.isArray(data.value)&&data.value.length){
+        staffConfirmAccounts=data.value;
+        localStorage.setItem('amansala_staff_confirm_accounts',JSON.stringify(staffConfirmAccounts));
+      }
+      account=tryLogin();
+      if(!account){errEl.textContent='Incorrect username or password.';return;}
+      errEl.textContent='';
+      staffConfirmLoginComplete(account);
+    }).catch(()=>{errEl.textContent='Incorrect username or password.';});
+    return;
+  }
+  staffConfirmLoginComplete(account);
+}
+
+function staffConfirmLoginComplete(account){
+  const session={id:account.id,name:account.name,username:account.username.toLowerCase()};
+  sessionStorage.setItem('amansala_staff_confirm_session',JSON.stringify(session));
+  sessionStorage.setItem('ama_confirm_mode','1');
+  localStorage.setItem('ama_confirm_persist','1');
+  currentStaffConfirmSession=session;
+  const ov=document.getElementById('staffConfirmLoginOverlay');if(ov)ov.style.display='none';
+  const dash=document.getElementById('staffConfirmDashboard');if(dash)dash.style.display='block';
+  scInitDashboard();
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('staffConfirmLoginOverlay')?.style.display!=='none'&&IS_STAFF_CONFIRM_MODE)staffConfirmLoginSubmit();});
+
+function staffConfirmLogout(){
+  if(!confirm('Sign out?'))return;
+  sessionStorage.removeItem('amansala_staff_confirm_session');
+  sessionStorage.removeItem('ama_confirm_mode');
+  localStorage.removeItem('ama_confirm_persist');
+  currentStaffConfirmSession=null;
+  location.href=location.pathname;
+}
+
+// ===== BOOTSTRAP =====
+async function initStaffConfirmMode(){
+  if(!IS_STAFF_CONFIRM_MODE)return;
+  await loadStaffConfirmAccounts();
+  document.querySelectorAll('.tab-btn').forEach(b=>b.style.pointerEvents='none');
+  const session=getStaffConfirmSession();
+  if(session){
+    const ov=document.getElementById('staffConfirmLoginOverlay');if(ov)ov.style.display='none';
+    const dash=document.getElementById('staffConfirmDashboard');if(dash)dash.style.display='block';
+    scInitDashboard();
+    return;
+  }
+  const ov=document.getElementById('staffConfirmLoginOverlay');if(ov)ov.style.display='flex';
+  setTimeout(()=>document.getElementById('staffConfirmLoginUser')?.focus(),120);
+}
+
+// ===== DATA GATHERING (matched by name across the three systems) =====
+function scSessionName(){return(getStaffConfirmSession()?.name||'').trim().toLowerCase();}
+
+function scBbcItemsForName(name){
+  const items=[];
+  (typeof bbcSchedules!=='undefined'?bbcSchedules:[]).forEach(s=>{
+    (s.days||[]).forEach((day,di)=>{
+      (day.slots||[]).forEach((slot,si)=>{
+        if(slot.type==='meal')return;
+        if(!slot.instructor||slot.instructor.trim().toLowerCase()!==name)return;
+        items.push({domain:'bbc',schedId:s.id,schedName:s.name,di,si,date:day.date,time:slot.time,activity:slot.activity,location:slot.location,confirmed:!!slot.confirmed,confirmedAt:slot.confirmedAt});
+      });
+    });
+  });
+  return items;
+}
+
+function scSpaItemsForName(name){
+  if(typeof SpaData==='undefined')return[];
+  const ther=(SpaData.therapists||[]).find(t=>{
+    const full=((t.firstName||'')+' '+(t.lastName||'')).trim().toLowerCase();
+    return full===name||(t.firstName||'').trim().toLowerCase()===name;
+  });
+  if(!ther)return[];
+  return(typeof SpaAppointments!=='undefined'?SpaAppointments:[]).filter(a=>a.therapistId===ther.id&&a.status!=='CANCELLED').map(a=>{
+    const svc=(SpaData.services||[]).find(s=>s.id===a.serviceId);
+    return{domain:'spa',id:a.id,date:a.date,time:a.start,duration:a.duration,activity:svc?svc.name:'Service',client:a.clientName,confirmed:!!a.confirmed,confirmedAt:a.confirmedAt};
+  });
+}
+
+function scTourItemsForName(name){
+  const items=[];
+  const ops=(typeof actOpsData!=='undefined'?actOpsData:{});
+  Object.keys(ops).forEach(opsKey=>{
+    const o=ops[opsKey]||{};
+    const[aoId,date]=opsKey.split('|');
+    const role=o.guide1===name||o.guide2===name?'guide':o.driver===name?'driver':null;
+    if(!role)return;
+    const ao=(typeof ADD_ONS!=='undefined'?ADD_ONS:[]).find(a=>a.id===aoId);
+    const confirmed=role==='driver'?!!o.driverConfirmed:!!o.guideConfirmed;
+    const confirmedAt=role==='driver'?o.driverConfirmedAt:o.guideConfirmedAt;
+    items.push({domain:'tour',opsKey,date,activity:ao?ao.name:aoId,role,confirmed,confirmedAt});
+  });
+  return items;
+}
+
+function scAllItemsForName(name){
+  return[...scBbcItemsForName(name),...scSpaItemsForName(name),...scTourItemsForName(name)].sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+}
+
+// ===== CONFIRM ACTIONS (reusable by the staff dashboard AND the admin board) =====
+function scConfirmBbc(schedId,di,si){
+  if(typeof bbcSchedules==='undefined')return;
+  const s=bbcSchedules.find(x=>x.id===schedId);if(!s)return;
+  const slot=s.days[di]?.slots[si];if(!slot)return;
+  slot.confirmed=!slot.confirmed;
+  slot.confirmedAt=slot.confirmed?new Date().toISOString():null;
+  bbcSaveData();
+}
+function scConfirmSpa(apptId){
+  if(typeof SpaAppointments==='undefined')return;
+  const a=SpaAppointments.find(x=>x.id===apptId);if(!a)return;
+  a.confirmed=!a.confirmed;
+  a.confirmedAt=a.confirmed?new Date().toISOString():null;
+  spaCalSave();
+}
+function scConfirmTour(opsKey,role){
+  const field=role==='driver'?'driverConfirmed':'guideConfirmed';
+  const cur=!!(actOpsData[opsKey]||{})[field];
+  actOpsSet(opsKey,field,!cur); // reuses existing function — saves + timestamps + refreshes admin view
+}
+
+// ===== STAFF DASHBOARD =====
+async function scInitDashboard(){
+  const root=document.getElementById('staffConfirmDashboard');if(!root)return;
+  root.innerHTML='<div style="text-align:center;padding:80px 20px;color:#8a7e74;font-family:\'Jost\',sans-serif">Loading your schedule…</div>';
+  await Promise.all([
+    (typeof bbcLoadData==='function'?bbcLoadData():Promise.resolve()),
+    (typeof spaLoad==='function'&&typeof spaLoaded!=='undefined'&&!spaLoaded?spaLoad():Promise.resolve()),
+    (typeof spaCalLoad==='function'&&typeof spaCalLoaded!=='undefined'&&!spaCalLoaded?spaCalLoad():Promise.resolve()),
+    (typeof actOpsLoad==='function'?actOpsLoad():Promise.resolve()),
+  ]);
+  scRenderDashboard();
+}
+
+function scFmtDate(ds){const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
+
+function scItemCardHtml(item,forAdmin){
+  const today=new Date().toISOString().slice(0,10);
+  const isPast=item.date<today;
+  const label=item.domain==='bbc'?'Bikini Bootcamp':item.domain==='spa'?'Spa':('Tour — '+(item.role==='driver'?'Driver':'Guide'));
+  const color=item.domain==='bbc'?'#0e9494':item.domain==='spa'?'#a855f7':'#d97706';
+  const timeLabel=item.domain==='spa'&&item.time?spaCalFmtT(item.time):(item.time||'');
+  const sub=item.domain==='spa'?(item.client?' · '+item.client:''):(item.location?' · '+item.location:'');
+  const onClick=item.domain==='bbc'?`scConfirmBbc('${item.schedId}',${item.di},${item.si})`
+    :item.domain==='spa'?`scConfirmSpa('${item.id}')`
+    :`scConfirmTour('${item.opsKey}','${item.role}')`;
+  const refresh=forAdmin?';scRenderAdminBoard()':';scRenderDashboard()';
+  return`<div style="background:#fff;border:1.5px solid ${item.confirmed?'#86efac':'#e8dfd4'};border-radius:12px;padding:16px 18px;margin-bottom:10px;opacity:${isPast&&!item.confirmed?'.55':'1'}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div>
+        <div style="font-weight:800;color:${color};font-size:11px;letter-spacing:.4px;text-transform:uppercase">${label}${forAdmin?' · '+(item.instructorName||''):''}</div>
+        <div style="font-size:16px;font-weight:700;color:#2d2520;margin-top:3px">${item.activity}</div>
+        <div style="font-size:12.5px;color:#8a7e74;margin-top:3px">${scFmtDate(item.date)}${timeLabel?' · '+timeLabel:''}${sub}</div>
+      </div>
+      ${item.confirmed
+        ?`<button onclick="${onClick}${refresh}" title="Click to unconfirm" style="font-size:11.5px;font-weight:700;color:#15803d;background:#dcfce7;border:none;border-radius:99px;padding:6px 14px;white-space:nowrap;cursor:pointer">&#10003; Confirmed</button>`
+        :`<button onclick="${onClick}${refresh}" style="background:#2d6a6a;color:#fff;border:none;padding:9px 18px;border-radius:9px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Confirm</button>`}
+    </div>
+  </div>`;
+}
+
+function scRenderDashboard(){
+  const root=document.getElementById('staffConfirmDashboard');if(!root)return;
+  const session=getStaffConfirmSession();if(!session)return;
+  const name=scSessionName();
+  const bbc=scBbcItemsForName(name).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  const spa=scSpaItemsForName(name).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  const tour=scTourItemsForName(name).sort((a,b)=>a.date.localeCompare(b.date));
+  const section=(title,items)=>items.length?`<div style="margin-bottom:26px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">${title}</div>${items.map(i=>scItemCardHtml(i,false)).join('')}</div>`:'';
+  const all=[...bbc,...spa,...tour];
+  root.innerHTML=`
+    <div style="max-width:640px;margin:0 auto;padding:28px 20px 60px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <div>
+          <div style="font-size:22px;font-weight:800;color:#2d2520;font-family:'Cormorant Garamond',serif">Hi, ${session.name}</div>
+          <div style="font-size:12.5px;color:#8a7e74;margin-top:2px">Your hours — confirm what's yours</div>
+        </div>
+        <button onclick="staffConfirmLogout()" style="background:#fff;border:1.5px solid #e8dfd4;color:#6b5f54;padding:8px 14px;border-radius:9px;font-family:'Jost',sans-serif;font-size:12px;font-weight:600;cursor:pointer">Sign Out</button>
+      </div>
+      ${all.length===0?`<div style="text-align:center;padding:60px 20px;color:#c8bfb5;font-style:italic">No hours assigned to you right now.</div>`:''}
+      ${section('Bikini Bootcamp',bbc)}
+      ${section('Spa',spa)}
+      ${section('Tours',tour)}
+    </div>`;
+}
+
+// ===== ADMIN — manage accounts + read/toggle every domain's confirm status =====
+function scAdminAddAccount(){
+  const name=document.getElementById('scNewName').value.trim();
+  const username=document.getElementById('scNewUser').value.trim().toLowerCase();
+  const password=document.getElementById('scNewPass').value.trim();
+  if(!name||!username||!password){alert('Please fill in name, username, and password.');return;}
+  if(staffConfirmAccounts.some(a=>a.username.toLowerCase()===username)){alert('That username is already in use.');return;}
+  staffConfirmAccounts.push({id:'sc_'+Math.random().toString(36).substr(2,9),name,username,password,active:true});
+  saveStaffConfirmAccounts();
+  scRenderAdminAccounts();
+  document.getElementById('scNewName').value='';document.getElementById('scNewUser').value='';document.getElementById('scNewPass').value='';
+}
+function scAdminToggleActive(id){
+  const a=staffConfirmAccounts.find(x=>x.id===id);if(!a)return;
+  a.active=!a.active;
+  saveStaffConfirmAccounts();
+  scRenderAdminAccounts();
+}
+function scAdminRemoveAccount(id){
+  const a=staffConfirmAccounts.find(x=>x.id===id);if(!a)return;
+  if(!confirm('Remove '+a.name+'’s login?'))return;
+  staffConfirmAccounts=staffConfirmAccounts.filter(x=>x.id!==id);
+  saveStaffConfirmAccounts();
+  scRenderAdminAccounts();
+}
+function scCopyLoginLink(){
+  const url=location.origin+location.pathname.replace(/[^/]*$/,'')+'booking-hub.html?mode=confirm';
+  navigator.clipboard.writeText(url).then(()=>showToast('Login link copied — send it to your team.')).catch(()=>alert(url));
+}
+
+function scRenderAdminAccounts(){
+  const el=document.getElementById('scAccountsList');if(!el)return;
+  el.innerHTML=staffConfirmAccounts.map(a=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;margin-bottom:7px;background:${a.active?'#fff':'#f5f5f0'}">
+      <div style="flex:1;min-width:120px;font-weight:700;color:var(--dark);font-size:13px">${a.name}</div>
+      <div style="font-size:12px;color:var(--muted);min-width:90px">@${a.username}</div>
+      <div style="font-size:12px;color:var(--muted);font-family:monospace;min-width:100px">${a.password}</div>
+      <button onclick="scAdminToggleActive('${a.id}')" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid ${a.active?'#86efac':'#e8dfd4'};background:${a.active?'#dcfce7':'#f5f5f0'};color:${a.active?'#15803d':'#9ca3af'};cursor:pointer">${a.active?'Active':'Disabled'}</button>
+      <button onclick="scAdminRemoveAccount('${a.id}')" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;cursor:pointer">Remove</button>
+    </div>`).join('');
+}
+
+async function scAdminInit(){
+  const el=document.getElementById('scAccountsList');if(!el)return;
+  await loadStaffConfirmAccounts();
+  scRenderAdminAccounts();
+  await Promise.all([
+    (typeof bbcLoadData==='function'?bbcLoadData():Promise.resolve()),
+    (typeof spaLoad==='function'&&typeof spaLoaded!=='undefined'&&!spaLoaded?spaLoad():Promise.resolve()),
+    (typeof spaCalLoad==='function'&&typeof spaCalLoaded!=='undefined'&&!spaCalLoaded?spaCalLoad():Promise.resolve()),
+    (typeof actOpsLoad==='function'?actOpsLoad():Promise.resolve()),
+  ]);
+  scRenderAdminBoard();
+}
+
+function scRenderAdminBoard(){
+  const el=document.getElementById('scAdminBoard');if(!el)return;
+  const names=[...new Set(staffConfirmAccounts.map(a=>a.name.trim().toLowerCase()))];
+  const byNameLabel=new Map(staffConfirmAccounts.map(a=>[a.name.trim().toLowerCase(),a.name]));
+  let all=[];
+  names.forEach(n=>{
+    scAllItemsForName(n).forEach(i=>{i.instructorName=byNameLabel.get(n);all.push(i);});
+  });
+  all.sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+  const today=new Date().toISOString().slice(0,10);
+  const upcoming=all.filter(i=>i.date>=today||!i.confirmed);
+  if(!upcoming.length){el.innerHTML='<div style="text-align:center;padding:30px;color:#c8bfb5;font-style:italic">Nothing assigned yet.</div>';return;}
+  el.innerHTML=upcoming.map(i=>scItemCardHtml(i,true)).join('');
+}
