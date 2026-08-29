@@ -392,7 +392,36 @@ function scIsAvailable(name,date){
   const list=(typeof staffConfirmAccounts!=='undefined'?staffConfirmAccounts:[]);
   const acct=list.find(a=>a.name.trim().toLowerCase()===name.trim().toLowerCase());
   if(!acct)return true;
-  return !(acct.unavailableDates||[]).includes(date);
+  if((acct.unavailableDates||[]).includes(date))return false;
+  if(Array.isArray(acct.availableDaysOfWeek)&&acct.availableDaysOfWeek.length>0){
+    const dow=new Date(date+'T12:00:00').getDay();
+    if(!acct.availableDaysOfWeek.includes(dow))return false;
+  }
+  return true;
+}
+
+// ===== Recurring weekly-pattern availability (e.g. "only Mon/Wed/Fri") —
+// separate from, and layered on top of, the specific-date blocklist above =====
+const SC_DAY_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function scDaysOfWeekHtml(account){
+  const sel=Array.isArray(account.availableDaysOfWeek)?account.availableDaysOfWeek:[];
+  return`<div style="margin-bottom:14px">
+    <div style="font-size:12.5px;color:#8a7e74;margin-bottom:8px">Only work certain days of the week? Select them (leave all off = available any day).</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      ${SC_DAY_NAMES.map((d,i)=>{
+        const active=sel.includes(i);
+        return`<button onclick="scToggleDayOfWeek('${account.id}',${i})" style="padding:6px 13px;border-radius:20px;border:1.5px solid ${active?'#2d6a6a':'#e8dfd4'};background:${active?'#2d6a6a':'#fff'};color:${active?'#fff':'#6b5f54'};font-family:'Jost',sans-serif;font-size:12px;font-weight:700;cursor:pointer">${d}</button>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+function scToggleDayOfWeek(id,dayIdx){
+  const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
+  account.availableDaysOfWeek=account.availableDaysOfWeek||[];
+  const i=account.availableDaysOfWeek.indexOf(dayIdx);
+  if(i>=0)account.availableDaysOfWeek.splice(i,1);else account.availableDaysOfWeek.push(dayIdx);
+  saveStaffConfirmAccounts();
+  scTeamRefreshWhicheverView();
 }
 
 function scAvailabilityHtml(account){
@@ -401,6 +430,7 @@ function scAvailabilityHtml(account){
   return`<div style="margin-top:10px;margin-bottom:26px">
     <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">My Availability</div>
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:16px 18px">
+      ${scDaysOfWeekHtml(account)}
       <div style="font-size:12.5px;color:#8a7e74;margin-bottom:12px">Mark dates you're NOT available — you won't be scheduled for BBC classes on these days.</div>
       <div style="display:flex;gap:8px;margin-bottom:14px">
         <input type="date" id="scUnavailInput" style="flex:1;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
@@ -444,6 +474,7 @@ function scTeamAvailabilityHtml(){
             ${upcoming.length?`<span style="font-size:10.5px;font-weight:700;color:#dc2626">🚫 ${upcoming.length} date${upcoming.length>1?'s':''}</span>`:'<span style="font-size:10.5px;color:#c8bfb5;font-style:italic">available</span>'}
           </summary>
           <div style="padding:0 16px 14px">
+            ${scDaysOfWeekHtml(a)}
             <div style="display:flex;gap:8px;margin-bottom:10px">
               <input type="date" id="scTeamUnavailInput_${a.id}" style="flex:1;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
               <button onclick="scTeamAddUnavailable('${a.id}')" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Mark Unavailable</button>
@@ -566,6 +597,7 @@ function scRenderAdminAccounts(){
       </summary>
       <div style="padding:0 12px 12px;border-top:1px solid #f0ece4;margin-top:2px">
         <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin:10px 0 8px">Edit Availability</div>
+        ${scDaysOfWeekHtml(a)}
         <div style="display:flex;gap:8px;margin-bottom:10px">
           <input type="date" id="scTeamUnavailInput_${a.id}" style="flex:1;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
           <button onclick="scTeamAddUnavailable('${a.id}')" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Mark Unavailable</button>
