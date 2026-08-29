@@ -31,16 +31,21 @@ const DEF_STAFF_CONFIRM=[
 // no rate and shows as "no rate set" in payroll rather than being silently
 // skipped or paid $0 without explanation.
 const BBC_PAY_RATES={
-  'yoga':800,'yoga mala':800,'gentle yoga':800,
+  'yoga':800,'yoga mala':800,'gentle yoga':800,'morning yoga':800,
   'circuit training':1000,'bbc 20':1000,'sculpt & tone':1000,'boxing':1000,'absolution':1000,'pilates':1000,
   'latin grooves':1000,'afrobeats':1000,'bollywood':1000,'salsa':1000,'dance':1000,
   'morning beach walk':500,
 };
-function bbcPayRateFor(activity){
+// Ryan lives onsite and is paid 50% of the standard rate — Darlene's spec
+// (2026-08-29): $500 for a class (normally $1000), $250 for a walk (normally $500).
+const RYAN_RATE_OVERRIDE={1000:500,500:250};
+function bbcPayRateFor(activity,instructor){
   if(!activity)return null;
   const a=activity.trim().toLowerCase();
-  if(a.indexOf('grand rising')===0)return 250; // activation slot — Breathwork/Meditation
-  return BBC_PAY_RATES[a]!=null?BBC_PAY_RATES[a]:null;
+  let rate=a.indexOf('grand rising')===0?250:(BBC_PAY_RATES[a]!=null?BBC_PAY_RATES[a]:null); // activation slot — Breathwork/Meditation
+  if(rate==null)return null;
+  if(instructor&&instructor.trim().toLowerCase()==='ryan'&&RYAN_RATE_OVERRIDE[rate]!=null)rate=RYAN_RATE_OVERRIDE[rate];
+  return rate;
 }
 // Only CONFIRMED sessions count toward pay — matches the spa payroll
 // convention of paying for completed work, not everything scheduled.
@@ -53,7 +58,7 @@ function scComputeBbcPayroll(){
         if(!slot.confirmed||!slot.instructor)return;
         const name=slot.instructor.trim();if(!name)return;
         if(!byName[name])byName[name]={name,sessions:[],unrated:[],total:0};
-        const rate=bbcPayRateFor(slot.activity);
+        const rate=bbcPayRateFor(slot.activity,slot.instructor);
         if(rate==null){byName[name].unrated.push(slot.activity);return;}
         byName[name].sessions.push({date:day.date,activity:slot.activity,schedName:s.name,rate});
         byName[name].total+=rate;
