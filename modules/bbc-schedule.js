@@ -215,7 +215,7 @@ function bbcAddDays(ds,n){const d=new Date(ds+'T12:00:00');d.setDate(d.getDate()
 function bbcDayCount(s,e){return Math.round((new Date(e+'T12:00:00')-new Date(s+'T12:00:00'))/86400000)+1;}
 function bbcMakeSlot(time,activity,instructor,location,fixed,type){return{id:bbcUid(),time,activity,instructor:instructor||'',location:location||'',fixed:!!fixed,type:type||'class'};}
 
-function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount){
+function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount,date){
   const smallGroup=!!guestCount&&guestCount<3;
   const isFirst=di===0,isLast=di===total-1;
   const fullIdx=di-1; // 0-based index for full days (negative for arrival day)
@@ -234,12 +234,16 @@ function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount){
   const aftLoc='Grande';
   const hasExcursion=!isFirst&&!isLast&&excursionDays&&excursionDays.includes(di);
 
-  // Arrival day is a half day — starts at 4:45 with Sculpt & Tone
+  // Arrival day is a half day — starts at 4:45 with Sculpt & Tone.
+  // Yoga and Orientation (Opening Circle) default to Beachfront — only fall
+  // back to Heaven if Beachfront is already booked by a concurrent yoga
+  // retreat that day.
   if(isFirst){
+    const arrivalLoc=(date&&bbcGetShalaConflicts(date,'Beachfront').length)?'Heaven':'Beachfront';
     const slots=[
       bbcMakeSlot('4:45 – 5:30','Sculpt & Tone','Ryan','Grande',false,'class'),
-      bbcMakeSlot('5:45 – 6:45','Gentle Yoga','Kun','Beachfront',false,'class'),
-      bbcMakeSlot('7:00','Opening Circle','Ryan','Heaven',false,'event'),
+      bbcMakeSlot('5:45 – 6:45','Gentle Yoga','Kun',arrivalLoc,false,'class'),
+      bbcMakeSlot('7:00','Opening Circle','Ryan',arrivalLoc,false,'event'),
       bbcMakeSlot('7:45','Dinner','','',true,'meal'),
     ];
     return slots;
@@ -302,8 +306,11 @@ function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount){
   // Offsite dinner defaults to the 2nd-to-last night (departure day itself
   // is a half day ending at breakfast, so it can't host a dinner) —
   // editable per retreat from the schedule editor if the night needs to move.
-  const isSecondLast=di===total-2;
-  slots.push(bbcMakeSlot('7:30',isSecondLast?'Offsite Dinner':'Dinner','','',true,'meal'));
+  // Default to the 3rd-to-last night, not the 2nd-to-last — e.g. a camp
+  // ending Nov 27 defaults Offsite Dinner to Nov 25, not Nov 26. Editable
+  // per schedule from the day editor if a specific week needs it moved.
+  const isOffsiteDinnerNight=di===total-3;
+  slots.push(bbcMakeSlot('7:30',isOffsiteDinnerNight?'Offsite Dinner':'Dinner','','',true,'meal'));
   return slots;
 }
 
@@ -334,7 +341,8 @@ function bbcGenSchedule(name,start,nights,excursionDays,guestCount,tourMode,cust
   }
   for(let i=0;i<total;i++){
     const prompt=BBC_MORNING_PAGES[Math.min(i,BBC_MORNING_PAGES.length-1)];
-    days.push({date:bbcAddDays(start,i),prompt,note:'',slots:bbcGenDaySlots(i,total,excDays,tourByDay[i],guestCount)});
+    const date=bbcAddDays(start,i);
+    days.push({date,prompt,note:'',slots:bbcGenDaySlots(i,total,excDays,tourByDay[i],guestCount,date)});
   }
   return{id:bbcUid(),name,startDate:start,endDate:end,nights,guestCount:guestCount||null,tourMode:mode,status:'draft',createdAt:new Date().toISOString(),days};
 }
@@ -663,33 +671,47 @@ function bbcRemoveSlot(schedId,di,si){
 function bbcPrint(){
   const s=bbcGetCurrent();if(!s)return;
   const win=window.open('','_blank');if(!win)return;
+  const total=s.days.length;
   const dayHtml=s.days.map(function(day,di){
-    const total=s.days.length,isFirst=di===0,isLast=di===total-1;
-    const noteH=day.note?'<div style="font-size:17px;font-weight:700;text-align:center;color:#2d6a6a;margin-bottom:12px;font-family:Georgia,serif">'+day.note+'</div>':'';
-    const promptH=day.prompt?'<div style="font-size:14px;font-style:italic;color:#4a6a6a;margin-bottom:18px;line-height:1.7;border-left:3px solid #b2d8d8;padding-left:12px">'+day.prompt+'</div>':'';
+    const isFirst=di===0,isLast=di===total-1;
+    const dtc=isFirst?'#0e9494':isLast?'#8b5cf6':'#6b7280';
+    const dtag=isFirst?'Arrival Day':isLast?'Departure Day':'Day '+(di+1)+' of '+total;
+    const noteH=day.note?'<div style="font-size:16px;font-weight:700;color:#2d6a6a;margin-bottom:14px;font-family:\'Cormorant Garamond\',serif">'+day.note+'</div>':'';
+    const promptH=day.prompt?'<div style="font-size:13.5px;font-style:italic;color:#5a5048;margin-bottom:20px;line-height:1.7;background:#faf7f2;border-radius:8px;padding:12px 16px;border-left:3px solid #b2d8d8">'+day.prompt+'</div>':'';
     const slotsH=day.slots.map(function(slot){
       const isMeal=slot.type==='meal',isEvent=slot.type==='event';
-      let line='<b>'+slot.time+'</b>  '+slot.activity;
-      if(slot.instructor)line+=' w/ '+slot.instructor;
-      if(slot.location)line+=' | '+slot.location;
-      const st=isMeal?'font-weight:700;color:#2d6a6a;':isEvent?'font-weight:600;color:#7c3aed;':'';
-      return'<div style="padding:6px 0;border-bottom:1px solid #f0ece4;font-size:14px;line-height:1.4;'+st+'">'+line+'</div>';
+      if(isMeal){
+        return'<div style="display:flex;align-items:baseline;gap:10px;padding:7px 0;color:#a8998a;font-style:italic;font-size:12.5px">'
+          +'<span style="width:80px;flex-shrink:0;white-space:nowrap;font-variant-numeric:tabular-nums">'+(slot.time||'')+'</span><span>'+slot.activity+'</span></div>';
+      }
+      const nameColor=isEvent?'#7c3aed':'#2d2520';
+      const pill=slot.location?'<span style="font-size:10.5px;font-weight:700;color:#2d6a6a;background:#eaf4f2;border-radius:20px;padding:2px 9px;white-space:nowrap;margin-left:auto">'+slot.location+'</span>':'';
+      return'<div style="display:flex;align-items:baseline;gap:10px;padding:9px 0;border-bottom:1px solid #f0ece4">'
+        +'<span style="width:80px;flex-shrink:0;white-space:nowrap;font-size:12px;font-weight:700;color:#2d6a6a;font-variant-numeric:tabular-nums">'+(slot.time||'')+'</span>'
+        +'<div style="flex:1;display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 10px">'
+        +'<span style="font-size:15px;font-weight:700;color:'+nameColor+';font-family:\'Cormorant Garamond\',serif">'+slot.activity+'</span>'
+        +(slot.instructor?'<span style="font-size:12px;color:#8a7e74">w/ '+slot.instructor+'</span>':'')
+        +pill+'</div></div>';
     }).join('');
-    const bgC=isFirst||isLast?'#f0f9f9':'#fff';
-    const bdC=isFirst?'#0ea5e9':isLast?'#8b5cf6':'#e5e7eb';
-    return'<div style="margin-bottom:32px;padding:20px 24px;background:'+bgC+';border-radius:10px;border-left:4px solid '+bdC+';page-break-inside:avoid">'
-      +'<h2 style="margin:0 0 10px;font-size:20px;font-family:Georgia,serif;color:#1a3333">'+bbcFmtDate(day.date)+'</h2>'
+    return'<div style="margin-bottom:26px;padding:22px 26px;background:#fff;border:1.5px solid #ede7db;border-radius:14px;page-break-inside:avoid">'
+      +'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">'
+      +'<h2 style="margin:0;font-size:21px;font-family:\'Cormorant Garamond\',serif;color:#2d2520">'+bbcFmtDate(day.date)+'</h2>'
+      +'<span style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:'+dtc+';background:'+dtc+'18;border-radius:20px;padding:3px 11px">'+dtag+'</span>'
+      +'</div>'
       +noteH+promptH+'<div>'+slotsH+'</div></div>';
   }).join('');
-  win.document.write('<!DOCTYPE html><html><head><link rel="icon" type="image/png" href="/favicon.png"><title>'+s.name+'</title><style>body{font-family:Helvetica Neue,Arial,sans-serif;margin:0;padding:32px 40px;color:#1a2332;max-width:720px;margin:0 auto}@media print{body{padding:20px}}</style></head><body>'
-    +'<div style="text-align:center;margin-bottom:36px;padding-bottom:24px;border-bottom:2px solid #2d6a6a">'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#2d6a6a;margin-bottom:8px">Amansala · Tulum</div>'
-    +'<h1 style="margin:0;font-size:28px;font-family:Georgia,serif;color:#1a3333">'+s.name+'</h1>'
-    +'<div style="font-size:14px;color:#6b7280;margin-top:8px">'+bbcFmtDate(s.startDate)+' – '+bbcFmtDate(s.endDate)+' · '+s.days.length+' Days</div>'
-    +(s.status==='confirmed'?'<div style="display:inline-block;background:#ecfdf5;color:#059669;border-radius:20px;padding:4px 16px;font-size:12px;font-weight:700;margin-top:10px">✓ Confirmed</div>':'')
+  win.document.write('<!DOCTYPE html><html><head><link rel="icon" type="image/png" href="/favicon.png"><title>'+s.name+'</title>'
+    +'<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">'
+    +'<style>body{font-family:\'Jost\',Helvetica,Arial,sans-serif;margin:0;padding:36px 20px;color:#2d2520;background:#f5f1eb}'
+    +'.sheet{max-width:700px;margin:0 auto}@media print{body{padding:16px;background:#fff}.sheet{max-width:none}}</style></head><body><div class="sheet">'
+    +'<div style="text-align:center;margin-bottom:32px;padding-bottom:22px;border-bottom:2px solid #2d6a6a">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;color:#2d6a6a;margin-bottom:10px">Amansala · Tulum</div>'
+    +'<h1 style="margin:0;font-size:32px;font-family:\'Cormorant Garamond\',serif;font-weight:700;color:#2d2520">'+s.name+'</h1>'
+    +'<div style="font-size:13.5px;color:#8a7e74;margin-top:8px">'+bbcFmtDate(s.startDate)+' – '+bbcFmtDate(s.endDate)+' · '+s.days.length+' Days</div>'
+    +(s.status==='confirmed'?'<div style="display:inline-block;background:#ecfdf5;color:#059669;border-radius:20px;padding:4px 16px;font-size:12px;font-weight:700;margin-top:12px">✓ Confirmed</div>':'')
     +'</div>'+dayHtml
-    +'<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;font-style:italic">With Love, Team Amansala 💙</div>'
-    +'</body></html>');
+    +'<div style="text-align:center;padding:26px 0 10px;color:#a8998a;font-size:13px;font-style:italic;font-family:\'Cormorant Garamond\',serif">With Love, Team Amansala 💙</div>'
+    +'</div></body></html>');
   win.document.close();
   setTimeout(function(){win.print();},500);
 }
@@ -699,7 +721,7 @@ function bbcPrint(){
 function bbcScheduleAsText(s){
   const lines=[];
   lines.push(s.name);
-  lines.push(bbcFmtDate(s.startDate)+' - '+bbcFmtDate(s.endDate)+' ('+s.days.length+' days)'+(s.guestCount?' — '+s.guestCount+' guests':''));
+  lines.push(bbcFmtDate(s.startDate)+' - '+bbcFmtDate(s.endDate)+' ('+s.days.length+' days)');
   lines.push('');
   s.days.forEach(function(day){
     lines.push(bbcFmtDate(day.date).toUpperCase());

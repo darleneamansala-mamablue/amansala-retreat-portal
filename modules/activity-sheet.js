@@ -295,6 +295,13 @@ function actByRetreatSelect(bkId) {
   actByRetreatBkId = bkId;
   actByRetreatRender();
 }
+function actByRetreatSearchPick(typed) {
+  const fmtD = ds=>{if(!ds)return'';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
+  const retreatLabel = b=>`${b.retreatName||b.leaderName||'Retreat'}${b.startDate?' · '+fmtD(b.startDate)+' – '+fmtD(b.endDate):''}`;
+  const bks = AppData.bookings.filter(b=>b.status!=='cancelled');
+  const match = bks.find(b=>retreatLabel(b)===typed);
+  if (match) actByRetreatSelect(match.id); // only jumps once the typed text exactly matches a real retreat
+}
 
 function actByRetreatRender() {
   const wrap = document.getElementById('actSheetByRetreat');
@@ -306,14 +313,15 @@ function actByRetreatRender() {
     actByRetreatBkId = (upcoming||bks[0])?.id||'';
   }
   const fmtD = ds=>{if(!ds)return'';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
-  const opts = bks.map(b=>`<option value="${b.id}" ${b.id===actByRetreatBkId?'selected':''}>${b.retreatName||b.leaderName||'Retreat'}${b.startDate?' · '+fmtD(b.startDate)+' – '+fmtD(b.endDate):''}</option>`).join('');
+  const retreatLabel = b=>`${b.retreatName||b.leaderName||'Retreat'}${b.startDate?' · '+fmtD(b.startDate)+' – '+fmtD(b.endDate):''}`;
+  const selected = bks.find(b=>b.id===actByRetreatBkId);
+  const dlOpts = bks.map(b=>`<option value="${menuEsc(retreatLabel(b))}">`).join('');
 
   let html = `<div style="max-width:900px">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;padding:14px 18px;background:#fff;border:1px solid var(--border);border-radius:10px">
       <span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px">Retreat</span>
-      <select onchange="actByRetreatSelect(this.value)" style="flex:1;min-width:220px;max-width:420px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13.5px;color:var(--dark);background:#fff">
-        ${opts||'<option value="">No retreats found</option>'}
-      </select>
+      <input list="actByRetreatDatalist" value="${selected?menuEsc(retreatLabel(selected)):''}" placeholder="Search by name…" oninput="actByRetreatSearchPick(this.value)" style="flex:1;min-width:220px;max-width:420px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13.5px;color:var(--dark);background:#fff">
+      <datalist id="actByRetreatDatalist">${dlOpts||''}</datalist>
       <button onclick="actByRetreatPrint(actByRetreatBkId)" style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">🖨 Print Activity Sheet</button>
     </div>`;
 
@@ -418,7 +426,9 @@ function actByRetreatPrint(bkId) {
   }).join('');
 
   const guestRows = roster.map(g=>{
-    const cells = entries.map(()=>`<td class="mark"><span class="box"></span></td>`).join('');
+    // Included activities are already part of everyone's package, so they're
+    // pre-marked — guests only need to mark the optional/paid columns.
+    const cells = entries.map(e=>`<td class="mark"><span class="box${e.prepaid?' checked':''}">${e.prepaid?'✓':''}</span></td>`).join('');
     const first=titleCase(g.first), last=titleCase(g.last);
     return `<tr><td class="name-cell">${first}${last?' '+last:''}</td>${cells}</tr>`;
   }).join('');
@@ -477,6 +487,7 @@ function actByRetreatPrint(bkId) {
       tbody tr:nth-child(even){background:#faf7f0}
       td.mark{text-align:center}
       td.mark .box{display:inline-block;width:16px;height:16px;border:1.5px solid #cabfaa;border-radius:4px}
+      td.mark .box.checked{display:inline-flex;align-items:center;justify-content:center;background:#eef5f0;border-color:#2d6a6a;color:#2d6a6a;font-size:12px;font-weight:700;line-height:1}
       .ops-panel{margin-top:26px;border:1px solid #e8dfd0;border-radius:10px;overflow:hidden}
       .ops-panel-title{font-size:9.5pt;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#a89a86;background:#f4efe4;padding:9px 16px;border-bottom:1px solid #e8dfd0}
       .ops-panel table{margin-top:0;font-size:11.5pt}
