@@ -400,7 +400,11 @@ function bbcDupInstructors(slots){
 
 async function bbcInit(){await bbcLoadData();bbcShowList();}
 
-function bbcShowList(){
+async function bbcShowList(){
+  // Flush any debounced edit BEFORE the reload below runs, or a save still
+  // in flight could lose its race against the fetch and get silently
+  // reverted the moment anything saves again afterward.
+  await bbcFlushPendingSave();
   bbcCurrentId=null;
   document.getElementById('bbcListView').style.display='';
   document.getElementById('bbcNewView').style.display='none';
@@ -652,13 +656,31 @@ function bbcToggleDay(schedId,di){
   if(chev)chev.style.transform=open?'':'rotate(90deg)';
 }
 
-function bbcUpdateName(val){const s=bbcGetCurrent();if(!s)return;s.name=val;bbcSaveData();}
+// Typing into a name/note/instructor/etc field used to fire a fresh
+// bbcSaveData() on every single keystroke -- overlapping unawaited network
+// writes that can land out of order, and a race against bbcRenderList()'s
+// own reload if the user navigates away mid-edit (that's how a just-typed
+// instructor change could silently get reverted). Debouncing to one save
+// per pause, plus flushing it before any reload, closes both holes.
+let _bbcSaveTimer=null;
+function bbcQueueSave(){
+  clearTimeout(_bbcSaveTimer);
+  _bbcSaveTimer=setTimeout(()=>{_bbcSaveTimer=null;bbcSaveData();},500);
+}
+async function bbcFlushPendingSave(){
+  if(_bbcSaveTimer){
+    clearTimeout(_bbcSaveTimer);
+    _bbcSaveTimer=null;
+    await bbcSaveData();
+  }
+}
+function bbcUpdateName(val){const s=bbcGetCurrent();if(!s)return;s.name=val;bbcQueueSave();}
 
 function bbcUpdateDay(schedId,di,field,val){
   const s=bbcSchedules.find(x=>x.id===schedId);
   if(!s||!s.days[di])return;
   s.days[di][field]=val;
-  bbcSaveData();
+  bbcQueueSave();
   clearTimeout(window._bbcDayTimer);
   window._bbcDayTimer=setTimeout(function(){
     const wasOpen=document.getElementById('bbcDayBody-'+schedId+'-'+di)&&document.getElementById('bbcDayBody-'+schedId+'-'+di).style.display==='block';
@@ -672,7 +694,7 @@ function bbcSlotField(schedId,di,si,field,val){
   const s=bbcSchedules.find(x=>x.id===schedId);
   if(!s||!s.days[di]||!s.days[di].slots[si])return;
   s.days[di].slots[si][field]=val;
-  bbcSaveData();
+  bbcQueueSave();
   if(field==='instructor'){
     clearTimeout(window._bbcSlotTimer);
     window._bbcSlotTimer=setTimeout(function(){
