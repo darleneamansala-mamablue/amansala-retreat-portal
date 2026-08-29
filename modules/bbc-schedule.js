@@ -227,8 +227,8 @@ function bbcShowList(){
   document.getElementById('bbcListView').style.display='';
   document.getElementById('bbcNewView').style.display='none';
   document.getElementById('bbcEditorView').style.display='none';
-  const bb=document.getElementById('bbcBackBtn'),pb=document.getElementById('bbcPrintBtn'),sb=document.getElementById('bbcStatusBtn'),nb=document.getElementById('bbcNewBtn');
-  if(bb)bb.style.display='none';if(pb)pb.style.display='none';if(sb)sb.style.display='none';if(nb)nb.style.display='flex';
+  const bb=document.getElementById('bbcBackBtn'),pb=document.getElementById('bbcPrintBtn'),cb=document.getElementById('bbcCopyBtn'),sb=document.getElementById('bbcStatusBtn'),nb=document.getElementById('bbcNewBtn');
+  if(bb)bb.style.display='none';if(pb)pb.style.display='none';if(cb)cb.style.display='none';if(sb)sb.style.display='none';if(nb)nb.style.display='flex';
   bbcRenderList();
 }
 
@@ -236,8 +236,8 @@ function bbcShowNewForm(){
   document.getElementById('bbcListView').style.display='none';
   document.getElementById('bbcNewView').style.display='';
   document.getElementById('bbcEditorView').style.display='none';
-  const bb=document.getElementById('bbcBackBtn'),pb=document.getElementById('bbcPrintBtn'),sb=document.getElementById('bbcStatusBtn'),nb=document.getElementById('bbcNewBtn');
-  if(bb)bb.style.display='flex';if(pb)pb.style.display='none';if(sb)sb.style.display='none';if(nb)bb&&(nb.style.display='none');
+  const bb=document.getElementById('bbcBackBtn'),pb=document.getElementById('bbcPrintBtn'),cb=document.getElementById('bbcCopyBtn'),sb=document.getElementById('bbcStatusBtn'),nb=document.getElementById('bbcNewBtn');
+  if(bb)bb.style.display='flex';if(pb)pb.style.display='none';if(cb)cb.style.display='none';if(sb)sb.style.display='none';if(nb)bb&&(nb.style.display='none');
   document.getElementById('bbcNewName').value='';
   document.getElementById('bbcNewStart').value='';
   document.getElementById('bbcNewDayCount').style.display='none';
@@ -296,8 +296,8 @@ function bbcOpenEditor(id){
   document.getElementById('bbcListView').style.display='none';
   document.getElementById('bbcNewView').style.display='none';
   document.getElementById('bbcEditorView').style.display='';
-  const bb=document.getElementById('bbcBackBtn'),pb=document.getElementById('bbcPrintBtn'),sb=document.getElementById('bbcStatusBtn'),nb=document.getElementById('bbcNewBtn');
-  if(bb)bb.style.display='flex';if(pb)pb.style.display='flex';if(sb)sb.style.display='';if(nb)nb.style.display='none';
+  const bb=document.getElementById('bbcBackBtn'),pb=document.getElementById('bbcPrintBtn'),cb=document.getElementById('bbcCopyBtn'),sb=document.getElementById('bbcStatusBtn'),nb=document.getElementById('bbcNewBtn');
+  if(bb)bb.style.display='flex';if(pb)pb.style.display='flex';if(cb)cb.style.display='flex';if(sb)sb.style.display='';if(nb)nb.style.display='none';
   bbcRenderEditor();
 }
 
@@ -524,6 +524,44 @@ function bbcPrint(){
     +'</body></html>');
   win.document.close();
   setTimeout(function(){win.print();},500);
+}
+
+// Whole schedule as plain text (name, dates, every day, every slot) for
+// pasting into another program — no HTML/formatting, just readable lines.
+function bbcScheduleAsText(s){
+  const lines=[];
+  lines.push(s.name);
+  lines.push(bbcFmtDate(s.startDate)+' - '+bbcFmtDate(s.endDate)+' ('+s.days.length+' days)');
+  lines.push('');
+  s.days.forEach(function(day){
+    lines.push(bbcFmtDate(day.date).toUpperCase());
+    if(day.note)lines.push(day.note);
+    if(day.prompt)lines.push('Prompt: '+day.prompt);
+    day.slots.forEach(function(slot){
+      let line=(slot.time||'').padEnd(14)+slot.activity;
+      if(slot.instructor)line+=' w/ '+slot.instructor;
+      if(slot.location)line+=' | '+slot.location;
+      lines.push(line);
+    });
+    lines.push('');
+  });
+  lines.push('With Love, Team Amansala');
+  return lines.join('\n');
+}
+
+function bbcCopyAsText(){
+  const s=bbcGetCurrent();if(!s)return;
+  const text=bbcScheduleAsText(s);
+  navigator.clipboard.writeText(text).then(function(){
+    showToast('Schedule copied — paste it anywhere.');
+  }).catch(function(){
+    // Clipboard API can be blocked (permissions, non-HTTPS, etc.) — fall
+    // back to a selectable textarea so the text is still reachable.
+    const win=window.open('','_blank','width=600,height=700');
+    if(!win)return;
+    win.document.write('<textarea style="width:100%;height:95vh;font-family:monospace;font-size:13px;padding:12px;box-sizing:border-box">'+text.replace(/</g,'&lt;')+'</textarea>');
+    win.document.close();
+  });
 }
 
 // Wrap switchTab to initialize BBC on first open
