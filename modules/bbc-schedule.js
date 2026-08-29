@@ -4,8 +4,13 @@
 
 // ==================== BBC SCHEDULE MODULE ====================
 // Instructor rotations per Bikini Bootcamp spec
-const BBC_MORNING_YOGA_ROTATION=['Darlene','Kun','Yolanda','Kun','Kun']; // index = full-day index (0-based)
-const BBC_EVENING_YOGA_ROTATION=['Kun','Maya','Kun','Yolanda','Maya'];   // index = full-day index (0-based)
+// Darlene's spec (2026-08-29): Kun PM + Darlene AM start the camp (arrival
+// evening + day 1 morning, both already fixed below), then alternates so no
+// one teaches two calendar days in a row. Day 4 AM was Yolanda in her literal
+// sequence, which put her on days 4 and 5 back-to-back — swapped to Kiki
+// per her follow-up to fix that.
+const BBC_MORNING_YOGA_ROTATION=['Darlene','Kun','Darlene','Kiki','Yolanda']; // index = full-day index (0-based)
+const BBC_EVENING_YOGA_ROTATION=['Maya','Yolanda','Maya','Kun','Maya'];      // index = full-day index (0-based)
 const BBC_DANCE_ROTATION=[
   {activity:'Latin Grooves',instructor:'Sergio',location:'Heaven'},
   {activity:'AfroBeats',    instructor:'Sergio',location:'Grande'},

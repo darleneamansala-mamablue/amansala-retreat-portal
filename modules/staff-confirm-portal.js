@@ -13,18 +13,18 @@
 
 // ===== ACCOUNTS =====
 const DEF_STAFF_CONFIRM=[
-  {id:'sc_ryan',name:'Ryan',username:'ryan',password:'ryan2026',active:true},
-  {id:'sc_adele',name:'Adele',username:'adele',password:'adele2026',active:true},
-  {id:'sc_sergio',name:'Sergio',username:'sergio',password:'sergio2026',active:true},
-  {id:'sc_fernando',name:'Fernando',username:'fernando',password:'fernando2026',active:true},
-  {id:'sc_kun',name:'Kun',username:'kun',password:'kun2026',active:true},
-  {id:'sc_yolanda',name:'Yolanda',username:'yolanda',password:'yolanda2026',active:true},
-  {id:'sc_maya',name:'Maya',username:'maya',password:'maya2026',active:true},
-  {id:'sc_kiki',name:'Kiki',username:'kiki',password:'kiki2026',active:true},
-  {id:'sc_marco',name:'Marco',username:'marco',password:'marco2026',active:true},
-  {id:'sc_rubi',name:'Rubi',username:'rubi',password:'rubi2026',active:true,isPayrollAdmin:true},
-  {id:'sc_rosy',name:'Rosy',username:'rosy',password:'rosy2026',active:true},
-  {id:'sc_kike',name:'Kike',username:'kike',password:'kike2026',active:true},
+  {id:'sc_ryan',name:'Ryan',username:'ryan',password:'Tulum123',active:true},
+  {id:'sc_adele',name:'Adele',username:'adele',password:'Tulum123',active:true},
+  {id:'sc_sergio',name:'Sergio',username:'sergio',password:'Tulum123',active:true},
+  {id:'sc_fernando',name:'Fernando',username:'fernando',password:'Tulum123',active:true},
+  {id:'sc_kun',name:'Kun',username:'kun',password:'Tulum123',active:true},
+  {id:'sc_yolanda',name:'Yolanda',username:'yolanda',password:'Tulum123',active:true},
+  {id:'sc_maya',name:'Maya',username:'maya',password:'Tulum123',active:true},
+  {id:'sc_kiki',name:'Kiki',username:'kiki',password:'Tulum123',active:true},
+  {id:'sc_marco',name:'Marco',username:'marco',password:'Tulum123',active:true},
+  {id:'sc_rubi',name:'Rubi',username:'rubi',password:'Tulum123',active:true,isPayrollAdmin:true},
+  {id:'sc_rosy',name:'Rosy',username:'rosy',password:'Tulum123',active:true},
+  {id:'sc_kike',name:'Kike',username:'kike',password:'Tulum123',active:true},
 ];
 // BBC pay rates per confirmed session — Darlene's spec (2026-08-29). Anything
 // not listed here (tours, ceremonies, meals, Opening Circle, Departures) has
