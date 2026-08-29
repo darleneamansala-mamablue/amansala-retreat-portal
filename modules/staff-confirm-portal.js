@@ -182,7 +182,7 @@ function scBbcItemsForName(name){
       (day.slots||[]).forEach((slot,si)=>{
         if(slot.type==='meal')return;
         if(!slot.instructor||slot.instructor.trim().toLowerCase()!==name)return;
-        items.push({domain:'bbc',schedId:s.id,schedName:s.name,di,si,date:day.date,time:slot.time,activity:slot.activity,location:slot.location,confirmed:!!slot.confirmed,confirmedAt:slot.confirmedAt,confirmedBy:slot.confirmedBy||null});
+        items.push({domain:'bbc',schedId:s.id,schedName:s.name,di,si,date:day.date,time:slot.time,activity:slot.activity,location:slot.location,confirmed:!!slot.confirmed,confirmedAt:slot.confirmedAt,confirmedBy:slot.confirmedBy||null,requestedChange:!!slot.requestedChange,requestedChangeNote:slot.requestedChangeNote||'',requestedChangeBy:slot.requestedChangeBy||null});
       });
     });
   });
@@ -198,7 +198,7 @@ function scSpaItemsForName(name){
   if(!ther)return[];
   return(typeof SpaAppointments!=='undefined'?SpaAppointments:[]).filter(a=>a.therapistId===ther.id&&a.status!=='CANCELLED').map(a=>{
     const svc=(SpaData.services||[]).find(s=>s.id===a.serviceId);
-    return{domain:'spa',id:a.id,date:a.date,time:a.start,duration:a.duration,activity:svc?svc.name:'Service',client:a.clientName,confirmed:!!a.confirmed,confirmedAt:a.confirmedAt,confirmedBy:a.confirmedBy||null};
+    return{domain:'spa',id:a.id,date:a.date,time:a.start,duration:a.duration,activity:svc?svc.name:'Service',client:a.clientName,confirmed:!!a.confirmed,confirmedAt:a.confirmedAt,confirmedBy:a.confirmedBy||null,requestedChange:!!a.requestedChange,requestedChangeNote:a.requestedChangeNote||'',requestedChangeBy:a.requestedChangeBy||null};
   });
 }
 
@@ -214,7 +214,7 @@ function scTourItemsForName(name){
     const confirmed=role==='driver'?!!o.driverConfirmed:!!o.guideConfirmed;
     const confirmedAt=role==='driver'?o.driverConfirmedAt:o.guideConfirmedAt;
     const confirmedBy=role==='driver'?o.driverConfirmedBy:o.guideConfirmedBy;
-    items.push({domain:'tour',opsKey,date,activity:ao?ao.name:aoId,role,confirmed,confirmedAt,confirmedBy:confirmedBy||null});
+    items.push({domain:'tour',opsKey,date,activity:ao?ao.name:aoId,role,confirmed,confirmedAt,confirmedBy:confirmedBy||null,requestedChange:!!o.requestedChange,requestedChangeNote:o.requestedChangeNote||'',requestedChangeBy:o.requestedChangeBy||null});
   });
   return items;
 }
@@ -288,18 +288,67 @@ function scItemCardHtml(item,forAdmin){
     :`scConfirmTour('${item.opsKey}','${item.role}','${whoEsc}')`;
   const refresh=forAdmin?';scRenderAdminBoard();scRenderPayrollBoardIfPresent()':';scRenderDashboard()';
   const confirmedLabel='&#10003; Confirmed'+(item.confirmedBy?' by '+scInitials(item.confirmedBy):'');
-  return`<div style="background:#fff;border:1.5px solid ${item.confirmed?'#86efac':'#e8dfd4'};border-radius:12px;padding:16px 18px;margin-bottom:10px;opacity:${isPast&&!item.confirmed?'.55':'1'}">
+  const changeArgs=item.domain==='bbc'?`'bbc','${item.schedId}',${item.di},${item.si}`
+    :item.domain==='spa'?`'spa','${item.id}'`
+    :`'tour','${item.opsKey}','${item.role}'`;
+  const noteEsc=(item.requestedChangeNote||'').replace(/"/g,'&quot;');
+  let actionHtml;
+  if(item.confirmed){
+    actionHtml=`<button onclick="${onClick}${refresh}" title="Click to unconfirm" style="font-size:11.5px;font-weight:700;color:#15803d;background:#dcfce7;border:none;border-radius:99px;padding:6px 14px;white-space:nowrap;cursor:pointer">${confirmedLabel}</button>`;
+  } else if(item.requestedChange){
+    actionHtml=`<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+      <span title="${noteEsc}" style="font-size:11px;font-weight:700;color:#b45309;background:#fef3c7;border-radius:99px;padding:6px 14px;white-space:nowrap">⚠ Change Requested${item.requestedChangeBy?' by '+scInitials(item.requestedChangeBy):''}</span>
+      <button onclick="scClearRequestChange(${changeArgs})${refresh}" style="font-size:10.5px;color:#8a7e74;background:none;border:none;cursor:pointer;text-decoration:underline">cancel request</button>
+    </div>`;
+  } else {
+    actionHtml=`<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+      <button onclick="scRequestChange(${changeArgs},'${whoEsc}')${refresh}" style="background:#fff;color:#b45309;border:1.5px solid #fde68a;padding:9px 14px;border-radius:9px;font-family:'Jost',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Request Change</button>
+      <button onclick="${onClick}${refresh}" style="background:#2d6a6a;color:#fff;border:none;padding:9px 18px;border-radius:9px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Confirm</button>
+    </div>`;
+  }
+  return`<div style="background:#fff;border:1.5px solid ${item.confirmed?'#86efac':item.requestedChange?'#fde68a':'#e8dfd4'};border-radius:12px;padding:16px 18px;margin-bottom:10px;opacity:${isPast&&!item.confirmed&&!item.requestedChange?'.55':'1'}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
       <div>
         <div style="font-weight:800;color:${color};font-size:11px;letter-spacing:.4px;text-transform:uppercase">${label}${forAdmin?' · '+(item.instructorName||''):''}</div>
         <div style="font-size:16px;font-weight:700;color:#2d2520;margin-top:3px">${item.activity}</div>
         <div style="font-size:12.5px;color:#8a7e74;margin-top:3px">${scFmtDate(item.date)}${timeLabel?' · '+timeLabel:''}${sub}</div>
+        ${item.requestedChange&&item.requestedChangeNote?`<div style="font-size:12px;color:#92400e;margin-top:6px;font-style:italic">"${item.requestedChangeNote}"</div>`:''}
       </div>
-      ${item.confirmed
-        ?`<button onclick="${onClick}${refresh}" title="Click to unconfirm" style="font-size:11.5px;font-weight:700;color:#15803d;background:#dcfce7;border:none;border-radius:99px;padding:6px 14px;white-space:nowrap;cursor:pointer">${confirmedLabel}</button>`
-        :`<button onclick="${onClick}${refresh}" style="background:#2d6a6a;color:#fff;border:none;padding:9px 18px;border-radius:9px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Confirm</button>`}
+      ${actionHtml}
     </div>
   </div>`;
+}
+function scRequestChange(domain,a,b,c,who){
+  const note=prompt('What\'s the issue? (e.g. "not available that day", "wrong time")')||'';
+  if(domain==='bbc'){
+    if(typeof bbcSchedules==='undefined')return;
+    const s=bbcSchedules.find(x=>x.id===a);if(!s)return;
+    const slot=s.days[b]?.slots[c];if(!slot)return;
+    slot.requestedChange=true;slot.requestedChangeNote=note;slot.requestedChangeBy=who;
+    bbcSaveData();
+  } else if(domain==='spa'){
+    if(typeof SpaAppointments==='undefined')return;
+    const appt=SpaAppointments.find(x=>x.id===a);if(!appt)return;
+    appt.requestedChange=true;appt.requestedChangeNote=note;appt.requestedChangeBy=who;
+    spaCalSave();
+  } else {
+    if(!actOpsData[a])actOpsData[a]={};
+    actOpsData[a].requestedChange=true;actOpsData[a].requestedChangeNote=note;actOpsData[a].requestedChangeBy=who;
+    actOpsSave();
+  }
+}
+function scClearRequestChange(domain,a,b,c){
+  if(domain==='bbc'){
+    if(typeof bbcSchedules==='undefined')return;
+    const s=bbcSchedules.find(x=>x.id===a);const slot=s&&s.days[b]?.slots[c];
+    if(slot){slot.requestedChange=false;bbcSaveData();}
+  } else if(domain==='spa'){
+    if(typeof SpaAppointments==='undefined')return;
+    const appt=SpaAppointments.find(x=>x.id===a);
+    if(appt){appt.requestedChange=false;spaCalSave();}
+  } else if(actOpsData[a]){
+    actOpsData[a].requestedChange=false;actOpsSave();
+  }
 }
 
 function scRenderDashboard(){
