@@ -393,33 +393,67 @@ function scIsAvailable(name,date){
   const acct=list.find(a=>a.name.trim().toLowerCase()===name.trim().toLowerCase());
   if(!acct)return true;
   if((acct.unavailableDates||[]).includes(date))return false;
-  if(Array.isArray(acct.availableDaysOfWeek)&&acct.availableDaysOfWeek.length>0){
+  const rules=acct.dayOfWeekRules||[];
+  const covering=rules.filter(r=>date>=r.start&&date<=r.end);
+  if(covering.length){
     const dow=new Date(date+'T12:00:00').getDay();
-    if(!acct.availableDaysOfWeek.includes(dow))return false;
+    if(!covering.some(r=>r.days.includes(dow)))return false;
   }
   return true;
 }
 
-// ===== Recurring weekly-pattern availability (e.g. "only Mon/Wed/Fri") —
-// separate from, and layered on top of, the specific-date blocklist above =====
+// ===== Recurring weekly-pattern availability, bounded to a date range (e.g.
+// "Sept 1-30, only Mon/Wed/Fri") — layered on top of the specific-date
+// blocklist above. Outside any rule's range, there's no day-of-week
+// restriction at all. scPendingDOW holds each account's in-progress
+// (not-yet-added) rule so it survives re-render while picking days. =====
 const SC_DAY_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+let scPendingDOW={};
+function scDowPending(id){return scPendingDOW[id]||(scPendingDOW[id]={start:'',end:'',days:[]});}
+function scSetDowStart(id,val){scDowPending(id).start=val;}
+function scSetDowEnd(id,val){scDowPending(id).end=val;}
+function scTogglePendingDOW(id,dayIdx){
+  const p=scDowPending(id);
+  const i=p.days.indexOf(dayIdx);
+  if(i>=0)p.days.splice(i,1);else p.days.push(dayIdx);
+  scTeamRefreshWhicheverView();
+}
 function scDaysOfWeekHtml(account){
-  const sel=Array.isArray(account.availableDaysOfWeek)?account.availableDaysOfWeek:[];
+  const rules=(account.dayOfWeekRules||[]).slice().sort((a,b)=>a.start.localeCompare(b.start));
+  const p=scDowPending(account.id);
+  const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
   return`<div style="margin-bottom:14px">
-    <div style="font-size:12.5px;color:#8a7e74;margin-bottom:8px">Only work certain days of the week? Select them (leave all off = available any day).</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <div style="font-size:12.5px;color:#8a7e74;margin-bottom:8px">Only work certain days of the week during a specific period? Pick a start/end date and which days apply — outside that period they're available as usual.</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <input type="date" id="scDOWStart_${account.id}" value="${p.start}" oninput="scSetDowStart('${account.id}',this.value)" style="padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+      <span style="color:#8a7e74;font-size:12px">to</span>
+      <input type="date" id="scDOWEnd_${account.id}" value="${p.end}" oninput="scSetDowEnd('${account.id}',this.value)" style="padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
       ${SC_DAY_NAMES.map((d,i)=>{
-        const active=sel.includes(i);
-        return`<button onclick="scToggleDayOfWeek('${account.id}',${i})" style="padding:6px 13px;border-radius:20px;border:1.5px solid ${active?'#2d6a6a':'#e8dfd4'};background:${active?'#2d6a6a':'#fff'};color:${active?'#fff':'#6b5f54'};font-family:'Jost',sans-serif;font-size:12px;font-weight:700;cursor:pointer">${d}</button>`;
+        const active=p.days.includes(i);
+        return`<button onclick="scTogglePendingDOW('${account.id}',${i})" style="padding:6px 13px;border-radius:20px;border:1.5px solid ${active?'#2d6a6a':'#e8dfd4'};background:${active?'#2d6a6a':'#fff'};color:${active?'#fff':'#6b5f54'};font-family:'Jost',sans-serif;font-size:12px;font-weight:700;cursor:pointer">${d}</button>`;
       }).join('')}
     </div>
+    <button onclick="scAddDowRule('${account.id}')" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;margin-bottom:10px">Add Rule</button>
+    ${rules.length?rules.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(r.start)} – ${fmtD(r.end)}: only ${r.days.slice().sort().map(i=>SC_DAY_NAMES[i]).join(', ')}</span><button onclick="scRemoveDowRule('${account.id}','${r.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No weekly patterns set.</div>'}
   </div>`;
 }
-function scToggleDayOfWeek(id,dayIdx){
+function scAddDowRule(id){
+  const p=scDowPending(id);
+  if(!p.start||!p.end){alert('Pick a start and end date.');return;}
+  if(p.end<p.start){alert('End date must be on or after the start date.');return;}
+  if(!p.days.length){alert('Select at least one day of the week.');return;}
   const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
-  account.availableDaysOfWeek=account.availableDaysOfWeek||[];
-  const i=account.availableDaysOfWeek.indexOf(dayIdx);
-  if(i>=0)account.availableDaysOfWeek.splice(i,1);else account.availableDaysOfWeek.push(dayIdx);
+  account.dayOfWeekRules=account.dayOfWeekRules||[];
+  account.dayOfWeekRules.push({id:'dow_'+Math.random().toString(36).substr(2,9),start:p.start,end:p.end,days:p.days.slice().sort()});
+  delete scPendingDOW[id];
+  saveStaffConfirmAccounts();
+  scTeamRefreshWhicheverView();
+}
+function scRemoveDowRule(id,ruleId){
+  const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
+  account.dayOfWeekRules=(account.dayOfWeekRules||[]).filter(r=>r.id!==ruleId);
   saveStaffConfirmAccounts();
   scTeamRefreshWhicheverView();
 }
