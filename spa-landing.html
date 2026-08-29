@@ -159,7 +159,13 @@ function esc(s){return (s||'').replace(/</g,'&lt;');}
 
   // Services, grouped, bookable-only (matches spa-booking.html's own filter)
   const svcEl=document.getElementById('svcGroups');
-  const active=SpaData.services.filter(s=>s.active && s.price!=null && s.duration!=null);
+  const spaGroupPrice=(s,n)=>{
+    if(!s.groupPricing||!n||n<1)return null;
+    const gp=s.groupPricing;
+    if(n>=gp.minGroup)return gp.perPersonUSD*n;
+    return (gp.belowMin&&gp.belowMin[n]!=null)?gp.belowMin[n]:null;
+  };
+  const active=SpaData.services.filter(s=>s.active && s.duration!=null && (s.groupPricing?true:s.price!=null));
   if(!active.length){
     svcEl.innerHTML='<p class="loading-note">Our menu is being finalized — check back soon.</p>';
   }else{
@@ -168,10 +174,12 @@ function esc(s){return (s||'').replace(/</g,'&lt;');}
       if(!list.length) return '';
       return `<div>
         <div class="svc-group-title">${CAT_LABEL[cat]}</div>
-        <div class="svc-grid">${list.map(s=>`<div class="svc-item">
-          <div><div class="n">${esc(s.name)}</div><div class="d">${s.duration} min</div></div>
-          <div class="p">$${s.price}</div>
-        </div>`).join('')}</div>
+        <div class="svc-grid">${list.map(s=>{
+          const priceLbl=s.groupPricing?('from $'+spaGroupPrice(s,s.groupPricing.minGuests||1)):('$'+s.price);
+          return `<div class="svc-item">
+          <div><div class="n">${esc(s.name)}</div><div class="d">${s.duration}${s.durationNote?' ('+s.durationNote+')':''} min${s.groupPricing?' · private group':''}</div></div>
+          <div class="p">${priceLbl}</div>
+        </div>`;}).join('')}</div>
       </div>`;
     }).join('');
   }
