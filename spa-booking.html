@@ -168,7 +168,7 @@ function renderStep2_Service(el){
     if(!list.length) return;
     html+=`<div class="cat-label">${CAT_LABEL[cat]}</div>`;
     list.forEach(s=>{
-      const priceLbl=s.groupPricing?('from $'+spaGroupPrice(s,1)+' USD'):('$'+s.price+' USD');
+      const priceLbl=s.groupPricing?('from $'+spaGroupPrice(s,s.groupPricing.minGuests||1)+' USD'):('$'+s.price+' USD');
       html+=`<div class="svc-card" onclick="sbPickService('${s.id}')">
         <div class="svc-name">${esc(s.name)}</div>
         ${s.description?`<div class="svc-desc">${esc(s.description)}</div>`:''}
@@ -191,15 +191,18 @@ function renderStep2b_GroupCount(el){
   renderDots(7);
   const svc=SpaData.services.find(s=>s.id===SB.serviceId);
   const gp=svc.groupPricing;
+  const minGuests=gp.minGuests||1;
   const n=SB.guestCount||gp.minGroup;
   const price=spaGroupPrice(svc,n);
-  const showWarn=gp.discourageSolo&&n>=1&&n<=2;
+  const showWarn=gp.discourageSolo&&n>=minGuests&&n<=2;
+  const belowMinGuests=n<minGuests;
   el.innerHTML=`<button class="btn-back" onclick="setStep(2)">&#8249; Back</button>
     <div class="card">
       <div class="section-title">${esc(svc.name)}</div>
       <div class="section-sub">How many guests will be joining? (${gp.minGroup}+ gets the group rate of $${gp.perPersonUSD}/person)</div>
-      <div class="form-group"><label class="form-label">Number of Guests *</label><input class="form-input" type="number" min="1" id="sbGuestCountInput" value="${n}" oninput="sbUpdateGroupCount(this.value)"></div>
-      <div style="font-size:17px;font-weight:700;color:#2d6a6a;margin:16px 0">${price!=null?'Total: $'+price+' USD':'That group size isn\'t priced yet — please contact us directly.'}</div>
+      <div class="form-group"><label class="form-label">Number of Guests *</label><input class="form-input" type="number" min="${minGuests}" id="sbGuestCountInput" value="${n}" oninput="sbUpdateGroupCount(this.value)"></div>
+      <div style="font-size:17px;font-weight:700;color:#2d6a6a;margin:16px 0">${price!=null?'Total: $'+price+' USD':(belowMinGuests?'':'That group size isn\'t priced yet — please contact us directly.')}</div>
+      ${belowMinGuests?`<div class="no-slots">We don't offer this as a one-on-one experience — minimum ${minGuests} guests.</div>`:''}
       ${showWarn?`<div class="no-slots" style="color:#92400e;background:#fffbeb;border-color:#fde68a">We don't usually recommend booking this for 1–2 people unless you're a couple wanting a private experience — reach out to us to find out when we're hosting a group ${esc(svc.name)} you can join instead.</div>`:''}
       <button class="btn-primary" onclick="sbConfirmGroupCount()" ${price==null?'disabled':''}>Continue</button>
     </div>`;
