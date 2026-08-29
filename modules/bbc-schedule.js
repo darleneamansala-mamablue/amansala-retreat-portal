@@ -9,8 +9,14 @@
 // one teaches two calendar days in a row. Day 4 AM was Yolanda in her literal
 // sequence, which put her on days 4 and 5 back-to-back — swapped to Kiki
 // per her follow-up to fix that.
-const BBC_MORNING_YOGA_ROTATION=['Darlene','Kun','Darlene','Kiki','Yolanda']; // index = full-day index (0-based)
-const BBC_EVENING_YOGA_ROTATION=['Maya','Yolanda','Maya','Kun','Maya'];      // index = full-day index (0-based)
+// Darlene's spec (2026-08-29), evened out: Kun opens the camp (arrival PM,
+// already fixed below) and closes out at 2 AM + 2 PM total; Darlene gets 3
+// AM total (2 here + the departure morning, also fixed below); Maya gets 2
+// PM; Yolanda caps at 3 (1 AM + 2 PM). No one teaches two calendar days in a
+// row. Doesn't need Kiki/Noelia — only bring them in if a specific week's
+// mix of durations/excursion days creates a real back-to-back conflict.
+const BBC_MORNING_YOGA_ROTATION=['Darlene','Kun','Yolanda','Darlene','Kun']; // index = full-day index (0-based)
+const BBC_EVENING_YOGA_ROTATION=['Maya','Kun','Yolanda','Maya','Yolanda'];   // index = full-day index (0-based)
 const BBC_DANCE_ROTATION=[
   {activity:'Latin Grooves',instructor:'Sergio',location:'Heaven'},
   {activity:'AfroBeats',    instructor:'Sergio',location:'Grande'},
@@ -498,10 +504,15 @@ function bbcRenderList(){
   }).join('');
 }
 
-function bbcDeleteSched(id){
+async function bbcDeleteSched(id){
   if(!confirm('Delete this BBC schedule?'))return;
   bbcSchedules=bbcSchedules.filter(s=>s.id!==id);
-  bbcSaveData();bbcRenderList();
+  // Must land in Supabase BEFORE any reload happens — bbcRenderList() (and
+  // bbcShowList() right after it) both re-fetch from Supabase, and if that
+  // read won the race against this write, the "deleted" schedule would
+  // silently come right back.
+  await bbcSaveData();
+  bbcRenderList();
 }
 
 function bbcGetCurrent(){return bbcSchedules.find(s=>s.id===bbcCurrentId);}
