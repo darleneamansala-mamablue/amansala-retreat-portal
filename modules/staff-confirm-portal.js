@@ -31,14 +31,15 @@ const DEF_STAFF_CONFIRM=[
 // no rate and shows as "no rate set" in payroll rather than being silently
 // skipped or paid $0 without explanation.
 const BBC_PAY_RATES={
-  'yoga':800,'yoga mala':800,'gentle yoga':800,'morning yoga':800,
+  'yoga':800,'yoga mala':800,'gentle yoga':800,'morning yoga':800,'roll and release':800,'mayan clay meditation':800,
   'circuit training':1000,'bbc 20':1000,'sculpt & tone':1000,'boxing':1000,'absolution':1000,'pilates':1000,
   'latin grooves':1000,'afrobeats':1000,'bollywood':1000,'salsa':1000,'dance':1000,
   'morning beach walk':500,
 };
 // Ryan lives onsite and is paid 50% of the standard rate — Darlene's spec
-// (2026-08-29): $500 for a class (normally $1000), $250 for a walk (normally $500).
-const RYAN_RATE_OVERRIDE={1000:500,500:250};
+// (2026-08-29): $500 for a class (normally $1000), $250 for a walk (normally
+// $500), $125 for a Grand Rising activation (normally $250).
+const RYAN_RATE_OVERRIDE={1000:500,500:250,250:125};
 function bbcPayRateFor(activity,instructor){
   if(!activity)return null;
   const a=activity.trim().toLowerCase();
@@ -47,25 +48,66 @@ function bbcPayRateFor(activity,instructor){
   if(instructor&&instructor.trim().toLowerCase()==='ryan'&&RYAN_RATE_OVERRIDE[rate]!=null)rate=RYAN_RATE_OVERRIDE[rate];
   return rate;
 }
+// Guiding a tour/excursion (Tulum Ruins, Grande Cenote, etc.) pays a flat
+// rate regardless of which one — Darlene's spec (2026-08-29).
+const TOUR_GUIDE_RATE=1000;
+// Guide names in act_ops are stored lowercase (guide1/guide2); this maps
+// back to the properly-cased display name so tour pay lands on the same
+// payroll row as that person's BBC classes instead of a separate duplicate.
+function scProperStaffName(lowerName){
+  const list=(typeof staffConfirmAccounts!=='undefined'?staffConfirmAccounts:[]);
+  const acct=list.find(a=>a.name.trim().toLowerCase()===lowerName);
+  return acct?acct.name:lowerName;
+}
+function scConfirmedTourGuideSessions(){
+  const ops=(typeof actOpsData!=='undefined'?actOpsData:{});
+  const addOns=(typeof ADD_ONS!=='undefined'?ADD_ONS:[]);
+  const sessions=[];
+  Object.keys(ops).forEach(opsKey=>{
+    const o=ops[opsKey]||{};
+    if(!o.guideConfirmed)return;
+    const[aoId,date]=opsKey.split('|');
+    const ao=addOns.find(a=>a.id===aoId);
+    const activity=ao?ao.name:aoId;
+    [o.guide1,o.guide2].forEach(g=>{
+      if(!g)return;
+      sessions.push({name:scProperStaffName(g.trim().toLowerCase()),date,activity,rate:TOUR_GUIDE_RATE});
+    });
+  });
+  return sessions;
+}
 // Only CONFIRMED sessions count toward pay — matches the spa payroll
 // convention of paying for completed work, not everything scheduled.
 function scComputeBbcPayroll(){
-  const byName={};
+  // Keyed by lowercase name so a tour session lands on the same row as that
+  // person's BBC classes even if scProperStaffName couldn't resolve a nicely-
+  // cased label (e.g. staffConfirmAccounts hadn't loaded yet on this page) —
+  // whichever row claims the key first keeps its display label.
+  const byKey={};
+  const ensure=(label)=>{
+    const key=label.trim().toLowerCase();if(!key)return null;
+    if(!byKey[key])byKey[key]={name:label.trim(),sessions:[],unrated:[],total:0};
+    return byKey[key];
+  };
   (typeof bbcSchedules!=='undefined'?bbcSchedules:[]).forEach(s=>{
     if(s.status!=='confirmed')return;
     (s.days||[]).forEach(day=>{
       (day.slots||[]).forEach(slot=>{
         if(!slot.confirmed||!slot.instructor)return;
-        const name=slot.instructor.trim();if(!name)return;
-        if(!byName[name])byName[name]={name,sessions:[],unrated:[],total:0};
+        const row=ensure(slot.instructor);if(!row)return;
         const rate=bbcPayRateFor(slot.activity,slot.instructor);
-        if(rate==null){byName[name].unrated.push(slot.activity);return;}
-        byName[name].sessions.push({date:day.date,activity:slot.activity,schedName:s.name,rate});
-        byName[name].total+=rate;
+        if(rate==null){row.unrated.push(slot.activity);return;}
+        row.sessions.push({date:day.date,activity:slot.activity,schedName:s.name,rate});
+        row.total+=rate;
       });
     });
   });
-  return Object.values(byName).sort((a,b)=>b.total-a.total);
+  scConfirmedTourGuideSessions().forEach(({name,date,activity,rate})=>{
+    const row=ensure(name);if(!row)return;
+    row.sessions.push({date,activity,schedName:'Tour',rate});
+    row.total+=rate;
+  });
+  return Object.values(byKey).sort((a,b)=>b.total-a.total);
 }
 function scPayrollTableHtml(){
   const rows=scComputeBbcPayroll();
@@ -100,6 +142,11 @@ function scComputeMyIncome(name){
         else{potentialSessions.push(entry);potentialTotal+=rate;}
       });
     });
+  });
+  scTourItemsForName(norm).filter(i=>i.role==='guide').forEach(i=>{
+    const entry={date:i.date,activity:i.activity,schedName:'Tour',rate:TOUR_GUIDE_RATE};
+    if(i.confirmed){confirmedSessions.push(entry);confirmedTotal+=TOUR_GUIDE_RATE;}
+    else{potentialSessions.push(entry);potentialTotal+=TOUR_GUIDE_RATE;}
   });
   confirmedSessions.sort((a,b)=>a.date.localeCompare(b.date));
   potentialSessions.sort((a,b)=>a.date.localeCompare(b.date));
@@ -279,30 +326,47 @@ function scInitials(name){
   if(!name)return'';
   return name.trim().split(/\s+/).slice(0,2).map(w=>w[0].toUpperCase()).join('');
 }
-function scConfirmBbc(schedId,di,si,who){
+// Each of these reloads fresh data before mutating — this whole system saves
+// the ENTIRE shared blob on every write, so building on a copy that might be
+// stale (e.g. someone else's edit landed since this tab last loaded) risks
+// silently overwriting their change the moment this one saves. Reloading
+// right before the mutate+save narrows that window as much as this
+// architecture allows. Both callers (dashboard + admin board) already
+// re-render after calling these, so the async gap is a harmless beat, not a
+// broken interaction.
+async function scConfirmBbc(schedId,di,si,who){
+  if(typeof bbcLoadData==='function')await bbcLoadData();
   if(typeof bbcSchedules==='undefined')return;
   const s=bbcSchedules.find(x=>x.id===schedId);if(!s)return;
   const slot=s.days[di]?.slots[si];if(!slot)return;
   slot.confirmed=!slot.confirmed;
   slot.confirmedAt=slot.confirmed?new Date().toISOString():null;
   slot.confirmedBy=slot.confirmed?(who||null):null;
-  bbcSaveData();
+  await bbcSaveData();
+  scTeamRefreshWhicheverView();scRenderAdminBoard?.();scRenderPayrollBoardIfPresent?.();
 }
-function scConfirmSpa(apptId,who){
+async function scConfirmSpa(apptId,who){
+  if(typeof spaCalLoad==='function')await spaCalLoad();
   if(typeof SpaAppointments==='undefined')return;
   const a=SpaAppointments.find(x=>x.id===apptId);if(!a)return;
   a.confirmed=!a.confirmed;
   a.confirmedAt=a.confirmed?new Date().toISOString():null;
   a.confirmedBy=a.confirmed?(who||null):null;
-  spaCalSave();
+  await spaCalSave();
+  scTeamRefreshWhicheverView();scRenderAdminBoard?.();scRenderPayrollBoardIfPresent?.();
 }
-function scConfirmTour(opsKey,role,who){
+async function scConfirmTour(opsKey,role,who){
+  if(typeof actOpsLoad==='function')await actOpsLoad();
   const field=role==='driver'?'driverConfirmed':'guideConfirmed';
   const byField=role==='driver'?'driverConfirmedBy':'guideConfirmedBy';
   const cur=!!(actOpsData[opsKey]||{})[field];
   if(!actOpsData[opsKey])actOpsData[opsKey]={};
   actOpsData[opsKey][byField]=cur?null:(who||null);
-  actOpsSet(opsKey,field,!cur); // reuses existing function — saves + timestamps + refreshes admin view
+  actOpsData[opsKey][field]=!cur;
+  if(!cur&&field==='guideConfirmed')actOpsData[opsKey].guideConfirmedAt=new Date().toISOString();
+  if(!cur&&field==='driverConfirmed')actOpsData[opsKey].driverConfirmedAt=new Date().toISOString();
+  await actOpsSave();
+  scTeamRefreshWhicheverView();scRenderAdminBoard?.();scRenderPayrollBoardIfPresent?.();
 }
 
 // ===== STAFF DASHBOARD =====
