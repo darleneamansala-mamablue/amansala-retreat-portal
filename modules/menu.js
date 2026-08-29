@@ -1023,8 +1023,16 @@ let menuRecipeCosts=[];
 let menuProteinAssign={};
 let menuIngredientCatalog=[];
 let menuCatalogFilter='';
+let menuCostGuestCount=6;
+
+function menuSetGuestCount(val){
+  menuCostGuestCount=parseInt(val)||1;
+  localStorage.setItem('amansala_menu_guest_count',String(menuCostGuestCount));
+  menuRenderCostPanel();
+}
 
 function menuLoadCostData(){
+  menuCostGuestCount=parseInt(localStorage.getItem('amansala_menu_guest_count'))||6;
   try{menuProteinPrices=JSON.parse(localStorage.getItem('amansala_menu_protein_prices')||'null')||DEF_MENU_PROTEIN_PRICES.map(p=>({...p}));}catch{menuProteinPrices=DEF_MENU_PROTEIN_PRICES.map(p=>({...p}));}
   try{menuRecipeCosts=JSON.parse(localStorage.getItem('amansala_menu_recipe_costs')||'null')||DEF_MENU_RECIPE_COSTS.map(r=>({...r}));}catch{menuRecipeCosts=DEF_MENU_RECIPE_COSTS.map(r=>({...r}));}
   try{menuProteinAssign=JSON.parse(localStorage.getItem('amansala_menu_protein_assign')||'null')||JSON.parse(JSON.stringify(DEF_MENU_PROTEIN_ASSIGN));}catch{menuProteinAssign=JSON.parse(JSON.stringify(DEF_MENU_PROTEIN_ASSIGN));}
@@ -1183,6 +1191,7 @@ function menuRenderCostPanel(){
         ${unmatchedList.length?`<div style="margin-top:4px;color:#c8a468;font-style:italic">no cost yet: ${unmatchedList.map(menuEsc).join(', ')}</div>`:''}
       </td>
       <td style="padding:9px 10px;font-weight:800;color:var(--dark);white-space:nowrap">$${dayTotal.toFixed(2)}</td>
+      <td style="padding:9px 10px;font-weight:800;color:var(--teal,#2d6a6a);white-space:nowrap">$${(dayTotal*menuCostGuestCount).toFixed(2)}</td>
     </tr>`;
   }).join('');
 
@@ -1191,9 +1200,13 @@ function menuRenderCostPanel(){
       <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:10px;padding:10px 16px;margin-bottom:18px;font-size:12.5px;color:#92400e;font-weight:600">All prices on this page are in Mexican pesos (MXN), matching your supplier price lists — not USD.</div>
 
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:22px">
-        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="padding:12px 18px;background:#f8f5f0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
           <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Weekly Menu Cost Estimate — per person (MXN)</span>
-          <span style="font-size:12.5px;font-weight:700;color:var(--teal,#2d6a6a)">Week total: $${weeklyTotal.toFixed(2)} MXN</span>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--dark)">Guests: <input type="number" min="1" value="${menuCostGuestCount}" onchange="menuSetGuestCount(this.value)" style="width:60px;padding:4px 7px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px"></label>
+            <span style="font-size:12.5px;font-weight:700;color:var(--teal,#2d6a6a)">Week total: $${weeklyTotal.toFixed(2)}/person</span>
+            <span style="font-size:12.5px;font-weight:700;color:var(--teal,#2d6a6a)">Group total (${menuCostGuestCount}): $${(weeklyTotal*menuCostGuestCount).toFixed(2)} MXN</span>
+          </div>
         </div>
         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
           <thead><tr style="background:#faf7f2">
@@ -1201,7 +1214,8 @@ function menuRenderCostPanel(){
             <th style="padding:8px 10px;text-align:left;color:#5a5048">Midday Protein</th>
             <th style="padding:8px 10px;text-align:left;color:#5a5048">Dinner Protein</th>
             <th style="padding:8px 10px;text-align:left;color:#5a5048">Other Costed Dishes</th>
-            <th style="padding:8px 10px;text-align:left;color:#5a5048">Day Total</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Day Total (person)</th>
+            <th style="padding:8px 10px;text-align:left;color:#5a5048">Day Total (${menuCostGuestCount} guests)</th>
           </tr></thead>
           <tbody>${dayRows}</tbody>
         </table></div>
