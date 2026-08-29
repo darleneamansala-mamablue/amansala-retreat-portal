@@ -298,6 +298,10 @@ function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount,date){
     }
     slots.push(bbcMakeSlot('5:45 – 6:45','Gentle Yoga',eveningYoga,'Beachfront',false,'class'));
   } else {
+    // Every non-tour day gets a Mayan Clay Meditation at 12:15, led by
+    // whichever of Darlene/Yolanda isn't already stretched thin that day —
+    // alternates day to day since either can lead it.
+    slots.push(bbcMakeSlot('12:15','Mayan Clay Meditation',fullIdx%2===0?'Darlene':'Yolanda','Beachfront',false,'class'));
     slots.push(bbcMakeSlot('1:30','Lunch','','',true,'meal'));
     if(smallGroup){
       const sg=bbcSmallGroupAfternoon(fullIdx,dance);
@@ -732,9 +736,6 @@ function bbcPrint(){
 // pasting into another program — no HTML/formatting, just readable lines.
 function bbcScheduleAsText(s){
   const lines=[];
-  lines.push(s.name);
-  lines.push(bbcFmtDate(s.startDate)+' - '+bbcFmtDate(s.endDate)+' ('+s.days.length+' days)');
-  lines.push('');
   s.days.forEach(function(day){
     lines.push(bbcFmtDate(day.date).toUpperCase());
     if(day.note)lines.push(day.note);
