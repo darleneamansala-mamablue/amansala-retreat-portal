@@ -916,19 +916,54 @@ function actOpsCostHtml(ops, totalSigned, aoId, opsKey) {
     </div>`;
   }
 
-  // Cacao: 50/50 split
+  // Sound Healing & Cacao Ceremony — Ignacia (sound healing helper) is paid
+  // a fixed MXN fee (tiered by guest count) out of the team's 50% share;
+  // Darlene and Kun split whatever's left of that 50% evenly.
   if (aoId==='ao4') {
-    const guideCount=(ops.guide1?1:0)+(ops.guide2?1:0)||1;
-    const guideCost=ops.guideConfirmed?guideCount*1000:0;
-    const vanCostTotal=miguelVans*VAN_COST_MIGUEL+inhouseVans*VAN_COST_INHOUSE;
-    const vanNote=[miguelVans?miguelVans+' Miguel':'',inhouseVans?inhouseVans+' in-house':''].filter(Boolean).join('+');
-    const total=guideCost+vanCostTotal;
+    const IGNACIA_TIERS=[{max:7,fee:800},{max:15,fee:1100},{max:20,fee:1300},{max:25,fee:1600},{max:30,fee:1800},{max:35,fee:2000},{max:40,fee:2250}];
+    const ignaciaFeeFor=n=>{const t=IGNACIA_TIERS.find(x=>n<=x.max);return t?t.fee:null;};
+    const totalCollected=ops.totalCollectedMXN||0;
+    const currency=ops.ignaciaCurrency||'MXN';
+    const exchangeRate=ops.exchangeRate||0;
+    const ignaciaFee=totalSigned>0?ignaciaFeeFor(totalSigned):null;
+    const housePayment=totalCollected*0.5;
+    const teamPool=totalCollected*0.5;
+    const overTier=totalSigned>40;
+    const canCalc=totalCollected>0&&ignaciaFee!=null&&teamPool>=ignaciaFee;
+    const remaining=canCalc?teamPool-ignaciaFee:0;
+    const darlenePayment=canCalc?remaining/2:0;
+    const kunPayment=canCalc?remaining/2:0;
+    const ignaciaUSD=currency==='USD'&&exchangeRate>0?ignaciaFee/exchangeRate:null;
+    const mxn=n=>n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' MXN';
+    const inp=(field,val,ph)=>`<input type="number" step="0.01" value="${val||''}" placeholder="${ph||''}" onchange="actOpsSetNum('${opsKey}','${field}',+this.value)" style="width:120px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px;color:var(--dark);background:#fff;outline:none">`;
+    const textRow=(label,val)=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12.5px;border-bottom:1px solid #f0ebe0">
+      <span style="color:#374151">${label}</span><span style="font-weight:600;color:var(--dark)">${val}</span>
+    </div>`;
     return `<div>
-      <div style="font-size:11.5px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:7px 10px;margin-bottom:6px">ℹ️ <b>Cacao Ceremony</b> — cost is split 50/50 with the ceremony lead.</div>
-      ${guideCost||vansUsedTotal?secHdr('Cost for Transport'):''}
-      ${guideCost?row('Guide'+(guideCount>1?'s':''),guideCost,guideCount+' × $1,000'):''}
-      ${vansUsedTotal?row('Vans',vanCostTotal,vanNote+' van(s)'):''}
-      ${total?totalRow(total):'<div style="font-size:11.5px;color:#9ca3af;font-style:italic">Confirm guide &amp; vans to see cost estimate.</div>'}
+      <div style="font-size:11.5px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:7px 10px;margin-bottom:10px">ℹ️ <b>Sound Healing &amp; Cacao Ceremony</b> — house takes 50%; Ignacia's fee comes out of the remaining 50% (by guest count); the rest splits evenly between Darlene and Kun.</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+        <div><label style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Total Collected (MXN)</label>${inp('totalCollectedMXN',ops.totalCollectedMXN,'e.g. 8000')}</div>
+        <div><label style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Pay Ignacia In</label>
+          <select onchange="actOpsSet('${opsKey}','ignaciaCurrency',this.value)" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px;color:var(--dark);background:#fff">
+            <option value="MXN"${currency==='MXN'?' selected':''}>MXN</option>
+            <option value="USD"${currency==='USD'?' selected':''}>USD</option>
+          </select>
+        </div>
+        ${currency==='USD'?`<div><label style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:3px">Exchange Rate (MXN per $1)</label>${inp('exchangeRate',ops.exchangeRate,'e.g. 18')}</div>`:''}
+      </div>
+      ${overTier?'<div style="font-size:12px;color:#dc2626;font-weight:600;margin-bottom:8px">⚠ '+totalSigned+' guests is above the 40-guest tier table — enter Ignacia\'s fee manually with Amansala before confirming.</div>':''}
+      ${totalCollected>0&&ignaciaFee!=null&&!canCalc?`<div style="font-size:12px;color:#dc2626;font-weight:600;margin-bottom:8px">⚠ Cannot calculate — the 50% team pool (${mxn(teamPool)}) is less than Ignacia's fee (${mxn(ignaciaFee)}). Total collected is too low for this group size.</div>`:''}
+      ${totalCollected>0?`
+        ${row('Total Collected',totalCollected)}
+        ${row('House Payment (50%)',housePayment)}
+        ${ignaciaFee!=null?row('Ignacia\'s Payment',ignaciaFee,totalSigned+' guests'):''}
+        ${ignaciaFee!=null?textRow('Currency Used for Ignacia',currency):''}
+        ${ignaciaFee!=null&&currency==='USD'?textRow('Exchange Rate',exchangeRate>0?exchangeRate+' MXN per $1':'not set'):''}
+        ${ignaciaFee!=null&&currency==='USD'&&ignaciaUSD!=null?textRow('Ignacia\'s Payment (USD)','$'+ignaciaUSD.toFixed(2)+' USD'):''}
+        ${canCalc?row('Darlene\'s Payment',darlenePayment):''}
+        ${canCalc?row('Kun\'s Payment',kunPayment):''}
+        ${canCalc?totalRow(housePayment+ignaciaFee+darlenePayment+kunPayment):''}
+      `:'<div style="font-size:11.5px;color:#9ca3af;font-style:italic">Enter total collected to see the payment breakdown.</div>'}
     </div>`;
   }
 
