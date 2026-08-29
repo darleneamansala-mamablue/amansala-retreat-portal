@@ -224,15 +224,18 @@ function bbcMakeSlot(time,activity,instructor,location,fixed,type){return{id:bbc
 // Availability check (from the Staff Confirmations login, modules/
 // staff-confirm-portal.js) — no account on file for that name, or no date,
 // means "assume available" since there's nothing on record saying otherwise.
-function bbcCheckAvail(name,date){
-  return !date||typeof scIsAvailable!=='function'||scIsAvailable(name,date);
+// period: 'AM'|'PM' for the specific class slot, so a staff member who's
+// only blocked out mornings (or afternoons) still gets picked for the half
+// of the day they ARE available.
+function bbcCheckAvail(name,date,period){
+  return !date||typeof scIsAvailable!=='function'||scIsAvailable(name,date,period);
 }
 // Tries the rotation's usual pick first; falls back through the rest of the
-// pool (in order) for anyone else marked unavailable that date; if literally
-// everyone in the pool is unavailable, flags it instead of guessing.
-function bbcPickAvailable(preferred,pool,date){
-  if(bbcCheckAvail(preferred,date))return preferred;
-  for(const p of pool){if(p!==preferred&&bbcCheckAvail(p,date))return p;}
+// pool (in order) for anyone else marked unavailable that date/period; if
+// literally everyone in the pool is unavailable, flags it instead of guessing.
+function bbcPickAvailable(preferred,pool,date,period){
+  if(bbcCheckAvail(preferred,date,period))return preferred;
+  for(const p of pool){if(p!==preferred&&bbcCheckAvail(p,date,period))return p;}
   return '⚠ Needs Instructor';
 }
 const BBC_YOGA_POOL=['Darlene','Kun','Yolanda'];
@@ -248,20 +251,20 @@ function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount,date){
   // each pick falls back to another pool member if the rotation's usual
   // choice marked themselves unavailable that date.
   const morningYogaPick=(isFirst||isLast)?'Darlene':BBC_MORNING_YOGA_ROTATION[Math.min(fullIdx,BBC_MORNING_YOGA_ROTATION.length-1)];
-  const morningYoga=bbcPickAvailable(morningYogaPick,BBC_YOGA_POOL,date);
+  const morningYoga=bbcPickAvailable(morningYogaPick,BBC_YOGA_POOL,date,'AM');
   const eveningYogaPick=isFirst?'Kun':BBC_EVENING_YOGA_ROTATION[Math.min(fullIdx,BBC_EVENING_YOGA_ROTATION.length-1)];
-  const eveningYoga=bbcPickAvailable(eveningYogaPick,BBC_YOGA_POOL,date);
+  const eveningYoga=bbcPickAvailable(eveningYogaPick,BBC_YOGA_POOL,date,'PM');
   // Dance cycles Latin → Afro → Bollywood, always Sergio — no substitute pool
   // defined, so an unavailable Sergio just flags the slot for a manual fix.
   const danceRaw=BBC_DANCE_ROTATION[(isFirst?0:fullIdx)%BBC_DANCE_ROTATION.length];
-  const dance=bbcCheckAvail(danceRaw.instructor,date)?danceRaw:{...danceRaw,instructor:'⚠ Needs Instructor'};
+  const dance=bbcCheckAvail(danceRaw.instructor,date,'PM')?danceRaw:{...danceRaw,instructor:'⚠ Needs Instructor'};
   // Strength rotation ties the activity to the person's specialty (Adele=
   // Pilates, Sergio=Absolution, Fernando=Boxing) — if today's pick is
   // unavailable, swap to whichever of the other two specialties IS
   // available rather than guessing a name for the wrong activity.
   const strengthRaw=BBC_AFTERNOON_STRENGTH_ROTATION[Math.min(Math.max(fullIdx,0),BBC_AFTERNOON_STRENGTH_ROTATION.length-1)];
-  const strength=bbcCheckAvail(strengthRaw.instructor,date)?strengthRaw
-    :(BBC_AFTERNOON_STRENGTH_ROTATION.find(s=>s.instructor!==strengthRaw.instructor&&bbcCheckAvail(s.instructor,date))||{...strengthRaw,instructor:'⚠ Needs Instructor'});
+  const strength=bbcCheckAvail(strengthRaw.instructor,date,'PM')?strengthRaw
+    :(BBC_AFTERNOON_STRENGTH_ROTATION.find(s=>s.instructor!==strengthRaw.instructor&&bbcCheckAvail(s.instructor,date,'PM'))||{...strengthRaw,instructor:'⚠ Needs Instructor'});
   const yogaLabel=(isFirst||isLast)?'Yoga Mala':'Yoga';
   const circuitLabel=(isFirst||isLast)?'BBC 20':'Circuit Training';
   // Default locations unless told otherwise for a specific booking: yoga at
@@ -330,7 +333,7 @@ function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount,date){
     // Every non-tour day gets a Mayan Clay Meditation at 12:15, led by
     // whichever of Darlene/Yolanda isn't already stretched thin that day —
     // alternates day to day since either can lead it.
-    slots.push(bbcMakeSlot('12:15','Mayan Clay Meditation',bbcPickAvailable(fullIdx%2===0?'Darlene':'Yolanda',BBC_CLAY_MEDITATION_POOL,date),'Beachfront',false,'class'));
+    slots.push(bbcMakeSlot('12:15','Mayan Clay Meditation',bbcPickAvailable(fullIdx%2===0?'Darlene':'Yolanda',BBC_CLAY_MEDITATION_POOL,date,'PM'),'Beachfront',false,'class'));
     slots.push(bbcMakeSlot('1:30','Lunch','','',true,'meal'));
     if(smallGroup){
       const sg=bbcSmallGroupAfternoon(fullIdx,dance);

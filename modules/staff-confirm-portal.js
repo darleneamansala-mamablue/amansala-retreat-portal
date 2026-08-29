@@ -387,17 +387,25 @@ function scCancelAssignment(domain,a,b,c){
 // Global availability check other modules (bbc-schedule.js) consult before
 // assigning an instructor — no account on file, or no date/name given, means
 // "don't block" (we can't know they're unavailable if we have no record).
-function scIsAvailable(name,date){
+// period: 'AM'|'PM' for the specific class being scheduled, or omitted when
+// the caller just wants "are they out this whole day" — an unspecified
+// period is treated conservatively (any block on the date counts, and a
+// day-of-week rule's AM/PM restriction is ignored since we don't know which
+// half of the day is being asked about).
+function scIsAvailable(name,date,period){
   if(!name||!date)return true;
   const list=(typeof staffConfirmAccounts!=='undefined'?staffConfirmAccounts:[]);
   const acct=list.find(a=>a.name.trim().toLowerCase()===name.trim().toLowerCase());
   if(!acct)return true;
-  if((acct.unavailableDates||[]).includes(date))return false;
+  const dateBlocks=(acct.unavailableDates||[]).map(d=>typeof d==='string'?{date:d,period:'ALL'}:d);
+  if(dateBlocks.some(b=>b.date===date&&(b.period==='ALL'||!period||b.period===period)))return false;
   const rules=acct.dayOfWeekRules||[];
   const covering=rules.filter(r=>date>=r.start&&date<=r.end);
   if(covering.length){
     const dow=new Date(date+'T12:00:00').getDay();
-    if(!covering.some(r=>r.days.includes(dow)))return false;
+    const matchingDayRule=covering.find(r=>r.days.includes(dow));
+    if(!matchingDayRule)return false;
+    if(matchingDayRule.period&&matchingDayRule.period!=='ALL'&&period&&matchingDayRule.period!==period)return false;
   }
   return true;
 }
@@ -417,25 +425,34 @@ let scOpenAccountIds=new Set();
 function scTrackDetailsOpen(id,isOpen){
   if(isOpen)scOpenAccountIds.add(id);else scOpenAccountIds.delete(id);
 }
-function scDowPending(id){return scPendingDOW[id]||(scPendingDOW[id]={start:'',end:'',days:[]});}
+function scDowPending(id){return scPendingDOW[id]||(scPendingDOW[id]={start:'',end:'',days:[],period:'ALL'});}
 function scSetDowStart(id,val){scDowPending(id).start=val;}
 function scSetDowEnd(id,val){scDowPending(id).end=val;}
+function scSetDowPeriod(id,val){scDowPending(id).period=val;}
 function scTogglePendingDOW(id,dayIdx){
   const p=scDowPending(id);
   const i=p.days.indexOf(dayIdx);
   if(i>=0)p.days.splice(i,1);else p.days.push(dayIdx);
   scTeamRefreshWhicheverView();
 }
+function scPeriodSelectHtml(id,val,onchangeFn){
+  const opt=(v,label)=>`<option value="${v}"${val===v?' selected':''}>${label}</option>`;
+  return`<select id="${id}" onchange="${onchangeFn}" style="padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;background:#fff">
+    ${opt('ALL','All day')}${opt('AM','AM classes only')}${opt('PM','PM classes only')}
+  </select>`;
+}
 function scDaysOfWeekHtml(account){
   const rules=(account.dayOfWeekRules||[]).slice().sort((a,b)=>a.start.localeCompare(b.start));
   const p=scDowPending(account.id);
   const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
+  const periodLabel=per=>per==='AM'?' — AM classes only':per==='PM'?' — PM classes only':'';
   return`<div style="margin-bottom:14px">
-    <div style="font-size:12.5px;color:#8a7e74;margin-bottom:8px">Only work certain days of the week during a specific period? Pick a start/end date and which days apply — outside that period they're available as usual.</div>
+    <div style="font-size:12.5px;color:#8a7e74;margin-bottom:8px">Only work certain days of the week during a specific period? Pick a start/end date, which days apply, and whether it's all day or just AM/PM classes — outside that date range they're available as usual.</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <input type="date" id="scDOWStart_${account.id}" value="${p.start}" oninput="scSetDowStart('${account.id}',this.value)" style="padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
       <span style="color:#8a7e74;font-size:12px">to</span>
       <input type="date" id="scDOWEnd_${account.id}" value="${p.end}" oninput="scSetDowEnd('${account.id}',this.value)" style="padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+      ${scPeriodSelectHtml('scDOWPeriod_'+account.id,p.period,`scSetDowPeriod('${account.id}',this.value)`)}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
       ${SC_DAY_NAMES.map((d,i)=>{
@@ -444,7 +461,7 @@ function scDaysOfWeekHtml(account){
       }).join('')}
     </div>
     <button onclick="scAddDowRule('${account.id}')" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;margin-bottom:10px">Add Rule</button>
-    ${rules.length?rules.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(r.start)} – ${fmtD(r.end)}: only ${r.days.slice().sort().map(i=>SC_DAY_NAMES[i]).join(', ')}</span><button onclick="scRemoveDowRule('${account.id}','${r.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No weekly patterns set.</div>'}
+    ${rules.length?rules.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(r.start)} – ${fmtD(r.end)}: only ${r.days.slice().sort().map(i=>SC_DAY_NAMES[i]).join(', ')}${periodLabel(r.period)}</span><button onclick="scRemoveDowRule('${account.id}','${r.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No weekly patterns set.</div>'}
   </div>`;
 }
 function scAddDowRule(id){
@@ -454,7 +471,7 @@ function scAddDowRule(id){
   if(!p.days.length){alert('Select at least one day of the week.');return;}
   const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
   account.dayOfWeekRules=account.dayOfWeekRules||[];
-  account.dayOfWeekRules.push({id:'dow_'+Math.random().toString(36).substr(2,9),start:p.start,end:p.end,days:p.days.slice().sort()});
+  account.dayOfWeekRules.push({id:'dow_'+Math.random().toString(36).substr(2,9),start:p.start,end:p.end,days:p.days.slice().sort(),period:p.period||'ALL'});
   delete scPendingDOW[id];
   saveStaffConfirmAccounts();
   scTeamRefreshWhicheverView();
@@ -466,35 +483,41 @@ function scRemoveDowRule(id,ruleId){
   scTeamRefreshWhicheverView();
 }
 
+function scDateBlockLabel(entry,fmtD){
+  const per=entry.period;
+  return fmtD(entry.date)+(per==='AM'?' — AM classes only':per==='PM'?' — PM classes only':'');
+}
 function scAvailabilityHtml(account){
-  const dates=(account.unavailableDates||[]).slice().sort();
+  const dates=(account.unavailableDates||[]).map(d=>typeof d==='string'?{id:d,date:d,period:'ALL'}:d).sort((a,b)=>a.date.localeCompare(b.date));
   const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});};
   return`<div style="margin-top:10px;margin-bottom:26px">
     <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">My Availability</div>
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:16px 18px">
       ${scDaysOfWeekHtml(account)}
-      <div style="font-size:12.5px;color:#8a7e74;margin-bottom:12px">Mark dates you're NOT available — you won't be scheduled for BBC classes on these days.</div>
-      <div style="display:flex;gap:8px;margin-bottom:14px">
-        <input type="date" id="scUnavailInput" style="flex:1;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+      <div style="font-size:12.5px;color:#8a7e74;margin-bottom:12px">Mark dates you're NOT available — you won't be scheduled for BBC classes on these days (or just that half of the day, if you only block AM or PM).</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <input type="date" id="scUnavailInput" style="flex:1;min-width:140px;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+        ${scPeriodSelectHtml('scUnavailPeriod','ALL','')}
         <button onclick="scAddUnavailable()" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Mark Unavailable</button>
       </div>
-      ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(d)}</span><button onclick="scRemoveUnavailable('${d}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked — you\'re available for everything.</div>'}
+      ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${scDateBlockLabel(d,fmtD)}</span><button onclick="scRemoveUnavailable('${d.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked — you\'re available for everything.</div>'}
     </div>
   </div>`;
 }
 function scAddUnavailable(){
   const val=document.getElementById('scUnavailInput').value;if(!val)return;
+  const period=document.getElementById('scUnavailPeriod')?.value||'ALL';
   const session=getStaffConfirmSession();if(!session)return;
   const account=staffConfirmAccounts.find(a=>a.id===session.id);if(!account)return;
   account.unavailableDates=account.unavailableDates||[];
-  if(!account.unavailableDates.includes(val))account.unavailableDates.push(val);
+  account.unavailableDates.push({id:'ua_'+Math.random().toString(36).substr(2,9),date:val,period});
   saveStaffConfirmAccounts();
   scRenderDashboard();
 }
-function scRemoveUnavailable(date){
+function scRemoveUnavailable(entryId){
   const session=getStaffConfirmSession();if(!session)return;
   const account=staffConfirmAccounts.find(a=>a.id===session.id);if(!account)return;
-  account.unavailableDates=(account.unavailableDates||[]).filter(d=>d!==date);
+  account.unavailableDates=(account.unavailableDates||[]).filter(d=>(typeof d==='string'?d:d.id)!==entryId);
   saveStaffConfirmAccounts();
   scRenderDashboard();
 }
@@ -508,8 +531,8 @@ function scTeamAvailabilityHtml(){
     <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">Team Availability — Edit Anyone's Dates</div>
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
       ${staff.map(a=>{
-        const dates=(a.unavailableDates||[]).slice().sort();
-        const upcoming=dates.filter(d=>d>=today);
+        const dates=(a.unavailableDates||[]).map(d=>typeof d==='string'?{id:d,date:d,period:'ALL'}:d).sort((x,y)=>x.date.localeCompare(y.date));
+        const upcoming=dates.filter(d=>d.date>=today);
         return`<details${scOpenAccountIds.has(a.id)?' open':''} ontoggle="scTrackDetailsOpen('${a.id}',this.open)" style="border-bottom:1px solid #f0ece4">
           <summary style="cursor:pointer;padding:12px 16px;font-size:13px;font-weight:700;color:#2d2520;display:flex;justify-content:space-between;align-items:center">
             <span>${a.name}</span>
@@ -517,11 +540,12 @@ function scTeamAvailabilityHtml(){
           </summary>
           <div style="padding:0 16px 14px">
             ${scDaysOfWeekHtml(a)}
-            <div style="display:flex;gap:8px;margin-bottom:10px">
-              <input type="date" id="scTeamUnavailInput_${a.id}" style="flex:1;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+              <input type="date" id="scTeamUnavailInput_${a.id}" style="flex:1;min-width:140px;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+              ${scPeriodSelectHtml('scTeamUnavailPeriod_'+a.id,'ALL','')}
               <button onclick="scTeamAddUnavailable('${a.id}')" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Mark Unavailable</button>
             </div>
-            ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(d)}</span><button onclick="scTeamRemoveUnavailable('${a.id}','${d}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked.</div>'}
+            ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${scDateBlockLabel(d,fmtD)}</span><button onclick="scTeamRemoveUnavailable('${a.id}','${d.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked.</div>'}
           </div>
         </details>`;
       }).join('')}
@@ -534,15 +558,16 @@ function scTeamRefreshWhicheverView(){
 }
 function scTeamAddUnavailable(id){
   const input=document.getElementById('scTeamUnavailInput_'+id);const val=input?input.value:'';if(!val)return;
+  const period=document.getElementById('scTeamUnavailPeriod_'+id)?.value||'ALL';
   const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
   account.unavailableDates=account.unavailableDates||[];
-  if(!account.unavailableDates.includes(val))account.unavailableDates.push(val);
+  account.unavailableDates.push({id:'ua_'+Math.random().toString(36).substr(2,9),date:val,period});
   saveStaffConfirmAccounts();
   scTeamRefreshWhicheverView();
 }
-function scTeamRemoveUnavailable(id,date){
+function scTeamRemoveUnavailable(id,entryId){
   const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
-  account.unavailableDates=(account.unavailableDates||[]).filter(d=>d!==date);
+  account.unavailableDates=(account.unavailableDates||[]).filter(d=>(typeof d==='string'?d:d.id)!==entryId);
   saveStaffConfirmAccounts();
   scTeamRefreshWhicheverView();
 }
@@ -625,12 +650,12 @@ function scRenderAdminAccounts(){
   const today=new Date().toISOString().slice(0,10);
   const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
   el.innerHTML=staffConfirmAccounts.map(a=>{
-    const dates=(a.unavailableDates||[]).slice().sort();
-    const upcoming=dates.filter(d=>d>=today);
+    const dates=(a.unavailableDates||[]).map(d=>typeof d==='string'?{id:d,date:d,period:'ALL'}:d).sort((x,y)=>x.date.localeCompare(y.date));
+    const upcoming=dates.filter(d=>d.date>=today);
     return`
     <details${scOpenAccountIds.has(a.id)?' open':''} ontoggle="scTrackDetailsOpen('${a.id}',this.open)" style="border:1.5px solid var(--border);border-radius:9px;margin-bottom:7px;background:${a.active?'#fff':'#f5f5f0'}">
       <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:9px 12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:120px;font-weight:700;color:var(--dark);font-size:13px">${a.name}${upcoming.length?`<div style="font-weight:600;color:#dc2626;font-size:10.5px;margin-top:2px">🚫 ${upcoming.map(fmtD).join(', ')}</div>`:''}</div>
+        <div style="flex:1;min-width:120px;font-weight:700;color:var(--dark);font-size:13px">${a.name}${upcoming.length?`<div style="font-weight:600;color:#dc2626;font-size:10.5px;margin-top:2px">🚫 ${upcoming.map(d=>fmtD(d.date)+(d.period&&d.period!=='ALL'?' ('+d.period+')':'')).join(', ')}</div>`:''}</div>
         <div style="font-size:12px;color:var(--muted);min-width:90px">@${a.username}</div>
         <div style="font-size:12px;color:var(--muted);font-family:monospace;min-width:100px">${a.password}</div>
         <button onclick="event.preventDefault();scAdminTogglePayrollAdmin('${a.id}')" title="Can see everyone's hours + BBC payroll, and edit everyone's availability" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid ${a.isPayrollAdmin?'#93c5fd':'#e8dfd4'};background:${a.isPayrollAdmin?'#dbeafe':'#f5f5f0'};color:${a.isPayrollAdmin?'#1d4ed8':'#9ca3af'};cursor:pointer">${a.isPayrollAdmin?'★ Payroll Admin':'Payroll Admin'}</button>
@@ -640,11 +665,12 @@ function scRenderAdminAccounts(){
       <div style="padding:0 12px 12px;border-top:1px solid #f0ece4;margin-top:2px">
         <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin:10px 0 8px">Edit Availability</div>
         ${scDaysOfWeekHtml(a)}
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <input type="date" id="scTeamUnavailInput_${a.id}" style="flex:1;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <input type="date" id="scTeamUnavailInput_${a.id}" style="flex:1;min-width:140px;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+          ${scPeriodSelectHtml('scTeamUnavailPeriod_'+a.id,'ALL','')}
           <button onclick="scTeamAddUnavailable('${a.id}')" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Mark Unavailable</button>
         </div>
-        ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(d)}</span><button onclick="scTeamRemoveUnavailable('${a.id}','${d}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked.</div>'}
+        ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(d.date)}${d.period&&d.period!=='ALL'?' — '+d.period+' classes only':''}</span><button onclick="scTeamRemoveUnavailable('${a.id}','${d.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked.</div>'}
       </div>
     </details>`;}).join('');
 }
