@@ -267,8 +267,20 @@ function spaRenderServices() {
   const inactive = SpaData.services.filter(s => !s.active);
   if (!active.length) { el.innerHTML = '<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No services yet.</p>'; return; }
   const catColors = { massage: '#2d6a6a', spa: '#a855f7', wellness: '#c084fc', fitness: '#f59e0b' };
+  // Group-priced services (Temazcal, Cacao, Private Yoga, etc.) have no flat
+  // s.price -- their real price lives in s.groupPricing, so the "missing
+  // price" check and display need to account for that or every group
+  // service falsely shows as unpriced.
+  const groupPriceFor = (s, n) => {
+    if (!s.groupPricing || !n || n < 1) return null;
+    const gp = s.groupPricing;
+    if (gp.belowMin && gp.belowMin[n] != null) return gp.belowMin[n];
+    if (gp.flatFee != null) return gp.flatFee + Math.max(0, n - (gp.flatFeeMax || 0)) * (gp.perPersonUSD || 0);
+    if (n >= gp.minGroup) return gp.perPersonUSD * n;
+    return null;
+  };
   const card = s => {
-    const missing = !s.duration || !s.price;
+    const missing = !s.duration || (s.price == null && !s.groupPricing);
     const color = catColors[s.category] || '#6b7280';
     return `<div onclick="spaShowServiceForm('${s.id}')" style="background:#fff;border:1.5px solid ${missing ? '#fbbf24' : '#e8dfd4'};border-radius:14px;padding:16px 18px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
@@ -278,7 +290,7 @@ function spaRenderServices() {
       ${s.description ? `<div style="font-size:12px;color:#8a7e74;margin-top:4px">${s.description}</div>` : ''}
       <div style="display:flex;gap:14px;margin-top:10px;font-size:12.5px;color:#4a4038">
         <span>${s.duration ? s.duration + ' min' : '<span style="color:#d97706;font-weight:600">Duration TBD</span>'}</span>
-        <span>${s.price != null ? '$' + s.price : '<span style="color:#d97706;font-weight:600">Price TBD</span>'}</span>
+        <span>${s.price != null ? '$' + s.price : (s.groupPricing ? 'from $' + groupPriceFor(s, s.groupPricing.minGuests || 1) + ' <span style="color:#9ca3af;font-weight:400">(group)</span>' : '<span style="color:#d97706;font-weight:600">Price TBD</span>')}</span>
         ${s.roomRequired ? '<span style="color:#9ca3af">Room required</span>' : ''}
         ${s.sessionType === 'group' ? '<span style="color:#7c3aed;font-weight:600">Group Ceremony</span>' : ''}
       </div>

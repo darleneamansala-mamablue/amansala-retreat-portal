@@ -127,11 +127,14 @@ function renderDots(total){
 function spaGroupPrice(s,n){
   if(!s.groupPricing||!n||n<1)return null;
   const gp=s.groupPricing;
+  // Explicit per-headcount override (e.g. a special solo rate) always wins,
+  // checked before the flat-fee/per-person formulas below.
+  if(gp.belowMin&&gp.belowMin[n]!=null)return gp.belowMin[n];
   // Flat-fee model (e.g. Private Yoga/Fitness): one flat rate covers up to
   // flatFeeMax people, each guest beyond that adds perPersonUSD.
   if(gp.flatFee!=null)return gp.flatFee+Math.max(0,n-(gp.flatFeeMax||0))*(gp.perPersonUSD||0);
   if(n>=gp.minGroup)return gp.perPersonUSD*n;
-  return (gp.belowMin&&gp.belowMin[n]!=null)?gp.belowMin[n]:null;
+  return null;
 }
 
 function renderStep(){
