@@ -9,7 +9,7 @@
 
 let SpaData = { services: [], rooms: [], therapists: [] };
 let spaLoaded = false;
-let spaCurView = 'calendar';
+let spaCurView = 'dashboard';
 
 function spaNewId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -111,7 +111,7 @@ async function spaInit() {
 
 function spaSetView(v) {
   spaCurView = v;
-  ['calendar', 'services', 'therapists', 'rooms', 'public', 'payroll'].forEach(id => {
+  ['dashboard', 'calendar', 'services', 'therapists', 'rooms', 'public', 'payroll'].forEach(id => {
     const btn = document.getElementById('spaView' + id.charAt(0).toUpperCase() + id.slice(1));
     if (btn) {
       btn.style.background = id === v ? 'var(--teal,#2d6a6a)' : 'transparent';
@@ -128,12 +128,68 @@ function spaRender() {
   const addWrap = document.getElementById('spaAddBtnWrap');
   const addBtn = (label, onclick) => `<button onclick="${onclick}" style="display:flex;align-items:center;gap:6px;padding:9px 18px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>${label}</button>`;
+  if (spaCurView === 'dashboard') { addWrap.innerHTML = ''; spaRenderDashboard(); }
   if (spaCurView === 'calendar') { spaCalRenderToolbar(); spaCalRender(); }
   if (spaCurView === 'services') { addWrap.innerHTML = addBtn('New Service', 'spaShowServiceForm(null)'); spaRenderServices(); }
   if (spaCurView === 'therapists') { addWrap.innerHTML = addBtn('New Therapist', 'spaShowTherapistForm(null)'); spaRenderTherapists(); }
   if (spaCurView === 'rooms') { addWrap.innerHTML = addBtn('New Room', 'spaShowRoomForm(null)'); spaRenderRooms(); }
   if (spaCurView === 'public') { addWrap.innerHTML = ''; spaRenderPublicPage(); }
   if (spaCurView === 'payroll') { addWrap.innerHTML = ''; spaRenderPayroll(); }
+}
+
+// ── DASHBOARD — today's services at a glance, confirmed vs pending ────────
+let spaDashDate = new Date(); spaDashDate.setHours(0, 0, 0, 0);
+function spaDashNav(dir) { spaDashDate = new Date(spaDashDate.getTime() + dir * DAY_MS); spaRenderDashboard(); }
+function spaDashToday() { spaDashDate = new Date(); spaDashDate.setHours(0, 0, 0, 0); spaRenderDashboard(); }
+async function spaDashToggleConfirm(apptId) {
+  if (typeof spaCalLoad === 'function') await spaCalLoad();
+  const a = SpaAppointments.find(x => x.id === apptId);
+  if (!a) return;
+  a.confirmed = !a.confirmed;
+  a.confirmedAt = a.confirmed ? new Date().toISOString() : null;
+  a.confirmedBy = a.confirmed ? 'Admin' : null;
+  await spaCalSave();
+  spaRenderDashboard();
+}
+function spaRenderDashboard() {
+  const el = document.getElementById('spaContent');
+  const dateStr = spaCalFmtDateStr(spaDashDate);
+  const todays = (SpaAppointments || []).filter(a => a.date === dateStr && a.status !== 'CANCELLED').sort((a, b) => spaCalHHMMToMin(a.start) - spaCalHHMMToMin(b.start));
+  const svcName = id => SpaData.services.find(s => s.id === id)?.name || 'Service';
+  const therName = id => id ? (SpaData.therapists.find(t => t.id === id)?.firstName || 'Unknown') : null;
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const MON_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const dateLabel = `${DAY_NAMES[spaDashDate.getDay()]}, ${MON_NAMES[spaDashDate.getMonth()]} ${spaDashDate.getDate()}`;
+  const confirmedCount = todays.filter(a => a.confirmed).length;
+
+  const row = a => {
+    const confirmed = !!a.confirmed;
+    const unassigned = !a.therapistId;
+    const pref = a.therapistPreference?.type;
+    const prefLabel = unassigned ? (pref === 'male' ? 'Any male therapist' : pref === 'female' ? 'Any female therapist' : 'Unassigned') : therName(a.therapistId);
+    return `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #f0ebe0;background:${confirmed ? '#fff' : '#fffbeb'}">
+      <div style="font-weight:700;color:#2d2520;font-size:13px">${spaCalFmtT(a.start)}</div>
+      <div style="font-size:13px;color:#2d2520">${menuEsc(svcName(a.serviceId))}</div>
+      <div style="font-size:12.5px;color:#6b7280">${menuEsc(a.clientName || '')}</div>
+      <div style="font-size:12.5px;${unassigned ? 'color:#dc2626;font-weight:700' : 'color:#4a4038'}">${menuEsc(prefLabel)}</div>
+      <div style="text-align:right">
+        <button onclick="spaDashToggleConfirm('${a.id}')" style="font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:20px;border:1.5px solid ${confirmed ? '#86efac' : '#fde68a'};background:${confirmed ? '#dcfce7' : '#fef3c7'};color:${confirmed ? '#15803d' : '#92400e'};cursor:pointer">${confirmed ? '✓ Confirmed' : 'Pending'}</button>
+      </div>
+    </div>`;
+  };
+
+  el.innerHTML = `<div style="max-width:900px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+      <button onclick="spaDashNav(-1)" style="padding:7px 12px;border:1.5px solid #e8dfd4;background:#fff;border-radius:8px;cursor:pointer;font-size:13px">‹</button>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:#2d2520;min-width:220px">${dateLabel}</div>
+      <button onclick="spaDashNav(1)" style="padding:7px 12px;border:1.5px solid #e8dfd4;background:#fff;border-radius:8px;cursor:pointer;font-size:13px">›</button>
+      <button onclick="spaDashToday()" style="padding:7px 14px;border:1.5px solid #e8dfd4;background:#fff;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600">Today</button>
+      ${todays.length ? `<span style="margin-left:auto;font-size:12.5px;color:#6b7280">${confirmedCount} of ${todays.length} confirmed</span>` : ''}
+    </div>
+    <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
+      ${todays.length ? `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px;gap:10px;padding:10px 16px;background:#f8f5f0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74"><div>Time</div><div>Service</div><div>Client</div><div>Therapist</div><div style="text-align:right">Status</div></div>${todays.map(row).join('')}` : '<div style="padding:40px;text-align:center;color:#9ca3af;font-style:italic">No services booked for this day.</div>'}
+    </div>
+  </div>`;
 }
 
 // ── PAYROLL (code-gated) ─────────────────────────────────────────────────
