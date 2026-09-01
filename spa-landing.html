@@ -58,10 +58,15 @@ section{padding:70px 24px}
 .svc-groups{display:flex;flex-direction:column;gap:36px}
 .svc-group-title{font-family:'Italiana',serif;font-size:22px;font-weight:600;color:#3AB7AE;margin-bottom:14px;text-align:center}
 .svc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
-.svc-item{background:#fff;border:1px solid #e8dfd4;border-radius:12px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.svc-item{background:#fff;border:1px solid #e8dfd4;border-radius:12px;padding:16px 18px}
+.svc-item.has-desc{cursor:pointer}
+.svc-item.has-desc:hover .n{color:#3AB7AE}
+.svc-item-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .svc-item .n{font-size:14px;font-weight:600;color:#2d2520}
 .svc-item .d{font-size:11.5px;color:#8a7e74;margin-top:2px}
 .svc-item .p{font-size:14px;font-weight:700;color:#a05a35;white-space:nowrap}
+.svc-desc{display:none;font-size:12px;color:#8a7e74;margin-top:10px;padding-top:10px;border-top:1px solid #f0ebe0;line-height:1.55;text-align:left}
+.svc-desc.open{display:block}
 
 /* ── THERAPISTS ── */
 .ther-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
@@ -181,9 +186,14 @@ function esc(s){return (s||'').replace(/</g,'&lt;');}
         <div class="svc-group-title">${CAT_LABEL[cat]}</div>
         <div class="svc-grid">${list.map(s=>{
           const priceLbl=s.groupPricing?('from $'+spaGroupPrice(s,s.groupPricing.minGuests||1)):('$'+s.price);
-          return `<div class="svc-item">
-          <div><div class="n">${esc(s.name)}</div><div class="d">${s.duration}${s.durationNote?' ('+s.durationNote+')':''} min${s.groupPricing?' · private group':''}</div></div>
-          <div class="p">${priceLbl}</div>
+          const descId='svcDesc_'+s.id;
+          const hasDesc=!!s.description;
+          return `<div class="svc-item${hasDesc?' has-desc':''}"${hasDesc?` onclick="document.getElementById('${descId}').classList.toggle('open')"`:''}>
+          <div class="svc-item-row">
+            <div><div class="n">${esc(s.name)}</div><div class="d">${s.duration}${s.durationNote?' ('+s.durationNote+')':''} min${s.groupPricing?' · private group':''}</div></div>
+            <div class="p">${priceLbl}</div>
+          </div>
+          ${hasDesc?`<div class="svc-desc" id="${descId}">${esc(s.description)}</div>`:''}
         </div>`;}).join('')}</div>
       </div>`;
     }).join('');
