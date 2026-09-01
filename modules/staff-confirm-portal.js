@@ -513,12 +513,21 @@ function scIsAvailable(name,date,period){
   const dateBlocks=(acct.unavailableDates||[]).map(d=>typeof d==='string'?{date:d,period:'ALL'}:d);
   if(dateBlocks.some(b=>b.date===date&&(b.period==='ALL'||!period||b.period===period)))return false;
   const rules=acct.dayOfWeekRules||[];
-  const covering=rules.filter(r=>date>=r.start&&date<=r.end);
+  const covering=rules.filter(r=>date>=r.start&&(!r.end||date<=r.end));
   if(covering.length){
     const dow=new Date(date+'T12:00:00').getDay();
-    const matchingDayRule=covering.find(r=>r.days.includes(dow));
-    if(!matchingDayRule)return false;
-    if(matchingDayRule.period&&matchingDayRule.period!=='ALL'&&period&&matchingDayRule.period!==period)return false;
+    // 'block' mode = a standing recurring commitment elsewhere (e.g. "every
+    // Tuesday PM") — only THAT day/period is blocked, everything else is
+    // unaffected. 'only' mode (default, legacy) = "the ONLY days I can ever
+    // work are these" — every day NOT listed is blocked outright.
+    const blockHit=covering.find(r=>r.mode==='block'&&r.days.includes(dow)&&(!r.period||r.period==='ALL'||!period||r.period===period));
+    if(blockHit)return false;
+    const onlyRules=covering.filter(r=>r.mode!=='block');
+    if(onlyRules.length){
+      const matchingDayRule=onlyRules.find(r=>r.days.includes(dow));
+      if(!matchingDayRule)return false;
+      if(matchingDayRule.period&&matchingDayRule.period!=='ALL'&&period&&matchingDayRule.period!==period)return false;
+    }
   }
   return true;
 }
@@ -538,10 +547,11 @@ let scOpenAccountIds=new Set();
 function scTrackDetailsOpen(id,isOpen){
   if(isOpen)scOpenAccountIds.add(id);else scOpenAccountIds.delete(id);
 }
-function scDowPending(id){return scPendingDOW[id]||(scPendingDOW[id]={start:'',end:'',days:[],period:'ALL'});}
+function scDowPending(id){return scPendingDOW[id]||(scPendingDOW[id]={start:'',end:'',days:[],period:'ALL',mode:'only'});}
 function scSetDowStart(id,val){scDowPending(id).start=val;}
 function scSetDowEnd(id,val){scDowPending(id).end=val;}
 function scSetDowPeriod(id,val){scDowPending(id).period=val;}
+function scSetDowMode(id,val){scDowPending(id).mode=val;scTeamRefreshWhicheverView();}
 function scTogglePendingDOW(id,dayIdx){
   const p=scDowPending(id);
   const i=p.days.indexOf(dayIdx);
@@ -558,13 +568,19 @@ function scDaysOfWeekHtml(account){
   const rules=(account.dayOfWeekRules||[]).slice().sort((a,b)=>a.start.localeCompare(b.start));
   const p=scDowPending(account.id);
   const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
-  const periodLabel=per=>per==='AM'?' — AM classes only':per==='PM'?' — PM classes only':'';
+  const periodLabel=per=>per==='AM'?' AM classes':per==='PM'?' PM classes':'';
+  const modeLabel=r=>r.mode==='block'
+    ?`Blocked every ${r.days.slice().sort().map(i=>SC_DAY_NAMES[i]).join(', ')}${periodLabel(r.period)}`
+    :`Only works ${r.days.slice().sort().map(i=>SC_DAY_NAMES[i]).join(', ')}${periodLabel(r.period)}`;
+  const modeBtn=(val,label)=>`<button onclick="scSetDowMode('${account.id}','${val}')" style="padding:6px 13px;border-radius:20px;border:1.5px solid ${p.mode===val?'#2d6a6a':'#e8dfd4'};background:${p.mode===val?'#2d6a6a':'#fff'};color:${p.mode===val?'#fff':'#6b5f54'};font-family:'Jost',sans-serif;font-size:12px;font-weight:700;cursor:pointer">${label}</button>`;
   return`<div style="margin-bottom:14px">
-    <div style="font-size:12.5px;color:#8a7e74;margin-bottom:8px">Only work certain days of the week during a specific period? Pick a start/end date, which days apply, and whether it's all day or just AM/PM classes — outside that date range they're available as usual.</div>
+    <div style="font-size:12.5px;color:#8a7e74;margin-bottom:8px">A recurring weekly pattern — pick whether this is the only time they work, or a standing commitment that blocks them out (e.g. "every Tuesday PM I teach elsewhere"). Leave the end date blank for a rule that never expires.</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">${modeBtn('only','Only works these days')}${modeBtn('block','Block these days')}</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <input type="date" id="scDOWStart_${account.id}" value="${p.start}" oninput="scSetDowStart('${account.id}',this.value)" style="padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
       <span style="color:#8a7e74;font-size:12px">to</span>
-      <input type="date" id="scDOWEnd_${account.id}" value="${p.end}" oninput="scSetDowEnd('${account.id}',this.value)" style="padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+      <input type="date" id="scDOWEnd_${account.id}" value="${p.end}" oninput="scSetDowEnd('${account.id}',this.value)" placeholder="ongoing" style="padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
+      <span style="color:#c8bfb5;font-size:11px;font-style:italic">(blank = ongoing)</span>
       ${scPeriodSelectHtml('scDOWPeriod_'+account.id,p.period,`scSetDowPeriod('${account.id}',this.value)`)}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
@@ -574,25 +590,25 @@ function scDaysOfWeekHtml(account){
       }).join('')}
     </div>
     <button onclick="scAddDowRule('${account.id}')" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;margin-bottom:10px">Add Rule</button>
-    ${rules.length?rules.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${fmtD(r.start)} – ${fmtD(r.end)}: only ${r.days.slice().sort().map(i=>SC_DAY_NAMES[i]).join(', ')}${periodLabel(r.period)}</span><button onclick="scRemoveDowRule('${account.id}','${r.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No weekly patterns set.</div>'}
+    ${rules.length?rules.map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${modeLabel(r)} — ${fmtD(r.start)} – ${r.end?fmtD(r.end):'ongoing'}</span><button onclick="scRemoveDowRule('${account.id}','${r.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No weekly patterns set.</div>'}
   </div>`;
 }
-function scAddDowRule(id){
+async function scAddDowRule(id){
   const p=scDowPending(id);
-  if(!p.start||!p.end){alert('Pick a start and end date.');return;}
-  if(p.end<p.start){alert('End date must be on or after the start date.');return;}
+  if(!p.start){alert('Pick a start date.');return;}
+  if(p.end&&p.end<p.start){alert('End date must be on or after the start date.');return;}
   if(!p.days.length){alert('Select at least one day of the week.');return;}
   const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
   account.dayOfWeekRules=account.dayOfWeekRules||[];
-  account.dayOfWeekRules.push({id:'dow_'+Math.random().toString(36).substr(2,9),start:p.start,end:p.end,days:p.days.slice().sort(),period:p.period||'ALL'});
+  account.dayOfWeekRules.push({id:'dow_'+Math.random().toString(36).substr(2,9),start:p.start,end:p.end||null,days:p.days.slice().sort(),period:p.period||'ALL',mode:p.mode||'only'});
   delete scPendingDOW[id];
-  saveStaffConfirmAccounts();
+  await saveStaffConfirmAccounts();
   scTeamRefreshWhicheverView();
 }
-function scRemoveDowRule(id,ruleId){
+async function scRemoveDowRule(id,ruleId){
   const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
   account.dayOfWeekRules=(account.dayOfWeekRules||[]).filter(r=>r.id!==ruleId);
-  saveStaffConfirmAccounts();
+  await saveStaffConfirmAccounts();
   scTeamRefreshWhicheverView();
 }
 
@@ -617,21 +633,21 @@ function scAvailabilityHtml(account){
     </div>
   </div>`;
 }
-function scAddUnavailable(){
+async function scAddUnavailable(){
   const val=document.getElementById('scUnavailInput').value;if(!val)return;
   const period=document.getElementById('scUnavailPeriod')?.value||'ALL';
   const session=getStaffConfirmSession();if(!session)return;
   const account=staffConfirmAccounts.find(a=>a.id===session.id);if(!account)return;
   account.unavailableDates=account.unavailableDates||[];
   account.unavailableDates.push({id:'ua_'+Math.random().toString(36).substr(2,9),date:val,period});
-  saveStaffConfirmAccounts();
+  await saveStaffConfirmAccounts();
   scRenderDashboard();
 }
-function scRemoveUnavailable(entryId){
+async function scRemoveUnavailable(entryId){
   const session=getStaffConfirmSession();if(!session)return;
   const account=staffConfirmAccounts.find(a=>a.id===session.id);if(!account)return;
   account.unavailableDates=(account.unavailableDates||[]).filter(d=>(typeof d==='string'?d:d.id)!==entryId);
-  saveStaffConfirmAccounts();
+  await saveStaffConfirmAccounts();
   scRenderDashboard();
 }
 
@@ -669,19 +685,19 @@ function scTeamRefreshWhicheverView(){
   if(document.getElementById('scAccountsList'))scRenderAdminAccounts();
   if(document.getElementById('staffConfirmDashboard'))scRenderDashboard();
 }
-function scTeamAddUnavailable(id){
+async function scTeamAddUnavailable(id){
   const input=document.getElementById('scTeamUnavailInput_'+id);const val=input?input.value:'';if(!val)return;
   const period=document.getElementById('scTeamUnavailPeriod_'+id)?.value||'ALL';
   const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
   account.unavailableDates=account.unavailableDates||[];
   account.unavailableDates.push({id:'ua_'+Math.random().toString(36).substr(2,9),date:val,period});
-  saveStaffConfirmAccounts();
+  await saveStaffConfirmAccounts();
   scTeamRefreshWhicheverView();
 }
-function scTeamRemoveUnavailable(id,entryId){
+async function scTeamRemoveUnavailable(id,entryId){
   const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
   account.unavailableDates=(account.unavailableDates||[]).filter(d=>(typeof d==='string'?d:d.id)!==entryId);
-  saveStaffConfirmAccounts();
+  await saveStaffConfirmAccounts();
   scTeamRefreshWhicheverView();
 }
 
@@ -724,34 +740,34 @@ function scRenderPayrollBoardIfPresent(){
 }
 
 // ===== ADMIN — manage accounts + read/toggle every domain's confirm status =====
-function scAdminAddAccount(){
+async function scAdminAddAccount(){
   const name=document.getElementById('scNewName').value.trim();
   const username=document.getElementById('scNewUser').value.trim().toLowerCase();
   const password=document.getElementById('scNewPass').value.trim();
   if(!name||!username||!password){alert('Please fill in name, username, and password.');return;}
   if(staffConfirmAccounts.some(a=>a.username.toLowerCase()===username)){alert('That username is already in use.');return;}
   staffConfirmAccounts.push({id:'sc_'+Math.random().toString(36).substr(2,9),name,username,password,active:true});
-  saveStaffConfirmAccounts();
+  await saveStaffConfirmAccounts();
   scRenderAdminAccounts();
   document.getElementById('scNewName').value='';document.getElementById('scNewUser').value='';document.getElementById('scNewPass').value='';
 }
-function scAdminToggleActive(id){
+async function scAdminToggleActive(id){
   const a=staffConfirmAccounts.find(x=>x.id===id);if(!a)return;
   a.active=!a.active;
-  saveStaffConfirmAccounts();
+  await saveStaffConfirmAccounts();
   scRenderAdminAccounts();
 }
-function scAdminTogglePayrollAdmin(id){
+async function scAdminTogglePayrollAdmin(id){
   const a=staffConfirmAccounts.find(x=>x.id===id);if(!a)return;
   a.isPayrollAdmin=!a.isPayrollAdmin;
-  saveStaffConfirmAccounts();
+  await saveStaffConfirmAccounts();
   scRenderAdminAccounts();
 }
-function scAdminRemoveAccount(id){
+async function scAdminRemoveAccount(id){
   const a=staffConfirmAccounts.find(x=>x.id===id);if(!a)return;
   if(!confirm('Remove '+a.name+'’s login?'))return;
   staffConfirmAccounts=staffConfirmAccounts.filter(x=>x.id!==id);
-  saveStaffConfirmAccounts();
+  await saveStaffConfirmAccounts();
   scRenderAdminAccounts();
 }
 function scCopyLoginLink(){
