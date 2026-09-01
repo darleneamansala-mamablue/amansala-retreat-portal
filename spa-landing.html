@@ -69,7 +69,11 @@ section{padding:70px 24px}
 .ther-photo{width:100px;height:100px;border-radius:50%;object-fit:cover;margin:0 auto 12px;border:3px solid #fff;box-shadow:0 4px 16px rgba(45,37,32,.1)}
 .ther-photo-ph{width:100px;height:100px;border-radius:50%;background:#f0ebe0;color:#c8bfb5;display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 12px;border:3px solid #fff;box-shadow:0 4px 16px rgba(45,37,32,.1)}
 .ther-name{font-family:'Italiana',serif;font-size:18px;font-weight:600;color:#2d2520}
-.ther-bio{font-size:12px;color:#8a7e74;margin-top:4px;line-height:1.5}
+.ther-bio{font-size:12px;color:#8a7e74;margin-top:8px;line-height:1.5;display:none;text-align:left;padding-top:8px;border-top:1px solid #f0ebe0}
+.ther-bio.open{display:block}
+.ther-specialties{font-size:11.5px;color:#a89a89;margin-top:4px;letter-spacing:.2px}
+.ther-card{cursor:pointer}
+.ther-card:hover .ther-name{color:#3AB7AE}
 
 /* ── CTA BANNER ── */
 .cta-banner{background:#3AB7AE;color:#fff;text-align:center;padding:70px 24px}
@@ -191,11 +195,16 @@ function esc(s){return (s||'').replace(/</g,'&lt;');}
   const therEl=document.getElementById('therGrid');
   const activeTher=SpaData.therapists.filter(t=>t.active).sort((a,b)=>a.firstName.localeCompare(b.firstName));
   const therCategories=t=>t.primaryCategory?new Set([t.primaryCategory]):new Set((t.services||[]).map(s=>SpaData.services.find(sv=>sv.id===s.serviceId)?.category).filter(Boolean));
-  const cardHtml=(t,icon)=>`<div class="ther-card">
+  const cardHtml=(t,icon)=>{
+    const specialties=(t.services||[]).map(s=>SpaData.services.find(sv=>sv.id===s.serviceId)?.name).filter(Boolean);
+    const bioId='therBio_'+t.id;
+    return`<div class="ther-card" onclick="document.getElementById('${bioId}')?.classList.toggle('open')">
     ${t.photoDataUrl?`<img class="ther-photo" src="${t.photoDataUrl}">`:`<div class="ther-photo-ph">${icon}</div>`}
     <div class="ther-name">${esc(t.firstName)} ${esc(t.lastName||'')}</div>
-    ${t.bio?`<div class="ther-bio">${esc(t.bio)}</div>`:''}
+    ${specialties.length?`<div class="ther-specialties">${specialties.map(esc).join(' | ')}</div>`:''}
+    ${t.bio?`<div class="ther-bio" id="${bioId}">${esc(t.bio)}</div>`:''}
   </div>`;
+  };
   if(!activeTher.length){
     therEl.innerHTML='<p class="loading-note">Meet our team soon.</p>';
   }else{
