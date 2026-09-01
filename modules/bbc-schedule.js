@@ -664,7 +664,12 @@ function bbcRenderSlotRow(schedId,di,slot,si,dups,date){
       const cfBorder=cfls.length?'#f87171':'#e5e7eb';
       const cfBg=cfls.length?'#fff5f5':'#fff';
       const cfHtml=cfls.length?'<div title="'+cfls.join(' | ').replace(/"/g,'&quot;')+'" style="font-size:9.5px;color:#dc2626;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help">⚠ '+cfls[0].substring(0,28)+(cfls[0].length>28||cfls.length>1?'…':'')+'</div>':'';
-      return'<input value="'+slot.location+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'location\',this.value)" onchange="bbcCheckLocationConflict(\''+schedId+'\','+di+','+si+',this.value,\''+slot.location.replace(/'/g,"\\'")+'\')" list="bbcLocDl-'+schedId+'-'+di+'" style="width:100%;border:1px solid '+cfBorder+';border-radius:6px;padding:4px 7px;font-family:\'Jost\',sans-serif;font-size:12px;color:var(--dark);background:'+cfBg+';outline:none" placeholder="Location...">'+cfHtml;
+      // If the saved location isn't one of the standard shalas (blank, or old
+      // free-typed text from before this was a dropdown), show it as its own
+      // option so the field doesn't silently change out from under it.
+      const extraOpt=BBC_LOCATIONS_LIST.includes(slot.location)?'':'<option value="'+slot.location.replace(/"/g,'&quot;')+'">'+(slot.location?slot.location:'— Select —')+'</option>';
+      const opts=extraOpt+BBC_LOCATIONS_LIST.map(l=>'<option value="'+l+'"'+(slot.location===l?' selected':'')+'>'+l+'</option>').join('');
+      return'<select onchange="bbcSlotField(\''+schedId+'\','+di+','+si+',\'location\',this.value);bbcCheckLocationConflict(\''+schedId+'\','+di+','+si+',this.value,\''+slot.location.replace(/'/g,"\\'")+'\')" style="width:100%;border:1px solid '+cfBorder+';border-radius:6px;padding:4px 7px;font-family:\'Jost\',sans-serif;font-size:12px;color:var(--dark);background:'+cfBg+';outline:none">'+opts+'</select>'+cfHtml;
     })())
     +'</div><div style="display:flex;align-items:center;justify-content:center;padding:4px">'
     +(isLocked?'<button onclick="bbcUnlockSlot(\''+schedId+'\','+di+','+si+')" style="background:none;border:none;cursor:pointer;color:#059669;font-size:14px;width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center" title="Unlock to edit (clears their confirmation)">🔓</button>'
