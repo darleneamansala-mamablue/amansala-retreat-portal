@@ -876,7 +876,7 @@ const TS_SPECIAL_TIME_SLOTS=(()=>{
   return slots;
 })();
 
-let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseStart:'',sunriseDur:45,sunriseLocation:''};
+let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
 let _tsBkId=null;
 let _tsPrepaidMode='choice'; // 'choice' | 'manual' — for the pre-paid activities assignment card
 
@@ -1176,7 +1176,7 @@ function tsInit(bkId){
     _tsPrepaidMode='choice';
     _ts=bk.scheduleRequest
       ?{..._ts,...bk.scheduleRequest}
-      :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseStart:'',sunriseDur:45,sunriseLocation:''};
+      :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
     // Migrate old field name: afternoonStart → afternoonSlot
     if(!_ts.afternoonSlot&&_ts.afternoonStart)_ts.afternoonSlot=_ts.afternoonStart;
     // Load any day-specific overrides (start/duration/type/co-teacher) that
@@ -1208,6 +1208,7 @@ function tsInit(bkId){
   const srStart=document.getElementById('tsSunriseStart');if(srStart)srStart.value=_ts.sunriseStart||'06:30';
   const srDur=document.getElementById('tsSunriseDur');if(srDur)srDur.value=String(_ts.sunriseDur||45);
   const srLoc=document.getElementById('tsSunriseLocation');if(srLoc)srLoc.value=_ts.sunriseLocation||'';
+  if(_ts.hasSunrise)tsRenderSunriseDays();
   // Restore arrival class
   const arrCb=document.getElementById('tsHasArrivalClass');if(arrCb)arrCb.checked=!!_ts.hasArrivalClass;
   const arrSec=document.getElementById('tsArrivalSection');if(arrSec)arrSec.style.display=_ts.hasArrivalClass?'block':'none';
@@ -1326,6 +1327,49 @@ function tsToggleWorkshop(){
 function tsToggleSunrise(){
   _ts.hasSunrise=document.getElementById('tsHasSunrise')?.checked||false;
   const sec=document.getElementById('tsSunriseSection');if(sec)sec.style.display=_ts.hasSunrise?'block':'none';
+  // Turning it on fresh (nothing picked yet) defaults to every eligible day,
+  // since that's the common case — restoring a previously-saved request with
+  // specific days already chosen must NOT be overwritten by this default.
+  if(_ts.hasSunrise&&(!_ts.sunriseDates||!_ts.sunriseDates.length)){
+    const bk=AppData.bookings.find(b=>b.id===_tsBkId);
+    if(bk&&bk.startDate){
+      const nights=Math.max(1,Math.round((pd(bk.endDate)-pd(bk.startDate))/DAY_MS));
+      _ts.sunriseDates=[];
+      for(let i=1;i<nights;i++)_ts.sunriseDates.push(new Date(pd(bk.startDate).getTime()+i*DAY_MS).toISOString().slice(0,10));
+    }
+  }
+  if(_ts.hasSunrise)tsRenderSunriseDays();
+}
+// Some teachers hold a sunrise activity every day, others just once or twice
+// a week — so which days it happens is picked per retreat day, same pattern
+// as the bowl-rental/class-setup day pickers. Pure render only — defaulting
+// to "every day" happens once, in tsToggleSunrise, not here.
+function tsRenderSunriseDays(){
+  const list=document.getElementById('tsSunriseDaysList');if(!list)return;
+  const bk=AppData.bookings.find(b=>b.id===_tsBkId);
+  if(!bk||!bk.startDate){list.innerHTML='';return;}
+  const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const nights=Math.max(1,Math.round((pd(bk.endDate)-pd(bk.startDate))/DAY_MS));
+  if(!_ts.sunriseDates)_ts.sunriseDates=[];
+  list.innerHTML='';
+  for(let i=1;i<nights;i++){ // skip arrival (0) and departure (nights) days -- no sunrise those days
+    const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
+    const dateStr=d.toISOString().slice(0,10);
+    const label=DAYS[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate();
+    const checked=_ts.sunriseDates.includes(dateStr);
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;background:#fff;';
+    row.innerHTML=`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#1e4f4f;font-weight:600;width:100%">
+      <input type="checkbox" ${checked?'checked':''} style="width:14px;height:14px;accent-color:var(--teal)" onchange="tsToggleSunriseDay('${dateStr}',this.checked)"> ${label}
+    </label>`;
+    list.appendChild(row);
+  }
+}
+function tsToggleSunriseDay(dateStr,on){
+  if(!_ts.sunriseDates)_ts.sunriseDates=[];
+  if(on){if(!_ts.sunriseDates.includes(dateStr))_ts.sunriseDates.push(dateStr);}
+  else{_ts.sunriseDates=_ts.sunriseDates.filter(d=>d!==dateStr);}
 }
 function tsToggleArrivalClass(){
   _ts.hasArrivalClass=document.getElementById('tsHasArrivalClass')?.checked||false;
@@ -1933,6 +1977,7 @@ function tsSubmitSchedule(){
     const missingDay=svValidActivityDays(bk).find(d=>!_ts.dailyMorning?.[d.date]?.start);
     if(missingDay){tsFlagRequired('tsDailyScheduleFields',`Please set a morning start time for ${missingDay.label}.`);return;}
   }
+  if(_ts.hasSunrise&&(!_ts.sunriseDates||!_ts.sunriseDates.length)){showToast('Please check at least one day for your sunrise activity, or turn it off.');return;}
   if(_ts.hasSunrise&&!_ts.sunriseStart){tsFlagRequired('tsSunriseStart','Please select a start time for your sunrise activity.');return;}
   if(_ts.hasSunrise&&!_ts.sunriseLocation){tsFlagRequired('tsSunriseLocation','Please select a location for your sunrise activity.');return;}
   // A 1-night retreat has no night that isn't the arrival night, so there's
@@ -2052,7 +2097,7 @@ function tsRenderCalSection(bk){
       }
       rows.push({time:'9:30 AM',desc:'Brunch &amp; Departures',shala:'',cat:'meal',sk:'09:30'});
     } else {
-      if(sr.hasSunrise&&sr.sunriseStart){
+      if(sr.hasSunrise&&sr.sunriseStart&&(sr.sunriseDates||[]).includes(dateStr)){
         rows.push({time:fmtT(sr.sunriseStart)+' – '+fmtT(addMin(sr.sunriseStart,sr.sunriseDur||45)),desc:'Sunrise Activity'+(sr.sunriseLocation?' — '+(TS_SUNRISE_LOCATIONS[sr.sunriseLocation]||sr.sunriseLocation):'')+' (no shala, no music — quiet hours)',shala:'',cat:'yoga',sk:sr.sunriseStart});
       }
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea',shala:'',cat:'meal',sk:'07:00'});
@@ -3755,7 +3800,7 @@ function openPrintSchedule(bkId){
       rows.push({time:'9:30 AM',desc:'Full Breakfast',shala:'',cls:'',sk:'09:30'});
       rows.push({time:'',desc:'Departures',shala:'',cls:'',sk:'99:99'});
     } else {
-      if(sr?.hasSunrise&&sr?.sunriseStart){
+      if(sr?.hasSunrise&&sr?.sunriseStart&&(sr.sunriseDates||[]).includes(dateStr)){
         const srEnd=fmtT(addMin(sr.sunriseStart,sr.sunriseDur||45));
         rows.push({time:fmtT(sr.sunriseStart)+' – '+srEnd,desc:'Sunrise Activity'+(sr.sunriseLocation?' — '+(TS_SUNRISE_LOCATIONS[sr.sunriseLocation]||sr.sunriseLocation):'')+' (no shala, no music — quiet hours)',shala:'',cls:'',sk:sr.sunriseStart});
       }
@@ -4261,7 +4306,7 @@ function skedGetRetreatEvents(dateStr){
     }
     // Middle days — morning class + evening class
     else {
-      if(sr.hasSunrise&&sr.sunriseStart){
+      if(sr.hasSunrise&&sr.sunriseStart&&(sr.sunriseDates||[]).includes(dateStr)){
         const srEnd=skedMinToTime(skedTimeToMin(sr.sunriseStart)+(sr.sunriseDur||45));
         const srLoc=TS_SUNRISE_LOCATIONS[sr.sunriseLocation]||sr.sunriseLocation||'';
         evs.push({id:'ret_'+bk.id+'_sunrise_'+dateStr,resourceId:'sunrise',date:dateStr,startTime:sr.sunriseStart,endTime:srEnd,title,subtitle:'Sunrise Activity'+(srLoc?' — '+srLoc:'')+' (no music)',color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});

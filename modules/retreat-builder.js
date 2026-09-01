@@ -15,6 +15,7 @@ const ADD_ONS_DEFAULT=[
   {id:'ao10',name:'Ice Bath & Breathwork',           desc:'Cold plunge ice bath with guided breathwork session',        price:45},
   {id:'ao8', name:'Massage (60 min)',                desc:'Relaxation or deep tissue massage',                         price:95},
   {id:'ao11',name:'Offsite Dinner Onsite',           desc:'Onsite dinner option on the offsite dinner evening',         price:40},
+  {id:'ao12',name:'Group Salsa Class',               desc:'Included group salsa dance class',                          price:0},
   {id:'ao13',name:'Gitano Dinner',                   desc:'Offsite dinner at Gitano Tulum — $75 dinner + 15% gratuity + $15 transport per person (16% IVA applies)',price:101.25},
   {id:'ao14',name:'Cooking Class',                   desc:'Included hands-on cooking demonstration — complimentary for all guests',price:0},
 ];
