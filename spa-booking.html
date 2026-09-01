@@ -127,6 +127,9 @@ function renderDots(total){
 function spaGroupPrice(s,n){
   if(!s.groupPricing||!n||n<1)return null;
   const gp=s.groupPricing;
+  // Flat-fee model (e.g. Private Yoga/Fitness): one flat rate covers up to
+  // flatFeeMax people, each guest beyond that adds perPersonUSD.
+  if(gp.flatFee!=null)return gp.flatFee+Math.max(0,n-(gp.flatFeeMax||0))*(gp.perPersonUSD||0);
   if(n>=gp.minGroup)return gp.perPersonUSD*n;
   return (gp.belowMin&&gp.belowMin[n]!=null)?gp.belowMin[n]:null;
 }
@@ -456,7 +459,10 @@ async function sbFinalConfirm(){
       guestType:SB.guestType,
       sessionType:SB.sessionType,
       email:SB.email||null, phone:SB.phone||null, roomNumber:SB.roomNumber||null,
-      serviceId:SB.serviceId, therapistId:SB.therapistId, roomId:SB.roomId||null,
+      // Only lock in a therapist immediately if the guest asked for that
+      // specific person — otherwise it sits unassigned so any qualified
+      // therapist can grab it themselves (first to claim it gets it).
+      serviceId:SB.serviceId, therapistId:SB.prefType==='specific'?SB.therapistId:null, roomId:SB.roomId||null,
       date:SB.date, start:SB.start, duration:svc.duration,
       status:isHotel?'CONFIRMED':'PAYMENT_PENDING',
       paymentStatus:isHotel?'NOT_REQUIRED':'PENDING',
