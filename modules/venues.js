@@ -101,8 +101,8 @@ function venBuild(){
       const discBadge=bkTd&&bkTd.tiers.some(t=>t.earned)?`<span title="Teacher discount earned — $${bkTd.totalCredit.toLocaleString()} credit" style="font-size:9px;font-weight:700;background:#16a34a;color:#fff;border-radius:3px;padding:1px 5px;margin-left:3px">★ DISC</span>`:'';
       bl.innerHTML=`<span class="bk-n">${bk.leaderName||bk.retreatName}</span>${stBadge}<span class="bk-s">${bk.retreatName&&bk.leaderName?bk.retreatName:''}</span>${countHtml}${transportHtml}${finBadge}${discBadge}<span style="flex:1"></span>${flagHtml}`;
       if(bk.pax&&fillPct>0){const bar=document.createElement('div');bar.style.cssText=`position:absolute;bottom:0;left:0;height:3px;width:${fillPct}%;background:${st.border};opacity:.6;border-radius:0 0 4px 4px;`;bl.appendChild(bar);}
-      bl.draggable=true;
-      bl.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/bk-id',bk.id);bl.style.opacity='.4';_bkDragActive=true;});
+      bl.draggable=!bk.roomLocked;
+      bl.addEventListener('dragstart',e=>{if(bk.roomLocked){e.preventDefault();return;}e.dataTransfer.setData('text/bk-id',bk.id);bl.style.opacity='.4';_bkDragActive=true;});
       bl.addEventListener('dragend',()=>{bl.style.opacity='1';setTimeout(()=>_bkDragActive=false,120);});
       bl.addEventListener('click',()=>{if(!_bkDragActive)showAvailPreview(bk.id);});
       bl.addEventListener('mouseenter',e=>showTip(e,bk,regCount));bl.addEventListener('mousemove',moveTip);bl.addEventListener('mouseleave',hideTip);
@@ -1775,11 +1775,12 @@ function rcBuild(){
         const hasGuest=guestNames.length>0;
         const bl=document.createElement('div');
         bl.className='bk'+(st.dash||!hasGuest?' dashed':'');
-        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:grab;border-left:4px solid ${st.border};`;
-        bl.draggable=true;
-        bl.innerHTML=`<span class="bk-n">${bk.leaderName||bk.retreatName}</span>`
+        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:${bk.roomLocked?'default':'grab'};border-left:4px solid ${st.border};`;
+        bl.draggable=!bk.roomLocked;
+        bl.innerHTML=`<span class="bk-lock" title="${bk.roomLocked?'Locked — click to allow moving':'Click to lock this room (prevent sliding)'}" onclick="event.stopPropagation();bkToggleLock('${bk.id}')" style="cursor:pointer;margin-right:4px;opacity:${bk.roomLocked?'1':'.35'}">${bk.roomLocked?'🔒':'🔓'}</span><span class="bk-n">${bk.leaderName||bk.retreatName}</span>`
           +(hasGuest?`<span class="bk-s">${guestNames[0]}</span>`:`<span class="bk-s" style="opacity:.5;font-style:italic">blocked</span>`);
         bl.addEventListener('dragstart',e=>{
+          if(bk.roomLocked){e.preventDefault();return;}
           rcDragData={bkId:bk.id,fromRoom:room,rtId:rt.id};
           e.dataTransfer.effectAllowed='move';
           e.dataTransfer.setData('text/plain',JSON.stringify(rcDragData));
@@ -1883,8 +1884,16 @@ async function rcFetchExternalReservations(startMs){
   });
 }
 
+function bkToggleLock(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  bk.roomLocked=!bk.roomLocked;
+  saveAll();venBuild();rcBuild();
+  logActivity(bk.roomLocked?'Room locked':'Room unlocked',`${bk.leaderName||bk.retreatName||''} · ${(bk.blockedRooms||[])[0]||''}`,bkId);
+  showToast(bk.roomLocked?'Room locked — it will not move 🔒':'Room unlocked — can be moved again');
+}
 function rcMoveRoom(bkId,fromRoom,toRoom){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  if(bk.roomLocked){showToast('This room is locked — unlock it first to move it.');return;}
   // Check toRoom not already blocked by another retreat on overlapping dates
   const conflict=AppData.bookings.find(other=>
     other.id!==bkId&&other.status!=='cancelled'&&
