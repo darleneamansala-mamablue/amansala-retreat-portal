@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="pageTitle">Event Inquiry — Amansala Tulum</title>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500;600&family=Cormorant+Garamond:ital,wght@1,300;1,400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html,body{min-height:100%;}
+body{font-family:'Jost',-apple-system,sans-serif;font-size:14px;color:#1a1a2e;background:#f7f9f8;}
+.page{min-height:100vh;padding:40px 20px 60px;background:radial-gradient(ellipse at 20% 0%,rgba(45,106,106,.12) 0%,transparent 50%),radial-gradient(ellipse at 80% 100%,rgba(107,181,181,.08) 0%,transparent 50%),#f7f9f8;}
+
+.portal-header{text-align:center;margin-bottom:32px;}
+.portal-logo{display:inline-flex;align-items:center;gap:14px;margin-bottom:8px;}
+.portal-mark{width:50px;height:50px;border-radius:13px;background:linear-gradient(135deg,#2d6a6a,#5ba8a8);display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.9rem;color:#fff;}
+.portal-brand-name{font-size:1.05rem;font-weight:600;color:#1a1a2e;letter-spacing:.02em;text-align:left;}
+.portal-brand-sub{font-size:.62rem;text-transform:uppercase;letter-spacing:.14em;color:#9ca3af;margin-top:2px;}
+
+.card{max-width:660px;margin:0 auto;background:#fff;border-radius:20px;box-shadow:0 4px 6px rgba(0,0,0,.04),0 20px 50px rgba(0,0,0,.09);overflow:hidden;}
+.card-inner{padding:44px 48px 36px;}
+.step-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.95rem;color:#1a1a2e;margin-bottom:8px;line-height:1.2;}
+.step-sub{font-size:.81rem;color:#6b7280;line-height:1.75;margin-bottom:30px;}
+
+.fg{margin-bottom:20px;}
+.fg label{display:block;font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6b7280;margin-bottom:7px;}
+.req{color:#ef4444;}
+.fg input,.fg select,.fg textarea{width:100%;padding:11px 14px;border:1.5px solid #e5e7eb;border-radius:9px;font-family:inherit;font-size:.87rem;color:#1a1a2e;outline:none;transition:border-color .2s,box-shadow .2s;background:#fff;}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:#2d6a6a;box-shadow:0 0 0 3px rgba(45,106,106,.1);}
+.fg textarea{resize:vertical;min-height:100px;line-height:1.65;}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.field-error{font-size:.72rem;color:#ef4444;margin-top:5px;display:none;}
+.has-error input,.has-error select,.has-error textarea{border-color:#ef4444!important;}
+.has-error .field-error{display:block;}
+
+.btn-submit{width:100%;padding:14px 22px;border:none;border-radius:9px;background:#2d6a6a;font-family:inherit;font-size:.85rem;font-weight:600;color:#fff;cursor:pointer;transition:background .2s;letter-spacing:.02em;margin-top:8px;}
+.btn-submit:hover{background:#235555;}
+.btn-submit:disabled{opacity:.6;cursor:not-allowed;}
+
+.thankyou{display:none;text-align:center;padding:64px 48px;}
+.ty-icon{font-size:3rem;margin-bottom:20px;}
+.ty-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:2.3rem;color:#1a1a2e;margin-bottom:14px;}
+.ty-sub{font-size:.85rem;color:#6b7280;line-height:1.85;max-width:420px;margin:0 auto 24px;}
+.ty-contact{margin-top:24px;font-size:.75rem;color:#9ca3af;}
+.ty-contact a{color:#2d6a6a;text-decoration:none;font-weight:600;}
+
+@media(max-width:640px){
+  .card-inner{padding:28px 22px 28px;}
+  .f2{grid-template-columns:1fr;}
+  .thankyou{padding:44px 24px;}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="portal-header">
+    <div class="portal-logo">
+      <div class="portal-mark">A</div>
+      <div>
+        <div class="portal-brand-name">Amansala Tulum</div>
+        <div class="portal-brand-sub" id="brandSub">Event Inquiry</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="mainCard">
+    <div class="card-inner" id="formPanel">
+      <h2 class="step-title" id="formTitle">Tell us about your event</h2>
+      <p class="step-sub" id="formSub">We'd love to host you at Amansala Tulum. Fill in your details and we'll be in touch within 48 hours.</p>
+
+      <div class="f2">
+        <div class="fg" id="fg-name">
+          <label>Your Name <span class="req">*</span></label>
+          <input type="text" id="f-name" placeholder="Full name" oninput="clearErr('fg-name')">
+          <div class="field-error">Please enter your name.</div>
+        </div>
+        <div class="fg" id="fg-email">
+          <label>Email Address <span class="req">*</span></label>
+          <input type="email" id="f-email" placeholder="you@example.com" oninput="clearErr('fg-email')">
+          <div class="field-error">Please enter a valid email.</div>
+        </div>
+      </div>
+
+      <div class="fg">
+        <label>Phone Number <span style="color:#9ca3af;font-weight:400;font-size:.6rem">(optional)</span></label>
+        <input type="tel" id="f-phone" placeholder="+1 555 000 0000">
+      </div>
+
+      <div class="fg" id="fg-honoree">
+        <label id="lbl-honoree">Couple's Names <span class="req">*</span></label>
+        <input type="text" id="f-honoree" placeholder="" oninput="clearErr('fg-honoree')">
+        <div class="field-error">Please fill this in.</div>
+      </div>
+
+      <div class="f2">
+        <div class="fg" id="fg-date">
+          <label>Preferred Date <span class="req">*</span></label>
+          <input type="date" id="f-date" oninput="clearErr('fg-date')">
+          <div class="field-error">Please pick a date.</div>
+        </div>
+        <div class="fg">
+          <label>Estimated Guest Count</label>
+          <input type="number" min="1" id="f-guests" placeholder="e.g. 20">
+        </div>
+      </div>
+
+      <div class="fg">
+        <label>Tell us about your vision <span style="color:#9ca3af;font-weight:400;font-size:.6rem">(optional)</span></label>
+        <textarea id="f-notes" placeholder="Anything you'd like us to know — style, must-haves, budget range, questions..."></textarea>
+      </div>
+
+      <div class="fg">
+        <label>How did you hear about us? <span style="color:#9ca3af;font-weight:400;font-size:.6rem">(optional)</span></label>
+        <select id="f-referral">
+          <option value="">Select…</option>
+          <option>Instagram</option>
+          <option>Google Search</option>
+          <option>Friend / Referral</option>
+          <option>Previous Guest</option>
+          <option>Wedding Planner</option>
+          <option>Other</option>
+        </select>
+      </div>
+
+      <button class="btn-submit" id="submitBtn" onclick="submitInquiry()">Submit Inquiry</button>
+    </div>
+
+    <div class="thankyou" id="thankyouPanel">
+      <div class="ty-icon">✓</div>
+      <div class="ty-title">Thank you!</div>
+      <p class="ty-sub">Your inquiry has been received. Our team will review your request and be in touch within 48 hours.</p>
+      <div class="ty-contact">Questions? Email us at <a href="mailto:darlene@amansala.com">darlene@amansala.com</a></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// Same form, two flavors — driven by ?type=wedding or ?type=bachelorette (defaults to wedding).
+// Kept as its own lightweight lead-capture (writes to crm_inquiries, not bookings)
+// rather than the full retreat-leader wizard, since these don't need scheduling.
+const EVENT_TYPES={
+  wedding:{brandSub:'Wedding Inquiry',pageTitle:'Wedding Inquiry — Amansala Tulum',formTitle:'Tell us about your wedding',formSub:"We'd love to host your wedding at Amansala Tulum. Fill in your details and we'll be in touch within 48 hours.",honoreeLabel:"Couple's Names",honoreePlaceholder:'e.g. Jane & Alex',dateLabel:'Preferred Wedding Date'},
+  bachelorette:{brandSub:'Bachelorette Inquiry',pageTitle:'Bachelorette Inquiry — Amansala Tulum',formTitle:'Tell us about your celebration',formSub:"We'd love to host your bachelorette weekend at Amansala Tulum. Fill in your details and we'll be in touch within 48 hours.",honoreeLabel:"Bride's Name",honoreePlaceholder:'e.g. Jane',dateLabel:'Preferred Dates'},
+};
+const params=new URLSearchParams(location.search);
+const eventType=EVENT_TYPES[params.get('type')]?params.get('type'):'wedding';
+const cfg=EVENT_TYPES[eventType];
+document.getElementById('pageTitle').textContent=cfg.pageTitle;
+document.getElementById('brandSub').textContent=cfg.brandSub;
+document.getElementById('formTitle').textContent=cfg.formTitle;
+document.getElementById('formSub').textContent=cfg.formSub;
+document.getElementById('lbl-honoree').innerHTML=cfg.honoreeLabel+' <span class="req">*</span>';
+document.getElementById('f-honoree').placeholder=cfg.honoreePlaceholder;
+document.getElementById('fg-date').querySelector('label').innerHTML=cfg.dateLabel+' <span class="req">*</span>';
+
+const _db=supabase.createClient('https://fzresosiqafiyxfgeyvk.supabase.co','sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB');
+function clearErr(id){document.getElementById(id)?.classList.remove('has-error');}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+
+function validate(){
+  let ok=true;
+  const name=document.getElementById('f-name').value.trim();
+  if(!name){document.getElementById('fg-name').classList.add('has-error');ok=false;}
+  const email=document.getElementById('f-email').value.trim();
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){document.getElementById('fg-email').classList.add('has-error');ok=false;}
+  const honoree=document.getElementById('f-honoree').value.trim();
+  if(!honoree){document.getElementById('fg-honoree').classList.add('has-error');ok=false;}
+  const date=document.getElementById('f-date').value;
+  if(!date){document.getElementById('fg-date').classList.add('has-error');ok=false;}
+  if(!ok)document.querySelector('.has-error')?.scrollIntoView({behavior:'smooth',block:'center'});
+  return ok;
+}
+
+async function submitInquiry(){
+  if(!validate())return;
+  const btn=document.getElementById('submitBtn');
+  btn.disabled=true;btn.textContent='Submitting…';
+  const entry={
+    id:'ci_'+uid(),
+    type:eventType,
+    name:document.getElementById('f-name').value.trim(),
+    email:document.getElementById('f-email').value.trim(),
+    phone:document.getElementById('f-phone').value.trim(),
+    honoree:document.getElementById('f-honoree').value.trim(),
+    date:document.getElementById('f-date').value,
+    guestCount:document.getElementById('f-guests').value||null,
+    notes:document.getElementById('f-notes').value.trim(),
+    referral:document.getElementById('f-referral').value,
+    status:'new',
+    submittedAt:new Date().toISOString(),
+  };
+  // Additive-only append to its own dedicated key -- never touches bookings,
+  // so it can never race the admin's own saves the way a shared key would.
+  try{
+    const {data}=await _db.from('app_store').select('value').eq('key','crm_inquiries').maybeSingle();
+    const existing=Array.isArray(data?.value)?data.value:[];
+    existing.push(entry);
+    await _db.from('app_store').upsert({key:'crm_inquiries',value:existing,updated_at:new Date().toISOString()});
+  }catch(e){console.warn('Supabase push failed:',e);}
+  document.getElementById('formPanel').style.display='none';
+  document.getElementById('thankyouPanel').style.display='block';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+</script>
+</body>
+</html>

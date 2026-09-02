@@ -712,6 +712,56 @@ function updateInquiryDot(){
   else{dot.style.display='none';}
 }
 
+// ── CRM — the three public inquiry forms (Retreat Leader, Wedding,
+// Bachelorette) in one place: open/copy each link, plus a live feed of
+// wedding/bachelorette leads (crm_inquiries — separate from bookings, so
+// it never races the admin's own booking saves). Retreat leads already flow
+// into Venues via the existing bookings/inquiries merge, so that one just
+// links out to the existing Submissions view instead of duplicating it.
+let crmInquiries=null;
+async function dbCrmLoadInquiries(){
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','crm_inquiries').maybeSingle();
+    crmInquiries=Array.isArray(data?.value)?data.value:[];
+  }catch(e){crmInquiries=crmInquiries||[];}
+  const wrap=document.getElementById('dbCrmRecent');
+  if(wrap)wrap.innerHTML=dbCrmRecentListHtml();
+}
+function dbCrmRecentListHtml(){
+  if(crmInquiries===null)return'<div style="padding:14px;font-size:12px;color:var(--muted);font-style:italic">Loading…</div>';
+  const recent=crmInquiries.slice().sort((a,b)=>(b.submittedAt||'').localeCompare(a.submittedAt||'')).slice(0,8);
+  if(!recent.length)return'<div style="padding:14px;font-size:12px;color:var(--muted);font-style:italic">No wedding or bachelorette inquiries yet.</div>';
+  const fmtD=ds=>{if(!ds)return'TBD';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
+  return recent.map(i=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid #f0ece4;font-size:12.5px">
+    <div><b style="color:var(--dark)">${menuEsc(i.honoree||i.name)}</b> <span style="color:var(--muted);text-transform:capitalize">— ${i.type}</span></div>
+    <div style="color:var(--muted)">${fmtD(i.date)} · ${i.guestCount||'?'} guests</div>
+    <div style="color:var(--muted)">${menuEsc(i.email)}</div>
+  </div>`).join('');
+}
+function dbCrmLinkRow(label,formUrl,copyUrl,submissionsUrl){
+  const btn=(inner,onclick,href)=>href
+    ?`<a href="${href}" target="_blank" style="display:inline-flex;align-items:center;gap:7px;padding:7px 14px;background:#fff;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;color:var(--dark);text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='#2d6a6a';this.style.color='#2d6a6a'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dark)'">${inner}</a>`
+    :`<button onclick="${onclick}" style="display:inline-flex;align-items:center;gap:7px;padding:7px 14px;background:#fff;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;color:var(--dark);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='#2d6a6a';this.style.color='#2d6a6a'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dark)'">${inner}</button>`;
+  return`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+    <span style="font-size:12.5px;font-weight:700;color:var(--dark);min-width:140px">${label}</span>
+    ${btn('Open Form',null,formUrl)}
+    ${btn('Copy Link',`navigator.clipboard.writeText('${copyUrl}').then(()=>showToast('Link copied!'))`)}
+    ${submissionsUrl?btn('Submissions',null,submissionsUrl):''}
+  </div>`;
+}
+function dbCrmSectionHtml(){
+  if(crmInquiries===null)dbCrmLoadInquiries();
+  return`<div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:22px">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:12px">CRM — Inquiry Forms</div>
+    ${dbCrmLinkRow('Retreat Leader','/leader-inquiry.html','https://amansala-portal.netlify.app/leader-inquiry.html','/retreat-admin')}
+    ${dbCrmLinkRow('Wedding','/event-inquiry.html?type=wedding','https://amansala-portal.netlify.app/event-inquiry.html?type=wedding')}
+    ${dbCrmLinkRow('Bachelorette','/event-inquiry.html?type=bachelorette','https://amansala-portal.netlify.app/event-inquiry.html?type=bachelorette')}
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0ece4">
+      <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Recent Wedding / Bachelorette Inquiries</div>
+      <div id="dbCrmRecent">${dbCrmRecentListHtml()}</div>
+    </div>
+  </div>`;
+}
 function buildDashboard(){
   const el=document.getElementById('dbContent');if(!el)return;
   const today=new Date();today.setHours(0,0,0,0);
@@ -1209,20 +1259,7 @@ function buildDashboard(){
       <span style="font-size:12px;color:var(--muted);flex:1">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</span>
       <button onclick="loadFromSupabase().then(()=>{buildDashboard();showToast('Dashboard refreshed from cloud');})" style="padding:5px 13px;font-size:12px;font-weight:600;color:#2d6a6a;background:#fff;border:1.5px solid #2d6a6a;border-radius:7px;cursor:pointer;font-family:inherit">↻ Refresh</button>
     </div>
-    <div style="display:flex;gap:10px;margin-bottom:22px;flex-wrap:wrap">
-      <a href="/leader-inquiry" target="_blank" style="display:inline-flex;align-items:center;gap:7px;padding:8px 16px;background:#fff;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;color:var(--dark);text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='#2d6a6a';this.style.color='#2d6a6a'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dark)'">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Leader Form
-      </a>
-      <button onclick="navigator.clipboard.writeText('https://amansala-portal.netlify.app/leader-inquiry.html').then(()=>showToast('Link copied!'))" style="display:inline-flex;align-items:center;gap:7px;padding:8px 16px;background:#fff;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;color:var(--dark);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='#2d6a6a';this.style.color='#2d6a6a'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dark)'">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        Copy Form Link
-      </button>
-      <a href="/retreat-admin" target="_blank" style="display:inline-flex;align-items:center;gap:7px;padding:8px 16px;background:#fff;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;color:var(--dark);text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='#2d6a6a';this.style.color='#2d6a6a'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dark)'">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-        Submissions
-      </a>
-    </div>
+    ${dbCrmSectionHtml()}
     ${liveChatSection}
     ${actvSection}
     ${inquirySection}
