@@ -463,7 +463,22 @@
             </div>
           </div>
 
-          <div class="field-row single" style="margin-bottom:18px;">
+          <!-- Guest type toggle — shown only in individual/open mode (no ?code or ?bk param) -->
+          <div id="guestTypeToggle" style="display:none;margin-bottom:18px;background:#f5f1eb;border:1.5px solid #c8bfb5;border-radius:12px;padding:14px 18px;">
+            <div style="font-size:13px;font-weight:700;color:#3d3530;margin-bottom:10px">Are you…</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;background:#fff;border:1.5px solid #c8bfb5;border-radius:9px;transition:border-color 0.15s" id="guestTypeGroupLabel">
+                <input type="radio" name="guestType" value="group" checked style="width:16px;height:16px;accent-color:#2d6a6a;cursor:pointer;flex-shrink:0" onchange="setGuestType('group')">
+                <span style="font-size:14px;color:#2c3e50"><b>Joining a retreat group</b><br><span style="font-size:12px;color:#7f8c9a">I'm attending a retreat led by a yoga teacher or group organizer</span></span>
+              </label>
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;background:#fff;border:1.5px solid #c8bfb5;border-radius:9px;transition:border-color 0.15s" id="guestTypeIndividualLabel">
+                <input type="radio" name="guestType" value="individual" style="width:16px;height:16px;accent-color:#2d6a6a;cursor:pointer;flex-shrink:0" onchange="setGuestType('individual')">
+                <span style="font-size:14px;color:#2c3e50"><b>I'm not part of a retreat group</b><br><span style="font-size:12px;color:#7f8c9a">I booked Escape, BBC, RNR, OTA</span></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field-row single" id="retreatFieldRow" style="margin-bottom:18px;">
             <div class="field" id="field-retreat">
               <label for="retreatSelect">Retreat <span class="req">*</span></label>
               <!-- Filled dynamically -->
@@ -614,14 +629,81 @@
   async function saveTransportToCloud(entry){
     try{await _db.from('transport').upsert({id:entry.id,booking_id:entry.bookingId,data:entry,submitted_at:entry.submittedAt});}catch(e){console.warn('Cloud save failed',e);}
   }
+
+  function _normName(n) {
+    return (n ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+      .replace(/[^a-z\s]/g,'').trim().split(/\s+/).sort().join(' ');
+  }
+
+  // Match a guest who didn't pick a retreat (individual mode, or no code/bk param) to a real
+  // booking by email then fuzzy name, searching registrations for retreats ending in the last
+  // 30 days or later — mirrors getTransportRoster()'s matching logic in modules/transport.js,
+  // but runs at submission time so the admin side sees the booking link immediately.
+  async function tryAutoMatchGuest(entryId, email, firstName, lastName) {
+    try {
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+      const cutoffStr = cutoff.toISOString().slice(0,10);
+
+      const [{data: bkRow}, {data: regRow}] = await Promise.all([
+        _db.from('app_store').select('value').eq('key','bookings').maybeSingle(),
+        _db.from('app_store').select('value').eq('key','regs').maybeSingle()
+      ]);
+      const bookings = bkRow?.value || [];
+      const regs = regRow?.value || [];
+      const endDateByBkId = new Map(bookings.map(bk => [bk.id, bk.endDate || '']));
+      const eligibleRegs = regs.filter(r => (endDateByBkId.get(r.bookingId) || '') >= cutoffStr);
+
+      if (!eligibleRegs.length) return;
+
+      const emailLc   = (email || '').toLowerCase().trim();
+      const keySearch = _normName([firstName, lastName].filter(Boolean).join(' '));
+      const keyFirst  = _normName(firstName ?? '');
+      const keyLast   = _normName(lastName  ?? '');
+
+      let matchedBkId = null;
+
+      // 1st pass — email match
+      if (emailLc) {
+        for (const reg of eligibleRegs) {
+          const hit = (reg.guests ?? []).find(g => g.email && g.email.toLowerCase().trim() === emailLc);
+          if (hit) { matchedBkId = reg.bookingId; break; }
+        }
+      }
+
+      // 2nd pass — name match
+      if (!matchedBkId && keySearch) {
+        for (const reg of eligibleRegs) {
+          for (const g of (reg.guests ?? [])) {
+            if (!g.name) continue;
+            const keyReg = _normName(g.name);
+            if (keyReg === keySearch) { matchedBkId = reg.bookingId; break; }
+            if (keyFirst.length > 2 && keyLast.length > 2 &&
+                keyReg.includes(keyFirst) && keyReg.includes(keyLast)) {
+              matchedBkId = reg.bookingId; break;
+            }
+          }
+          if (matchedBkId) break;
+        }
+      }
+
+      if (matchedBkId) {
+        await _db.from('transport').update({ booking_id: matchedBkId }).eq('id', entryId);
+      }
+    } catch(e) {
+      console.warn('[transport auto-match]', e);
+    }
+  }
   </script>
   <script>
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    function getBookings() {
+    async function getBookings() {
       try {
-        return JSON.parse(localStorage.getItem('amansala_venue_bookings') || '[]');
+        const { data, error } = await _db.from('app_store').select('value').eq('key','bookings').maybeSingle();
+        if (error) throw error;
+        return data?.value || [];
       } catch (e) {
+        console.warn('getBookings failed', e);
         return [];
       }
     }
@@ -653,39 +735,113 @@
 
     const params = new URLSearchParams(window.location.search);
     const codeParam = (params.get('code') || '').trim().toUpperCase();
+    const bkParam   = (params.get('bk')   || '').trim();
+    const trParam   = (params.get('tr')   || '').trim();
 
     const container = document.getElementById('retreatFieldContainer');
     const retreatErrSpan = document.getElementById('retreatErr');
     let selectedBookingId = '';
+    let individualMode = false;
 
-    const bookings = getBookings();
-
-    if (codeParam) {
-      // Look up booking by teacherCode
-      const match = bookings.find(bk => (bk.teacherCode || '').toUpperCase() === codeParam);
-
-      if (match) {
-        selectedBookingId = match.id;
-
-        const inp = document.createElement('input');
-        inp.type = 'text';
-        inp.id = 'retreatSelect';
-        inp.value = match.retreatName || match.title || match.name || 'Retreat';
-        inp.readOnly = true;
-        container.appendChild(inp);
-      } else {
-        // Code provided but not found — show a note and fall through to dropdown
-        const note = document.createElement('p');
-        note.style.cssText = 'font-size:12.5px;color:#c0392b;margin-bottom:8px;';
-        note.textContent = `No retreat found for code "${codeParam}". Please select below.`;
-        container.appendChild(note);
-        buildDropdown();
-      }
-    } else {
-      buildDropdown();
+    function setGuestType(type) {
+      individualMode = (type === 'individual');
+      const retreatRow = document.getElementById('retreatFieldRow');
+      if (retreatRow) retreatRow.style.display = individualMode ? 'none' : '';
+      const grpLbl = document.getElementById('guestTypeGroupLabel');
+      const indLbl = document.getElementById('guestTypeIndividualLabel');
+      if (grpLbl) grpLbl.style.borderColor = !individualMode ? '#2d6a6a' : '#c8bfb5';
+      if (indLbl) indLbl.style.borderColor = individualMode ? '#2d6a6a' : '#c8bfb5';
     }
 
-    function buildDropdown() {
+    (async function initTransportForm() {
+      const bookings = await getBookings();
+
+      if (trParam) {
+        // Came from "Update my info" link in confirmation email — load saved entry
+        let row = null;
+        try {
+          const { data, error } = await _db.from('transport').select('data').eq('id', trParam).maybeSingle();
+          if (!error) row = data;
+        } catch(e) { /* ignore — fall through to empty form */ }
+        if (row?.data) {
+          const saved = row.data;
+          if (saved.bookingId && saved.bookingId !== 'individual') {
+            selectedBookingId = saved.bookingId;
+            const match = bookings.find(bk => bk.id === saved.bookingId);
+            const inp = document.createElement('input');
+            inp.type = 'text'; inp.id = 'retreatSelect'; inp.readOnly = true;
+            inp.value = match ? (match.retreatName || match.leaderName || 'Retreat') : 'Retreat';
+            container.appendChild(inp);
+          } else {
+            individualMode = true;
+            setGuestType('individual');
+          }
+          sessionStorage.setItem('tr_last_entry', JSON.stringify(saved));
+          trPrefillForm(saved);
+          return;
+        }
+        // tr ID not found — fall through to normal form
+      }
+
+      if (codeParam) {
+        // Look up booking by teacherCode
+        const match = bookings.find(bk => (bk.teacherCode || '').toUpperCase() === codeParam);
+
+        if (match) {
+          selectedBookingId = match.id;
+
+          const inp = document.createElement('input');
+          inp.type = 'text';
+          inp.id = 'retreatSelect';
+          inp.value = match.retreatName || match.leaderName || 'Retreat';
+          inp.readOnly = true;
+          container.appendChild(inp);
+        } else {
+          // Code provided but not found — show a note and fall through to dropdown
+          const note = document.createElement('p');
+          note.style.cssText = 'font-size:12.5px;color:#c0392b;margin-bottom:8px;';
+          note.textContent = `No retreat found for code "${codeParam}". Please select below.`;
+          container.appendChild(note);
+          buildDropdown(bookings);
+        }
+      } else if (bkParam) {
+        // Direct booking ID link (copied from booking hub)
+        const match = bookings.find(bk => bk.id === bkParam);
+
+        if (match) {
+          selectedBookingId = match.id;
+
+          const inp = document.createElement('input');
+          inp.type = 'text';
+          inp.id = 'retreatSelect';
+          inp.value = match.retreatName || match.leaderName || 'Retreat';
+          inp.readOnly = true;
+          container.appendChild(inp);
+        } else {
+          // ID not found — show dropdown
+          buildDropdown(bookings);
+        }
+      } else {
+        // No retreat code — show guest type toggle so individual guests can identify themselves
+        const toggle = document.getElementById('guestTypeToggle');
+        if (toggle) toggle.style.display = 'block';
+        buildDropdown(bookings);
+      }
+
+      // Same-session return (e.g. back button after submitting) — pre-fill from sessionStorage.
+      // The ?tr= branch above already handles the cross-session "update my info" email link case.
+      const raw = sessionStorage.getItem('tr_last_entry');
+      if (raw) {
+        try {
+          const saved = JSON.parse(raw);
+          if (!(codeParam && saved.bookingId && selectedBookingId && saved.bookingId !== selectedBookingId)) {
+            if (saved.bookingId === selectedBookingId || !codeParam) trPrefillForm(saved);
+          }
+        } catch(e) {}
+      }
+    })();
+
+    function buildDropdown(bookings) {
       const today = todayISO();
 
       const future = bookings.filter(bk => {
@@ -699,7 +855,7 @@
       const inp = document.createElement('input');
       inp.type = 'text';
       inp.id = 'retreatSelect';
-      inp.placeholder = 'Type retreat leader name...';
+      inp.placeholder = 'Type retreat or leader name...';
       inp.autocomplete = 'off';
       container.appendChild(inp);
 
@@ -713,8 +869,9 @@
         const q = query.trim().toLowerCase();
         const matches = q
           ? future.filter(bk => {
-              const leader = (bk.leaderName || bk.leader || bk.teacherName || '').toLowerCase();
-              return leader.includes(q);
+              const leader  = (bk.leaderName || bk.leader || bk.teacherName || '').toLowerCase();
+              const retreat = (bk.retreatName || '').toLowerCase();
+              return leader.includes(q) || retreat.includes(q);
             })
           : future;
 
@@ -726,10 +883,13 @@
           dropdown.appendChild(msg);
         } else {
           matches.forEach(bk => {
-            const leader = bk.leaderName || bk.leader || bk.teacherName || '';
-            const start  = bk.startDate  || bk.start  || '';
-            const end    = bk.endDate    || bk.end    || '';
-            const label  = leader + ' — ' + formatDate(start) + ' to ' + formatDate(end);
+            const leader  = bk.leaderName || bk.leader || bk.teacherName || '';
+            const retreat = bk.retreatName || '';
+            const start   = bk.startDate  || bk.start  || '';
+            const end     = bk.endDate    || bk.end    || '';
+            const primary = retreat || leader;
+            const secondary = retreat && leader ? ' · ' + leader : '';
+            const label  = primary + secondary + ' — ' + formatDate(start) + ' to ' + formatDate(end);
 
             const item = document.createElement('div');
             item.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:1px solid #f0f4f4;transition:background 0.15s;';
@@ -827,9 +987,67 @@
     document.getElementById('arrivalOT').addEventListener('change',  () => updateOtState('arrival'));
     document.getElementById('departureOT').addEventListener('change', () => updateOtState('departure'));
 
+    // ── Confirmation email ────────────────────────────────────────────────────
+
+    async function _sendTransportEmail(entry, isUpdate) {
+      const editUrl  = `${location.origin}/transport-form.html?tr=${entry.id}`;
+      const airport  = a => a === 'cancun' ? 'Cancún (CUN)' : a === 'tulum' ? 'Tulum (TQO)' : '—';
+      const fmtDate  = d => { if (!d) return '—'; const [y,m,dy] = d.split('-'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]} ${+dy}, ${y}`; };
+      const fmtTime  = t => { if (!t) return '—'; const [h,mn] = t.split(':'); const hr=+h; return `${hr%12||12}:${mn} ${hr<12?'AM':'PM'}`; };
+      const arrLine  = entry.arrivalOT   ? 'Own transport / not using Amansala transfer' : `${fmtDate(entry.arrivalDate)} at ${fmtTime(entry.arrivalTime)} · ${airport(entry.arrivalAirport)}`;
+      const depLine  = entry.departureOT ? 'Own transport / not using Amansala transfer' : `${fmtDate(entry.departureDate)} at ${fmtTime(entry.departureTime)} · ${airport(entry.departureAirport)}`;
+      const row = (label, value) => `<tr><td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:13px;color:#6b7280;width:130px;vertical-align:top">${label}</td><td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:14px;color:#1a2332;font-weight:500">${value}</td></tr>`;
+      const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f0ea;font-family:'Helvetica Neue',Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f0ea;padding:32px 0">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+
+  <!-- Header -->
+  <tr><td style="background:#2d6a6a;padding:28px 36px;text-align:center">
+    <div style="font-size:11px;letter-spacing:.15em;color:#a7d7d7;text-transform:uppercase;margin-bottom:6px">Amansala Eco-Chic Resort + Retreat</div>
+    <div style="font-size:22px;font-weight:700;color:#fff">${isUpdate ? 'Transport Info Updated' : 'Transport Info Received'}</div>
+  </td></tr>
+
+  <!-- Body -->
+  <tr><td style="padding:32px 36px">
+    <p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${entry.firstName}, ${isUpdate ? 'your transport details have been updated.' : 'we\'ve received your transportation information.'} Here\'s a summary:</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px">
+      ${entry.flightNumber ? row('Flight', entry.flightNumber) : ''}
+      ${row('Arrival', arrLine)}
+      ${row('Departure', depLine)}
+      ${entry.willingToShare ? row('Sharing', 'Willing to share a ride') : ''}
+      ${entry.notes ? row('Notes', entry.notes.replace(/\n/g,'<br>')) : ''}
+    </table>
+
+    <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px">If your flight details change, you can update your info anytime using the button below — no login required.</p>
+
+    <div style="text-align:center;margin-bottom:8px">
+      <a href="${editUrl}" style="display:inline-block;background:#2d6a6a;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.3px">Update My Transport Info</a>
+    </div>
+    <p style="font-size:11px;color:#9ca3af;text-align:center;margin:8px 0 0">Or copy this link: <span style="color:#2d6a6a">${editUrl}</span></p>
+  </td></tr>
+
+  <!-- Footer -->
+  <tr><td style="background:#f5f0ea;padding:20px 36px;text-align:center;border-top:1px solid #e8e3dc">
+    <p style="font-size:12px;color:#9ca3af;margin:0">Amansala Eco-Chic Resort · Tulum, México · retreats@amansala.com</p>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body></html>`;
+
+      await fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: entry.email, subject: isUpdate ? 'Transport Info Updated — Amansala' : 'Transport Info Received — Amansala', html }),
+      });
+    }
+
     // ── Form submit ───────────────────────────────────────────────────────────
 
-    document.getElementById('transportForm').addEventListener('submit', function(e) {
+    document.getElementById('transportForm').addEventListener('submit', async function(e) {
       e.preventDefault();
 
       let valid = true;
@@ -849,10 +1067,10 @@
       if (!validateEmail(email)) { markFieldInvalid('field-email'); valid = false; }
       else { clearFieldInvalid('field-email'); }
 
-      // Retreat — selectedBookingId is set when user picks from search list or code param
-      const bookingId = selectedBookingId;
+      // Retreat — skip if individual mode
+      const bookingId = individualMode ? 'individual' : selectedBookingId;
 
-      if (!bookingId) {
+      if (!individualMode && !bookingId) {
         markFieldInvalid('field-retreat');
         retreatErrSpan.style.display = 'block';
         valid = false;
@@ -918,6 +1136,7 @@
         id:               _editingEntryId || ('tr_' + Date.now()),
         submittedAt:      new Date().toISOString(),
         bookingId:        bookingId,
+        isIndividual:     individualMode || undefined,
         firstName:        firstName,
         lastName:         lastName,
         email:            email,
@@ -938,18 +1157,26 @@
       const existing = getTransport().filter(e => e.id !== entry.id);
       existing.push(entry);
       saveTransport(existing);
-      saveTransportToCloud(entry); // sync to shared database (upserts by ID)
+      await saveTransportToCloud(entry); // sync to shared database (upserts by ID)
+
+      // Auto-match to retreat booking by email then name (individual guests only; runs in background)
+      if (individualMode || !selectedBookingId) {
+        tryAutoMatchGuest(entry.id, email, firstName, lastName);
+      }
 
       // Store for edit-in-place
       sessionStorage.setItem('tr_last_entry', JSON.stringify(entry));
       _editingEntryId = entry.id;
 
-      // ── Show success ──
+      // Send confirmation email (fire and forget — never blocks the UI)
       const isUpdate = !!document.getElementById('formWrap').dataset.editing;
+      _sendTransportEmail(entry, isUpdate).catch(() => {});
+
+      // ── Show success ──
       document.getElementById('successTitle').textContent = isUpdate ? 'Info Updated!' : 'Thank You!';
-      document.getElementById('successBody').textContent = isUpdate
-        ? 'Your flight details have been updated. We will use this information to coordinate your transfer.'
-        : 'Your transportation info has been received! Your retreat coordinator will be in touch with your ride details.';
+      document.getElementById('successBody').innerHTML = isUpdate
+        ? `Your flight details have been updated. A confirmation has been sent to <strong>${entry.email}</strong>.`
+        : `Your transportation info has been received! A confirmation with all your details has been sent to <strong>${entry.email}</strong>.`;
       document.getElementById('formWrap').style.display = 'none';
       document.getElementById('successScreen').style.display = 'block';
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1008,17 +1235,6 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // On load: check if there's a saved entry to pre-fill (returning user, same session)
-    (function(){
-      const raw = sessionStorage.getItem('tr_last_entry');
-      if (!raw) return;
-      try {
-        const saved = JSON.parse(raw);
-        // Only pre-fill if it matches the current retreat code
-        if (codeParam && saved.bookingId && selectedBookingId && saved.bookingId !== selectedBookingId) return;
-        if (saved.bookingId === selectedBookingId || !codeParam) trPrefillForm(saved);
-      } catch(e) {}
-    })();
   </script>
 </body>
 </html>
