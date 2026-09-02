@@ -187,65 +187,15 @@ body{font-family:'Jost',-apple-system,sans-serif;font-size:14px;color:#1a1a2e;ba
       </div>
     </div>
 
-    <!-- STEP 3: AM & PM CLASSES -->
+    <!-- STEP 3: DAILY CLASSES -->
     <div class="step-panel" id="step3" style="display:none">
       <div class="card-inner">
         <div class="step-num">Step 3 of 7</div>
-        <h2 class="step-title">AM & PM Classes</h2>
-        <p class="step-sub">Tell us your preferred times and class types for your morning and afternoon sessions. Our team will confirm based on shala availability.</p>
-
-        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#3d8a8a;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #f0fdf9;">Morning Class</div>
-        <p style="font-size:0.76rem;color:#6b7280;margin-bottom:16px;">Light breakfast served <strong>6:45 – 8:00 AM</strong>. Brunch served 15 min after class ends.</p>
+        <h2 class="step-title">Daily Classes</h2>
+        <p class="step-sub">Let us know how many classes you'd like scheduled each day. Our team will build the specific times and class types based on shala availability.</p>
         <div class="fg">
-          <div class="fg-label">Preferred Start Time <span class="req">*</span></div>
-          <div class="choice-grid col2" id="amTimeGrid"></div>
-          <div class="other-time" id="amOtherWrap">
-            <div class="fg" style="margin-top:10px;margin-bottom:0"><label>Specify Time</label><input type="time" id="amOtherTime"></div>
-          </div>
-        </div>
-        <div class="fg">
-          <div class="fg-label">Class Type <span class="req">*</span></div>
-          <div class="choice-grid col3" id="amTypeGrid"></div>
-        </div>
-        <div class="fg">
-          <div class="fg-label">Preferred Shala</div>
-          <div class="choice-grid col5" id="amShalaGrid"></div>
-        </div>
-        <div class="fg"><label>Duration</label>
-          <select id="amDuration">
-            <option value="60">60 minutes</option>
-            <option value="75">75 minutes</option>
-            <option value="90" selected>90 minutes</option>
-            <option value="120">120 minutes</option>
-          </select>
-        </div>
-
-        <div style="border-top:2px solid #f3f4f6;margin:28px 0 22px;"></div>
-
-        <div style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#3d8a8a;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #f0fdf9;">Afternoon Class</div>
-        <p style="font-size:0.76rem;color:#6b7280;margin-bottom:16px;">Snack served <strong>2:00 – 4:00 PM</strong>. Dinner served 45 min after class ends.</p>
-        <div class="fg">
-          <div class="fg-label">Preferred Start Time <span class="req">*</span></div>
-          <div class="choice-grid col2" id="pmTimeGrid"></div>
-          <div class="other-time" id="pmOtherWrap">
-            <div class="fg" style="margin-top:10px;margin-bottom:0"><label>Specify Time</label><input type="time" id="pmOtherTime"></div>
-          </div>
-        </div>
-        <div class="fg">
-          <div class="fg-label">Class Type <span class="req">*</span></div>
-          <div class="choice-grid col3" id="pmTypeGrid"></div>
-        </div>
-        <div class="fg">
-          <div class="fg-label">Preferred Shala</div>
-          <div class="choice-grid col5" id="pmShalaGrid"></div>
-        </div>
-        <div class="fg"><label>Duration</label>
-          <select id="pmDuration">
-            <option value="60">60 minutes</option>
-            <option value="75">75 minutes</option>
-            <option value="90" selected>90 minutes</option>
-            <option value="120">120 minutes</option>
-          </select>
+          <div class="fg-label">Classes Per Day <span class="req">*</span></div>
+          <div class="choice-grid col3" id="classesPerDayGrid"></div>
         </div>
       </div>
     </div>
@@ -385,18 +335,15 @@ body{font-family:'Jost',-apple-system,sans-serif;font-size:14px;color:#1a1a2e;ba
 </div>
 <script>
 const SHALAS=['Beachfront','Skye','Grande','Chica','Heaven'];
-const CLASS_TYPES=['Yoga','Pilates','Meditation','Breathwork','Fitness','Other'];
-const AM_TIMES=['7:00 AM','7:30 AM','8:00 AM','8:30 AM','Other / Request'];
-const PM_TIMES=['4:00 PM','4:30 PM','5:00 PM','5:30 PM','Other / Request'];
-const STEP_NAMES=['Info','Returning','AM & PM','Workshop','Guidelines','Notes','Review'];
+const CLASSES_PER_DAY_OPTIONS=['1','2','3+'];
+const STEP_NAMES=['Info','Returning','Classes','Workshop','Guidelines','Notes','Review'];
 const MAX=7;
 let cur=1;
 
 const S={
   leaderName:'',leaderEmail:'',retreatName:'',arrivalDate:'',departureDate:'',groupSize:'',
   isReturning:null,preferredShala:'',
-  amTime:'',amTimeCustom:'',amType:'',amShala:'',amDuration:'90',
-  pmTime:'',pmTimeCustom:'',pmType:'',pmShala:'',pmDuration:'90',
+  classesPerDay:'',
   hasWorkshop:null,wsTitle:'',wsTime:'',wsDuration:'60',wsSpace:'',wsSetup:'',wsNotes:'',
   ackMeals:false,ackTours:false,
   additionalNotes:'',prepaidActivities:''
@@ -467,10 +414,6 @@ function collect(){
   S.arrivalDate=document.getElementById('arrivalDate').value;
   S.departureDate=document.getElementById('departureDate').value;
   S.groupSize=document.getElementById('groupSize').value;
-  S.amDuration=document.getElementById('amDuration').value;
-  S.pmDuration=document.getElementById('pmDuration').value;
-  S.amTimeCustom=document.getElementById('amOtherTime').value;
-  S.pmTimeCustom=document.getElementById('pmOtherTime').value;
   if(S.hasWorkshop){
     S.wsTitle=document.getElementById('wsTitle').value.trim();
     S.wsTime=document.getElementById('wsTime').value;
@@ -492,12 +435,7 @@ function validate(){
     if(!document.getElementById('departureDate').value){alert('Please select your departure date.');return false;}
   }
   if(cur===2&&S.isReturning===null){alert('Please let us know if you are a returning leader.');return false;}
-  if(cur===3){
-    if(!S.amTime){alert('Please select a morning class time.');return false;}
-    if(!S.amType){alert('Please select a morning class type.');return false;}
-    if(!S.pmTime){alert('Please select an afternoon class time.');return false;}
-    if(!S.pmType){alert('Please select an afternoon class type.');return false;}
-  }
+  if(cur===3&&!S.classesPerDay){alert('Please select how many classes per day.');return false;}
   if(cur===4&&S.hasWorkshop===null){alert('Please indicate if you need a workshop.');return false;}
   if(cur===5&&(!S.ackMeals||!S.ackTours)){alert('Please confirm both schedule guidelines before continuing.');return false;}
   return true;
@@ -506,7 +444,6 @@ function validate(){
 function buildReview(){
   collect();
   const fd=d=>{if(!d)return'—';const p=d.split('-');return`${p[1]}/${p[2]}/${p[0]}`;};
-  const ft=t=>t==='Other / Request'?'Requested separately':t||'—';
   let h=`
     <div class="review-section">
       <h4>Retreat Information</h4>
@@ -519,18 +456,8 @@ function buildReview(){
       ${S.isReturning&&S.preferredShala?`<div class="review-row"><span class="review-lbl">Preferred Shala</span><span class="review-val">${S.preferredShala}</span></div>`:''}
     </div>
     <div class="review-section">
-      <h4>Morning Class</h4>
-      <div class="review-row"><span class="review-lbl">Time</span><span class="review-val">${ft(S.amTime)}${S.amTime==='Other / Request'&&S.amTimeCustom?' ('+S.amTimeCustom+')':''}</span></div>
-      <div class="review-row"><span class="review-lbl">Class Type</span><span class="review-val">${S.amType||'—'}</span></div>
-      <div class="review-row"><span class="review-lbl">Duration</span><span class="review-val">${S.amDuration} min</span></div>
-      <div class="review-row"><span class="review-lbl">Preferred Shala</span><span class="review-val">${S.amShala||'No preference'}</span></div>
-    </div>
-    <div class="review-section">
-      <h4>Afternoon Class</h4>
-      <div class="review-row"><span class="review-lbl">Time</span><span class="review-val">${ft(S.pmTime)}${S.pmTime==='Other / Request'&&S.pmTimeCustom?' ('+S.pmTimeCustom+')':''}</span></div>
-      <div class="review-row"><span class="review-lbl">Class Type</span><span class="review-val">${S.pmType||'—'}</span></div>
-      <div class="review-row"><span class="review-lbl">Duration</span><span class="review-val">${S.pmDuration} min</span></div>
-      <div class="review-row"><span class="review-lbl">Preferred Shala</span><span class="review-val">${S.pmShala||'No preference'}</span></div>
+      <h4>Daily Classes</h4>
+      <div class="review-row"><span class="review-lbl">Classes Per Day</span><span class="review-val">${S.classesPerDay||'—'}</span></div>
     </div>`;
   h+=S.hasWorkshop?`
     <div class="review-section">
@@ -572,14 +499,7 @@ function initStep(n){
     buildGrid('shalaGrid',SHALAS,'preferredShala');
   }
   if(n===3){
-    buildGrid('amTimeGrid',AM_TIMES,'amTime','amOtherWrap');
-    buildGrid('amTypeGrid',CLASS_TYPES,'amType');
-    buildGrid('amShalaGrid',SHALAS,'amShala');
-    buildGrid('pmTimeGrid',PM_TIMES,'pmTime','pmOtherWrap');
-    buildGrid('pmTypeGrid',CLASS_TYPES,'pmType');
-    buildGrid('pmShalaGrid',SHALAS,'pmShala');
-    if(S.amTime==='Other / Request')document.getElementById('amOtherWrap').classList.add('show');
-    if(S.pmTime==='Other / Request')document.getElementById('pmOtherWrap').classList.add('show');
+    buildGrid('classesPerDayGrid',CLASSES_PER_DAY_OPTIONS,'classesPerDay');
   }
   if(n===4&&S.hasWorkshop!==null)selectWorkshop(S.hasWorkshop);
   if(n===5){

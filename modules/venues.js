@@ -3,7 +3,12 @@
 // Do not add <script type="module"> here — onclick="..." handlers in the HTML rely on plain globals.
 
 // ===== VENUE GANTT =====
+let _venTransportSynced=false;
 function venBuild(){
+  if(!_venTransportSynced&&typeof syncTransportFromSupabase==='function'){
+    _venTransportSynced=true;
+    syncTransportFromSupabase().then(()=>venBuild()).catch(()=>{});
+  }
   venPopYearSel();
   const body=document.getElementById('venBody');
   body.innerHTML='';
@@ -81,6 +86,8 @@ function venBuild(){
       bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:${8+lane*LANE_H}px;height:40px;background:${st.bg};border-color:${st.border};color:${st.text};position:absolute;`;
       const fillPct=bk.pax>0?Math.min(100,Math.round(regCount/bk.pax*100)):0;
       const countHtml=!isInquiry&&bk.pax?`<span class="bk-count" style="font-size:10.5px;font-weight:700;background:rgba(0,0,0,.12);border-radius:4px;padding:1px 5px;margin-left:4px">${regCount}/${bk.pax}</span>`:'';
+      const transRoster=!isInquiry&&typeof getTransportRoster==='function'?getTransportRoster(bk.id):null;
+      const transportHtml=transRoster&&transRoster.roster.length>0?`<span class="bk-transport" title="Transportation: ${transRoster.submittedCount}/${transRoster.roster.length} submitted — ${trCompletionLabel(transRoster.submittedCount,transRoster.roster.length)}" style="font-size:10.5px;font-weight:700;background:rgba(0,0,0,.12);border-radius:4px;padding:1px 5px;margin-left:4px;color:${trCompletionColor(transRoster.submittedCount,transRoster.roster.length)}">🚐 ${transRoster.submittedCount}/${transRoster.roster.length}</span>`:'';
       const flagHtml=hasFlags?`<span class="bk-flag" title="${autoFlags.length+manualFlags.length} flag(s)" onclick="event.stopPropagation();openFlagsModal('${bk.id}')">🚩</span>`:'';
       const stBadge=isInquiry
         ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#e5e7eb;color:#6b7280;border-radius:3px;padding:1px 5px;margin-left:6px">Inquiry</span>`
@@ -88,7 +95,7 @@ function venBuild(){
       const finBadge=bk.finalPaymentRequested?`<span title="Final payment requested" style="font-size:9.5px;background:rgba(0,0,0,.15);border-radius:3px;padding:1px 5px;margin-left:3px;font-weight:700">$</span>`:'';
       const bkTd=!bk.teacherDiscountDisabled?calcTeacherDiscount(bk,AppData.regs.filter(r=>r.bookingId===bk.id)):null;
       const discBadge=bkTd&&bkTd.tiers.some(t=>t.earned)?`<span title="Teacher discount earned — $${bkTd.totalCredit.toLocaleString()} credit" style="font-size:9px;font-weight:700;background:#16a34a;color:#fff;border-radius:3px;padding:1px 5px;margin-left:3px">★ DISC</span>`:'';
-      bl.innerHTML=`<span class="bk-n">${bk.leaderName||bk.retreatName}</span>${stBadge}<span class="bk-s">${bk.retreatName&&bk.leaderName?bk.retreatName:''}</span>${countHtml}${finBadge}${discBadge}<span style="flex:1"></span>${flagHtml}`;
+      bl.innerHTML=`<span class="bk-n">${bk.leaderName||bk.retreatName}</span>${stBadge}<span class="bk-s">${bk.retreatName&&bk.leaderName?bk.retreatName:''}</span>${countHtml}${transportHtml}${finBadge}${discBadge}<span style="flex:1"></span>${flagHtml}`;
       if(bk.pax&&fillPct>0){const bar=document.createElement('div');bar.style.cssText=`position:absolute;bottom:0;left:0;height:3px;width:${fillPct}%;background:${st.border};opacity:.6;border-radius:0 0 4px 4px;`;bl.appendChild(bar);}
       bl.draggable=true;
       bl.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/bk-id',bk.id);bl.style.opacity='.4';_bkDragActive=true;});
