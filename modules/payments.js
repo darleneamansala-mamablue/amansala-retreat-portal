@@ -528,6 +528,69 @@ function renderVmPaymentWidget(bk){
     </div>`;
 }
 
+// ===== CHARGES LEDGER (internal record-keeping, not a folio/POS system) =====
+let _vmChargesAddOpen=false;
+function renderVmChargesWidget(bk){
+  const el=document.getElementById('vm-charges-widget');if(!el)return;
+  const charges=(bk.charges||[]).slice().sort((a,b)=>(b.addedAt||'').localeCompare(a.addedAt||''));
+  const total=charges.reduce((s,c)=>s+(c.amount||0),0);
+  el.style.display='block';
+  const addFormHtml=_vmChargesAddOpen?`
+    <div style="padding:10px 14px;background:#f8fafc;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:2;min-width:120px"><label style="font-size:10.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px">Item</label><input type="text" id="vmc-item" placeholder="e.g. Extra towels" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px;box-sizing:border-box"></div>
+      <div style="flex:1;min-width:80px"><label style="font-size:10.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px">Amount</label><input type="number" id="vmc-amount" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px;box-sizing:border-box"></div>
+      <div style="flex:2;min-width:120px"><label style="font-size:10.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px">Note (optional)</label><input type="text" id="vmc-note" placeholder="" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px;box-sizing:border-box"></div>
+      <button class="btn btn-secondary btn-sm" onclick="vmChargesToggleAdd()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="vmChargesSave('${bk.id}')">Save Charge</button>
+    </div>`:'';
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
+      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)">Charges${total>0?' · '+fmt$(total)+' total':''}</span>
+      <button class="btn btn-secondary btn-sm" onclick="vmChargesToggleAdd()">${_vmChargesAddOpen?'Cancel':'+ Add Charge'}</button>
+    </div>
+    ${addFormHtml}
+    ${!charges.length?`<div style="padding:16px 14px;text-align:center;font-size:12.5px;color:var(--muted)">No charges yet — use "+ Add Charge" to record extras of the stay.</div>`
+      :`<div style="padding:4px 14px 8px">
+        ${charges.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.item)}</div>
+            <div style="font-size:11px;color:var(--muted)">${c.note?escHtml(c.note)+' · ':''}${fmtDate(c.addedAt.slice(0,10))} · ${escHtml(c.addedBy||'Staff')}</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:var(--dark);white-space:nowrap">${fmt$(c.amount)}</div>
+          <button class="btn btn-danger btn-sm" onclick="vmChargesDelete('${bk.id}','${c.id}')" style="padding:3px 8px;font-size:11px">Remove</button>
+        </div>`).join('')}
+      </div>`}`;
+}
+function vmChargesToggleAdd(){
+  _vmChargesAddOpen=!_vmChargesAddOpen;
+  const bk=AppData.bookings.find(b=>b.id===venEditId);if(bk)renderVmChargesWidget(bk);
+}
+function vmChargesSave(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const item=document.getElementById('vmc-item').value.trim();
+  const amount=Math.round(parseFloat(document.getElementById('vmc-amount').value)*100)/100;
+  const note=document.getElementById('vmc-note').value.trim();
+  if(!item){alert('Enter what the charge is for.');return;}
+  if(!amount||amount<=0){alert('Enter a valid amount.');return;}
+  if(!bk.charges)bk.charges=[];
+  bk.charges.push({id:uid(),item,amount,note,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff'});
+  _vmChargesAddOpen=false;
+  saveAll();renderVmChargesWidget(bk);
+  logActivity('Charge added',`${fmt$(amount)} — ${item} — ${bk.leaderName||bk.retreatName}`,bk.id);
+  renderVmHistory(bk.id);
+  showToast('Charge added ✓');
+}
+function vmChargesDelete(bkId,chargeId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const c=(bk.charges||[]).find(x=>x.id===chargeId);if(!c)return;
+  if(!confirm(`Remove this charge — "${c.item}" (${fmt$(c.amount)})?`))return;
+  bk.charges=(bk.charges||[]).filter(x=>x.id!==chargeId);
+  saveAll();renderVmChargesWidget(bk);
+  logActivity('Charge removed',`${fmt$(c.amount)} — ${c.item} — ${bk.leaderName||bk.retreatName}`,bk.id);
+  renderVmHistory(bk.id);
+  showToast('Charge removed.');
+}
+
 
 // ===== PIPELINE STEPS =====
 const PIPELINE_STEPS=[
