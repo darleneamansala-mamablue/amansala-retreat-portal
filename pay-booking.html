@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Complete Your Payment | Amansala Tulum</title>
+  <meta name="theme-color" content="#eee9df">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Italiana&display=swap" rel="stylesheet">
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    :root { --sand: #eee9df; --sand-light: #f8f5ef; --ink: #1f2b27; --moss: #3f5147; --clay: #b9795a; --line: #1f2b272e; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { color: var(--ink); background: var(--sand-light); -webkit-font-smoothing: antialiased; font-family: 'DM Sans', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    button, input { font: inherit; }
+    .card { width: 100%; max-width: 460px; background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 40px 36px; }
+    .wordmark { letter-spacing: .36em; font-size: 15px; font-weight: 600; text-align: center; margin-bottom: 28px; }
+    h1 { font-family: 'Italiana', serif; font-size: 26px; font-weight: 400; margin-bottom: 6px; }
+    .sub { font-size: 13.5px; opacity: .7; margin-bottom: 24px; }
+    .detail-row { display: flex; justify-content: space-between; font-size: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .detail-row.total { font-weight: 600; font-size: 16px; border-bottom: none; padding-top: 16px; }
+    #stripe-element { margin: 20px 0; }
+    .btn-pay { width: 100%; padding: 15px; background: var(--moss); color: #fff; border: none; border-radius: 2px; font-size: 14.5px; font-weight: 500; cursor: pointer; letter-spacing: .02em; }
+    .btn-pay:disabled { opacity: .55; cursor: default; }
+    .err { color: #b3402f; font-size: 13px; margin-top: 10px; min-height: 16px; }
+    .state { text-align: center; padding: 20px 0; font-size: 14px; opacity: .75; }
+    .success-icon { width: 48px; height: 48px; margin: 0 auto 16px; border-radius: 50%; background: var(--moss); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="wordmark">AMANSALA</div>
+    <div id="content">
+      <div class="state">Loading your reservation…</div>
+    </div>
+  </div>
+
+<script>
+const SUPA_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPA_ANON = 'sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
+const params = new URLSearchParams(location.search);
+const bookingId = params.get('id');
+
+let _stripe, _stripeElems, _piAmount = 0, _paymentIntentId = null;
+
+function fmtUSD(n) { return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtDate(s) { if (!s) return ''; const [y,m,d] = s.split('-'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]} ${+d}, ${y}`; }
+
+async function init() {
+  const content = document.getElementById('content');
+  if (!bookingId) { content.innerHTML = '<div class="state">Missing reservation link. Please use the link sent to you.</div>'; return; }
+
+  let bk;
+  try {
+    const res = await fetch(`${SUPA_URL}/rest/v1/app_store?key=eq.bookings&select=value`, { headers: { apikey: SUPA_ANON } });
+    const rows = await res.json();
+    const bookings = rows[0]?.value ?? [];
+    bk = bookings.find(b => b.id === bookingId);
+  } catch (e) { /* fall through to error below */ }
+
+  if (!bk) { content.innerHTML = '<div class="state">We couldn\'t find this reservation. Please contact us.</div>'; return; }
+  if (bk.bookingType !== 'room_only' || !bk.roomRateTotal) { content.innerHTML = '<div class="state">This reservation isn\'t set up for online payment yet. Please contact us.</div>'; return; }
+
+  const room = (bk.blockedRooms || [])[0] || '';
+  const alreadyPaid = (bk.payments || []).reduce((s,p) => s + (p.amount||0), 0);
+  if (alreadyPaid >= bk.roomRateTotal) {
+    content.innerHTML = `<div class="success-icon">✓</div><div class="state" style="font-weight:600;color:var(--ink)">This reservation has already been paid in full. Thank you!</div>`;
+    return;
+  }
+
+  content.innerHTML = `
+    <h1>Complete Your Payment</h1>
+    <div class="sub">${bk.leaderName || 'Guest'}</div>
+    <div class="detail-row"><span>Room</span><span>${room}</span></div>
+    <div class="detail-row"><span>Check-in</span><span>${fmtDate(bk.startDate)}</span></div>
+    <div class="detail-row"><span>Check-out</span><span>${fmtDate(bk.endDate)}</span></div>
+    <div class="detail-row total"><span>Total Due</span><span id="amount-due">${fmtUSD(bk.roomRateTotal)}</span></div>
+    <div id="stripe-element"></div>
+    <button class="btn-pay" id="btn-pay">Pay ${fmtUSD(bk.roomRateTotal)}</button>
+    <div class="err" id="err"></div>
+  `;
+
+  try {
+    const res = await fetch('/.netlify/functions/create-booking-payment', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookingId }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error ?? 'Could not start payment');
+
+    _piAmount = data.amount;
+    _paymentIntentId = data.paymentIntentId;
+    _stripe = Stripe(data.publishableKey);
+    _stripeElems = _stripe.elements({
+      clientSecret: data.clientSecret,
+      appearance: { theme: 'stripe', variables: { fontFamily: 'DM Sans, sans-serif', borderRadius: '2px', colorPrimary: '#3f5147' } },
+    });
+    _stripeElems.create('payment').mount('#stripe-element');
+    document.getElementById('btn-pay').addEventListener('click', confirmPayment);
+  } catch (e) {
+    document.getElementById('err').textContent = e.message;
+  }
+}
+
+async function confirmPayment() {
+  const errEl = document.getElementById('err');
+  const btn = document.getElementById('btn-pay');
+  errEl.textContent = '';
+  btn.disabled = true; btn.textContent = 'Processing…';
+
+  try {
+    const { error } = await _stripe.confirmPayment({
+      elements: _stripeElems,
+      confirmParams: { return_url: window.location.href },
+      redirect: 'if_required',
+    });
+    if (error) {
+      errEl.textContent = error.message;
+      btn.disabled = false; btn.textContent = `Pay ${fmtUSD(_piAmount)}`;
+      return;
+    }
+
+    // Verify server-side against Stripe before treating this as paid.
+    const confirmRes = await fetch('/.netlify/functions/confirm-booking-payment', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentIntentId: _paymentIntentId, bookingId }),
+    });
+    const confirmData = await confirmRes.json();
+    if (!confirmRes.ok || confirmData.error) throw new Error(confirmData.error ?? 'Payment could not be verified');
+
+    document.getElementById('content').innerHTML = `
+      <div class="success-icon">✓</div>
+      <div class="state" style="font-weight:600;color:var(--ink)">Payment received — thank you!</div>
+      <div class="state">A confirmation will follow by email shortly.</div>
+    `;
+  } catch (e) {
+    errEl.textContent = e.message;
+    btn.disabled = false; btn.textContent = `Pay ${fmtUSD(_piAmount)}`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>

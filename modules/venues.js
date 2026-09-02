@@ -624,6 +624,13 @@ async function rmAutoRate(){
     if(hintEl)hintEl.textContent=`${rt.name} · ${season} · Solo ${fmt$(soloRate??0)}${shareRate&&shareRate!==soloRate?` / Sharing ${fmt$(shareRate)}`:''}/night`;
   }else if(hintEl)hintEl.textContent=`${rt.name} — no rate configured`;
 }
+function rmUpdateNights(){
+  const start=document.getElementById('rm-start').value,end=document.getElementById('rm-end').value;
+  const el=document.getElementById('rm-nights');if(!el)return;
+  if(!start||!end||end<=start){el.textContent='';return;}
+  const nights=Math.round((pd(end)-pd(start))/DAY_MS);
+  el.textContent=`${nights} night${nights!==1?'s':''}`;
+}
 function rmOpenNewBooking(room,rtId,startDate){
   _rmEditId=null;_rmRoom=room;_rmRtId=rtId;_rmRateMode='solo';
   const rt=AppData.roomTypes.find(r=>r.id===rtId);
@@ -636,10 +643,15 @@ function rmOpenNewBooking(room,rtId,startDate){
   document.getElementById('rm-end').value=end;
   document.getElementById('rm-type').value='Walk-in';
   document.getElementById('rm-leader').value='';
+  document.getElementById('rm-email').value='';
+  document.getElementById('rm-notes').value='';
+  document.getElementById('rm-mealplan').value='none';
   document.getElementById('rm-adults').value='1';
   document.getElementById('rm-status').value='requested';
   const err=document.getElementById('rm-err');err.textContent='';err.style.display='none';
+  document.getElementById('rm-pay-link-row').style.display='none';
   rmSetRateMode('solo');
+  rmUpdateNights();
   document.getElementById('rmModal').style.display='flex';
   setTimeout(()=>document.getElementById('rm-leader').focus(),80);
 }
@@ -654,12 +666,17 @@ function rmOpenEditBooking(id){
   document.getElementById('rm-end').value=bk.endDate;
   document.getElementById('rm-type').value=bk.retreatName||'Walk-in';
   document.getElementById('rm-leader').value=bk.leaderName||'';
+  document.getElementById('rm-email').value=bk.leaderEmail||'';
+  document.getElementById('rm-notes').value=bk.notes||'';
+  document.getElementById('rm-mealplan').value=bk.mealPlan||'none';
   document.getElementById('rm-adults').value=bk.pax||1;
   document.getElementById('rm-status').value=bk.status||'requested';
   const err=document.getElementById('rm-err');err.textContent='';err.style.display='none';
   const nightly=bk.roomRateNights?Math.round((bk.roomRateTotal||0)/bk.roomRateNights):null;
   document.getElementById('rm-rate').value=nightly??'';
   const hintEl=document.getElementById('rm-rate-hint');if(hintEl&&rt)hintEl.textContent=`${rt.name} · ${bk.roomRateNights||0} night(s) · ${fmt$(bk.roomRateTotal||0)} total`;
+  rmUpdateNights();
+  document.getElementById('rm-pay-link-row').style.display=bk.roomRateTotal>0?'block':'none';
   document.getElementById('rmModal').style.display='flex';
 }
 function rmDeleteBooking(){
@@ -673,12 +690,16 @@ function rmSaveNewBooking(){
   const start=document.getElementById('rm-start').value,end=document.getElementById('rm-end').value;
   const type=document.getElementById('rm-type').value;
   const leader=document.getElementById('rm-leader').value.trim();
+  const leaderEmail=document.getElementById('rm-email').value.trim();
+  const notes=document.getElementById('rm-notes').value.trim();
+  const mealPlan=document.getElementById('rm-mealplan').value;
   const rate=parseFloat(document.getElementById('rm-rate').value)||0;
   const adults=parseInt(document.getElementById('rm-adults').value)||1;
   const status=document.getElementById('rm-status').value;
   const errEl=document.getElementById('rm-err');errEl.style.display='none';
   if(!leader){errEl.textContent='Guest name is required.';errEl.style.display='block';return;}
   if(!start||!end||end<=start){errEl.textContent='Invalid dates.';errEl.style.display='block';return;}
+  if(leaderEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leaderEmail)){errEl.textContent='Enter a valid email or leave it blank.';errEl.style.display='block';return;}
   const nights=Math.round((pd(end)-pd(start))/DAY_MS);
   const roomRateTotal=rate*nights;
   // Conflict check (exclude the booking currently being edited, if any)
@@ -686,7 +707,7 @@ function rmSaveNewBooking(){
   if(conflict){errEl.textContent=`Room ${room} is already booked for part of these dates.`;errEl.style.display='block';return;}
   if(_rmEditId){
     const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
-    Object.assign(bk,{leaderName:leader,retreatName:type,startDate:start,endDate:end,pax:adults,status,roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights});
+    Object.assign(bk,{leaderName:leader,leaderEmail,notes,mealPlan,retreatName:type,startDate:start,endDate:end,pax:adults,status,roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights});
     saveAll();rmClose();venBuild();rcBuild();
     logActivity('Room-only booking updated',`${leader} · ${room} · ${fmtDate(start)} – ${fmtDate(end)}`,_rmEditId);
     showToast('Reservation updated ✓');
@@ -694,10 +715,51 @@ function rmSaveNewBooking(){
   }
   const bestRow=findAvailableRow(start,end,null);
   const newId=uid();
-  AppData.bookings.push({id:newId,bookingType:'room_only',leaderName:leader,retreatName:type,startDate:start,endDate:end,row:bestRow,pax:adults,status,notes:'',docLink:'',roomAssignments:[],roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights,charges:[]});
+  AppData.bookings.push({id:newId,bookingType:'room_only',leaderName:leader,leaderEmail,notes,mealPlan,retreatName:type,startDate:start,endDate:end,row:bestRow,pax:adults,status,docLink:'',roomAssignments:[],roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights,charges:[],payments:[]});
   saveAll();rmClose();venBuild();rcBuild();
   logActivity('Room-only booking created',`${leader} · ${room} · ${type} · ${fmtDate(start)} – ${fmtDate(end)}${rate?' · '+fmt$(rate)+'/night':''}`,newId);
   showToast(`Reservation created — ${room} · ${leader} ✓`);
+}
+async function rmSendPaymentLink(){
+  if(!_rmEditId)return;
+  const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
+  if(!bk.roomRateTotal||bk.roomRateTotal<=0){showToast('Set a rate before sending a payment link.');return;}
+  const btn=document.getElementById('rm-pay-link-btn');
+  const origLabel=btn.textContent;btn.disabled=true;btn.textContent='Preparing link…';
+  try{
+    const url=`${location.origin}/pay-booking.html?id=${bk.id}`;
+    await navigator.clipboard.writeText(url).catch(()=>{});
+    if(bk.leaderEmail){
+      const room=(bk.blockedRooms||[])[0]||'';
+      const html=`<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr><td>
+      <table style="max-width:520px;margin:20px auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08)" cellpadding="0" cellspacing="0" width="100%">
+        <tr><td style="background:#1a2332;padding:22px 32px"><span style="color:#4db6ac;font-size:20px;font-weight:700;letter-spacing:2px">AMANSALA</span></td></tr>
+        <tr><td style="background:#ffffff;padding:32px;color:#374151;font-size:14px;line-height:1.7">
+          <p>Hi ${bk.leaderName||'there'},</p>
+          <p>Here's your payment link for your upcoming stay at Amansala Tulum.</p>
+          <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:13px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+            <tr style="background:#fff"><td style="padding:9px 14px;color:#9ca3af;width:40%">Room</td><td style="padding:9px 14px;font-weight:600;color:#111827">${room}</td></tr>
+            <tr style="background:#f8fafc"><td style="padding:9px 14px;color:#9ca3af">Dates</td><td style="padding:9px 14px;font-weight:600;color:#111827">${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}</td></tr>
+            <tr style="background:#fff"><td style="padding:9px 14px;color:#9ca3af">Amount Due</td><td style="padding:9px 14px;font-weight:700;color:#111827">${fmt$(bk.roomRateTotal)}</td></tr>
+          </table>
+          <p style="text-align:center;margin:28px 0"><a href="${url}" style="background:#4db6ac;color:#fff;padding:13px 30px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block">Pay Now</a></p>
+          <p style="font-size:12px;color:#9ca3af;text-align:center">Or copy this link: ${url}</p>
+        </td></tr>
+        <tr><td style="background:#f1f5f9;padding:16px 32px;text-align:center;font-size:12px;color:#9ca3af">Amansala Eco-Chic Resort · Tulum, Mexico</td></tr>
+      </table></td></tr></table></body></html>`;
+      await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:bk.leaderEmail,subject:`Payment Link — Amansala Tulum · ${room}`,html})});
+      logActivity('Payment link sent',`${bk.leaderName||''} · ${room} · ${fmt$(bk.roomRateTotal)} · emailed to ${bk.leaderEmail}`,bk.id);
+      showToast('Payment link copied & emailed ✓');
+    }else{
+      logActivity('Payment link created',`${bk.leaderName||''} · ${room} · ${fmt$(bk.roomRateTotal)} · link copied (no email on file)`,bk.id);
+      showToast('Payment link copied to clipboard ✓ (no email on file to send it)');
+    }
+  }catch(e){
+    showToast('Could not prepare payment link.');
+  }finally{
+    btn.disabled=false;btn.textContent=origLabel;
+  }
 }
 // Click on an empty spot in a room's Rooms-tab grid row → open the New Reservation modal prefilled with that room+date.
 function rcTrackClick(event,room,rtId){

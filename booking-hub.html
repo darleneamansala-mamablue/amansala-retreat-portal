@@ -2253,9 +2253,11 @@
     <div class="modal-hdr"><h2 id="rmModalTitle">New Reservation</h2><button class="modal-x" onclick="rmClose()">&times;</button></div>
     <div class="modal-body">
       <div class="frow full"><div class="fg"><label>Room</label><input type="text" id="rm-room" readonly style="background:var(--sand);color:var(--muted)"></div></div>
-      <div class="frow"><div class="fg"><label>Check-in</label><input type="date" id="rm-start" onchange="rmAutoRate()"></div><div class="fg"><label>Check-out</label><input type="date" id="rm-end"></div></div>
+      <div class="frow"><div class="fg"><label>Check-in</label><input type="date" id="rm-start" onchange="rmAutoRate();rmUpdateNights()"></div><div class="fg"><label>Check-out</label><input type="date" id="rm-end" onchange="rmUpdateNights()"></div></div>
+      <div id="rm-nights" style="font-size:11px;color:var(--muted);margin:-6px 0 10px"></div>
       <div class="frow full"><div class="fg"><label>Reservation Type</label><select id="rm-type"><option value="Walk-in">Walk-in</option><option value="Direct">Direct</option><option value="OTA">OTA</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Guest Name</label><input type="text" id="rm-leader" placeholder="e.g. Jane Smith"></div></div>
+      <div class="frow full"><div class="fg"><label>Guest Email</label><input type="email" id="rm-email" placeholder="jane@example.com"></div></div>
       <div class="frow full"><div class="fg">
         <label>Rate / night (USD)</label>
         <div style="display:flex;gap:8px;align-items:center">
@@ -2267,7 +2269,12 @@
         <div id="rm-rate-hint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
       </div></div>
       <div class="frow"><div class="fg"><label>Guests</label><input type="number" id="rm-adults" min="1" max="20" value="1"></div><div class="fg"><label>Status</label><select id="rm-status"><option value="requested">Soft Hold</option><option value="contract_sent">Contract Sent</option><option value="contract_signed">Contract Signed</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Confirmed</option></select></div></div>
+      <div class="frow full"><div class="fg"><label>Meals Included</label><select id="rm-mealplan"><option value="none">None — room only</option><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option></select></div></div>
+      <div class="frow full"><div class="fg"><label>Notes</label><textarea id="rm-notes" placeholder="Internal notes..."></textarea></div></div>
       <div id="rm-err" style="display:none;color:#dc2626;font-size:12px;margin-top:4px"></div>
+      <div id="rm-pay-link-row" style="display:none;margin-top:10px;padding-top:12px;border-top:1px solid var(--border)">
+        <button class="btn btn-secondary btn-sm" style="width:100%" onclick="rmSendPaymentLink()" id="rm-pay-link-btn">💳 Send Payment Link</button>
+      </div>
     </div>
     <div class="modal-foot"><div class="l"><button class="btn btn-danger btn-sm" id="rmDelBtn" onclick="rmDeleteBooking()" style="display:none">🗑 Delete</button></div><div class="r"><button class="btn btn-secondary" onclick="rmClose()">Cancel</button><button class="btn btn-primary" onclick="rmSaveNewBooking()">Create Reservation</button></div></div>
   </div>

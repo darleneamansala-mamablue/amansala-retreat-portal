@@ -1,0 +1,87 @@
+'use strict';
+
+// Verifies a PaymentIntent directly against Stripe's API (server-side, using the
+// secret key) before recording a payment on the booking -- this sidesteps needing
+// STRIPE_WEBHOOK_SECRET (not configured yet) while still never trusting a client's
+// bare claim that a payment succeeded. Records into bk.payments[], the SAME array
+// every other payment (deposits, balances) already uses, so existing "is this paid"
+// logic elsewhere in the app picks it up automatically.
+const SUPABASE_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
+const STRIPE_API = 'https://api.stripe.com/v1';
+
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: '' };
+  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
+
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  const supaKey = process.env.SUPABASE_SERVICE_KEY;
+  if (!stripeKey) return jsonErr(500, 'Stripe not configured');
+  if (!supaKey) return jsonErr(500, 'Server config error');
+
+  let body;
+  try { body = JSON.parse(event.body); }
+  catch { return jsonErr(400, 'Invalid JSON'); }
+
+  const { paymentIntentId, bookingId } = body;
+  if (!paymentIntentId || !bookingId) return jsonErr(400, 'Missing paymentIntentId or bookingId');
+
+  const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json' };
+
+  // Verify directly with Stripe -- never trust the client's claim alone.
+  let pi;
+  try {
+    const piRes = await fetch(`${STRIPE_API}/payment_intents/${encodeURIComponent(paymentIntentId)}`, {
+      headers: { Authorization: `Bearer ${stripeKey}`, 'Stripe-Version': '2024-06-20' },
+    });
+    pi = await piRes.json();
+    if (pi.error) return jsonErr(400, pi.error.message ?? 'Stripe error');
+  } catch (err) {
+    return jsonErr(500, 'Could not verify payment with Stripe');
+  }
+
+  if (pi.status !== 'succeeded') return jsonErr(400, `Payment not completed (status: ${pi.status})`);
+  if ((pi.metadata || {}).bookingId !== bookingId) return jsonErr(400, 'Payment does not match this booking');
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.bookings&select=value`, { headers: hdrs });
+    if (!res.ok) throw new Error('bookings fetch failed');
+    const rows = await res.json();
+    const bookings = rows[0]?.value ?? [];
+    const bk = bookings.find(b => b.id === bookingId);
+    if (!bk) return jsonErr(404, 'Booking not found');
+
+    if (!Array.isArray(bk.payments)) bk.payments = [];
+    const already = bk.payments.some(p => p.stripePaymentIntentId === paymentIntentId);
+    if (!already) {
+      bk.payments.push({
+        id: 'pay_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        amount: Math.round((pi.amount_received / 100) * 100) / 100,
+        date: new Date().toISOString().slice(0, 10),
+        method: 'stripe',
+        ref: paymentIntentId,
+        note: 'Paid via payment link',
+        stripePaymentIntentId: paymentIntentId,
+      });
+      await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.bookings`, {
+        method: 'PATCH',
+        headers: { ...hdrs, Prefer: 'return=minimal' },
+        body: JSON.stringify({ value: bookings, updated_at: new Date().toISOString() }),
+      });
+    }
+
+    return {
+      statusCode: 200,
+      headers: { ...cors(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ success: true, amount: pi.amount_received / 100, leaderName: bk.leaderName || '' }),
+    };
+  } catch (err) {
+    return jsonErr(500, 'Could not record payment: ' + err.message);
+  }
+};
+
+function cors() {
+  return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
+}
+function jsonErr(code, msg) {
+  return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify({ error: msg }) };
+}
