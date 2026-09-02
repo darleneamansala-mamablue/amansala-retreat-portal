@@ -752,7 +752,10 @@ function dbCrmLinkRow(label,formUrl,copyUrl,submissionsUrl){
 function dbCrmSectionHtml(){
   if(crmInquiries===null)dbCrmLoadInquiries();
   return`<div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:22px">
-    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:12px">CRM — Inquiry Forms</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">CRM — Inquiry Forms</div>
+      <button onclick="switchTab('pipeline',document.getElementById('pipelineTabBtn'))" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#2d6a6a;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer">View Sales Pipeline →</button>
+    </div>
     ${dbCrmLinkRow('Retreat Leader','/leader-inquiry.html','https://amansala-portal.netlify.app/leader-inquiry.html','/retreat-admin')}
     ${dbCrmLinkRow('Wedding','/event-inquiry.html?type=wedding','https://amansala-portal.netlify.app/event-inquiry.html?type=wedding')}
     ${dbCrmLinkRow('Bachelorette','/event-inquiry.html?type=bachelorette','https://amansala-portal.netlify.app/event-inquiry.html?type=bachelorette')}

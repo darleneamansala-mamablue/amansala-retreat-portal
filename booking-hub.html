@@ -866,6 +866,10 @@
     <span class="tab-label">Dashboard</span>
     <span id="inquiryDot" style="display:none;background:#ef4444;color:#fff;border-radius:20px;padding:0 5px;height:16px;font-size:9px;font-weight:800;line-height:16px;min-width:16px;text-align:center"></span>
   </button>
+  <button class="tab-btn" id="pipelineTabBtn" onclick="switchTab('pipeline',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+    <span class="tab-label">Sales Pipeline</span>
+  </button>
   <button class="tab-btn" id="menuTabBtn" onclick="switchTab('menu',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h12"/><circle cx="19" cy="18" r="2"/><path d="M19 16v-4"/></svg>
     <span class="tab-label">Menu</span>
@@ -1031,6 +1035,87 @@
       <span id="cancelledCount" style="background:#fecaca;color:#991b1b;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:800;margin-left:4px">0</span>
     </button>
     <div id="cancelledList" style="display:none;padding:0 24px 16px;background:#fff8f8"></div>
+  </div>
+</div>
+
+<!-- ============================= TAB: SALES PIPELINE ============================= -->
+<div class="tab-panel" id="tab-pipeline" style="flex-direction:column;overflow-y:auto">
+  <div id="pipelineRoot"></div>
+</div>
+
+<!-- ===== PIPELINE: LOG ACTIVITY MODAL ===== -->
+<div class="modal-overlay" id="pipeActModal">
+  <div class="modal wide">
+    <div class="modal-hdr"><div><h2 id="pipeActTitle">Log Activity</h2></div><button class="modal-x" onclick="closeModal('pipeActModal')">&times;</button></div>
+    <div class="modal-body">
+      <div class="frow full"><div class="fg"><label>Activity Type</label><select id="pipeActTypeSelect" onchange="pipeActTypeChanged()"></select></div></div>
+
+      <div id="pipeActCallSchedFields" style="display:none;background:var(--sand);border-radius:10px;padding:12px 14px;margin-bottom:12px">
+        <div class="frow">
+          <div class="fg"><label>Call Date</label><input type="date" id="pipeActCallDate"></div>
+          <div class="fg"><label>Call Time</label><input type="time" id="pipeActCallTime"></div>
+        </div>
+        <div class="frow">
+          <div class="fg"><label>Time Zone</label><input type="text" id="pipeActCallTz" placeholder="e.g. America/Cancun"></div>
+          <div class="fg"><label>Call Agenda / Notes (optional)</label><input type="text" id="pipeActCallAgenda"></div>
+        </div>
+      </div>
+
+      <div id="pipeActCallCompleteFields" style="display:none;background:var(--sand);border-radius:10px;padding:12px 14px;margin-bottom:12px">
+        <div class="frow full"><div class="fg"><label>Call Outcome</label><input type="text" id="pipeActOutcome" placeholder="e.g. Positive, needs pricing follow-up"></div></div>
+      </div>
+
+      <div id="pipeActDepositFields" style="display:none;background:var(--sand);border-radius:10px;padding:12px 14px;margin-bottom:12px">
+        <div class="frow full"><div class="fg"><label>Deposit Amount Received (optional)</label><input type="number" id="pipeActDepositAmt" placeholder="Leave blank if just logging the update"></div></div>
+      </div>
+
+      <div id="pipeActHoldFields" style="display:none;background:var(--sand);border-radius:10px;padding:12px 14px;margin-bottom:12px">
+        <div class="frow full"><div class="fg"><label>Reason for Hold</label><input type="text" id="pipeActHoldReason" placeholder="Required"></div></div>
+      </div>
+
+      <div id="pipeActLostFields" style="display:none;background:var(--sand);border-radius:10px;padding:12px 14px;margin-bottom:12px">
+        <div class="frow full"><div class="fg"><label>Reason</label><select id="pipeActLostReasonSel" onchange="pipeActLostReasonChanged()"></select></div></div>
+        <div class="frow full" id="pipeActLostOtherWrap" style="display:none"><div class="fg"><label>Notes (required for "Other")</label><input type="text" id="pipeActLostOther"></div></div>
+      </div>
+
+      <div class="frow full"><div class="fg"><label>Notes (optional)</label><textarea id="pipeActNotes"></textarea></div></div>
+      <div class="frow" id="pipeActNoFollowUpRow" style="display:none;align-items:center;margin-bottom:4px">
+        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--text);grid-column:1/-1"><input type="checkbox" id="pipeActNoFollowUp" onchange="pipeActNoFollowUpChanged()"> No follow-up required</label>
+      </div>
+      <div class="frow">
+        <div class="fg"><label>Next Action</label><input type="text" id="pipeActNextAction" placeholder="e.g. Send revised pricing"></div>
+        <div class="fg"><label>Follow-Up Date</label><input type="date" id="pipeActFollowUp"></div>
+      </div>
+      <div class="frow full"><div class="fg"><label>Assigned Team Member</label><select id="pipeActAssignee"></select></div></div>
+      <div id="pipeActTeacherPortalWarn" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:9px 12px;font-size:12px;color:#92400e;margin-top:4px">This retreat hasn't reached "Booked" yet — sending the teacher portal now will require a reason.</div>
+    </div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('pipeActModal')">Cancel</button><button class="btn btn-primary" id="pipeActSubmitBtn" onclick="pipeSubmitActivity()">Log Activity</button></div></div>
+  </div>
+</div>
+
+<!-- ===== PIPELINE: MOVE-REASON MODAL ===== -->
+<div class="modal-overlay" id="pipeReasonModal">
+  <div class="modal">
+    <div class="modal-hdr"><div><h2 id="pipeReasonTitle">Move Lead</h2><div class="modal-sub" id="pipeReasonSub"></div></div><button class="modal-x" onclick="closeModal('pipeReasonModal')">&times;</button></div>
+    <div class="modal-body">
+      <div class="frow full" id="pipeReasonLostWrap" style="display:none">
+        <div class="fg"><label>Reason</label><select id="pipeReasonLostSelect"></select></div>
+      </div>
+      <div class="frow full" id="pipeReasonLostOtherWrap" style="display:none">
+        <div class="fg"><label>Notes (required for "Other")</label><input type="text" id="pipeReasonLostOther"></div>
+      </div>
+      <div class="frow full"><div class="fg"><label>Reason</label><textarea id="pipeReasonText" placeholder="Why is this lead moving?"></textarea></div></div>
+    </div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('pipeReasonModal');pipeReasonCtx=null;">Cancel</button><button class="btn btn-primary" onclick="pipeSubmitReasonModal()">Confirm Move</button></div></div>
+  </div>
+</div>
+
+<!-- ===== PIPELINE: LEAD DETAIL MODAL ===== -->
+<div class="modal-overlay" id="pipeDetailModal">
+  <div class="modal wide">
+    <div class="modal-hdr"><div><h2 id="pipeDetailTitle">Lead Detail</h2></div><button class="modal-x" onclick="pipeCloseLeadDetail()">&times;</button></div>
+    <div class="modal-body" id="pipeDetailBody"></div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="pipeCloseLeadDetail()">Close</button></div></div>
   </div>
 </div>
 
@@ -4912,6 +4997,7 @@ function switchTab(id,btn){
   document.getElementById('tab-'+id).classList.add('active');
   btn.classList.add('active');
   if(id==='dashboard') buildDashboard();
+  if(id==='pipeline')  pipeRender();
   if(id==='venues')    venBuild();
   if(id==='roomcal')   rcBuild();
   if(id==='teacherreg'){regInitSel();regRender();}
@@ -4932,6 +5018,7 @@ function switchTab(id,btn){
 
 </script>
 <script src="modules/venues.js"></script>
+<script src="modules/sales-pipeline.js"></script>
 <script>
 // ===== VENUE GANTT — moved to modules/venues.js =====
 // ===== DATE FINDER — moved to modules/venues.js (loaded above) =====
