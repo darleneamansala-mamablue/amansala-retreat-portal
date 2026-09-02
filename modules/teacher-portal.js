@@ -325,7 +325,7 @@ function regRender(){
     withSeq.forEach(({entry,gSeq},roomIdx)=>{
       const room=entry.display;
       const roomRegs=entry.physical.map(p=>getRegForRoom(regSelBk.id,p)).filter(Boolean);
-      const guests=roomRegs.flatMap(reg=>(reg.guests||[]).filter(g=>g.name).map(g=>({...g,_reg:reg,_physical:reg.room})));
+      const guests=roomRegs.flatMap(reg=>(reg.guests||[]).filter(g=>g.name).map(g=>({...g,_reg:reg,_physical:reg.room,_guestIdx:reg.guests.indexOf(g)})));
       const gc=Math.max(1,guests.length);
       const totalPrice=roomRegs.reduce((s,reg)=>{const gcn=(reg.guests||[]).filter(g=>g.name).length||1;return s+(reg.customPrice!=null?reg.customPrice:calcPrice(rt,gcn,nights,regSelBk.startDate,regSelBk,reg));},0);
       const perPrice=+(totalPrice/gc).toFixed(2);
@@ -391,7 +391,7 @@ function regRender(){
             const nameTd=document.createElement('td');nameTd.className='r-guest';
             const _bdTeacherStar=bedReg?.isTeacherRoom?`<span style="color:#b45309;font-size:13px;margin-right:4px" title="Teacher Room">★</span>`:'';
             const _bdTeacherStyle=bedReg?.isTeacherRoom?'color:#92400e;font-weight:700;':'';
-            nameTd.innerHTML=`<div class="r-gname" style="${_bdTeacherStyle}">${_bdTeacherStar}${g.name}${g2?`<br><span style="font-size:11px;color:#6b7280;font-weight:400">+ ${g2.name}</span>`:''}`;tr.appendChild(nameTd);
+            nameTd.innerHTML=`<div class="r-gname" style="${_bdTeacherStyle}cursor:pointer" title="Click to open ${escHtml(g.name)}'s folio" onclick="event.stopPropagation();openGuestFolio('${bedReg.id}',0)">${_bdTeacherStar}${g.name}</div>${g2?`<div class="r-gname" style="font-size:11px;color:#6b7280;font-weight:400;cursor:pointer" title="Click to open ${escHtml(g2.name)}'s folio" onclick="event.stopPropagation();openGuestFolio('${bedReg.id}',1)">+ ${g2.name}</div>`:''}`;tr.appendChild(nameTd);
             const retTd=document.createElement('td');retTd.style.cssText='white-space:nowrap;padding:0 8px;';
             const isRet=g.returning||false;const yrs=g.yearsAttending||'';
             retTd.innerHTML=`<button class="ret-toggle${isRet?' ret-on':''}" onclick="regToggleReturning('${bedReg.id}',0)">${isRet?'↩ Returning':'✦ New'}</button>${isRet?`<input class="ret-years" type="number" min="1" max="30" value="${yrs}" placeholder="yrs" title="Years attending" onchange="regSaveYears('${bedReg.id}',0,this.value)">`:''}`;
@@ -475,7 +475,7 @@ function regRender(){
         nameTd.className='r-guest';
         const _teacherStar=reg.isTeacherRoom?`<span style="color:#b45309;font-size:13px;margin-right:4px" title="Teacher Room">★</span>`:'';
         const _teacherStyle=reg.isTeacherRoom?'color:#92400e;font-weight:700;':'';
-        nameTd.innerHTML=`<div class="r-gname" style="${_teacherStyle}">${_teacherStar}${g.name}${entry.merged&&entry.physical.length>1?` <span style="font-size:10px;color:#8a7e74">(${g._physical})</span>`:''}</div>`;
+        nameTd.innerHTML=`<div class="r-gname" style="${_teacherStyle}cursor:pointer" title="Click to open ${escHtml(g.name)}'s folio" onclick="event.stopPropagation();openGuestFolio('${g._reg.id}',${g._guestIdx})">${_teacherStar}${g.name}${entry.merged&&entry.physical.length>1?` <span style="font-size:10px;color:#8a7e74">(${g._physical})</span>`:''}</div>`;
         tr.appendChild(nameTd);
 
         const retTd=document.createElement('td');

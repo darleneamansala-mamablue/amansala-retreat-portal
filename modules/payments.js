@@ -529,37 +529,136 @@ function renderVmPaymentWidget(bk){
 }
 
 // ===== CHARGES LEDGER (internal record-keeping, not a folio/POS system) =====
+// A charge with a matching Guest name is stored on that guest's OWN registration
+// (reg.charges) — their individual folio. Left blank, it's a room/booking-level
+// charge (bk.charges) — e.g. incidentals not tied to one person.
+const VMC_CATEGORIES=['Spa','Massage','Excursión','Food & Bev','Laundry','Private Session','Transport','Upgrade','Other'];
 let _vmChargesAddOpen=false;
+let _vmChargeItems=null; // lazy-loaded, cached catalog from Booking Engine → Items — powers the description autosuggest only
+async function vmLoadChargeItems(){
+  if(_vmChargeItems!==null)return _vmChargeItems;
+  try{const{data}=await db.from('app_store').select('value').eq('key','chargeItems').maybeSingle();_vmChargeItems=(data?.value||[]).filter(i=>i.active!==false);}
+  catch(e){_vmChargeItems=[];}
+  return _vmChargeItems;
+}
+function vmChargesGuestNames(bk){
+  return AppData.regs.filter(r=>r.bookingId===bk.id).flatMap(r=>(r.guests||[]).filter(g=>g.name).map(g=>g.name));
+}
+function vmFindRegForGuestName(bk,name){
+  const key=(name||'').trim().toLowerCase();if(!key)return null;
+  const regs=AppData.regs.filter(r=>r.bookingId===bk.id);
+  for(const r of regs){if((r.guests||[]).some(g=>(g.name||'').trim().toLowerCase()===key))return r;}
+  return null;
+}
 function renderVmChargesWidget(bk){
   const el=document.getElementById('vm-charges-widget');if(!el)return;
-  const charges=(bk.charges||[]).slice().sort((a,b)=>(b.addedAt||'').localeCompare(a.addedAt||''));
+  const bkCharges=(bk.charges||[]).map(c=>({...c,_scope:'booking'}));
+  const regCharges=AppData.regs.filter(r=>r.bookingId===bk.id).flatMap(r=>(r.charges||[]).map(c=>({...c,_scope:'guest',_regId:r.id})));
+  const charges=[...bkCharges,...regCharges].sort((a,b)=>(b.addedAt||'').localeCompare(a.addedAt||''));
   const total=charges.reduce((s,c)=>s+(c.amount||0),0);
   el.style.display='block';
+  if(_vmChargesAddOpen&&_vmChargeItems===null){vmLoadChargeItems().then(()=>renderVmChargesWidget(bk));}
+  const guestNames=vmChargesGuestNames(bk);
   const addFormHtml=_vmChargesAddOpen?`
-    <div style="padding:10px 14px;background:#f8fafc;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-      <div style="flex:2;min-width:120px"><label style="font-size:10.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px">Item</label><input type="text" id="vmc-item" placeholder="e.g. Extra towels" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px;box-sizing:border-box"></div>
-      <div style="flex:1;min-width:80px"><label style="font-size:10.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px">Amount</label><input type="number" id="vmc-amount" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px;box-sizing:border-box"></div>
-      <div style="flex:2;min-width:120px"><label style="font-size:10.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px">Note (optional)</label><input type="text" id="vmc-note" placeholder="" style="width:100%;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px;box-sizing:border-box"></div>
-      <button class="btn btn-secondary btn-sm" onclick="vmChargesToggleAdd()">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="vmChargesSave('${bk.id}')">Save Charge</button>
+    <div style="padding:10px 14px;background:#f8fafc;border-top:1px solid var(--border)">
+      <div class="frow" style="margin:0 0 8px">
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Date</label><input type="date" id="vmc-date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Category</label><select id="vmc-category">${VMC_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="frow" style="margin:0 0 8px">
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Description</label><input type="text" id="vmc-desc" placeholder="e.g. Massage 60min" list="vmc-desc-list"><datalist id="vmc-desc-list">${(_vmChargeItems||[]).map(i=>`<option value="${escHtml(i.name)}" data-price="${i.price}">`).join('')}</datalist></div>
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Amount ($)</label><input type="number" id="vmc-amount" min="0" step="0.01" placeholder="0.00"></div>
+      </div>
+      <div class="frow full" style="margin:0 0 10px">
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Guest <span style="font-weight:400">(optional)</span></label><input type="text" id="vmc-guest" placeholder="Leave empty to charge the room" list="vmc-guest-list"><datalist id="vmc-guest-list">${guestNames.map(n=>`<option value="${escHtml(n)}">`).join('')}</datalist></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="vmChargesToggleAdd()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="vmChargesSave('${bk.id}')">Save</button>
+      </div>
     </div>`:'';
   el.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap">
       <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)">Charges${total>0?' · '+fmt$(total)+' total':''}</span>
-      <button class="btn btn-secondary btn-sm" onclick="vmChargesToggleAdd()">${_vmChargesAddOpen?'Cancel':'+ Add Charge'}</button>
+      <div style="display:flex;gap:6px">
+        ${guestNames.length>1?`<button class="btn btn-secondary btn-sm" onclick="vmBulkChargeOpen('${bk.id}')">👥 Bulk Charge</button>`:''}
+        <button class="btn btn-secondary btn-sm" onclick="vmChargesToggleAdd()">${_vmChargesAddOpen?'Cancel':'+ Add Charge'}</button>
+      </div>
     </div>
     ${addFormHtml}
     ${!charges.length?`<div style="padding:16px 14px;text-align:center;font-size:12.5px;color:var(--muted)">No charges yet — use "+ Add Charge" to record extras of the stay.</div>`
       :`<div style="padding:4px 14px 8px">
         ${charges.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9">
           <div style="flex:1;min-width:0">
-            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.item)}</div>
-            <div style="font-size:11px;color:var(--muted)">${c.note?escHtml(c.note)+' · ':''}${fmtDate(c.addedAt.slice(0,10))} · ${escHtml(c.addedBy||'Staff')}</div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.description||c.item||'')} <span style="font-weight:400;color:var(--muted);font-size:11px">· ${escHtml(c.category||'Other')}</span></div>
+            <div style="font-size:11px;color:var(--muted)">${c.guestName?`👤 ${escHtml(c.guestName)} · `:'🏠 Room · '}${fmtDate((c.date||c.addedAt||'').slice(0,10))} · ${escHtml(c.addedBy||'Staff')}</div>
           </div>
           <div style="font-size:13px;font-weight:700;color:var(--dark);white-space:nowrap">${fmt$(c.amount)}</div>
-          <button class="btn btn-danger btn-sm" onclick="vmChargesDelete('${bk.id}','${c.id}')" style="padding:3px 8px;font-size:11px">Remove</button>
+          <button class="btn btn-danger btn-sm" onclick="vmChargesDelete('${bk.id}','${c.id}','${c._scope}'${c._regId?`,'${c._regId}'`:''})" style="padding:3px 8px;font-size:11px">Remove</button>
         </div>`).join('')}
       </div>`}`;
+}
+// ── Bulk charge: one description/category/amount, applied as a separate charge on EACH selected guest's own folio ──
+function vmBulkChargeOpen(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const regs=AppData.regs.filter(r=>r.bookingId===bkId);
+  const guestRows=regs.flatMap(r=>(r.guests||[]).filter(g=>g.name).map((g,gi)=>({reg:r,guest:g,guestIdx:r.guests.indexOf(g)})));
+  if(!guestRows.length){showToast('No registered guests on this booking yet.');return;}
+  let existing=document.getElementById('bulkChargeModal');if(existing)existing.remove();
+  const overlay=document.createElement('div');
+  overlay.id='bulkChargeModal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:24px;max-width:480px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:'Jost',sans-serif">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:var(--dark)">Bulk Charge</div>
+      <button onclick="document.getElementById('bulkChargeModal').remove()" style="background:none;border:none;font-size:20px;color:#9ca3af;cursor:pointer">&times;</button>
+    </div>
+    <div class="frow" style="margin:0 0 8px">
+      <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Category</label><select id="bc-category">${VMC_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+      <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Amount ($ per person)</label><input type="number" id="bc-amount" min="0" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="frow full" style="margin:0 0 12px">
+      <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Description</label><input type="text" id="bc-desc" placeholder="e.g. Offsite Dinner"></div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Apply to</span>
+      <button class="btn btn-secondary btn-sm" onclick="document.querySelectorAll('.bc-guest-chk').forEach(c=>c.checked=true)">Select All</button>
+    </div>
+    <div style="border:1.5px solid var(--border);border-radius:9px;max-height:220px;overflow-y:auto;margin-bottom:16px">
+      ${guestRows.map((r,i)=>`<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;font-size:13px;color:var(--dark)"><input type="checkbox" class="bc-guest-chk" data-regid="${r.reg.id}" data-gidx="${r.guestIdx}" checked> ${escHtml(r.guest.name)} <span style="color:var(--muted);font-size:11.5px">— ${escHtml(r.reg.room||'')}</span></label>`).join('')}
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bulkChargeModal').remove()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="vmBulkChargeSave('${bkId}')">Save Charges</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function vmBulkChargeSave(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const category=document.getElementById('bc-category').value||'Other';
+  const description=document.getElementById('bc-desc').value.trim();
+  const amount=Math.round(parseFloat(document.getElementById('bc-amount').value)*100)/100;
+  const checked=[...document.querySelectorAll('.bc-guest-chk:checked')];
+  if(!description){alert('Enter a description.');return;}
+  if(!amount||amount<=0){alert('Enter a valid amount.');return;}
+  if(!checked.length){alert('Select at least one guest.');return;}
+  const who=getCurrentSession()?.name||'Staff';
+  const date=new Date().toISOString().slice(0,10);
+  let count=0;
+  checked.forEach(chk=>{
+    const reg=AppData.regs.find(r=>r.id===chk.dataset.regid);if(!reg)return;
+    const guest=(reg.guests||[])[parseInt(chk.dataset.gidx)];if(!guest)return;
+    if(!reg.charges)reg.charges=[];
+    reg.charges.push({id:uid(),date,category,description,amount,guestName:guest.name,addedAt:new Date().toISOString(),addedBy:who});
+    count++;
+  });
+  saveAll();
+  document.getElementById('bulkChargeModal').remove();
+  renderVmChargesWidget(bk);
+  logActivity('Bulk charge added',`${fmt$(amount)} × ${count} — ${description} — ${bk.leaderName||bk.retreatName}`,bk.id);
+  renderVmHistory(bk.id);
+  showToast(`Charged ${count} guest${count!==1?'s':''} ✓`);
 }
 function vmChargesToggleAdd(){
   _vmChargesAddOpen=!_vmChargesAddOpen;
@@ -567,27 +666,121 @@ function vmChargesToggleAdd(){
 }
 function vmChargesSave(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
-  const item=document.getElementById('vmc-item').value.trim();
+  const date=document.getElementById('vmc-date').value||new Date().toISOString().slice(0,10);
+  const category=document.getElementById('vmc-category').value||'Other';
+  const description=document.getElementById('vmc-desc').value.trim();
   const amount=Math.round(parseFloat(document.getElementById('vmc-amount').value)*100)/100;
-  const note=document.getElementById('vmc-note').value.trim();
-  if(!item){alert('Enter what the charge is for.');return;}
+  const guestName=document.getElementById('vmc-guest').value.trim();
+  if(!description){alert('Enter a description for the charge.');return;}
   if(!amount||amount<=0){alert('Enter a valid amount.');return;}
-  if(!bk.charges)bk.charges=[];
-  bk.charges.push({id:uid(),item,amount,note,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff'});
+  const charge={id:uid(),date,category,description,amount,guestName:guestName||null,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff'};
+  const matchedReg=guestName?vmFindRegForGuestName(bk,guestName):null;
+  if(matchedReg){
+    if(!matchedReg.charges)matchedReg.charges=[];
+    matchedReg.charges.push(charge);
+  }else{
+    if(!bk.charges)bk.charges=[];
+    bk.charges.push(charge);
+  }
   _vmChargesAddOpen=false;
   saveAll();renderVmChargesWidget(bk);
-  logActivity('Charge added',`${fmt$(amount)} — ${item} — ${bk.leaderName||bk.retreatName}`,bk.id);
+  logActivity('Charge added',`${fmt$(amount)} — ${description}${guestName?' — '+guestName:''} — ${bk.leaderName||bk.retreatName}`,bk.id);
   renderVmHistory(bk.id);
   showToast('Charge added ✓');
 }
-function vmChargesDelete(bkId,chargeId){
+function vmChargesDelete(bkId,chargeId,scope,regId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
-  const c=(bk.charges||[]).find(x=>x.id===chargeId);if(!c)return;
-  if(!confirm(`Remove this charge — "${c.item}" (${fmt$(c.amount)})?`))return;
-  bk.charges=(bk.charges||[]).filter(x=>x.id!==chargeId);
+  let c;
+  if(scope==='guest'){
+    const reg=AppData.regs.find(r=>r.id===regId);if(!reg)return;
+    c=(reg.charges||[]).find(x=>x.id===chargeId);if(!c)return;
+    if(!confirm(`Remove this charge — "${c.description}" (${fmt$(c.amount)})?`))return;
+    reg.charges=(reg.charges||[]).filter(x=>x.id!==chargeId);
+  }else{
+    c=(bk.charges||[]).find(x=>x.id===chargeId);if(!c)return;
+    if(!confirm(`Remove this charge — "${c.description}" (${fmt$(c.amount)})?`))return;
+    bk.charges=(bk.charges||[]).filter(x=>x.id!==chargeId);
+  }
   saveAll();renderVmChargesWidget(bk);
-  logActivity('Charge removed',`${fmt$(c.amount)} — ${c.item} — ${bk.leaderName||bk.retreatName}`,bk.id);
+  logActivity('Charge removed',`${fmt$(c.amount)} — ${c.description}${c.guestName?' — '+c.guestName:''} — ${bk.leaderName||bk.retreatName}`,bk.id);
   renderVmHistory(bk.id);
+  showToast('Charge removed.');
+}
+
+// ===== INDIVIDUAL GUEST FOLIO ===== (opened by clicking a guest's name in a room list)
+let _gfRegId=null,_gfGuestIdx=0,_gfAddOpen=false;
+function openGuestFolio(regId,guestIdx){
+  const reg=AppData.regs.find(r=>r.id===regId);if(!reg)return;
+  const guest=(reg.guests||[])[guestIdx];if(!guest)return;
+  _gfRegId=regId;_gfGuestIdx=guestIdx;_gfAddOpen=false;
+  renderGuestFolio();
+  openModal('guestFolioModal');
+}
+function renderGuestFolio(){
+  const reg=AppData.regs.find(r=>r.id===_gfRegId);if(!reg)return closeModal('guestFolioModal');
+  const guest=(reg.guests||[])[_gfGuestIdx];if(!guest)return closeModal('guestFolioModal');
+  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
+  const charges=(reg.charges||[]).slice().sort((a,b)=>(b.addedAt||'').localeCompare(a.addedAt||''));
+  const total=charges.reduce((s,c)=>s+(c.amount||0),0);
+  document.getElementById('gfTitle').textContent=guest.name;
+  document.getElementById('gfSub').textContent=`Room ${reg.room||'—'} · ${bk?(bk.leaderName||bk.retreatName):''}`;
+  const addFormHtml=_gfAddOpen?`
+    <div style="padding:10px 14px;background:#f8fafc;border-top:1px solid var(--border)">
+      <div class="frow" style="margin:0 0 8px">
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Date</label><input type="date" id="gfc-date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Category</label><select id="gfc-category">${VMC_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="frow" style="margin:0 0 10px">
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Description</label><input type="text" id="gfc-desc" placeholder="e.g. Massage 60min"></div>
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Amount ($)</label><input type="number" id="gfc-amount" min="0" step="0.01" placeholder="0.00"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="gfToggleAdd()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="gfChargeSave()">Save</button>
+      </div>
+    </div>`:'';
+  document.getElementById('gfBody').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
+      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)">Folio${total>0?' · '+fmt$(total)+' total':''}</span>
+      <button class="btn btn-secondary btn-sm" onclick="gfToggleAdd()">${_gfAddOpen?'Cancel':'+ Add Charge'}</button>
+    </div>
+    ${addFormHtml}
+    ${!charges.length?`<div style="padding:16px 14px;text-align:center;font-size:12.5px;color:var(--muted)">No charges on this guest's folio yet.</div>`
+      :`<div style="padding:4px 14px 8px">
+        ${charges.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.description)} <span style="font-weight:400;color:var(--muted);font-size:11px">· ${escHtml(c.category||'Other')}</span></div>
+            <div style="font-size:11px;color:var(--muted)">${fmtDate((c.date||c.addedAt||'').slice(0,10))} · ${escHtml(c.addedBy||'Staff')}</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:var(--dark);white-space:nowrap">${fmt$(c.amount)}</div>
+          <button class="btn btn-danger btn-sm" onclick="gfChargeDelete('${c.id}')" style="padding:3px 8px;font-size:11px">Remove</button>
+        </div>`).join('')}
+      </div>`}`;
+}
+function gfToggleAdd(){_gfAddOpen=!_gfAddOpen;renderGuestFolio();}
+function gfChargeSave(){
+  const reg=AppData.regs.find(r=>r.id===_gfRegId);if(!reg)return;
+  const guest=(reg.guests||[])[_gfGuestIdx];
+  const date=document.getElementById('gfc-date').value||new Date().toISOString().slice(0,10);
+  const category=document.getElementById('gfc-category').value||'Other';
+  const description=document.getElementById('gfc-desc').value.trim();
+  const amount=Math.round(parseFloat(document.getElementById('gfc-amount').value)*100)/100;
+  if(!description){alert('Enter a description for the charge.');return;}
+  if(!amount||amount<=0){alert('Enter a valid amount.');return;}
+  if(!reg.charges)reg.charges=[];
+  reg.charges.push({id:uid(),date,category,description,amount,guestName:guest?.name||null,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff'});
+  _gfAddOpen=false;
+  saveAll();renderGuestFolio();
+  logActivity('Charge added',`${fmt$(amount)} — ${description} — ${guest?.name||''}`,reg.bookingId);
+  showToast('Charge added ✓');
+}
+function gfChargeDelete(chargeId){
+  const reg=AppData.regs.find(r=>r.id===_gfRegId);if(!reg)return;
+  const c=(reg.charges||[]).find(x=>x.id===chargeId);if(!c)return;
+  if(!confirm(`Remove this charge — "${c.description}" (${fmt$(c.amount)})?`))return;
+  reg.charges=(reg.charges||[]).filter(x=>x.id!==chargeId);
+  saveAll();renderGuestFolio();
+  logActivity('Charge removed',`${fmt$(c.amount)} — ${c.description} — ${c.guestName||''}`,reg.bookingId);
   showToast('Charge removed.');
 }
 

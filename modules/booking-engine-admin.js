@@ -14,6 +14,7 @@ let beSettings = {};
 let beRatesList = [];
 let beDiscounts = [];
 let beRequests = [];
+let beItems = [];
 let beEditRtId = null;
 let beEditPhotos = [];
 let beLoaded = false;
@@ -49,11 +50,12 @@ async function beInit() {
   if (!root) return;
   if (!beLoaded) {
     root.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted)">Loading Booking Engine…</div>`;
-    const [s, r, d, rq] = await Promise.all([
+    const [s, r, d, rq, it] = await Promise.all([
       beDbGet('bookingEngineSettings'),
       beDbGet('beRates'),
       beDbGet('beDiscountCodes'),
       beDbGet('beBookingRequests'),
+      beDbGet('chargeItems'),
     ]);
     beSettings  = s ?? {};
     beRatesList = r ?? [];
@@ -63,6 +65,7 @@ async function beInit() {
     beDiscounts.forEach(dc => { if (!dc.id) { dc.id = 'dc_' + Math.random().toString(36).slice(2, 10); needsIdBackfill = true; } });
     if (needsIdBackfill) beDbSet('beDiscountCodes', beDiscounts);
     beRequests  = rq ?? [];
+    beItems     = it ?? [];
     beLoaded = true;
   }
   beRenderShell();
@@ -92,6 +95,7 @@ function beRenderShell() {
           ${beTabBtn('rates','Rates')}
           ${beTabBtn('requests',`Requests${paidCount ? ` <span style="background:#16a34a;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">${paidCount}</span>` : ''}`)}
           ${beTabBtn('discounts','Discounts')}
+          ${beTabBtn('items','Items')}
           ${beTabBtn('emails','Emails')}
         </div>
       </div>
@@ -116,6 +120,7 @@ function beRenderBody() {
   else if (beTab === 'rates')     beRenderRates();
   else if (beTab === 'requests')  beRenderRequests();
   else if (beTab === 'discounts') beRenderDiscounts();
+  else if (beTab === 'items')     beRenderItems();
   else if (beTab === 'emails')    beRenderEmails();
 }
 
@@ -623,6 +628,120 @@ async function beDeleteDiscount(id) {
   if (!ok) { beDiscounts = prev; return; }
   showToast('Code deleted');
   beRenderDiscounts();
+}
+
+// ─── ITEMS TAB — charge/item catalog, feeds the Venues "Add Charge" picker ────
+// A one-time reference import from Jorge's separate staging project seeded the Spa/
+// Transportation/Tour/Clases/AyB categories with his real Cloudbeds-sourced prices —
+// read-only fetch, nothing is written back to his database. Everything after that is
+// managed here, independent of his system.
+const BE_JORGE_ITEMS_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co/rest/v1/items?select=*';
+const BE_JORGE_ITEMS_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
+async function beImportJorgeItems() {
+  if (!confirm('Import items from Jorge\'s catalog? This only adds items you don\'t already have — nothing existing gets changed or removed.')) return;
+  try {
+    const res = await fetch(BE_JORGE_ITEMS_URL, { headers: { apikey: BE_JORGE_ITEMS_KEY } });
+    if (!res.ok) throw new Error('fetch failed');
+    const rows = await res.json();
+    const existingKeys = new Set(beItems.map(i => (i.name + '|' + i.category).toLowerCase()));
+    let added = 0;
+    rows.forEach(r => {
+      const key = (r.name + '|' + r.category).toLowerCase();
+      if (existingKeys.has(key)) return;
+      beItems.push({
+        id: 'ci_' + Math.random().toString(36).slice(2, 10),
+        name: r.name, price: r.price, category: r.category || 'Other',
+        taxRate: r.tax_rate ?? 0, active: r.active !== false,
+      });
+      existingKeys.add(key);
+      added++;
+    });
+    if (!added) { showToast('Nothing new to import — you already have all of these.'); return; }
+    const ok = await beDbSet('chargeItems', beItems);
+    if (!ok) return;
+    showToast(`Imported ${added} item${added !== 1 ? 's' : ''} ✓`);
+    beRenderItems();
+  } catch (e) { showToast('Import failed: ' + e.message); }
+}
+function beRenderItems() {
+  const cats = [...new Set(beItems.map(i => i.category || 'Other'))].sort();
+  let html = `<div style="max-width:900px;margin:0 auto">
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <div>
+          <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0 0 4px">Charge Items</h3>
+          <p style="font-size:12px;color:var(--muted);margin:0">This list is what staff pick from when adding a charge to a booking on Venues.</p>
+        </div>
+        <button onclick="beImportJorgeItems()" style="${beBtnS('#8b5cf6','#fff')}">↓ Import from Jorge's Catalog</button>
+      </div>
+      <p style="font-size:11.5px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin:0 0 16px">Jorge's catalog only has real Spa and Transportation prices in depth — Food &amp; Beverage has just a few items and there's no Boutique category at all. Add those below.</p>
+      <div class="frow">
+        <div class="fg"><label>Name</label><input type="text" id="ci-name" placeholder="e.g. Mango Smoothie"></div>
+        <div class="fg"><label>Price (USD)</label><input type="number" id="ci-price" placeholder="0.00" min="0" step="0.01"></div>
+        <div class="fg"><label>Category</label><input type="text" id="ci-category" placeholder="e.g. Boutique" list="ci-cat-list"><datalist id="ci-cat-list">${cats.map(c => `<option value="${escHtml(c)}">`).join('')}</datalist></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px">
+        <button onclick="beSaveItem()" style="${beBtnS('#2d6a6a','#fff')}">Add item</button>
+      </div>
+    </div>`;
+
+  if (beItems.length) {
+    cats.forEach(cat => {
+      const rows = beItems.filter(i => (i.category || 'Other') === cat).sort((a, b) => a.name.localeCompare(b.name));
+      html += `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:14px">
+        <div style="padding:12px 20px;border-bottom:1px solid var(--border);background:var(--sand)"><h3 style="font-size:13px;font-weight:700;color:var(--dark);margin:0">${escHtml(cat)} <span style="font-weight:400;color:var(--muted)">(${rows.length})</span></h3></div>
+        <table style="width:100%;border-collapse:collapse">
+          <tbody>
+            ${rows.map(i => `
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="padding:8px 20px;font-size:13px;color:var(--dark);${i.active === false ? 'opacity:.45;text-decoration:line-through' : ''}">${escHtml(i.name)}</td>
+              <td style="padding:8px 14px;font-size:13px;color:var(--text);white-space:nowrap">${beFmtUSD(i.price)}</td>
+              <td style="padding:8px 10px;text-align:right;white-space:nowrap">
+                <button onclick="beToggleItem('${i.id}',${i.active === false})" style="${beBtnS(i.active === false ? '#d1fae5' : '#fef3c7', i.active === false ? '#065f46' : '#92400e')};font-size:11px;padding:3px 9px;margin-right:4px">${i.active === false ? 'Activate' : 'Deactivate'}</button>
+                <button onclick="beDeleteItem('${i.id}')" style="${beBtnS('#fee2e2','#dc2626')};font-size:11px;padding:3px 9px">Delete</button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    });
+  } else {
+    html += `<div style="text-align:center;padding:40px;color:var(--muted);background:#fff;border:1px solid var(--border);border-radius:12px">
+      <div style="font-size:28px;margin-bottom:10px">🧾</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text)">No items yet</div>
+      <div style="font-size:12px;margin-top:4px">Import from Jorge's catalog or add your own above.</div>
+    </div>`;
+  }
+  html += `</div>`;
+  document.getElementById('beBody').innerHTML = html;
+}
+async function beSaveItem() {
+  const name = (document.getElementById('ci-name')?.value ?? '').trim();
+  const price = parseFloat(document.getElementById('ci-price')?.value);
+  const category = (document.getElementById('ci-category')?.value ?? '').trim() || 'Other';
+  if (!name) { showToast('Enter an item name'); return; }
+  if (isNaN(price) || price < 0) { showToast('Enter a valid price'); return; }
+  beItems.push({ id: 'ci_' + Math.random().toString(36).slice(2, 10), name, price, category, taxRate: 0, active: true });
+  const ok = await beDbSet('chargeItems', beItems);
+  if (!ok) { beItems.pop(); return; }
+  showToast('Item added ✓');
+  beRenderItems();
+}
+async function beToggleItem(id, active) {
+  const it = beItems.find(i => i.id === id); if (!it) return;
+  const prev = it.active; it.active = active;
+  const ok = await beDbSet('chargeItems', beItems);
+  if (!ok) { it.active = prev; return; }
+  beRenderItems();
+}
+async function beDeleteItem(id) {
+  if (!confirm('Delete this item?')) return;
+  const prev = beItems;
+  beItems = beItems.filter(i => i.id !== id);
+  const ok = await beDbSet('chargeItems', beItems);
+  if (!ok) { beItems = prev; return; }
+  showToast('Item deleted');
+  beRenderItems();
 }
 
 // ─── EMAILS TAB ──────────────────────────────────────────────

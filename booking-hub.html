@@ -1014,6 +1014,7 @@
         Room List
       </button>
       <button class="btn btn-primary" onclick="openVenAdd()">+ Add Booking</button>
+      <button class="btn btn-secondary" style="border-color:#a855f7;color:#a855f7" onclick="goToRoomOnlyTab()">🏨 Room Only — click a room to book</button>
     </div>
   </div>
   <div id="venLegend">
@@ -2246,6 +2247,32 @@
   </div>
 </div>
 
+<!-- ===== NEW RESERVATION MODAL (room-only booking — click an open date on a room's row on the Rooms tab) ===== -->
+<div class="modal-overlay" id="rmModal" style="display:none">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-hdr"><h2 id="rmModalTitle">New Reservation</h2><button class="modal-x" onclick="rmClose()">&times;</button></div>
+    <div class="modal-body">
+      <div class="frow full"><div class="fg"><label>Room</label><input type="text" id="rm-room" readonly style="background:var(--sand);color:var(--muted)"></div></div>
+      <div class="frow"><div class="fg"><label>Check-in</label><input type="date" id="rm-start" onchange="rmAutoRate()"></div><div class="fg"><label>Check-out</label><input type="date" id="rm-end"></div></div>
+      <div class="frow full"><div class="fg"><label>Reservation Type</label><select id="rm-type"><option value="Walk-in">Walk-in</option><option value="Direct">Direct</option><option value="OTA">OTA</option></select></div></div>
+      <div class="frow full"><div class="fg"><label>Guest Name</label><input type="text" id="rm-leader" placeholder="e.g. Jane Smith"></div></div>
+      <div class="frow full"><div class="fg">
+        <label>Rate / night (USD)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" id="rm-rate" min="0" step="1" placeholder="0" style="flex:1">
+          <button type="button" id="rm-solo-btn" data-base="padding:6px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;font-family:'Jost',sans-serif;" onclick="rmSetRateMode('solo')">Solo</button>
+          <button type="button" id="rm-share-btn" data-base="padding:6px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;font-family:'Jost',sans-serif;" onclick="rmSetRateMode('sharing')">Sharing</button>
+          <button type="button" onclick="rmAutoRate()" style="padding:6px 10px;font-size:11px;font-weight:600;border-radius:6px;border:1.5px solid #059669;background:#d1fae5;color:#065f46;cursor:pointer;white-space:nowrap;font-family:'Jost',sans-serif">↓ Auto</button>
+        </div>
+        <div id="rm-rate-hint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+      </div></div>
+      <div class="frow"><div class="fg"><label>Guests</label><input type="number" id="rm-adults" min="1" max="20" value="1"></div><div class="fg"><label>Status</label><select id="rm-status"><option value="requested">Soft Hold</option><option value="contract_sent">Contract Sent</option><option value="contract_signed">Contract Signed</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Confirmed</option></select></div></div>
+      <div id="rm-err" style="display:none;color:#dc2626;font-size:12px;margin-top:4px"></div>
+    </div>
+    <div class="modal-foot"><div class="l"><button class="btn btn-danger btn-sm" id="rmDelBtn" onclick="rmDeleteBooking()" style="display:none">🗑 Delete</button></div><div class="r"><button class="btn btn-secondary" onclick="rmClose()">Cancel</button><button class="btn btn-primary" onclick="rmSaveNewBooking()">Create Reservation</button></div></div>
+  </div>
+</div>
+
 <!-- ===== PROGRAM BLOCK MODAL (BBC / RNR) ===== -->
 <div class="modal-overlay" id="progModal">
   <div class="modal" style="max-width:440px">
@@ -2256,6 +2283,15 @@
       <div class="fg"><label>Notes <span style="font-weight:400;color:var(--muted)">(optional)</span></label><textarea id="pm-notes" placeholder="Internal notes…" style="min-height:70px"></textarea></div>
     </div>
     <div class="modal-foot"><div class="l"><button class="btn btn-danger btn-sm" id="progDelBtn" onclick="deleteProgBlock()" style="display:none">🗑 Delete</button></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('progModal')">Cancel</button><button class="btn btn-primary" onclick="saveProgBlock()">Save</button></div></div>
+  </div>
+</div>
+
+<!-- ===== INDIVIDUAL GUEST FOLIO MODAL ===== -->
+<div class="modal-overlay" id="guestFolioModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-hdr"><div><h2 id="gfTitle">Guest</h2><div class="modal-sub" id="gfSub"></div></div><button class="modal-x" onclick="closeModal('guestFolioModal')">&times;</button></div>
+    <div class="modal-body" style="padding:0" id="gfBody"></div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('guestFolioModal')">Close</button></div></div>
   </div>
 </div>
 

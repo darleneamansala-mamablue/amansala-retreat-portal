@@ -75,8 +75,11 @@ function venBuild(){
     visBks.forEach(({bk,li,wi})=>{
       const lane=bkLane.get(bk.id)||0;
       const isInquiry=bk.source==='inquiry'&&bk.status==='requested';
+      const isRoomOnly=bk.bookingType==='room_only';
       const st=isInquiry
         ?{label:'Inquiry',bg:'#f3f4f6',border:'#9ca3af',text:'#6b7280',dash:false}
+        :isRoomOnly
+        ?{label:(STATUS[bk.status]||STATUS.requested).label,bg:'#fdf4ff',border:'#a855f7',text:'#6b21a8',dash:(STATUS[bk.status]||STATUS.requested).dash}
         :(STATUS[bk.status]||STATUS.requested);
       const regCount=registeredCount(bk.id);
       const autoFlags=getAutoFlags(bk);
@@ -85,13 +88,14 @@ function venBuild(){
       const bl=document.createElement('div');bl.className='bk'+(isInquiry?' inquiry':st.dash?' dashed':'');
       bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:${8+lane*LANE_H}px;height:40px;background:${st.bg};border-color:${st.border};color:${st.text};position:absolute;`;
       const fillPct=bk.pax>0?Math.min(100,Math.round(regCount/bk.pax*100)):0;
-      const countHtml=!isInquiry&&bk.pax?`<span class="bk-count" style="font-size:10.5px;font-weight:700;background:rgba(0,0,0,.12);border-radius:4px;padding:1px 5px;margin-left:4px">${regCount}/${bk.pax}</span>`:'';
-      const transRoster=!isInquiry&&typeof getTransportRoster==='function'?getTransportRoster(bk.id):null;
+      const countHtml=!isInquiry&&!isRoomOnly&&bk.pax?`<span class="bk-count" style="font-size:10.5px;font-weight:700;background:rgba(0,0,0,.12);border-radius:4px;padding:1px 5px;margin-left:4px">${regCount}/${bk.pax}</span>`:'';
+      const transRoster=!isInquiry&&!isRoomOnly&&typeof getTransportRoster==='function'?getTransportRoster(bk.id):null;
       const transportHtml=transRoster&&transRoster.roster.length>0?`<span class="bk-transport" title="Transportation: ${transRoster.submittedCount}/${transRoster.roster.length} submitted — ${trCompletionLabel(transRoster.submittedCount,transRoster.roster.length)}" style="font-size:10.5px;font-weight:700;background:rgba(0,0,0,.12);border-radius:4px;padding:1px 5px;margin-left:4px;color:${trCompletionColor(transRoster.submittedCount,transRoster.roster.length)}">🚐 ${transRoster.submittedCount}/${transRoster.roster.length}</span>`:'';
       const flagHtml=hasFlags?`<span class="bk-flag" title="${autoFlags.length+manualFlags.length} flag(s)" onclick="event.stopPropagation();openFlagsModal('${bk.id}')">🚩</span>`:'';
+      const roomOnlyBadge=isRoomOnly?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#a855f7;color:#fff;border-radius:3px;padding:1px 5px;margin-left:6px">🏨 Room Only</span>`:'';
       const stBadge=isInquiry
         ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#e5e7eb;color:#6b7280;border-radius:3px;padding:1px 5px;margin-left:6px">Inquiry</span>`
-        :`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;opacity:.75;margin-left:5px">${st.label}</span>`;
+        :`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;opacity:.75;margin-left:5px">${st.label}</span>${roomOnlyBadge}`;
       const finBadge=bk.finalPaymentRequested?`<span title="Final payment requested" style="font-size:9.5px;background:rgba(0,0,0,.15);border-radius:3px;padding:1px 5px;margin-left:3px;font-weight:700">$</span>`:'';
       const bkTd=!bk.teacherDiscountDisabled?calcTeacherDiscount(bk,AppData.regs.filter(r=>r.bookingId===bk.id)):null;
       const discBadge=bkTd&&bkTd.tiers.some(t=>t.earned)?`<span title="Teacher discount earned — $${bkTd.totalCredit.toLocaleString()} credit" style="font-size:9px;font-weight:700;background:#16a34a;color:#fff;border-radius:3px;padding:1px 5px;margin-left:3px">★ DISC</span>`:'';
@@ -532,6 +536,10 @@ function venUpdateRowOptions(start,end,selectedRow,excludeId){
   }).join('');
 }
 
+function goToRoomOnlyTab(){
+  switchTab('roomcal',document.querySelector('.tab-btn[onclick*="roomcal"]'));
+  showToast('Click an open date on any room\'s row to book it.');
+}
 function openVenAdd(){
   venEditId=null;
   document.getElementById('venModalTitle').textContent='Add Booking';
@@ -562,6 +570,147 @@ function openVenAdd(){
     };
   });
   openModal('venModal');
+}
+// ── Room-only pricing engine — mirrors netlify/functions/get-rates.js exactly (base → seasonal → weekend → manual override) ──
+// Shared by the "New Reservation" (room-only) modal below.
+let _venRoSettings=null,_venRoRates=null;
+async function venRoLoadPricingConfig(){
+  if(_venRoSettings!==null&&_venRoRates!==null)return;
+  try{
+    const [{data:s},{data:r}]=await Promise.all([
+      db.from('app_store').select('value').eq('key','bookingEngineSettings').maybeSingle(),
+      db.from('app_store').select('value').eq('key','beRates').maybeSingle(),
+    ]);
+    _venRoSettings=s?.value||{};_venRoRates=r?.value||[];
+  }catch(e){_venRoSettings={};_venRoRates=[];}
+}
+function venRoIsLow(dateStr){const m=new Date(dateStr+'T12:00:00').getMonth()+1;return m>=5&&m<=9;}
+function venRoIsWeekend(dateStr){const d=new Date(dateStr+'T12:00:00').getDay();return d===0||d===5||d===6;}
+function venRoNightRate(rt,dateStr){
+  const low=venRoIsLow(dateStr),wknd=venRoIsWeekend(dateStr),month=new Date(dateStr+'T12:00:00').getMonth()+1;
+  const weekendPct=_venRoSettings?.weekend_premium??0;
+  const seasonal=_venRoSettings?.seasonal_adjustments??{};
+  const manual=(_venRoRates||[]).find(x=>x.roomTypeId===rt.id&&x.startDate<=dateStr&&x.endDate>=dateStr);
+  if(manual){let price=manual.priceSingle;if(wknd&&weekendPct)price=Math.round(price*(1+weekendPct/100));return price;}
+  const base=rt.be_price_single??(low?(rt.price1_low??rt.price1):rt.price1);
+  if(base==null)return null;
+  const seasonalPct=Number(seasonal[String(month)]??0);
+  return Math.round(base*(1+seasonalPct/100)*(wknd&&weekendPct?(1+weekendPct/100):1));
+}
+// ── "New Reservation" — room-only booking modal, opened by clicking an empty cell on a room's row in the Rooms grid ──
+let _rmEditId=null,_rmRoom=null,_rmRtId=null,_rmRateMode='solo';
+function rmClose(){document.getElementById('rmModal').style.display='none';}
+function rmSetRateMode(mode){
+  _rmRateMode=mode;
+  const soloBtn=document.getElementById('rm-solo-btn'),shareBtn=document.getElementById('rm-share-btn');
+  const active='border:1.5px solid #1c3d36;background:#1c3d36;color:#fff';const inactive='border:1.5px solid #d1d5db;background:#fff;color:#374151';
+  if(soloBtn)soloBtn.style.cssText=(soloBtn.dataset.base||'')+(mode==='solo'?active:inactive);
+  if(shareBtn)shareBtn.style.cssText=(shareBtn.dataset.base||'')+(mode==='sharing'?active:inactive);
+  rmAutoRate();
+}
+async function rmAutoRate(){
+  const rateEl=document.getElementById('rm-rate'),hintEl=document.getElementById('rm-rate-hint');
+  const start=document.getElementById('rm-start').value;
+  if(!_rmRtId||!rateEl)return;
+  const rt=AppData.roomTypes.find(r=>r.id===_rmRtId);if(!rt)return;
+  await venRoLoadPricingConfig();
+  const low=venRoIsLow(start||fmtISO(new Date()));
+  const season=low?'Low Season':'High Season';
+  const soloRate=rt.be_price_single??(low?(rt.price1_low??rt.price1):rt.price1);
+  const shareRate=low?(rt.price2_low??soloRate):(rt.price2??soloRate);
+  const rate=_rmRateMode==='sharing'?shareRate:soloRate;
+  if(rate!=null){
+    rateEl.value=rate;
+    if(hintEl)hintEl.textContent=`${rt.name} · ${season} · Solo ${fmt$(soloRate??0)}${shareRate&&shareRate!==soloRate?` / Sharing ${fmt$(shareRate)}`:''}/night`;
+  }else if(hintEl)hintEl.textContent=`${rt.name} — no rate configured`;
+}
+function rmOpenNewBooking(room,rtId,startDate){
+  _rmEditId=null;_rmRoom=room;_rmRtId=rtId;_rmRateMode='solo';
+  const rt=AppData.roomTypes.find(r=>r.id===rtId);
+  document.getElementById('rmModalTitle').textContent='New Reservation';
+  document.getElementById('rmDelBtn').style.display='none';
+  document.getElementById('rm-room').value=`${room}${rt?' — '+rt.name:''}`;
+  const start=startDate||fmtISO(new Date());
+  const end=fmtISO(addDays(pd(start),7));
+  document.getElementById('rm-start').value=start;
+  document.getElementById('rm-end').value=end;
+  document.getElementById('rm-type').value='Walk-in';
+  document.getElementById('rm-leader').value='';
+  document.getElementById('rm-adults').value='1';
+  document.getElementById('rm-status').value='requested';
+  const err=document.getElementById('rm-err');err.textContent='';err.style.display='none';
+  rmSetRateMode('solo');
+  document.getElementById('rmModal').style.display='flex';
+  setTimeout(()=>document.getElementById('rm-leader').focus(),80);
+}
+function rmOpenEditBooking(id){
+  const bk=AppData.bookings.find(b=>b.id===id);if(!bk||bk.bookingType!=='room_only')return;
+  _rmEditId=id;_rmRoom=(bk.blockedRooms||[])[0]||'';_rmRtId=bk.roomTypeId||'';_rmRateMode='solo';
+  const rt=AppData.roomTypes.find(r=>r.id===_rmRtId);
+  document.getElementById('rmModalTitle').textContent='Edit Reservation';
+  document.getElementById('rmDelBtn').style.display='inline-flex';
+  document.getElementById('rm-room').value=`${_rmRoom}${rt?' — '+rt.name:''}`;
+  document.getElementById('rm-start').value=bk.startDate;
+  document.getElementById('rm-end').value=bk.endDate;
+  document.getElementById('rm-type').value=bk.retreatName||'Walk-in';
+  document.getElementById('rm-leader').value=bk.leaderName||'';
+  document.getElementById('rm-adults').value=bk.pax||1;
+  document.getElementById('rm-status').value=bk.status||'requested';
+  const err=document.getElementById('rm-err');err.textContent='';err.style.display='none';
+  const nightly=bk.roomRateNights?Math.round((bk.roomRateTotal||0)/bk.roomRateNights):null;
+  document.getElementById('rm-rate').value=nightly??'';
+  const hintEl=document.getElementById('rm-rate-hint');if(hintEl&&rt)hintEl.textContent=`${rt.name} · ${bk.roomRateNights||0} night(s) · ${fmt$(bk.roomRateTotal||0)} total`;
+  document.getElementById('rmModal').style.display='flex';
+}
+function rmDeleteBooking(){
+  if(!_rmEditId||!confirm('Delete this reservation?'))return;
+  AppData.bookings=AppData.bookings.filter(b=>b.id!==_rmEditId);
+  saveAll();rmClose();venBuild();rcBuild();
+  showToast('Reservation deleted.');
+}
+function rmSaveNewBooking(){
+  const room=_rmRoom,rtId=_rmRtId;
+  const start=document.getElementById('rm-start').value,end=document.getElementById('rm-end').value;
+  const type=document.getElementById('rm-type').value;
+  const leader=document.getElementById('rm-leader').value.trim();
+  const rate=parseFloat(document.getElementById('rm-rate').value)||0;
+  const adults=parseInt(document.getElementById('rm-adults').value)||1;
+  const status=document.getElementById('rm-status').value;
+  const errEl=document.getElementById('rm-err');errEl.style.display='none';
+  if(!leader){errEl.textContent='Guest name is required.';errEl.style.display='block';return;}
+  if(!start||!end||end<=start){errEl.textContent='Invalid dates.';errEl.style.display='block';return;}
+  const nights=Math.round((pd(end)-pd(start))/DAY_MS);
+  const roomRateTotal=rate*nights;
+  // Conflict check (exclude the booking currently being edited, if any)
+  const conflict=AppData.bookings.some(b=>b.id!==_rmEditId&&b.status!=='cancelled'&&(b.blockedRooms||[]).includes(room)&&datesOverlap(start,end,b.startDate,b.endDate));
+  if(conflict){errEl.textContent=`Room ${room} is already booked for part of these dates.`;errEl.style.display='block';return;}
+  if(_rmEditId){
+    const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
+    Object.assign(bk,{leaderName:leader,retreatName:type,startDate:start,endDate:end,pax:adults,status,roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights});
+    saveAll();rmClose();venBuild();rcBuild();
+    logActivity('Room-only booking updated',`${leader} · ${room} · ${fmtDate(start)} – ${fmtDate(end)}`,_rmEditId);
+    showToast('Reservation updated ✓');
+    return;
+  }
+  const bestRow=findAvailableRow(start,end,null);
+  const newId=uid();
+  AppData.bookings.push({id:newId,bookingType:'room_only',leaderName:leader,retreatName:type,startDate:start,endDate:end,row:bestRow,pax:adults,status,notes:'',docLink:'',roomAssignments:[],roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights,charges:[]});
+  saveAll();rmClose();venBuild();rcBuild();
+  logActivity('Room-only booking created',`${leader} · ${room} · ${type} · ${fmtDate(start)} – ${fmtDate(end)}${rate?' · '+fmt$(rate)+'/night':''}`,newId);
+  showToast(`Reservation created — ${room} · ${leader} ✓`);
+}
+// Click on an empty spot in a room's Rooms-tab grid row → open the New Reservation modal prefilled with that room+date.
+function rcTrackClick(event,room,rtId){
+  if(event.target.closest('.bk'))return; // clicked an existing booking block, not empty space
+  const track=event.currentTarget;
+  const rect=track.getBoundingClientRect();
+  const dayIdx=Math.floor((event.clientX-rect.left)/36);
+  const days=rcShowDays;
+  if(dayIdx<0||dayIdx>=days)return;
+  const clickedDate=fmtISO(addDays(rcStart,dayIdx));
+  const busy=AppData.bookings.some(bk=>bk.status!=='cancelled'&&(bk.blockedRooms||[]).includes(room)&&clickedDate>=bk.startDate&&clickedDate<bk.endDate);
+  if(busy)return;
+  rmOpenNewBooking(room,rtId,clickedDate);
 }
 function showAvailPreview(id){
   const bk=AppData.bookings.find(b=>b.id===id);
@@ -710,7 +859,7 @@ function openOvCalModal(bkId){
   document.getElementById('ovCalModal').style.display='flex';
 }
 
-function openVenEdit(id){const bk=AppData.bookings.find(b=>b.id===id);if(!bk)return;venEditId=id;document.getElementById('venModalTitle').textContent='Edit Booking';['venDelBtn','venGoRegBtn','venFinBtn','venCopyRoomsBtn'].forEach(el=>document.getElementById(el).style.display='inline-flex');
+function openVenEdit(id){const bk=AppData.bookings.find(b=>b.id===id);if(!bk)return;if(bk.bookingType==='room_only'){rmOpenEditBooking(id);return;}venEditId=id;document.getElementById('venModalTitle').textContent='Edit Booking';['venDelBtn','venGoRegBtn','venFinBtn','venCopyRoomsBtn'].forEach(el=>document.getElementById(el).style.display='inline-flex');
   document.getElementById('venRoomCalBanner').style.display='flex';
   // Accept Dates button
   const adBtn=document.getElementById('venAcceptDatesBtn');if(adBtn){adBtn.style.display='inline-flex';if(bk.datesAccepted){adBtn.textContent='✓ Dates Accepted';adBtn.style.background='#059669';adBtn.style.color='#fff';adBtn.style.borderColor='#059669';adBtn.style.opacity='.7';adBtn.style.pointerEvents='none';}else{adBtn.textContent='✓ Accept Dates';adBtn.style.background='';adBtn.style.color='';adBtn.style.borderColor='';adBtn.style.opacity='';adBtn.style.pointerEvents='';}}
@@ -1465,6 +1614,8 @@ function rcBuild(){
         if(!rcDragData||rcDragData.rtId!==rt.id)return;
         rcMoveRoom(rcDragData.bkId,rcDragData.fromRoom,room);
       });
+      track.style.cursor='pointer';
+      track.addEventListener('click',e=>rcTrackClick(e,room,rt.id));
 
       days.forEach((d,i)=>{if(d.getDate()===1){const gl=document.createElement('div');gl.className='g-gl ms';gl.style.left=i*36+'px';track.appendChild(gl);}if(fmtISO(d)===todayStr){const tl=document.createElement('div');tl.className='g-gl today-l';tl.style.left=(i*36+18)+'px';track.appendChild(tl);}});
 

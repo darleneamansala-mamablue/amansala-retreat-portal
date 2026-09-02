@@ -167,7 +167,12 @@ function spaRenderDashboard() {
     const unassigned = !a.therapistId;
     const pref = a.therapistPreference?.type;
     const prefLabel = unassigned ? (pref === 'male' ? 'Any male therapist' : pref === 'female' ? 'Any female therapist' : 'Unassigned') : therName(a.therapistId);
-    return `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #f0ebe0;background:${confirmed ? '#fff' : '#fffbeb'}">
+    const svc = SpaData.services.find(s => s.id === a.serviceId);
+    const match = spaFindGuestRegForAppt(a);
+    const chargeBtn = match
+      ? `<button onclick="spaChargeApptToRoom('${a.id}')" title="Charge this service to ${escHtml(match.guest.name)}'s room folio" style="font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;border:1.5px solid #0d9488;background:#f0fdfa;color:#0f766e;cursor:pointer;white-space:nowrap">🧾 Charge to Room</button>`
+      : '';
+    return `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px 130px;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #f0ebe0;background:${confirmed ? '#fff' : '#fffbeb'}">
       <div style="font-weight:700;color:#2d2520;font-size:13px">${spaCalFmtT(a.start)}</div>
       <div style="font-size:13px;color:#2d2520">${menuEsc(svcName(a.serviceId))}</div>
       <div style="font-size:12.5px;color:#6b7280">${menuEsc(a.clientName || '')}</div>
@@ -175,10 +180,11 @@ function spaRenderDashboard() {
       <div style="text-align:right">
         <button onclick="spaDashToggleConfirm('${a.id}')" style="font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:20px;border:1.5px solid ${confirmed ? '#86efac' : '#fde68a'};background:${confirmed ? '#dcfce7' : '#fef3c7'};color:${confirmed ? '#15803d' : '#92400e'};cursor:pointer">${confirmed ? '✓ Confirmed' : 'Pending'}</button>
       </div>
+      <div style="text-align:right">${chargeBtn}</div>
     </div>`;
   };
 
-  el.innerHTML = `<div style="max-width:900px;margin:0 auto">
+  el.innerHTML = `<div style="max-width:1020px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
       <button onclick="spaDashNav(-1)" style="padding:7px 12px;border:1.5px solid #e8dfd4;background:#fff;border-radius:8px;cursor:pointer;font-size:13px">‹</button>
       <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:#2d2520;min-width:220px">${dateLabel}</div>
@@ -187,9 +193,37 @@ function spaRenderDashboard() {
       ${todays.length ? `<span style="margin-left:auto;font-size:12.5px;color:#6b7280">${confirmedCount} of ${todays.length} confirmed</span>` : ''}
     </div>
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
-      ${todays.length ? `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px;gap:10px;padding:10px 16px;background:#f8f5f0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74"><div>Time</div><div>Service</div><div>Client</div><div>Therapist</div><div style="text-align:right">Status</div></div>${todays.map(row).join('')}` : '<div style="padding:40px;text-align:center;color:#9ca3af;font-style:italic">No services booked for this day.</div>'}
+      ${todays.length ? `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px 130px;gap:10px;padding:10px 16px;background:#f8f5f0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74"><div>Time</div><div>Service</div><div>Client</div><div>Therapist</div><div style="text-align:right">Status</div><div></div></div>${todays.map(row).join('')}` : '<div style="padding:40px;text-align:center;color:#9ca3af;font-style:italic">No services booked for this day.</div>'}
     </div>
   </div>`;
+}
+
+// Match a spa appointment's clientName against registered guests (name-only —
+// spa appointments have no email) to find the guest's room/folio to charge.
+function spaFindGuestRegForAppt(a) {
+  const key = (a.clientName || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!key) return null;
+  for (const reg of (AppData.regs || [])) {
+    const idx = (reg.guests || []).findIndex(g => (g.name || '').toLowerCase().replace(/\s+/g, ' ').trim() === key);
+    if (idx >= 0) return { reg, guest: reg.guests[idx], guestIdx: idx };
+  }
+  return null;
+}
+function spaChargeApptToRoom(apptId) {
+  const a = (SpaAppointments || []).find(x => x.id === apptId); if (!a) return;
+  const match = spaFindGuestRegForAppt(a); if (!match) { showToast('No matching registered guest found.'); return; }
+  const svc = SpaData.services.find(s => s.id === a.serviceId);
+  const name = svc?.name || 'Spa Service';
+  const price = svc?.price;
+  if (price == null) { showToast('This service has no price set — add one in Services first.'); return; }
+  const category = /massage/i.test(name) ? 'Massage' : 'Spa';
+  if (!confirm(`Charge ${match.guest.name}'s room folio ${fmt$(price)} for "${name}"?`)) return;
+  if (!match.reg.charges) match.reg.charges = [];
+  match.reg.charges.push({ id: uid(), date: a.date, category, description: name, amount: price, guestName: match.guest.name, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
+  saveAll();
+  logActivity('Charge added', `${fmt$(price)} — ${name} — ${match.guest.name} (from Spa)`, match.reg.bookingId);
+  showToast(`Charged ${fmt$(price)} to ${match.guest.name}'s folio ✓`);
+  spaRenderDashboard();
 }
 
 // ── PAYROLL (code-gated) ─────────────────────────────────────────────────
