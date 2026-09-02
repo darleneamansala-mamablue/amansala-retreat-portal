@@ -1145,6 +1145,7 @@
       <button class="btn-nav" onclick="rcShift(-rcShowDays)">&lsaquo; Prev</button>
       <button class="btn-nav" onclick="rcGoToday()" style="font-weight:600;color:var(--teal);border-color:var(--teal)">Today</button>
       <button class="btn-nav" onclick="rcShift(rcShowDays)">Next &rsaquo;</button>
+      <button class="btn btn-primary btn-sm" onclick="rsOpen()" style="white-space:nowrap">+ Book a Room</button>
       <div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center">
         <button class="btn-nav" onclick="rcGoToMonth(0)"  style="padding:5px 7px;font-size:11.5px">Jan</button>
         <button class="btn-nav" onclick="rcGoToMonth(1)"  style="padding:5px 7px;font-size:11.5px">Feb</button>
@@ -2277,6 +2278,30 @@
       </div>
     </div>
     <div class="modal-foot"><div class="l"><button class="btn btn-danger btn-sm" id="rmDelBtn" onclick="rmDeleteBooking()" style="display:none">🗑 Delete</button></div><div class="r"><button class="btn btn-secondary" onclick="rmClose()">Cancel</button><button class="btn btn-primary" onclick="rmSaveNewBooking()">Create Reservation</button></div></div>
+  </div>
+</div>
+
+<!-- ===== BOOK A ROOM — guided search (dates+pax -> category availability -> specific room) ===== -->
+<div class="modal-overlay" id="roomSearchModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-hdr"><div><h2>Book a Room</h2><div class="modal-sub">Find and book an available room by dates and guest count</div></div><button class="modal-x" onclick="closeModal('roomSearchModal')">&times;</button></div>
+    <div class="modal-body">
+      <div id="rsStep1">
+        <div class="frow">
+          <div class="fg"><label>Check-in</label><input type="date" id="rs-start"></div>
+          <div class="fg"><label>Check-out</label><input type="date" id="rs-end"></div>
+        </div>
+        <div class="fg" style="max-width:160px"><label>Guests</label><input type="number" id="rs-pax" min="1" max="20" value="1"></div>
+        <div id="rs-err" style="display:none;color:#dc2626;font-size:12px;margin-top:4px"></div>
+        <button class="btn btn-primary" style="margin-top:10px" onclick="rsSearch()">Search Availability</button>
+      </div>
+      <div id="rsStep2" style="display:none">
+        <button class="btn btn-secondary btn-sm" style="margin-bottom:12px" onclick="rsBackToSearch()">&larr; Change dates</button>
+        <div id="rs-summary" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+        <div id="rsResults"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('roomSearchModal')">Close</button></div></div>
   </div>
 </div>
 

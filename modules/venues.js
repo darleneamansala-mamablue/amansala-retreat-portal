@@ -761,6 +761,85 @@ async function rmSendPaymentLink(){
     btn.disabled=false;btn.textContent=origLabel;
   }
 }
+// ── "Book a Room" — guided search: dates+pax -> room-type availability counts -> pick a specific room -> hand off to the New Reservation modal ──
+let _rsCheckIn=null,_rsCheckOut=null,_rsPax=1;
+function rsOpen(){
+  const today=fmtISO(new Date());
+  document.getElementById('rs-start').value=today;
+  document.getElementById('rs-end').value=fmtISO(addDays(pd(today),1));
+  document.getElementById('rs-pax').value='1';
+  document.getElementById('rs-err').style.display='none';
+  document.getElementById('rsStep1').style.display='block';
+  document.getElementById('rsStep2').style.display='none';
+  openModal('roomSearchModal');
+}
+function rsBackToSearch(){
+  document.getElementById('rsStep1').style.display='block';
+  document.getElementById('rsStep2').style.display='none';
+}
+// Same overlap/blocked-rooms logic as netlify/functions/get-availability.js, computed
+// client-side against AppData since the admin panel already has it all in memory.
+function rsComputeAvailability(checkIn,checkOut){
+  const blocked=new Set();
+  AppData.bookings.forEach(bk=>{
+    if(bk.status==='cancelled')return;
+    if(bk.startDate<checkOut&&bk.endDate>checkIn)(bk.blockedRooms||[]).forEach(r=>blocked.add(r));
+  });
+  return AppData.roomTypes.map(rt=>{
+    const rooms=rt.rooms||[];
+    const availableRooms=rooms.filter(r=>!blocked.has(r));
+    return{rt,availableRooms,totalRooms:rooms.length};
+  }).filter(x=>x.totalRooms>0&&x.availableRooms.length>0);
+}
+function rsSearch(){
+  const start=document.getElementById('rs-start').value,end=document.getElementById('rs-end').value;
+  const pax=parseInt(document.getElementById('rs-pax').value)||1;
+  const errEl=document.getElementById('rs-err');errEl.style.display='none';
+  if(!start||!end||end<=start){errEl.textContent='Please choose valid check-in/check-out dates.';errEl.style.display='block';return;}
+  _rsCheckIn=start;_rsCheckOut=end;_rsPax=pax;
+  const nights=Math.round((pd(end)-pd(start))/DAY_MS);
+  const results=rsComputeAvailability(start,end).sort((a,b)=>b.availableRooms.length-a.availableRooms.length);
+  document.getElementById('rs-summary').textContent=`${fmtDate(start)} – ${fmtDate(end)} · ${nights} night${nights!==1?'s':''} · ${pax} guest${pax!==1?'s':''}`;
+  const low=venRoIsLow(start);
+  const resEl=document.getElementById('rsResults');
+  if(!results.length){resEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No rooms available for these dates.</div>`;}
+  else{
+    resEl.innerHTML=results.map(({rt,availableRooms,totalRooms})=>{
+      const soloRate=rt.be_price_single??(low?(rt.price1_low??rt.price1):rt.price1);
+      const shareRate=low?(rt.price2_low??soloRate):(rt.price2??soloRate);
+      const priceLine=soloRate!=null?`Solo ${fmt$(soloRate)}${shareRate&&shareRate!==soloRate?` / Sharing ${fmt$(shareRate)}`:''}/night`:'No rate configured';
+      return`<div class="rs-type-card" style="border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer" onclick="rsToggleType('${rt.id}')">
+          <div>
+            <div style="font-weight:700;font-size:13.5px;color:var(--dark)">${rt.name}</div>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${priceLine}</div>
+          </div>
+          <div style="text-align:right;white-space:nowrap">
+            <div style="font-weight:700;font-size:13px;color:#059669">${availableRooms.length} of ${totalRooms} available</div>
+            <div style="font-size:10.5px;color:var(--teal);font-weight:600">Select room ▾</div>
+          </div>
+        </div>
+        <div id="rs-rooms-${rt.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap;gap:6px">
+          ${availableRooms.map(r=>`<button class="btn-nav" style="padding:6px 12px" onclick="rsPickRoom('${r}','${rt.id}')">${r}</button>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('rsStep1').style.display='none';
+  document.getElementById('rsStep2').style.display='block';
+}
+function rsToggleType(rtId){
+  const el=document.getElementById('rs-rooms-'+rtId);if(!el)return;
+  const showing=el.style.display==='flex';
+  el.style.display=showing?'none':'flex';
+}
+function rsPickRoom(room,rtId){
+  closeModal('roomSearchModal');
+  rmOpenNewBooking(room,rtId,_rsCheckIn);
+  document.getElementById('rm-end').value=_rsCheckOut;
+  document.getElementById('rm-adults').value=_rsPax;
+  rmUpdateNights();rmAutoRate();
+}
 // Click on an empty spot in a room's Rooms-tab grid row → open the New Reservation modal prefilled with that room+date.
 function rcTrackClick(event,room,rtId){
   if(event.target.closest('.bk'))return; // clicked an existing booking block, not empty space
