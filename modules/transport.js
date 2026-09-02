@@ -445,6 +445,70 @@ function trBuildGroups(subs,direction,heading,showUpgrade=false){
 
 function trTimeToMins(t){if(!t)return 0;const[h,m]=(t||'').split(':');return parseInt(h)*60+parseInt(m);}
 
+// ── CHARGE TO ROOM FOLIO ─────────────────────────────────────────────────
+// Manual "click to charge" button (staff trigger this around arrival time,
+// not automatic) — same folio-charge shape/pattern as the Spa "Charge to
+// Room" button (spaChargeApptToRoom in modules/spa.js), reusing the
+// roster/email-or-name guest matching already used to check who has
+// submitted transport info (trGuestMatchesSub/getTransportRoster above).
+function trFindRegForTransportSub(sub){
+  for(const reg of (AppData.regs||[])){
+    if(reg.bookingId!==sub.bookingId)continue;
+    const idx=(reg.guests||[]).findIndex(g=>trGuestMatchesSub({name:g.name,email:g.email||reg.email||''},sub));
+    if(idx>=0)return{reg,guest:reg.guests[idx],guestIdx:idx};
+  }
+  return null;
+}
+function trChargeTransport(subId,price){
+  const all=loadTransport();
+  const sub=all.find(s=>s.id===subId);if(!sub)return;
+  if(sub.chargedAt){showToast('Already charged.');return;}
+  const match=trFindRegForTransportSub(sub);
+  if(!match){showToast(`No matching registered guest found for ${sub.firstName} ${sub.lastName}.`);return;}
+  if(price==null){showToast('No price set for this ride yet.');return;}
+  const airportLabel=sub.arrivalAirport==='cancun'?'Cancún':'Tulum';
+  if(!confirm(`Charge ${match.guest.name}'s room folio ${fmt$(price)} for airport transport?`))return;
+  if(!match.reg.charges)match.reg.charges=[];
+  const chargeId=uid();
+  match.reg.charges.push({id:chargeId,date:sub.arrivalDate,category:'Transport',description:`Airport Transport (${airportLabel})`,amount:price,guestName:match.guest.name,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff',source:'transport'});
+  sub.chargedAt=new Date().toISOString();
+  sub.chargeId=chargeId;
+  sub.chargeAmount=price;
+  saveAll();
+  saveTransport(all);
+  logActivity('Charge added',`${fmt$(price)} — Airport Transport — ${match.guest.name}`,match.reg.bookingId);
+  showToast(`Charged ${fmt$(price)} to ${match.guest.name}'s folio ✓`);
+  refreshTransport();
+}
+function trChargeAllArrivals(date){
+  const all=loadTransport();
+  const todays=all.filter(s=>s.arrivalDate===date&&s.arrivalTime&&s.arrivalAirport&&s.status!=='cancelled'&&!s.chargedAt);
+  if(!todays.length){showToast('Nothing left to charge for this date.');return;}
+  if(!confirm(`Charge transport to room folios for all ${todays.length} guest(s) arriving on this date?`))return;
+  const groups=trComputeRideGroups(all.filter(s=>s.arrivalDate===date&&s.arrivalTime&&s.arrivalAirport),'arrivalTime','arrivalAirport');
+  const gMap=trGroupMapByEmail(groups);
+  let charged=0,skipped=0;
+  todays.forEach(sub=>{
+    const match=trFindRegForTransportSub(sub);
+    if(!match){skipped++;return;}
+    const info=gMap[sub.email]||{pricePerPax:trGetPrice(sub.arrivalAirport,1)};
+    const price=info.pricePerPax;
+    const airportLabel=sub.arrivalAirport==='cancun'?'Cancún':'Tulum';
+    if(!match.reg.charges)match.reg.charges=[];
+    const chargeId=uid();
+    match.reg.charges.push({id:chargeId,date:sub.arrivalDate,category:'Transport',description:`Airport Transport (${airportLabel})`,amount:price,guestName:match.guest.name,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff',source:'transport'});
+    sub.chargedAt=new Date().toISOString();
+    sub.chargeId=chargeId;
+    sub.chargeAmount=price;
+    charged++;
+  });
+  saveAll();
+  saveTransport(all);
+  logActivity('Bulk charge added',`Airport Transport charged for ${charged} guest(s)`,null);
+  showToast(`Charged ${charged} guest${charged!==1?'s':''}${skipped?`, ${skipped} skipped (no match)`:''} ✓`);
+  refreshTransport();
+}
+
 // Transport pricing table
 function trGetPrice(airport,size){
   const c=airport==='cancun';
@@ -1127,6 +1191,7 @@ function trBuildAllArrivals(){
               <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4">Retreat</th>
               <th style="padding:6px 10px;text-align:right;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4">Owes</th>
               <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4;white-space:nowrap">Onsite Upgrade</th>
+              <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4;white-space:nowrap">Folio</th>
             </tr></thead>
             <tbody>${rg.guests.map(g=>{
               const airChipSm=g.arrivalAirport==='cancun'
@@ -1134,6 +1199,9 @@ function trBuildAllArrivals(){
                 :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
               const gUpg=trGetUpgrade(g.bookingId,g.room);
               const gUpgCell=trUpgradeCellHtml(gUpg,g,10);
+              const chargeCell=g.chargedAt
+                ?`<span style="font-size:10.5px;font-weight:700;color:#15803d">✓ Charged $${g.chargeAmount}</span>`
+                :`<button onclick="trChargeTransport('${g.id}',${rg.pricePerPax})" style="font-size:10.5px;font-weight:700;color:#fff;background:#0e9494;border:none;border-radius:6px;padding:4px 9px;cursor:pointer;white-space:nowrap">💳 Charge $${rg.pricePerPax}</button>`;
               return`<tr style="border-bottom:1px solid rgba(200,216,212,.4)">
               <td style="padding:7px 10px;font-weight:600;color:#2d2520;white-space:nowrap">${g.firstName} ${g.lastName}</td>
               <td style="padding:7px 10px;font-weight:700;color:#2d2520">${g.room}</td>
@@ -1144,6 +1212,7 @@ function trBuildAllArrivals(){
               <td style="padding:7px 10px;color:#8a7e74;font-size:11.5px">${g.retreatLabel}</td>
               <td style="padding:7px 10px;text-align:right;font-weight:800;color:${rg.guests.length===1?'#5a5048':'#15803d'};white-space:nowrap">$${rg.pricePerPax}</td>
               <td style="padding:7px 10px">${gUpgCell}</td>
+              <td style="padding:7px 10px;white-space:nowrap">${chargeCell}</td>
             </tr>`;}).join('')}</tbody>
           </table>
         </div>
@@ -1153,10 +1222,12 @@ function trBuildAllArrivals(){
   </div>`;
 
   // ── Master chronological table with group + price columns ─────────────────
+  const unchargedCount=enriched.filter(s=>s.status!=='cancelled'&&!s.chargedAt).length;
   html+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;overflow:hidden">
-    <div style="background:#f2f8f6;padding:10px 18px;border-bottom:1px solid #c8d8d4;display:flex;align-items:center;gap:10px">
+    <div style="background:#f2f8f6;padding:10px 18px;border-bottom:1px solid #c8d8d4;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="font-size:12px;font-weight:700;color:#0e9494">All Arrivals · ${dateLabel}</span>
       <span style="font-size:11px;background:#0e9494;color:#fff;border-radius:99px;padding:1px 9px;font-weight:700">${enriched.length} total</span>
+      ${unchargedCount?`<button onclick="trChargeAllArrivals('${date}')" style="margin-left:auto;font-size:11.5px;font-weight:700;color:#fff;background:#0e9494;border:none;border-radius:7px;padding:6px 14px;cursor:pointer;white-space:nowrap">💳 Charge All (${unchargedCount})</button>`:`<span style="margin-left:auto;font-size:11px;color:#15803d;font-weight:700">✓ All charged</span>`}
     </div>
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -1171,6 +1242,7 @@ function trBuildAllArrivals(){
           <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Ride</th>
           <th style="padding:8px 12px;text-align:right;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Price</th>
           <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Onsite Upgrade</th>
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Folio</th>
         </tr></thead>
         <tbody>${enriched.map((s,i)=>{
           const gInfo=groupMap[s.email];
@@ -1186,6 +1258,10 @@ function trBuildAllArrivals(){
             :'—';
           const mUpg=trGetUpgrade(s.bookingId,s.room);
           const mUpgCell=trUpgradeCellHtml(mUpg,s,10);
+          const chargePrice=gInfo?gInfo.pricePerPax:trGetPrice(s.arrivalAirport,1);
+          const chargeCell=s.chargedAt
+            ?`<span style="font-size:10.5px;font-weight:700;color:#15803d">✓ $${s.chargeAmount}</span>`
+            :`<button onclick="trChargeTransport('${s.id}',${chargePrice})" style="font-size:10.5px;font-weight:700;color:#fff;background:#0e9494;border:none;border-radius:6px;padding:4px 9px;cursor:pointer;white-space:nowrap">💳 Charge</button>`;
           return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
             <td style="padding:9px 12px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
             <td style="padding:9px 12px;font-weight:700;color:#2d2520">${s.room}</td>
@@ -1197,6 +1273,7 @@ function trBuildAllArrivals(){
             <td style="padding:9px 12px">${rideChip}</td>
             <td style="padding:9px 12px;text-align:right">${priceCell}</td>
             <td style="padding:9px 12px">${mUpgCell}</td>
+            <td style="padding:9px 12px;white-space:nowrap">${chargeCell}</td>
           </tr>`;}).join('')}</tbody>
       </table>
     </div>

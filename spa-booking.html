@@ -92,6 +92,7 @@ const CAT_ICON={massage:'🪷',spirit:'🦋',fitness:'💪',yoga:'🧘',pilates:
 
 let SpaData={services:[],rooms:[],therapists:[]};
 let SpaAppointments=[];
+let SBRegs=[];
 let SB={step:1,sessionType:null,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
         policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null};
 
@@ -104,14 +105,40 @@ function fmtDateLong(ds){const d=new Date(ds+'T12:00:00');return d.toLocaleDateS
 
 async function init(){
   try{
-    const [{data:sd},{data:ad}]=await Promise.all([
+    const [{data:sd},{data:ad},{data:rd}]=await Promise.all([
       db.from('app_store').select('value').eq('key','spa_data').single(),
       db.from('app_store').select('value').eq('key','spa_appointments').single(),
+      db.from('app_store').select('value').eq('key','regs').single(),
     ]);
     if(sd?.value) SpaData=sd.value;
     SpaAppointments=(ad?.value)||[];
+    SBRegs=(rd?.value)||[];
   }catch(e){}
+  const cancelId=new URLSearchParams(location.search).get('cancel');
+  if(cancelId) return sbRenderCancelScreen(cancelId);
   renderStep();
+}
+
+// ── GUEST → FOLIO MATCHING ────────────────────────────────────────────────
+// Same name-only matching convention used by the admin Spa dashboard
+// (spaFindGuestRegForAppt in modules/spa.js), strengthened here with the
+// room number the guest entered: an exact name+room match is used
+// immediately; a name-only match is kept as a fallback so we don't leave a
+// hotel guest's charge unposted just because they mistyped their room.
+function sbFindGuestReg(clientName,roomNumber){
+  const key=(clientName||'').toLowerCase().replace(/\s+/g,' ').trim();
+  if(!key) return null;
+  const rn=(roomNumber||'').toLowerCase().replace(/\s+/g,' ').trim();
+  let fallback=null;
+  for(const reg of SBRegs){
+    const idx=(reg.guests||[]).findIndex(g=>(g.name||'').toLowerCase().replace(/\s+/g,' ').trim()===key);
+    if(idx>=0){
+      const match={reg,guest:reg.guests[idx],guestIdx:idx};
+      if(rn&&(reg.room||'').toLowerCase().replace(/\s+/g,' ').trim()===rn) return match;
+      if(!fallback) fallback=match;
+    }
+  }
+  return fallback;
 }
 
 function setStep(n){SB.step=n;renderStep();window.scrollTo({top:0,behavior:'smooth'});}
@@ -247,6 +274,7 @@ function renderStep4_Hotel(el){
         <div><label class="form-label">Last Name *</label><input class="form-input" id="sbLast" value="${esc(SB.lastName)}"></div>
       </div>
       <div class="form-group"><label class="form-label">Room Number *</label><input class="form-input" id="sbRoom" placeholder="e.g. GV3" value="${esc(SB.roomNumber)}"></div>
+      <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="sbEmail" type="email" placeholder="So we can send your confirmation" value="${esc(SB.email)}"></div>
       <button class="btn-primary" onclick="sbSubmitHotel()">Continue</button>
     </div>`;
 }
@@ -254,9 +282,11 @@ function sbSubmitHotel(){
   const first=document.getElementById('sbFirst').value.trim();
   const last=document.getElementById('sbLast').value.trim();
   const room=document.getElementById('sbRoom').value.trim();
+  const email=document.getElementById('sbEmail').value.trim();
   if(!first||!last){showToast('Please enter your name.');return;}
   if(!room){showToast('Please enter your room number.');return;}
-  SB.firstName=first;SB.lastName=last;SB.roomNumber=room;
+  if(!email){showToast('Please enter your email so we can send your confirmation.');return;}
+  SB.firstName=first;SB.lastName=last;SB.roomNumber=room;SB.email=email;
   setStep(5);
 }
 
@@ -429,6 +459,63 @@ function renderStep7_Confirm(el){
     </div>`;
 }
 
+// ── CONFIRMATION / CANCELLATION EMAILS ───────────────────────────────────
+function sbEmailShell(headline,bodyHtml){
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f0ea;font-family:'Helvetica Neue',Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f0ea;padding:32px 0">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+  <tr><td style="background:#2d6a6a;padding:28px 36px;text-align:center">
+    <div style="font-size:11px;letter-spacing:.15em;color:#a7d7d7;text-transform:uppercase;margin-bottom:6px">Amansala Eco-Chic Resort + Retreat</div>
+    <div style="font-size:22px;font-weight:700;color:#fff">${headline}</div>
+  </td></tr>
+  <tr><td style="padding:32px 36px">${bodyHtml}</td></tr>
+  <tr><td style="background:#f5f0ea;padding:20px 36px;text-align:center;border-top:1px solid #e8e3dc">
+    <p style="font-size:12px;color:#9ca3af;margin:0">Amansala Eco-Chic Resort · Tulum, México · retreats@amansala.com</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`;
+}
+function sbEmailRow(label,value){
+  return `<tr><td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:13px;color:#6b7280;width:130px;vertical-align:top">${label}</td><td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:14px;color:#1a2332;font-weight:500">${value}</td></tr>`;
+}
+async function sbSendConfirmEmail(appt,svc,therName,location_,folioPosted){
+  try{
+    const cancelUrl=`${location.origin}/spa-booking.html?cancel=${appt.id}`;
+    const body=`<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(SB.firstName)}, you're booked! Here are your appointment details:</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px">
+        ${sbEmailRow('Service',esc(svc.name))}
+        ${sbEmailRow('Date',fmtDateLong(appt.date))}
+        ${sbEmailRow('Time',fmtT(appt.start))}
+        ${sbEmailRow('Therapist',esc(therName))}
+        ${sbEmailRow('Meet at',esc(location_))}
+        ${appt.roomNumber?sbEmailRow('Your room',esc(appt.roomNumber)):''}
+        ${folioPosted?sbEmailRow('Payment','Charged to your room folio'):''}
+      </table>
+      <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px">Need to cancel? You can cancel free of charge up to 12 hours before your appointment using the button below.</p>
+      <div style="text-align:center;margin-bottom:8px">
+        <a href="${cancelUrl}" style="display:inline-block;background:#b45309;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.3px">Cancel My Appointment</a>
+      </div>`;
+    const html=sbEmailShell('Your Spa Appointment is Confirmed',body);
+    await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:appt.email,subject:'Spa Appointment Confirmed — Amansala',html})});
+  }catch(e){}
+}
+async function sbSendCancelEmail(appt,svc){
+  try{
+    const body=`<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(SB_cancelFirstName(appt))}, your appointment has been cancelled as requested:</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px">
+        ${sbEmailRow('Service',esc(svc?.name||''))}
+        ${sbEmailRow('Was scheduled',fmtDateLong(appt.date)+' at '+fmtT(appt.start))}
+      </table>
+      <p style="font-size:13.5px;color:#6b7280;margin:20px 0 0">We hope to welcome you for a treatment another time.</p>`;
+    const html=sbEmailShell('Spa Appointment Cancelled',body);
+    await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:appt.email,subject:'Spa Appointment Cancelled — Amansala',html})});
+  }catch(e){}
+}
+function SB_cancelFirstName(appt){return (appt.clientName||'').split(' ')[0]||'there';}
+
 async function sbFinalConfirm(){
   const btn=document.getElementById('sbConfirmBtn');
   btn.disabled=true;btn.textContent='Confirming…';
@@ -479,15 +566,54 @@ async function sbFinalConfirm(){
       notes:svc.groupPricing?(SB.guestCount+' guests · $'+SB.groupTotalPrice+' USD total'):'',
       createdAt:new Date().toISOString(),
     };
+
+    // Auto-post to the guest's room folio: re-fetch regs fresh (someone on
+    // the front desk may have changed charges/registrations since page
+    // load), find the matching registered guest, and push the charge
+    // directly onto their folio — same shape/category logic as the admin
+    // "Charge to Room" button (spaChargeApptToRoom in modules/spa.js), just
+    // run automatically at booking time instead of requiring a staff click.
+    let folioPosted=false;
+    if(isHotel){
+      try{
+        const {data:rd}=await db.from('app_store').select('value').eq('key','regs').single();
+        const latestRegs=(rd?.value)||[];
+        SBRegs=latestRegs;
+        const match=sbFindGuestReg(appt.clientName,SB.roomNumber);
+        if(match){
+          const price=svc.groupPricing?SB.groupTotalPrice:svc.price;
+          if(price!=null){
+            const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+            const category=/massage/i.test(svc.name)?'Massage':'Spa';
+            const ri=latestRegs.findIndex(r=>r.id===match.reg.id);
+            if(ri>=0){
+              if(!latestRegs[ri].charges) latestRegs[ri].charges=[];
+              latestRegs[ri].charges.push({id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:match.guest.name,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'});
+              await db.from('app_store').upsert({key:'regs',value:latestRegs,updated_at:new Date().toISOString()});
+              appt.folioStatus='POSTED';
+              appt.folioChargeId=chargeId;
+              appt.folioRegId=match.reg.id;
+              folioPosted=true;
+            }
+          }
+        }
+      }catch(e){}
+    }
+
     latest.push(appt);
     await db.from('app_store').upsert({key:'spa_appointments',value:latest,updated_at:new Date().toISOString()});
+    const ther=SpaData.therapists.find(t=>t.id===appt.therapistId)||SpaData.therapists.find(t=>t.id===SB.therapistId);
+    const roomLoc=SpaData.rooms.find(r=>r.id===appt.roomId);
+    const meetAt=roomLoc?(roomLoc.location?`${roomLoc.name} — ${roomLoc.location}`:roomLoc.name):'Our spa reception';
+    const therName=ther?`${ther.firstName} ${ther.lastName||''}`.trim():'Your therapist';
+    if(appt.email) await sbSendConfirmEmail(appt,svc,therName,meetAt,folioPosted);
     const el=document.getElementById('mainContent');
     document.getElementById('stepDots').style.display='none';
     if(isHotel){
       el.innerHTML=`<div class="msg">
         <div class="msg-icon">🌴</div>
         <div class="msg-title">You're Booked!</div>
-        <div class="msg-sub">See you for your <b>${esc(svc.name)}</b> on ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>The charge will appear on your room folio. Our team will confirm your reservation.</div>
+        <div class="msg-sub">See you for your <b>${esc(svc.name)}</b> on ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>${folioPosted?'The charge has been added to your room folio.':'The charge will appear on your room folio. Our team will confirm your reservation.'} We've sent the details — including your meeting location and a cancellation link — to ${esc(appt.email)}.</div>
       </div>`;
     }else{
       el.innerHTML=`<div class="msg">
@@ -499,6 +625,75 @@ async function sbFinalConfirm(){
   }catch(e){
     showToast('Something went wrong — please try again.');
     btn.disabled=false;btn.textContent='Confirm Booking';
+  }
+}
+
+// ── GUEST-FACING CANCELLATION (reached via ?cancel=<apptId> link in the
+// confirmation email) — enforces the 12-hour cutoff, reverses the folio
+// charge if one was auto-posted, and emails a cancellation confirmation. ──
+function sbApptDateTime(appt){return new Date(appt.date+'T'+appt.start+':00');}
+function sbRenderCancelScreen(apptId){
+  document.getElementById('stepDots').style.display='none';
+  const el=document.getElementById('mainContent');
+  const appt=SpaAppointments.find(a=>a.id===apptId);
+  if(!appt){
+    el.innerHTML=`<div class="msg"><div class="msg-icon">🤔</div><div class="msg-title">Appointment Not Found</div><div class="msg-sub">We couldn't find that appointment. Please contact us directly if you need to make a change.</div></div>`;
+    return;
+  }
+  const svc=SpaData.services.find(s=>s.id===appt.serviceId);
+  if(appt.status==='CANCELLED'){
+    el.innerHTML=`<div class="msg"><div class="msg-icon">✓</div><div class="msg-title">Already Cancelled</div><div class="msg-sub">This appointment has already been cancelled — nothing further to do.</div></div>`;
+    return;
+  }
+  const hoursLeft=(sbApptDateTime(appt)-new Date())/3600000;
+  if(hoursLeft<12){
+    el.innerHTML=`<div class="msg"><div class="msg-icon">⏰</div><div class="msg-title">Too Late to Cancel Online</div><div class="msg-sub">Your <b>${esc(svc?.name||'appointment')}</b> on ${fmtDateLong(appt.date)} at ${fmtT(appt.start)} is less than 12 hours away, so it can't be cancelled online. Please contact us directly at the front desk if you still need to cancel.</div></div>`;
+    return;
+  }
+  el.innerHTML=`<div class="card">
+    <div class="section-title">Cancel This Appointment?</div>
+    <div class="summary-row"><span class="lbl">Service</span><span class="val">${esc(svc?.name||'')}</span></div>
+    <div class="summary-row"><span class="lbl">Date</span><span class="val">${fmtDateLong(appt.date)}</span></div>
+    <div class="summary-row"><span class="lbl">Time</span><span class="val">${fmtT(appt.start)}</span></div>
+    <div class="section-sub" style="margin-top:14px">Cancelling is free since it's more than 12 hours out. ${appt.folioStatus==='POSTED'?'The charge on your room folio will be removed.':''}</div>
+    <button class="btn-primary" style="background:#b45309" id="sbCancelBtn" onclick="sbDoCancel('${apptId}')">Yes, Cancel My Appointment</button>
+  </div>`;
+}
+async function sbDoCancel(apptId){
+  const btn=document.getElementById('sbCancelBtn');
+  if(btn){btn.disabled=true;btn.textContent='Cancelling…';}
+  try{
+    const {data:ad}=await db.from('app_store').select('value').eq('key','spa_appointments').single();
+    const latest=(ad?.value)||[];
+    const idx=latest.findIndex(a=>a.id===apptId);
+    if(idx<0){showToast('Appointment not found.');return;}
+    const appt=latest[idx];
+    if(appt.status==='CANCELLED'){showToast('Already cancelled.');SpaAppointments=latest;sbRenderCancelScreen(apptId);return;}
+    if((sbApptDateTime(appt)-new Date())/3600000<12){showToast('Too close to your appointment time to cancel online.');SpaAppointments=latest;sbRenderCancelScreen(apptId);return;}
+    if(appt.folioStatus==='POSTED'&&appt.folioChargeId&&appt.folioRegId){
+      try{
+        const {data:rd}=await db.from('app_store').select('value').eq('key','regs').single();
+        const latestRegs=(rd?.value)||[];
+        const ri=latestRegs.findIndex(r=>r.id===appt.folioRegId);
+        if(ri>=0&&Array.isArray(latestRegs[ri].charges)){
+          latestRegs[ri].charges=latestRegs[ri].charges.filter(c=>c.id!==appt.folioChargeId);
+          await db.from('app_store').upsert({key:'regs',value:latestRegs,updated_at:new Date().toISOString()});
+        }
+      }catch(e){}
+    }
+    appt.status='CANCELLED';
+    appt.cancelledAt=new Date().toISOString();
+    appt.folioStatus=appt.folioStatus==='POSTED'?'REVERSED':appt.folioStatus;
+    latest[idx]=appt;
+    await db.from('app_store').upsert({key:'spa_appointments',value:latest,updated_at:new Date().toISOString()});
+    SpaAppointments=latest;
+    const svc=SpaData.services.find(s=>s.id===appt.serviceId);
+    if(appt.email) await sbSendCancelEmail(appt,svc);
+    const el=document.getElementById('mainContent');
+    el.innerHTML=`<div class="msg"><div class="msg-icon">✓</div><div class="msg-title">Cancelled</div><div class="msg-sub">Your appointment has been cancelled${appt.folioStatus==='REVERSED'?' and the charge removed from your folio' :''}. We've sent you a confirmation email.</div></div>`;
+  }catch(e){
+    showToast('Something went wrong — please try again.');
+    if(btn){btn.disabled=false;btn.textContent='Yes, Cancel My Appointment';}
   }
 }
 
