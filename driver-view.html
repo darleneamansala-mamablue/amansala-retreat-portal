@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amansala — Driver View</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;600;700;800&family=Cormorant+Garamond:wght@600&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Jost', sans-serif; background: #f0f4f8; min-height: 100vh; }
+
+/* ── Login (mirrors booking-hub.html's .staff-login-* driver login screen) ── */
+.staff-login-overlay{position:fixed;inset:0;background:#f0ece4;z-index:9999;display:flex;align-items:center;justify-content:center;}
+.staff-login-card{background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.12);padding:44px 48px;width:400px;max-width:93vw;text-align:center;}
+.staff-login-brand{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:600;color:#2d6a6a;letter-spacing:1px;margin-bottom:4px;}
+.staff-login-sub{font-size:11.5px;letter-spacing:3px;text-transform:uppercase;color:#7f8c9a;margin-bottom:28px;}
+.staff-login-field{width:100%;padding:11px 14px;border:1.5px solid #e0d8cc;border-radius:9px;font-family:'Jost',sans-serif;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:12px;background:#f7f4ef;}
+.staff-login-field:focus{border-color:#2d6a6a;}
+.staff-login-err{color:#dc2626;font-size:12.5px;min-height:18px;margin:-4px 0 10px;}
+.staff-login-btn{width:100%;padding:13px;font-size:14px;border-radius:10px;border:none;background:#2d6a6a;color:#fff;font-family:'Jost',sans-serif;font-weight:700;cursor:pointer;}
+.staff-login-btn:hover{background:#255757;}
+
+.header {
+  background: #1a2332;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.header-brand { color: #4db6ac; font-size: 18px; font-weight: 800; letter-spacing: 3px; }
+.header-driver { color: #fff; font-size: 14px; font-weight: 700; }
+.header-co { color: #4db6ac; font-size: 11px; font-weight: 600; letter-spacing: .5px; }
+.header-signout { background:none; border:1.5px solid rgba(255,255,255,.3); color:#fff; padding:6px 14px; border-radius:8px; font-family:'Jost',sans-serif; font-size:11.5px; cursor:pointer; margin-left:12px; }
+.header-signout:hover { border-color:#fff; }
+.header-right { display:flex; align-items:center; }
+
+.filters {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 12px 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.filter-btn {
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1.5px solid #e5e7eb;
+  background: #fff;
+  font-family: 'Jost', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #374151;
+  transition: all .15s;
+}
+.filter-btn.active {
+  background: #1a2332;
+  color: #fff;
+  border-color: #1a2332;
+}
+.date-input {
+  padding: 7px 10px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-family: 'Jost', sans-serif;
+  font-size: 13px;
+  color: #374151;
+  outline: none;
+}
+
+.body { padding: 16px; max-width: 960px; margin: 0 auto; }
+
+.pickup-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fdf4ff;
+  color: #7e22ce;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+.eta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.confirm-btn {
+  border: none;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-family: 'Jost', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+}
+.confirm-btn.pending { background: #f1f5f9; color: #6b7280; }
+.confirm-btn.done    { background: #d1fae5; color: #065f46; }
+
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.badge-arr    { background: #dbeafe; color: #1d4ed8; }
+.badge-dep    { background: #fce7f3; color: #9d174d; }
+.badge-cun    { background: #eff6ff; color: #2563eb; }
+.badge-tqo    { background: #f0fdf4; color: #16a34a; }
+.badge-share  { background: #f0fdf4; color: #16a34a; }
+.badge-conf   { background: #d1fae5; color: #065f46; }
+
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #9ca3af;
+}
+.empty-icon { font-size: 40px; margin-bottom: 12px; }
+.empty-title { font-size: 15px; font-weight: 700; color: #374151; margin-bottom: 6px; }
+
+.stats-bar {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 10px 16px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.stat { font-size: 12px; color: #6b7280; }
+.stat strong { color: #111827; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="staff-login-overlay" id="driverLoginOverlay">
+  <div class="staff-login-card">
+    <div class="staff-login-brand">Amansala</div>
+    <div class="staff-login-sub">Driver Portal</div>
+    <input type="text" class="staff-login-field" id="driverLoginUser" placeholder="Username" autocomplete="username">
+    <input type="password" class="staff-login-field" id="driverLoginPass" placeholder="Password" autocomplete="current-password">
+    <div class="staff-login-err" id="driverLoginErr"></div>
+    <button class="staff-login-btn" onclick="driverLoginSubmit()">Sign In</button>
+    <div style="margin-top:20px;font-size:11.5px;color:#7f8c9a">Need access? Contact <a href="mailto:darlene@amansala.com" style="color:#2d6a6a">darlene@amansala.com</a></div>
+  </div>
+</div>
+
+<!-- DASHBOARD (hidden until login) -->
+<div id="dashboard" style="display:none">
+  <div class="header">
+    <div class="header-brand">AMANSALA</div>
+    <div style="display:flex;align-items:center">
+      <div style="text-align:right">
+        <div class="header-driver" id="hdr-driver">Driver View</div>
+        <div class="header-co" id="hdr-co"></div>
+      </div>
+      <button class="header-signout" onclick="driverLogout()">Sign Out</button>
+    </div>
+  </div>
+
+  <div class="filters">
+    <button class="filter-btn active" id="f-upcoming" onclick="setFilter('upcoming')">Upcoming</button>
+    <button class="filter-btn" id="f-today" onclick="setFilter('today')">Today</button>
+    <button class="filter-btn" id="f-tomorrow" onclick="setFilter('tomorrow')">Tomorrow</button>
+    <input type="date" class="date-input" id="f-date" onchange="setFilter('date',this.value)" title="Pick a specific date">
+  </div>
+
+  <div class="stats-bar" id="stats-bar"></div>
+  <div class="body" id="main-body">
+    <div class="empty"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const _db = supabase.createClient('https://fzresosiqafiyxfgeyvk.supabase.co','sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB');
+
+// ── Driver accounts / session — same keys & shape as modules/driver-portal.js,
+// kept 100% interoperable with the embedded ?mode=driver view in booking-hub.html ──
+const DEF_DRIVERS=[
+  {id:'drv_irving',name:'Irving',username:'irving',password:'irving2026',active:true},
+  {id:'drv_salamon',name:'Salamon',username:'salamon',password:'salamon2026',active:true},
+];
+let driverAccounts=[];
+let currentDriverSession=null;
+let driverConfirmations={};
+
+function loadDrivers(){
+  const raw=localStorage.getItem('amansala_drivers');
+  if(raw){try{driverAccounts=JSON.parse(raw);}catch{driverAccounts=DEF_DRIVERS.map(d=>({...d}));}}
+  else{driverAccounts=DEF_DRIVERS.map(d=>({...d}));localStorage.setItem('amansala_drivers',JSON.stringify(driverAccounts));}
+  driverAccounts.forEach(d=>{if(d.active===undefined)d.active=true;});
+  if(!driverAccounts.length)driverAccounts=DEF_DRIVERS.map(d=>({...d}));
+}
+function saveDrivers(){
+  localStorage.setItem('amansala_drivers',JSON.stringify(driverAccounts));
+  (async()=>{try{await _db.from('app_store').upsert({key:'driverAccounts',value:driverAccounts,updated_at:new Date().toISOString()});}catch(e){console.warn('Driver account sync failed:',e);}})();
+}
+
+function loadDriverConfirmationsLocal(){
+  const raw=localStorage.getItem('amansala_driver_confirmations');
+  if(raw){try{driverConfirmations=JSON.parse(raw);}catch{driverConfirmations={};}}
+}
+async function syncDriverConfirmationsFromSupabase(){
+  try{
+    const{data}=await _db.from('app_store').select('value').eq('key','driverConfirmations').maybeSingle();
+    if(data?.value){driverConfirmations={...driverConfirmations,...data.value};localStorage.setItem('amansala_driver_confirmations',JSON.stringify(driverConfirmations));}
+  }catch(e){}
+}
+function saveDriverConfirmations(){
+  localStorage.setItem('amansala_driver_confirmations',JSON.stringify(driverConfirmations));
+  (async()=>{try{await _db.from('app_store').upsert({key:'driverConfirmations',value:driverConfirmations,updated_at:new Date().toISOString()});}catch(e){console.warn('Driver confirmation sync failed:',e);}})();
+}
+
+function getDriverSession(){
+  if(currentDriverSession)return currentDriverSession;
+  const raw=sessionStorage.getItem('amansala_driver_session');
+  if(raw){try{currentDriverSession=JSON.parse(raw);}catch{currentDriverSession=null;}}
+  return currentDriverSession;
+}
+
+function driverLoginSubmit(){
+  const username=document.getElementById('driverLoginUser').value.trim().toLowerCase();
+  const password=document.getElementById('driverLoginPass').value;
+  const errEl=document.getElementById('driverLoginErr');
+  errEl.textContent='';
+  if(!username||!password){errEl.textContent='Please enter your username and password.';return;}
+  function tryLogin(){
+    return driverAccounts.find(d=>d.active&&d.username.toLowerCase()===username&&d.password===password)
+      ||DEF_DRIVERS.find(d=>d.username===username&&d.password===password)||null;
+  }
+  let account=tryLogin();
+  if(!account){
+    errEl.textContent='Checking credentials…';
+    _db.from('app_store').select('value').eq('key','driverAccounts').maybeSingle().then(({data})=>{
+      if(data?.value&&Array.isArray(data.value)&&data.value.length){
+        const seen=new Map();
+        data.value.forEach(d=>d.username&&seen.set(d.username.toLowerCase(),d));
+        driverAccounts.forEach(d=>{if(d.username&&!seen.has(d.username.toLowerCase()))seen.set(d.username.toLowerCase(),d);});
+        driverAccounts=[...seen.values()];
+        localStorage.setItem('amansala_drivers',JSON.stringify(driverAccounts));
+      }
+      account=tryLogin();
+      if(!account){errEl.textContent='Incorrect username or password.';return;}
+      errEl.textContent='';
+      driverLoginComplete(account);
+    }).catch(()=>{errEl.textContent='Incorrect username or password.';});
+    return;
+  }
+  driverLoginComplete(account);
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('driverLoginOverlay')?.style.display!=='none')driverLoginSubmit();});
+
+function driverLoginComplete(account){
+  const session={id:account.id,name:account.name,username:account.username.toLowerCase()};
+  sessionStorage.setItem('amansala_driver_session',JSON.stringify(session));
+  sessionStorage.setItem('ama_driver_mode','1');
+  localStorage.setItem('ama_driver_persist','1');
+  currentDriverSession=session;
+  document.getElementById('driverLoginOverlay').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('hdr-driver').textContent=session.name;
+  document.getElementById('hdr-co').textContent='Driver View';
+  loadData();
+}
+function driverLogout(){
+  if(!confirm('Sign out?'))return;
+  sessionStorage.removeItem('amansala_driver_session');
+  sessionStorage.removeItem('ama_driver_mode');
+  localStorage.removeItem('ama_driver_persist');
+  currentDriverSession=null;
+  location.reload();
+}
+
+function bootstrap(){
+  loadDrivers();
+  loadDriverConfirmationsLocal();
+  const session=getDriverSession();
+  if(session){
+    document.getElementById('driverLoginOverlay').style.display='none';
+    document.getElementById('dashboard').style.display='block';
+    document.getElementById('hdr-driver').textContent=session.name;
+    document.getElementById('hdr-co').textContent='Driver View';
+    loadData();
+    return;
+  }
+  document.getElementById('driverLoginOverlay').style.display='flex';
+  setTimeout(()=>document.getElementById('driverLoginUser')?.focus(),120);
+}
+
+// ── Trip data + assignment (mirrors trComputeDriverAssignments in modules/transport.js,
+// generalized across every date present in the data instead of a single day, so the
+// Upcoming/Today/Tomorrow filters below have a full dataset to filter from) ──
+
+const PASTEL = ['#eff6ff','#f0fdf4','#faf5ff','#fffbeb','#fdf2f8','#f0fdfa','#fff7ed','#f0f9ff'];
+const TR_LEAD = { cancun: 240, tulum: 150 };
+const TR_ETA  = { cancun: 90,  tulum: 45  };
+
+let _entries = [];
+let _filter  = 'upcoming';
+let _filterDate = '';
+let regsData = [];
+
+function toMins(t) {
+  if (!t) return null;
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + (m || 0);
+}
+function addMins(t, mins) {
+  if (!t) return null;
+  const total = ((toMins(t) + mins) % 1440 + 1440) % 1440;
+  return String(Math.floor(total/60)).padStart(2,'0') + ':' + String(total%60).padStart(2,'0');
+}
+function fmtTime(t) {
+  if (!t) return '—';
+  const [h,m] = t.split(':').map(Number);
+  return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;
+}
+function fmtDate(d) {
+  if (!d) return '';
+  const dt = new Date(d + 'T12:00:00');
+  return dt.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function fetchAppStoreValue(key){
+  try{
+    const {data} = await _db.from('app_store').select('value').eq('key',key).maybeSingle();
+    return data?.value || [];
+  }catch(e){ console.warn('fetchAppStoreValue failed for '+key, e); return []; }
+}
+
+// Dedup: collapse same-guest duplicate submissions (mirrors Jorge's dedupedRows logic)
+function dedupeEntries(entries){
+  const map = new Map();
+  for (const e of entries) {
+    const em = (e.email || '').toLowerCase().trim();
+    const fn = (e.firstName || '').toLowerCase().trim();
+    const ln = (e.lastName  || '').toLowerCase().trim();
+    const key = `${em || (fn + '_' + ln)}|${e.arrivalDate || ''}|${e.departureDate || ''}`;
+    const cur = map.get(key);
+    if (!cur) { map.set(key, e); continue; }
+    const curHasBk = !!cur.bookingId && cur.bookingId !== 'individual';
+    const eHasBk   = !!e.bookingId && e.bookingId !== 'individual';
+    if (eHasBk && !curHasBk) map.set(key, e);
+    else if (eHasBk === curHasBk && e.id > cur.id) map.set(key, e);
+  }
+  return [...map.values()];
+}
+
+function lookupRoom(bookingId, email, firstName, lastName){
+  const match = regsData.find(r=>r.bookingId===bookingId && r.room && (r.guests||[]).some(g=>
+    (g.email && email && g.email.toLowerCase().trim()===email.toLowerCase().trim()) ||
+    (g.name && firstName && g.name.toLowerCase().trim()===(firstName+' '+lastName).toLowerCase().trim())
+  ));
+  return match ? match.room : '';
+}
+
+function trTimeToMinsLocal(t){ if(!t) return 0; const [h,m]=t.split(':').map(Number); return h*60+(m||0); }
+
+// Exact port of trComputeDriverAssignments(date) from modules/transport.js, looped
+// over every distinct date present in the data (the original took one date at a time).
+function computeAllAssignments(allSubs, bookingsById){
+  const dates = new Set();
+  allSubs.forEach(s=>{ if(s.arrivalDate) dates.add(s.arrivalDate); if(s.departureDate) dates.add(s.departureDate); });
+  let salamon=[], irving=[];
+  dates.forEach(date=>{
+    const arrivals = allSubs.filter(s=>s.arrivalDate===date&&s.arrivalTime&&s.arrivalAirport)
+      .map(s=>({...s,_kind:'arrival',room:lookupRoom(s.bookingId,s.email,s.firstName,s.lastName),
+        retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(bookingsById[s.bookingId]?.leaderName||bookingsById[s.bookingId]?.retreatName||'Unknown')}))
+      .sort((a,b)=>a.arrivalTime.localeCompare(b.arrivalTime));
+    const departures = allSubs.filter(s=>s.departureDate===date&&s.departureTime&&s.departureAirport)
+      .map(s=>({...s,_kind:'departure',room:lookupRoom(s.bookingId,s.email,s.firstName,s.lastName),
+        retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(bookingsById[s.bookingId]?.leaderName||bookingsById[s.bookingId]?.retreatName||'Unknown')}))
+      .sort((a,b)=>a.departureTime.localeCompare(b.departureTime));
+
+    const claimedDepIds = new Set();
+    arrivals.forEach(a=>{
+      if (a.arrivalAirport==='cancun') {
+        salamon.push({...a,note:''});
+        const anchor = trTimeToMinsLocal(a.arrivalTime);
+        const match = departures.find(d=>!claimedDepIds.has(d.id)&&d.departureAirport==='cancun'&&
+          trTimeToMinsLocal(d.departureTime)>=anchor&&trTimeToMinsLocal(d.departureTime)<=anchor+30);
+        if (match) {
+          claimedDepIds.add(match.id);
+          salamon.push({...match,note:`Round trip — combined with ${a.firstName} ${a.lastName}'s ${fmtTime(a.arrivalTime)} arrival`});
+        }
+      } else {
+        irving.push({...a,note:''});
+      }
+    });
+    departures.forEach(d=>{ if(!claimedDepIds.has(d.id)) irving.push({...d,note:''}); });
+  });
+  return {salamon, irving};
+}
+
+function toRenderEntry(t){
+  const isArr = t._kind==='arrival';
+  const airport = (isArr ? t.arrivalAirport : t.departureAirport || '').toLowerCase();
+  const time = isArr ? t.arrivalTime : t.departureTime;
+  const ot = isArr ? !!t.arrivalOT : !!t.departureOT;
+  const key = t.id + '_' + t._kind;
+  return {
+    key,
+    confirmed: !!driverConfirmations[key],
+    type: isArr ? 'arrival' : 'departure',
+    date: isArr ? t.arrivalDate : t.departureDate,
+    time, airport,
+    flight: t.flightNumber || '',
+    name: `${t.firstName||''} ${t.lastName||''}`.trim(),
+    room: t.room || '',
+    eta: (isArr && !ot) ? addMins(time, TR_ETA[airport] ?? 90) : null,
+    pickup: (!isArr && !ot) ? addMins(time, -(TR_LEAD[airport] ?? 240)) : null,
+    share: !!t.willingToShare,
+    notes: t.notes || '',
+    retreatLabel: t.retreatLabel || '',
+    ot,
+    note: t.note || '',
+  };
+}
+
+async function loadData(){
+  const session = getDriverSession(); if(!session) return;
+  const [bookings, regs, transportRows] = await Promise.all([
+    fetchAppStoreValue('bookings'),
+    fetchAppStoreValue('regs'),
+    _db.from('transport').select('*').then(({data})=>data||[]).catch(()=>[]),
+  ]);
+  regsData = regs || [];
+  const bookingsById = {};
+  (bookings||[]).forEach(b=>{ bookingsById[b.id]=b; });
+
+  const flatEntries = (transportRows||[])
+    .map(row => ({...(row.data||{}), id: row.data?.id || row.id, bookingId: row.data?.bookingId || row.booking_id}))
+    .filter(e => e.id);
+  const deduped = dedupeEntries(flatEntries);
+
+  await syncDriverConfirmationsFromSupabase();
+
+  const {salamon, irving} = computeAllAssignments(deduped, bookingsById);
+  const trips = session.name==='Irving' ? irving : salamon;
+  _entries = trips.map(toRenderEntry);
+
+  render();
+}
+
+async function confirmGroup(keysStr, confirmed){
+  const session = getDriverSession(); if(!session) return;
+  const keys = keysStr.split(',').filter(Boolean);
+  if(!keys.length) return;
+  keys.forEach(k=>{
+    if (confirmed) driverConfirmations[k] = {driver: session.name, confirmedAt: new Date().toISOString()};
+    else delete driverConfirmations[k];
+    _entries.forEach(e=>{ if(e.key===k) e.confirmed=confirmed; });
+  });
+  render();
+  saveDriverConfirmations();
+}
+
+function setFilter(f, val) {
+  _filter = f;
+  _filterDate = val || '';
+  ['upcoming','today','tomorrow'].forEach(k => {
+    document.getElementById('f-' + k)?.classList.toggle('active', k === f);
+  });
+  if (f !== 'date') document.getElementById('f-date').value = '';
+  render();
+}
+
+function filterEntries() {
+  const today    = new Date().toISOString().slice(0,10);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0,10);
+  return _entries.filter(e => {
+    if (_filter === 'today')    return e.date === today;
+    if (_filter === 'tomorrow') return e.date === tomorrow;
+    if (_filter === 'date')     return e.date === _filterDate;
+    return e.date >= today; // upcoming
+  });
+}
+
+// Greedy 20-min window → color map (per-driver view, no manual grouping override — that's
+// a Jorge-only feature backed by a settings table we don't have; every entry falls through
+// to auto-clustering here)
+function colorMap(entries) {
+  const map = new Map();
+  const clusters = [];
+  let ci = 0;
+  for (const e of entries) {
+    if (e.ot) continue;
+    const sortT = e.type === 'departure' ? (e.pickup || e.time) : e.time;
+    const mins = toMins(sortT);
+    if (!e.date || mins === null) continue;
+    const key = `${e.date}|${e.airport}|${e.type}`;
+    let joined = false;
+    for (const cl of clusters) {
+      if (cl.key !== key) continue;
+      if (cl.members.some(m => Math.abs(toMins(m.type==='departure'?(m.pickup||m.time):m.time) - mins) <= 20)) {
+        cl.members.push(e); joined = true; break;
+      }
+    }
+    if (!joined) clusters.push({ key, members: [e] });
+  }
+  clusters.forEach(cl => {
+    const color = PASTEL[ci++ % PASTEL.length];
+    cl.members.forEach(e => map.set(e, color));
+  });
+  return map;
+}
+
+function buildPickupGroups(entries) {
+  const groups = [];
+  for (const e of entries) {
+    const t = e.pickup || e.time;
+    let joined = false;
+    for (const g of groups) {
+      if (g.airport !== e.airport) continue;
+      if (Math.abs(toMins(g.pickup) - toMins(t)) <= 20) { g.members.push(e); joined = true; break; }
+    }
+    if (!joined) groups.push({ pickup: t, airport: e.airport, members: [e] });
+  }
+  groups.forEach(g => {
+    const minT = g.members.reduce((mn, e) => {
+      const t = e.pickup || e.time;
+      return toMins(t) < toMins(mn) ? t : mn;
+    }, g.pickup);
+    g.pickup = minT;
+  });
+  return groups;
+}
+
+function buildEtaGroups(entries) {
+  const groups = [];
+  for (const e of entries) {
+    const mins = toMins(e.eta || e.time);
+    let joined = false;
+    for (const g of groups) {
+      if (g.airport !== e.airport) continue;
+      if (Math.abs(toMins(g.eta) - mins) <= 20) { g.members.push(e); joined = true; break; }
+    }
+    if (!joined) groups.push({ eta: e.eta || e.time, airport: e.airport, members: [e] });
+  }
+  return groups;
+}
+
+function render() {
+  const filtered = filterEntries().sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    const aT = a.type === 'departure' ? (a.pickup||a.time||'') : (a.time||'');
+    const bT = b.type === 'departure' ? (b.pickup||b.time||'') : (b.time||'');
+    return aT.localeCompare(bT);
+  });
+
+  const today = new Date().toISOString().slice(0,10);
+  const normal = filtered.filter(e => !e.ot);
+  const ot     = filtered.filter(e => e.ot);
+  const cmap   = colorMap(normal);
+
+  const arrCount = filtered.filter(e => e.type==='arrival').length;
+  const depCount = filtered.filter(e => e.type==='departure').length;
+  const confCount = filtered.filter(e => e.confirmed && !e.ot).length;
+  document.getElementById('stats-bar').innerHTML = `
+    <div class="stat">🛬 <strong>${arrCount}</strong> arrival${arrCount!==1?'s':''}</div>
+    <div class="stat">🛫 <strong>${depCount}</strong> departure${depCount!==1?'s':''}</div>
+    <div class="stat">Total <strong>${filtered.length}</strong> guests</div>
+    ${confCount ? `<div class="stat" style="color:#065f46">✓ <strong>${confCount}</strong> confirmed</div>` : ''}
+  `;
+
+  if (!filtered.length) {
+    document.getElementById('main-body').innerHTML = `<div class="empty">
+      <div class="empty-icon">✈️</div>
+      <div class="empty-title">No transfers</div>
+      <div style="font-size:13px">No entries for the selected period</div>
+    </div>`;
+    return;
+  }
+
+  const byDate = new Map();
+  normal.forEach(e => {
+    if (!byDate.has(e.date)) byDate.set(e.date, { arr:[], dep:[] });
+    byDate.get(e.date)[e.type==='arrival'?'arr':'dep'].push(e);
+  });
+
+  const TH = (t, w='') => `<th style="padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;text-align:left;white-space:nowrap;border-bottom:2px solid #e5e7eb;${w?'width:'+w:''}">${t}</th>`;
+
+  let html = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:'Jost',sans-serif">
+  <thead><tr style="background:#f8fafc">
+    ${TH('Hab.','70px')}${TH('Nombre')}${TH('Tipo','100px')}${TH('Aeropuerto','80px')}${TH('Vuelo')}${TH('Hora')}${TH('Notas')}${TH('Retiro')}
+  </tr></thead><tbody>`;
+
+  for (const [date, {arr, dep}] of byDate) {
+    const isToday = date === today;
+    html += `<tr><td colspan="8" style="padding:8px 10px;background:${isToday?'#ccfbf1':'#f1f5f9'};font-size:11px;font-weight:700;color:${isToday?'#0f766e':'#374151'};border-top:2px solid #e5e7eb">${isToday?'📍 TODAY — ':''}${fmtDate(date)}</td></tr>`;
+
+    if (arr.length) {
+      const etaGroups = buildEtaGroups(arr);
+      etaGroups.forEach((g, gi) => {
+        if (gi > 0) html += `<tr><td colspan="8" style="padding:6px;background:#fff;border:none"></td></tr>`;
+        const keysStr = g.members.map(e => e.key).join(',');
+        const allDone = g.members.every(e => e.confirmed);
+        const grpBg   = cmap.get(g.members[0]) || '#f9fafb';
+        html += `<tr style="background:${grpBg}"><td colspan="8" style="padding:5px 10px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span class="eta-label">🛬 ETA hotel ~${fmtTime(g.eta)}</span>
+            <span style="font-size:10px;font-weight:600;color:#6b7280">${g.members.length} pax</span>
+            <button class="confirm-btn ${allDone?'done':'pending'}" onclick="confirmGroup('${keysStr}',${!allDone})">${allDone?'✓ Confirmado':'Confirmar ✓'}</button>
+            ${g.members[0].note?`<span style="font-size:11px;color:#15803d;font-weight:700">${esc(g.members[0].note)}</span>`:''}
+          </div></td></tr>`;
+        g.members.forEach(e => { html += renderRow(e, cmap.get(e)); });
+      });
+    }
+
+    if (dep.length) {
+      if (arr.length) html += `<tr><td colspan="8" style="padding:8px;background:#fff;border:none"></td></tr>`;
+      const pickupGroups = buildPickupGroups(dep);
+      pickupGroups.forEach((g, gi) => {
+        if (gi > 0) html += `<tr><td colspan="8" style="padding:6px;background:#fff;border:none"></td></tr>`;
+        const keysStr = g.members.map(e => e.key).join(',');
+        const allDone = g.members.every(e => e.confirmed);
+        const grpBg   = cmap.get(g.members[0]) || '#f9fafb';
+        html += `<tr style="background:${grpBg}"><td colspan="8" style="padding:5px 10px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span class="pickup-label">🚐 Pick-up ${fmtTime(g.pickup)}</span>
+            <span style="font-size:10px;font-weight:600;color:#6b7280">${g.members.length} pax</span>
+            <button class="confirm-btn ${allDone?'done':'pending'}" onclick="confirmGroup('${keysStr}',${!allDone})">${allDone?'✓ Confirmado':'Confirmar ✓'}</button>
+            ${g.members[0].note?`<span style="font-size:11px;color:#15803d;font-weight:700">${esc(g.members[0].note)}</span>`:''}
+          </div></td></tr>`;
+        g.members.forEach(e => { html += renderRow(e, cmap.get(e)); });
+      });
+    }
+  }
+
+  if (ot.length) {
+    html += `<tr><td colspan="8" style="padding:8px 10px;background:#fef2f2;font-size:11px;font-weight:700;color:#dc2626;border-top:2px solid #e5e7eb">🚗 Own Transport (${ot.length})</td></tr>`;
+    ot.forEach(e => { html += renderRow(e, null); });
+  }
+
+  html += `</tbody></table></div>`;
+  document.getElementById('main-body').innerHTML = html;
+}
+
+function renderRow(e, color) {
+  const isArr = e.type === 'arrival';
+  const apBadge = e.airport === 'cancun'
+    ? '<span class="badge badge-cun">CUN</span>'
+    : e.airport === 'tulum'
+      ? '<span class="badge badge-tqo">TQO</span>'
+      : '';
+  const typeBadge = isArr
+    ? '<span class="badge badge-arr">🛬 Arrival</span>'
+    : '<span class="badge badge-dep">🛫 Dep</span>';
+
+  // Flight status badge — we have no live flight-tracking integration, so this always
+  // falls back to a simple date-based SCHEDULED/LANDED/DEPARTED label.
+  const flightStatusBadge = (() => {
+    if (!e.flight) return '';
+    const today = new Date().toISOString().slice(0, 10);
+    let lbl;
+    if (e.date < today) lbl = isArr ? 'LANDED' : 'DEPARTED';
+    else                lbl = 'SCHEDULED';
+    const past      = lbl === 'LANDED' || lbl === 'DEPARTED';
+    const bg = past ? '#f1f5f9' : '#f0fdf4';
+    const cl = past ? '#9ca3af' : '#15803d';
+    return `<div style="margin-top:3px"><span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:${bg};color:${cl};white-space:nowrap">${lbl}</span></div>`;
+  })();
+
+  const timeCell = isArr
+    ? (e.time ? `<strong>${fmtTime(e.time)}</strong>${e.eta ? `<span style="color:#9ca3af;font-size:11px"> → ~${fmtTime(e.eta)}</span>` : ''}` : '—')
+    : (e.pickup ? `<span style="color:#7e22ce;font-weight:700">🚐 ${fmtTime(e.pickup)}</span>${e.time ? `<span style="color:#9ca3af;font-size:11px"> ✈ ${fmtTime(e.time)}</span>` : ''}` : (e.time ? fmtTime(e.time) : '—'));
+
+  const namePart = `<div style="font-weight:700;color:#111827;font-size:13px">${esc(e.name)}</div>
+    ${e.confirmed ? '<span class="badge badge-conf" style="font-size:9px">✓ Conf</span>' : ''}
+    ${e.share ? '<span class="badge badge-share" style="font-size:9px">Shared</span>' : ''}`;
+
+  const bg = color || '#fff';
+  const TD = (content, s='') => `<td style="padding:8px 10px;font-size:12.5px;vertical-align:middle;border-bottom:1px solid rgba(0,0,0,.04);${s}">${content}</td>`;
+
+  return `<tr style="background:${bg}">
+    ${TD(e.room ? `<span style="font-weight:600;background:#f1f5f9;padding:2px 7px;border-radius:5px;font-size:11.5px">${esc(e.room)}</span>` : '<span style="color:#d1d5db">—</span>')}
+    ${TD(namePart)}
+    ${TD(typeBadge)}
+    ${TD(apBadge, 'text-align:center')}
+    ${TD((e.flight ? `<span style="font-weight:600">${esc(e.flight)}</span>` : '<span style="color:#d1d5db">—</span>') + flightStatusBadge)}
+    ${TD(timeCell)}
+    ${TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${esc(e.notes)}</span>` : '')}
+    ${TD(e.retreatLabel ? `<span style="font-size:11px;color:#9ca3af">${esc(e.retreatLabel)}</span>` : '')}
+  </tr>`;
+}
+
+bootstrap();
+</script>
+</body>
+</html>
