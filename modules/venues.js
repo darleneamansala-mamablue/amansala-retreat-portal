@@ -1646,7 +1646,14 @@ function rcBuild(){
         });
         bl.addEventListener('dragend',()=>{bl.classList.remove('rc-dragging');rcDragData=null;});
         bl.addEventListener('mouseenter',e=>showTip(e,bk));bl.addEventListener('mousemove',moveTip);bl.addEventListener('mouseleave',hideTip);
-        bl.addEventListener('click',()=>{const btn=document.querySelectorAll('.tab-btn')[2];switchTab('teacherreg',btn);setTimeout(()=>regSelectRetreat(bk.id),80);});
+        bl.addEventListener('click',e=>{
+          e.stopPropagation();
+          if(regEntry&&hasGuest){
+            const guestIdx=(regEntry.guests||[]).findIndex(g=>g.name);
+            if(guestIdx>=0){openGuestFolio(regEntry.id,guestIdx);return;}
+          }
+          const btn=document.querySelectorAll('.tab-btn')[2];switchTab('teacherreg',btn);setTimeout(()=>regSelectRetreat(bk.id),80);
+        });
         track.appendChild(bl);
         for(let i=Math.max(0,li);i<Math.min(rcShowDays,li+wi);i++)occupied[i]++;
       });
