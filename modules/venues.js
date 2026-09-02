@@ -599,7 +599,7 @@ function venRoNightRate(rt,dateStr){
 }
 // ── "New Reservation" — room-only booking modal, opened by clicking an empty cell on a room's row in the Rooms grid ──
 let _rmEditId=null,_rmRoom=null,_rmRtId=null,_rmRateMode='solo';
-function rmClose(){document.getElementById('rmModal').style.display='none';}
+function rmClose(){const m=document.getElementById('rmModal');m.style.display='none';m.classList.remove('open');}
 function rmSetRateMode(mode){
   _rmRateMode=mode;
   const soloBtn=document.getElementById('rm-solo-btn'),shareBtn=document.getElementById('rm-share-btn');
@@ -652,7 +652,7 @@ function rmOpenNewBooking(room,rtId,startDate){
   document.getElementById('rm-pay-link-row').style.display='none';
   rmSetRateMode('solo');
   rmUpdateNights();
-  document.getElementById('rmModal').style.display='flex';
+  document.getElementById('rmModal').style.display='flex';document.getElementById('rmModal').classList.add('open');
   setTimeout(()=>document.getElementById('rm-leader').focus(),80);
 }
 function rmOpenEditBooking(id){
@@ -677,7 +677,7 @@ function rmOpenEditBooking(id){
   const hintEl=document.getElementById('rm-rate-hint');if(hintEl&&rt)hintEl.textContent=`${rt.name} · ${bk.roomRateNights||0} night(s) · ${fmt$(bk.roomRateTotal||0)} total`;
   rmUpdateNights();
   document.getElementById('rm-pay-link-row').style.display=bk.roomRateTotal>0?'block':'none';
-  document.getElementById('rmModal').style.display='flex';
+  document.getElementById('rmModal').style.display='flex';document.getElementById('rmModal').classList.add('open');
 }
 function rmDeleteBooking(){
   if(!_rmEditId||!confirm('Delete this reservation?'))return;
@@ -841,9 +841,9 @@ function rsPickRoom(room,rtId){
   rmUpdateNights();rmAutoRate();
 }
 // Click on an empty spot in a room's Rooms-tab grid row → open the New Reservation modal prefilled with that room+date.
-function rcTrackClick(event,room,rtId){
+function rcTrackClick(event,room,rtId,trackEl){
   if(event.target.closest('.bk'))return; // clicked an existing booking block, not empty space
-  const track=event.currentTarget;
+  const track=trackEl||event.currentTarget;
   const rect=track.getBoundingClientRect();
   const dayIdx=Math.floor((event.clientX-rect.left)/36);
   const days=rcShowDays;
@@ -1690,6 +1690,18 @@ function rcBuild(){
   const todayStr=new Date().toISOString().split('T')[0];
   const body=document.getElementById('rcBody');
   body.innerHTML='';
+  // Event delegation for empty-cell clicks: bound ONCE to the stable #rcBody container rather
+  // than to each individual .g-track element, which gets destroyed and recreated on every
+  // rcBuild() call. A per-element listener can silently go missing if a rebuild happens between
+  // page load and a real click (e.g. a background data refresh) -- delegation is immune to that.
+  if(!body.dataset.rcClickBound){
+    body.dataset.rcClickBound='1';
+    body.addEventListener('click',e=>{
+      const track=e.target.closest('.g-track');if(!track)return;
+      if(e.target.closest('.bk')||e.target.closest('.bk-lock'))return;
+      rcTrackClick(e,track.dataset.room,track.dataset.rtid,track);
+    });
+  }
 
   // Build days
   const days=[];for(let i=0;i<rcShowDays;i++)days.push(addDays(rcStart,i));
@@ -1756,7 +1768,6 @@ function rcBuild(){
         rcMoveRoom(rcDragData.bkId,rcDragData.fromRoom,room);
       });
       track.style.cursor='pointer';
-      track.addEventListener('click',e=>rcTrackClick(e,room,rt.id));
 
       days.forEach((d,i)=>{if(d.getDate()===1){const gl=document.createElement('div');gl.className='g-gl ms';gl.style.left=i*36+'px';track.appendChild(gl);}if(fmtISO(d)===todayStr){const tl=document.createElement('div');tl.className='g-gl today-l';tl.style.left=(i*36+18)+'px';track.appendChild(tl);}});
 
