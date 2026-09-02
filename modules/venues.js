@@ -616,13 +616,17 @@ async function rmAutoRate(){
   await venRoLoadPricingConfig();
   const low=venRoIsLow(start||fmtISO(new Date()));
   const season=low?'Low Season':'High Season';
-  const soloRate=rt.be_price_single??(low?(rt.price1_low??rt.price1):rt.price1);
-  const shareRate=low?(rt.price2_low??soloRate):(rt.price2??soloRate);
+  // Room Only rate (walk-in/individual guests, breakfast only -- no retreat inclusions) is
+  // a separate, cheaper category from the Yoga/retreat rate (price1/price2). For now this is
+  // calculated as the retreat Single rate minus $75/night, per Darlene -- a placeholder until
+  // she sends the real Room Only rate sheet.
+  const soloRate=low?(rt.roomOnlyPrice1_low??rt.roomOnlyPrice1):rt.roomOnlyPrice1;
+  const shareRate=low?(rt.roomOnlyPrice2_low??soloRate):(rt.roomOnlyPrice2??soloRate);
   const rate=_rmRateMode==='sharing'?shareRate:soloRate;
   if(rate!=null){
     rateEl.value=rate;
-    if(hintEl)hintEl.textContent=`${rt.name} · ${season} · Solo ${fmt$(soloRate??0)}${shareRate&&shareRate!==soloRate?` / Sharing ${fmt$(shareRate)}`:''}/night`;
-  }else if(hintEl)hintEl.textContent=`${rt.name} — no rate configured`;
+    if(hintEl)hintEl.textContent=`${rt.name} · Room Only · ${season} · Solo ${fmt$(soloRate??0)}${shareRate&&shareRate!==soloRate?` / Sharing ${fmt$(shareRate)}`:''}/night`;
+  }else if(hintEl)hintEl.textContent=`${rt.name} — no Room Only rate configured`;
 }
 function rmUpdateNights(){
   const start=document.getElementById('rm-start').value,end=document.getElementById('rm-end').value;
@@ -805,9 +809,9 @@ function rsSearch(){
   if(!results.length){resEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No rooms available for these dates.</div>`;}
   else{
     resEl.innerHTML=results.map(({rt,availableRooms,totalRooms})=>{
-      const soloRate=rt.be_price_single??(low?(rt.price1_low??rt.price1):rt.price1);
-      const shareRate=low?(rt.price2_low??soloRate):(rt.price2??soloRate);
-      const priceLine=soloRate!=null?`Solo ${fmt$(soloRate)}${shareRate&&shareRate!==soloRate?` / Sharing ${fmt$(shareRate)}`:''}/night`:'No rate configured';
+      const soloRate=low?(rt.roomOnlyPrice1_low??rt.roomOnlyPrice1):rt.roomOnlyPrice1;
+      const shareRate=low?(rt.roomOnlyPrice2_low??soloRate):(rt.roomOnlyPrice2??soloRate);
+      const priceLine=soloRate!=null?`Room Only · Solo ${fmt$(soloRate)}${shareRate&&shareRate!==soloRate?` / Sharing ${fmt$(shareRate)}`:''}/night`:'No Room Only rate configured';
       return`<div class="rs-type-card" style="border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer" onclick="rsToggleType('${rt.id}')">
           <div>
