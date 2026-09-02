@@ -759,6 +759,7 @@ function dbCrmSectionHtml(){
     ${dbCrmLinkRow('Retreat Leader','/leader-inquiry.html','https://amansala-portal.netlify.app/leader-inquiry.html','/retreat-admin')}
     ${dbCrmLinkRow('Wedding','/event-inquiry.html?type=wedding','https://amansala-portal.netlify.app/event-inquiry.html?type=wedding')}
     ${dbCrmLinkRow('Bachelorette','/event-inquiry.html?type=bachelorette','https://amansala-portal.netlify.app/event-inquiry.html?type=bachelorette')}
+    ${dbCrmLinkRow('Extra Nights','/extra-nights.html','https://amansala-portal.netlify.app/extra-nights.html')}
     <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0ece4">
       <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Recent Wedding / Bachelorette Inquiries</div>
       <div id="dbCrmRecent">${dbCrmRecentListHtml()}</div>
