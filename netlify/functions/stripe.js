@@ -67,8 +67,10 @@ exports.handler = async (event) => {
   const numAdults = Math.max(1, parseInt(adults) || 1);
   const nights = Math.max(1, Math.round((new Date(checkOut) - new Date(checkIn)) / 86400000));
 
-  // Our real seasonal single-occupancy rate — same source get-rates.js uses.
-  const baseRate = isLow(checkIn) ? (rt.price1_low ?? rt.price1) : rt.price1;
+  // A Booking Engine override (admin Rates tab) takes priority; otherwise our real
+  // seasonal single-occupancy rate — same source get-rates.js uses, so what a guest
+  // sees on the room card matches what they're actually charged.
+  const baseRate = rt.be_price_single ?? (isLow(checkIn) ? (rt.price1_low ?? rt.price1) : rt.price1);
   if (baseRate == null) return jsonErr(400, 'Room type has no price configured');
 
   const ciDate = new Date(checkIn + 'T12:00:00');

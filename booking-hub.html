@@ -870,6 +870,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
     <span class="tab-label">Sales Pipeline</span>
   </button>
+  <button class="tab-btn" id="bookingEngineTabBtn" onclick="switchTab('booking-engine',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <span class="tab-label">Booking Engine</span>
+  </button>
   <button class="tab-btn" id="menuTabBtn" onclick="switchTab('menu',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h12"/><circle cx="19" cy="18" r="2"/><path d="M19 16v-4"/></svg>
     <span class="tab-label">Menu</span>
@@ -1041,6 +1045,10 @@
 <!-- ============================= TAB: SALES PIPELINE ============================= -->
 <div class="tab-panel" id="tab-pipeline" style="flex-direction:column;overflow-y:auto">
   <div id="pipelineRoot"></div>
+</div>
+
+<div class="tab-panel" id="tab-booking-engine" style="flex-direction:column;overflow-y:auto">
+  <div id="beRoot"></div>
 </div>
 
 <!-- ===== PIPELINE: LOG ACTIVITY MODAL ===== -->
@@ -2223,6 +2231,7 @@
       <div class="frow"><div class="fg"><label>Venue Row</label><select id="vm-row"></select></div><div class="fg"><label>Pax</label><input type="number" id="vm-pax" min="0" placeholder="0"></div><div class="fg"><label>Meal Plan</label><select id="vm-mealplan"><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Status</label><select id="vm-status"><option value="requested">Soft Hold</option><option value="contract_sent">Contract Sent</option><option value="contract_signed">Contract Signed</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Room List Sent</option><option value="cancelled">Cancelled</option></select></div></div>
       <div id="vm-payment-widget" style="display:none;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:4px 0 8px"></div>
+      <div id="vm-charges-widget" style="display:none;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:4px 0 8px"></div>
       <div class="frow full"><div class="fg"><label>Notes</label><textarea id="vm-notes" placeholder="Internal notes..."></textarea></div></div>
       <div class="frow full"><div class="fg"><label>Retreat Document / Registration Link</label><input type="url" id="vm-doc-link" placeholder="https://…"></div></div>
       <div id="vm-history" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:14px">
@@ -4998,6 +5007,7 @@ function switchTab(id,btn){
   btn.classList.add('active');
   if(id==='dashboard') buildDashboard();
   if(id==='pipeline')  pipeRender();
+  if(id==='booking-engine') beInit();
   if(id==='venues')    venBuild();
   if(id==='roomcal')   rcBuild();
   if(id==='teacherreg'){regInitSel();regRender();}
@@ -5019,6 +5029,7 @@ function switchTab(id,btn){
 </script>
 <script src="modules/venues.js"></script>
 <script src="modules/sales-pipeline.js"></script>
+<script src="modules/booking-engine-admin.js"></script>
 <script>
 // ===== VENUE GANTT — moved to modules/venues.js =====
 // ===== DATE FINDER — moved to modules/venues.js (loaded above) =====

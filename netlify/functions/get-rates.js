@@ -62,8 +62,9 @@ exports.handler = async (event) => {
           price = manualRate.priceSingle;
           if (wknd && weekendPct) price = Math.round(price * (1 + weekendPct / 100));
         } else {
-          // Base rate: our existing real seasonal single-occupancy price.
-          const base = low ? (rt.price1_low ?? rt.price1) : rt.price1;
+          // Base rate: a Booking Engine override (set via the admin Rates tab) takes
+          // priority; otherwise our existing real seasonal single-occupancy price.
+          const base = rt.be_price_single ?? (low ? (rt.price1_low ?? rt.price1) : rt.price1);
           if (base != null) {
             const seasonalPct = Number(seasonal[String(month)] ?? 0);
             price = Math.round(base * (1 + seasonalPct / 100) * (wknd && weekendPct ? (1 + weekendPct / 100) : 1));

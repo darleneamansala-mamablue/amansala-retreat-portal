@@ -12,6 +12,8 @@ async function readAppStore(key, hdrs) {
 }
 
 // Map our real roomTypes shape to the field names the Extra Nights front-end expects.
+// be_* fields are set via the Booking Engine admin tab (modules/booking-engine-admin.js)
+// and live directly on the roomTypes app_store record — read them straight through.
 function mapRoomType(rt) {
   return {
     id: rt.id,
@@ -22,13 +24,11 @@ function mapRoomType(rt) {
     price_single_low: rt.price1_low ?? rt.price1 ?? null,
     price_double_high: rt.price2 ?? null,
     price_double_low: rt.price2_low ?? rt.price2 ?? null,
-    // No Booking Engine overrides configured yet — always falls through to the
-    // real price fields above. Left in place so a future admin screen can set these.
-    be_price_single: null,
-    be_price_double: null,
-    be_photos: [],
-    be_description: rt.desc ?? null,
-    be_amenities: [],
+    be_price_single: rt.be_price_single ?? null,
+    be_price_double: rt.be_price_double ?? null,
+    be_photos: rt.be_photos ?? [],
+    be_description: rt.be_description ?? rt.desc ?? null,
+    be_amenities: rt.be_amenities ?? [],
     color: rt.color ?? null,
   };
 }
@@ -44,8 +44,8 @@ exports.handler = async (event) => {
   const supaKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supaKey) return jsonErr(500, 'Server config error');
 
-  let checkIn, checkOut, listAll;
-  try { ({ checkIn, checkOut, listAll } = JSON.parse(event.body || '{}')); }
+  let checkIn, checkOut, listAll, source;
+  try { ({ checkIn, checkOut, listAll, source } = JSON.parse(event.body || '{}')); }
   catch { return jsonErr(400, 'Invalid JSON'); }
   if (!listAll && (!checkIn || !checkOut)) return jsonErr(400, 'Missing checkIn or checkOut');
 
@@ -60,8 +60,12 @@ exports.handler = async (event) => {
       readAppStore('roomTypes', hdrs),
       readAppStore('bookingEngineSettings', hdrs),
     ]);
-    // Offer every real, actively-used room type (has at least one physical room).
-    const roomTypes = (roomTypesRaw ?? []).filter(rt => (rt.rooms ?? []).length > 0).map(mapRoomType);
+    // Offer every real, actively-used room type (has at least one physical room),
+    // gated by whichever Booking Engine toggle applies to the calling page.
+    const enabledFlag = source === 'extra_nights' ? 'be_extra_nights' : 'be_enabled';
+    const roomTypes = (roomTypesRaw ?? [])
+      .filter(rt => (rt.rooms ?? []).length > 0 && rt[enabledFlag])
+      .map(mapRoomType);
 
     if (listAll) {
       return {
