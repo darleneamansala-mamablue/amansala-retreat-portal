@@ -597,6 +597,13 @@
 let _available      = [];
 let _settings       = {};
 let _selectedRt     = null;
+// Extra Nights is a single static offer, not a room-type shopping grid — guests
+// always see/pay this flat nightly rate and are assigned a Garden King room;
+// staff can upgrade them on-site. Per Darlene (2026-09-03): "that pricing needs
+// to stay static." Mirrored server-side in netlify/functions/stripe.js.
+const EXTRA_NIGHT_RATE      = 275;
+const EXTRA_NIGHT_ROOM_ID   = 'gko1';
+const EXTRA_NIGHT_ROOM_NAME = 'Garden King';
 let _guestCount     = 2;
 let _stripe         = null;
 let _stripeElems    = null;
@@ -930,20 +937,25 @@ async function searchRooms() {
   const checkOut = _calOut;
   if (!checkIn || !checkOut || checkOut <= checkIn) { openCalendar('in'); return; }
 
-  showOutput(`<div class="section-heading"><div><p class="kicker" style="font-size:32px;letter-spacing:.12em">Extra nights</p><h2>Choose your room</h2></div><p>Finding available rooms…</p></div><div class="state-box"><div class="state-icon" style="font-size:40px;margin-bottom:12px">⏳</div><div class="state-title">Checking availability</div></div>`);
-
+  // Static offer — no per-room availability shopping. Staff assign the actual
+  // physical room (Garden King, or an on-site upgrade) at check-in.
+  _available = [{
+    id: EXTRA_NIGHT_ROOM_ID,
+    name: EXTRA_NIGHT_ROOM_NAME,
+    be_price_single: EXTRA_NIGHT_RATE,
+    be_description: 'A bright, comfortable garden-view room — the perfect spot for an extra night before or after your retreat. Complimentary upgrades may be available on-site, subject to availability.',
+    max_occ: 2,
+    be_photos: [],
+  }];
   try {
     const res = await fetch('/.netlify/functions/get-availability', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ checkIn, checkOut, source: 'extra_nights' }),
     });
-    const { available, settings } = await res.json();
-    _available = available ?? [];
-    _settings  = settings ?? _settings;
-    renderRooms();
-  } catch (err) {
-    showOutput(`<div class="state-box"><div class="state-icon">😔</div><div class="state-title">Something went wrong</div><div class="state-sub">${esc(err.message)}</div></div>`);
-  }
+    const { settings } = await res.json();
+    _settings = settings ?? _settings;
+  } catch (err) { /* non-fatal — settings only affect taxes, rate itself is static */ }
+  renderRooms();
 }
 
 // ─── RENDER ROOMS ─────────────────────────────────────────────
@@ -972,8 +984,7 @@ function renderRooms() {
     const eyebrow = getRoomTag(rt);
     const desc    = rt.be_description ?? getDefaultDesc(rt);
     const feats   = getFeatures(rt);
-    const rate    = getRatePerPerson(rt, gc);
-    const { price: adjRate, original: origRate, isOffer } = applyRules(rate, checkIn);
+    const adjRate = EXTRA_NIGHT_RATE, origRate = null, isOffer = false;
     const img     = getRoomImage(rt);
     const photos  = rt.be_photos ?? [];
     const imgSrc  = photos[0] ?? img;
@@ -1088,8 +1099,7 @@ function openBooking(rtId) {
 
   const gc       = _guestCount;
   const nights   = Math.round((new Date(checkOut)-new Date(checkIn))/86400000);
-  const rate     = getRatePerPerson(_selectedRt, gc);
-  const { price: adjRate } = applyRules(rate, checkIn);
+  const adjRate  = EXTRA_NIGHT_RATE;
   const taxes    = _settings.taxes_pct ?? 0;
   const subtotal = adjRate * nights;
   const taxAmt   = Math.round(subtotal * taxes) / 100;
@@ -1099,12 +1109,6 @@ function openBooking(rtId) {
   document.getElementById('modal-subtitle').textContent = `${fmtDate(checkIn)} – ${fmtDate(checkOut)} · ${nights} night${nights!==1?'s':''}`;
 
   document.getElementById('modal-body').innerHTML = `
-    <div style="background:#ede9fe;border-left:3px solid #7c3aed;border-radius:8px;padding:11px 14px;margin-bottom:18px;display:flex;align-items:flex-start;gap:10px">
-      <span style="font-size:16px;line-height:1">🏷️</span>
-      <div style="font-size:12.5px;line-height:1.55;color:#4c1d95">
-        Use code <strong style="font-family:monospace;letter-spacing:.5px;font-size:13px">EXTRANIGHT</strong> for 20% off — we've pre-filled it below, just click <strong>Apply</strong>.
-      </div>
-    </div>
     <div class="form-summary" id="fm-summary"></div>
     <div class="form-grid" id="fm-grid">
       <div class="form-field">
@@ -1173,8 +1177,6 @@ function openBooking(rtId) {
   _refreshSummary();
   document.getElementById('booking-modal').classList.add('open');
   setTimeout(() => {
-    const discountInput = document.getElementById('fm-discount');
-    if (discountInput && !discountInput.value) discountInput.value = 'EXTRANIGHT';
     document.getElementById('fm-first')?.focus();
   }, 100);
 }
@@ -1201,8 +1203,7 @@ function _refreshSummary() {
   if (!_selectedRt || !_calIn || !_calOut) return;
   const nights    = Math.round((new Date(_calOut) - new Date(_calIn)) / 86400000);
   const gc        = parseInt(document.getElementById('fm-adults')?.value) || _guestCount;
-  const rate      = getRatePerPerson(_selectedRt, gc);
-  const { price: adjRate } = applyRules(rate, _calIn);
+  const adjRate   = EXTRA_NIGHT_RATE;
   const taxes     = _settings.taxes_pct ?? 0;
   const subtotal  = adjRate * nights;
   const discAmt   = Math.min(_discountAmount, subtotal);
@@ -1247,9 +1248,7 @@ async function applyDiscount() {
     }
 
     const nights   = Math.round((new Date(_calOut) - new Date(_calIn)) / 86400000);
-    const gc       = parseInt(document.getElementById('fm-adults')?.value) || _guestCount;
-    const rate     = getRatePerPerson(_selectedRt, gc);
-    const { price: adjRate } = applyRules(rate, _calIn);
+    const adjRate  = EXTRA_NIGHT_RATE;
     const subtotal = adjRate * nights;
 
     _discountCode   = data.code;

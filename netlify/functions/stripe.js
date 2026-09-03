@@ -77,8 +77,12 @@ exports.handler = async (event) => {
   const month = ciDate.getMonth() + 1;
   const dow = ciDate.getDay();
   const isWeekend = dow === 0 || dow === 5 || dow === 6;
-  const seasonalPct = Number(seasonalAdj[String(month)] ?? 0);
-  const rate = Math.round(baseRate * (1 + seasonalPct / 100) * (isWeekend && weekendPremium ? (1 + weekendPremium / 100) : 1));
+  // Extra Nights pricing is intentionally static — no seasonal/weekend swings,
+  // per Darlene (2026-09-03). Only Book a Stay (source === 'Escape') fluctuates.
+  const isStatic = source === 'Extra Night';
+  const seasonalPct = isStatic ? 0 : Number(seasonalAdj[String(month)] ?? 0);
+  const weekendMult = isStatic ? 1 : (isWeekend && weekendPremium ? (1 + weekendPremium / 100) : 1);
+  const rate = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
   const subtotal = rate * nights;
 
   // Validate and apply discount code server-side
