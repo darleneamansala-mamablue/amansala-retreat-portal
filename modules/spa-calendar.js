@@ -19,20 +19,18 @@ let spaCalDate = new Date(); spaCalDate.setHours(0, 0, 0, 0);
 let spaCalMode = 'therapist';
 let spaCalDragApptId = null;
 
-// One-click filter to a single wellness category — Darlene's ask: "click to
-// body workers, only include the body workers / spirit workers / yoga
-// fitness — 3 buttons". Yoga & Fitness is one combined button covering all
-// non-massage, non-spirit movement categories (yoga/fitness/pilates/dance),
-// matching how she described it as a single bucket, not four separate ones.
+// One-click filter to a wellness category — Darlene's revised ask: two
+// groups, Body Workers on their own and everything else (Fitness, Yoga,
+// Spirit, Pilates, Dance) combined under one "the rest" bucket, with a
+// button to show that combined section on its own.
 let spaCalGroupFilter = 'all';
 const SPA_CAL_FILTER_BTNS = [
   { key: 'massage', label: '🪷 Body Workers' },
-  { key: 'spirit', label: '🦋 Spirit Workers' },
-  { key: 'yogafit', label: '🧘 Yoga & Fitness' },
+  { key: 'other', label: '🌿 Fitness, Yoga & Spirit' },
 ];
 function spaCalGroupMatchesFilter(groupKey) {
   if (spaCalGroupFilter === 'all') return true;
-  if (spaCalGroupFilter === 'yogafit') return ['yoga', 'fitness', 'pilates', 'dance'].includes(groupKey);
+  if (spaCalGroupFilter === 'other') return groupKey !== 'massage';
   return groupKey === spaCalGroupFilter;
 }
 function spaCalSetGroupFilter(key) {

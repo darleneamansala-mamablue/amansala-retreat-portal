@@ -111,7 +111,7 @@ async function spaInit() {
 
 function spaSetView(v) {
   spaCurView = v;
-  ['dashboard', 'calendar', 'services', 'therapists', 'rooms', 'public', 'payroll'].forEach(id => {
+  ['dashboard', 'confirm', 'calendar', 'services', 'therapists', 'rooms', 'public', 'payroll'].forEach(id => {
     const btn = document.getElementById('spaView' + id.charAt(0).toUpperCase() + id.slice(1));
     if (btn) {
       btn.style.background = id === v ? 'var(--teal,#2d6a6a)' : 'transparent';
@@ -129,6 +129,7 @@ function spaRender() {
   const addBtn = (label, onclick) => `<button onclick="${onclick}" style="display:flex;align-items:center;gap:6px;padding:9px 18px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>${label}</button>`;
   if (spaCurView === 'dashboard') { addWrap.innerHTML = ''; spaRenderDashboard(); }
+  if (spaCurView === 'confirm') { addWrap.innerHTML = ''; spaRenderConfirmations(); }
   if (spaCurView === 'calendar') { spaCalRenderToolbar(); spaCalRender(); }
   if (spaCurView === 'services') { addWrap.innerHTML = addBtn('New Service', 'spaShowServiceForm(null)'); spaRenderServices(); }
   if (spaCurView === 'therapists') { addWrap.innerHTML = addBtn('New Therapist', 'spaShowTherapistForm(null)'); spaRenderTherapists(); }
@@ -198,6 +199,88 @@ function spaRenderDashboard() {
     </div>
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
       ${todays.length ? `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px 130px;gap:10px;padding:10px 16px;background:#f8f5f0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74"><div>Time</div><div>Service</div><div>Client</div><div>Therapist</div><div style="text-align:right">Status</div><div></div></div>${todays.map(row).join('')}` : '<div style="padding:40px;text-align:center;color:#9ca3af;font-style:italic">No services booked for this day.</div>'}
+    </div>
+  </div>`;
+}
+
+// ── CONFIRMATIONS — every upcoming service across all days, pending vs
+// confirmed, filterable by category — a dedicated cross-date view since the
+// Dashboard above only shows one day at a time. This is the place to check
+// "did we confirm everything booked this week/month" in one look. ─────────
+let spaConfirmFilter = 'all';    // 'all' | 'pending' | 'confirmed'
+let spaConfirmCatFilter = 'all'; // 'all' | 'massage' | 'spirit' | 'yogafit'
+function spaConfirmCatMatches(a) {
+  if (spaConfirmCatFilter === 'all') return true;
+  const cat = SpaData.services.find(s => s.id === a.serviceId)?.category;
+  if (spaConfirmCatFilter === 'other') return cat !== 'massage';
+  return cat === spaConfirmCatFilter;
+}
+function spaConfirmSetCatFilter(key) {
+  spaConfirmCatFilter = (spaConfirmCatFilter === key) ? 'all' : key;
+  spaRenderConfirmations();
+}
+function spaConfirmSetStatusFilter(key) {
+  spaConfirmFilter = key;
+  spaRenderConfirmations();
+}
+function spaRenderConfirmations() {
+  const el = document.getElementById('spaContent');
+  const today = spaCalFmtDateStr(new Date());
+  const svcName = id => SpaData.services.find(s => s.id === id)?.name || 'Service';
+  const therName = id => id ? (SpaData.therapists.find(t => t.id === id)?.firstName || 'Unknown') : null;
+
+  const allUpcoming = (SpaAppointments || []).filter(a => a.status !== 'CANCELLED' && a.date >= today);
+  const pendingCount = allUpcoming.filter(a => !a.confirmed).length;
+  const upcoming = allUpcoming
+    .filter(spaConfirmCatMatches)
+    .filter(a => spaConfirmFilter === 'all' ? true : spaConfirmFilter === 'pending' ? !a.confirmed : !!a.confirmed)
+    .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+
+  const statusFilters = [{ key: 'all', label: 'All' }, { key: 'pending', label: 'Pending' }, { key: 'confirmed', label: 'Confirmed' }];
+
+  const row = a => {
+    const confirmed = !!a.confirmed;
+    const unassigned = !a.therapistId;
+    const pref = a.therapistPreference?.type;
+    const prefLabel = unassigned ? (pref === 'male' ? 'Any male therapist' : pref === 'female' ? 'Any female therapist' : 'Unassigned') : therName(a.therapistId);
+    const match = spaFindGuestRegForAppt(a);
+    const bkMatch = !match ? spaFindGuestBookingForAppt(a) : null;
+    const chargeGuestLabel = match ? match.guest.name : bkMatch?.bk.leaderName;
+    const chargeBtn = a.folioStatus === 'POSTED'
+      ? `<span style="font-size:10.5px;font-weight:700;color:#15803d;white-space:nowrap">✓ Charged</span>`
+      : (chargeGuestLabel
+        ? `<button onclick="spaChargeApptToRoom('${a.id}')" style="font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;border:1.5px solid #0d9488;background:#f0fdfa;color:#0f766e;cursor:pointer;white-space:nowrap">🧾 Charge</button>`
+        : '');
+    const dateLabel = new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return `<div style="display:grid;grid-template-columns:120px 76px 1fr 1fr 150px 120px 96px;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #f0ebe0;background:${confirmed ? '#fff' : '#fffbeb'}">
+      <div style="font-weight:700;color:#2d2520;font-size:12.5px">${dateLabel}</div>
+      <div style="font-weight:700;color:#2d2520;font-size:12.5px">${spaCalFmtT(a.start)}</div>
+      <div style="font-size:13px;color:#2d2520">${menuEsc(svcName(a.serviceId))}</div>
+      <div style="font-size:12.5px;color:#6b7280">${menuEsc(a.clientName || '')}</div>
+      <div style="font-size:12.5px;${unassigned ? 'color:#dc2626;font-weight:700' : 'color:#4a4038'}">${menuEsc(prefLabel)}</div>
+      <div style="text-align:right">
+        <button onclick="spaDashToggleConfirm('${a.id}');spaRenderConfirmations()" style="font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:20px;border:1.5px solid ${confirmed ? '#86efac' : '#fde68a'};background:${confirmed ? '#dcfce7' : '#fef3c7'};color:${confirmed ? '#15803d' : '#92400e'};cursor:pointer">${confirmed ? '✓ Confirmed' : 'Pending'}</button>
+      </div>
+      <div style="text-align:right">${chargeBtn}</div>
+    </div>`;
+  };
+
+  el.innerHTML = `<div style="max-width:1100px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:#2d2520">Upcoming Confirmations</div>
+      ${pendingCount ? `<span style="background:#fef3c7;color:#92400e;border-radius:99px;padding:3px 12px;font-size:12px;font-weight:700">${pendingCount} pending</span>` : `<span style="background:#dcfce7;color:#15803d;border-radius:99px;padding:3px 12px;font-size:12px;font-weight:700">All caught up ✓</span>`}
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <span style="font-size:11px;font-weight:700;color:#8a7e74;text-transform:uppercase;letter-spacing:.4px">Status:</span>
+      ${statusFilters.map(f => `<button onclick="spaConfirmSetStatusFilter('${f.key}')" style="padding:6px 13px;font-size:12px;font-weight:700;border-radius:99px;cursor:pointer;font-family:'Jost',sans-serif;border:1.5px solid ${spaConfirmFilter === f.key ? 'var(--teal,#2d6a6a)' : '#e8dfd4'};background:${spaConfirmFilter === f.key ? 'var(--teal,#2d6a6a)' : '#fff'};color:${spaConfirmFilter === f.key ? '#fff' : 'var(--dark)'}">${f.label}</button>`).join('')}
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:18px">
+      <span style="font-size:11px;font-weight:700;color:#8a7e74;text-transform:uppercase;letter-spacing:.4px">Category:</span>
+      ${SPA_CAL_FILTER_BTNS.map(f => `<button onclick="spaConfirmSetCatFilter('${f.key}')" style="padding:6px 13px;font-size:12px;font-weight:700;border-radius:99px;cursor:pointer;font-family:'Jost',sans-serif;border:1.5px solid ${spaConfirmCatFilter === f.key ? 'var(--teal,#2d6a6a)' : '#e8dfd4'};background:${spaConfirmCatFilter === f.key ? 'var(--teal,#2d6a6a)' : '#fff'};color:${spaConfirmCatFilter === f.key ? '#fff' : 'var(--dark)'}">${f.label}</button>`).join('')}
+      ${spaConfirmCatFilter !== 'all' ? `<button onclick="spaConfirmSetCatFilter('all')" style="padding:6px 13px;font-size:11.5px;font-weight:600;border-radius:99px;cursor:pointer;font-family:'Jost',sans-serif;border:1.5px dashed var(--muted);background:none;color:var(--muted)">Show All</button>` : ''}
+    </div>
+    <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
+      ${upcoming.length ? `<div style="display:grid;grid-template-columns:120px 76px 1fr 1fr 150px 120px 96px;gap:10px;padding:10px 16px;background:#f8f5f0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74"><div>Date</div><div>Time</div><div>Service</div><div>Client</div><div>Therapist</div><div style="text-align:right">Status</div><div></div></div>${upcoming.map(row).join('')}` : '<div style="padding:40px;text-align:center;color:#9ca3af;font-style:italic">Nothing in this view.</div>'}
     </div>
   </div>`;
 }
