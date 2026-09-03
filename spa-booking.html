@@ -423,7 +423,7 @@ function sbRenderSlots(candidates,svc){
   const wrap=document.getElementById('sbSlots');
   if(!candidates.length){wrap.innerHTML=`<div class="no-slots">No therapists available for this service yet. Please try a different preference or contact us directly.</div>`;return;}
   const slots=[];
-  for(let m=SB_START_H*60;m<=SB_END_H*60-svc.duration;m+=15){
+  for(let m=SB_START_H*60;m<=SB_END_H*60-svc.duration;m+=30){
     const assign=sbAutoAssign(candidates,SB.date,m,svc.duration);
     if(assign) slots.push({start:m,assign});
   }
