@@ -739,7 +739,20 @@ function renderGuestFolio(){
         <button class="btn btn-primary btn-sm" onclick="gfChargeSave()">Save</button>
       </div>
     </div>`:'';
+  const bkBalance=bk?calcBkBalance(bk):null;
+  const infoRow=(label,value)=>value?`<div style="display:flex;gap:8px;padding:3px 0"><span style="font-size:11px;color:var(--muted);min-width:52px">${label}</span><span style="font-size:12.5px;color:var(--dark)">${escHtml(value)}</span></div>`:'';
   document.getElementById('gfBody').innerHTML=`
+    <div style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;margin-bottom:${(guest.email||guest.phone||guest.notes)?'10px':'0'}">
+        ${infoRow('Email',guest.email)}
+        ${infoRow('Phone',guest.phone)}
+      </div>
+      ${guest.notes?`<div style="font-size:12px;color:var(--dark);background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px"><span style="font-weight:700;color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.6px">Notes</span><div style="margin-top:2px">${escHtml(guest.notes)}</div></div>`:''}
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">This Guest's Charges</div><div style="font-size:15px;font-weight:800;color:var(--dark)">${fmt$(total)}</div></div>
+        ${bkBalance?`<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Retreat Balance (all guests)</div><div style="font-size:15px;font-weight:800;color:${bkBalance.balance>0?'#dc2626':'#16a34a'}">${bkBalance.balance>0?fmt$(bkBalance.balance):'Paid in full'}</div></div>`:''}
+      </div>
+    </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
       <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)">Folio${total>0?' · '+fmt$(total)+' total':''}</span>
       <button class="btn btn-secondary btn-sm" onclick="gfToggleAdd()">${_gfAddOpen?'Cancel':'+ Add Charge'}</button>

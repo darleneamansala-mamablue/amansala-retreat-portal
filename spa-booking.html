@@ -85,7 +85,7 @@ const SUPA_URL='https://fzresosiqafiyxfgeyvk.supabase.co';
 const SUPA_KEY='sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
 const db=supabase.createClient(SUPA_URL,SUPA_KEY);
 
-const SB_START_H=7, SB_END_H=21;
+const SB_START_H=10, SB_END_H=19;
 const CAT_ORDER=['massage','spirit','fitness','yoga','pilates','dance'];
 const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates',dance:'Dance'};
 const CAT_ICON={massage:'🪷',spirit:'🦋',fitness:'💪',yoga:'🧘',pilates:'🤸',dance:'💃'};
@@ -388,6 +388,17 @@ function sbAutoAssign(candidates,dateStr,startMin,duration){
   counts.sort((a,b)=>a.n-b.n);
   return {therapist:counts[0].t, room:freeRoom};
 }
+// Every eligible+free therapist at this exact time — not just the least-busy
+// one — so the guest can pick who they want instead of us silently deciding.
+function sbAllFreeAssignments(candidates,dateStr,startMin,duration){
+  const free=candidates.filter(t=>sbSlotFree(t.id,null,dateStr,startMin,duration));
+  if(!free.length) return [];
+  const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  if(!svc.roomRequired) return free.map(t=>({therapist:t,room:null}));
+  const freeRooms=SpaData.rooms.filter(r=>!SpaAppointments.some(a=>a.date===dateStr&&a.roomId===r.id&&a.status!=='CANCELLED'&&startMin<hhmmToMin(a.start)+(a.duration||60)&&(startMin+duration)>hhmmToMin(a.start)));
+  if(!freeRooms.length) return [];
+  return free.slice(0,freeRooms.length).map((t,i)=>({therapist:t,room:freeRooms[i]}));
+}
 function sbNextDays(n){
   const out=[];
   const today=new Date();today.setHours(0,0,0,0);
@@ -422,15 +433,19 @@ function sbPickDate(ds){SB.date=ds;renderStep6_DateTime(document.getElementById(
 function sbRenderSlots(candidates,svc){
   const wrap=document.getElementById('sbSlots');
   if(!candidates.length){wrap.innerHTML=`<div class="no-slots">No therapists available for this service yet. Please try a different preference or contact us directly.</div>`;return;}
-  const slots=[];
+  const rows=[];
   for(let m=SB_START_H*60;m<=SB_END_H*60-svc.duration;m+=30){
-    const assign=sbAutoAssign(candidates,SB.date,m,svc.duration);
-    if(assign) slots.push({start:m,assign});
+    const assigns=sbAllFreeAssignments(candidates,SB.date,m,svc.duration);
+    if(assigns.length) rows.push({start:m,assigns});
   }
-  if(!slots.length){wrap.innerHTML=`<div class="no-slots">No open times on this day — try another date.</div>`;return;}
-  wrap.innerHTML=`<div class="slot-grid">${slots.map(s=>
-    `<button class="slot-btn" onclick="sbPickSlot(${s.start},'${s.assign.therapist.id}','${s.assign.room?s.assign.room.id:''}')">${fmtT(minToHHMM(s.start))}</button>`
-  ).join('')}</div>`;
+  if(!rows.length){wrap.innerHTML=`<div class="no-slots">No open times on this day — try another date.</div>`;return;}
+  wrap.innerHTML=`<div style="display:flex;flex-direction:column;gap:12px">${rows.map(r=>`
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#8a7e74;margin-bottom:5px">${fmtT(minToHHMM(r.start))}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${r.assigns.map(a=>`<button class="slot-btn" style="width:auto;padding:10px 16px" onclick="sbPickSlot(${r.start},'${a.therapist.id}','${a.room?a.room.id:''}')">${esc(a.therapist.firstName)}</button>`).join('')}
+      </div>
+    </div>`).join('')}</div>`;
 }
 function sbPickSlot(startMin,therapistId,roomId){
   SB.start=minToHHMM(startMin);
