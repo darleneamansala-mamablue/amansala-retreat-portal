@@ -79,7 +79,7 @@ function venBuild(){
       const st=isInquiry
         ?{label:'Inquiry',bg:'#f3f4f6',border:'#9ca3af',text:'#6b7280',dash:false}
         :isRoomOnly
-        ?{label:(STATUS[bk.status]||STATUS.requested).label,bg:'#fdf4ff',border:'#a855f7',text:'#6b21a8',dash:(STATUS[bk.status]||STATUS.requested).dash}
+        ?{label:(STATUS[bk.status]||STATUS.requested).label,...rmTypeColor(bk),dash:(STATUS[bk.status]||STATUS.requested).dash}
         :(STATUS[bk.status]||STATUS.requested);
       const regCount=registeredCount(bk.id);
       const autoFlags=getAutoFlags(bk);
@@ -1784,7 +1784,7 @@ function rcBuild(){
         const li=Math.round((cs-startMs)/DAY_MS),wi=Math.round((ce-cs)/DAY_MS);
         if(wi<=0)return;
         const st=STATUS[bk.status]||STATUS.requested;
-        const pc=RETREAT_PALETTE[getRetreatColorIdx(bk.id)];
+        const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk.id)];
         const regEntry=AppData.regs.find(r=>r.bookingId===bk.id&&entry.physical.includes(r.room));
         const guestNames=regEntry?(regEntry.guests||[]).filter(g=>g.name).map(g=>g.name):[];
         const hasGuest=guestNames.length>0;
