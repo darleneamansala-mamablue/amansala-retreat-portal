@@ -723,16 +723,31 @@ function vmChargesDelete(bkId,chargeId,scope,regId){
   showToast('Charge removed.');
 }
 
-// ===== INDIVIDUAL GUEST FOLIO ===== (opened by clicking a guest's name in a room list)
-let _gfRegId=null,_gfGuestIdx=0,_gfAddOpen=false;
+// ===== INDIVIDUAL GUEST FOLIO ===== (opened by clicking a guest's name in a room list,
+// or by clicking a Room Only booking — Hilario/Jorge-style in-house guests are a member
+// of an existing retreat, not their own retreat, so clicking them should land here
+// directly rather than on a room list or the full reservation-edit form).
+let _gfRegId=null,_gfGuestIdx=0,_gfAddOpen=false,_gfBkId=null;
 function openGuestFolio(regId,guestIdx){
   const reg=AppData.regs.find(r=>r.id===regId);if(!reg)return;
   const guest=(reg.guests||[])[guestIdx];if(!guest)return;
-  _gfRegId=regId;_gfGuestIdx=guestIdx;_gfAddOpen=false;
+  _gfRegId=regId;_gfGuestIdx=guestIdx;_gfBkId=null;_gfAddOpen=false;
   renderGuestFolio();
   openModal('guestFolioModal');
 }
+function openBookingFolio(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  _gfBkId=bkId;_gfRegId=null;_gfAddOpen=false;
+  renderGuestFolio();
+  openModal('guestFolioModal');
+}
+function gfEditDetails(){
+  const bkId=_gfBkId;if(!bkId)return;
+  closeModal('guestFolioModal');
+  rmOpenEditBooking(bkId);
+}
 function renderGuestFolio(){
+  if(_gfBkId) return renderBookingFolio();
   const reg=AppData.regs.find(r=>r.id===_gfRegId);if(!reg)return closeModal('guestFolioModal');
   const guest=(reg.guests||[])[_gfGuestIdx];if(!guest)return closeModal('guestFolioModal');
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
@@ -789,8 +804,66 @@ function renderGuestFolio(){
         </div>`).join('')}
       </div>`}`;
 }
+// Booking-mode: Room Only guests (Walk-in/Direct/Bikini Bootcamp/Restore &
+// Renew/OTA) have no `reg` at all — rmSaveNewBooking initializes charges
+// directly on the booking — so this renders the same clean folio from `bk`.
+function renderBookingFolio(){
+  const bk=AppData.bookings.find(b=>b.id===_gfBkId);if(!bk)return closeModal('guestFolioModal');
+  const rt=AppData.roomTypes.find(t=>t.id===bk.roomTypeId);
+  const room=(bk.blockedRooms||[])[0]||'—';
+  const charges=(bk.charges||[]).slice().sort((a,b)=>(b.addedAt||'').localeCompare(a.addedAt||''));
+  const total=charges.reduce((s,c)=>s+(c.amount||0),0);
+  document.getElementById('gfTitle').textContent=bk.leaderName||bk.retreatName||'Guest';
+  document.getElementById('gfSub').innerHTML=`Room ${escHtml(room)}${rt?' · '+escHtml(rt.name):''} · ${escHtml(bk.retreatName||'')} <span onclick="gfEditDetails()" style="cursor:pointer;color:var(--teal,#2d6a6a);font-weight:600;text-decoration:underline;margin-left:6px">Edit Details</span>`;
+  const addFormHtml=_gfAddOpen?`
+    <div style="padding:10px 14px;background:#f8fafc;border-top:1px solid var(--border)">
+      <div class="frow" style="margin:0 0 8px">
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Date</label><input type="date" id="gfc-date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Category</label><select id="gfc-category">${VMC_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="frow" style="margin:0 0 10px">
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Description</label><input type="text" id="gfc-desc" placeholder="e.g. Massage 60min"></div>
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Amount ($)</label><input type="number" id="gfc-amount" min="0" step="0.01" placeholder="0.00"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="gfToggleAdd()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="gfChargeSave()">Save</button>
+      </div>
+    </div>`:'';
+  const roomTotal=bk.roomRateTotal||0;
+  const paid=(bk.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
+  const balance=+(roomTotal+total-paid).toFixed(2);
+  const byDept={};charges.forEach(c=>{const d=gfDeptFor(c.category);byDept[d]=(byDept[d]||0)+(c.amount||0);});
+  const deptChipsHtml=Object.keys(byDept).length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${GF_DEPT_ORDER.filter(d=>byDept[d]>0).map(d=>`<div style="background:#fff;border:1px solid var(--border);border-radius:7px;padding:4px 9px"><span style="font-size:10px;color:var(--muted)">${d}</span> <span style="font-size:11.5px;font-weight:700;color:var(--dark)">${fmt$(byDept[d])}</span></div>`).join('')}</div>`:'';
+  document.getElementById('gfBody').innerHTML=`
+    <div style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Room/Package</div><div style="font-size:15px;font-weight:800;color:var(--dark)">${fmt$(roomTotal)}</div></div>
+        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Outstanding — Charges</div><div style="font-size:15px;font-weight:800;color:var(--dark)">${fmt$(total)}</div></div>
+        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Balance</div><div style="font-size:15px;font-weight:800;color:${balance>0?'#dc2626':'#16a34a'}">${balance>0?fmt$(balance):'Paid in full'}</div></div>
+      </div>
+      ${deptChipsHtml}
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
+      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)">Folio${total>0?' · '+fmt$(total)+' total':''}</span>
+      <button class="btn btn-secondary btn-sm" onclick="gfToggleAdd()">${_gfAddOpen?'Cancel':'+ Add Charge'}</button>
+    </div>
+    ${addFormHtml}
+    ${!charges.length?`<div style="padding:16px 14px;text-align:center;font-size:12.5px;color:var(--muted)">No charges on this guest's folio yet.</div>`
+      :`<div style="padding:4px 14px 8px">
+        ${charges.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.description)} <span style="font-weight:400;color:var(--muted);font-size:11px">· ${escHtml(c.category||'Other')}</span></div>
+            <div style="font-size:11px;color:var(--muted)">${fmtDate((c.date||c.addedAt||'').slice(0,10))} · ${escHtml(c.addedBy||'Staff')}</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:var(--dark);white-space:nowrap">${fmt$(c.amount)}</div>
+          <button class="btn btn-danger btn-sm" onclick="gfChargeDelete('${c.id}')" style="padding:3px 8px;font-size:11px">Remove</button>
+        </div>`).join('')}
+      </div>`}`;
+}
 function gfToggleAdd(){_gfAddOpen=!_gfAddOpen;renderGuestFolio();}
 function gfChargeSave(){
+  if(_gfBkId) return gfChargeSaveBooking();
   const reg=AppData.regs.find(r=>r.id===_gfRegId);if(!reg)return;
   const guest=(reg.guests||[])[_gfGuestIdx];
   const date=document.getElementById('gfc-date').value||new Date().toISOString().slice(0,10);
@@ -806,13 +879,38 @@ function gfChargeSave(){
   logActivity('Charge added',`${fmt$(amount)} — ${description} — ${guest?.name||''}`,reg.bookingId);
   showToast('Charge added ✓');
 }
+function gfChargeSaveBooking(){
+  const bk=AppData.bookings.find(b=>b.id===_gfBkId);if(!bk)return;
+  const date=document.getElementById('gfc-date').value||new Date().toISOString().slice(0,10);
+  const category=document.getElementById('gfc-category').value||'Other';
+  const description=document.getElementById('gfc-desc').value.trim();
+  const amount=Math.round(parseFloat(document.getElementById('gfc-amount').value)*100)/100;
+  if(!description){alert('Enter a description for the charge.');return;}
+  if(!amount||amount<=0){alert('Enter a valid amount.');return;}
+  if(!bk.charges)bk.charges=[];
+  bk.charges.push({id:uid(),date,category,description,amount,guestName:bk.leaderName||null,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff'});
+  _gfAddOpen=false;
+  saveAll();renderGuestFolio();
+  logActivity('Charge added',`${fmt$(amount)} — ${description} — ${bk.leaderName||''}`,bk.id);
+  showToast('Charge added ✓');
+}
 function gfChargeDelete(chargeId){
+  if(_gfBkId) return gfChargeDeleteBooking(chargeId);
   const reg=AppData.regs.find(r=>r.id===_gfRegId);if(!reg)return;
   const c=(reg.charges||[]).find(x=>x.id===chargeId);if(!c)return;
   if(!confirm(`Remove this charge — "${c.description}" (${fmt$(c.amount)})?`))return;
   reg.charges=(reg.charges||[]).filter(x=>x.id!==chargeId);
   saveAll();renderGuestFolio();
   logActivity('Charge removed',`${fmt$(c.amount)} — ${c.description} — ${c.guestName||''}`,reg.bookingId);
+  showToast('Charge removed.');
+}
+function gfChargeDeleteBooking(chargeId){
+  const bk=AppData.bookings.find(b=>b.id===_gfBkId);if(!bk)return;
+  const c=(bk.charges||[]).find(x=>x.id===chargeId);if(!c)return;
+  if(!confirm(`Remove this charge — "${c.description}" (${fmt$(c.amount)})?`))return;
+  bk.charges=(bk.charges||[]).filter(x=>x.id!==chargeId);
+  saveAll();renderGuestFolio();
+  logActivity('Charge removed',`${fmt$(c.amount)} — ${c.description} — ${bk.leaderName||''}`,bk.id);
   showToast('Charge removed.');
 }
 

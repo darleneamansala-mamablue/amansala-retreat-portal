@@ -683,6 +683,7 @@ function rmOpenNewBooking(room,rtId,startDate){
   document.getElementById('rm-status').value='requested';
   const err=document.getElementById('rm-err');err.textContent='';err.style.display='none';
   document.getElementById('rm-pay-link-row').style.display='none';
+  document.getElementById('rm-folio-wrap').style.display='none';
   rmSetRateMode('solo');
   rmUpdateNights();
   document.getElementById('rmModal').style.display='flex';document.getElementById('rmModal').classList.add('open');
@@ -711,6 +712,78 @@ function rmOpenEditBooking(id){
   rmUpdateNights();
   document.getElementById('rm-pay-link-row').style.display=bk.roomRateTotal>0?'block':'none';
   document.getElementById('rmModal').style.display='flex';document.getElementById('rmModal').classList.add('open');
+  _rmAddChargeOpen=false;
+  document.getElementById('rm-folio-wrap').style.display='block';
+  rmRenderFolio();
+}
+// Room Only bookings have no room-list guest row to click into a folio from
+// (rmSaveNewBooking never creates a `reg`) — charges live directly on the
+// booking (bk.charges), initialized empty at creation. This is that folio,
+// surfaced right in the Edit Reservation modal so staff can charge Room
+// Only / Bikini Bootcamp / Restore & Renew guests without a separate screen.
+let _rmAddChargeOpen=false;
+function rmToggleAddCharge(){_rmAddChargeOpen=!_rmAddChargeOpen;rmRenderFolio();}
+function rmRenderFolio(){
+  const wrap=document.getElementById('rm-folio-wrap');if(!wrap||!_rmEditId)return;
+  const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
+  const charges=(bk.charges||[]).slice().sort((a,b)=>(b.addedAt||'').localeCompare(a.addedAt||''));
+  const total=charges.reduce((s,c)=>s+(c.amount||0),0);
+  const addFormHtml=_rmAddChargeOpen?`
+    <div style="padding:10px 0;border-top:1px solid var(--border);margin-top:8px">
+      <div class="frow" style="margin:0 0 8px">
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Date</label><input type="date" id="rmc-date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Category</label><select id="rmc-category">${VMC_CATEGORIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="frow" style="margin:0 0 10px">
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Description</label><input type="text" id="rmc-desc" placeholder="e.g. Massage 60min"></div>
+        <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Amount ($)</label><input type="number" id="rmc-amount" min="0" step="0.01" placeholder="0.00"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="rmToggleAddCharge()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="rmChargeSave()">Save</button>
+      </div>
+    </div>`:'';
+  wrap.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Folio${total>0?' · '+fmt$(total)+' total':''}</span>
+      <button class="btn btn-secondary btn-sm" onclick="rmToggleAddCharge()">${_rmAddChargeOpen?'Cancel':'+ Add Charge'}</button>
+    </div>
+    ${addFormHtml}
+    ${!charges.length?`<div style="padding:10px 0;text-align:center;font-size:12.5px;color:var(--muted)">No charges on this folio yet.</div>`
+      :`<div style="margin-top:6px">
+        ${charges.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f1f5f9">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.description)} <span style="font-weight:400;color:var(--muted);font-size:11px">· ${escHtml(c.category||'Other')}</span></div>
+            <div style="font-size:11px;color:var(--muted)">${fmtDate((c.date||c.addedAt||'').slice(0,10))} · ${escHtml(c.addedBy||'Staff')}</div>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:var(--dark);white-space:nowrap">${fmt$(c.amount)}</div>
+          <button class="btn btn-danger btn-sm" onclick="rmChargeDelete('${c.id}')" style="padding:3px 8px;font-size:11px">Remove</button>
+        </div>`).join('')}
+      </div>`}`;
+}
+function rmChargeSave(){
+  const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
+  const date=document.getElementById('rmc-date').value||new Date().toISOString().slice(0,10);
+  const category=document.getElementById('rmc-category').value||'Other';
+  const description=document.getElementById('rmc-desc').value.trim();
+  const amount=Math.round(parseFloat(document.getElementById('rmc-amount').value)*100)/100;
+  if(!description){alert('Enter a description for the charge.');return;}
+  if(!amount||amount<=0){alert('Enter a valid amount.');return;}
+  if(!bk.charges)bk.charges=[];
+  bk.charges.push({id:uid(),date,category,description,amount,guestName:bk.leaderName||null,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff'});
+  _rmAddChargeOpen=false;
+  saveAll();rmRenderFolio();
+  logActivity('Charge added',`${fmt$(amount)} — ${description} — ${bk.leaderName||''}`,bk.id);
+  showToast('Charge added ✓');
+}
+function rmChargeDelete(chargeId){
+  const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
+  const c=(bk.charges||[]).find(x=>x.id===chargeId);if(!c)return;
+  if(!confirm(`Remove this charge — "${c.description}" (${fmt$(c.amount)})?`))return;
+  bk.charges=(bk.charges||[]).filter(x=>x.id!==chargeId);
+  saveAll();rmRenderFolio();
+  logActivity('Charge removed',`${fmt$(c.amount)} — ${c.description} — ${bk.leaderName||''}`,bk.id);
+  showToast('Charge removed.');
 }
 function rmDeleteBooking(){
   if(!_rmEditId||!confirm('Delete this reservation?'))return;
@@ -1033,7 +1106,7 @@ function openOvCalModal(bkId){
   document.getElementById('ovCalModal').style.display='flex';
 }
 
-function openVenEdit(id){const bk=AppData.bookings.find(b=>b.id===id);if(!bk)return;if(bk.bookingType==='room_only'){rmOpenEditBooking(id);return;}venEditId=id;document.getElementById('venModalTitle').textContent='Edit Booking';['venDelBtn','venGoRegBtn','venFinBtn','venCopyRoomsBtn'].forEach(el=>document.getElementById(el).style.display='inline-flex');
+function openVenEdit(id){const bk=AppData.bookings.find(b=>b.id===id);if(!bk)return;if(bk.bookingType==='room_only'){openBookingFolio(id);return;}venEditId=id;document.getElementById('venModalTitle').textContent='Edit Booking';['venDelBtn','venGoRegBtn','venFinBtn','venCopyRoomsBtn'].forEach(el=>document.getElementById(el).style.display='inline-flex');
   document.getElementById('venRoomCalBanner').style.display='flex';
   // Accept Dates button
   const adBtn=document.getElementById('venAcceptDatesBtn');if(adBtn){adBtn.style.display='inline-flex';if(bk.datesAccepted){adBtn.textContent='✓ Dates Accepted';adBtn.style.background='#059669';adBtn.style.color='#fff';adBtn.style.borderColor='#059669';adBtn.style.opacity='.7';adBtn.style.pointerEvents='none';}else{adBtn.textContent='✓ Accept Dates';adBtn.style.background='';adBtn.style.color='';adBtn.style.borderColor='';adBtn.style.opacity='';adBtn.style.pointerEvents='';}}
@@ -1838,6 +1911,10 @@ function rcBuild(){
             const guestIdx=(regEntry.guests||[]).findIndex(g=>g.name);
             if(guestIdx>=0){openGuestFolio(regEntry.id,guestIdx);return;}
           }
+          // Room Only bookings (Walk-in/Direct/Bikini Bootcamp/Restore & Renew/OTA)
+          // have no `reg` at all — they're an in-house guest, not a retreat with a
+          // room list — so go straight to their simple folio, same as any other guest.
+          if(bk.bookingType==='room_only'){openBookingFolio(bk.id);return;}
           const btn=document.querySelectorAll('.tab-btn')[2];switchTab('teacherreg',btn);setTimeout(()=>regSelectRetreat(bk.id),80);
         });
         track.appendChild(bl);
