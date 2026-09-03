@@ -7,19 +7,19 @@ let menuSchedule = {};       // { 'YYYY-MM-DD': { lightBreakfast:[{time,group,pa
 let menuCurrentMonday = null;
 
 const WEEKLY_MENU = {
-  1: { // Lunes (Monday) — Day 1
+  1: { // Lunes (Monday) — Day 1 (dinner swapped with Tuesday's per Darlene, 2026-09-03)
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
     brunch: ['Chilaquiles','Omelette de Espinaca','Protein Pancakes','Tinga de Pollo ★','Ensalada Amansala','Tostada Bar'],
     lunch:  ['Tinga de Pollo ★','Ensalada Amansala'],
     snack:  ['Summer Rolls con Gazpacho'],
-    dinner: {protein:'Grilled Lemon Kebabs Pollo',dishes:['Grilled Eggplant con Tahini'],dessert:'Deconstructed Cheesecake'}
+    dinner: {protein:'Pescado',dishes:['Sopa de Calabaza','Quinoa Verduras'],dessert:'Vegan Choco Mousse'}
   },
-  2: { // Martes (Tuesday) — Day 2
+  2: { // Martes (Tuesday) — Day 2 (dinner swapped with Monday's per Darlene, 2026-09-03)
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
     brunch: ['Huevos Rancheros','Avocado Toast','Pan de Platano','Salmon con Miel y Ajo ★','Ensalada Edamame','Poke Bowl'],
     lunch:  ['Salmon con Miel y Ajo ★','Ensalada Edamame','Poke Bowl'],
     snack:  ['Guacamole con Veggies y Chips'],
-    dinner: {protein:'Pescado',dishes:['Sopa de Calabaza','Quinoa Verduras'],dessert:'Vegan Choco Mouse'}
+    dinner: {protein:'Grilled Lemon Kebabs Pollo',dishes:['Grilled Eggplant con Tahini'],dessert:'Deconstructed Cheesecake'}
   },
   3: { // Miércoles (Wednesday) — Day 3
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
