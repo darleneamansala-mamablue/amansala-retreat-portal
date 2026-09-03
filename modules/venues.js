@@ -649,7 +649,7 @@ function rmOpenNewBooking(room,rtId,startDate){
   document.getElementById('rm-leader').value='';
   document.getElementById('rm-email').value='';
   document.getElementById('rm-notes').value='';
-  document.getElementById('rm-mealplan').value='none';
+  document.getElementById('rm-mealplan').value='breakfast';
   document.getElementById('rm-adults').value='1';
   document.getElementById('rm-status').value='requested';
   const err=document.getElementById('rm-err');err.textContent='';err.style.display='none';
