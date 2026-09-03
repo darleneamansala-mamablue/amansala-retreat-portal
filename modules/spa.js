@@ -169,10 +169,12 @@ function spaRenderDashboard() {
     const prefLabel = unassigned ? (pref === 'male' ? 'Any male therapist' : pref === 'female' ? 'Any female therapist' : 'Unassigned') : therName(a.therapistId);
     const svc = SpaData.services.find(s => s.id === a.serviceId);
     const match = spaFindGuestRegForAppt(a);
+    const bkMatch = !match ? spaFindGuestBookingForAppt(a) : null;
+    const chargeGuestLabel = match ? match.guest.name : bkMatch?.bk.leaderName;
     const chargeBtn = a.folioStatus === 'POSTED'
       ? `<span style="font-size:10.5px;font-weight:700;color:#15803d;white-space:nowrap">✓ Charged to Room</span>`
-      : (match
-        ? `<button onclick="spaChargeApptToRoom('${a.id}')" title="Charge this service to ${escHtml(match.guest.name)}'s room folio" style="font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;border:1.5px solid #0d9488;background:#f0fdfa;color:#0f766e;cursor:pointer;white-space:nowrap">🧾 Charge to Room</button>`
+      : (chargeGuestLabel
+        ? `<button onclick="spaChargeApptToRoom('${a.id}')" title="Charge this service to ${escHtml(chargeGuestLabel)}'s room folio" style="font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;border:1.5px solid #0d9488;background:#f0fdfa;color:#0f766e;cursor:pointer;white-space:nowrap">🧾 Charge to Room</button>`
         : '');
     return `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px 130px;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #f0ebe0;background:${confirmed ? '#fff' : '#fffbeb'}">
       <div style="font-weight:700;color:#2d2520;font-size:13px">${spaCalFmtT(a.start)}</div>
@@ -211,26 +213,48 @@ function spaFindGuestRegForAppt(a) {
   }
   return null;
 }
+// Room Only / BBC / Restore & Renew guests have no reg — their room and
+// charges live directly on the booking. Without this fallback, a spa charge
+// for one of these guests has no folio to attach to and "Charge to Room"
+// never even appears.
+function spaFindGuestBookingForAppt(a) {
+  const key = (a.clientName || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!key) return null;
+  for (const bk of (AppData.bookings || [])) {
+    if (bk.bookingType !== 'room_only') continue;
+    if ((bk.leaderName || '').toLowerCase().replace(/\s+/g, ' ').trim() === key) return { bk };
+  }
+  return null;
+}
 async function spaChargeApptToRoom(apptId) {
   const a = (SpaAppointments || []).find(x => x.id === apptId); if (!a) return;
   if (a.folioStatus === 'POSTED') { showToast('Already charged to this room.'); return; }
-  const match = spaFindGuestRegForAppt(a); if (!match) { showToast('No matching registered guest found.'); return; }
+  const match = spaFindGuestRegForAppt(a);
+  const bkMatch = !match ? spaFindGuestBookingForAppt(a) : null;
+  if (!match && !bkMatch) { showToast('No matching registered guest found.'); return; }
   const svc = SpaData.services.find(s => s.id === a.serviceId);
   const name = svc?.name || 'Spa Service';
   const price = svc?.groupPricing ? (a.groupTotalPriceUSD ?? svc.price) : svc?.price;
   if (price == null) { showToast('This service has no price set — add one in Services first.'); return; }
   const category = /massage/i.test(name) ? 'Massage' : 'Spa';
-  if (!confirm(`Charge ${match.guest.name}'s room folio ${fmt$(price)} for "${name}"?`)) return;
-  if (!match.reg.charges) match.reg.charges = [];
+  const guestLabel = match ? match.guest.name : bkMatch.bk.leaderName;
+  if (!confirm(`Charge ${guestLabel}'s room folio ${fmt$(price)} for "${name}"?`)) return;
   const chargeId = uid();
-  match.reg.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: match.guest.name, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
+  if (match) {
+    if (!match.reg.charges) match.reg.charges = [];
+    match.reg.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: match.guest.name, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
+    a.folioRegId = match.reg.id;
+  } else {
+    if (!bkMatch.bk.charges) bkMatch.bk.charges = [];
+    bkMatch.bk.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: bkMatch.bk.leaderName, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
+    a.folioBkId = bkMatch.bk.id;
+  }
   saveAll();
   a.folioStatus = 'POSTED';
   a.folioChargeId = chargeId;
-  a.folioRegId = match.reg.id;
   if (typeof spaCalSave === 'function') await spaCalSave();
-  logActivity('Charge added', `${fmt$(price)} — ${name} — ${match.guest.name} (from Spa)`, match.reg.bookingId);
-  showToast(`Charged ${fmt$(price)} to ${match.guest.name}'s folio ✓`);
+  logActivity('Charge added', `${fmt$(price)} — ${name} — ${guestLabel} (from Spa)`, match ? match.reg.bookingId : bkMatch.bk.id);
+  showToast(`Charged ${fmt$(price)} to ${guestLabel}'s folio ✓`);
   spaRenderDashboard();
 }
 

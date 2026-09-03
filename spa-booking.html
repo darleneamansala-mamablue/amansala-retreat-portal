@@ -93,6 +93,7 @@ const CAT_ICON={massage:'🪷',spirit:'🦋',fitness:'💪',yoga:'🧘',pilates:
 let SpaData={services:[],rooms:[],therapists:[]};
 let SpaAppointments=[];
 let SBRegs=[];
+let SBBookings=[];
 let SB={step:1,sessionType:null,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
         policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null};
 
@@ -105,14 +106,16 @@ function fmtDateLong(ds){const d=new Date(ds+'T12:00:00');return d.toLocaleDateS
 
 async function init(){
   try{
-    const [{data:sd},{data:ad},{data:rd}]=await Promise.all([
+    const [{data:sd},{data:ad},{data:rd},{data:bd}]=await Promise.all([
       db.from('app_store').select('value').eq('key','spa_data').single(),
       db.from('app_store').select('value').eq('key','spa_appointments').single(),
       db.from('app_store').select('value').eq('key','regs').single(),
+      db.from('app_store').select('value').eq('key','bookings').single(),
     ]);
     if(sd?.value) SpaData=sd.value;
     SpaAppointments=(ad?.value)||[];
     SBRegs=(rd?.value)||[];
+    SBBookings=(bd?.value)||[];
   }catch(e){}
   const cancelId=new URLSearchParams(location.search).get('cancel');
   if(cancelId) return sbRenderCancelScreen(cancelId);
@@ -137,6 +140,27 @@ function sbFindGuestReg(clientName,roomNumber){
       if(rn&&(reg.room||'').toLowerCase().replace(/\s+/g,' ').trim()===rn) return match;
       if(!fallback) fallback=match;
     }
+  }
+  return fallback;
+}
+
+// Room Only / BBC / Restore & Renew guests have no reg record — their room
+// and charges live directly on the booking (bookingType==='room_only').
+// Without this, a spa charge for one of these guests silently never posts
+// anywhere (sbFindGuestReg finds nothing, the whole auto-post block is
+// skipped) even though folioStatus still gets left as PENDING as if it
+// worked. Mirrors sbFindGuestReg's name+room matching convention.
+function sbFindGuestBooking(clientName,roomNumber){
+  const key=(clientName||'').toLowerCase().replace(/\s+/g,' ').trim();
+  if(!key) return null;
+  const rn=(roomNumber||'').toLowerCase().replace(/\s+/g,' ').trim();
+  let fallback=null;
+  for(const bk of SBBookings){
+    if(bk.bookingType!=='room_only') continue;
+    if((bk.leaderName||'').toLowerCase().replace(/\s+/g,' ').trim()!==key) continue;
+    const rooms=(bk.blockedRooms||[]).map(r=>(r||'').toLowerCase().replace(/\s+/g,' ').trim());
+    if(rn&&rooms.includes(rn)) return {bk};
+    if(!fallback) fallback={bk};
   }
   return fallback;
 }
@@ -614,6 +638,31 @@ async function sbFinalConfirm(){
               folioPosted=true;
             }
           }
+        }else{
+          // No reg match (e.g. Room Only / BBC / Restore & Renew guests have
+          // no reg — see sbFindGuestBooking) — fall back to posting straight
+          // onto the booking itself so the charge doesn't silently vanish.
+          const {data:bd}=await db.from('app_store').select('value').eq('key','bookings').single();
+          const latestBookings=(bd?.value)||[];
+          SBBookings=latestBookings;
+          const bkMatch=sbFindGuestBooking(appt.clientName,SB.roomNumber);
+          if(bkMatch){
+            const price=svc.groupPricing?SB.groupTotalPrice:svc.price;
+            if(price!=null){
+              const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+              const category=/massage/i.test(svc.name)?'Massage':'Spa';
+              const bi=latestBookings.findIndex(b=>b.id===bkMatch.bk.id);
+              if(bi>=0){
+                if(!latestBookings[bi].charges) latestBookings[bi].charges=[];
+                latestBookings[bi].charges.push({id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:bkMatch.bk.leaderName,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'});
+                await db.from('app_store').upsert({key:'bookings',value:latestBookings,updated_at:new Date().toISOString()});
+                appt.folioStatus='POSTED';
+                appt.folioChargeId=chargeId;
+                appt.folioBkId=bkMatch.bk.id;
+                folioPosted=true;
+              }
+            }
+          }
         }
       }catch(e){}
     }
@@ -696,6 +745,16 @@ async function sbDoCancel(apptId){
         if(ri>=0&&Array.isArray(latestRegs[ri].charges)){
           latestRegs[ri].charges=latestRegs[ri].charges.filter(c=>c.id!==appt.folioChargeId);
           await db.from('app_store').upsert({key:'regs',value:latestRegs,updated_at:new Date().toISOString()});
+        }
+      }catch(e){}
+    }else if(appt.folioStatus==='POSTED'&&appt.folioChargeId&&appt.folioBkId){
+      try{
+        const {data:bd}=await db.from('app_store').select('value').eq('key','bookings').single();
+        const latestBookings=(bd?.value)||[];
+        const bi=latestBookings.findIndex(b=>b.id===appt.folioBkId);
+        if(bi>=0&&Array.isArray(latestBookings[bi].charges)){
+          latestBookings[bi].charges=latestBookings[bi].charges.filter(c=>c.id!==appt.folioChargeId);
+          await db.from('app_store').upsert({key:'bookings',value:latestBookings,updated_at:new Date().toISOString()});
         }
       }catch(e){}
     }
