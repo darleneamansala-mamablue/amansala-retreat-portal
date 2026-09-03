@@ -1099,7 +1099,7 @@ function openBooking(rtId) {
         <input type="email" id="fm-email" placeholder="maria@email.com" autocomplete="email">
       </div>
       <div class="form-field full">
-        <label>Phone / WhatsApp</label>
+        <label>Phone / WhatsApp *</label>
         <input type="tel" id="fm-phone" placeholder="+52 984 000 0000" autocomplete="tel">
       </div>
       <div class="form-field">
@@ -1258,6 +1258,7 @@ async function proceedToPayment() {
 
   if (!first || !last) { errEl.textContent = 'First and last name are required'; return; }
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Invalid email address'; return; }
+  if (!phone) { errEl.textContent = 'Phone number is required'; return; }
 
   const btn = document.getElementById('btn-continue');
   btn.disabled = true; btn.childNodes[0].textContent = 'Loading… ';

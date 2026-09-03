@@ -275,6 +275,7 @@ function renderStep4_Hotel(el){
       </div>
       <div class="form-group"><label class="form-label">Room Number *</label><input class="form-input" id="sbRoom" placeholder="e.g. GV3" value="${esc(SB.roomNumber)}"></div>
       <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="sbEmail" type="email" placeholder="So we can send your confirmation" value="${esc(SB.email)}"></div>
+      <div class="form-group"><label class="form-label">Phone *</label><input class="form-input" id="sbPhoneHotel" type="tel" value="${esc(SB.phone)}"></div>
       <button class="btn-primary" onclick="sbSubmitHotel()">Continue</button>
     </div>`;
 }
@@ -283,10 +284,12 @@ function sbSubmitHotel(){
   const last=document.getElementById('sbLast').value.trim();
   const room=document.getElementById('sbRoom').value.trim();
   const email=document.getElementById('sbEmail').value.trim();
+  const phone=document.getElementById('sbPhoneHotel').value.trim();
   if(!first||!last){showToast('Please enter your name.');return;}
   if(!room){showToast('Please enter your room number.');return;}
   if(!email){showToast('Please enter your email so we can send your confirmation.');return;}
-  SB.firstName=first;SB.lastName=last;SB.roomNumber=room;SB.email=email;
+  if(!phone){showToast('Please enter your phone number.');return;}
+  SB.firstName=first;SB.lastName=last;SB.roomNumber=room;SB.email=email;SB.phone=phone;
   setStep(5);
 }
 

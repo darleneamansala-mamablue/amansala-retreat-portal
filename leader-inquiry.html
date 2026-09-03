@@ -151,9 +151,10 @@ body{font-family:'Jost',-apple-system,sans-serif;font-size:14px;color:#1a1a2e;ba
           </div>
         </div>
 
-        <div class="fg">
-          <label>Phone Number <span style="color:#9ca3af;font-weight:400;font-size:.6rem">(optional)</span></label>
-          <input type="tel" id="f-phone" placeholder="+1 555 000 0000">
+        <div class="fg" id="fg-phone">
+          <label>Phone Number <span class="req">*</span></label>
+          <input type="tel" id="f-phone" placeholder="+1 555 000 0000" oninput="clearErr('fg-phone')">
+          <div class="field-error">Please enter a phone number.</div>
         </div>
 
         <div class="fg" style="margin-bottom:4px">
@@ -367,6 +368,8 @@ function validateStep1(){
   if(!name){document.getElementById('fg-name').classList.add('has-error');ok=false;}
   const email=document.getElementById('f-email').value.trim();
   if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){document.getElementById('fg-email').classList.add('has-error');ok=false;}
+  const phone=document.getElementById('f-phone').value.trim();
+  if(!phone){document.getElementById('fg-phone').classList.add('has-error');ok=false;}
   if(!ok)document.querySelector('.has-error')?.scrollIntoView({behavior:'smooth',block:'center'});
   return ok;
 }
