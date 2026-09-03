@@ -850,6 +850,22 @@ function buildDashboard(){
   finalBalancePending.sort((a,b)=>a.bk.startDate.localeCompare(b.bk.startDate));
   const depositPendingTotal=depositPending.reduce((s,x)=>s+x.balance,0);
   const finalBalancePendingTotal=finalBalancePending.reduce((s,x)=>s+x.balance,0);
+  // Overdue = balance still owed past its due date — the final-payment due
+  // date (6 weeks before arrival, same convention finalPaymentDue() already
+  // uses elsewhere) for retreats yet to arrive, or the retreat's own start
+  // date once it's already begun/passed and still isn't paid off.
+  const overdueBalances=[];
+  active.forEach(bk=>{
+    if(adminDone[bk.id+'_payment'])return;
+    const {balance}=calcBkBalance(bk);
+    if(balance<=0)return;
+    const dueDateStr=bk.startDate<=todayStr?bk.startDate:fmtISO(finalPaymentDue(bk));
+    if(dueDateStr>=todayStr)return;
+    const daysOverdue=Math.round((today-pd(dueDateStr))/DAY_MS);
+    overdueBalances.push({bk,balance,dueDateStr,daysOverdue});
+  });
+  overdueBalances.sort((a,b)=>b.daysOverdue-a.daysOverdue);
+  const overdueBalancesTotal=overdueBalances.reduce((s,x)=>s+x.balance,0);
   const scheduleConfirmPending=active.filter(bk=>{
     if(!bk.scheduleRequest?.submittedAt)return false;
     const s=bk.scheduleRequest.adminStatus||'pending';
@@ -1083,7 +1099,11 @@ function buildDashboard(){
       ${rightHtml}
     </div>
   </div>`;
-  let alerts=dbAccordionSection('depositPending','💰','Deposit Pending','#991b1b','#fff5f5','#fca5a5',
+  let alerts=dbAccordionSection('overdueBalances','🔴','Overdue Balances','#7f1d1d','#fef2f2','#f87171',
+    `${overdueBalances.length} retreat${overdueBalances.length!==1?'s':''} · ${fmt$(overdueBalancesTotal)}`,
+    overdueBalances.length?overdueBalances.map(x=>dbItemRow(x.bk,`<span style="font-weight:700;color:#7f1d1d">${fmt$(x.balance)}</span><span style="font-size:10.5px;font-weight:700;background:#fecaca;color:#7f1d1d;border-radius:5px;padding:1px 7px">${x.daysOverdue}d overdue</span>`,`openPaymentModal('${x.bk.id}')`)).join(''):'<div style="padding:12px 16px;color:var(--muted);font-size:12.5px;font-style:italic">Nothing overdue.</div>',
+    true)
+  +dbAccordionSection('depositPending','💰','Deposit Pending','#991b1b','#fff5f5','#fca5a5',
     `${depositPending.length} retreat${depositPending.length!==1?'s':''} · ${fmt$(depositPendingTotal)}`,
     depositPending.length?depositPending.map(x=>dbItemRow(x.bk,`<span style="font-weight:700;color:#991b1b">${fmt$(x.balance)}</span>`,`openPaymentModal('${x.bk.id}')`)).join(''):'<div style="padding:12px 16px;color:var(--muted);font-size:12.5px;font-style:italic">Nothing pending.</div>',
     true)
@@ -1134,11 +1154,15 @@ function buildDashboard(){
     </div>`;
   }
 
-  const sections=evtDashSection+pipeline+(alerts||(!allActive.length?`<div style="text-align:center;padding:64px 20px">
+  const noActiveMsg=!allActive.length?`<div style="text-align:center;padding:64px 20px">
     <div style="font-size:48px;margin-bottom:14px">✓</div>
     <div style="font-size:17px;font-weight:600;color:var(--dark)">All clear!</div>
     <div style="font-size:13px;color:var(--muted);margin-top:6px">No active retreats to show.</div>
-  </div>`:''));
+  </div>`:'';
+  // alerts (Deposit/Final Balance/Schedule Confirmation Pending) renders at
+  // the very top of the Dashboard — Darlene's priority section — separately
+  // from evtDashSection+pipeline, which stay further down.
+  const sections=evtDashSection+pipeline+(allActive.length?'':noActiveMsg);
 
   // ── ACTIVITY NOTIFICATIONS ──
   const actvNotifs=_buildActivityNotifs();
@@ -1230,6 +1254,7 @@ function buildDashboard(){
       <span style="font-size:12px;color:var(--muted);flex:1">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</span>
       <button onclick="loadFromSupabase().then(()=>{buildDashboard();showToast('Dashboard refreshed from cloud');})" style="padding:5px 13px;font-size:12px;font-weight:600;color:#2d6a6a;background:#fff;border:1.5px solid #2d6a6a;border-radius:7px;cursor:pointer;font-family:inherit">↻ Refresh</button>
     </div>
+    ${alerts}
     ${dbCrmSectionHtml()}
     ${liveChatSection}
     ${actvSection}

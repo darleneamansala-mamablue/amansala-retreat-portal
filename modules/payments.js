@@ -1009,7 +1009,7 @@ function buildPipelineSection(retreats,today){
     }
   });
 
-  const cards=retreats.map(bk=>{
+  const buildCard=(bk)=>{
     const pal=bkPalette.get(bk.id)||null;
     const peers=bkPeers.get(bk.id)||[];
     const doneArr=PIPELINE_STEPS.map(s=>dbPipelineStepDone(bk,s.id));
@@ -1129,13 +1129,46 @@ function buildPipelineSection(retreats,today){
       ${rtRow}
       ${bk.depositInvoiceSentAt&&!doneArr[PIPELINE_STEPS.findIndex(s=>s.id==='depositPaid')]?`<div style="margin-top:8px;padding:6px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:7px;font-size:11.5px;color:#15803d;display:flex;align-items:center;gap:6px">✉ Deposit invoice sent ${new Date(bk.depositInvoiceSentAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} · awaiting payment</div>`:''}
     </div>`;
+  };
+  // Grouped by month (each its own collapsed-by-default mini-accordion) rather
+  // than dumping every retreat's card on the page at once when the section
+  // opens — with 90+ active retreats that was an unusable wall of cards.
+  const monthGroups=new Map();
+  retreats.forEach(bk=>{
+    const mk=(bk.startDate||'').slice(0,7); // YYYY-MM
+    if(!monthGroups.has(mk))monthGroups.set(mk,[]);
+    monthGroups.get(mk).push(bk);
+  });
+  const MON_FULL=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const cards=[...monthGroups.keys()].sort().map(mk=>{
+    const [y,m]=mk.split('-');
+    const label=`${MON_FULL[parseInt(m,10)-1]||mk} ${y}`;
+    const group=monthGroups.get(mk);
+    const key='retreatPipelineMonth_'+mk;
+    if(!(key in _dbAccOpen))_dbAccOpen[key]=false;
+    const open=_dbAccOpen[key];
+    return`<div style="margin-bottom:10px;border:1px solid #e0d8cc;border-radius:10px;overflow:hidden;background:#fff">
+      <div style="padding:8px 14px;background:#faf7f2;display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="dbToggleAccordion('${key}')">
+        <span style="font-size:12.5px;font-weight:700;color:#5a5048">${label}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;color:#a89e94">${group.length} retreat${group.length!==1?'s':''}</span>
+          <span id="dbAccChev-${key}" style="font-size:11px;color:#a89e94">${open?'▾':'▸'}</span>
+        </div>
+      </div>
+      <div id="dbAcc-${key}" style="display:${open?'block':'none'};padding:12px">${group.map(buildCard).join('')}</div>
+    </div>`;
   }).join('');
+  if(!('retreatPipeline' in _dbAccOpen))_dbAccOpen.retreatPipeline=false;
+  const pOpen=_dbAccOpen.retreatPipeline;
   return`<div class="db-section" style="border-color:#c8d8d4;margin-bottom:20px">
-    <div class="db-sec-hdr" style="background:#f2f8f6;border-color:#c8d8d4;display:flex;justify-content:space-between;align-items:center">
+    <div class="db-sec-hdr" style="background:#f2f8f6;border-color:#c8d8d4;display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="dbToggleAccordion('retreatPipeline')">
       <span class="db-sec-title" style="color:#0e9494">🗓 Retreat Pipeline — ${retreats.length} retreat${retreats.length!==1?'s':''}</span>
-      <span style="font-size:10.5px;color:#a89e94">Click dashed dots to mark manual steps · Click card to open</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:10.5px;color:#a89e94">Click dashed dots to mark manual steps · Click card to open</span>
+        <span id="dbAccChev-retreatPipeline" style="font-size:12px;color:#0e9494">${pOpen?'▾':'▸'}</span>
+      </div>
     </div>
-    <div style="padding:14px 18px;background:#f5f1eb">${cards}</div>
+    <div id="dbAcc-retreatPipeline" style="display:${pOpen?'block':'none'};padding:14px 18px;background:#f5f1eb">${cards}</div>
   </div>`;
 }
 
