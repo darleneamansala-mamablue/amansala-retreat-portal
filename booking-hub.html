@@ -1498,17 +1498,19 @@
             If you choose a time that overlaps two blocks, we may need to adjust your times. If your group is too large for a certain shala, we may need to move you to a more suitable shala. If your group is much smaller than the shala you requested, your group may need to change practice time or shala.
           </div>
           <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:13px;font-weight:600;color:#78350f">
-            <input type="checkbox" id="tsMorningBlocksAck" style="width:16px;height:16px;accent-color:#b45309;margin-top:1px;flex-shrink:0">
+            <input type="checkbox" id="tsMorningBlocksAck" onchange="tsToggleMorningLock(this.checked)" style="width:16px;height:16px;accent-color:#b45309;margin-top:1px;flex-shrink:0">
             I understand
           </label>
         </div>
-        <div class="ts-window-row" id="tsWindowRow" style="display:none"></div>
-        <div id="tsMorningFields"></div>
-        <div id="tsDailyScheduleFields"></div>
-        <div style="margin-top:20px">
-          <div class="ts-section-lbl">Morning Shala Preference</div>
-          <div style="font-size:12.5px;color:var(--muted);margin:6px 0 12px;line-height:1.6">Tap to set 1st choice, tap again for 2nd choice, tap once more to remove.</div>
-          <div id="tsMorningShalaGrid" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+        <div id="tsMorningLockWrap" style="opacity:.4;pointer-events:none;filter:grayscale(.3)">
+          <div class="ts-window-row" id="tsWindowRow" style="display:none"></div>
+          <div id="tsMorningFields"></div>
+          <div id="tsDailyScheduleFields"></div>
+          <div style="margin-top:20px">
+            <div class="ts-section-lbl">Morning Shala Preference</div>
+            <div style="font-size:12.5px;color:var(--muted);margin:6px 0 12px;line-height:1.6">Tap to set 1st choice, tap again for 2nd choice, tap once more to remove.</div>
+            <div id="tsMorningShalaGrid" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          </div>
         </div>
       </div>
 

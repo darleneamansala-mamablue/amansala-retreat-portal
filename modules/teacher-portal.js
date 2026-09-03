@@ -1293,6 +1293,15 @@ function tsRenderWindows(){
     </div>`;
 }
 
+// The whole morning-class fill-in section (window picker, times, shala grid)
+// stays locked/dimmed until the guest checks "I understand" on the AM-blocks
+// note above it — they can't start filling anything in before that.
+function tsToggleMorningLock(understood){
+  const wrap=document.getElementById('tsMorningLockWrap');if(!wrap)return;
+  wrap.style.pointerEvents=understood?'auto':'none';
+  wrap.style.opacity=understood?'1':'.4';
+  wrap.style.filter=understood?'none':'grayscale(.3)';
+}
 function tsPickWindow(id){_ts.window=id;_ts.morningStart='';tsRenderWindows();tsBuildMorningFields();tsBuildDailySchedule();tsRenderShalaGrid('morning');}
 function tsToggleFlag(period,val,on){
   const k=period==='morning'?'morningFlags':'afternoonFlags';
