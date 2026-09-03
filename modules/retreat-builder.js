@@ -33,6 +33,32 @@ function loadAddOns(){
 }
 let ADD_ONS=loadAddOns();
 const PKG_DISCOUNT=0.10;
+// ADD_ONS used to live ONLY in this browser's localStorage — never synced to
+// Supabase like every other data type in this app, so a customized activities
+// list silently vanished on any other device/browser. Fixed 2026-09-03: syncs
+// to app_store key 'addOns' now, same pattern as spa/transport/BBC schedules.
+// Local storage is kept as an instant-render cache; Supabase is the source of truth.
+async function syncAddOnsFromSupabase(){
+  try{
+    const {data}=await db.from('app_store').select('value').eq('key','addOns').maybeSingle();
+    if(data?.value&&Array.isArray(data.value)&&data.value.length){
+      const stored=data.value;
+      const merged=ADD_ONS_DEFAULT.map(def=>{
+        const edit=stored.find(s=>s.id===def.id);
+        return edit?{...def,...edit}:{...def};
+      });
+      stored.filter(s=>!ADD_ONS_DEFAULT.find(d=>d.id===s.id)).forEach(c=>merged.push({...c}));
+      ADD_ONS=merged;
+      localStorage.setItem('amansala_addons',JSON.stringify(stored));
+      if(typeof regRender==='function')regRender();
+    }
+  }catch(e){console.warn('[retreat-builder] addOns Supabase sync failed',e);}
+}
+async function saveAddOnsToSupabase(saved){
+  try{await db.from('app_store').upsert({key:'addOns',value:saved,updated_at:new Date().toISOString()});}
+  catch(e){console.warn('[retreat-builder] addOns Supabase save failed',e);}
+}
+syncAddOnsFromSupabase(); // pull any saved custom package rates on load -- without this call the sync/save functions above were dead code
 
 // Room preset: base mix for 15 guests (12 rooms), scale +2 rooms per additional 5 guests
 function getBldPreset(pax){

@@ -282,7 +282,9 @@ function pkgRatesSave(){
   ADD_ONS.filter(a=>!ADD_ONS_DEFAULT.find(d=>d.id===a.id)).forEach(c=>{
     if(!saved.find(s=>s.id===c.id))saved.push({...c});
   });
-  localStorage.setItem('amansala_addons',JSON.stringify(saved.length?saved:[]));
+  const toSave=saved.length?saved:[];
+  localStorage.setItem('amansala_addons',JSON.stringify(toSave));
+  saveAddOnsToSupabase(toSave);
   closeModal('pkgRatesModal');regRender();showToast('Package rates saved.');
 }
 
@@ -308,6 +310,7 @@ function pkgRatesRemoveCustom(id){
 function pkgRatesReset(){
   if(!confirm('Reset all package rates to defaults? Custom packages will also be removed.'))return;
   localStorage.removeItem('amansala_addons');
+  saveAddOnsToSupabase([]);
   ADD_ONS=ADD_ONS_DEFAULT.map(a=>({...a}));
   closeModal('pkgRatesModal');regRender();showToast('Package rates reset to defaults.');
 }
