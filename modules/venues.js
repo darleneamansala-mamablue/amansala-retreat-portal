@@ -614,6 +614,16 @@ function rmSetRateMode(mode){
   if(shareBtn)shareBtn.style.cssText=(shareBtn.dataset.base||'')+(mode==='sharing'?active:inactive);
   rmAutoRate();
 }
+// Bikini Bootcamp / Restore & Renew's package cost already bundles food (per
+// Darlene's rate sheet — $85 of the $265 package is food), so these types
+// default to the fullest meal plan rather than staff having to remember to
+// switch it manually. Staff can still override before saving.
+function rmOnTypeChange(){
+  const rmType=document.getElementById('rm-type')?.value||'';
+  const mealEl=document.getElementById('rm-mealplan');
+  if(mealEl&&(rmType==='Bikini Bootcamp'||rmType==='Restore and Renew'))mealEl.value='full';
+  rmAutoRate();
+}
 async function rmAutoRate(){
   const rateEl=document.getElementById('rm-rate'),hintEl=document.getElementById('rm-rate-hint');
   const start=document.getElementById('rm-start').value;
