@@ -583,6 +583,12 @@ async function venRoLoadPricingConfig(){
     ]);
     _venRoSettings=s?.value||{};_venRoRates=r?.value||[];
   }catch(e){_venRoSettings={};_venRoRates=[];}
+  // Keep the Room Only season %s and BBC package cost in sync with whatever was
+  // last saved in Booking Engine → Rates, even if that tab was never opened
+  // this session (rmAutoRate can otherwise run before beInit() hydrates them).
+  if(_venRoSettings.room_only_season_pcts) ROOM_ONLY_SEASON_PCTS={...ROOM_ONLY_SEASON_PCTS,...(_venRoSettings.room_only_season_pcts)};
+  if(_venRoSettings.bbc_package_classes_tours_massage!=null) BBC_PACKAGE_CLASSES_TOURS_MASSAGE=_venRoSettings.bbc_package_classes_tours_massage;
+  if(_venRoSettings.bbc_package_food!=null) BBC_PACKAGE_FOOD=_venRoSettings.bbc_package_food;
 }
 function venRoIsLow(dateStr){const m=new Date(dateStr+'T12:00:00').getMonth()+1;return m>=5&&m<=9;}
 function venRoIsWeekend(dateStr){const d=new Date(dateStr+'T12:00:00').getDay();return d===0||d===5||d===6;}
@@ -614,19 +620,32 @@ async function rmAutoRate(){
   if(!_rmRtId||!rateEl)return;
   const rt=AppData.roomTypes.find(r=>r.id===_rmRtId);if(!rt)return;
   await venRoLoadPricingConfig();
-  const low=venRoIsLow(start||fmtISO(new Date()));
-  const season=low?'Low Season':'High Season';
-  // Room Only rate (walk-in/individual guests, breakfast only -- no retreat inclusions) is
-  // a separate, cheaper category from the Yoga/retreat rate (price1/price2). For now this is
-  // calculated as the retreat Single rate minus $75/night, per Darlene -- a placeholder until
-  // she sends the real Room Only rate sheet.
-  const soloRate=low?(rt.roomOnlyPrice1_low??rt.roomOnlyPrice1):rt.roomOnlyPrice1;
-  const shareRate=low?(rt.roomOnlyPrice2_low??soloRate):(rt.roomOnlyPrice2??soloRate);
-  const rate=_rmRateMode==='sharing'?shareRate:soloRate;
+  const rmType=document.getElementById('rm-type')?.value||'';
+  const isBbcOrRestore=rmType==='Bikini Bootcamp'||rmType==='Restore and Renew';
+  if(isBbcOrRestore){
+    // BBC / Restore & Renew: the existing seasonal retreat room rate (price1/price2)
+    // plus a fixed package add-on (classes/tours/massage + food) — per Darlene.
+    const gc=Math.max(1,parseInt(document.getElementById('rm-adults')?.value)||1);
+    const low=isLowSeason(start||fmtISO(new Date()));
+    const roomRate=getRoomRate(rt,gc,start||fmtISO(new Date()));
+    const pkg=bbcPackageTotal();
+    const rate=roomRate!=null?+(roomRate+pkg).toFixed(2):null;
+    if(rate!=null){
+      rateEl.value=rate;
+      if(hintEl)hintEl.textContent=`${rt.name} · ${rmType} · ${low?'Low':'High'} Season · Room ${fmt$(roomRate)} + Package ${fmt$(pkg)}/night`;
+    }else if(hintEl)hintEl.textContent=`${rt.name} — no rate configured for this room type`;
+    return;
+  }
+  // Room Only (Walk-in/Direct/Booking.com/Expedia/Air BnB/OTA) — real seasonal rate
+  // sheet from Darlene (2026-09-02), one base rate per room type computed by date via
+  // roomOnlySeasonPct(). She said sharing isn't really offered as a separate rate, so
+  // solo/sharing currently compute the same number for this category.
+  const rate=roomOnlyRateForDate(rt,start||fmtISO(new Date()));
   if(rate!=null){
     rateEl.value=rate;
-    if(hintEl)hintEl.textContent=`${rt.name} · Room Only · ${season} · Solo ${fmt$(soloRate??0)}${shareRate&&shareRate!==soloRate?` / Sharing ${fmt$(shareRate)}`:''}/night`;
-  }else if(hintEl)hintEl.textContent=`${rt.name} — no Room Only rate configured`;
+    const pct=roomOnlySeasonPct(start||fmtISO(new Date()));
+    if(hintEl)hintEl.textContent=`${rt.name} · Room Only · ${pct===0?'Base rate':(pct>0?'+'+pct+'%':pct+'%')} · ${fmt$(rate)}/night`;
+  }else if(hintEl)hintEl.textContent=`${rt.name} — no Room Only rate configured yet`;
 }
 function rmUpdateNights(){
   const start=document.getElementById('rm-start').value,end=document.getElementById('rm-end').value;

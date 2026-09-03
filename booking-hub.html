@@ -2256,7 +2256,7 @@
       <div class="frow full"><div class="fg"><label>Room</label><input type="text" id="rm-room" readonly style="background:var(--sand);color:var(--muted)"></div></div>
       <div class="frow"><div class="fg"><label>Check-in</label><input type="date" id="rm-start" onchange="rmAutoRate();rmUpdateNights()"></div><div class="fg"><label>Check-out</label><input type="date" id="rm-end" onchange="rmUpdateNights()"></div></div>
       <div id="rm-nights" style="font-size:11px;color:var(--muted);margin:-6px 0 10px"></div>
-      <div class="frow full"><div class="fg"><label>Reservation Type</label><select id="rm-type"><option value="Walk-in">Walk-in</option><option value="Direct">Direct</option><option value="Bikini Bootcamp">Bikini Bootcamp</option><option value="Restore and Renew">Restore and Renew</option><option value="Booking.com">Booking.com</option><option value="Expedia">Expedia</option><option value="Air BnB">Air BnB</option><option value="OTA">OTA (other)</option></select></div></div>
+      <div class="frow full"><div class="fg"><label>Reservation Type</label><select id="rm-type" onchange="rmAutoRate()"><option value="Walk-in">Walk-in</option><option value="Direct">Direct</option><option value="Bikini Bootcamp">Bikini Bootcamp</option><option value="Restore and Renew">Restore and Renew</option><option value="Booking.com">Booking.com</option><option value="Expedia">Expedia</option><option value="Air BnB">Air BnB</option><option value="OTA">OTA (other)</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Guest Name</label><input type="text" id="rm-leader" placeholder="e.g. Jane Smith"></div></div>
       <div class="frow full"><div class="fg"><label>Guest Email</label><input type="email" id="rm-email" placeholder="jane@example.com"></div></div>
       <div class="frow full"><div class="fg">
@@ -2269,7 +2269,7 @@
         </div>
         <div id="rm-rate-hint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
       </div></div>
-      <div class="frow"><div class="fg"><label>Guests</label><input type="number" id="rm-adults" min="1" max="20" value="1"></div><div class="fg"><label>Status</label><select id="rm-status"><option value="requested">Soft Hold</option><option value="contract_sent">Contract Sent</option><option value="contract_signed">Contract Signed</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Confirmed</option></select></div></div>
+      <div class="frow"><div class="fg"><label>Guests</label><input type="number" id="rm-adults" min="1" max="20" value="1" onchange="rmAutoRate()"></div><div class="fg"><label>Status</label><select id="rm-status"><option value="requested">Soft Hold</option><option value="contract_sent">Contract Sent</option><option value="contract_signed">Contract Signed</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Confirmed</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Meals Included</label><select id="rm-mealplan"><option value="breakfast">Breakfast Only</option><option value="none">None</option><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Notes</label><textarea id="rm-notes" placeholder="Internal notes..."></textarea></div></div>
       <div id="rm-err" style="display:none;color:#dc2626;font-size:12px;margin-top:4px"></div>
@@ -4812,6 +4812,42 @@ function roomAbbrev(rt){
 }
 
 function isLowSeason(dateStr){if(!dateStr)return false;const m=pd(dateStr).getMonth()+1;return m>=5&&m<=9;}
+
+// ── ROOM ONLY seasonal pricing ───────────────────────────────────────────
+// Real rate sheet from Darlene (2026-09-02) — one base rate per room type
+// (roomOnlyBaseRate, the Nov1–Mar31 figure), with the rest of the year computed
+// as a % of that base. Centralized here (not hard-coded per room) so the whole
+// curve can be adjusted in one place — editable in Booking Engine → Rates.
+//   Nov 1 – Dec 26:  base rate
+//   Dec 27 – Jan 10: +20% (peak surcharge)
+//   Jan 11 – Mar 31: base rate
+//   Apr 1 – Apr 30:  NOT SPECIFIED by Darlene — currently defaults to base rate
+//   May 1 – Jun 30:  –39% off base
+//   Jul 1 – Sep 30:  –50% off base
+//   Oct 1 – Oct 31:  –30% off base
+// Editable at runtime by Booking Engine → Rates (beSaveRoomOnlyRates) —
+// defaults match Darlene's 2026-09-02 rate sheet exactly.
+let ROOM_ONLY_SEASON_PCTS={peak:20,low:-39,lowest:-50,shoulder:-30};
+function roomOnlySeasonPct(dateStr){
+  if(!dateStr)return 0;
+  const d=pd(dateStr),m=d.getMonth()+1,day=d.getDate(),md=m*100+day;
+  if(md>=1227||md<=110)return ROOM_ONLY_SEASON_PCTS.peak;
+  if(m===5||m===6)return ROOM_ONLY_SEASON_PCTS.low;
+  if(m===7||m===8||m===9)return ROOM_ONLY_SEASON_PCTS.lowest;
+  if(m===10)return ROOM_ONLY_SEASON_PCTS.shoulder;
+  return 0;
+}
+function roomOnlyRateForDate(rt,dateStr){
+  if(!rt||rt.roomOnlyBaseRate==null)return null;
+  return Math.round(rt.roomOnlyBaseRate*(1+roomOnlySeasonPct(dateStr)/100)*100)/100;
+}
+// BBC / Restore & Renew: the seasonal RETREAT room rate (price1/price2 — already
+// existed before this) plus a fixed package add-on. Darlene gave $180 (classes/
+// tours/massage) + $85 (food) = $265 itemized; she said "$275" once but confirmed
+// proceeding with these numbers for now, editable in Booking Engine → Rates.
+let BBC_PACKAGE_CLASSES_TOURS_MASSAGE=180;
+let BBC_PACKAGE_FOOD=85;
+function bbcPackageTotal(){return BBC_PACKAGE_CLASSES_TOURS_MASSAGE+BBC_PACKAGE_FOOD;}
 function getRoomRate(rt,gc,dateStr){const ls=isLowSeason(dateStr);if(gc>=2)return ls?(rt.price2_low||rt.price2):rt.price2;return ls?(rt.price1_low||rt.price1):rt.price1;}
 function calcPkgItems(bk){
   if(!bk)return[];

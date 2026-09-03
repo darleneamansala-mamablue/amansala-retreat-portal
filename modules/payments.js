@@ -367,14 +367,24 @@ function _calcRoomRevenue(bk){
   return +(total-(bk.eqDiscountAmt||0)).toFixed(2);
 }
 function calcBkBalance(bk){
-  const charged=_calcRoomRevenue(bk);
+  const roomRevenue=_calcRoomRevenue(bk);
+  // Individual guest charges (spa/transport/etc., posted per-registration via
+  // reg.charges) roll up onto the retreat leader's master bill/balance here —
+  // students' incidentals are the group's responsibility, not billed separately,
+  // unless a guest is on their own booking (in which case getRegsForBk already
+  // scopes to just their reg).
+  const incidentalCharges=getRegsForBk(bk.id).reduce((s,reg)=>s+((reg.charges||[]).reduce((s2,c)=>s2+(c.amount||0),0)),0);
+  const charged=+(roomRevenue+incidentalCharges).toFixed(2);
   const totalPaid=(bk.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
-  return{charged,totalPaid,balance:+(charged-totalPaid).toFixed(2)};
+  return{charged,totalPaid,balance:+(charged-totalPaid).toFixed(2),roomRevenue,incidentalCharges};
 }
 function renderPayBalance(bk){
-  const {charged,totalPaid,balance}=calcBkBalance(bk);
+  const {charged,totalPaid,balance,roomRevenue,incidentalCharges}=calcBkBalance(bk);
   const clr=balance<=0?'#16a34a':balance>1000?'#dc2626':'#d97706';
-  document.getElementById('payBalanceSummary').innerHTML=`
+  const wrap=document.getElementById('payBalanceSummary');
+  wrap.style.display='block';
+  const breakdownHtml=incidentalCharges>0?`<div style="text-align:center;padding:6px 10px;font-size:10.5px;color:var(--muted);border-top:1px solid var(--border)">Room/Package ${fmt$(roomRevenue)} + Guest Charges ${fmt$(incidentalCharges)}</div>`:'';
+  wrap.innerHTML=`<div style="display:flex">
     <div style="flex:1;text-align:center;padding:14px 10px;border-right:1px solid var(--border)">
       <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600">Total Charged</div>
       <div style="font-size:20px;font-weight:700;color:var(--dark)">${fmt$(charged)}</div>
@@ -386,7 +396,8 @@ function renderPayBalance(bk){
     <div style="flex:1;text-align:center;padding:14px 10px;background:${balance<=0?'#f0fdf4':balance>1000?'#fef2f2':'#fffbeb'}">
       <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:600">Balance Due</div>
       <div style="font-size:20px;font-weight:700;color:${clr}">${balance<=0?'Paid in Full':fmt$(balance)}</div>
-    </div>`;
+    </div>
+  </div>${breakdownHtml}`;
 }
 function renderPayHistory(bk){
   const payments=(bk.payments||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
@@ -532,7 +543,12 @@ function renderVmPaymentWidget(bk){
 // A charge with a matching Guest name is stored on that guest's OWN registration
 // (reg.charges) — their individual folio. Left blank, it's a room/booking-level
 // charge (bk.charges) — e.g. incidentals not tied to one person.
-const VMC_CATEGORIES=['Spa','Massage','Excursión','Food & Bev','Laundry','Private Session','Transport','Upgrade','Other'];
+const VMC_CATEGORIES=['Spa','Massage','Excursión','Food & Bev','Boutique','Laundry','Private Session','Transport','Upgrade','Other'];
+// Groups the finer-grained charge categories above into the 5 consumption
+// buckets Darlene wants on the guest folio quick-view.
+const GF_DEPT_MAP={Spa:'Spa',Massage:'Spa','Private Session':'Spa',Excursión:'Tours / Ceremonies','Food & Bev':'F&B',Boutique:'Boutique',Transport:'Transport'};
+const GF_DEPT_ORDER=['Transport','F&B','Boutique','Tours / Ceremonies','Spa','Other'];
+function gfDeptFor(category){return GF_DEPT_MAP[category]||'Other';}
 let _vmChargesAddOpen=false;
 let _vmChargeItems=null; // lazy-loaded, cached catalog from Booking Engine → Items — powers the description autosuggest only
 async function vmLoadChargeItems(){
@@ -741,6 +757,8 @@ function renderGuestFolio(){
     </div>`:'';
   const bkBalance=bk?calcBkBalance(bk):null;
   const infoRow=(label,value)=>value?`<div style="display:flex;gap:8px;padding:3px 0"><span style="font-size:11px;color:var(--muted);min-width:52px">${label}</span><span style="font-size:12.5px;color:var(--dark)">${escHtml(value)}</span></div>`:'';
+  const byDept={};charges.forEach(c=>{const d=gfDeptFor(c.category);byDept[d]=(byDept[d]||0)+(c.amount||0);});
+  const deptChipsHtml=Object.keys(byDept).length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${GF_DEPT_ORDER.filter(d=>byDept[d]>0).map(d=>`<div style="background:#fff;border:1px solid var(--border);border-radius:7px;padding:4px 9px"><span style="font-size:10px;color:var(--muted)">${d}</span> <span style="font-size:11.5px;font-weight:700;color:var(--dark)">${fmt$(byDept[d])}</span></div>`).join('')}</div>`:'';
   document.getElementById('gfBody').innerHTML=`
     <div style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;margin-bottom:${(guest.email||guest.phone||guest.notes)?'10px':'0'}">
@@ -749,9 +767,10 @@ function renderGuestFolio(){
       </div>
       ${guest.notes?`<div style="font-size:12px;color:var(--dark);background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px"><span style="font-weight:700;color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.6px">Notes</span><div style="margin-top:2px">${escHtml(guest.notes)}</div></div>`:''}
       <div style="display:flex;gap:16px;flex-wrap:wrap">
-        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">This Guest's Charges</div><div style="font-size:15px;font-weight:800;color:var(--dark)">${fmt$(total)}</div></div>
+        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Outstanding — This Guest's Charges</div><div style="font-size:15px;font-weight:800;color:var(--dark)">${fmt$(total)}</div></div>
         ${bkBalance?`<div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Retreat Balance (all guests)</div><div style="font-size:15px;font-weight:800;color:${bkBalance.balance>0?'#dc2626':'#16a34a'}">${bkBalance.balance>0?fmt$(bkBalance.balance):'Paid in full'}</div></div>`:''}
       </div>
+      ${deptChipsHtml}
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
       <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)">Folio${total>0?' · '+fmt$(total)+' total':''}</span>
