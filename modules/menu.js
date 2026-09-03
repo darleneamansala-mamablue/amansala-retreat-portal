@@ -501,7 +501,7 @@ function menuPrint(){
   days.forEach(ds=>{
     const mi=menuDayIndex(ds);
     const d=new Date(ds+'T12:00:00');
-    gridHtml+=`<div style="background:#1a2332;color:#fff;padding:6px 4px;text-align:center"><div style="font-size:7px;text-transform:uppercase;opacity:.7">${d.toLocaleDateString('en-US',{weekday:'long'})}</div><div style="font-size:11px;font-weight:600;margin-top:1px">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div><div style="font-size:8px;opacity:.5;margin-top:1px">Day ${mi}</div></div>`;
+    gridHtml+=`<div style="background:#1a2332;color:#fff;padding:7px 4px;text-align:center"><div style="font-size:10px;text-transform:uppercase;opacity:.7">${d.toLocaleDateString('en-US',{weekday:'long'})}</div><div style="font-size:15px;font-weight:600;margin-top:1px">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div><div style="font-size:11px;opacity:.5;margin-top:1px">Day ${mi}</div></div>`;
   });
   // Meal rows
   meals.forEach(meal=>{
@@ -516,24 +516,24 @@ function menuPrint(){
       let dishesHtml='';
       if(meal==='dinner'){
         const din=mData.dinner||{};
-        if(din.protein) dishesHtml+=`<div style="font-weight:700;font-size:8.5px;color:#1e3a5f;padding:2px 0;border-bottom:1px dotted #cde">★ ${din.protein}</div>`;
-        (din.dishes||[]).forEach(d2=>{ dishesHtml+=`<div style="font-size:8px;padding:1px 0;border-bottom:1px dotted #e0dbd2">${d2}</div>`; });
-        if(din.dessert) dishesHtml+=`<div style="font-size:7px;font-weight:700;text-transform:uppercase;color:#888;margin-top:3px">Postre</div><div style="font-size:8px;padding:1px 0">${din.dessert}</div>`;
+        if(din.protein) dishesHtml+=`<div style="font-weight:700;font-size:12px;color:#1e3a5f;padding:3px 0;border-bottom:1px dotted #cde">★ ${din.protein}</div>`;
+        (din.dishes||[]).forEach(d2=>{ dishesHtml+=`<div style="font-size:11.5px;padding:2px 0;border-bottom:1px dotted #e0dbd2">${d2}</div>`; });
+        if(din.dessert) dishesHtml+=`<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-top:4px">Postre</div><div style="font-size:11.5px;padding:2px 0">${din.dessert}</div>`;
       } else {
         (mData[meal]||[]).forEach(d2=>{
           const isProt=(meal==='brunch'||meal==='lunch')&&d2.includes('★');
           dishesHtml+=isProt
-            ?`<div style="font-weight:700;font-size:8.5px;color:#78350f;padding:2px 0;border-bottom:1px dotted #fde">★ ${d2.replace(' ★','')}</div>`
-            :`<div style="font-size:8px;padding:1px 0;border-bottom:1px dotted #e0dbd2">${d2}</div>`;
+            ?`<div style="font-weight:700;font-size:12px;color:#78350f;padding:3px 0;border-bottom:1px dotted #fde">★ ${d2.replace(' ★','')}</div>`
+            :`<div style="font-size:11.5px;padding:2px 0;border-bottom:1px dotted #e0dbd2">${d2}</div>`;
         });
       }
       // Schedule rows
-      let schedHtml='<table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr><th style="padding:2px 3px;background:#f0ece4;font-size:7px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">Hora</th><th style="padding:2px 3px;background:#f0ece4;font-size:7px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">Grupo</th><th style="padding:2px 3px;background:#f0ece4;font-size:7px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">#</th></tr></thead><tbody>';
-      rows.forEach(r=>{schedHtml+=`<tr><td style="padding:2px 3px;border-top:1px solid #f2efe8">${r.time||''}</td><td style="padding:2px 3px;border-top:1px solid #f2efe8">${r.group||''}</td><td style="padding:2px 3px;border-top:1px solid #f2efe8;text-align:center">${r.pax||''}</td></tr>`;});
+      let schedHtml='<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr><th style="padding:3px 4px;background:#f0ece4;font-size:10px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">Hora</th><th style="padding:3px 4px;background:#f0ece4;font-size:10px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">Grupo</th><th style="padding:3px 4px;background:#f0ece4;font-size:10px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">#</th></tr></thead><tbody>';
+      rows.forEach(r=>{schedHtml+=`<tr><td style="padding:3px 4px;border-top:1px solid #f2efe8">${r.time||''}</td><td style="padding:3px 4px;border-top:1px solid #f2efe8">${r.group||''}</td><td style="padding:3px 4px;border-top:1px solid #f2efe8;text-align:center">${r.pax||''}</td></tr>`;});
       // Spacer rows for alignment
-      for(let p=rows.length;p<maxR[meal];p++) schedHtml+=`<tr><td colspan="3" style="padding:2px 3px;border-top:1px solid #f2efe8">&nbsp;</td></tr>`;
+      for(let p=rows.length;p<maxR[meal];p++) schedHtml+=`<tr><td colspan="3" style="padding:3px 4px;border-top:1px solid #f2efe8">&nbsp;</td></tr>`;
       schedHtml+='</tbody></table>';
-      gridHtml+=`<div style="background:#fff"><div style="padding:3px 5px;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:${cfg.bg};color:${cfg.color};text-align:center">${cfg.label}</div><div style="padding:4px 5px;background:#fafaf7">${dishesHtml||'<div style="font-size:8px;color:#aaa">—</div>'}</div>${schedHtml}<div style="padding:2px 5px;font-size:8px;color:#888;background:#f5f2ec;border-top:1px solid #e8e2d8;text-align:right">Total: ${total||'—'}</div></div>`;
+      gridHtml+=`<div style="background:#fff"><div style="padding:4px 5px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:${cfg.bg};color:${cfg.color};text-align:center">${cfg.label}</div><div style="padding:5px 5px;background:#fafaf7">${dishesHtml||'<div style="font-size:11.5px;color:#aaa">—</div>'}</div>${schedHtml}<div style="padding:3px 5px;font-size:11px;color:#888;background:#f5f2ec;border-top:1px solid #e8e2d8;text-align:right">Total: ${total||'—'}</div></div>`;
     });
   });
   gridHtml+='</div>';
@@ -541,7 +541,7 @@ function menuPrint(){
   const title=fromVal===toVal?`Menu — ${fromFmt}`:`Menu — ${fromFmt} to ${toFmt}`;
   const w=window.open('','_blank');
   w.document.write(`<!DOCTYPE html><html><head>
-  <link rel="icon" type="image/png" href="/favicon.png"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:16px;font-size:11px;}h1{font-size:15px;margin:0 0 10px;text-align:center;}@media print{@page{size:landscape}body{padding-top:60px}}</style></head><body><h1>${title}</h1>${gridHtml}</body></html>`);
+  <link rel="icon" type="image/png" href="/favicon.png"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:16px;font-size:14px;}h1{font-size:20px;margin:0 0 12px;text-align:center;}@media print{@page{size:landscape}body{padding-top:60px}}</style></head><body><h1>${title}</h1>${gridHtml}</body></html>`);
   w.document.close();
   setTimeout(()=>w.print(),400);
 }
