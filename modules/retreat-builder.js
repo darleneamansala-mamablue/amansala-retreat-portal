@@ -795,6 +795,33 @@ function dbCrmSectionHtml(){
     </div>
   </div>`;
 }
+// Collapsible dashboard section — startOpen only matters the first time a
+// key is rendered; after that the user's own expand/collapse choice (kept in
+// _dbAccOpen for this session) wins, so re-rendering the dashboard doesn't
+// keep snapping a section back open/closed on them.
+let _dbAccOpen={};
+function dbToggleAccordion(key){
+  _dbAccOpen[key]=!_dbAccOpen[key];
+  const body=document.getElementById('dbAcc-'+key),chev=document.getElementById('dbAccChev-'+key);
+  if(body)body.style.display=_dbAccOpen[key]?'block':'none';
+  if(chev)chev.textContent=_dbAccOpen[key]?'▾':'▸';
+}
+function dbAccordionSection(key,icon,title,color,bg,border,headerRight,bodyHtml,startOpen){
+  if(!(key in _dbAccOpen))_dbAccOpen[key]=!!startOpen;
+  const open=_dbAccOpen[key];
+  return`<div class="db-section" style="margin-bottom:14px;border-color:${border}">
+    <div class="db-sec-hdr" style="background:${bg};border-color:${border};display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="dbToggleAccordion('${key}')">
+      <span class="db-sec-title" style="color:${color}">${icon}&nbsp; ${title}</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:12px;font-weight:700;color:${color}">${headerRight}</span>
+        <span id="dbAccChev-${key}" style="font-size:12px;color:${color}">${open?'▾':'▸'}</span>
+      </div>
+    </div>
+    <div id="dbAcc-${key}" style="display:${open?'block':'none'}">
+      ${bodyHtml}
+    </div>
+  </div>`;
+}
 function buildDashboard(){
   const el=document.getElementById('dbContent');if(!el)return;
   const today=new Date();today.setHours(0,0,0,0);
@@ -806,17 +833,28 @@ function buildDashboard(){
 
   const active=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate>=todayStr);
 
-  // Payment alerts: retreats starting within 7 weeks with a balance due
-  const urgent=[],warning=[];
+  // Payment alerts — the Sales Pipeline (CRM) now owns early-lead tracking
+  // (soft holds, contract follow-up, deposit reminders), so the Dashboard only
+  // tracks money actually pending on ALREADY-booked retreats, split by
+  // certainty: a deposit not yet received isn't guaranteed revenue the way a
+  // remaining final balance on a deposited retreat is.
+  const depositPending=[],finalBalancePending=[];
   active.forEach(bk=>{
     if(adminDone[bk.id+'_payment'])return;
-    if(bk.startDate<todayStr||bk.startDate>in7wStr)return;
     const {charged,totalPaid:paid,balance}=calcBkBalance(bk);
     if(balance<=0)return;
-    const daysOut=Math.round((pd(bk.startDate)-today)/DAY_MS);
-    const obj={bk,balance,charged,paid,daysOut};
-    if(bk.startDate<=in6wStr)urgent.push(obj);else warning.push(obj);
+    const obj={bk,balance,charged,paid};
+    if(pipeDepositReceived(bk))finalBalancePending.push(obj);else depositPending.push(obj);
   });
+  depositPending.sort((a,b)=>a.bk.startDate.localeCompare(b.bk.startDate));
+  finalBalancePending.sort((a,b)=>a.bk.startDate.localeCompare(b.bk.startDate));
+  const depositPendingTotal=depositPending.reduce((s,x)=>s+x.balance,0);
+  const finalBalancePendingTotal=finalBalancePending.reduce((s,x)=>s+x.balance,0);
+  const scheduleConfirmPending=active.filter(bk=>{
+    if(!bk.scheduleRequest?.submittedAt)return false;
+    const s=bk.scheduleRequest.adminStatus||'pending';
+    return s==='pending'||s==='changes';
+  }).sort((a,b)=>a.startDate.localeCompare(b.startDate));
 
   // Pipeline stages
   const noContract=active.filter(b=>['requested','pending'].includes(b.status))
@@ -834,7 +872,6 @@ function buildDashboard(){
   const soon=active.filter(b=>b.startDate>=todayStr&&b.startDate<=in30Str)
     .sort((a,b)=>a.startDate.localeCompare(b.startDate));
 
-  const totalAlertBal=[...urgent,...warning].reduce((s,x)=>s+x.balance,0);
 
   // ── BANK TOTALS ──
   const methodLabel={wire:'Wire Transfer',cheque:'Cheque',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',check:'Cheque',cash:'Cash',other:'Other'};
@@ -1009,7 +1046,7 @@ function buildDashboard(){
     ${dbStat('Active Retreats',active.length,'#2d6a6a','<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>')}
     ${dbStat('Arriving in 30 Days',soon.length,'#0891b2','<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>')}
     ${dbStat('Transport (30 Days)',transportVal,transportColor,'<path d="M3 17h2l1.5-4.5A2 2 0 0 1 8.4 11h7.2a2 2 0 0 1 1.9 1.5L19 17h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M5 17V9a2 2 0 0 1 2-2h6l4 4v6"/>')}
-    ${dbStat('Payment Alerts',urgent.length+warning.length,urgent.length?'#dc2626':warning.length?'#d97706':'#16a34a','<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>')}
+    ${dbStat('Payments Pending',depositPending.length+finalBalancePending.length,depositPending.length?'#991b1b':finalBalancePending.length?'#92400e':'#16a34a','<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>')}
     ${dbStat('Total Received',fmt$(grandTotalReceived),'#15803d','<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>')}
   </div>
   <div class="db-insights-bar">
@@ -1035,131 +1072,32 @@ function buildDashboard(){
   const allActive=active.slice().sort((a,b)=>a.startDate.localeCompare(b.startDate));
   const pipeline=buildPipelineSection(allActive,today);
 
-  // ── COMPACT ALERTS (urgent payment + schedule pending) ──
-  let alerts='';
-  // Soft hold (date requested) alert — shown at top
-  const softHolds=active.filter(b=>b.status==='requested').sort((a,b)=>a.startDate.localeCompare(b.startDate));
-  if(softHolds.length){
-    alerts+=`<div class="db-alert-row" style="border-color:#c4b5fd;margin-bottom:10px">
-      <div class="db-alert-hdr" style="background:#f5f3ff">
-        <span style="font-size:12.5px;font-weight:700;color:#7c3aed;flex:1">📅 Retreat Date Requested</span>
-        <span style="font-size:11px;color:#7c3aed;font-weight:600">${softHolds.length} retreat${softHolds.length>1?'s':''}</span>
-      </div>
-      ${softHolds.map(bk=>`<div class="db-alert-item" onclick="showAvailPreview('${bk.id}')">
-        <span style="font-weight:600;font-size:13px">${bk.leaderName||bk.retreatName||'Unnamed'}</span>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:12px;color:var(--muted)">${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}</span>
-          <span style="padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700;background:#ede9fe;color:#6d28d9">Soft Hold</span>
-        </div>
-      </div>`).join('')}
-    </div>`;
-  }
-  // Contract unsigned after 7 days alert
-  const contractOverdue=active.filter(b=>{
-    if(b.status!=='contract_sent')return false;
-    const sentDate=b.contractSentAt||b.statusChangedAt;
-    if(!sentDate)return false;
-    return(today-new Date(sentDate))>7*DAY_MS;
-  }).sort((a,b)=>a.startDate.localeCompare(b.startDate));
-  if(contractOverdue.length){
-    alerts+=`<div class="db-alert-row" style="border-color:#fdba74;margin-bottom:10px">
-      <div class="db-alert-hdr" style="background:#fff7ed">
-        <span style="font-size:12.5px;font-weight:700;color:#c2410c;flex:1">✉️ Contract Not Signed — Follow Up</span>
-        <span style="font-size:11px;color:#c2410c;font-weight:600">${contractOverdue.length} retreat${contractOverdue.length>1?'s':''}</span>
-      </div>
-      ${contractOverdue.map(bk=>{
-        const sentDate=bk.contractSentAt||bk.statusChangedAt;
-        const daysWaiting=sentDate?Math.floor((today-new Date(sentDate))/DAY_MS):null;
-        return`<div class="db-alert-item" onclick="openVenEdit('${bk.id}')">
-          <span style="font-weight:600;font-size:13px">${bk.leaderName||bk.retreatName||'Unnamed'}</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:12px;color:var(--muted)">${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}</span>
-            ${daysWaiting!==null?`<span style="padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700;background:#ffedd5;color:#c2410c">${daysWaiting}d waiting</span>`:''}
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`;
-  }
-  // Deposit not received 7 days after contract signing
-  const depositOverdue=active.filter(b=>{
-    if(b.status!=='contract_signed')return false;
-    const signedDate=b.contractSignedAt||b.statusChangedAt;
-    if(!signedDate)return false;
-    return(today-new Date(signedDate))>7*DAY_MS;
-  }).sort((a,b)=>a.startDate.localeCompare(b.startDate));
-  if(depositOverdue.length){
-    alerts+=`<div class="db-alert-row" style="border-color:#f9a8d4;margin-bottom:10px">
-      <div class="db-alert-hdr" style="background:#fdf2f8">
-        <span style="font-size:12.5px;font-weight:700;color:#be185d;flex:1">💰 Deposit Not Received — Send Reminder</span>
-        <span style="font-size:11px;color:#be185d;font-weight:600">${depositOverdue.length} retreat${depositOverdue.length>1?'s':''}</span>
-      </div>
-      ${depositOverdue.map(bk=>{
-        const signedDate=bk.contractSignedAt||bk.statusChangedAt;
-        const daysSince=signedDate?Math.floor((today-new Date(signedDate))/DAY_MS):null;
-        return`<div class="db-alert-item" style="cursor:pointer" onclick="sendDepositReminder('${bk.id}')" title="Click to send payment reminder">
-          <span style="font-weight:600;font-size:13px">${bk.leaderName||bk.retreatName||'Unnamed'}</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:12px;color:var(--muted)">${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}</span>
-            ${daysSince!==null?`<span style="padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700;background:#fce7f3;color:#be185d">${daysSince}d since signing</span>`:''}
-            <span style="font-size:11px;font-weight:600;color:#be185d;opacity:.7">✉ Send reminder</span>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`;
-  }
-  if(urgent.length){
-    alerts+=`<div class="db-alert-row" style="border-color:#fca5a5;margin-bottom:10px">
-      <div class="db-alert-hdr" style="background:#fff5f5">
-        <span style="font-size:12.5px;font-weight:700;color:#dc2626;flex:1">🔴 Final Payment Due — Within 6 Weeks</span>
-        <span style="font-size:11px;color:#dc2626;font-weight:600">${urgent.length} retreat${urgent.length>1?'s':''}</span>
-      </div>
-      ${urgent.map(x=>`<div class="db-alert-item" onclick="openPaymentModal('${x.bk.id}')">
-        <span style="font-weight:600;font-size:13px">${x.bk.leaderName||x.bk.retreatName}</span>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-weight:700;color:#dc2626">${fmt$(x.balance)} due</span>
-          <span style="font-size:11.5px;color:var(--muted)">${x.daysOut}d away</span>
-        </div>
-      </div>`).join('')}
-    </div>`;
-  }
-  if(warning.length){
-    alerts+=`<div class="db-alert-row" style="border-color:#fdba74;margin-bottom:10px">
-      <div class="db-alert-hdr" style="background:#fff7ed">
-        <span style="font-size:12.5px;font-weight:700;color:#d97706;flex:1">⚠️ Payment Due Soon — Within 7 Weeks</span>
-        <span style="font-size:11px;color:#d97706;font-weight:600">${warning.length} retreat${warning.length>1?'s':''}</span>
-      </div>
-      ${warning.map(x=>`<div class="db-alert-item" onclick="openPaymentModal('${x.bk.id}')">
-        <span style="font-weight:600;font-size:13px">${x.bk.leaderName||x.bk.retreatName}</span>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-weight:700;color:#d97706">${fmt$(x.balance)} due</span>
-          <span style="font-size:11.5px;color:var(--muted)">${x.daysOut}d away</span>
-        </div>
-      </div>`).join('')}
-    </div>`;
-  }
-  // Schedule pending alert
-  const schedPending2=active.filter(bk=>{
-    if(!bk.scheduleRequest?.submittedAt)return false;
-    const s=bk.scheduleRequest.adminStatus||'pending';
-    return s==='pending'||s==='changes';
-  }).sort((a,b)=>a.startDate.localeCompare(b.startDate));
-  if(schedPending2.length){
-    alerts+=`<div class="db-alert-row" style="border-color:#6ee7b7;margin-bottom:10px">
-      <div class="db-alert-hdr" style="background:#ecfdf5">
-        <span style="font-size:12.5px;font-weight:700;color:#059669;flex:1">📋 Schedule Pending Confirmation</span>
-        <span style="font-size:11px;color:#059669;font-weight:600;margin-right:8px">${schedPending2.length} retreat${schedPending2.length>1?'s':''}</span>
-        <button onclick="loadFromSupabase().then(()=>{buildDashboard();showToast('Refreshed from cloud');})" style="padding:3px 10px;font-size:11px;font-weight:600;color:#059669;background:#fff;border:1.5px solid #6ee7b7;border-radius:6px;cursor:pointer;font-family:inherit">↻ Refresh</button>
-      </div>
-      ${schedPending2.map(bk=>{
-        const sr=bk.scheduleRequest;
-        const isChanges=sr.adminStatus==='changes';
-        return`<div class="db-alert-item" onclick="openScheduleViewer('${bk.id}')">
-          <span style="font-weight:600;font-size:13px">${bk.leaderName||bk.retreatName}</span>
-          <span style="padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700;background:${isChanges?'#fef3c7':'#d1fae5'};color:${isChanges?'#92400e':'#065f46'}">${isChanges?'Changes Requested':'Awaiting Review'}</span>
-        </div>`;
-      }).join('')}
-    </div>`;
-  }
+  // ── ACCORDION SECTIONS ── Deposit Pending / Final Balance Pending / Schedule
+  // Confirmation Pending. Early-lead stages (soft hold, contract follow-up,
+  // deposit reminders) moved to the Sales Pipeline (CRM) and are no longer
+  // duplicated here.
+  const dbItemRow=(bk,rightHtml,onclick)=>`<div class="db-alert-item" onclick="${onclick}" style="cursor:pointer">
+    <span style="font-weight:600;font-size:13px">${bk.leaderName||bk.retreatName||'Unnamed'}</span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:12px;color:var(--muted)">${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}</span>
+      ${rightHtml}
+    </div>
+  </div>`;
+  let alerts=dbAccordionSection('depositPending','💰','Deposit Pending','#991b1b','#fff5f5','#fca5a5',
+    `${depositPending.length} retreat${depositPending.length!==1?'s':''} · ${fmt$(depositPendingTotal)}`,
+    depositPending.length?depositPending.map(x=>dbItemRow(x.bk,`<span style="font-weight:700;color:#991b1b">${fmt$(x.balance)}</span>`,`openPaymentModal('${x.bk.id}')`)).join(''):'<div style="padding:12px 16px;color:var(--muted);font-size:12.5px;font-style:italic">Nothing pending.</div>',
+    true)
+  +dbAccordionSection('finalBalancePending','💵','Final Balance Pending','#92400e','#fff7ed','#fdba74',
+    `${finalBalancePending.length} retreat${finalBalancePending.length!==1?'s':''} · ${fmt$(finalBalancePendingTotal)}`,
+    finalBalancePending.length?finalBalancePending.map(x=>dbItemRow(x.bk,`<span style="font-weight:700;color:#92400e">${fmt$(x.balance)}</span>`,`openPaymentModal('${x.bk.id}')`)).join(''):'<div style="padding:12px 16px;color:var(--muted);font-size:12.5px;font-style:italic">Nothing pending.</div>',
+    false)
+  +dbAccordionSection('scheduleConfirmPending','📋','Schedule Confirmation Pending','#059669','#ecfdf5','#6ee7b7',
+    `${scheduleConfirmPending.length} retreat${scheduleConfirmPending.length!==1?'s':''}`,
+    scheduleConfirmPending.length?scheduleConfirmPending.map(bk=>{
+      const isChanges=bk.scheduleRequest.adminStatus==='changes';
+      return dbItemRow(bk,`<span style="padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700;background:${isChanges?'#fef3c7':'#d1fae5'};color:${isChanges?'#92400e':'#065f46'}">${isChanges?'Changes Requested':'Awaiting Review'}</span>`,`openScheduleViewer('${bk.id}')`);
+    }).join(''):'<div style="padding:12px 16px;color:var(--muted);font-size:12.5px;font-style:italic">Nothing pending.</div>',
+    false);
 
   // Special events section for dashboard
   const activeEvts=(AppData.specialEvents||[]).filter(e=>e.status!=='cancelled').sort((a,b)=>a.startDate.localeCompare(b.startDate));
