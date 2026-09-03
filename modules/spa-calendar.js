@@ -19,6 +19,28 @@ let spaCalDate = new Date(); spaCalDate.setHours(0, 0, 0, 0);
 let spaCalMode = 'therapist';
 let spaCalDragApptId = null;
 
+// One-click filter to a single wellness category — Darlene's ask: "click to
+// body workers, only include the body workers / spirit workers / yoga
+// fitness — 3 buttons". Yoga & Fitness is one combined button covering all
+// non-massage, non-spirit movement categories (yoga/fitness/pilates/dance),
+// matching how she described it as a single bucket, not four separate ones.
+let spaCalGroupFilter = 'all';
+const SPA_CAL_FILTER_BTNS = [
+  { key: 'massage', label: '🪷 Body Workers' },
+  { key: 'spirit', label: '🦋 Spirit Workers' },
+  { key: 'yogafit', label: '🧘 Yoga & Fitness' },
+];
+function spaCalGroupMatchesFilter(groupKey) {
+  if (spaCalGroupFilter === 'all') return true;
+  if (spaCalGroupFilter === 'yogafit') return ['yoga', 'fitness', 'pilates', 'dance'].includes(groupKey);
+  return groupKey === spaCalGroupFilter;
+}
+function spaCalSetGroupFilter(key) {
+  spaCalGroupFilter = (spaCalGroupFilter === key) ? 'all' : key;
+  spaCalRenderToolbar();
+  spaCalRender();
+}
+
 async function spaCalLoad() {
   try {
     const { data } = await db.from('app_store').select('value').eq('key', 'spa_appointments').single();
@@ -59,7 +81,12 @@ function spaCalRenderToolbar() {
       <button onclick="spaApptShowForm(null)" style="display:flex;align-items:center;gap:6px;padding:9px 16px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer;margin-left:6px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Appointment
       </button>
-    </div>`;
+    </div>
+    ${spaCalMode === 'therapist' ? `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px">
+      <span style="font-size:11px;font-weight:700;color:#8a7e74;text-transform:uppercase;letter-spacing:.4px">View:</span>
+      ${SPA_CAL_FILTER_BTNS.map(f => `<button onclick="spaCalSetGroupFilter('${f.key}')" style="padding:7px 14px;min-height:32px;font-size:12.5px;font-weight:700;border-radius:99px;cursor:pointer;font-family:'Jost',sans-serif;border:1.5px solid ${spaCalGroupFilter === f.key ? 'var(--teal,#2d6a6a)' : '#e8dfd4'};background:${spaCalGroupFilter === f.key ? 'var(--teal,#2d6a6a)' : '#fff'};color:${spaCalGroupFilter === f.key ? '#fff' : 'var(--dark)'}" aria-pressed="${spaCalGroupFilter === f.key}">${f.label}</button>`).join('')}
+      ${spaCalGroupFilter !== 'all' ? `<button onclick="spaCalSetGroupFilter('all')" style="padding:7px 14px;min-height:32px;font-size:12px;font-weight:600;border-radius:99px;cursor:pointer;font-family:'Jost',sans-serif;border:1.5px dashed var(--muted);background:none;color:var(--muted)">Show All</button>` : ''}
+    </div>` : ''}`;
   const btnT = document.getElementById('spaCalModeTher'), btnR = document.getElementById('spaCalModeRoom');
   btnT.style.background = spaCalMode === 'therapist' ? 'var(--teal,#2d6a6a)' : 'transparent';
   btnT.style.color = spaCalMode === 'therapist' ? '#fff' : 'var(--dark)';
@@ -93,7 +120,12 @@ function spaCalRender() {
       ${muted.map(t => `<button onclick="spaCalMuteToggle('${t.id}')" style="border:1px solid #e0d8cc;background:#fff;border-radius:99px;padding:3px 10px;font-size:11.5px;color:#6b7280;cursor:pointer;font-family:'Jost',sans-serif">${t.firstName} · tap to unmute</button>`).join('')}
     </div>`;
   }
-  spaTherGroupList(activeTher).forEach(g => { html += spaCalSectionHtml(g.label, g.list, dateStr); });
+  const groups = spaTherGroupList(activeTher).filter(g => spaCalGroupMatchesFilter(g.key));
+  if (!groups.length) {
+    html += `<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No active therapists in this category yet.</p>`;
+  } else {
+    groups.forEach(g => { html += spaCalSectionHtml(g.label, g.list, dateStr); });
+  }
   el.innerHTML = html;
 }
 
@@ -132,7 +164,8 @@ function spaCalPanelHtml(cols, isTher, dateStr) {
       const statusColor = a.status === 'COMPLETED' ? '#059669' : a.status === 'NO_SHOW' ? '#dc2626' : '#2d6a6a';
       const otherLabel = isTher ? (SpaData.rooms.find(r => r.id === a.roomId)?.name || '') : (SpaData.therapists.find(t => t.id === a.therapistId)?.firstName || '');
       html += `<div draggable="true" ondragstart="spaCalDragStart(event,'${a.id}')" onclick="event.stopPropagation();spaApptShowForm('${a.id}')" style="position:absolute;top:${top}px;left:3px;right:3px;height:${height}px;background:${statusColor}18;border-left:3px solid ${statusColor};border-radius:6px;padding:4px 7px;overflow:hidden;cursor:grab;font-family:'Jost',sans-serif">
-        <div style="font-size:11px;font-weight:700;color:#1a2332;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.clientName}</div>
+        ${isTher ? `<span onclick="event.stopPropagation();spaCalToggleApptConfirm('${a.id}')" title="${a.confirmed ? 'Confirmed by ' + (a.confirmedBy || 'staff') + ' — click to unconfirm' : 'Not yet confirmed by the therapist — click to confirm on their behalf'}" style="position:absolute;top:3px;right:5px;font-size:12px;cursor:pointer;line-height:1;z-index:2">${a.confirmed ? '✅' : '⏳'}</span>` : ''}
+        <div style="font-size:11px;font-weight:700;color:#1a2332;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:${isTher ? '16px' : '0'}">${a.clientName}</div>
         <div style="font-size:10px;color:#4b5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${svc ? svc.name : ''}</div>
         ${height > 44 ? `<div style="font-size:9.5px;color:#9ca3af">${spaCalFmtT(a.start)}${otherLabel ? ' · ' + otherLabel : ''}</div>` : ''}
       </div>`;
@@ -143,6 +176,15 @@ function spaCalPanelHtml(cols, isTher, dateStr) {
   return html;
 }
 
+// Lets Darlene confirm/unconfirm a service on the therapist's behalf directly
+// from the admin calendar — reuses the same toggle the therapist's own
+// login uses (scConfirmSpa in staff-confirm-portal.js) so both sides always
+// agree on one confirmed/confirmedAt/confirmedBy state per appointment.
+async function spaCalToggleApptConfirm(apptId) {
+  if (typeof scConfirmSpa !== 'function') return;
+  await scConfirmSpa(apptId, getCurrentSession()?.name || 'Staff');
+  spaCalRender();
+}
 function spaCalMuteToggle(therapistId) {
   const t = SpaData.therapists.find(x => x.id === therapistId);
   if (!t) return;
