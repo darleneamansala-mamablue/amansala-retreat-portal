@@ -745,6 +745,239 @@ function menuPrintDay(dateStr){
   setTimeout(()=>w.print(),500);
 }
 
+// Readable weekly menu — replaces trying to cram 7 days onto one page (the
+// old compact grid in menuPrint() below is kept as the deliberate "Compact
+// Weekly" option for anyone who still wants that). Two landscape pages by
+// default: Sun–Wed then Thu–Sat, each day getting its own full column with
+// real font sizes rather than a shrunk table. isKitchen adds group/count/prep
+// info; guest mode (default) stays branding + dishes + dietary notes only.
+function menuPrintWeekReadable(fromVal,toVal,isKitchen){
+  if(!fromVal||!toVal){showToast('Please select a From and To date first.');return;}
+  if(toVal<fromVal){showToast('End date must be after start date.');return;}
+  const days=[];
+  const d=new Date(fromVal+'T12:00:00');
+  const end=new Date(toVal+'T12:00:00');
+  while(d<=end&&days.length<14){days.push(d.toISOString().split('T')[0]);d.setDate(d.getDate()+1);}
+  if(!days.length){showToast('No days in that range.');return;}
+  // Default split for a real 7-day week: Sun–Wed (4) then Thu–Sat (3). For any
+  // other length, just split as evenly as possible into pages of up to 4 days
+  // so no page gets too cramped.
+  const pages=[];
+  if(days.length===7){pages.push(days.slice(0,4));pages.push(days.slice(4,7));}
+  else{for(let i=0;i<days.length;i+=4)pages.push(days.slice(i,i+4));}
+
+  const fmtDayName=ds=>new Date(ds+'T12:00:00').toLocaleDateString('en-US',{weekday:'long'});
+  const fmtDayDate=ds=>new Date(ds+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const fmtRangeLbl=(ds,de)=>{
+    const a=new Date(ds+'T12:00:00'),b=new Date(de+'T12:00:00');
+    const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return a.getMonth()===b.getMonth()?`${MON[a.getMonth()]} ${a.getDate()}–${b.getDate()}, ${a.getFullYear()}`:`${MON[a.getMonth()]} ${a.getDate()} – ${MON[b.getMonth()]} ${b.getDate()}, ${a.getFullYear()}`;
+  };
+  const rangeLbl=fmtRangeLbl(fromVal,toVal);
+  const printHasLunch=days.some(ds=>(menuSchedule[ds]?.lunch||[]).length>0);
+  const meals=['lightBreakfast','brunch',...(printHasLunch?['lunch']:[]),'snack','dinner'];
+
+  const itemLine=(s)=>{
+    const clean=s.replace(' ★','').replace('★ ','');
+    const {name,desc}=menuItemDetail(clean);
+    return `<div class="rw-item">${escHtml(name)}</div>${desc?`<div class="rw-item-desc">${escHtml(desc)}</div>`:''}`;
+  };
+  const groupLine=(ds,meal)=>{
+    if(!isKitchen)return'';
+    const rows=menuSchedule[ds]?.[meal]||[];
+    if(!rows.length)return'';
+    return `<div class="rw-groups">${rows.map(r=>`<div class="rw-group-row">${r.time?escHtml(r.time)+' · ':''}${escHtml(r.group||'')} · ${r.pax||0}</div>`).join('')}</div>`;
+  };
+  const dayColumn=(ds)=>{
+    const mi=menuDayIndex(ds);
+    const mData=WEEKLY_MENU[mi]||{};
+    const isToday=ds===fmtISO(new Date());
+    const mealBlock=(meal)=>{
+      if(meal==='dinner'){
+        const din=mData.dinner;if(!din)return'';
+        return `<div class="rw-meal">
+          <div class="rw-meal-hdr" style="background:${MENU_MEAL_CFG.dinner.bg};color:${MENU_MEAL_CFG.dinner.color}">Dinner</div>
+          <div class="rw-meal-body">
+            ${din.protein?itemLine(din.protein):''}
+            ${(din.dishes||[]).map(itemLine).join('')}
+            ${din.dessert?`<div class="rw-dessert">Postre · ${escHtml(menuItemDetail(din.dessert).name)}</div>`:''}
+            ${groupLine(ds,'dinner')}
+          </div>
+        </div>`;
+      }
+      const items=mData[meal];if(!items||!items.length)return'';
+      return `<div class="rw-meal">
+        <div class="rw-meal-hdr" style="background:${MENU_MEAL_CFG[meal].bg};color:${MENU_MEAL_CFG[meal].color}">${MENU_MEAL_CFG[meal].label}</div>
+        <div class="rw-meal-body">${items.map(itemLine).join('')}${groupLine(ds,meal)}</div>
+      </div>`;
+    };
+    return `<div class="rw-day${isToday?' rw-today':''}">
+      <div class="rw-day-hdr">
+        <div class="rw-day-name">${fmtDayName(ds)}</div>
+        <div class="rw-day-date">${fmtDayDate(ds)}</div>
+      </div>
+      ${meals.map(mealBlock).join('')}
+    </div>`;
+  };
+
+  const pagesHtml=pages.map((pageDays,pi)=>`<div class="rw-page${pi>0?' rw-page-break':''}">
+    <div class="rw-hdr">
+      <div class="rw-brand">Amansala</div>
+      <div class="rw-title">${isKitchen?'Kitchen · ':''}Weekly Menu</div>
+      <div class="rw-range">${rangeLbl}</div>
+    </div>
+    <div class="rw-days-row" style="grid-template-columns:repeat(${pageDays.length},1fr)">
+      ${pageDays.map(dayColumn).join('')}
+    </div>
+    <div class="rw-footer">Generated ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} at ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})} · Page ${pi+1} of ${pages.length}${!isKitchen?' · Menu subject to change':''}</div>
+  </div>`).join('');
+
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <title>Amansala-Weekly-Menu-${fromVal}-to-${toVal}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    @page{size:letter landscape;margin:0.45in}
+    *{box-sizing:border-box}
+    body{font-family:'Jost',sans-serif;margin:0;color:#2d2520;background:#fdfbf7}
+    .rw-page{padding:6px 4px 10px}
+    .rw-page-break{page-break-before:always}
+    .rw-hdr{text-align:center;margin-bottom:14px}
+    .rw-brand{font-family:'Cormorant Garamond',serif;font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#8a7e74}
+    .rw-title{font-family:'Cormorant Garamond',serif;font-size:22pt;font-weight:700;color:#1a2332;margin-top:2px}
+    .rw-range{font-size:14pt;color:#8a7e74;letter-spacing:.5px;margin-top:2px}
+    .rw-days-row{display:grid;gap:18px;align-items:start}
+    .rw-day{border:1px solid #e8dfd4;border-radius:10px;overflow:hidden;background:#fff}
+    .rw-day.rw-today{border-color:#2d6a6a;border-width:2px}
+    .rw-day-hdr{background:#1a2332;color:#fff;text-align:center;padding:8px 6px}
+    .rw-day-name{font-size:16pt;font-weight:600;font-family:'Cormorant Garamond',serif}
+    .rw-day-date{font-size:11pt;opacity:.75;margin-top:1px}
+    .rw-meal{border-bottom:1px solid #f0ebe0}
+    .rw-meal:last-child{border-bottom:none}
+    .rw-meal-hdr{font-size:12pt;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:6px 10px}
+    .rw-meal-body{padding:8px 10px 12px}
+    .rw-item{font-size:11pt;color:#2d2520;padding:3px 0;line-height:1.35}
+    .rw-item-desc{font-size:9pt;color:#9a8f83;font-style:italic;line-height:1.4;margin:-1px 0 4px}
+    .rw-dessert{font-size:9.5pt;font-style:italic;color:#8a5a2e;margin-top:4px}
+    .rw-groups{margin-top:6px;padding-top:6px;border-top:1px dashed #e0d8cc}
+    .rw-group-row{font-size:9pt;color:#6b7280}
+    .rw-footer{text-align:center;margin-top:10px;font-size:8.5pt;color:#b8ab9e;letter-spacing:.3px}
+    @media print{.rw-day{break-inside:avoid}}
+  </style></head>
+  <body>${pagesHtml}
+  <div class="rw-print-actions" style="text-align:center;padding:16px 0" data-no-print="1">
+    <button onclick="window.print()" style="padding:9px 22px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Print / Save PDF</button>
+  </div>
+  <style>@media print{[data-no-print]{display:none!important}}</style>
+  </body></html>`;
+
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+// "Daily Menu" format applied across a date range — same guest-poster look as
+// menuPrintDay (which stays untouched, still used by the single-day wall
+// click), one full page per day, portrait.
+function menuPrintDailyRange(fromVal,toVal,isKitchen){
+  if(!fromVal||!toVal){showToast('Please select a From and To date first.');return;}
+  if(toVal<fromVal){showToast('End date must be after start date.');return;}
+  const days=[];
+  const d=new Date(fromVal+'T12:00:00');
+  const end=new Date(toVal+'T12:00:00');
+  while(d<=end&&days.length<31){days.push(d.toISOString().split('T')[0]);d.setDate(d.getDate()+1);}
+  const itemHtml=(s)=>{
+    const clean=s.replace(' ★','').replace('★ ','');
+    const {name,desc}=menuItemDetail(clean);
+    return `<div class="menu-poster-item">${escHtml(name)}</div>${desc?`<div class="menu-poster-item-desc">${escHtml(desc)}</div>`:''}`;
+  };
+  const groupHtml=(ds,meal)=>{
+    if(!isKitchen)return'';
+    const rows=menuSchedule[ds]?.[meal]||[];
+    if(!rows.length)return'';
+    return `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #e0d8cc;font-size:11px;color:#6b7280">${rows.map(r=>`${r.time?escHtml(r.time)+' · ':''}${escHtml(r.group||'')} · ${r.pax||0}`).join('<br>')}</div>`;
+  };
+  const section=(label,items,ds,meal)=>{
+    if(!items||!items.length)return'';
+    return `<div class="menu-poster-section">
+      <div class="menu-poster-label">${label}</div>
+      <div class="menu-poster-items">${items.map(itemHtml).join('')}</div>
+      ${groupHtml(ds,meal)}
+    </div>`;
+  };
+  const pagesHtml=days.map((ds,i)=>{
+    const mi=menuDayIndex(ds);
+    const mData=WEEKLY_MENU[mi]||{};
+    const dd=new Date(ds+'T12:00:00');
+    const dayName=dd.toLocaleDateString('en-US',{weekday:'long'});
+    const dateFmt=dd.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+    const dinnerHtml=mData.dinner?`<div class="menu-poster-section">
+      <div class="menu-poster-label">Dinner</div>
+      <div class="menu-poster-items">
+        ${mData.dinner.protein?itemHtml(mData.dinner.protein):''}
+        ${(mData.dinner.dishes||[]).map(itemHtml).join('')}
+        ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${escHtml(menuItemDetail(mData.dinner.dessert).name)}</div>`:''}
+      </div>
+      ${groupHtml(ds,'dinner')}
+    </div>`:'';
+    return `<div class="${i>0?'menu-poster-page2':''}" style="${i>0?'':''}">
+      <div class="menu-poster-brand">Amansala${isKitchen?' · Kitchen':''}</div>
+      <div class="menu-poster-day">${dayName}</div>
+      <div class="menu-poster-date">${dateFmt}</div>
+      <div class="menu-poster-divider"></div>
+      ${section('Brunch',mData.brunch,ds,'brunch')}
+      ${section('Afternoon Snack',mData.snack,ds,'snack')}
+      ${dinnerHtml}
+    </div>`;
+  }).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <title>Amansala-Daily-Menu-${fromVal}-to-${toVal}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    @page{size:portrait;margin:0.6in}
+    *{box-sizing:border-box}
+    body{font-family:'Jost',sans-serif;margin:0;padding:56px 64px;color:#2d2520;background:#fdfbf7}
+    .menu-poster-brand{text-align:center;font-family:'Cormorant Garamond',serif;font-size:25px;letter-spacing:4px;text-transform:uppercase;color:#8a7e74;margin-bottom:4px}
+    .menu-poster-day{text-align:center;font-family:'Cormorant Garamond',serif;font-size:58px;font-weight:600;color:#2d2520;margin:0 0 2px}
+    .menu-poster-date{text-align:center;font-size:17px;letter-spacing:1px;color:#8a7e74;text-transform:uppercase;margin-bottom:44px}
+    .menu-poster-divider{width:60px;height:2px;background:#c9a876;margin:0 auto 44px}
+    .menu-poster-section{margin-bottom:36px}
+    .menu-poster-label{font-family:'Cormorant Garamond',serif;font-size:27px;font-weight:600;color:#8a5a2e;letter-spacing:.5px;border-bottom:1.5px solid #e8dfd4;padding-bottom:8px;margin-bottom:14px;text-align:center}
+    .menu-poster-items{display:flex;flex-direction:column;gap:4px}
+    .menu-poster-item{font-size:21px;color:#3a332c;text-align:center;margin-top:6px}
+    .menu-poster-item-desc{font-size:18px;color:#9a8f83;text-align:center;font-style:italic;line-height:1.55;max-width:560px;margin:2px auto 0}
+    .menu-poster-dessert{margin-top:10px;font-size:17px;font-style:italic;color:#8a7e74;text-align:center}
+    .menu-poster-page2{page-break-before:always;padding-top:40px}
+    @media print{body{padding:170px 40px 20px}.menu-poster-page2{padding-top:140px}}
+    .dm-actions{text-align:center;padding:16px 0}
+    @media print{.dm-actions{display:none}}
+  </style></head>
+  <body>${pagesHtml}
+  <div class="dm-actions"><button onclick="window.print()" style="padding:9px 22px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Print / Save PDF</button></div>
+  </body></html>`;
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+function openMenuPrintOptions(){
+  const fromVal=document.getElementById('menuPrintFrom')?.value;
+  const toVal=document.getElementById('menuPrintTo')?.value;
+  if(!fromVal||!toVal){showToast('Please select a From and To date first.');return;}
+  openModal('menuPrintOptionsModal');
+}
+function menuRunPrintOptions(){
+  const fromVal=document.getElementById('menuPrintFrom')?.value;
+  const toVal=document.getElementById('menuPrintTo')?.value;
+  const format=document.getElementById('menuPrintFormat').value;
+  const isKitchen=document.getElementById('menuPrintAudience').value==='kitchen';
+  closeModal('menuPrintOptionsModal');
+  if(format==='readable')menuPrintWeekReadable(fromVal,toVal,isKitchen);
+  else if(format==='compact')menuPrint();
+  else if(format==='daily')menuPrintDailyRange(fromVal,toVal,isKitchen);
+}
+
 // ===== MENU COSTS =====
 // Raw protein pricing (from Darlene's supplier price list, pesos/kg) and a
 // growing library of full recipe costs (marinades, sides, dressings, breads —
