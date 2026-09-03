@@ -5255,6 +5255,7 @@ function _applyRemoteSync(silent){
   setInterval(()=>_applyRemoteSync(true), 5*60*1000);
 })();
 
+try{if(typeof syncAddOnsFromSupabase==='function')syncAddOnsFromSupabase();}catch(e){console.warn('[addOns init]',e);}
 loadFromSupabase().then(async loaded=>{
   if(loaded){
     try{
