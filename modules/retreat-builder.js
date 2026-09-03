@@ -778,22 +778,21 @@ function dbCrmLinkRow(label,formUrl,copyUrl,submissionsUrl){
 }
 function dbCrmSectionHtml(){
   if(crmInquiries===null)dbCrmLoadInquiries();
-  return`<div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:22px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">CRM — Inquiry Forms</div>
-      <button onclick="switchTab('pipeline',document.getElementById('pipelineTabBtn'))" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#2d6a6a;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer">View Sales Pipeline →</button>
-    </div>
-    ${dbCrmLinkRow('Retreat Leader','/leader-inquiry.html','https://amansala-portal.netlify.app/leader-inquiry.html','/retreat-admin')}
-    ${dbCrmLinkRow('Wedding','/event-inquiry.html?type=wedding','https://amansala-portal.netlify.app/event-inquiry.html?type=wedding')}
-    ${dbCrmLinkRow('Bachelorette','/event-inquiry.html?type=bachelorette','https://amansala-portal.netlify.app/event-inquiry.html?type=bachelorette')}
-    ${dbCrmLinkRow('Extra Nights','/extra-nights.html','https://amansala-portal.netlify.app/extra-nights.html')}
-    ${dbCrmLinkRow('Book a Stay','/book.html','https://amansala-portal.netlify.app/book.html')}
-    ${dbCrmLinkRow('Hotel PMS','https://amansala-staging.netlify.app','https://amansala-staging.netlify.app')}
-    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0ece4">
-      <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Recent Wedding / Bachelorette Inquiries</div>
-      <div id="dbCrmRecent">${dbCrmRecentListHtml()}</div>
-    </div>
-  </div>`;
+  return dbAccordionSection('crmForms','📋','CRM — Inquiry Forms','#2d6a6a','#fff','var(--border)',
+    `<button onclick="event.stopPropagation();switchTab('pipeline',document.getElementById('pipelineTabBtn'))" style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:#2d6a6a;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:11.5px;font-weight:700;color:#fff;cursor:pointer">View Sales Pipeline →</button>`,
+    `<div style="padding:12px 20px 16px">
+      ${dbCrmLinkRow('Retreat Leader','/leader-inquiry.html','https://amansala-portal.netlify.app/leader-inquiry.html','/retreat-admin')}
+      ${dbCrmLinkRow('Wedding','/event-inquiry.html?type=wedding','https://amansala-portal.netlify.app/event-inquiry.html?type=wedding')}
+      ${dbCrmLinkRow('Bachelorette','/event-inquiry.html?type=bachelorette','https://amansala-portal.netlify.app/event-inquiry.html?type=bachelorette')}
+      ${dbCrmLinkRow('Extra Nights','/extra-nights.html','https://amansala-portal.netlify.app/extra-nights.html')}
+      ${dbCrmLinkRow('Book a Stay','/book.html','https://amansala-portal.netlify.app/book.html')}
+      ${dbCrmLinkRow('Hotel PMS','https://amansala-staging.netlify.app','https://amansala-staging.netlify.app')}
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f0ece4">
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Recent Wedding / Bachelorette Inquiries</div>
+        <div id="dbCrmRecent">${dbCrmRecentListHtml()}</div>
+      </div>
+    </div>`,
+    false);
 }
 // Collapsible dashboard section — startOpen only matters the first time a
 // key is rendered; after that the user's own expand/collapse choice (kept in
@@ -903,19 +902,16 @@ function buildDashboard(){
       <span style="font-size:12.5px;color:#374151">${methodLabel[k]||k}</span>
       <span style="font-size:13px;font-weight:700;color:#16a34a">${fmt$(v)}</span>
     </div>`).join('');
-  const bankOverview=grandTotalReceived>0?`<div class="db-section" style="margin-bottom:20px;border-color:#86efac">
-    <div class="db-sec-hdr" style="background:#f0fdf4;border-color:#86efac;display:flex;justify-content:space-between;align-items:center">
-      <span class="db-sec-title" style="color:#15803d">💰&nbsp; Money Received — All Retreats</span>
-      <span style="font-size:13px;font-weight:700;color:#15803d">${fmt$(grandTotalReceived)} total</span>
-    </div>
-    <div style="padding:4px 20px 8px">
+  const bankOverview=grandTotalReceived>0?dbAccordionSection('moneyReceived','💰','Money Received — All Retreats','#15803d','#f0fdf4','#86efac',
+    `${fmt$(grandTotalReceived)} total`,
+    `<div style="padding:4px 20px 8px">
       ${bankRows}
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px">
         <span style="font-size:12px;color:var(--muted)">Outstanding across all active retreats</span>
         <span style="font-size:13px;font-weight:700;color:${grandTotalOutstanding>0?'#dc2626':'#16a34a'}">${grandTotalOutstanding>0?fmt$(grandTotalOutstanding):'All paid ✓'}</span>
       </div>
-    </div>
-  </div>`:'';
+    </div>`,
+    false):'';
 
   // ── CANCELLATION BANK ──
   const cancelledWithFee=AppData.bookings.filter(b=>b.status==='cancelled'&&b.cancellationFee>0)
@@ -1119,41 +1115,6 @@ function buildDashboard(){
     }).join(''):'<div style="padding:12px 16px;color:var(--muted);font-size:12.5px;font-style:italic">Nothing pending.</div>',
     false);
 
-  // Special events section for dashboard
-  const activeEvts=(AppData.specialEvents||[]).filter(e=>e.status!=='cancelled').sort((a,b)=>a.startDate.localeCompare(b.startDate));
-  let evtDashSection='';
-  if(activeEvts.length){
-    const EVT_S_COLORS={inquiry:{bg:'#f5f3ff',color:'#6d28d9',border:'#ddd6fe'},proposal_sent:{bg:'#eff6ff',color:'#1d4ed8',border:'#bfdbfe'},contract_sent:{bg:'#ecfdf5',color:'#065f46',border:'#a7f3d0'},contract_signed:{bg:'#f0fdf4',color:'#15803d',border:'#bbf7d0'},deposit_paid:{bg:'#fff7ed',color:'#c2410c',border:'#fed7aa'},confirmed:{bg:'#f0fdfa',color:'#0f766e',border:'#99f6e4'}};
-    const EVT_S_LBLS={inquiry:'Inquiry',proposal_sent:'Proposal Sent',contract_sent:'Contract Sent',contract_signed:'Contract Signed',deposit_paid:'Deposit Paid',confirmed:'Confirmed'};
-    const EVT_T_LBLS={wedding:'Wedding',bachelorette:'Bachelorette',corporate:'Corporate',birthday:'Birthday',anniversary:'Anniversary',family:'Family Reunion',group:'Private Group',other:'Other'};
-    evtDashSection=`<div class="db-section" style="border-color:#d8b4fe;margin-bottom:20px">
-      <div class="db-sec-hdr" style="background:#f5f3ff;border-color:#d8b4fe;display:flex;align-items:center;justify-content:space-between">
-        <span class="db-sec-title" style="color:#7c3aed;display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Special Events</span>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span class="db-sec-badge" style="background:#a855f7;color:#fff">${activeEvts.length}</span>
-          <button onclick="switchTab('events',document.getElementById('eventsTabBtn'))" style="padding:3px 10px;font-size:11px;font-weight:600;color:#7c3aed;background:#fff;border:1.5px solid #d8b4fe;border-radius:6px;cursor:pointer;font-family:inherit">View All →</button>
-        </div>
-      </div>
-      ${activeEvts.slice(0,5).map(e=>{
-        const sc=EVT_S_COLORS[e.status]||EVT_S_COLORS.inquiry;
-        const dOut=e.startDate?Math.round((pd(e.startDate)-today)/DAY_MS):null;
-        const dLbl=dOut===null?'':dOut===0?'Today':dOut<0?`${Math.abs(dOut)}d ago`:`${dOut}d`;
-        return`<div class="db-alert-item" onclick="switchTab('events',document.getElementById('eventsTabBtn'));setTimeout(()=>evtShowForm('${e.id}'),100)" style="cursor:pointer">
-          <div style="flex:1;min-width:0">
-            <span style="font-weight:600;font-size:13px">${e.contact||'Unnamed'}</span>
-            <span style="font-size:12px;color:#a89e94;margin-left:8px">${EVT_T_LBLS[e.type]||e.type||''}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            ${e.startDate?`<span style="font-size:12px;color:var(--muted)">${fmtDate(e.startDate)}${e.endDate&&e.endDate!==e.startDate?' – '+fmtDate(e.endDate):''}</span>`:''}
-            ${dLbl?`<span style="font-size:11px;color:${dOut>=0?'#6d28d9':'#dc2626'};font-weight:600">${dLbl}</span>`:''}
-            <span style="padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700;background:${sc.bg};color:${sc.color};border:1px solid ${sc.border}">${EVT_S_LBLS[e.status]||e.status}</span>
-          </div>
-        </div>`;
-      }).join('')}
-      ${activeEvts.length>5?`<div style="padding:10px 20px;font-size:12px;color:#a89e94;text-align:center">${activeEvts.length-5} more event${activeEvts.length-5!==1?'s':''} — <span onclick="switchTab('events',document.getElementById('eventsTabBtn'))" style="color:#7c3aed;cursor:pointer;font-weight:600">view all</span></div>`:''}
-    </div>`;
-  }
-
   const noActiveMsg=!allActive.length?`<div style="text-align:center;padding:64px 20px">
     <div style="font-size:48px;margin-bottom:14px">✓</div>
     <div style="font-size:17px;font-weight:600;color:var(--dark)">All clear!</div>
@@ -1161,8 +1122,10 @@ function buildDashboard(){
   </div>`:'';
   // alerts (Deposit/Final Balance/Schedule Confirmation Pending) renders at
   // the very top of the Dashboard — Darlene's priority section — separately
-  // from evtDashSection+pipeline, which stay further down.
-  const sections=evtDashSection+pipeline+(allActive.length?'':noActiveMsg);
+  // from pipeline, which stays further down. Special Events dashboard card
+  // removed 2026-09-03 per Darlene ("old feature, not needed") — the Special
+  // Events tab/module itself is untouched, just no longer summarized here.
+  const sections=pipeline+(allActive.length?'':noActiveMsg);
 
   // ── ACTIVITY NOTIFICATIONS ──
   const actvNotifs=_buildActivityNotifs();
@@ -1226,28 +1189,6 @@ function buildDashboard(){
     </div>`;
   }
 
-  // ── LIVE CHAT STATUS ──
-  const _lcNow=new Date(),_lcH=_lcNow.getUTCHours(),_lcDay=_lcNow.getUTCDay();
-  const _lcOnline=_lcDay>=1&&_lcDay<=5&&_lcH>=14&&_lcH<23;
-  const liveChatSection=`<div class="db-section" style="margin-bottom:20px;border-color:${_lcOnline?'#86efac':'#e5e7eb'}">
-    <div class="db-sec-hdr" style="background:${_lcOnline?'#f0fdf4':'#f9fafb'};border-color:${_lcOnline?'#86efac':'#e5e7eb'};display:flex;justify-content:space-between;align-items:center">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span class="db-sec-title" style="color:${_lcOnline?'#15803d':'#6b7280'}">💬&nbsp; Live Chat</span>
-        <div style="display:flex;align-items:center;gap:5px">
-          <div style="width:8px;height:8px;border-radius:50%;background:${_lcOnline?'#4ade80':'#9ca3af'}${_lcOnline?';box-shadow:0 0 0 2px #bbf7d0':''}"></div>
-          <span style="font-size:11px;font-weight:600;color:${_lcOnline?'#15803d':'#6b7280'}">${_lcOnline?'Retreat Specialist Online':'Away — replies when back online'}</span>
-        </div>
-      </div>
-      <a href="https://trywhistle.net" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:5px 13px;font-size:12px;font-weight:600;color:#2d6a6a;background:#fff;border:1.5px solid #2d6a6a;border-radius:7px;cursor:pointer;font-family:inherit;text-decoration:none">Open Whistle →</a>
-    </div>
-    <div style="padding:12px 20px;font-size:13px;color:#6b7280;display:flex;align-items:center;gap:12px">
-      <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#9ca3af" stroke-width="2"/><path d="M12 8v4l3 3" stroke="#9ca3af" stroke-width="2" stroke-linecap="round"/></svg>
-      ${_lcOnline
-        ? 'Teachers who need help will be directed to Whistle chat. Check your Whistle inbox for new messages.'
-        : 'You\'re currently away. Teachers will be directed to Whistle, email, or to book a call.'}
-    </div>
-  </div>`;
-
   el.innerHTML=`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
       <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:600;color:var(--dark);margin:0">Dashboard</h2>
@@ -1256,7 +1197,6 @@ function buildDashboard(){
     </div>
     ${alerts}
     ${dbCrmSectionHtml()}
-    ${liveChatSection}
     ${actvSection}
     ${inquirySection}
     ${statGrid}
