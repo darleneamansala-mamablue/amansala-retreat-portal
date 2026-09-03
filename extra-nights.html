@@ -1234,7 +1234,7 @@ async function applyDiscount() {
   try {
     const res = await fetch('/.netlify/functions/validate-discount', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, source: 'Extra Night' }),
+      body: JSON.stringify({ code, source: 'Extra Night', checkIn: _calIn, checkOut: _calOut }),
     });
     const data = await res.json();
 

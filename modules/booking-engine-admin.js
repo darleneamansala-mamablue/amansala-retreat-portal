@@ -58,6 +58,9 @@ async function beInit() {
       beDbGet('chargeItems'),
     ]);
     beSettings  = s ?? {};
+    if (beSettings.room_only_season_pcts) ROOM_ONLY_SEASON_PCTS = { ...ROOM_ONLY_SEASON_PCTS, ...beSettings.room_only_season_pcts };
+    if (beSettings.bbc_package_classes_tours_massage != null) BBC_PACKAGE_CLASSES_TOURS_MASSAGE = beSettings.bbc_package_classes_tours_massage;
+    if (beSettings.bbc_package_food != null) BBC_PACKAGE_FOOD = beSettings.bbc_package_food;
     beRatesList = r ?? [];
     beDiscounts = d ?? [];
     // Backfill an id on any legacy discount codes that predate this admin screen.
@@ -559,6 +562,8 @@ function beRenderDiscounts() {
         <div class="fg"><label>Applies to</label><select id="dc-appliesto"><option value="all">Both pages</option><option value="escape">Book a Stay only</option><option value="extra_nights">Extra Nights only</option></select></div>
         <div class="fg"><label>Max uses (blank = unlimited)</label><input type="number" id="dc-maxuses" placeholder="—" min="1" step="1"></div>
         <div class="fg"><label>Expires on (blank = never)</label><input type="date" id="dc-expires"></div>
+        <div class="fg"><label>Blackout stay dates — start (blank = none)</label><input type="date" id="dc-blackout-start"></div>
+        <div class="fg"><label>Blackout stay dates — end (blank = none)</label><input type="date" id="dc-blackout-end"></div>
         <div class="fg" style="grid-column:span 2"><label>Description (shown to guest)</label><input type="text" id="dc-desc" placeholder="10% off your stay"></div>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:14px">
@@ -585,6 +590,7 @@ function beRenderDiscounts() {
               <span style="font-size:13px;font-weight:700;color:var(--dark);font-family:monospace;letter-spacing:.5px">${escHtml(dc.code)}</span>
               ${dc.description ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${escHtml(dc.description)}</div>` : ''}
               ${dc.appliesTo === 'extra_nights' ? `<div style="margin-top:3px"><span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#ede9fe;color:#6d28d9">Extra Nights only</span></div>` : dc.appliesTo === 'escape' ? `<div style="margin-top:3px"><span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#ccfbf1;color:#0f766e">Book a Stay only</span></div>` : ''}
+              ${dc.blackoutStart ? `<div style="margin-top:3px"><span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#fee2e2;color:#991b1b">Blackout ${fmtDate(dc.blackoutStart)}–${fmtDate(dc.blackoutEnd)}</span></div>` : ''}
             </td>
             <td style="padding:10px 14px;font-size:13px;color:var(--text)">${dc.type === 'pct' ? `${dc.value}%` : `$${dc.value} USD`}</td>
             <td style="padding:10px 14px;font-size:12px;color:var(--muted)">${dc.usedCount ?? 0}${dc.maxUses != null ? ` / ${dc.maxUses}` : ' / ∞'}</td>
@@ -616,6 +622,8 @@ async function beSaveDiscount() {
   const appliesTo = document.getElementById('dc-appliesto')?.value ?? 'all';
   const maxUses = document.getElementById('dc-maxuses')?.value.trim();
   const expires = document.getElementById('dc-expires')?.value.trim();
+  const blackoutStart = document.getElementById('dc-blackout-start')?.value.trim();
+  const blackoutEnd = document.getElementById('dc-blackout-end')?.value.trim();
   const desc = document.getElementById('dc-desc')?.value.trim();
 
   if (!code) { showToast('Code cannot be empty'); return; }
@@ -623,12 +631,16 @@ async function beSaveDiscount() {
   if (isNaN(value) || value <= 0) { showToast('Value must be greater than 0'); return; }
   if (type === 'pct' && value > 100) { showToast('Percentage cannot exceed 100'); return; }
   if (beDiscounts.some(d => d.code === code)) { showToast('That code already exists'); return; }
+  if ((blackoutStart && !blackoutEnd) || (!blackoutStart && blackoutEnd)) { showToast('Enter both blackout dates, or leave both blank'); return; }
+  if (blackoutStart && blackoutEnd && blackoutEnd < blackoutStart) { showToast('Blackout end date must be after the start date'); return; }
 
   const dc = {
     id: 'dc_' + Math.random().toString(36).slice(2, 10),
     code, type, value, appliesTo,
     maxUses: maxUses ? parseInt(maxUses) : null,
     expiresAt: expires || null,
+    blackoutStart: blackoutStart || null,
+    blackoutEnd: blackoutEnd || null,
     description: desc || null,
     active: true,
     usedCount: 0,

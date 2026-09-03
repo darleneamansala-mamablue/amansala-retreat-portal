@@ -10,8 +10,8 @@ exports.handler = async (event) => {
   const supaKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supaKey) return jsonErr(500, 'Server config error');
 
-  let code, source;
-  try { ({ code, source } = JSON.parse(event.body || '{}')); }
+  let code, source, checkIn, checkOut;
+  try { ({ code, source, checkIn, checkOut } = JSON.parse(event.body || '{}')); }
   catch { return jsonErr(400, 'Invalid JSON'); }
   if (!code) return jsonErr(400, 'Missing code');
 
@@ -36,6 +36,12 @@ exports.handler = async (event) => {
     const pageKey = source === 'Extra Night' ? 'extra_nights' : 'escape';
     if (dc.appliesTo && dc.appliesTo !== 'all' && dc.appliesTo !== pageKey) {
       return jsonErr(404, 'Código no válido');
+    }
+    // Blackout stay dates — the code simply doesn't apply if the guest's stay
+    // overlaps this range at all (e.g. Scouting 50% off, blocked Dec27–Jan15).
+    if (dc.blackoutStart && dc.blackoutEnd && checkIn && checkOut) {
+      const overlaps = checkIn < dc.blackoutEnd && checkOut > dc.blackoutStart;
+      if (overlaps) return jsonErr(400, 'Ese código no aplica para esas fechas');
     }
 
     return {
