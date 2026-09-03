@@ -420,7 +420,7 @@ function toRenderEntry(t){
   const key = t.id + '_' + t._kind;
   return {
     key,
-    confirmed: !!driverConfirmations[key],
+    confirmed: driverConfirmations[key]?.status==='confirmed'||driverConfirmations[key]?.status==='completed',
     type: isArr ? 'arrival' : 'departure',
     date: isArr ? t.arrivalDate : t.departureDate,
     time, airport,
@@ -462,13 +462,28 @@ async function loadData(){
   render();
 }
 
+// Writes the same rich status shape modules/driver-portal.js uses (status/
+// driverId/history/etc) instead of the old flat {driver,confirmedAt} —
+// this page shares the driverConfirmations store with the embedded
+// dashboard in booking-hub.html, so a stale write shape here would corrupt
+// records the admin side and the embedded dashboard both depend on.
 async function confirmGroup(keysStr, confirmed){
   const session = getDriverSession(); if(!session) return;
   const keys = keysStr.split(',').filter(Boolean);
   if(!keys.length) return;
   keys.forEach(k=>{
-    if (confirmed) driverConfirmations[k] = {driver: session.name, confirmedAt: new Date().toISOString()};
-    else delete driverConfirmations[k];
+    let rec = driverConfirmations[k];
+    if (!rec) rec = driverConfirmations[k] = {status:'pending',driverId:session.id,assignedBy:null,assignedAt:new Date().toISOString(),
+      viewedAt:null,confirmedAt:null,confirmedBy:null,declineReason:null,declinedAt:null,version:1,confirmedVersion:null,note:null,changeMessage:null,history:[]};
+    if (rec.driverId && rec.driverId !== session.id) return; // not this driver's assignment
+    if (!rec.history) rec.history = [];
+    if (confirmed) {
+      rec.status='confirmed'; rec.confirmedAt=new Date().toISOString(); rec.confirmedBy=session.name; rec.confirmedVersion=rec.version||1;
+      rec.history.push({at:rec.confirmedAt,event:'confirmed',by:session.name,detail:null});
+    } else {
+      rec.status='pending'; rec.confirmedAt=null; rec.confirmedBy=null;
+      rec.history.push({at:new Date().toISOString(),event:'unconfirmed',by:session.name,detail:null});
+    }
     _entries.forEach(e=>{ if(e.key===k) e.confirmed=confirmed; });
   });
   render();

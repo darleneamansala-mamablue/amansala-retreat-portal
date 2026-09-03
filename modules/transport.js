@@ -10,6 +10,223 @@ let trMonthOffset=0; // months from today's month
 let deletedTransportIds=new Set(JSON.parse(localStorage.getItem('amansala_deleted_transport_ids')||'[]'));
 
 function loadTransport(){try{return(JSON.parse(localStorage.getItem(TRANSPORT_KEY)||'[]')).filter(s=>!deletedTransportIds.has(s.id));}catch{return[];}}
+
+// ===== DRIVER CONFIRMATION WORKFLOW (7-state) =====
+// Separate from sub.status (which means "is this transport request itself
+// valid vs cancelled") — this tracks whether the ASSIGNED DRIVER has
+// acknowledged one leg (arrival or departure) of a submission. Stored in
+// driverConfirmations{} (declared in driver-portal.js, loads after this file
+// — safe because these are only read/written from inside function bodies,
+// called after both scripts have loaded, same pattern trBuildDriverView
+// already relies on).
+const TR_DRV_STATUS={
+  pending:  {label:'Pending Driver Confirmation',       color:'#92400e',bg:'#fef3c7',border:'#fde68a'},
+  viewed:   {label:'Viewed by Driver',                   color:'#0369a1',bg:'#e0f2fe',border:'#93c5fd'},
+  confirmed:{label:'Confirmed by Driver',                color:'#15803d',bg:'#dcfce7',border:'#86efac'},
+  reconfirm:{label:'Changes Require Reconfirmation',     color:'#c2410c',bg:'#ffedd5',border:'#fdba74'},
+  declined: {label:'Driver Declined/Unable',             color:'#dc2626',bg:'#fee2e2',border:'#fca5a5'},
+  completed:{label:'Trip Completed',                     color:'#fff',   bg:'#115e59',border:'#115e59'},
+  cancelled:{label:'Cancelled',                          color:'#6b7280',bg:'#f3f4f6',border:'#d1d5db'},
+};
+function trDrvKey(sub,kind){return sub.id+'_'+kind;}
+function trDrvRec(sub,kind){
+  const dc=(typeof driverConfirmations!=='undefined')?driverConfirmations:null;
+  if(!dc)return null;
+  return dc[trDrvKey(sub,kind)]||null;
+}
+// Which important fields feed reconfirmation, and the id/label of the driver
+// currently assigned to this leg (explicit override first, falling back to
+// the existing airport-based auto-assignment so nothing already assigned
+// silently changes).
+function trDrvFieldsSnapshot(sub,kind,computedDefaultId){
+  return{
+    date:kind==='arrival'?sub.arrivalDate:sub.departureDate,
+    time:kind==='arrival'?sub.arrivalTime:sub.departureTime,
+    airport:kind==='arrival'?sub.arrivalAirport:sub.departureAirport,
+    flightNumber:sub.flightNumber||'',
+    guest:trTransportFullName(sub),
+    driverId:trDrvAssignedId(sub,kind,computedDefaultId),
+    note:(kind==='arrival'?sub.arrivalDriverNote:sub.departureDriverNote)||'',
+  };
+}
+// computedDefaultId, when passed, is the driver trComputeDriverAssignments's
+// date-level pairing already decided (it alone knows whether a Cancún
+// departure is a same-day round-trip riding with Salamon vs a standalone
+// Irving departure) — this function only falls back to the simple
+// arrival-airport heuristic when called without that context.
+function trDrvAssignedId(sub,kind,computedDefaultId){
+  const override=kind==='arrival'?sub.arrivalDriverId:sub.departureDriverId;
+  if(override)return override;
+  if(computedDefaultId)return computedDefaultId;
+  const airport=kind==='arrival'?sub.arrivalAirport:sub.departureAirport;
+  return(airport==='cancun'&&kind==='arrival')?'drv_salamon':'drv_irving';
+}
+function trDrvAssignedName(sub,kind,computedDefaultId){
+  const id=trDrvAssignedId(sub,kind,computedDefaultId);
+  const list=(typeof driverAccounts!=='undefined'&&driverAccounts.length)?driverAccounts:(typeof DEF_DRIVERS!=='undefined'?DEF_DRIVERS:[]);
+  return list.find(d=>d.id===id)?.name||'Unassigned';
+}
+function trDrvPushHistory(rec,event,by,detail){
+  if(!rec.history)rec.history=[];
+  rec.history.push({at:new Date().toISOString(),event,by:by||null,detail:detail||null});
+}
+function trDrvEnsureRec(sub,kind,assignedBy){
+  const dc=driverConfirmations;
+  const key=trDrvKey(sub,kind);
+  if(!dc[key]){
+    dc[key]={status:'pending',driverId:trDrvAssignedId(sub,kind),assignedBy:assignedBy||null,assignedAt:new Date().toISOString(),
+      viewedAt:null,confirmedAt:null,confirmedBy:null,declineReason:null,declinedAt:null,
+      version:1,confirmedVersion:null,note:null,changeMessage:null,snapshot:trDrvFieldsSnapshot(sub,kind),history:[]};
+    trDrvPushHistory(dc[key],'assigned',assignedBy||'System',`Assigned to ${trDrvAssignedName(sub,kind)}`);
+  }
+  return dc[key];
+}
+// Diffs the leg's current fields against the snapshot taken at last
+// assignment/confirmation. If an important field changed AND the leg was
+// confirmed (or already needs reconfirmation), reset it to 'reconfirm' and
+// store a human-readable message of exactly what changed. Call this any
+// time a submission's key fields are edited (guest intake resubmission,
+// staff quick-edit, driver reassignment).
+function trDrvCheckReconfirm(sub,kind,changedBy){
+  const dc=driverConfirmations;const key=trDrvKey(sub,kind);
+  const rec=dc[key];
+  if(!rec){trDrvEnsureRec(sub,kind,changedBy);return;}
+  const now=trDrvFieldsSnapshot(sub,kind);
+  const prev=rec.snapshot||now;
+  const FIELD_LABELS={date:'Date',time:'Pickup time',airport:'Airport',flightNumber:'Flight number',guest:'Guest',driverId:'Assigned driver',note:'Transportation note'};
+  const changes=Object.keys(FIELD_LABELS).filter(f=>(prev[f]||'')!==(now[f]||''));
+  if(!changes.length)return;
+  const wasLive=rec.status==='confirmed'||rec.status==='reconfirm'||rec.status==='viewed';
+  const msgs=changes.map(f=>{
+    const label=FIELD_LABELS[f];
+    let a=prev[f]||'—',b=now[f]||'—';
+    if(f==='time'){a=a&&a!=='—'?tsFmt(a):'—';b=b&&b!=='—'?tsFmt(b):'—';}
+    if(f==='airport'){a=a==='cancun'?'CUN':a==='tulum'?'TQO':a;b=b==='cancun'?'CUN':b==='tulum'?'TQO':b;}
+    if(f==='driverId'){
+      const list=(typeof driverAccounts!=='undefined'&&driverAccounts.length)?driverAccounts:(typeof DEF_DRIVERS!=='undefined'?DEF_DRIVERS:[]);
+      a=list.find(d=>d.id===a)?.name||a;b=trDrvAssignedName(sub,kind);
+    }
+    return`${label} changed from ${a} to ${b}.`;
+  });
+  const changeMessage=msgs.join(' ')+(wasLive?' Driver must reconfirm.':'');
+  rec.snapshot=now;
+  rec.driverId=now.driverId;
+  rec.version=(rec.version||1)+1;
+  rec.changeMessage=changeMessage;
+  rec.changedAt=new Date().toISOString();
+  if(wasLive){
+    rec.status='reconfirm';
+    trDrvPushHistory(rec,'reconfirm_required',changedBy||'System',changeMessage);
+  }else{
+    trDrvPushHistory(rec,'updated',changedBy||'System',changeMessage);
+  }
+}
+// Gathers every trip (arrival + departure legs) assigned to one driver
+// across a date window, reusing trComputeDriverAssignments per distinct
+// date so the same round-trip-pairing/default-routing logic applies no
+// matter how far out the driver looks — used by both the embedded and
+// standalone driver dashboards, and by the admin Driver Assignments page.
+function trDrvGatherTrips(driverId,daysBack,daysFwd){
+  const allSubs=loadTransport();
+  const dates=new Set();
+  const today=new Date();today.setHours(0,0,0,0);
+  const inWindow=ds=>{
+    if(!ds)return false;
+    const d=new Date(ds+'T00:00:00');
+    const diffDays=Math.round((d-today)/86400000);
+    return diffDays>=-daysBack&&diffDays<=daysFwd;
+  };
+  allSubs.forEach(s=>{
+    if(inWindow(s.arrivalDate))dates.add(s.arrivalDate);
+    if(inWindow(s.departureDate))dates.add(s.departureDate);
+  });
+  const trips=[];
+  [...dates].sort().forEach(d=>{
+    const{byDriverId}=trComputeDriverAssignments(d);
+    (byDriverId[driverId]||[]).forEach(t=>trips.push({...t,_date:t._kind==='arrival'?t.arrivalDate:t.departureDate}));
+  });
+  return trips;
+}
+// All drivers' trips combined (not scoped to one driverId) — feeds the
+// management alerts panel on the Driver Assignments page.
+function trDrvGatherAllTrips(daysBack,daysFwd){
+  const allSubs=loadTransport();
+  const dates=new Set();
+  const today=new Date();today.setHours(0,0,0,0);
+  const inWindow=ds=>{
+    if(!ds)return false;
+    const d=new Date(ds+'T00:00:00');
+    const diffDays=Math.round((d-today)/86400000);
+    return diffDays>=-daysBack&&diffDays<=daysFwd;
+  };
+  allSubs.forEach(s=>{
+    if(inWindow(s.arrivalDate))dates.add(s.arrivalDate);
+    if(inWindow(s.departureDate))dates.add(s.departureDate);
+  });
+  const trips=[];
+  [...dates].sort().forEach(d=>{
+    const{allTrips}=trComputeDriverAssignments(d);
+    allTrips.forEach(t=>trips.push({...t,_date:t._kind==='arrival'?t.arrivalDate:t.departureDate}));
+  });
+  return trips;
+}
+function trDrvManagementAlerts(){
+  const trips=trDrvGatherAllTrips(0,14).filter(t=>t.status!=='cancelled');
+  const now=Date.now();
+  const within24h=t=>{
+    const time=t._kind==='arrival'?t.arrivalTime:t.departureTime;
+    if(!t._date||!time)return false;
+    const dt=new Date(t._date+'T'+time+':00');
+    const diffH=(dt-now)/3600000;
+    return diffH>=0&&diffH<=24;
+  };
+  const st=t=>t._drvRec?.status;
+  return{
+    pending:trips.filter(t=>st(t)==='pending').length,
+    viewedNotConfirmed:trips.filter(t=>st(t)==='viewed').length,
+    reconfirm:trips.filter(t=>st(t)==='reconfirm').length,
+    declined:trips.filter(t=>st(t)==='declined').length,
+    noDriver:trips.filter(t=>!t._assignedDriverId).length,
+    departures24h:trips.filter(t=>t._kind==='departure'&&within24h(t)&&['pending','viewed','reconfirm'].includes(st(t))).length,
+    arrivals24h:trips.filter(t=>t._kind==='arrival'&&within24h(t)&&['pending','viewed','reconfirm'].includes(st(t))).length,
+  };
+}
+function trDrvAlertsHtml(){
+  const a=trDrvManagementAlerts();
+  const chips=[
+    {n:a.pending,label:'pending',color:'#92400e',bg:'#fef3c7'},
+    {n:a.viewedNotConfirmed,label:'viewed, not confirmed',color:'#0369a1',bg:'#e0f2fe'},
+    {n:a.reconfirm,label:'need reconfirmation',color:'#c2410c',bg:'#ffedd5'},
+    {n:a.declined,label:'declined',color:'#dc2626',bg:'#fee2e2'},
+    {n:a.noDriver,label:'no driver assigned',color:'#6b7280',bg:'#f3f4f6'},
+    {n:a.arrivals24h,label:'arrivals <24h unconfirmed',color:'#b91c1c',bg:'#fef2f2'},
+    {n:a.departures24h,label:'departures <24h unconfirmed',color:'#b91c1c',bg:'#fef2f2'},
+  ].filter(c=>c.n>0);
+  if(!chips.length)return`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:12.5px;color:#15803d;font-weight:700">✓ All driver confirmations are up to date.</div>`;
+  const urgent=a.arrivals24h+a.departures24h;
+  return`<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px 18px;margin-bottom:16px">
+    ${urgent?`<div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:8px">Driver confirmation required: ${urgent} transportation assignment${urgent!==1?'s':''} within 24 hours ${urgent!==1?'have':'has'} not been confirmed.</div>`:''}
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      ${chips.map(c=>`<span style="font-size:11.5px;font-weight:700;color:${c.color};background:${c.bg};border-radius:99px;padding:4px 12px;white-space:nowrap">${c.n} ${c.label}</span>`).join('')}
+    </div>
+  </div>`;
+}
+function trDrvSetAssignedDriver(subId,kind,driverId,assignedBy){
+  const data=loadTransport();const sub=data.find(s=>s.id===subId);if(!sub)return;
+  if(kind==='arrival')sub.arrivalDriverId=driverId;else sub.departureDriverId=driverId;
+  saveTransport(data);
+  trDrvEnsureRec(sub,kind,assignedBy);
+  trDrvCheckReconfirm(sub,kind,assignedBy);
+  driverConfirmations[trDrvKey(sub,kind)].driverId=driverId;
+  saveDriverConfirmations();
+  if(typeof refreshTransport==='function')refreshTransport();
+}
+function trFmtTulum(iso){
+  if(!iso)return'';
+  try{
+    return new Date(iso).toLocaleString('en-US',{timeZone:'America/Cancun',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
+  }catch(e){return new Date(iso).toLocaleString();}
+}
 function trNormName(s){return(s||'').toLowerCase().replace(/\s+/g,' ').trim();}
 function trTransportFullName(s){return trNormName(((s.firstName||'')+' '+(s.lastName||'')).trim());}
 function trGuestMatchesSub(guest,sub){
@@ -107,6 +324,7 @@ async function syncTransportFromSupabase(){
   const remote=await loadTransportFromSupabase();
   if(!remote)return;
   const local=loadTransport();
+  const localById=new Map(local.map(l=>[l.id,l]));
   const remoteIds=new Set(remote.map(r=>r.id));
   // Keep local entries not yet in Supabase, merge with all remote entries — excluding anything deleted
   const localOnly=local.filter(l=>!remoteIds.has(l.id)&&!deletedTransportIds.has(l.id));
@@ -116,6 +334,25 @@ async function syncTransportFromSupabase(){
   localOnly.forEach(e=>saveTransportToSupabase(e));
   // If Supabase still somehow has a row marked deleted, remove it there too
   remote.filter(r=>deletedTransportIds.has(r.id)).forEach(r=>deleteTransportFromSupabase(r.id));
+
+  // A guest/leader resubmitting the transport form upserts by the same id
+  // (see transport-form.html's _editingEntryId reuse) — this is the only
+  // place that update becomes visible on the admin side, so it's where
+  // reconfirmation gets triggered for any already-confirmed leg whose
+  // important fields changed underneath it.
+  if(typeof driverConfirmations!=='undefined'){
+    let anyChanged=false;
+    remote.forEach(sub=>{
+      const before=localById.get(sub.id);
+      if(!before)return; // brand-new submission — trDrvEnsureRec will create a fresh 'pending' record on first render, nothing to reconfirm
+      const FIELDS=['arrivalDate','arrivalTime','arrivalAirport','departureDate','departureTime','departureAirport','flightNumber','firstName','lastName'];
+      const changed=FIELDS.some(f=>(before[f]||'')!==(sub[f]||''));
+      if(!changed)return;
+      if(sub.arrivalDate&&sub.arrivalTime&&sub.arrivalAirport){trDrvCheckReconfirm(sub,'arrival','Guest resubmission');anyChanged=true;}
+      if(sub.departureDate&&sub.departureTime&&sub.departureAirport){trDrvCheckReconfirm(sub,'departure','Guest resubmission');anyChanged=true;}
+    });
+    if(anyChanged&&typeof saveDriverConfirmations==='function')saveDriverConfirmations();
+  }
 }
 async function refreshTransport(){
   await syncTransportFromSupabase();
@@ -159,7 +396,11 @@ function trSetView(v){
     const ddEl=document.getElementById('trDriversDate');
     if(ddEl&&!ddEl.value)ddEl.value=fmtISO(new Date());
     trBuildDriverView();
-    Promise.all([syncTransportFromSupabase(),typeof syncDriverConfirmationsFromSupabase==='function'?syncDriverConfirmationsFromSupabase():null]).then(()=>trBuildDriverView());
+    (async()=>{
+      if(typeof syncDriverConfirmationsFromSupabase==='function')await syncDriverConfirmationsFromSupabase();
+      await syncTransportFromSupabase();
+      trBuildDriverView();
+    })();
   } else {
     if(aBtn)aBtn.style.cssText=aBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
     if(aCtrl)aCtrl.style.display='flex';
@@ -971,49 +1212,77 @@ function trComputeDriverAssignments(date){
       retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(AppData.bookings.find(b=>b.id===s.bookingId)?.leaderName||AppData.bookings.find(b=>b.id===s.bookingId)?.retreatName||'Unknown')}))
     .sort((a,b)=>a.departureTime.localeCompare(b.departureTime));
 
-  const salamon=[],irving=[];
+  // Default grouping (unchanged from the original heuristic): Cancún
+  // arrivals — plus their same-day round-trip departure when one exists —
+  // go to Salamon; everything else goes to Irving. This stays the DEFAULT;
+  // an explicit arrivalDriverId/departureDriverId override (set via
+  // trDrvSetAssignedDriver) takes priority and can move a trip to any
+  // driver, including one added later.
+  const defaultBuckets={drv_salamon:[],drv_irving:[]};
   const claimedDepIds=new Set();
 
   arrivals.forEach(a=>{
     if(a.arrivalAirport==='cancun'){
-      salamon.push({...a,note:''});
-      // Check for a same-day Cancún departure within 30 min after this flight lands
+      defaultBuckets.drv_salamon.push({...a,note:'',_defaultDriverId:'drv_salamon'});
       const anchor=trTimeToMins(a.arrivalTime);
       const match=departures.find(d=>!claimedDepIds.has(d.id)&&d.departureAirport==='cancun'&&
         trTimeToMins(d.departureTime)>=anchor&&trTimeToMins(d.departureTime)<=anchor+30);
       if(match){
         claimedDepIds.add(match.id);
-        salamon.push({...match,note:`Round trip — combined with ${a.firstName} ${a.lastName}'s ${tsFmt(a.arrivalTime)} arrival`});
+        defaultBuckets.drv_salamon.push({...match,note:`Round trip — combined with ${a.firstName} ${a.lastName}'s ${tsFmt(a.arrivalTime)} arrival`,_defaultDriverId:'drv_salamon',_pairKey:trDrvKey(a,'arrival')});
       }
     } else {
-      irving.push({...a,note:''});
+      defaultBuckets.drv_irving.push({...a,note:'',_defaultDriverId:'drv_irving'});
     }
   });
   departures.forEach(d=>{
-    if(!claimedDepIds.has(d.id))irving.push({...d,note:''});
+    if(!claimedDepIds.has(d.id))defaultBuckets.drv_irving.push({...d,note:'',_defaultDriverId:'drv_irving'});
   });
-  salamon.sort((a,b)=>(a.arrivalTime||a.departureTime).localeCompare(b.arrivalTime||b.departureTime));
-  irving.sort((a,b)=>(a.arrivalTime||a.departureTime).localeCompare(b.arrivalTime||b.departureTime));
-  return{salamon,irving};
+
+  // Apply explicit overrides + ensure every leg has a confirmation record,
+  // then bucket by the FINAL assigned driver (override or default).
+  const byDriverId={};
+  const allTrips=[...defaultBuckets.drv_salamon,...defaultBuckets.drv_irving];
+  allTrips.forEach(t=>{
+    const finalId=trDrvAssignedId(t,t._kind,t._defaultDriverId);
+    t._assignedDriverId=finalId;
+    if(typeof driverConfirmations!=='undefined'){
+      const rec=trDrvEnsureRec(t,t._kind);
+      t._drvRec=rec;
+    }
+    if(!byDriverId[finalId])byDriverId[finalId]=[];
+    byDriverId[finalId].push(t);
+  });
+  Object.values(byDriverId).forEach(list=>list.sort((a,b)=>(a.arrivalTime||a.departureTime).localeCompare(b.arrivalTime||b.departureTime)));
+  return{salamon:byDriverId.drv_salamon||[],irving:byDriverId.drv_irving||[],byDriverId,allTrips};
 }
 
+function trDrvReassignSelect(t){
+  const list=(typeof driverAccounts!=='undefined'&&driverAccounts.length)?driverAccounts.filter(d=>d.active):(typeof DEF_DRIVERS!=='undefined'?DEF_DRIVERS:[]);
+  const curId=t._assignedDriverId;
+  return`<select onchange="trDrvSetAssignedDriver('${t.id}','${t._kind}',this.value,(typeof getCurrentSession==='function'?getCurrentSession()?.name:null)||'Staff')" style="font-size:11px;padding:4px 6px;border:1px solid #e8dfd4;border-radius:6px;font-family:'Jost',sans-serif;background:#fff;color:#2d2520">
+    ${list.map(d=>`<option value="${d.id}" ${d.id===curId?'selected':''}>${escHtml(d.name)}</option>`).join('')}
+  </select>`;
+}
 function trBuildDriverView(){
   const wrap=document.getElementById('trContent');if(!wrap)return;
   const dEl=document.getElementById('trDriversDate');
   const date=dEl?dEl.value:fmtISO(new Date());
   if(!date){wrap.innerHTML='<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0">Select a date to view driver assignments.</div>';return;}
-  const{salamon,irving}=trComputeDriverAssignments(date);
+  const{byDriverId}=trComputeDriverAssignments(date);
+  const driverList=(typeof driverAccounts!=='undefined'&&driverAccounts.length)?driverAccounts:(typeof DEF_DRIVERS!=='undefined'?DEF_DRIVERS:[]);
 
   const dt=new Date(date+'T00:00:00');
   const MNTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
+  const CARD_COLORS=['#0e9494','#d97706','#7c3aed','#be185d','#0369a1'];
 
-  function driverCard(name,sub,trips,color,bg){
-    if(!trips.length)return `<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;padding:20px;margin-bottom:16px;text-align:center;color:#8a7e74;font-size:13px">No trips for ${name} on ${dateLabel}.</div>`;
+  function driverCard(name,trips,color){
+    if(!trips.length)return '';
+    const bg=color+'0d';
     return `<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;margin-bottom:16px;overflow:hidden">
       <div style="background:${bg};padding:12px 18px;border-bottom:1px solid ${color}44">
-        <span style="font-size:14px;font-weight:800;color:${color}">${name}</span>
-        <span style="font-size:11.5px;color:${color};opacity:.8;margin-left:8px">${sub}</span>
+        <span style="font-size:14px;font-weight:800;color:${color}">${escHtml(name)}</span>
         <span style="font-size:11px;background:${color};color:#fff;border-radius:99px;padding:1px 9px;font-weight:700;margin-left:8px">${trips.length} trip${trips.length!==1?'s':''}</span>
       </div>
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
@@ -1025,7 +1294,8 @@ function trBuildDriverView(){
           <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Flight</th>
           <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Retreat</th>
           <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Notes</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Driver</th>
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Driver Confirmation</th>
+          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Reassign</th>
         </tr></thead>
         <tbody>${trips.map((t,i)=>{
           const isArr=t._kind==='arrival';
@@ -1034,10 +1304,13 @@ function trBuildDriverView(){
           const airChip=airport==='cancun'
             ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
             :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
-          const conf=(typeof driverConfirmations!=='undefined'&&driverConfirmations)?driverConfirmations[t.id+'_'+t._kind]:null;
-          const confBadge=conf
-            ?`<span style="font-size:10.5px;font-weight:700;color:#15803d;background:#dcfce7;border-radius:99px;padding:2px 9px;white-space:nowrap">&#10003; ${tsFmt(new Date(conf.confirmedAt).toTimeString().slice(0,5))}</span>`
-            :`<span style="font-size:10.5px;font-weight:600;color:#b45309;background:#fef3c7;border-radius:99px;padding:2px 9px;white-space:nowrap">Pending</span>`;
+          const rec=t._drvRec||(typeof driverConfirmations!=='undefined'?driverConfirmations[trDrvKey(t,t._kind)]:null);
+          const st=TR_DRV_STATUS[rec?.status||'pending'];
+          const confBadge=`<div><span style="font-size:10.5px;font-weight:700;color:${st.color};background:${st.bg};border:1px solid ${st.border};border-radius:99px;padding:2px 9px;white-space:nowrap;display:inline-block">${st.label}</span>
+            ${rec?.status==='confirmed'&&rec.confirmedAt?`<div style="font-size:10px;color:#8a7e74;margin-top:3px">${rec.confirmedBy} · ${trFmtTulum(rec.confirmedAt)}</div>`:''}
+            ${rec?.status==='reconfirm'&&rec.changeMessage?`<div style="font-size:10px;color:#c2410c;margin-top:3px;max-width:220px">${rec.changeMessage}</div>`:''}
+            ${rec?.status==='declined'&&rec.declineReason?`<div style="font-size:10px;color:#dc2626;margin-top:3px;max-width:220px">${rec.declineReason}</div>`:''}
+          </div>`;
           return `<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
             <td style="padding:8px 12px;font-weight:700;color:${isArr?'#0e9494':'#d97706'}">${isArr?'↓ Arrival':'↑ Departure'} ${airChip}</td>
             <td style="padding:8px 12px;font-weight:700;color:#2d2520;white-space:nowrap">${tsFmt(time)}</td>
@@ -1047,15 +1320,17 @@ function trBuildDriverView(){
             <td style="padding:8px 12px;color:#8a7e74;font-size:11.5px">${t.retreatLabel}</td>
             <td style="padding:8px 12px;color:${t.note?'#15803d':'#c0b8b0'};font-size:11.5px;font-weight:${t.note?700:400}">${t.note||'—'}</td>
             <td style="padding:8px 12px">${confBadge}</td>
+            <td style="padding:8px 12px">${trDrvReassignSelect(t)}</td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
     </div>`;
   }
 
-  let html=`<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:12px">Driver Assignments · ${dateLabel}</div>`;
-  html+=driverCard('Salamon','Cancún arrivals · occasional round-trip departures',salamon,'#0e9494','#f0fdfb');
-  html+=driverCard('Irving','Tulum arrivals · all departures',irving,'#d97706','#fffbeb');
+  let html=trDrvAlertsHtml();
+  html+=`<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:12px">Driver Assignments · ${dateLabel}</div>`;
+  driverList.forEach((d,i)=>{html+=driverCard(d.name,byDriverId[d.id]||[],CARD_COLORS[i%CARD_COLORS.length]);});
+  if(!driverList.some(d=>(byDriverId[d.id]||[]).length))html+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;padding:20px;text-align:center;color:#8a7e74;font-size:13px">No trips for ${dateLabel}.</div>`;
   wrap.innerHTML=html;
 }
 
@@ -1396,12 +1671,39 @@ function trDeleteArrival(id){
   showToast('Submission removed.');
 }
 
-function trSetStatus(id,status){
+async function trSetStatus(id,status){
   const data=loadTransport();
   const sub=data.find(s=>s.id===id);
   if(!sub)return;
   sub.status=status;
   saveTransport(data);
+  // Cancelling the transport request itself also moves any driver
+  // confirmation for its legs to Cancelled — a driver shouldn't keep
+  // seeing a trip as active/needing confirmation once it's been called
+  // off, and un-cancelling puts it back to Pending so it's re-noticed.
+  // driverConfirmations may not be loaded in this browser tab at all yet
+  // (staff can reach this button without ever opening the Drivers view or
+  // driver mode) — always pull the latest copy from Supabase first so the
+  // propagation is reliable regardless of what else has or hasn't loaded.
+  if(typeof syncDriverConfirmationsFromSupabase==='function')await syncDriverConfirmationsFromSupabase();
+  if(typeof driverConfirmations!=='undefined'){
+    let changed=false;
+    ['arrival','departure'].forEach(kind=>{
+      const key=trDrvKey(sub,kind);
+      const rec=driverConfirmations[key];
+      if(!rec)return;
+      if(status==='cancelled'&&rec.status!=='cancelled'){
+        rec.status='cancelled';
+        trDrvPushHistory(rec,'cancelled',(typeof getCurrentSession==='function'?getCurrentSession()?.name:null)||'Staff',null);
+        changed=true;
+      }else if(status!=='cancelled'&&rec.status==='cancelled'){
+        rec.status='pending';
+        trDrvPushHistory(rec,'reactivated',(typeof getCurrentSession==='function'?getCurrentSession()?.name:null)||'Staff',null);
+        changed=true;
+      }
+    });
+    if(changed&&typeof saveDriverConfirmations==='function')saveDriverConfirmations();
+  }
   refreshTransport();
   showToast(status==='cancelled'?'Marked as cancelled — no longer counted as transport received.':'Marked as confirmed.');
 }
