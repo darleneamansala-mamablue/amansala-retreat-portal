@@ -301,10 +301,37 @@ function beSaveRoomEdit() {
 }
 
 // ─── RATES TAB ───────────────────────────────────────────────
+// Flags likely rate-entry mistakes — not a hard rule, just a heads-up: two
+// different room types priced identically, or an unusually wide jump between
+// adjacent rooms when sorted by price (default threshold $150, since we don't
+// have a real business rule for "too wide" — adjust here if that's not right).
+const BE_RATE_GAP_THRESHOLD = 150;
+function beRateHealthChecks(rows) {
+  const priced = rows.filter(rt => rt.be_price_single != null && rt.be_price_single !== '');
+  const warnings = [];
+  const byPrice = {};
+  priced.forEach(rt => { const p = Number(rt.be_price_single); (byPrice[p] = byPrice[p] || []).push(rt); });
+  Object.entries(byPrice).forEach(([p, list]) => {
+    if (list.length > 1) warnings.push(`${list.map(r => r.name).join(' & ')} are both priced at $${p} — same price on purpose?`);
+  });
+  const sorted = priced.slice().sort((a, b) => Number(a.be_price_single) - Number(b.be_price_single));
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = Number(sorted[i].be_price_single) - Number(sorted[i - 1].be_price_single);
+    if (gap > BE_RATE_GAP_THRESHOLD) warnings.push(`${sorted[i - 1].name} ($${sorted[i - 1].be_price_single}) → ${sorted[i].name} ($${sorted[i].be_price_single}) is a $${gap} jump — worth double-checking.`);
+  }
+  return warnings;
+}
+
 function beRenderRates() {
   const s = beSettings;
   const rows = [...AppData.roomTypes].filter(rt => !['bd','cg'].some(p => rt.id.startsWith(p))).sort((a,b) => beRtSortKey(a)-beRtSortKey(b));
+  const rateWarnings = beRateHealthChecks(rows);
+  const rateWarnHtml = rateWarnings.length ? `<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px 18px;margin-bottom:20px">
+    <div style="font-size:12.5px;font-weight:700;color:#92400e;margin-bottom:6px">⚠️ Rate Check — ${rateWarnings.length} thing${rateWarnings.length > 1 ? 's' : ''} to review</div>
+    ${rateWarnings.map(w => `<div style="font-size:12px;color:#78350f;padding:2px 0">• ${escHtml(w)}</div>`).join('')}
+  </div>` : '';
   let html = `<div style="max-width:820px;margin:0 auto">
+    ${rateWarnHtml}
     <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
       <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0 0 4px">Base Rates</h3>
       <p style="font-size:12px;color:var(--muted);margin:0 0 16px">Escape rate per room type. "Pricing Rules" below adjusts on top of these.</p>
