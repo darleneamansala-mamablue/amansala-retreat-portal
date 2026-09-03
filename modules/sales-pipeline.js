@@ -267,11 +267,29 @@ function pipeRender(){
       <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--dark)">Retreat Sales Pipeline</div>
       <div style="font-size:12.5px;color:var(--muted);margin-top:2px;margin-bottom:16px">Drag a card between stages, or use + Log Activity to record progress. All inquiries land here — Retreats (green), Weddings (light blue), Bachelorette (pink).</div>
     </div>
+    <div id="pipeStatsBar"></div>
     <div id="pipeFilterBar"></div>
     <div id="pipeBoard" style="flex:1;overflow-x:auto;overflow-y:hidden;padding:0 24px 24px;display:flex;gap:0"></div>`;
   pipeRenderBoard();
 }
+function pipeStatsBarHtml(){
+  const leads=pipeLeads();
+  const booked=leads.filter(bk=>{const s=pipeGetStage(bk);return s==='booked'||s==='onboarding_started';}).length;
+  const lost=leads.filter(bk=>pipeGetStage(bk)==='closed_lost').length;
+  const total=booked+lost;
+  const bookedPct=total?(booked/total*100):50;
+  const lostPct=100-bookedPct;
+  const winPct=total?Math.round(booked/total*100):null;
+  return`<div style="margin:0 24px 14px;padding:12px 16px;background:#fff;border:1px solid #e8e0d0;border-radius:12px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--dark)"><span style="width:10px;height:10px;border-radius:3px;background:#16a34a;display:inline-block;flex-shrink:0"></span>Booked <span style="color:#16a34a">${booked}</span></div>
+    <div style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--dark)"><span style="width:10px;height:10px;border-radius:3px;background:#dc2626;display:inline-block;flex-shrink:0"></span>Lost <span style="color:#dc2626">${lost}</span></div>
+    ${total?`<div style="flex:1;min-width:140px;height:10px;border-radius:99px;overflow:hidden;background:#f1ede2;display:flex" role="img" aria-label="${booked} booked, ${lost} lost, ${winPct}% win rate"><div style="width:${bookedPct}%;background:#16a34a"></div><div style="width:${lostPct}%;background:#dc2626"></div></div><div style="font-size:12px;font-weight:700;color:var(--muted)">${winPct}% win rate</div>`
+      :`<div style="font-size:12px;color:var(--muted);font-style:italic">No booked or lost leads yet</div>`}
+  </div>`;
+}
 function pipeRenderBoard(){
+  const statsBar=document.getElementById('pipeStatsBar');
+  if(statsBar)statsBar.innerHTML=pipeStatsBarHtml();
   const bar=document.getElementById('pipeFilterBar');
   if(bar)bar.innerHTML=pipeFilterBarHtml();
   const board=document.getElementById('pipeBoard');
