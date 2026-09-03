@@ -1494,8 +1494,8 @@
         <div style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">Set the time, shala, and class type for each day in the Day-by-Day Schedule below — some teachers don't do the same class every day.</div>
         <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px 16px;margin-bottom:16px">
           <div style="font-size:13px;color:#78350f;line-height:1.65;margin-bottom:10px">
-            Please note: the AM section starts at <b>7:45&ndash;9:20 AM</b> (you can choose a start time within that window). The second block starts at <b>9:30 AM onward</b>.<br><br>
-            If you choose a time that overlaps two blocks, we may need to adjust your times. If your group is too large for a certain shala, we may need to move you to a more suitable shala. If your group is much smaller than the shala you requested, your group may need to change practice time or shala.
+            Please note: The morning block begins between <b>7:45 and 9:20 AM</b>, with the second block starting at <b>9:30 AM</b>.<br><br>
+            To ensure the best experience for all groups, times that overlap scheduling blocks may be adjusted. Shala assignments may also change based on group size and availability. We appreciate your flexibility and understanding.
           </div>
           <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:13px;font-weight:600;color:#78350f">
             <input type="checkbox" id="tsMorningBlocksAck" onchange="tsToggleMorningLock(this.checked)" style="width:16px;height:16px;accent-color:#b45309;margin-top:1px;flex-shrink:0">
@@ -1542,6 +1542,17 @@
           <span>I have an afternoon or evening class</span>
         </label>
         <div id="tsAfternoonSection" style="display:none">
+          <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px 16px;margin-bottom:16px">
+            <div style="font-size:13px;color:#78350f;line-height:1.65;margin-bottom:10px">
+              Please note: Morning classes may begin between <b>7:45 and 9:20 AM</b>, with the second block starting at <b>9:30 AM</b>. Afternoon classes are scheduled from <b>3:30 to 5:30 PM</b>, with the evening block beginning at <b>5:45 PM</b>.<br><br>
+              To accommodate all groups comfortably, overlapping times may be adjusted, and shala assignments may change based on group size and availability. We appreciate your flexibility and understanding.
+            </div>
+            <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:13px;font-weight:600;color:#78350f">
+              <input type="checkbox" id="tsAfternoonBlocksAck" onchange="tsToggleAfternoonLock(this.checked)" style="width:16px;height:16px;accent-color:#b45309;margin-top:1px;flex-shrink:0">
+              I understand
+            </label>
+          </div>
+          <div id="tsAfternoonLockWrap" style="opacity:.4;pointer-events:none;filter:grayscale(.3)">
           <div class="ts-fields" style="display:none">
             <div class="ts-field">
               <label>Time Slot</label>
@@ -1584,6 +1595,7 @@
           <div style="font-size:12.5px;color:var(--muted);margin:6px 0 12px;line-height:1.6">Tap to set 1st choice, tap again for 2nd choice, tap once more to remove.</div>
           <div id="tsAfternoonShalaGrid" style="display:flex;flex-wrap:wrap;gap:8px"></div>
           <div id="tsDailyScheduleFieldsAfternoon"></div>
+          </div>
         </div>
       </div>
 

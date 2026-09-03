@@ -1302,6 +1302,12 @@ function tsToggleMorningLock(understood){
   wrap.style.opacity=understood?'1':'.4';
   wrap.style.filter=understood?'none':'grayscale(.3)';
 }
+function tsToggleAfternoonLock(understood){
+  const wrap=document.getElementById('tsAfternoonLockWrap');if(!wrap)return;
+  wrap.style.pointerEvents=understood?'auto':'none';
+  wrap.style.opacity=understood?'1':'.4';
+  wrap.style.filter=understood?'none':'grayscale(.3)';
+}
 function tsPickWindow(id){_ts.window=id;_ts.morningStart='';tsRenderWindows();tsBuildMorningFields();tsBuildDailySchedule();tsRenderShalaGrid('morning');}
 function tsToggleFlag(period,val,on){
   const k=period==='morning'?'morningFlags':'afternoonFlags';
@@ -1936,6 +1942,9 @@ function tsSubmitSchedule(){
   if(IS_TEACHER_MODE&&bk.endDate&&new Date().toISOString().slice(0,10)>bk.endDate){showToast('Your retreat has passed. Please contact Amansala if you need schedule changes.');return;}
   const ackEl=document.getElementById('tsMorningBlocksAck');
   if(ackEl&&!ackEl.checked){showToast('Please check the box confirming you understand the morning time blocks.');ackEl.closest('div').scrollIntoView({behavior:'smooth',block:'center'});return;}
+  const hasAfternoonEl=document.getElementById('tsHasAfternoon');
+  const afternoonAckEl=document.getElementById('tsAfternoonBlocksAck');
+  if(hasAfternoonEl?.checked&&afternoonAckEl&&!afternoonAckEl.checked){showToast('Please check the box confirming you understand the afternoon/evening time blocks.');afternoonAckEl.closest('div').scrollIntoView({behavior:'smooth',block:'center'});return;}
   const srCbEl=document.getElementById('tsHasSunrise');if(srCbEl)_ts.hasSunrise=srCbEl.checked;
   const srStartEl=document.getElementById('tsSunriseStart');if(srStartEl)_ts.sunriseStart=srStartEl.value;
   const srDurEl=document.getElementById('tsSunriseDur');if(srDurEl)_ts.sunriseDur=parseInt(srDurEl.value);
