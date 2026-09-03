@@ -1925,6 +1925,8 @@ function tsSubmitSchedule(){
   const bk=AppData.bookings.find(b=>b.id===savedId);if(!bk)return;
   // Block teachers from submitting for past retreats (admin can still create via admin tools)
   if(IS_TEACHER_MODE&&bk.endDate&&new Date().toISOString().slice(0,10)>bk.endDate){showToast('Your retreat has passed. Please contact Amansala if you need schedule changes.');return;}
+  const ackEl=document.getElementById('tsMorningBlocksAck');
+  if(ackEl&&!ackEl.checked){showToast('Please check the box confirming you understand the morning time blocks.');ackEl.closest('div').scrollIntoView({behavior:'smooth',block:'center'});return;}
   const srCbEl=document.getElementById('tsHasSunrise');if(srCbEl)_ts.hasSunrise=srCbEl.checked;
   const srStartEl=document.getElementById('tsSunriseStart');if(srStartEl)_ts.sunriseStart=srStartEl.value;
   const srDurEl=document.getElementById('tsSunriseDur');if(srDurEl)_ts.sunriseDur=parseInt(srDurEl.value);
