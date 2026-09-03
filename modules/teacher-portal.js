@@ -2193,7 +2193,7 @@ function tsRenderCalSection(bk){
   const renderRow=r=>{
     const catCls=r.cat?'cat-'+r.cat:'';
     const tagHtml=r.actTag?`<span class="sched-act-tag ${r.prepaid?'prepaid':r.cat}">${r.actTag}</span>`:'';
-    const shalaHtml=r.shala?`<span class="sched-shala">${r.shala}</span>`:'';
+    const shalaHtml=r.shala?`<span class="sched-shala">📍 SHALA: ${r.shala.toUpperCase()}</span>`:(r.cat&&r.cat!=='meal'?`<span class="sched-shala" style="background:#fef3c7;color:#92400e">⚠ SHALA TO BE CONFIRMED</span>`:'');
     return`<div class="sched-item-row ${catCls}"><span class="sched-time">${r.time}</span><span class="sched-desc">${r.desc}</span>${tagHtml}${shalaHtml}</div>`;
   };
 
@@ -2221,7 +2221,7 @@ function tsRenderCalSection(bk){
             ${day.prepaidActs.map((a,ai)=>`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;${ai>0?'border-top:1px solid #d1fae5;':''}">
               ${a.time?`<span style="min-width:95px;flex-shrink:0;font-size:11px;color:#4b7070;font-weight:600;font-family:'Jost',sans-serif">${a.time}</span>`:''}
               <span style="flex:1;font-size:12.5px;color:#15803d;font-weight:600">${a.name}${a.requestedTime?' <span style="font-weight:600;font-style:italic;color:#4b7070">(requested this time)</span>':''}</span>
-              ${a.shala?`<span class="sched-shala" style="flex-shrink:0">${a.shala}</span>`:''}
+              ${a.shala?`<span class="sched-shala" style="flex-shrink:0">📍 SHALA: ${a.shala.toUpperCase()}</span>`:''}
               <span class="sched-act-tag prepaid" style="flex-shrink:0">${a.tag}</span>
             </div>`).join('')}
           </div>`:''}
@@ -4565,9 +4565,18 @@ function skedBuildWeek(weekStart,DAYS_SHORT,MONTHS_LONG){
       const height=Math.max(16,(endMin-startMin)*(SKED_PX_HR/60));
       const color=ev.color||'#2d6a6a';const bgColor=ev.bg||(color+'22');
       const evId=ev.isRetreat?ev.bkId:ev.id;
+      const isShalaRes=SKED_SHALAS.some(s=>s.id===ev.resourceId);
+      const rsLabel=[...SKED_SHALAS,...SKED_ACTIVITIES].find(r=>r.id===ev.resourceId)?.name||'';
+      // Only room to show the shala line once the block is tall enough not to
+      // clip it — short (e.g. 15-min) events still show on click via skedClickEvent.
+      const shalaLine=height>=32
+        ?(isShalaRes?'<div style="font-size:9px;font-weight:700;color:#0e7490;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📍 '+escHtml(rsLabel.toUpperCase())+'</div>'
+          :!rsLabel?'<div style="font-size:9px;font-weight:700;color:#b45309;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">⚠ NO SHALA</div>':'')
+        :'';
       h+='<div class="sked-event" style="top:'+top+'px;height:'+height+'px;background:'+bgColor+';border-left:3px solid '+color+'" onclick="event.stopPropagation();skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+',\''+ev.date+'\')">';
       h+='<div style="font-size:10px;font-weight:700;color:'+color+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(ev.title)+'</div>';
       h+='<div style="font-size:9px;color:#6b7280">'+skedFmtTime(ev.startTime)+'</div>';
+      h+=shalaLine;
       h+='</div>';
     });
     h+='</div></div>';
@@ -4591,13 +4600,22 @@ function skedBuildList(days,DAYS_LONG,MONTHS_LONG){
     h+='<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:'+(isToday?'var(--teal)':'var(--muted)')+';padding:8px 0 6px;border-bottom:2px solid '+(isToday?'var(--teal)':'var(--border)')+';margin-bottom:10px">'+DAYS_LONG[d.getDay()]+', '+MNTHS[d.getMonth()]+' '+d.getDate()+(isToday?' — Today':'')+'</div>';
     evs.forEach(ev=>{
       const color=ev.color||'#2d6a6a';const bgColor=ev.bg||(color+'22');
+      const isShalaRes=SKED_SHALAS.some(s=>s.id===ev.resourceId);
       const rsLabel=[...SKED_SHALAS,...SKED_ACTIVITIES].find(r=>r.id===ev.resourceId)?.name||ev.resourceId||'';
       const evId=ev.isRetreat?ev.bkId:ev.id;
+      // Shala line: bold/high-contrast, deliberately more prominent than the
+      // retreat/teacher subtitle above it (was pale var(--muted) gray before
+      // — easy to miss). Missing shala now surfaces as a visible warning
+      // instead of silently showing nothing.
+      const shalaHtml=isShalaRes
+        ?'<div style="font-size:12.5px;font-weight:700;color:#0e7490;margin-top:3px;letter-spacing:.2px">📍 SHALA: '+escHtml(rsLabel.toUpperCase())+'</div>'
+        :rsLabel?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+escHtml(rsLabel)+'</div>'
+        :'<div style="font-size:12px;font-weight:700;color:#b45309;margin-top:3px">⚠ SHALA TO BE CONFIRMED</div>';
       h+='<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid '+color+'44;border-left:4px solid '+color+';border-radius:8px;margin-bottom:8px;background:'+bgColor+';cursor:pointer" onclick="skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+',\''+ev.date+'\')">';
       h+='<div style="min-width:80px;font-size:12px;font-weight:700;color:'+color+'">'+skedFmtTime(ev.startTime)+(ev.endTime?' – '+skedFmtTime(ev.endTime):'')+'</div>';
       h+='<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#1a2332">'+escHtml(ev.title)+'</div>';
       if(ev.subtitle)h+='<div style="font-size:12px;color:#374151">'+escHtml(ev.subtitle)+'</div>';
-      if(rsLabel)h+='<div style="font-size:11px;color:var(--muted)">'+escHtml(rsLabel)+'</div>';
+      h+=shalaHtml;
       h+='</div>';
       if(!ev.isRetreat)h+='<button onclick="event.stopPropagation();openSkedEditModal(\''+ev.id+'\')" style="font-size:10.5px;padding:3px 8px;border:1px solid var(--border);border-radius:5px;background:#fff;cursor:pointer;color:var(--muted)">Edit</button>';
       h+='</div>';
