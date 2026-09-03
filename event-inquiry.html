@@ -200,6 +200,28 @@ async function submitInquiry(){
     existing.push(entry);
     await _db.from('app_store').upsert({key:'crm_inquiries',value:existing,updated_at:new Date().toISOString()});
   }catch(e){console.warn('Supabase push failed:',e);}
+  // Also land on the Sales Pipeline like retreat leads (leader-inquiry.html does
+  // the same fresh-read-then-append to 'bookings') -- per Darlene, all inquiries
+  // should live on one pipeline, colored by type (eventType drives card color).
+  try{
+    const {data:bd}=await _db.from('app_store').select('value').eq('key','bookings').maybeSingle();
+    const bookings=Array.isArray(bd?.value)?bd.value:[];
+    bookings.push({
+      id:'bk_'+uid(),
+      eventType,
+      leaderName:entry.name,
+      retreatName:`${entry.honoree} ${eventType==='wedding'?'Wedding':'Bachelorette'}`,
+      leaderEmail:entry.email,
+      leaderPhone:entry.phone,
+      startDate:entry.date,endDate:entry.date,
+      pax:entry.guestCount?parseInt(entry.guestCount):null,
+      notes:entry.notes,
+      source:'inquiry',
+      status:'requested',
+      charges:[],payments:[],
+    });
+    await _db.from('app_store').upsert({key:'bookings',value:bookings,updated_at:new Date().toISOString()});
+  }catch(e){console.warn('Pipeline push failed:',e);}
   document.getElementById('formPanel').style.display='none';
   document.getElementById('thankyouPanel').style.display='block';
   window.scrollTo({top:0,behavior:'smooth'});

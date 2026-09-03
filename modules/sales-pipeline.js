@@ -124,18 +124,28 @@ function pipeFollowUpBadge(bk){
 }
 
 // ===== CARD =====
+// Every lead is colored by type — Retreats (the default, no eventType) green,
+// Weddings light blue, Bachelorette pink — so a mixed board stays scannable.
+const PIPE_TYPE_COLORS={
+  retreat:{bg:'#f0fdf4',border:'#86efac',label:null},
+  wedding:{bg:'#eff6ff',border:'#93c5fd',label:'Wedding'},
+  bachelorette:{bg:'#fdf2f8',border:'#f9a8d4',label:'Bachelorette'},
+};
+function pipeTypeColor(bk){return PIPE_TYPE_COLORS[bk.eventType]||PIPE_TYPE_COLORS.retreat;}
 function pipeBuildCard(bk){
   const fu=pipeFollowUpStatus(bk);
   const fuColor={overdue:'#dc2626',today:'#b45309',upcoming:'#374151',none:'#9ca3af'}[fu];
   const fuLabel=bk.followUpDate?`Follow up: ${pipeFmtDateShort(bk.followUpDate)}`:'No follow-up scheduled';
   const dateRange=(bk.startDate&&bk.endDate)?`${pipeFmtDateShort(bk.startDate)}–${pipeFmtDateShort(bk.endDate)}`:'Dates TBD';
   const paxTxt=bk.pax?`${bk.pax} pax`:'Pax TBD';
+  const tc=pipeTypeColor(bk);
   const el=document.createElement('div');
   el.className='salespipe-card';
   el.draggable=true;
   el.dataset.bkId=bk.id;
-  el.style.cssText='background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:12px 13px;margin-bottom:9px;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:box-shadow .15s,border-color .15s;';
+  el.style.cssText=`background:${tc.bg};border:1.5px solid ${tc.border};border-radius:10px;padding:12px 13px;margin-bottom:9px;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:box-shadow .15s,border-color .15s;`;
   el.innerHTML=`
+    ${tc.label?`<div style="margin-bottom:4px">${pipeBadge(tc.label,tc.bg,tc.border,tc.border)}</div>`:''}
     <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:700;color:var(--dark);line-height:1.25;margin-bottom:2px">${menuEsc(bk.retreatName||'Untitled Retreat')}</div>
     <div style="font-size:12.5px;color:var(--muted);margin-bottom:7px">${menuEsc(bk.leaderName||'No teacher/host on file')}</div>
     <div style="font-size:12px;color:var(--text);margin-bottom:8px">${dateRange} &middot; ${paxTxt}</div>
@@ -185,7 +195,7 @@ function pipeRender(){
   root.innerHTML=`
     <div style="padding:22px 24px 4px;flex-shrink:0">
       <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--dark)">Retreat Sales Pipeline</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-top:2px;margin-bottom:16px">Drag a card between stages, or use + Log Activity to record progress. Retreat leads only — Wedding &amp; Bachelorette inquiries live on the Dashboard CRM section.</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:2px;margin-bottom:16px">Drag a card between stages, or use + Log Activity to record progress. All inquiries land here — Retreats (green), Weddings (light blue), Bachelorette (pink).</div>
     </div>
     <div id="pipeFilterBar"></div>
     <div id="pipeBoard" style="flex:1;overflow-x:auto;overflow-y:hidden;padding:0 24px 24px;display:flex;gap:0"></div>`;
@@ -198,7 +208,7 @@ function pipeRenderBoard(){
   if(!board)return;
   const leads=pipeLeads();
   if(!leads.length){
-    board.innerHTML=`<div style="padding:40px;color:var(--muted);font-size:13px;font-style:italic">No retreat leads yet. New inquiries submitted through the Retreat Leader form will appear here automatically.</div>`;
+    board.innerHTML=`<div style="padding:40px;color:var(--muted);font-size:13px;font-style:italic">No leads yet. New inquiries submitted through the Retreat Leader, Wedding, or Bachelorette forms will appear here automatically.</div>`;
     return;
   }
   board.innerHTML='';
