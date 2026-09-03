@@ -102,6 +102,56 @@ let pipeFilters=new Set();
 let pipeDetailId=null;
 let pipeActivityBkId=null;
 let pipeReasonCtx=null; // {bkId, newStage} awaiting a typed reason for a manual move
+// Which stages are currently expanded past the first-5 default — per-column,
+// independent, and persists across re-renders (drag/drop, filter changes)
+// within this page session. Not saved across reloads on purpose: a stale
+// "expanded" state from a previous day isn't something worth remembering.
+let pipeColExpanded={};
+const PIPE_CARD_PAGE_SIZE=5;
+
+// ===== SORT ORDER (remembered across sessions) =====
+const PIPE_SORT_KEY='amansala_pipeline_sort';
+let pipeSortMode=localStorage.getItem(PIPE_SORT_KEY)||'priority';
+function pipeSetSortMode(mode){
+  pipeSortMode=mode;
+  localStorage.setItem(PIPE_SORT_KEY,mode);
+  pipeRenderBoard();
+}
+// "Created" isn't a single consistent field across every lead source (public
+// inquiry forms stamp submittedAt; admin-added leads may not) — fall back
+// through the fields that exist rather than treating missing ones as an error.
+function pipeCreatedAt(bk){return bk.submittedAt||bk.createdAt||'';}
+function pipeUpdatedAt(bk){
+  const lastAct=(bk.pipelineActivity||[])[0]?.at; // unshift() puts newest first
+  return lastAct||bk.statusChangedAt||pipeCreatedAt(bk)||'';
+}
+// Default "Priority" order — the 5 leads shown by default should always be
+// the ones that most need a human's attention right now, not just whichever
+// 5 happen to sort alphabetically first.
+function pipeLeadPriorityRank(bk){
+  const fu=pipeFollowUpStatus(bk);
+  if(fu==='overdue')return 0;
+  if(fu==='today')return pipeGetStage(bk)==='call_scheduled'?1:2; // a scheduled call due today edges out a generic follow-up due today
+  if(!(bk.pipelineActivity||[]).length)return 3; // never contacted / no activity logged at all
+  if(fu==='upcoming')return 4;
+  return 5; // has activity, no follow-up date set
+}
+function pipeSortComparator(mode){
+  switch(mode){
+    case 'newest':   return(a,b)=>pipeCreatedAt(b).localeCompare(pipeCreatedAt(a));
+    case 'oldest':   return(a,b)=>pipeCreatedAt(a).localeCompare(pipeCreatedAt(b));
+    case 'followup': return(a,b)=>(a.followUpDate||'9999-99-99').localeCompare(b.followUpDate||'9999-99-99');
+    case 'arrival':  return(a,b)=>(a.startDate||'9999-99-99').localeCompare(b.startDate||'9999-99-99');
+    case 'groupsize':return(a,b)=>(b.pax||0)-(a.pax||0);
+    case 'updated':  return(a,b)=>pipeUpdatedAt(b).localeCompare(pipeUpdatedAt(a));
+    default:         return(a,b)=>{ // priority
+      const ra=pipeLeadPriorityRank(a),rb=pipeLeadPriorityRank(b);
+      if(ra!==rb)return ra-rb;
+      if(ra===4)return(a.followUpDate||'').localeCompare(b.followUpDate||''); // nearest upcoming first
+      return pipeCreatedAt(b).localeCompare(pipeCreatedAt(a)); // most recently created first
+    };
+  }
+}
 
 // ===== BADGES =====
 function pipeBadge(text,bg,border,color){
@@ -182,11 +232,31 @@ function pipeMatchesFilters(bk){
   if(!pipeFilters.size)return true;
   return[...pipeFilters].every(k=>{const d=PIPE_FILTER_DEFS.find(f=>f.key===k);return d?d.test(bk):true;});
 }
+const PIPE_SORT_OPTIONS=[
+  {key:'priority', label:'Priority'},
+  {key:'newest',   label:'Newest'},
+  {key:'oldest',   label:'Oldest'},
+  {key:'followup', label:'Follow-up date'},
+  {key:'arrival',  label:'Arrival date'},
+  {key:'groupsize',label:'Group size'},
+  {key:'updated',  label:'Recently updated'},
+];
 function pipeFilterBarHtml(){
-  return`<div style="display:flex;flex-wrap:wrap;gap:7px;padding:0 24px 14px">${PIPE_FILTER_DEFS.map(f=>{
+  return`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:0 24px 14px">
+    <label style="font-size:11.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:6px">Sort:
+      <select onchange="pipeSetSortMode(this.value)" style="padding:5px 10px;border-radius:8px;border:1.5px solid var(--border);font-family:'Jost',sans-serif;font-size:11.5px;font-weight:600;color:var(--text);background:#fff;cursor:pointer">
+        ${PIPE_SORT_OPTIONS.map(o=>`<option value="${o.key}"${pipeSortMode===o.key?' selected':''}>${o.label}</option>`).join('')}
+      </select>
+    </label>
+    <span style="width:1px;height:18px;background:var(--border);margin:0 3px"></span>
+    ${PIPE_FILTER_DEFS.map(f=>{
     const active=pipeFilters.has(f.key);
     return`<button onclick="pipeToggleFilter('${f.key}')" style="padding:6px 13px;border-radius:99px;font-family:'Jost',sans-serif;font-size:11.5px;font-weight:700;cursor:pointer;border:1.5px solid ${active?'#2d6a6a':'var(--border)'};background:${active?'#2d6a6a':'#fff'};color:${active?'#fff':'var(--text)'}">${f.label}</button>`;
   }).join('')}${pipeFilters.size?`<button onclick="pipeFilters.clear();pipeRenderBoard();" style="padding:6px 13px;border-radius:99px;font-family:'Jost',sans-serif;font-size:11.5px;font-weight:600;cursor:pointer;border:1.5px dashed var(--muted);background:none;color:var(--muted)">Clear filters</button>`:''}</div>`;
+}
+function pipeToggleColumn(stageKey){
+  pipeColExpanded[stageKey]=!pipeColExpanded[stageKey];
+  pipeRenderBoard();
 }
 
 function pipeRender(){
@@ -211,24 +281,51 @@ function pipeRenderBoard(){
     board.innerHTML=`<div style="padding:40px;color:var(--muted);font-size:13px;font-style:italic">No leads yet. New inquiries submitted through the Retreat Leader, Wedding, or Bachelorette forms will appear here automatically.</div>`;
     return;
   }
+  // Preserve each column's scroll position across re-render (drag/drop, filter
+  // change, expand/collapse all call this) — losing scroll position on every
+  // interaction would be disorienting on a long column.
+  const scrollPositions={};
+  board.querySelectorAll('.salespipe-col-body').forEach(b=>{scrollPositions[b.closest('.salespipe-col').dataset.stage]=b.scrollTop;});
+  const filtersActive=pipeFilters.size>0;
   board.innerHTML='';
+  const cmp=pipeSortComparator(pipeSortMode);
   PIPE_STAGES.forEach(stage=>{
     const col=document.createElement('div');
     col.className='salespipe-col';
     col.dataset.stage=stage.key;
     col.style.cssText='flex:0 0 250px;width:250px;margin-right:14px;display:flex;flex-direction:column;background:#f7f4ee;border-radius:12px;max-height:100%;';
-    const stageLeads=leads.filter(bk=>pipeGetStage(bk)===stage.key&&pipeMatchesFilters(bk));
+    const stageAllLeads=leads.filter(bk=>pipeGetStage(bk)===stage.key);
+    const stageLeads=stageAllLeads.filter(pipeMatchesFilters).sort(cmp);
+    const isExpanded=!!pipeColExpanded[stage.key];
+    const visibleLeads=isExpanded?stageLeads:stageLeads.slice(0,PIPE_CARD_PAGE_SIZE);
+    const hiddenCount=stageLeads.length-visibleLeads.length;
+    const countLabel=filtersActive&&stageAllLeads.length!==stageLeads.length
+      ?`${stageLeads.length} matching / ${stageAllLeads.length} total`
+      :`${stageAllLeads.length}`;
     const hdr=document.createElement('div');
-    hdr.style.cssText='padding:11px 13px;border-bottom:2px solid #e8e0d0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0';
-    hdr.innerHTML=`<span style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--dark)">${stage.label}</span><span style="background:#e8e0d0;color:#6b6255;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:700">${stageLeads.length}</span>`;
+    hdr.style.cssText='padding:11px 13px;border-bottom:2px solid #e8e0d0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;gap:8px';
+    hdr.innerHTML=`<span style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--dark)">${stage.label}</span><span style="background:#e8e0d0;color:#6b6255;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap">${countLabel}</span>`;
     col.appendChild(hdr);
     const body=document.createElement('div');
+    body.className='salespipe-col-body';
+    body.id='pipe-cards-'+stage.key;
     body.style.cssText='flex:1;overflow-y:auto;padding:10px;min-height:60px;';
     if(!stageLeads.length){
-      body.innerHTML=`<div style="text-align:center;color:#c4b8a0;font-size:11.5px;font-style:italic;padding:16px 6px">No leads here</div>`;
+      body.innerHTML=`<div style="text-align:center;color:#c4b8a0;font-size:11.5px;font-style:italic;padding:16px 6px">${filtersActive?'No matching leads':'No leads here'}</div>`;
     }else{
-      stageLeads.sort((a,b)=>(a.retreatName||'').localeCompare(b.retreatName||'')).forEach(bk=>body.appendChild(pipeBuildCard(bk)));
+      visibleLeads.forEach(bk=>body.appendChild(pipeBuildCard(bk)));
+      if(hiddenCount>0||isExpanded&&stageLeads.length>PIPE_CARD_PAGE_SIZE){
+        const btn=document.createElement('button');
+        btn.type='button';
+        btn.setAttribute('aria-expanded',String(isExpanded));
+        btn.setAttribute('aria-controls',body.id);
+        btn.style.cssText='width:100%;padding:10px 8px;margin-top:2px;background:#fff;border:1.5px dashed var(--border);border-radius:8px;font-family:\'Jost\',sans-serif;font-size:12px;font-weight:700;color:#2d6a6a;cursor:pointer;min-height:40px';
+        btn.textContent=isExpanded?`▴ Collapse ${stageLeads.length-PIPE_CARD_PAGE_SIZE} Leads`:`▾ View ${hiddenCount} More Leads`;
+        btn.onclick=()=>pipeToggleColumn(stage.key);
+        body.appendChild(btn);
+      }
     }
+    if(scrollPositions[stage.key])body.scrollTop=scrollPositions[stage.key];
     body.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('text/pipe-bk-id')){e.preventDefault();col.style.background='#eef3f0';}});
     body.addEventListener('dragleave',()=>{col.style.background='#f7f4ee';});
     body.addEventListener('drop',e=>{
