@@ -307,7 +307,74 @@ function payReminderFromModal(){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   sendPaymentReminder(bk);
 }
+// Room Only double/triple bookings get asked once, before the first
+// payment, whether each guest should have their own folio — Darlene's
+// Phase 1 spec. Only fires for pax 2/3 room_only bookings that haven't
+// been asked yet; every other booking type/pax count is unaffected.
+function fsShouldAsk(bk){
+  return bk.bookingType==='room_only'&&(bk.pax===2||bk.pax===3)&&!bk.folioSplit;
+}
+let _fsPendingBkId=null,_fsPendingQuickMethod=null;
 function openPaymentModal(bkId,quickMethod){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  if(fsShouldAsk(bk)){
+    _fsPendingBkId=bkId;_fsPendingQuickMethod=quickMethod||null;
+    openModal('folioSplitAskModal');
+    return;
+  }
+  _openPaymentModalReal(bkId,quickMethod);
+}
+function fsPushHistory(bk,event,detail){
+  if(!bk.folioSplit)bk.folioSplit={history:[]};
+  if(!bk.folioSplit.history)bk.folioSplit.history=[];
+  bk.folioSplit.history.push({at:new Date().toISOString(),by:getCurrentSession()?.name||'Staff',event,detail:detail||null});
+}
+function fsChooseNo(){
+  const bk=AppData.bookings.find(b=>b.id===_fsPendingBkId);if(!bk)return;
+  bk.folioSplit={mode:'combined',askedAt:new Date().toISOString(),askedBy:getCurrentSession()?.name||'Staff',history:[]};
+  fsPushHistory(bk,'kept_combined',null);
+  saveAll();
+  closeModal('folioSplitAskModal');
+  logActivity('Folio kept combined',bk.leaderName||bk.retreatName,bk.id);
+  _openPaymentModalReal(_fsPendingBkId,_fsPendingQuickMethod);
+}
+function fsSkip(){
+  const bk=AppData.bookings.find(b=>b.id===_fsPendingBkId);
+  closeModal('folioSplitAskModal');
+  if(bk)_openPaymentModalReal(_fsPendingBkId,_fsPendingQuickMethod);
+}
+function fsChooseYes(){
+  const bk=AppData.bookings.find(b=>b.id===_fsPendingBkId);if(!bk)return;
+  closeModal('folioSplitAskModal');
+  const guestCount=bk.pax; // 2 or 3, guaranteed by fsShouldAsk
+  const primary=bk.leaderName||'Guest 1';
+  let html=`<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Guest 1 is <b>${escHtml(primary)}</b> (the reservation holder). Enter the full name${guestCount>2?'s':''} of the other guest${guestCount>2?'s':''} sharing this room.</div>`;
+  for(let i=2;i<=guestCount;i++){
+    html+=`<div class="fg"><label>Guest ${i}'s Full Name *</label><input type="text" id="fsGuestName${i}" placeholder="Full name"></div>`;
+  }
+  document.getElementById('folioSplitNamesBody').innerHTML=html;
+  openModal('folioSplitNamesModal');
+}
+function fsSaveNames(){
+  const bk=AppData.bookings.find(b=>b.id===_fsPendingBkId);if(!bk)return;
+  const guestCount=bk.pax;
+  const names=[bk.leaderName||'Guest 1'];
+  for(let i=2;i<=guestCount;i++){
+    const val=document.getElementById('fsGuestName'+i).value.trim();
+    if(!val){alert(`Please enter Guest ${i}'s full name.`);return;}
+    names.push(val);
+  }
+  const equalPct=+(100/names.length).toFixed(2);
+  const splitPct=names.map((_,i)=>i===names.length-1?+(100-equalPct*(names.length-1)).toFixed(2):equalPct);
+  bk.folioSplit={mode:'separate',guestNames:names,splitPct,askedAt:new Date().toISOString(),askedBy:getCurrentSession()?.name||'Staff',history:[]};
+  fsPushHistory(bk,'separate_folios_created',`Guests: ${names.join(', ')} — split ${splitPct.map(p=>p+'%').join(' / ')}`);
+  saveAll();
+  closeModal('folioSplitNamesModal');
+  logActivity('Separate folios created',`${bk.leaderName||bk.retreatName} — ${names.join(', ')}`,bk.id);
+  showToast('Separate folios requested — each guest pays individually.');
+  _openPaymentModalReal(_fsPendingBkId,_fsPendingQuickMethod);
+}
+function _openPaymentModalReal(bkId,quickMethod){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   document.getElementById('paymentModal').dataset.bkId=bkId;
   _payBkId=bkId;
@@ -331,6 +398,13 @@ function openPaymentModal(bkId,quickMethod){
   document.getElementById('bankDisplay').textContent=bankDetails;
   document.getElementById('bankEdit').style.display='none';
   document.getElementById('bankDisplay').style.display='block';
+  const guestRow=document.getElementById('payGuestAttribRow');
+  if(bk.folioSplit?.mode==='separate'){
+    guestRow.style.display='block';
+    document.getElementById('pay-guest').innerHTML=bk.folioSplit.guestNames.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+  }else{
+    guestRow.style.display='none';
+  }
   renderPayBalance(bk);renderPayHistory(bk);
   openModal('paymentModal');
 }
@@ -431,17 +505,18 @@ function savePayment(){
   const method=document.getElementById('pay-method').value;
   const ref=document.getElementById('pay-ref').value.trim();
   const note=document.getElementById('pay-note').value.trim();
+  const guestName=bk.folioSplit?.mode==='separate'?(document.getElementById('pay-guest').value||null):null;
   if(_payEditId){
     // Edit existing payment
     const p=bk.payments.find(x=>x.id===_payEditId);
-    if(p){p.amount=amount;p.date=date;p.method=method;p.ref=ref;p.note=note;}
+    if(p){p.amount=amount;p.date=date;p.method=method;p.ref=ref;p.note=note;p.guestName=guestName;}
     payCancelEdit();
     saveAll();renderPayBalance(bk);renderPayHistory(bk);buildDashboard();venBuild();
-    logActivity('Payment updated',`${fmt$(amount)} via ${method} — ${bk.leaderName||bk.retreatName}`,bk.id);
+    logActivity('Payment updated',`${fmt$(amount)} via ${method} — ${guestName||bk.leaderName||bk.retreatName}`,bk.id);
     showToast('Payment updated ✓');
     return;
   }
-  bk.payments.push({id:uid(),amount,date,method,ref,note,ts:new Date().toISOString()});
+  bk.payments.push({id:uid(),amount,date,method,ref,note,guestName,ts:new Date().toISOString()});
   // Advance status to deposit_paid when first payment recorded
   if(['contract_sent','contract_signed','requested'].includes(bk.status)){
     bk.status='deposit_paid';
@@ -459,7 +534,7 @@ function savePayment(){
   document.getElementById('pay-ref').value='';
   document.getElementById('pay-note').value='';
   saveAll();renderPayBalance(bk);renderPayHistory(bk);buildDashboard();venBuild();
-  logActivity('Payment recorded',`${fmt$(amount)} via ${method} — ${bk.leaderName||bk.retreatName}`,bk.id);
+  logActivity('Payment recorded',`${fmt$(amount)} via ${method} — ${guestName||bk.leaderName||bk.retreatName}`,bk.id);
 }
 
 function editPayment(bkId,payId){
@@ -807,6 +882,66 @@ function renderGuestFolio(){
 // Booking-mode: Room Only guests (Walk-in/Direct/Bikini Bootcamp/Restore &
 // Renew/OTA) have no `reg` at all — rmSaveNewBooking initializes charges
 // directly on the booking — so this renders the same clean folio from `bk`.
+// Per-guest breakdown for a split booking — room total is divided by
+// bk.folioSplit.splitPct (equal by default, staff-adjustable below);
+// charges/payments tagged with a guestName go to that guest, untagged
+// ones fall to the primary guest so nothing silently disappears from the
+// combined total. The combined reservation total itself is never touched
+// here — this is purely a display split of the same numbers.
+function gfSplitBreakdownHtml(bk,charges,roomTotal){
+  const fs=bk.folioSplit;
+  const names=fs.guestNames;
+  const isAdmin=getCurrentSession()?.role==='admin';
+  const payments=bk.payments||[];
+  const rows=names.map((name,i)=>{
+    const pct=fs.splitPct[i];
+    const roomShare=+(roomTotal*pct/100).toFixed(2);
+    const myCharges=charges.filter(c=>(c.guestName||names[0])===name);
+    const myChargeTotal=myCharges.reduce((s,c)=>s+(c.amount||0),0);
+    const myPayments=payments.filter(p=>(p.guestName||names[0])===name);
+    const myPaid=myPayments.reduce((s,p)=>s+(p.amount||0),0);
+    const myBalance=+(roomShare+myChargeTotal-myPaid).toFixed(2);
+    return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+        <div style="font-weight:700;color:var(--dark);font-size:13px">${escHtml(name)}</div>
+        <div style="font-size:10.5px;color:var(--muted)">${pct}% share</div>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between"><span>Room share</span><span>${fmt$(roomShare)}</span></div>
+      <div style="font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between"><span>Charges (${myCharges.length})</span><span>${fmt$(myChargeTotal)}</span></div>
+      <div style="font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between"><span>Paid</span><span style="color:#16a34a">${fmt$(myPaid)}</span></div>
+      <div style="font-size:12.5px;font-weight:700;display:flex;justify-content:space-between;border-top:1px solid #f1f5f9;margin-top:5px;padding-top:5px"><span>Balance</span><span style="color:${myBalance>0?'#dc2626':'#16a34a'}">${myBalance>0?fmt$(myBalance):'Paid in full'}</span></div>
+    </div>`;
+  }).join('');
+  const adjustHtml=isAdmin?`<div style="margin-top:8px">
+    <button class="btn btn-secondary btn-sm" onclick="gfToggleSplitAdjust()">${_gfSplitAdjustOpen?'Cancel':'Adjust Split %'}</button>
+    ${_gfSplitAdjustOpen?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
+      ${names.map((name,i)=>`<div class="fg" style="margin:0"><label style="font-size:10px">${escHtml(name)} %</label><input type="number" id="gfSplitPct${i}" value="${fs.splitPct[i]}" min="0" max="100" step="0.01" style="width:80px"></div>`).join('')}
+      <button class="btn btn-primary btn-sm" onclick="gfSaveSplitAdjust()">Save</button>
+    </div>`:''}
+  </div>`:'';
+  return `<div style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">${rows}</div>
+    ${adjustHtml}
+  </div>`;
+}
+let _gfSplitAdjustOpen=false;
+function gfToggleSplitAdjust(){_gfSplitAdjustOpen=!_gfSplitAdjustOpen;renderGuestFolio();}
+function gfSaveSplitAdjust(){
+  const bk=AppData.bookings.find(b=>b.id===_gfBkId);if(!bk||bk.folioSplit?.mode!=='separate')return;
+  const names=bk.folioSplit.guestNames;
+  const vals=names.map((_,i)=>parseFloat(document.getElementById('gfSplitPct'+i).value));
+  if(vals.some(v=>isNaN(v)||v<0)){alert('Enter valid percentages.');return;}
+  const sum=+vals.reduce((s,v)=>s+v,0).toFixed(2);
+  if(Math.abs(sum-100)>0.5){alert(`Split percentages must add up to 100% (currently ${sum}%).`);return;}
+  const before=bk.folioSplit.splitPct.slice();
+  bk.folioSplit.splitPct=vals;
+  fsPushHistory(bk,'split_adjusted',`${names.map((n,i)=>`${n}: ${before[i]}%→${vals[i]}%`).join(', ')}`);
+  saveAll();
+  _gfSplitAdjustOpen=false;
+  renderGuestFolio();
+  logActivity('Folio split adjusted',names.map((n,i)=>`${n} ${vals[i]}%`).join(', '),bk.id);
+  showToast('Split updated ✓');
+}
 function renderBookingFolio(){
   const bk=AppData.bookings.find(b=>b.id===_gfBkId);if(!bk)return closeModal('guestFolioModal');
   const rt=AppData.roomTypes.find(t=>t.id===bk.roomTypeId);
@@ -815,6 +950,8 @@ function renderBookingFolio(){
   const total=charges.reduce((s,c)=>s+(c.amount||0),0);
   document.getElementById('gfTitle').textContent=bk.leaderName||bk.retreatName||'Guest';
   document.getElementById('gfSub').innerHTML=`Room ${escHtml(room)}${rt?' · '+escHtml(rt.name):''} · ${escHtml(bk.retreatName||'')} <span onclick="gfEditDetails()" style="cursor:pointer;color:var(--teal,#2d6a6a);font-weight:600;text-decoration:underline;margin-left:6px">Edit Details</span>`;
+  const fs=bk.folioSplit;
+  const isSplit=fs?.mode==='separate';
   const addFormHtml=_gfAddOpen?`
     <div style="padding:10px 14px;background:#f8fafc;border-top:1px solid var(--border)">
       <div class="frow" style="margin:0 0 8px">
@@ -825,6 +962,7 @@ function renderBookingFolio(){
         <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Description</label><input type="text" id="gfc-desc" placeholder="e.g. Massage 60min"></div>
         <div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Amount ($)</label><input type="number" id="gfc-amount" min="0" step="0.01" placeholder="0.00"></div>
       </div>
+      ${isSplit?`<div class="frow" style="margin:0 0 10px"><div class="fg" style="margin:0"><label style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px">Which Guest?</label><select id="gfc-guest">${fs.guestNames.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('')}</select></div></div>`:''}
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button class="btn btn-secondary btn-sm" onclick="gfToggleAdd()">Cancel</button>
         <button class="btn btn-primary btn-sm" onclick="gfChargeSave()">Save</button>
@@ -835,7 +973,10 @@ function renderBookingFolio(){
   const balance=+(roomTotal+total-paid).toFixed(2);
   const byDept={};charges.forEach(c=>{const d=gfDeptFor(c.category);byDept[d]=(byDept[d]||0)+(c.amount||0);});
   const deptChipsHtml=Object.keys(byDept).length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${GF_DEPT_ORDER.filter(d=>byDept[d]>0).map(d=>`<div style="background:#fff;border:1px solid var(--border);border-radius:7px;padding:4px 9px"><span style="font-size:10px;color:var(--muted)">${d}</span> <span style="font-size:11.5px;font-weight:700;color:var(--dark)">${fmt$(byDept[d])}</span></div>`).join('')}</div>`:'';
+  const splitBannerHtml=isSplit?`<div style="padding:9px 14px;background:#eff6ff;border-bottom:1px solid #bfdbfe;font-size:12px;color:#1e40af;font-weight:600">Separate folios requested — each guest pays individually.</div>`:'';
+  const splitBreakdownHtml=isSplit?gfSplitBreakdownHtml(bk,charges,roomTotal):'';
   document.getElementById('gfBody').innerHTML=`
+    ${splitBannerHtml}
     <div style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
       <div style="display:flex;gap:16px;flex-wrap:wrap">
         <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Room/Package</div><div style="font-size:15px;font-weight:800;color:var(--dark)">${fmt$(roomTotal)}</div></div>
@@ -844,6 +985,7 @@ function renderBookingFolio(){
       </div>
       ${deptChipsHtml}
     </div>
+    ${splitBreakdownHtml}
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-bottom:1px solid var(--border)">
       <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)">Folio${total>0?' · '+fmt$(total)+' total':''}</span>
       <button class="btn btn-secondary btn-sm" onclick="gfToggleAdd()">${_gfAddOpen?'Cancel':'+ Add Charge'}</button>
@@ -888,10 +1030,12 @@ function gfChargeSaveBooking(){
   if(!description){alert('Enter a description for the charge.');return;}
   if(!amount||amount<=0){alert('Enter a valid amount.');return;}
   if(!bk.charges)bk.charges=[];
-  bk.charges.push({id:uid(),date,category,description,amount,guestName:bk.leaderName||null,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff'});
+  const guestSel=document.getElementById('gfc-guest');
+  const guestName=(bk.folioSplit?.mode==='separate'&&guestSel)?guestSel.value:(bk.leaderName||null);
+  bk.charges.push({id:uid(),date,category,description,amount,guestName,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff'});
   _gfAddOpen=false;
   saveAll();renderGuestFolio();
-  logActivity('Charge added',`${fmt$(amount)} — ${description} — ${bk.leaderName||''}`,bk.id);
+  logActivity('Charge added',`${fmt$(amount)} — ${description} — ${guestName||''}`,bk.id);
   showToast('Charge added ✓');
 }
 function gfChargeDelete(chargeId){

@@ -2687,6 +2687,28 @@
   </div>
 </div>
 
+<!-- ===== FOLIO SPLIT QUESTION (Room Only double/triple, asked once before payment) ===== -->
+<div class="modal-overlay" id="folioSplitAskModal">
+  <div class="modal" style="width:460px;max-width:95vw">
+    <div class="modal-hdr"><div><h2>Separate Folios?</h2></div><button class="modal-x" onclick="fsSkip()">&times;</button></div>
+    <div class="modal-body" style="padding:22px 24px">
+      <div style="font-size:14px;color:var(--dark);margin-bottom:18px;line-height:1.5">Would you like each guest to have a separate folio and pay individually?</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-primary" onclick="fsChooseYes()">Yes, create separate folios</button>
+        <button class="btn btn-secondary" onclick="fsChooseNo()">No, keep everything on one folio</button>
+        <button class="btn btn-secondary" onclick="fsSkip()" style="color:var(--muted)">Skip</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="folioSplitNamesModal">
+  <div class="modal" style="width:460px;max-width:95vw">
+    <div class="modal-hdr"><div><h2>Guest Names</h2><div class="modal-sub">Needed to set up each guest's own folio</div></div><button class="modal-x" onclick="closeModal('folioSplitNamesModal')">&times;</button></div>
+    <div class="modal-body" style="padding:20px 24px" id="folioSplitNamesBody"></div>
+    <div class="modal-foot"><button class="btn btn-secondary" onclick="closeModal('folioSplitNamesModal')">Cancel</button><button class="btn btn-primary" onclick="fsSaveNames()">Create Separate Folios</button></div>
+  </div>
+</div>
+
 <!-- ===== PAYMENT MODAL ===== -->
 <div class="modal-overlay" id="paymentModal">
   <div class="modal" style="width:700px;max-width:97vw;max-height:93vh;display:flex;flex-direction:column">
@@ -2738,6 +2760,7 @@
           <div class="fg"><label>Reference / Confirmation #</label><input type="text" id="pay-ref" placeholder="Bank wire ref or check #"></div>
         </div>
         <div class="frow full"><div class="fg"><label>Note</label><input type="text" id="pay-note" placeholder="e.g. Deposit, partial payment, balance..."></div></div>
+        <div class="frow full" id="payGuestAttribRow" style="display:none"><div class="fg"><label>Which Guest's Folio?</label><select id="pay-guest"></select></div></div>
       </div>
 
       <!-- Payment history -->
