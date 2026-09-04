@@ -174,14 +174,38 @@ function pipeFollowUpBadge(bk){
 }
 
 // ===== CARD =====
-// Every lead is colored by type — Retreats (the default, no eventType) green,
-// Weddings light blue, Bachelorette pink — so a mixed board stays scannable.
-const PIPE_TYPE_COLORS={
-  retreat:{bg:'#f0fdf4',border:'#86efac',label:null},
-  wedding:{bg:'#eff6ff',border:'#93c5fd',label:'Wedding'},
-  bachelorette:{bg:'#fdf2f8',border:'#f9a8d4',label:'Bachelorette'},
+// One centralized category config, reused for every card, the legend, and
+// anywhere else in the app that needs to color a lead by type — Darlene's
+// explicit ask after the first pass left an old 3-color scheme in place.
+// Do not add a second/parallel color map; extend this one.
+const PIPELINE_CATEGORIES={
+  bbc:          {label:'BBC',               border:'#C94A4A',background:'#FCECEC'},
+  retreat:      {label:'Retreat',           border:'#3975B7',background:'#EDF5FC'},
+  roomonly:     {label:'Room Only',         border:'#D6A514',background:'#FFF8D9'},
+  wedding:      {label:'Wedding',           border:'#3F8A61',background:'#EDF8F1'},
+  bachelorette: {label:'Bachelorette',      border:'#D85B91',background:'#FCECF4'},
+  birthday:     {label:'Birthday',          border:'#D97828',background:'#FFF0E3'},
+  unassigned:   {label:'Type Not Assigned', border:'#7B8491',background:'#F1F3F5'},
 };
-function pipeTypeColor(bk){return PIPE_TYPE_COLORS[bk.eventType]||PIPE_TYPE_COLORS.retreat;}
+// Explicit-signal classification, in priority order — eventType (set by the
+// Wedding/Bachelorette/Birthday inquiry forms) wins first, then room_only
+// bookings split into BBC vs plain Room Only by retreatName, then anything
+// with retreat data left over defaults to Retreat, and only a record with
+// none of that goes to Type Not Assigned.
+function pipeCategoryKey(bk){
+  if(bk.eventType==='wedding')return'wedding';
+  if(bk.eventType==='bachelorette')return'bachelorette';
+  if(bk.eventType==='birthday')return'birthday';
+  if(bk.bookingType==='room_only')return bk.retreatName==='Bikini Bootcamp'?'bbc':'roomonly';
+  if(bk.retreatName||bk.leaderName)return'retreat';
+  return'unassigned';
+}
+function pipeTypeColor(bk){return PIPELINE_CATEGORIES[pipeCategoryKey(bk)]||PIPELINE_CATEGORIES.unassigned;}
+function pipeLegendHtml(){
+  return`<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px">${Object.values(PIPELINE_CATEGORIES).map(c=>
+    `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text)"><span style="width:9px;height:9px;border-radius:50%;background:${c.border};display:inline-block;flex-shrink:0"></span>${c.label}</span>`
+  ).join('')}</div>`;
+}
 function pipeBuildCard(bk){
   const fu=pipeFollowUpStatus(bk);
   const fuColor={overdue:'#dc2626',today:'#b45309',upcoming:'#374151',none:'#9ca3af'}[fu];
@@ -193,9 +217,9 @@ function pipeBuildCard(bk){
   el.className='salespipe-card';
   el.draggable=true;
   el.dataset.bkId=bk.id;
-  el.style.cssText=`background:${tc.bg};border:1.5px solid ${tc.border};border-radius:10px;padding:12px 13px;margin-bottom:9px;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:box-shadow .15s,border-color .15s;`;
+  el.style.cssText=`background:${tc.background};border-top:1px solid ${tc.border}33;border-right:1px solid ${tc.border}33;border-bottom:1px solid ${tc.border}33;border-left:4px solid ${tc.border};border-radius:10px;padding:12px 13px;margin-bottom:9px;cursor:grab;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:box-shadow .15s,border-color .15s;`;
   el.innerHTML=`
-    ${tc.label?`<div style="margin-bottom:4px">${pipeBadge(tc.label,tc.bg,tc.border,tc.border)}</div>`:''}
+    <div style="margin-bottom:4px">${pipeBadge(tc.label,tc.background,tc.border,tc.border)}</div>
     <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:700;color:var(--dark);line-height:1.25;margin-bottom:2px">${menuEsc(bk.retreatName||'Untitled Retreat')}</div>
     <div style="font-size:12.5px;color:var(--muted);margin-bottom:7px">${menuEsc(bk.leaderName||'No teacher/host on file')}</div>
     <div style="font-size:12px;color:var(--text);margin-bottom:8px">${dateRange} &middot; ${paxTxt}</div>
@@ -265,7 +289,9 @@ function pipeRender(){
   root.innerHTML=`
     <div style="padding:22px 24px 4px;flex-shrink:0">
       <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--dark)">Retreat Sales Pipeline</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-top:2px;margin-bottom:16px">Drag a card between stages, or use + Log Activity to record progress. All inquiries land here — Retreats (green), Weddings (light blue), Bachelorette (pink).</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:2px">Drag a card between stages, or use + Log Activity to record progress. All inquiries land here, colored by type:</div>
+      ${pipeLegendHtml()}
+      <div style="margin-bottom:6px"></div>
     </div>
     <div id="pipeStatsBar"></div>
     <div id="pipeFilterBar"></div>
