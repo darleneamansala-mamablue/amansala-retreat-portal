@@ -438,11 +438,12 @@ function spaSvcDirectCostTotal(s) {
 }
 function spaSvcMarginHtml(s) {
   const cost = spaSvcDirectCostTotal(s);
-  if (!cost || s.price == null) return '';
-  const margin = s.price - cost;
+  if (!cost) return '';
+  const hasPrice = s.price != null;
+  const margin = hasPrice ? s.price - cost : null;
   return `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0ebe0;font-size:11.5px;color:#6b7280;display:flex;gap:12px">
     <span>Costs: <b style="color:#a05a35">$${cost}</b></span>
-    <span>Margin before therapist pay: <b style="color:${margin >= 0 ? '#059669' : '#dc2626'}">$${margin}</b></span>
+    ${hasPrice ? `<span>Margin before therapist pay: <b style="color:${margin >= 0 ? '#059669' : '#dc2626'}">$${margin}</b></span>` : '<span style="color:#d97706;font-style:italic">— set a price to see margin</span>'}
   </div>`;
 }
 // Staff are paid in pesos, guests are priced in dollars — this rate is
