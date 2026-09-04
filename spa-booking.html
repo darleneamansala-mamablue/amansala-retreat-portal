@@ -95,7 +95,8 @@ let SpaAppointments=[];
 let SBRegs=[];
 let SBBookings=[];
 let SB={step:1,sessionType:null,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
-        policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null};
+        policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null,
+        stayStart:null,stayEnd:null};
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
 function esc(s){return (s||'').replace(/</g,'&lt;');}
@@ -303,7 +304,32 @@ function renderStep4_Hotel(el){
       <button class="btn-primary" onclick="sbSubmitHotel()">Continue</button>
     </div>`;
 }
-function sbSubmitHotel(){
+// Confines the date picker (and the final booking check) to the guest's
+// actual stay window — Darlene's request: a guest who hasn't checked in
+// yet shouldn't be able to book (or be booked for) a spa service before
+// their arrival date, or after they've checked out. Looks up the parent
+// booking fresh (regs have no dates of their own — only the booking they
+// belong to does) so a same-minute check-in is picked up correctly.
+async function sbLookupStayWindow(clientName,roomNumber){
+  try{
+    const [{data:rd},{data:bd}]=await Promise.all([
+      db.from('app_store').select('value').eq('key','regs').single(),
+      db.from('app_store').select('value').eq('key','bookings').single(),
+    ]);
+    const latestRegs=(rd?.value)||[];
+    const latestBookings=(bd?.value)||[];
+    SBRegs=latestRegs;SBBookings=latestBookings;
+    const regMatch=sbFindGuestReg(clientName,roomNumber);
+    if(regMatch){
+      const bk=latestBookings.find(b=>b.id===regMatch.reg.bookingId);
+      if(bk&&bk.startDate&&bk.endDate) return{start:bk.startDate,end:bk.endDate};
+    }
+    const bkMatch=sbFindGuestBooking(clientName,roomNumber);
+    if(bkMatch&&bkMatch.bk.startDate&&bkMatch.bk.endDate) return{start:bkMatch.bk.startDate,end:bkMatch.bk.endDate};
+  }catch(e){}
+  return null; // no confirmed match — don't restrict rather than risk a false block
+}
+async function sbSubmitHotel(){
   const first=document.getElementById('sbFirst').value.trim();
   const last=document.getElementById('sbLast').value.trim();
   const room=document.getElementById('sbRoom').value.trim();
@@ -314,6 +340,13 @@ function sbSubmitHotel(){
   if(!email){showToast('Please enter your email so we can send your confirmation.');return;}
   if(!phone){showToast('Please enter your phone number.');return;}
   SB.firstName=first;SB.lastName=last;SB.roomNumber=room;SB.email=email;SB.phone=phone;
+  const btn=document.querySelector('.btn-primary');
+  const origLabel=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Checking your stay…';}
+  const window_=await sbLookupStayWindow(first+' '+last,room);
+  SB.stayStart=window_?window_.start:null;
+  SB.stayEnd=window_?window_.end:null;
+  if(btn){btn.disabled=false;btn.textContent=origLabel;}
   setStep(5);
 }
 
@@ -432,12 +465,38 @@ function sbNextDays(n){
   for(let i=0;i<n;i++){const d=new Date(today.getTime()+i*86400000);out.push(d);}
   return out;
 }
+// Clamps the bookable date range to the guest's actual stay (SB.stayStart/
+// stayEnd, looked up in sbSubmitHotel) — a guest who hasn't checked in yet
+// can still book ahead, but only for dates within their real stay window,
+// not today just because today happens to fall in the next-14-days list.
+function sbBookableDays(){
+  const today=new Date();today.setHours(0,0,0,0);
+  let start=today, end=new Date(today.getTime()+13*86400000);
+  if(SB.stayStart){const ss=new Date(SB.stayStart+'T00:00:00');if(ss>start)start=ss;}
+  if(SB.stayEnd){const se=new Date(SB.stayEnd+'T00:00:00');if(se<end)end=se;}
+  const out=[];
+  for(let d=new Date(start);d<=end;d=new Date(d.getTime()+86400000))out.push(new Date(d));
+  return out;
+}
 function renderStep6_DateTime(el){
   renderDots(7);
   const svc=SpaData.services.find(s=>s.id===SB.serviceId);
   const candidates=sbCandidateTherapists();
-  if(!SB.date) SB.date=sbNextDays(14)[0].toISOString().slice(0,10);
-  const days=sbNextDays(14);
+  const days=sbBookableDays();
+  if(!days.length){
+    const fmtD=ds=>new Date(ds+'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric'});
+    const hasntArrived=SB.stayStart&&new Date(SB.stayStart+'T00:00:00')>new Date(new Date().setHours(0,0,0,0));
+    el.innerHTML=`
+      <button class="btn-back" onclick="setStep(5)">&#8249; Back</button>
+      <div class="card">
+        <div class="section-title">Pick a Date &amp; Time</div>
+        <div class="no-slots">${hasntArrived
+          ?`Your stay starts ${fmtD(SB.stayStart)} — spa services can only be booked for the dates you're here (${fmtD(SB.stayStart)}–${fmtD(SB.stayEnd)}). Please check back once you've arrived, or contact us directly to book ahead.`
+          :`Spa services can only be booked for the dates of your stay (${SB.stayStart?fmtD(SB.stayStart):'?'}–${SB.stayEnd?fmtD(SB.stayEnd):'?'}), which don't fall within the next two weeks from today. Please contact us directly.`}</div>
+      </div>`;
+    return;
+  }
+  if(!SB.date||!days.some(d=>d.toISOString().slice(0,10)===SB.date)) SB.date=days[0].toISOString().slice(0,10);
   el.innerHTML=`
     <button class="btn-back" onclick="setStep(5)">&#8249; Back</button>
     <div class="card">
@@ -582,6 +641,18 @@ async function sbFinalConfirm(){
       SpaAppointments=latest;
       setStep(6);
       return;
+    }
+    // Final safety net: re-check the stay window right before writing, in
+    // case something changed (e.g. an early checkout) since step 4.
+    if(SB.guestType==='hotel'){
+      const win=await sbLookupStayWindow(SB.firstName+' '+SB.lastName,SB.roomNumber);
+      if(win){SB.stayStart=win.start;SB.stayEnd=win.end;}
+      if((SB.stayStart&&SB.date<SB.stayStart)||(SB.stayEnd&&SB.date>SB.stayEnd)){
+        showToast("That date is outside your stay — please pick a date you're actually here.");
+        btn.disabled=false;btn.textContent='Confirm Booking';
+        setStep(6);
+        return;
+      }
     }
     const svc=SpaData.services.find(s=>s.id===SB.serviceId);
     const isHotel=SB.guestType==='hotel';
