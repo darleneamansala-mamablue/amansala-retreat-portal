@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spa Payroll — Amansala</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Jost',sans-serif;background:#f5f1eb;color:#2d2520;min-height:100vh}
+  .topbar{background:#1a2332;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+  .brand{color:#fff;font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700}
+  .brand span{color:#8a7e74;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-left:10px;font-family:'Jost',sans-serif;font-weight:500}
+  #signOutBtn{display:none;background:none;border:1.5px solid #4a5568;color:#c8bfb5;padding:7px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12px;cursor:pointer}
+  #loginOverlay{position:fixed;inset:0;background:#f5f1eb;display:flex;align-items:center;justify-content:center;padding:20px;z-index:100}
+  .login-card{background:#fff;border-radius:16px;padding:36px 32px;max-width:380px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+  .login-card h1{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;color:#2d2520;margin-bottom:4px}
+  .login-card .sub{font-size:12px;color:#8a7e74;margin-bottom:22px;letter-spacing:.5px;text-transform:uppercase}
+  .login-card input{width:100%;padding:11px 14px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:14px;margin-bottom:12px}
+  .login-card button{width:100%;padding:11px;background:#2d6a6a;color:#fff;border:none;border-radius:9px;font-family:'Jost',sans-serif;font-size:14px;font-weight:700;cursor:pointer}
+  .login-err{color:#dc2626;font-size:12.5px;margin-top:10px;min-height:16px}
+  #content{display:none;max-width:1000px;margin:0 auto;padding:28px 20px 60px}
+  .page-title{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:#2d2520;margin-bottom:4px}
+  .page-sub{font-size:12.5px;color:#8a7e74;margin-bottom:24px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .card{background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;padding:16px 18px}
+  .card .name{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:#2d2520}
+  .card .total{font-weight:800;color:#0f766e;font-size:17px}
+  .card .count{font-size:11.5px;color:#8a7e74;margin-top:2px}
+  .card .svc-row{display:flex;justify-content:space-between;font-size:12px;color:#5a5048;padding:3px 0;border-top:1px solid #f5f1eb;margin-top:6px;padding-top:6px}
+  .empty{text-align:center;color:#9ca3af;font-style:italic;padding:50px 20px}
+  .grand{margin-top:20px;padding:16px 18px;background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;display:flex;justify-content:space-between;align-items:center}
+  .grand .lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74}
+  .grand .amt{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:#0f766e}
+  .denied{max-width:420px;margin:80px auto;text-align:center;background:#fff;border:1.5px solid #fca5a5;border-radius:14px;padding:32px}
+  .denied .icon{font-size:32px;margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">Amansala <span>Spa Payroll</span></div>
+  <button id="signOutBtn" onclick="payrollSignOut()">Sign Out</button>
+</div>
+
+<div id="loginOverlay">
+  <div class="login-card">
+    <h1>Spa Payroll</h1>
+    <div class="sub">Admin Access Only</div>
+    <input type="text" id="loginUser" placeholder="Username" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password">
+    <button onclick="payrollLoginSubmit()">Sign In</button>
+    <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
+
+<div id="content"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const db = supabase.createClient('https://fzresosiqafiyxfgeyvk.supabase.co','sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB');
+
+// Separate standalone page per Darlene's request: spa payroll needs its own
+// URL, restricted to admin accounts only — not the old shared-code gate
+// (SPA_PAYROLL_CODE in modules/spa.js), which could be passed around.
+// Reuses the SAME staff accounts/credentials as the main admin login
+// (staffAccounts in Supabase, admin-staff.js's pattern) so there's only
+// one set of logins to manage, but requires role==='admin' specifically.
+const MASTER_STAFF=[
+  {id:'staff_001',name:'Darlene',username:'darlene',password:'amansala2024',role:'admin'},
+];
+
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+async function payrollLoginSubmit(){
+  const username=document.getElementById('loginUser').value.trim().toLowerCase();
+  const password=document.getElementById('loginPass').value;
+  const errEl=document.getElementById('loginErr');
+  errEl.textContent='';
+  if(!username||!password){errEl.textContent='Please enter your username and password.';return;}
+  errEl.textContent='Checking credentials…';
+  let account=null;
+  try{
+    const {data}=await db.from('app_store').select('value').eq('key','staffAccounts').maybeSingle();
+    const accounts=(data?.value&&Array.isArray(data.value))?data.value:[];
+    account=accounts.find(s=>s.active!==false&&(s.username||'').toLowerCase()===username&&s.password===password)||null;
+  }catch(e){}
+  if(!account) account=MASTER_STAFF.find(s=>s.username===username&&s.password===password)||null;
+  if(!account){errEl.textContent='Incorrect username or password.';return;}
+  if(account.role!=='admin'){
+    document.getElementById('loginOverlay').style.display='none';
+    document.getElementById('content').style.display='block';
+    document.getElementById('content').innerHTML=`<div class="denied"><div class="icon">🔒</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:700;margin-bottom:6px">Admin Access Required</div>
+      <div style="font-size:13px;color:#8a7e74">This page shows what each therapist earns and is limited to admin accounts. Contact Darlene if you need access.</div></div>`;
+    return;
+  }
+  errEl.textContent='';
+  sessionStorage.setItem('spa_payroll_session',JSON.stringify({name:account.name,username:account.username}));
+  document.getElementById('loginOverlay').style.display='none';
+  document.getElementById('signOutBtn').style.display='inline-block';
+  document.getElementById('content').style.display='block';
+  loadAndRenderPayroll();
+}
+function payrollSignOut(){
+  sessionStorage.removeItem('spa_payroll_session');
+  location.reload();
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('loginOverlay').style.display!=='none')payrollLoginSubmit();});
+
+// Mirrors spaTherapistCompAmount in modules/spa.js — kept in sync manually
+// since this page is intentionally self-contained (no dependency on the
+// main app's module files, same pattern as driver-view.html).
+const SPA_MXN_PER_USD=17;
+function therapistCompAmount(rate,service){
+  if(!rate||!service)return null;
+  let amountLocal;
+  if(rate.compensationType==='FIXED')amountLocal=rate.compensationValue||0;
+  else if(rate.compensationType==='PERCENTAGE')amountLocal=service.price!=null?service.price*(rate.compensationValue||0)/100:null;
+  else if(rate.compensationType==='HOURLY')amountLocal=service.duration?(rate.compensationValue||0)*service.duration/60:null;
+  else return null;
+  if(amountLocal==null)return null;
+  const isMXN=rate.compensationCurrency==='MXN';
+  return Math.round(isMXN?amountLocal/SPA_MXN_PER_USD:amountLocal);
+}
+
+async function loadAndRenderPayroll(){
+  const el=document.getElementById('content');
+  el.innerHTML='<div class="empty">Loading…</div>';
+  const [{data:sd},{data:ad}]=await Promise.all([
+    db.from('app_store').select('value').eq('key','spa_data').maybeSingle(),
+    db.from('app_store').select('value').eq('key','spa_appointments').maybeSingle(),
+  ]);
+  const services=(sd?.value?.services)||[];
+  const therapists=(sd?.value?.therapists)||[];
+  const appointments=(ad?.value)||[];
+  const completed=appointments.filter(a=>a.status==='COMPLETED');
+
+  const rows=therapists.map(t=>{
+    const own=completed.filter(a=>a.therapistId===t.id);
+    let total=0;
+    const bySvc={};
+    own.forEach(a=>{
+      const svc=services.find(s=>s.id===a.serviceId);
+      const rate=(t.services||[]).find(r=>r.serviceId===a.serviceId);
+      const pay=therapistCompAmount(rate,svc)||0;
+      total+=pay;
+      const name=svc?.name||a.serviceId;
+      bySvc[name]=(bySvc[name]||0)+pay;
+    });
+    return {t,count:own.length,total,bySvc};
+  }).filter(r=>r.count>0).sort((a,b)=>b.total-a.total);
+  const grandTotal=rows.reduce((s,r)=>s+r.total,0);
+
+  let html=`<div class="page-title">Spa Payroll</div><div class="page-sub">Real earnings from completed appointments, converted to USD at ${SPA_MXN_PER_USD}:1</div>`;
+  if(!rows.length){
+    html+='<div class="empty">No completed appointments yet — payroll fills in as services are marked Completed.</div>';
+  }else{
+    html+='<div class="grid">';
+    rows.forEach(r=>{
+      html+=`<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div class="name">${esc(r.t.firstName)} ${esc(r.t.lastName||'')}</div>
+          <div class="total">$${r.total}</div>
+        </div>
+        <div class="count">${r.count} completed service${r.count!==1?'s':''}</div>
+        ${Object.entries(r.bySvc).map(([name,amt])=>`<div class="svc-row"><span>${esc(name)}</span><span>$${amt}</span></div>`).join('')}
+      </div>`;
+    });
+    html+='</div>';
+    html+=`<div class="grand"><span class="lbl">Total Paid Out</span><span class="amt">$${grandTotal}</span></div>`;
+  }
+  el.innerHTML=html;
+}
+
+(function bootstrap(){
+  const raw=sessionStorage.getItem('spa_payroll_session');
+  if(raw){
+    try{
+      JSON.parse(raw);
+      document.getElementById('loginOverlay').style.display='none';
+      document.getElementById('signOutBtn').style.display='inline-block';
+      document.getElementById('content').style.display='block';
+      loadAndRenderPayroll();
+      return;
+    }catch(e){}
+  }
+  setTimeout(()=>document.getElementById('loginUser')?.focus(),120);
+})();
+</script>
+</body>
+</html>
