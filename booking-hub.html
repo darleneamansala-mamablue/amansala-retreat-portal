@@ -3578,6 +3578,7 @@
       <div>
         <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Service *</label>
         <select id="spaApptService" onchange="spaApptOnServiceChange()" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff"></select>
+        <div id="spaApptPriceDisplay" style="margin-top:6px;font-size:12.5px;font-weight:700;color:#0f766e"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
@@ -3603,18 +3604,34 @@
           <input id="spaApptDuration" type="number" min="15" step="15" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;box-sizing:border-box">
         </div>
       </div>
-      <div>
-        <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Status</label>
-        <select id="spaApptStatus" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff">
-          <option value="CONFIRMED">Confirmed</option>
-          <option value="COMPLETED">Completed</option>
-          <option value="NO_SHOW">No Show</option>
-          <option value="CANCELLED">Cancelled</option>
-        </select>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Status</label>
+          <select id="spaApptStatus" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff">
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="NO_SHOW">No Show</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Payment Status</label>
+          <select id="spaApptPaymentStatus" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff">
+            <option value="PENDING">Pending</option>
+            <option value="PAID">Paid</option>
+            <option value="CONFIRMED">Confirmed</option>
+          </select>
+        </div>
       </div>
       <div>
         <label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Notes</label>
         <textarea id="spaApptNotes" rows="2" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
+      <div id="spaApptHistoryWrap" style="display:none">
+        <details>
+          <summary style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;cursor:pointer">Original Details &amp; Change History</summary>
+          <div id="spaApptHistoryBody" style="margin-top:8px;font-size:12px;color:#5a5048"></div>
+        </details>
       </div>
       <div id="spaApptDeleteWrap" style="display:none;border-top:1px solid #e8dfd4;padding-top:14px">
         <button onclick="spaApptDelete()" style="background:#fef2f2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:8px;padding:8px 16px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Delete Appointment</button>

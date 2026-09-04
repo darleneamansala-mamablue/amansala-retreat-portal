@@ -209,6 +209,25 @@ function spaRenderDashboard() {
 // "did we confirm everything booked this week/month" in one look. ─────────
 let spaConfirmFilter = 'all';    // 'all' | 'pending' | 'confirmed'
 let spaConfirmCatFilter = 'all'; // 'all' | 'massage' | 'spirit' | 'yogafit'
+let spaConfirmSearchText = '';   // free-text search by guest, therapist, or service
+function spaConfirmSearchMatches(a) {
+  if (!spaConfirmSearchText) return true;
+  const q = spaConfirmSearchText.toLowerCase();
+  const svcName = (SpaData.services.find(s => s.id === a.serviceId)?.name || '').toLowerCase();
+  const therName = (SpaData.therapists.find(t => t.id === a.therapistId)?.firstName || '').toLowerCase();
+  const clientName = (a.clientName || '').toLowerCase();
+  return svcName.includes(q) || therName.includes(q) || clientName.includes(q);
+}
+function spaConfirmSetSearch(val) {
+  spaConfirmSearchText = val;
+  // Re-rendering rebuilds the input itself (innerHTML swap), which would
+  // otherwise steal focus after every keystroke — restore focus + cursor
+  // position so typing a search term doesn't require re-clicking the box.
+  const cursorPos = val.length;
+  spaRenderConfirmations();
+  const input = document.querySelector('#spaContent input[placeholder*="Search by guest"]');
+  if (input) { input.focus(); input.setSelectionRange(cursorPos, cursorPos); }
+}
 function spaConfirmCatMatches(a) {
   if (spaConfirmCatFilter === 'all') return true;
   const cat = SpaData.services.find(s => s.id === a.serviceId)?.category;
@@ -233,6 +252,7 @@ function spaRenderConfirmations() {
   const pendingCount = allUpcoming.filter(a => !a.confirmed).length;
   const upcoming = allUpcoming
     .filter(spaConfirmCatMatches)
+    .filter(spaConfirmSearchMatches)
     .filter(a => spaConfirmFilter === 'all' ? true : spaConfirmFilter === 'pending' ? !a.confirmed : !!a.confirmed)
     .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
 
@@ -269,6 +289,7 @@ function spaRenderConfirmations() {
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:700;color:#2d2520">Upcoming Confirmations</div>
       ${pendingCount ? `<span style="background:#fef3c7;color:#92400e;border-radius:99px;padding:3px 12px;font-size:12px;font-weight:700">${pendingCount} pending</span>` : `<span style="background:#dcfce7;color:#15803d;border-radius:99px;padding:3px 12px;font-size:12px;font-weight:700">All caught up ✓</span>`}
+      <input type="text" value="${escHtml(spaConfirmSearchText)}" oninput="spaConfirmSetSearch(this.value)" placeholder="Search by guest, therapist, or service…" style="margin-left:auto;min-width:220px;padding:7px 12px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px">
     </div>
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
       <span style="font-size:11px;font-weight:700;color:#8a7e74;text-transform:uppercase;letter-spacing:.4px">Status:</span>

@@ -263,6 +263,14 @@ function spaApptOnServiceChange() {
   const svc = SpaData.services.find(s => s.id === svcId);
   spaApptPopulateTherapistSelect(svcId, document.getElementById('spaApptTherapist').value);
   if (svc?.duration) document.getElementById('spaApptDuration').value = svc.duration;
+  spaApptUpdatePriceDisplay(svc);
+}
+function spaApptUpdatePriceDisplay(svc) {
+  const el = document.getElementById('spaApptPriceDisplay');
+  if (!el) return;
+  if (!svc) { el.textContent = ''; return; }
+  if (svc.groupPricing) { el.textContent = `Rate: from $${groupPriceFor(svc, svc.groupPricing.minGuests || 1)} (group pricing)`; return; }
+  el.textContent = svc.price != null ? `Rate: $${svc.price}` : 'Rate: not set — add a price in Services';
 }
 function spaApptOnTherapistChange() {}
 
@@ -276,10 +284,12 @@ function spaApptShowForm(id, prefill) {
   document.getElementById('spaApptGuestType').value = a?.guestType || 'hotel';
   document.getElementById('spaApptNotes').value = a?.notes || '';
   document.getElementById('spaApptStatus').value = a?.status || 'CONFIRMED';
+  document.getElementById('spaApptPaymentStatus').value = a?.paymentStatus && ['PENDING', 'PAID', 'CONFIRMED'].includes(a.paymentStatus) ? a.paymentStatus : 'PENDING';
   document.getElementById('spaApptDate').value = a?.date || spaCalFmtDateStr(spaCalDate);
 
   const svcSel = document.getElementById('spaApptService');
   svcSel.innerHTML = '<option value="">— Select —</option>' + SpaData.services.filter(s => s.active).map(s => `<option value="${s.id}" ${a?.serviceId === s.id ? 'selected' : ''}>${s.name}</option>`).join('');
+  spaApptUpdatePriceDisplay(SpaData.services.find(s => s.id === svcSel.value));
 
   const initTherapistId = a?.therapistId || (prefill.mode === 'therapist' ? prefill.colId : '') || '';
   spaApptPopulateTherapistSelect(svcSel.value, initTherapistId);
@@ -293,7 +303,48 @@ function spaApptShowForm(id, prefill) {
   document.getElementById('spaApptDuration').value = a?.duration || selectedSvc?.duration || 60;
 
   document.getElementById('spaApptDeleteWrap').style.display = a ? 'block' : 'none';
+  spaApptRenderHistory(a);
   openModal('spaApptModal');
+}
+
+// Lets staff see the original booking details alongside anything changed
+// afterward — Darlene's feedback: helpful for resolving discrepancies
+// without having to trust memory of what the guest originally asked for.
+function spaApptFieldLabels(f) {
+  const svcName = id => SpaData.services.find(s => s.id === id)?.name || id || '—';
+  const therName = id => id ? (SpaData.therapists.find(t => t.id === id)?.firstName || 'Unassigned') : 'Unassigned';
+  const roomName = id => id ? (SpaData.rooms.find(r => r.id === id)?.name || id) : 'None';
+  return {
+    clientName: { label: 'Client', fmt: v => v || '—' },
+    serviceId: { label: 'Service', fmt: svcName },
+    therapistId: { label: 'Therapist', fmt: therName },
+    roomId: { label: 'Room', fmt: roomName },
+    date: { label: 'Date', fmt: v => v || '—' },
+    start: { label: 'Start Time', fmt: v => v ? spaCalFmtT(v) : '—' },
+    duration: { label: 'Duration', fmt: v => v ? v + ' min' : '—' },
+    status: { label: 'Status', fmt: v => v || '—' },
+    paymentStatus: { label: 'Payment Status', fmt: v => v || 'PENDING' },
+  }[f];
+}
+function spaApptRenderHistory(a) {
+  const wrap = document.getElementById('spaApptHistoryWrap');
+  const body = document.getElementById('spaApptHistoryBody');
+  if (!wrap || !body) return;
+  if (!a || !a.originalDetails) { wrap.style.display = 'none'; body.innerHTML = ''; return; }
+  const orig = a.originalDetails;
+  const origLines = Object.keys(orig).map(f => {
+    const meta = spaApptFieldLabels(f); if (!meta) return '';
+    return `<div><b>${meta.label}:</b> ${meta.fmt(orig[f])}</div>`;
+  }).join('');
+  const changeLines = (a.editHistory || []).slice().reverse().map(h => {
+    const when = new Date(h.at).toLocaleString('en-US', { timeZone: 'America/Cancun', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const changes = h.changes.map(c => `${c.label} changed from "${c.from}" to "${c.to}"`).join('; ');
+    return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #f0ebe0"><b>${when}</b>${h.by ? ' — ' + escHtml(h.by) : ''}<br>${escHtml(changes)}</div>`;
+  }).join('');
+  wrap.style.display = 'block';
+  body.innerHTML = `<div style="background:#faf7f2;border-radius:8px;padding:10px 12px;margin-bottom:6px">
+    <div style="font-weight:700;margin-bottom:4px">Original Booking</div>${origLines}
+  </div>${changeLines || '<div style="color:#9ca3af;font-style:italic">No changes recorded since creation.</div>'}`;
 }
 
 function spaApptSave() {
@@ -312,6 +363,7 @@ function spaApptSave() {
     serviceId, therapistId, roomId: document.getElementById('spaApptRoom').value || null,
     date: document.getElementById('spaApptDate').value, start, duration,
     status: document.getElementById('spaApptStatus').value,
+    paymentStatus: document.getElementById('spaApptPaymentStatus').value,
     notes: document.getElementById('spaApptNotes').value.trim(),
   };
   const conflict = fields.status !== 'CANCELLED' ? spaCalCheckConflict(fields, id || null) : null;
@@ -322,7 +374,23 @@ function spaApptSave() {
     return;
   }
   if (id) {
-    Object.assign(SpaAppointments.find(x => x.id === id), fields);
+    const appt = SpaAppointments.find(x => x.id === id);
+    if (!appt.originalDetails) {
+      const HIST_FIELDS = ['clientName', 'serviceId', 'therapistId', 'roomId', 'date', 'start', 'duration', 'status', 'paymentStatus'];
+      appt.originalDetails = {};
+      HIST_FIELDS.forEach(f => { appt.originalDetails[f] = appt[f]; });
+    }
+    const before = { ...appt };
+    Object.assign(appt, fields);
+    const HIST_FIELDS = ['clientName', 'serviceId', 'therapistId', 'roomId', 'date', 'start', 'duration', 'status', 'paymentStatus'];
+    const changes = HIST_FIELDS.filter(f => (before[f] || '') !== (appt[f] || '')).map(f => {
+      const meta = spaApptFieldLabels(f);
+      return { field: f, label: meta.label, from: meta.fmt(before[f]), to: meta.fmt(appt[f]) };
+    });
+    if (changes.length) {
+      if (!appt.editHistory) appt.editHistory = [];
+      appt.editHistory.push({ at: new Date().toISOString(), by: (typeof getCurrentSession === 'function' ? getCurrentSession()?.name : null) || 'Staff', changes });
+    }
   } else {
     SpaAppointments.push({ id: spaNewId('ap'), createdAt: new Date().toISOString(), ...fields });
   }
