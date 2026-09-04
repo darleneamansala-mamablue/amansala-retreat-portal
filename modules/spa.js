@@ -152,6 +152,51 @@ async function spaDashToggleConfirm(apptId) {
   await spaCalSave();
   spaRenderDashboard();
 }
+// Guest price for one appointment — group-priced services use the locked-in
+// group total from booking time, everything else uses the service's price.
+function spaApptRevenue(a) {
+  const svc = SpaData.services.find(s => s.id === a.serviceId);
+  if (!svc) return 0;
+  if (svc.groupPricing) return a.groupTotalPriceUSD ?? svc.price ?? 0;
+  return svc.price ?? 0;
+}
+// The assigned therapist's actual take for one appointment, in USD —
+// reuses their per-service compensation row (spaTherapistCompAmount), 0 if
+// unassigned or no rate is set for that service.
+function spaApptTherapistPay(a) {
+  if (!a.therapistId) return 0;
+  const ther = SpaData.therapists.find(t => t.id === a.therapistId);
+  const svc = SpaData.services.find(s => s.id === a.serviceId);
+  if (!ther || !svc) return 0;
+  const rate = (ther.services || []).find(s => s.serviceId === a.serviceId);
+  return spaTherapistCompAmount(rate, svc) || 0;
+}
+// Daily Report — Darlene's ask: profit of the day, services sold, services
+// completed, at the top of the single-day Dashboard view. Profit is based
+// on COMPLETED services only (realized revenue), not everything booked —
+// "sold" separately counts everything booked that day regardless of status.
+function spaDailyReportHtml(todays) {
+  const completed = todays.filter(a => a.status === 'COMPLETED');
+  let revenue = 0, directCosts = 0, therapistPay = 0;
+  completed.forEach(a => {
+    const svc = SpaData.services.find(s => s.id === a.serviceId);
+    revenue += spaApptRevenue(a);
+    directCosts += svc ? spaSvcDirectCostTotal(svc) : 0;
+    therapistPay += spaApptTherapistPay(a);
+  });
+  const profit = revenue - directCosts - therapistPay;
+  const tile = (label, value, color, sub) => `<div style="flex:1;min-width:140px;background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:14px 16px">
+    <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74">${label}</div>
+    <div style="font-size:22px;font-weight:800;color:${color || '#2d2520'};margin-top:4px">${value}</div>
+    ${sub ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px">${sub}</div>` : ''}
+  </div>`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+    ${tile('Services Sold', todays.length)}
+    ${tile('Services Completed', completed.length)}
+    ${tile('Revenue (Completed)', '$' + revenue.toFixed(0))}
+    ${tile('Profit of the Day', '$' + profit.toFixed(0), profit >= 0 ? '#059669' : '#dc2626', 'after costs &amp; therapist pay')}
+  </div>`;
+}
 function spaRenderDashboard() {
   const el = document.getElementById('spaContent');
   const dateStr = spaCalFmtDateStr(spaDashDate);
@@ -197,6 +242,7 @@ function spaRenderDashboard() {
       <button onclick="spaDashToday()" style="padding:7px 14px;border:1.5px solid #e8dfd4;background:#fff;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600">Today</button>
       ${todays.length ? `<span style="margin-left:auto;font-size:12.5px;color:#6b7280">${confirmedCount} of ${todays.length} confirmed</span>` : ''}
     </div>
+    ${spaDailyReportHtml(todays)}
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
       ${todays.length ? `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px 130px;gap:10px;padding:10px 16px;background:#f8f5f0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74"><div>Time</div><div>Service</div><div>Client</div><div>Therapist</div><div style="text-align:right">Status</div><div></div></div>${todays.map(row).join('')}` : '<div style="padding:40px;text-align:center;color:#9ca3af;font-style:italic">No services booked for this day.</div>'}
     </div>
