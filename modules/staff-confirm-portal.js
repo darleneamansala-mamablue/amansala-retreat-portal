@@ -820,8 +820,38 @@ async function scAdminInit(){
   if(payrollEl)payrollEl.innerHTML=scPayrollTableHtml();
 }
 
+// Darlene's ask: BBC, Spa/massage, and Tours are three different
+// functions and staff want to check each one separately rather than
+// scroll through everything mixed together chronologically. Domain
+// buttons filter the same underlying data (scAllItemsForName already
+// tags every item with .domain) — no new data source needed.
+// Called from the 3 quick-access buttons on the main Dashboard — sets the
+// filter before switching tabs so scRenderAdminBoard picks it up as soon
+// as scAdminInit's data loads finish.
+function dbGoToConfirmations(domain){
+  scAdminDomainFilter=domain;
+  const btn=document.getElementById('confirmationsTabBtn');
+  if(btn&&typeof switchTab==='function')switchTab('confirmations',btn);
+}
+let scAdminDomainFilter='all'; // 'all' | 'bbc' | 'spa' | 'tour'
+const SC_DOMAIN_FILTERS=[
+  {key:'all',label:'All'},
+  {key:'bbc',label:'🏋 Bikini Bootcamp'},
+  {key:'spa',label:'💆 Massage / Spa'},
+  {key:'tour',label:'🚐 Tours'},
+];
+function scSetAdminDomainFilter(key){
+  scAdminDomainFilter=key;
+  scRenderDomainFilterBar();
+  scRenderAdminBoard();
+}
+function scRenderDomainFilterBar(){
+  const bar=document.getElementById('scDomainFilterBar');if(!bar)return;
+  bar.innerHTML=SC_DOMAIN_FILTERS.map(f=>`<button onclick="scSetAdminDomainFilter('${f.key}')" style="padding:7px 15px;font-size:12.5px;font-weight:700;border-radius:99px;cursor:pointer;font-family:'Jost',sans-serif;border:1.5px solid ${scAdminDomainFilter===f.key?'var(--teal,#2d6a6a)':'var(--border)'};background:${scAdminDomainFilter===f.key?'var(--teal,#2d6a6a)':'#fff'};color:${scAdminDomainFilter===f.key?'#fff':'var(--dark)'}">${f.label}</button>`).join('');
+}
 function scRenderAdminBoard(){
   const el=document.getElementById('scAdminBoard');if(!el)return;
+  scRenderDomainFilterBar();
   const names=[...new Set(staffConfirmAccounts.map(a=>a.name.trim().toLowerCase()))];
   const byNameLabel=new Map(staffConfirmAccounts.map(a=>[a.name.trim().toLowerCase(),a.name]));
   let all=[];
@@ -830,7 +860,8 @@ function scRenderAdminBoard(){
   });
   all.sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
   const today=new Date().toISOString().slice(0,10);
-  const upcoming=all.filter(i=>i.date>=today||!i.confirmed);
+  let upcoming=all.filter(i=>i.date>=today||!i.confirmed);
+  if(scAdminDomainFilter!=='all')upcoming=upcoming.filter(i=>i.domain===scAdminDomainFilter);
   if(!upcoming.length){el.innerHTML='<div style="text-align:center;padding:30px;color:#c8bfb5;font-style:italic">Nothing assigned yet.</div>';return;}
   el.innerHTML=upcoming.map(i=>scItemCardHtml(i,true)).join('');
 }

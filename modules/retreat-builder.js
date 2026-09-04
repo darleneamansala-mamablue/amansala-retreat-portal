@@ -1195,6 +1195,11 @@ function buildDashboard(){
       <span style="font-size:12px;color:var(--muted);flex:1">${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</span>
       <button onclick="loadFromSupabase().then(()=>{buildDashboard();showToast('Dashboard refreshed from cloud');})" style="padding:5px 13px;font-size:12px;font-weight:600;color:#2d6a6a;background:#fff;border:1.5px solid #2d6a6a;border-radius:7px;cursor:pointer;font-family:inherit">↻ Refresh</button>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+      <button onclick="dbGoToConfirmations('tour')" style="padding:9px 16px;font-size:12.5px;font-weight:700;color:#fff;background:#d97706;border:none;border-radius:9px;cursor:pointer;font-family:inherit">🚐 Tour Confirmations</button>
+      <button onclick="dbGoToConfirmations('spa')" style="padding:9px 16px;font-size:12.5px;font-weight:700;color:#fff;background:#7c3aed;border:none;border-radius:9px;cursor:pointer;font-family:inherit">💆 Massage / Spa Confirmations</button>
+      <button onclick="dbGoToConfirmations('bbc')" style="padding:9px 16px;font-size:12.5px;font-weight:700;color:#fff;background:#0e9494;border:none;border-radius:9px;cursor:pointer;font-family:inherit">🏋 Bikini Bootcamp Confirmations</button>
+    </div>
     ${alerts}
     ${dbCrmSectionHtml()}
     ${actvSection}
