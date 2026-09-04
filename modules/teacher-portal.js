@@ -185,7 +185,7 @@ function regRender(){
       pkgBar.innerHTML=`<div class="pkg-bar-hdr" style="display:flex;align-items:center;gap:8px">
         <span class="pkg-bar-title">Add-on Packages</span>
         <span class="pkg-bar-sub">${selPkgs.length?`${selPkgs.length} selected · $${effectivePkgTotal}/person`:'No add-on packages selected'}${contractBadgeHtml}${customBadge}</span>
-        <button id="pkgBarToggleBtn" onclick="pkgBarToggle()" title="Toggle packages" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:14px;color:#92400e;padding:2px 6px;line-height:1">${_pkgBarOpen?'▴':'▾'}</button>
+        <button id="pkgBarToggleBtn" onclick="pkgBarToggle()" title="View add-ons" style="margin-left:auto;background:${_pkgBarOpen?'#fef3c7':'#0e9494'};border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;color:${_pkgBarOpen?'#92400e':'#fff'};padding:6px 12px;font-family:'Jost',sans-serif;white-space:nowrap">${_pkgBarOpen?'▴ Hide Add-ons':'+ Add-ons'}</button>
       </div>
       <div id="pkgBarBody" style="max-height:${_pkgBarOpen?'600px':'0'};overflow:${_pkgBarOpen?'visible':'hidden'}">
         ${selPkgs.length?`<div class="pkg-chips">${lockedChips}</div>`:''}
@@ -197,7 +197,7 @@ function regRender(){
         <span class="pkg-bar-sub">${selPkgs.length?`${selPkgs.length} selected · $${effectivePkgTotal}/person added to all rooms`:'Select packages — they will apply to every guest in this retreat'}${contractBadge}${customBadge}</span>
         ${staffPriceBtn}
         ${addCustomBtn}
-        <button id="pkgBarToggleBtn" onclick="pkgBarToggle()" title="Toggle packages" style="background:none;border:none;cursor:pointer;font-size:14px;color:#92400e;padding:2px 6px;line-height:1">${_pkgBarOpen?'▴':'▾'}</button>
+        <button id="pkgBarToggleBtn" onclick="pkgBarToggle()" title="View add-ons" style="background:${_pkgBarOpen?'#fef3c7':'#0e9494'};border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;color:${_pkgBarOpen?'#92400e':'#fff'};padding:6px 12px;font-family:'Jost',sans-serif;white-space:nowrap">${_pkgBarOpen?'▴ Hide Add-ons':'+ Add-ons'}</button>
       </div>
       <div id="pkgBarBody" style="max-height:${_pkgBarOpen?'600px':'0'};overflow:${_pkgBarOpen?'visible':'hidden'}">
         <div class="pkg-chips">${ADD_ONS.filter(ao=>ao.price>0).map(ao=>{const on=selPkgs.includes(ao.id);const cp=customPrices[ao.id];const dispPrice=cp!=null?cp:ao.price;return`<button class="pkg-chip${on?' on':''}" onclick="togglePkg('${ao.id}')">${on?'<span class="pkg-check">✓</span>':''}${ao.name}<span class="pkg-price${cp!=null?' custom-price':''}">$${dispPrice}</span></button>`;}).join('')}${extraChips}</div>
@@ -253,6 +253,21 @@ function regRender(){
   document.getElementById('rstatPaid').textContent=fmt$(totalPaid);
   document.getElementById('rstatBal').textContent=fmt$(bal);
   document.getElementById('rstatBal').className='rstat-val '+(bal>0?'red':bal<0?'orange':'green');
+  // Room-list completion — named/registered guests vs the retreat's expected
+  // pax count. bkPax is the leader's original headcount estimate; without
+  // it there's nothing to measure completion against.
+  const rlStatusEl=document.getElementById('rstatRoomListStatus');
+  if(rlStatusEl){
+    if(bkPax>0){
+      const pct=Math.min(100,Math.round(totalGuests/bkPax*100));
+      const complete=totalGuests>=bkPax;
+      rlStatusEl.textContent=`${totalGuests}/${bkPax} roomed (${pct}%)`;
+      rlStatusEl.className='rstat-val '+(complete?'green':totalGuests>0?'orange':'red');
+    }else{
+      rlStatusEl.textContent=`${totalGuests} roomed`;
+      rlStatusEl.className='rstat-val';
+    }
+  }
 
   const panel=document.getElementById('regPanel');
   panel.innerHTML='';

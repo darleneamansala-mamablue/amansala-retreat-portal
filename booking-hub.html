@@ -1902,6 +1902,8 @@
     <div class="rstat-div"></div>
     <div class="rstat"><span class="rstat-lbl">Guests Registered</span><span class="rstat-val" id="rstatGuests">0</span></div>
     <div class="rstat-div"></div>
+    <div class="rstat"><span class="rstat-lbl">Room List</span><span class="rstat-val" id="rstatRoomListStatus">—</span></div>
+    <div class="rstat-div"></div>
     <div class="rstat teacher-admin-only"><span class="rstat-lbl">Tip/nt</span><span class="rstat-val" style="display:flex;align-items:center;gap:4px">$<input id="rstatTip" type="number" min="0" step="1" value="30" style="width:46px;padding:2px 4px;border:1.5px solid var(--border);border-radius:5px;font-family:'Jost',sans-serif;font-size:13px;font-weight:700;color:var(--dark)" onchange="regSetTip(this.value)"></span></div>
     <div class="rstat-div"></div>
     <div class="rstat"><span class="rstat-lbl">Bill Total</span><span class="rstat-val" id="rstatTotal">$0</span></div>
@@ -5021,7 +5023,11 @@ function pkgBarToggle(){
   _pkgBarOpen=opening;
   localStorage.setItem('pkgBarOpen',opening?'1':'0');
   const btn=document.getElementById('pkgBarToggleBtn');
-  if(btn)btn.textContent=opening?'▴':'▾';
+  if(btn){
+    btn.textContent=opening?'▴ Hide Add-ons':'+ Add-ons';
+    btn.style.background=opening?'#fef3c7':'#0e9494';
+    btn.style.color=opening?'#92400e':'#fff';
+  }
 }
 function pkgTogglePriceEditor(){
   if(!regSelBk)return;
