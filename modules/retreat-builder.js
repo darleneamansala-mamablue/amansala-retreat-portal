@@ -1050,10 +1050,10 @@ function buildDashboard(){
       <span style="font-size:12.5px;font-weight:800;color:${color}">${total?have+'/'+total:'—'} filled out</span>
     </div>`;
   }).join('');
-  const transportListSection=soon.length?`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;overflow:hidden;margin-top:16px">
-    <div style="padding:10px 16px;border-bottom:1px solid #e8dfd4;background:#f8f5f0;font-size:12.5px;font-weight:700;color:var(--dark)">Transport — Next 30 Days</div>
-    ${transportListRows}
-  </div>`:'';
+  const transportListSection=soon.length?dbAccordionSection('transport30','🚐','Transport — Next 30 Days','#0e7490','#ecfeff','#67e8f9',
+    `${soon.length} retreat${soon.length!==1?'s':''}`,
+    transportListRows,
+    false):'';
   const statGrid=`<div class="db-stat-grid">
     ${dbStat('Active Retreats',active.length,'#2d6a6a','<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>')}
     ${dbStat('Arriving in 30 Days',soon.length,'#0891b2','<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>')}

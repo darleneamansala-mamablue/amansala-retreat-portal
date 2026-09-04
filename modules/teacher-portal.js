@@ -272,6 +272,7 @@ function regRender(){
   const panel=document.getElementById('regPanel');
   panel.innerHTML='';
 
+  autoAssignTeacherRoom(regSelBk);
   const blockedSet=new Set(regSelBk.blockedRooms||[]);
   // If a virtual-group parent room (rt8/rt9) is in blockedRooms, also add its sub-rooms so bd3/bd4 entries pass the filter
   AppData.roomTypes.forEach(vrt=>{if(!VIRTUAL_GROUP_RT_IDS.has(vrt.id))return;(vrt.rooms||[]).forEach(r=>{if(blockedSet.has(r))_getSharedBeds(r).forEach(s=>blockedSet.add(s));});});
