@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Reservation | Amansala Tulum</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Italiana&display=swap" rel="stylesheet">
+<style>
+  :root { --sand: #eee9df; --sand-light: #f8f5ef; --ink: #1f2b27; --moss: #3f5147; --clay: #b9795a; --line: #1f2b272e; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { color: var(--ink); background: var(--sand-light); -webkit-font-smoothing: antialiased; font-family: 'DM Sans', sans-serif; min-height: 100vh; padding: 24px; }
+  .card { width: 100%; max-width: 520px; margin: 20px auto; background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 40px 36px; }
+  .wordmark { letter-spacing: .36em; font-size: 15px; font-weight: 600; text-align: center; margin-bottom: 28px; }
+  h1 { font-family: 'Italiana', serif; font-size: 26px; font-weight: 400; margin-bottom: 6px; }
+  .sub { font-size: 12.5px; opacity: .6; margin-bottom: 20px; }
+  .status-banner { border-radius: 4px; padding: 14px 18px; margin-bottom: 24px; font-weight: 600; font-size: 14px; }
+  .status-confirmed { background: #eaf1ec; color: var(--moss); border: 1px solid #cfe0d5; }
+  .status-pending { background: #fbf1e6; color: #a65d1e; border: 1px solid #f0d9bd; }
+  .detail-row { display: flex; justify-content: space-between; font-size: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); gap: 12px; }
+  .detail-row .lbl { opacity: .65; }
+  .detail-row .val { text-align: right; font-weight: 500; }
+  .detail-row.total { font-weight: 600; font-size: 16px; border-bottom: none; padding-top: 16px; }
+  .note-box { background: var(--sand); border-radius: 4px; padding: 14px 16px; font-size: 13.5px; margin-top: 18px; line-height: 1.6; }
+  .btn-row { display: flex; gap: 10px; margin-top: 26px; flex-wrap: wrap; }
+  .btn { flex: 1; min-width: 160px; text-align: center; padding: 15px; border-radius: 2px; font-size: 14.5px; font-weight: 500; cursor: pointer; letter-spacing: .02em; text-decoration: none; display: block; }
+  .btn-primary { background: var(--moss); color: #fff; border: none; }
+  .btn-secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+  .state { text-align: center; padding: 30px 0; font-size: 14px; opacity: .75; }
+  .success-icon { width: 48px; height: 48px; margin: 0 auto 16px; border-radius: 50%; background: var(--moss); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="wordmark">AMANSALA</div>
+    <div id="content"><div class="state">Loading your reservation…</div></div>
+  </div>
+
+<script>
+const SUPA_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPA_ANON = 'sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
+const token = new URLSearchParams(location.search).get('token');
+
+function fmtUSD(n) { return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtDate(s) { if (!s) return ''; const [y,m,d] = s.split('-'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]} ${+d}, ${y}`; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// This page is looked up by a long random token, never by the booking's
+// internal database id — the id, staff notes, and every other guest's
+// booking never leave this one match. (The underlying data store is one
+// JSON blob per key, so the full bookings array does transit over the
+// network to render this page — a known constraint of this app's storage
+// model, not something unique to this page. Nothing beyond the fields
+// below is ever placed into the rendered page.)
+async function init() {
+  const content = document.getElementById('content');
+  if (!token) { content.innerHTML = '<div class="state">Missing reservation link. Please use the link sent to you.</div>'; return; }
+
+  let bk;
+  try {
+    const res = await fetch(`${SUPA_URL}/rest/v1/app_store?key=eq.bookings&select=value`, { headers: { apikey: SUPA_ANON } });
+    const rows = await res.json();
+    const bookings = rows[0]?.value ?? [];
+    bk = bookings.find(b => b.guestResToken === token);
+  } catch (e) { /* fall through to error below */ }
+
+  if (!bk) { content.innerHTML = '<div class="state">We couldn\'t find this reservation. Please contact us.</div>'; return; }
+
+  const roomTotal = bk.roomRateTotal || 0;
+  const chargesTotal = (bk.charges||[]).reduce((s,c) => s + (c.amount||0), 0);
+  const total = +(roomTotal + chargesTotal).toFixed(2);
+  const paid = (bk.payments||[]).reduce((s,p) => s + (p.amount||0), 0);
+  const balance = +(total - paid).toFixed(2);
+  const isPaid = balance <= 0;
+  const additionalGuests = (bk.folioSplit?.mode === 'separate') ? bk.folioSplit.guestNames.slice(1) : [];
+  const nights = bk.roomRateNights || 0;
+
+  const dueDate = new Date((bk.startDate||'') + 'T00:00:00');
+  dueDate.setDate(dueDate.getDate() - 42);
+
+  content.innerHTML = `
+    <h1>Your Reservation</h1>
+    <div class="sub">Confirmation #${esc(bk.confirmationNumber||'')}</div>
+    <div class="status-banner ${isPaid ? 'status-confirmed' : 'status-pending'}">
+      ${isPaid ? 'Booking Confirmed' : 'Reservation Received — Payment Required'}
+    </div>
+    <div class="detail-row"><span class="lbl">Guest</span><span class="val">${esc(bk.leaderName||'')}</span></div>
+    ${additionalGuests.length ? `<div class="detail-row"><span class="lbl">Additional Guests</span><span class="val">${additionalGuests.map(esc).join(', ')}</span></div>` : ''}
+    <div class="detail-row"><span class="lbl">Dates</span><span class="val">${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)} (${nights} night${nights!==1?'s':''})</span></div>
+    <div class="detail-row"><span class="lbl">Total</span><span class="val">${fmtUSD(total)}</span></div>
+    <div class="detail-row"><span class="lbl">Paid</span><span class="val">${fmtUSD(paid)}</span></div>
+    <div class="detail-row total"><span class="lbl">Balance</span><span class="val">${balance > 0 ? fmtUSD(balance) : 'Paid in full'}</span></div>
+    ${balance > 0 ? `<div class="detail-row"><span class="lbl">Payment Due</span><span class="val">${dueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</span></div>` : ''}
+    ${bk.guestNotes ? `<div class="note-box"><b>Note from Amansala:</b><br>${esc(bk.guestNotes)}</div>` : ''}
+    <div class="btn-row">
+      ${balance > 0 ? `<a class="btn btn-primary" href="pay-booking.html?token=${encodeURIComponent(token)}">Complete Payment</a>` : ''}
+      <a class="btn btn-secondary" href="mailto:bookings@amansala.com">Contact Us</a>
+    </div>`;
+}
+init();
+</script>
+</body>
+</html>

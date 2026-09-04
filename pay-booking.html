@@ -40,7 +40,8 @@
 const SUPA_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
 const SUPA_ANON = 'sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
 const params = new URLSearchParams(location.search);
-const bookingId = params.get('id');
+let bookingId = params.get('id');
+const resToken = params.get('token');
 
 let _stripe, _stripeElems, _piAmount = 0, _paymentIntentId = null;
 
@@ -49,17 +50,22 @@ function fmtDate(s) { if (!s) return ''; const [y,m,d] = s.split('-'); return `$
 
 async function init() {
   const content = document.getElementById('content');
-  if (!bookingId) { content.innerHTML = '<div class="state">Missing reservation link. Please use the link sent to you.</div>'; return; }
+  if (!bookingId && !resToken) { content.innerHTML = '<div class="state">Missing reservation link. Please use the link sent to you.</div>'; return; }
 
   let bk;
   try {
     const res = await fetch(`${SUPA_URL}/rest/v1/app_store?key=eq.bookings&select=value`, { headers: { apikey: SUPA_ANON } });
     const rows = await res.json();
     const bookings = rows[0]?.value ?? [];
-    bk = bookings.find(b => b.id === bookingId);
+    // Prefer the secure token (Phase 2 "Send to Guest" links) — falls back
+    // to the raw id for any link sent before tokens existed.
+    bk = resToken ? bookings.find(b => b.guestResToken === resToken) : bookings.find(b => b.id === bookingId);
   } catch (e) { /* fall through to error below */ }
 
   if (!bk) { content.innerHTML = '<div class="state">We couldn\'t find this reservation. Please contact us.</div>'; return; }
+  // Resolve to the real internal id for the payment-processing calls below —
+  // the token never appears in those requests, only used to find the record.
+  bookingId = bk.id;
   if (bk.bookingType !== 'room_only' || !bk.roomRateTotal) { content.innerHTML = '<div class="state">This reservation isn\'t set up for online payment yet. Please contact us.</div>'; return; }
 
   const room = (bk.blockedRooms || [])[0] || '';
@@ -69,15 +75,18 @@ async function init() {
     return;
   }
 
+  const chargesTotal = (bk.charges || []).reduce((s,c) => s + (c.amount||0), 0);
+  const balanceDue = Math.round((bk.roomRateTotal + chargesTotal - alreadyPaid) * 100) / 100;
   content.innerHTML = `
     <h1>Complete Your Payment</h1>
     <div class="sub">${bk.leaderName || 'Guest'}</div>
     <div class="detail-row"><span>Room</span><span>${room}</span></div>
     <div class="detail-row"><span>Check-in</span><span>${fmtDate(bk.startDate)}</span></div>
     <div class="detail-row"><span>Check-out</span><span>${fmtDate(bk.endDate)}</span></div>
-    <div class="detail-row total"><span>Total Due</span><span id="amount-due">${fmtUSD(bk.roomRateTotal)}</span></div>
+    ${alreadyPaid > 0 ? `<div class="detail-row"><span>Already Paid</span><span>${fmtUSD(alreadyPaid)}</span></div>` : ''}
+    <div class="detail-row total"><span>Balance Due</span><span id="amount-due">${fmtUSD(balanceDue)}</span></div>
     <div id="stripe-element"></div>
-    <button class="btn-pay" id="btn-pay">Pay ${fmtUSD(bk.roomRateTotal)}</button>
+    <button class="btn-pay" id="btn-pay">Pay ${fmtUSD(balanceDue)}</button>
     <div class="err" id="err"></div>
   `;
 

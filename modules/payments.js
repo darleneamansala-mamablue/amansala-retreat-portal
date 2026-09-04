@@ -942,6 +942,158 @@ function gfSaveSplitAdjust(){
   logActivity('Folio split adjusted',names.map((n,i)=>`${n} ${vals[i]}%`).join(', '),bk.id);
   showToast('Split updated ✓');
 }
+// ===== PHASE 2 — ROOM BOOKING CONFIRMATION (preview + secure guest link + email) =====
+// Token is real entropy (crypto.getRandomValues), NOT uid() — uid() is a
+// timestamp + 4 base36 chars, guessable/enumerable, unsuitable for a
+// public link. Generated once per booking and stored, never regenerated
+// (so a previously-sent link keeps working).
+function resGenSecureToken(){
+  const bytes=new Uint8Array(24);
+  (window.crypto||window.msCrypto).getRandomValues(bytes);
+  return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+}
+function resEnsureConfirmation(bk){
+  let changed=false;
+  if(!bk.guestResToken){bk.guestResToken=resGenSecureToken();changed=true;}
+  if(!bk.confirmationNumber){bk.confirmationNumber='AMZ-'+bk.id.replace(/[^0-9]/g,'').slice(-6).padStart(6,'0');changed=true;}
+  if(changed)saveAll();
+}
+function resGuestLink(bk){
+  return `${location.origin}/reservation.html?token=${bk.guestResToken}`;
+}
+// Balance/status math shared between the admin preview and the wording
+// rule ("never call an unpaid reservation confirmed").
+function resComputeInfo(bk){
+  const roomTotal=bk.roomRateTotal||0;
+  const chargesTotal=(bk.charges||[]).reduce((s,c)=>s+(c.amount||0),0);
+  const total=+(roomTotal+chargesTotal).toFixed(2);
+  const paid=(bk.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
+  const balance=+(total-paid).toFixed(2);
+  const isPaid=balance<=0;
+  const dueDate=finalPaymentDue(bk);
+  return{roomTotal,chargesTotal,total,paid,balance,isPaid,dueDate};
+}
+let _resPreviewBkId=null,_resSending=false;
+function resOpenPreview(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  resEnsureConfirmation(bk);
+  _resPreviewBkId=bkId;
+  resRenderPreview();
+  openModal('resPreviewModal');
+}
+function resRenderPreview(){
+  const bk=AppData.bookings.find(b=>b.id===_resPreviewBkId);if(!bk)return;
+  const rt=AppData.roomTypes.find(t=>t.id===bk.roomTypeId);
+  const room=(bk.blockedRooms||[])[0]||'—';
+  const {roomTotal,chargesTotal,total,paid,balance,isPaid,dueDate}=resComputeInfo(bk);
+  const nights=bk.roomRateNights||0;
+  const additionalGuests=bk.folioSplit?.mode==='separate'?bk.folioSplit.guestNames.slice(1):[];
+  const statusLabel=isPaid?'Booking Confirmed':'Reservation Received — Payment Required';
+  const statusColor=isPaid?'#16a34a':'#d97706';
+  const sentLog=bk.guestResSentLog||[];
+  const lastSent=sentLog[sentLog.length-1];
+  document.getElementById('resPreviewBody').innerHTML=`
+    <div style="background:${isPaid?'#f0fdf4':'#fffbeb'};border:1.5px solid ${statusColor};border-radius:10px;padding:12px 16px;margin-bottom:16px">
+      <div style="font-weight:800;color:${statusColor};font-size:14px">${statusLabel}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">Confirmation #${bk.confirmationNumber}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12.5px;margin-bottom:16px">
+      <div><b>Guest</b><br>${escHtml(bk.leaderName||'—')}</div>
+      <div><b>Email</b><br>${escHtml(bk.leaderEmail||'—')}</div>
+      <div><b>Room / Category</b><br>${escHtml(room)}${rt?' · '+escHtml(rt.name):''} · ${bk.pax||1} guest${(bk.pax||1)!==1?'s':''}</div>
+      <div><b>Additional Guests</b><br>${additionalGuests.length?additionalGuests.map(n=>escHtml(n)).join(', '):'—'}</div>
+      <div><b>Dates</b><br>${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)} · ${nights} night${nights!==1?'s':''}</div>
+      <div><b>Rate / Total</b><br>${fmt$(roomTotal)}${chargesTotal?' + '+fmt$(chargesTotal)+' charges':''} = <b>${fmt$(total)}</b></div>
+      <div><b>Paid / Balance</b><br>${fmt$(paid)} paid · <span style="color:${balance>0?'#dc2626':'#16a34a'}">${balance>0?fmt$(balance)+' due':'Paid in full'}</span></div>
+      <div><b>Payment Deadline</b><br>${balance>0?dueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):'—'}</div>
+    </div>
+    <div class="fg"><label>Guest-Facing Notes <span style="font-weight:400;color:var(--muted)">(shown to the guest — do not put internal/staff notes here)</span></label>
+      <textarea id="resGuestNotes" rows="2">${escHtml(bk.guestNotes||'')}</textarea>
+    </div>
+    <div style="margin:10px 0;font-size:11px;color:var(--muted)">Secure link: <code style="background:#f8fafc;padding:2px 6px;border-radius:5px">${resGuestLink(bk)}</code></div>
+    ${lastSent?`<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Last sent ${new Date(lastSent.at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})} by ${escHtml(lastSent.by)}${sentLog.length>1?` (${sentLog.length} times total)`:''}</div>`:''}
+    <div id="resSendErr" style="display:none;color:#dc2626;font-size:12px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="resSendBtn" onclick="resSendToGuest()">${lastSent?'Send Again':'Send to Guest'}</button>
+      <button class="btn btn-secondary" onclick="resCopyWhatsApp()">Copy Link for WhatsApp</button>
+    </div>`;
+}
+function resSaveGuestNotesFromPreview(){
+  const bk=AppData.bookings.find(b=>b.id===_resPreviewBkId);if(!bk)return;
+  const val=document.getElementById('resGuestNotes')?.value.trim()||'';
+  if(bk.guestNotes===val)return;
+  bk.guestNotes=val;
+  saveAll();
+}
+async function resSendToGuest(){
+  const bk=AppData.bookings.find(b=>b.id===_resPreviewBkId);if(!bk)return;
+  if(!bk.leaderEmail){alert('No email on file for this guest — add one before sending.');return;}
+  if(_resSending)return; // guards a double-click before the request completes
+  resSaveGuestNotesFromPreview();
+  const sentLog=bk.guestResSentLog||[];
+  if(sentLog.length){
+    const lastAt=new Date(sentLog[sentLog.length-1].at).getTime();
+    if(Date.now()-lastAt<60000&&!confirm('A confirmation was already sent to this guest less than a minute ago. Send again?'))return;
+  }
+  _resSending=true;
+  const btn=document.getElementById('resSendBtn');
+  const errEl=document.getElementById('resSendErr');
+  if(errEl)errEl.style.display='none';
+  if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  try{
+    const {roomTotal,chargesTotal,total,paid,balance,isPaid,dueDate}=resComputeInfo(bk);
+    const name=bk.leaderName||'Guest';
+    const rt=AppData.roomTypes.find(t=>t.id===bk.roomTypeId);
+    const room=(bk.blockedRooms||[])[0]||'';
+    const link=resGuestLink(bk);
+    const statusLine=isPaid
+      ?'Your booking is confirmed. We look forward to welcoming you!'
+      :'Your reservation has been received and will be confirmed once the required payment is completed.';
+    const additionalGuests=bk.folioSplit?.mode==='separate'?bk.folioSplit.guestNames.slice(1):[];
+    const body=`<p style="font-size:15px;color:#1a2332">Hi ${escHtml(name.split(' ')[0])},</p>
+<p style="color:#4a4a4a;line-height:1.7">Thank you for choosing Amansala. We are delighted to welcome you to Tulum.</p>
+<div style="background:#f8fafc;border-left:4px solid #0e9494;padding:14px 18px;border-radius:6px;margin:20px 0;color:#1a2332;line-height:1.9">
+  <b>Reservation:</b> ${escHtml(bk.confirmationNumber)}<br>
+  <b>Room:</b> ${escHtml(rt?rt.name:room)}<br>
+  <b>Guests:</b> ${escHtml([name,...additionalGuests].join(' & '))}<br>
+  <b>Arrival:</b> ${fmtDate(bk.startDate)}<br>
+  <b>Departure:</b> ${fmtDate(bk.endDate)}<br>
+  <b>Total:</b> ${fmt$(total)} USD<br>
+  <b>Paid:</b> ${fmt$(paid)}<br>
+  <b>Balance:</b> ${fmt$(balance)}${balance>0?'<br><b>Payment due:</b> '+dueDate.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):''}
+</div>
+<p style="color:#4a4a4a;line-height:1.7">${statusLine}</p>
+${bk.guestNotes?`<p style="color:#4a4a4a;line-height:1.7"><b>Note:</b> ${escHtml(bk.guestNotes)}</p>`:''}
+<div style="text-align:center;margin:28px 0">
+  <a href="${link}" style="background:#0e9494;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;display:inline-block;margin:0 6px 10px">View Reservation</a>
+  ${balance>0?`<a href="${link}" style="background:#d97706;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;display:inline-block;margin:0 6px 10px">Complete Payment</a>`:''}
+</div>
+<p style="color:#4a4a4a">Warmly,<br><strong>The Amansala Team</strong></p>`;
+    await _sendEmail(bk.leaderEmail,`Your Amansala Reservation — ${bk.confirmationNumber}`,_emailHtmlWrap(body),'bookings@amansala.com');
+    if(!bk.guestResSentLog)bk.guestResSentLog=[];
+    bk.guestResSentLog.push({at:new Date().toISOString(),by:getCurrentSession()?.name||'Staff',method:'email'});
+    saveAll();
+    logActivity('Reservation sent to guest',`${bk.confirmationNumber} — ${bk.leaderEmail}`,bk.id);
+    showToast('Sent to guest ✓');
+    resRenderPreview();
+  }catch(e){
+    if(errEl){errEl.textContent='Sending failed: '+(e.message||'unknown error')+'. ';errEl.style.display='block';
+      const retryBtn=document.createElement('button');
+      retryBtn.className='btn btn-secondary btn-sm';retryBtn.textContent='Retry';retryBtn.onclick=resSendToGuest;
+      errEl.appendChild(retryBtn);
+    }
+  }finally{
+    _resSending=false;
+    if(btn){btn.disabled=false;btn.textContent=(bk.guestResSentLog||[]).length?'Send Again':'Send to Guest';}
+  }
+}
+function resCopyWhatsApp(){
+  const bk=AppData.bookings.find(b=>b.id===_resPreviewBkId);if(!bk)return;
+  const link=resGuestLink(bk);
+  const {balance}=resComputeInfo(bk);
+  const msg=`Hi ${bk.leaderName||'there'}! Here's your Amansala reservation (${bk.confirmationNumber}): ${link}${balance>0?`\nBalance due: ${fmt$(balance)}`:''}`;
+  navigator.clipboard.writeText(msg).then(()=>showToast('Copied — paste into WhatsApp ✓')).catch(()=>alert(msg));
+}
 function renderBookingFolio(){
   const bk=AppData.bookings.find(b=>b.id===_gfBkId);if(!bk)return closeModal('guestFolioModal');
   const rt=AppData.roomTypes.find(t=>t.id===bk.roomTypeId);
@@ -949,7 +1101,7 @@ function renderBookingFolio(){
   const charges=(bk.charges||[]).slice().sort((a,b)=>(b.addedAt||'').localeCompare(a.addedAt||''));
   const total=charges.reduce((s,c)=>s+(c.amount||0),0);
   document.getElementById('gfTitle').textContent=bk.leaderName||bk.retreatName||'Guest';
-  document.getElementById('gfSub').innerHTML=`Room ${escHtml(room)}${rt?' · '+escHtml(rt.name):''} · ${escHtml(bk.retreatName||'')} <span onclick="gfEditDetails()" style="cursor:pointer;color:var(--teal,#2d6a6a);font-weight:600;text-decoration:underline;margin-left:6px">Edit Details</span>`;
+  document.getElementById('gfSub').innerHTML=`Room ${escHtml(room)}${rt?' · '+escHtml(rt.name):''} · ${escHtml(bk.retreatName||'')} <span onclick="gfEditDetails()" style="cursor:pointer;color:var(--teal,#2d6a6a);font-weight:600;text-decoration:underline;margin-left:6px">Edit Details</span> <span onclick="resOpenPreview('${bk.id}')" style="cursor:pointer;color:var(--teal,#2d6a6a);font-weight:600;text-decoration:underline;margin-left:6px">Preview &amp; Send to Guest</span>`;
   const fs=bk.folioSplit;
   const isSplit=fs?.mode==='separate';
   const addFormHtml=_gfAddOpen?`

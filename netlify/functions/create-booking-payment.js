@@ -41,7 +41,15 @@ exports.handler = async (event) => {
   if (bk.bookingType !== 'room_only') return jsonErr(400, 'Not a room-only booking');
   if (!bk.roomRateTotal || bk.roomRateTotal <= 0) return jsonErr(400, 'Booking has no rate set');
 
-  const amountCents = Math.round(bk.roomRateTotal * 100);
+  // Charge the REMAINING balance, not the full total — a guest returning to
+  // pay off a balance after an earlier deposit/payment must never be
+  // charged the whole reservation amount again.
+  const chargesTotal = (bk.charges || []).reduce((s, c) => s + (c.amount || 0), 0);
+  const alreadyPaid = (bk.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+  const balanceDue = Math.round((bk.roomRateTotal + chargesTotal - alreadyPaid) * 100) / 100;
+  if (balanceDue <= 0) return jsonErr(400, 'This reservation is already paid in full');
+
+  const amountCents = Math.round(balanceDue * 100);
   if (amountCents < 50) return jsonErr(400, 'Amount too small');
 
   const room = (bk.blockedRooms || [])[0] || '';
@@ -80,7 +88,7 @@ exports.handler = async (event) => {
       clientSecret: pi.client_secret,
       paymentIntentId: pi.id,
       publishableKey: pubKey,
-      amount: bk.roomRateTotal,
+      amount: balanceDue,
       leaderName: bk.leaderName || '',
       room,
       startDate: bk.startDate,
