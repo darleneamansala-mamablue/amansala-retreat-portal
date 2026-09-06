@@ -4155,8 +4155,10 @@ async function syncToSupabase(){
   }catch(e){console.warn('Supabase sync failed:',e);}
 }
 async function syncRoomTypesToSupabase(){
-  try{await db.from('app_store').upsert({key:'roomTypes',value:AppData.roomTypes,updated_at:new Date().toISOString()});}
-  catch(e){console.warn('Room type sync failed:',e);}
+  try{
+    const rows=AppData.roomTypes.map(appRoomTypeToSqlRow);
+    if(rows.length)await db.from('room_types').upsert(rows);
+  }catch(e){console.warn('Room type sync failed:',e);}
 }
 
 // ── SQL <-> app-object field mapping for bookings/registrations (Phase 1 of the
@@ -4181,6 +4183,12 @@ const _PAYMENT_FIELD_TO_COL={ts:'created_at'};
 const _PAYMENT_COLUMNS=['id','booking_id','amount','date','method','ref','note'];
 function sqlPaymentToApp(row){const p={};for(const col in row) p[_PAYMENT_COL_TO_FIELD[col]||_s2c(col)]=row[col];return p;}
 function appPaymentToSqlRow(p,bookingId){const row={};_PAYMENT_COLUMNS.forEach(col=>{if(col==='booking_id'){row.booking_id=bookingId;return;}const field=_PAYMENT_FIELD_TO_COL[col]||_s2c(col);row[col]=p[field]!==undefined?p[field]:null;});return row;}
+// room_types: the price columns don't follow the plain snake_case->camelCase pattern
+// (e.g. price_single_high -> price1, price_double_low -> price2_low), so this one
+// needs an explicit column map rather than the generic converter.
+const _ROOMTYPE_COL_MAP={id:'id',name:'name',property:'property',color:'color',max_occ:'maxOcc',description:'desc',price_single_high:'price1',price_single_low:'price1_low',price_double_high:'price2',price_double_low:'price2_low',rooms:'rooms',cb_room_type_id:'cbRoomTypeId',be_enabled:'beEnabled',be_photos:'bePhotos',be_description:'beDescription',be_amenities:'beAmenities',be_price_single:'bePriceSingle',be_price_double:'bePriceDouble',be_included_occ:'beIncludedOcc',be_extra_adult_price:'beExtraAdultPrice',be_extra_nights:'beExtraNights'};
+function sqlRoomTypeToApp(row){const rt={};for(const col in row){rt[_ROOMTYPE_COL_MAP[col]||_s2c(col)]=row[col];}return rt;}
+function appRoomTypeToSqlRow(rt){const row={};Object.keys(_ROOMTYPE_COL_MAP).forEach(col=>{const field=_ROOMTYPE_COL_MAP[col];row[col]=rt[field]!==undefined?rt[field]:null;});return row;}
 async function _fetchAllRows(table,pageSize){
   pageSize=pageSize||1000;
   let all=[],from=0;
@@ -4241,8 +4249,13 @@ async function loadFromSupabase(){
       }
     }catch(e){console.warn('SQL bookings/registrations load failed — keeping previous in-memory data:',e);}
     if(store.venRows       !==undefined) AppData.venRows       =store.venRows;
-    if(store.roomTypes!==undefined){
-      AppData.roomTypes=store.roomTypes;
+    // room_types: read from the SQL table (same one the new app manages) instead of the blob.
+    let _sqlRoomTypesOk=false;
+    try{
+      const sqlRoomTypes=await _fetchAllRows('room_types');
+      if(sqlRoomTypes.length){AppData.roomTypes=sqlRoomTypes.map(sqlRoomTypeToApp);_sqlRoomTypesOk=true;}
+    }catch(e){console.warn('SQL room_types load failed — keeping previous in-memory data:',e);}
+    if(_sqlRoomTypesOk){
       // Detect Cloudbeds-corrupted data: if fewer than half of stored types match DEF IDs, reset to DEF
       const defIds=new Set(DEF_ROOM_TYPES.map(d=>d.id));
       const matchCount=AppData.roomTypes.filter(rt=>defIds.has(rt.id)).length;
@@ -4271,13 +4284,6 @@ async function loadFromSupabase(){
           AppData.roomTypes.push({...d});
         }});
         AppData.roomTypes.forEach(s=>{s.rooms=s.rooms.filter(r=>{const c=_defMap.get(r);return!c||c===s.id;});});
-        // One-time price sync: force DEF prices into Supabase (runs once per browser after deploy)
-        if(!localStorage.getItem('amansala_price_sync_v2')){
-          AppData.roomTypes.forEach(s=>{const d=DEF_ROOM_TYPES.find(x=>x.id===s.id);if(d){s.price1=d.price1;s.price2=d.price2;s.price1_low=d.price1_low;s.price2_low=d.price2_low;}});
-          localStorage.setItem('amansala_price_sync_v1','1');
-          localStorage.setItem('amansala_price_sync_v2','1');
-          (async()=>{try{await db.from('app_store').upsert({key:'roomTypes',value:AppData.roomTypes,updated_at:new Date().toISOString()});}catch(e){}})();
-        }
       }
     }
     if(store.programBlocks !==undefined) AppData.programBlocks =store.programBlocks;
