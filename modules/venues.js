@@ -1907,15 +1907,15 @@ function rcBuild(){
         bl.addEventListener('mouseenter',e=>showTip(e,bk));bl.addEventListener('mousemove',moveTip);bl.addEventListener('mouseleave',hideTip);
         bl.addEventListener('click',e=>{
           e.stopPropagation();
-          if(regEntry&&hasGuest){
-            const guestIdx=(regEntry.guests||[]).findIndex(g=>g.name);
-            if(guestIdx>=0){openGuestFolio(regEntry.id,guestIdx);return;}
-          }
+          if(regEntry&&hasGuest){openBookingDetailForReg(regEntry.id,guestNames[0]);return;}
           // Room Only bookings (Walk-in/Direct/Bikini Bootcamp/Restore & Renew/OTA)
           // have no `reg` at all — they're an in-house guest, not a retreat with a
           // room list — so go straight to their simple folio, same as any other guest.
-          if(bk.bookingType==='room_only'){openBookingFolio(bk.id);return;}
-          const btn=document.querySelectorAll('.tab-btn')[2];switchTab('teacherreg',btn);setTimeout(()=>regSelectRetreat(bk.id),80);
+          // A blocked-but-not-yet-registered retreat room has no folios/folio_items
+          // anchor either (that system is keyed by registration_id/booking_request_id),
+          // so it falls back to the same simple booking-level folio rather than
+          // silently jumping into the Teacher Registration roster.
+          openBookingFolio(bk.id);
         });
         track.appendChild(bl);
         for(let i=Math.max(0,li);i<Math.min(rcShowDays,li+wi);i++)occupied[i]++;

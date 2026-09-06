@@ -2349,6 +2349,14 @@
   </div>
 </div>
 
+<!-- ===== BOOKING DETAIL / FOLIO MODAL (Rooms tab reservation click) ===== -->
+<div class="modal-overlay" id="bookingDetailModal">
+  <div class="modal" style="width:1040px;max-width:96vw;padding:0">
+    <div id="bdHdr" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;background:#4a5a39;color:#fff;border-radius:16px 16px 0 0"></div>
+    <div id="bdBody"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="menuPrintOptionsModal">
   <div class="modal" style="max-width:420px">
     <div class="modal-hdr"><h2>Print Menu</h2><button class="modal-x" onclick="closeModal('menuPrintOptionsModal')">&times;</button></div>
@@ -5209,6 +5217,7 @@ function switchTab(id,btn){
 // ===== SIGNATURE PAD — moved to modules/contracts.js (loaded above) =====
 </script>
 <script src="modules/payments.js"></script>
+<script src="modules/booking-detail.js"></script>
 <script>
 // ===== PAYMENT RECORDING — moved to modules/payments.js =====
 // ===== PIPELINE STEPS — moved to modules/payments.js (loaded above) =====

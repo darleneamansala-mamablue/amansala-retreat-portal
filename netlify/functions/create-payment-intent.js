@@ -25,7 +25,7 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { amount, description, email } = body;
+  const { amount, description, email, folioId } = body;
   if (!amount || amount <= 0) return jsonErr(400, 'Invalid amount');
 
   const amountCents = Math.round(Number(amount) * 100);
@@ -38,6 +38,9 @@ exports.handler = async (event) => {
     'metadata[source]': 'admin_folio',
   });
   if (email) params.set('receipt_email', email);
+  // Stamped on the PaymentIntent so confirm-folio-payment.js can verify, server-side,
+  // that a successful charge is being recorded against the folio it was meant for.
+  if (folioId) params.set('metadata[folioId]', String(folioId).slice(0, 200));
 
   const piRes = await fetch(`${STRIPE_API}/payment_intents`, {
     method:  'POST',
