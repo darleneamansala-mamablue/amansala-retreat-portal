@@ -1,14 +1,6 @@
 'use strict';
 
-// Adapted from Jorge's version onto our app_store blob pattern (see get-availability.js).
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
-
-async function readAppStore(key, hdrs) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${encodeURIComponent(key)}&select=value`, { headers: hdrs });
-  if (!res.ok) throw new Error(`${key} fetch failed`);
-  const rows = await res.json();
-  return rows[0]?.value ?? null;
-}
 
 function isLow(dateStr) {
   const m = new Date(dateStr + 'T12:00:00').getMonth() + 1;
@@ -31,40 +23,44 @@ exports.handler = async (event) => {
   const hdrs = { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` };
 
   try {
-    const [roomTypesRaw, settings, beRates] = await Promise.all([
-      readAppStore('roomTypes', hdrs),
-      readAppStore('bookingEngineSettings', hdrs),
-      readAppStore('beRates', hdrs),
+    const [ratesRes, rtRes, settingsRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/be_rates?start_date=lte.${end}&end_date=gte.${start}&select=*`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/room_types?be_enabled=eq.true&select=id,be_price_single,price_single_high,price_single_low`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1&select=weekend_premium,seasonal_adjustments`, { headers: hdrs }),
     ]);
-    const roomTypes = (roomTypesRaw ?? []).filter(rt => (rt.rooms ?? []).length > 0);
-    const rates = beRates ?? []; // manual per-room-type date-range overrides — none configured yet
-    const weekendPct = settings?.weekend_premium ?? 0;
-    const seasonal = settings?.seasonal_adjustments ?? {};
+
+    const rates      = ratesRes.ok  ? await ratesRes.json()    : [];
+    const roomTypes  = rtRes.ok     ? await rtRes.json()       : [];
+    const settingsArr = settingsRes.ok ? await settingsRes.json() : [];
+    const settings   = settingsArr[0] ?? {};
+    const weekendPct  = settings.weekend_premium      ?? 0;
+    const seasonal    = settings.seasonal_adjustments ?? {};
 
     const result = {};
     const startD = new Date(start + 'T12:00:00');
-    const endD = new Date(end + 'T12:00:00');
+    const endD   = new Date(end   + 'T12:00:00');
 
     for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().slice(0, 10);
-      const low = isLow(dateStr);
-      const wknd = isWeekend(dateStr);
-      const month = d.getMonth() + 1;
-      let minPrice = null;
+      const low     = isLow(dateStr);
+      const wknd    = isWeekend(dateStr);
+      const month   = d.getMonth() + 1;
+      let minPrice  = null;
 
       roomTypes.forEach(rt => {
         const manualRate = rates.find(x =>
-          x.roomTypeId === rt.id && x.startDate <= dateStr && x.endDate >= dateStr
+          x.room_type_id === rt.id && x.start_date <= dateStr && x.end_date >= dateStr
         );
         let price;
         if (manualRate) {
-          // Manual override: apply weekend premium only (manual range = intentional pricing)
-          price = manualRate.priceSingle;
+          // Manual be_rates: apply weekend premium only (manual range = intentional pricing)
+          price = manualRate.price_single;
           if (wknd && weekendPct) price = Math.round(price * (1 + weekendPct / 100));
         } else {
-          // Base rate: a Booking Engine override (set via the admin Rates tab) takes
-          // priority; otherwise our existing real seasonal single-occupancy price.
-          const base = rt.be_price_single ?? (low ? (rt.price1_low ?? rt.price1) : rt.price1);
+          // Base rate: Escape → regular. Apply seasonal + weekend adjustments.
+          const base = rt.be_price_single != null
+            ? rt.be_price_single
+            : low ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high;
           if (base != null) {
             const seasonalPct = Number(seasonal[String(month)] ?? 0);
             price = Math.round(base * (1 + seasonalPct / 100) * (wknd && weekendPct ? (1 + weekendPct / 100) : 1));

@@ -1,37 +1,6 @@
 'use strict';
 
-// Adapted from Jorge's version: our Supabase has no relational room_types/bookings
-// tables — everything lives as one JSON blob per `key` in the `app_store` table.
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
-
-async function readAppStore(key, hdrs) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${encodeURIComponent(key)}&select=value`, { headers: hdrs });
-  if (!res.ok) throw new Error(`${key} fetch failed`);
-  const rows = await res.json();
-  return rows[0]?.value ?? null;
-}
-
-// Map our real roomTypes shape to the field names the Extra Nights front-end expects.
-// be_* fields are set via the Booking Engine admin tab (modules/booking-engine-admin.js)
-// and live directly on the roomTypes app_store record — read them straight through.
-function mapRoomType(rt) {
-  return {
-    id: rt.id,
-    name: rt.name,
-    rooms: rt.rooms ?? [],
-    max_occ: rt.maxOcc ?? 2,
-    price_single_high: rt.price1 ?? null,
-    price_single_low: rt.price1_low ?? rt.price1 ?? null,
-    price_double_high: rt.price2 ?? null,
-    price_double_low: rt.price2_low ?? rt.price2 ?? null,
-    be_price_single: rt.be_price_single ?? null,
-    be_price_double: rt.be_price_double ?? null,
-    be_photos: rt.be_photos ?? [],
-    be_description: rt.be_description ?? rt.desc ?? null,
-    be_amenities: rt.be_amenities ?? [],
-    color: rt.color ?? null,
-  };
-}
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -55,34 +24,45 @@ exports.handler = async (event) => {
     'Content-Type': 'application/json',
   };
 
-  try {
-    const [roomTypesRaw, settings] = await Promise.all([
-      readAppStore('roomTypes', hdrs),
-      readAppStore('bookingEngineSettings', hdrs),
-    ]);
-    // Offer every real, actively-used room type (has at least one physical room),
-    // gated by whichever Booking Engine toggle applies to the calling page.
-    const enabledFlag = source === 'extra_nights' ? 'be_extra_nights' : 'be_enabled';
-    const roomTypes = (roomTypesRaw ?? [])
-      .filter(rt => (rt.rooms ?? []).length > 0 && rt[enabledFlag])
-      .map(mapRoomType);
+  const RT_FIELDS = 'id,name,rooms,max_occ,price_single_high,price_single_low,price_double_high,price_double_low,be_price_single,be_price_double,be_photos,be_description,be_amenities,color';
+  const rtFilter  = source === 'extra_nights' ? 'be_extra_nights=eq.true' : 'be_enabled=eq.true';
 
+  try {
+    // listAll mode: return room types without availability filter
     if (listAll) {
+      const [rtRes, settingsRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/room_types?${rtFilter}&select=${RT_FIELDS}`, { headers: hdrs }),
+        fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: hdrs }),
+      ]);
+      if (!rtRes.ok) throw new Error('room_types fetch failed');
+      const [roomTypes, settingsArr] = await Promise.all([
+        rtRes.json(), settingsRes.ok ? settingsRes.json() : Promise.resolve([{}]),
+      ]);
       return {
         statusCode: 200,
         headers: { ...cors(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomTypes, settings: settings ?? {} }),
+        body: JSON.stringify({ roomTypes: roomTypes ?? [], settings: settingsArr[0] ?? {} }),
       };
     }
 
-    const bookings = (await readAppStore('bookings', hdrs)) ?? [];
+    const [bkRes, rtRes, settingsRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/bookings?select=blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/room_types?${rtFilter}&select=${RT_FIELDS}`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: hdrs }),
+    ]);
+
+    if (!bkRes.ok)  throw new Error('bookings fetch failed');
+    if (!rtRes.ok)  throw new Error('room_types fetch failed');
+
+    const [bookings, roomTypes, settingsArr] = await Promise.all([
+      bkRes.json(), rtRes.json(), settingsRes.ok ? settingsRes.json() : Promise.resolve([{}]),
+    ]);
+
     const blockedRooms = new Set(
-      bookings
-        .filter(bk => bk.status !== 'cancelled' && bk.startDate < checkOut && bk.endDate > checkIn)
-        .flatMap(bk => bk.blockedRooms ?? [])
+      (bookings ?? []).flatMap(bk => bk.blocked_rooms ?? [])
     );
 
-    const available = roomTypes.map(rt => {
+    const available = (roomTypes ?? []).map(rt => {
       const rooms = rt.rooms ?? [];
       const availableCount = rooms.filter(r => !blockedRooms.has(r)).length;
       return { ...rt, available_rooms: availableCount, total_rooms: rooms.length };
@@ -91,7 +71,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: { ...cors(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ available, settings: settings ?? {} }),
+      body: JSON.stringify({ available, settings: settingsArr[0] ?? {} }),
     };
   } catch (err) {
     console.error('[get-availability]', err.message);

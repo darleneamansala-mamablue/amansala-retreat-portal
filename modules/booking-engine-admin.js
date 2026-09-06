@@ -1,12 +1,12 @@
 // ===== booking-engine-admin.js — Booking Engine admin (Settings/Rates/Requests/Discounts/Emails) =====
 // Loaded as a classic script; shares global scope (same pattern as cb-portal-sync.js).
-// Adapted from Jorge's reference implementation onto our app_store-blob Supabase pattern.
 // Room type Book/Extra/pricing fields (be_*) live directly on AppData.roomTypes entries
 // and save through the existing saveAll() — same shared path every other room-type edit
-// uses. The four new admin-only concepts (bookingEngineSettings, beRates, beDiscountCodes,
-// beBookingRequests) are self-contained app_store keys with their own load/save here,
-// matching the "separate additive system" pattern used by driver-portal.js/transport.js —
-// they must never interfere with the shared AppData/saveAll() path.
+// uses. Settings/Rates/Discounts/Requests read and write the REAL SQL tables
+// (booking_engine_settings/be_rates/be_discount_codes/booking_requests) — the same
+// tables book.html/extra-nights.html's own backend functions (get-availability.js,
+// get-rates.js, validate-discount.js, stripe.js, stripe-webhook.js) already use, so
+// what staff configure here actually takes effect on the public pages.
 // Cloudbeds sync is intentionally NOT wired up here (Darlene decided not to connect Cloudbeds).
 
 let beTab = 'settings';
@@ -22,7 +22,7 @@ let beLoaded = false;
 const BE_PUBLIC_URL = location.origin + '/book.html';
 const BE_EXTRA_URL  = location.origin + '/extra-nights.html';
 
-// ─── APP_STORE HELPERS (scoped to this module's 4 new keys) ──
+// ─── APP_STORE HELPER (still used for the unrelated chargeItems key) ──
 async function beDbGet(key) {
   try {
     const { data, error } = await db.from('app_store').select('value').eq('key', key).maybeSingle();
@@ -35,6 +35,45 @@ async function beDbSet(key, value) {
     await db.from('app_store').upsert({ key, value, updated_at: new Date().toISOString() });
     return true;
   } catch (e) { console.warn('[booking-engine-admin] save', key, e.message); showToast('Save failed: ' + e.message); return false; }
+}
+
+// ─── REAL SQL TABLE HELPERS (booking_engine_settings/be_rates/be_discount_codes/booking_requests) ──
+function _beSqlToApp(row) { const o = {}; for (const k in row) o[_s2c(k)] = row[k]; return o; }
+async function beFetchSettings() {
+  try {
+    const { data, error } = await db.from('booking_engine_settings').select('*').eq('id', 1).maybeSingle();
+    if (error) throw error;
+    return data ?? {};
+  } catch (e) { console.warn('[booking-engine-admin] load settings', e.message); return {}; }
+}
+async function beSaveSettingsRow(fields) {
+  try {
+    const { error } = await db.from('booking_engine_settings').upsert({ id: 1, ...fields, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    return true;
+  } catch (e) { console.warn('[booking-engine-admin] save settings', e.message); showToast('Save failed: ' + e.message); return false; }
+}
+async function beFetchRates() {
+  try {
+    const { data, error } = await db.from('be_rates').select('*');
+    if (error) throw error;
+    return (data ?? []).map(_beSqlToApp);
+  } catch (e) { console.warn('[booking-engine-admin] load rates', e.message); return []; }
+}
+async function beFetchDiscounts() {
+  try {
+    const { data, error } = await db.from('be_discount_codes').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(_beSqlToApp);
+  } catch (e) { console.warn('[booking-engine-admin] load discounts', e.message); return []; }
+}
+async function beFetchRequests() {
+  try {
+    // Only rows actually paid through the Booking Engine (vs. other booking_requests sources).
+    const { data, error } = await db.from('booking_requests').select('*').not('payment_intent_id', 'is', null).order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map(_beSqlToApp);
+  } catch (e) { console.warn('[booking-engine-admin] load requests', e.message); return []; }
 }
 
 // ─── ROOM TYPE SORT (matches rooms/teachers ordering elsewhere in the app) ────
@@ -51,10 +90,10 @@ async function beInit() {
   if (!beLoaded) {
     root.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted)">Loading Booking Engine…</div>`;
     const [s, r, d, rq, it] = await Promise.all([
-      beDbGet('bookingEngineSettings'),
-      beDbGet('beRates'),
-      beDbGet('beDiscountCodes'),
-      beDbGet('beBookingRequests'),
+      beFetchSettings(),
+      beFetchRates(),
+      beFetchDiscounts(),
+      beFetchRequests(),
       beDbGet('chargeItems'),
     ]);
     beSettings  = s ?? {};
@@ -63,10 +102,6 @@ async function beInit() {
     if (beSettings.bbc_package_food != null) BBC_PACKAGE_FOOD = beSettings.bbc_package_food;
     beRatesList = r ?? [];
     beDiscounts = d ?? [];
-    // Backfill an id on any legacy discount codes that predate this admin screen.
-    let needsIdBackfill = false;
-    beDiscounts.forEach(dc => { if (!dc.id) { dc.id = 'dc_' + Math.random().toString(36).slice(2, 10); needsIdBackfill = true; } });
-    if (needsIdBackfill) beDbSet('beDiscountCodes', beDiscounts);
     beRequests  = rq ?? [];
     beItems     = it ?? [];
     beLoaded = true;
@@ -210,7 +245,7 @@ async function beSaveSettings() {
   const heroImage = document.getElementById('be-hero')?.value.trim()    || null;
   const taxesPct  = parseFloat(document.getElementById('be-taxes')?.value) || 0;
   const terms     = document.getElementById('be-terms')?.value.trim()   || null;
-  const ok = await beDbSet('bookingEngineSettings', { ...beSettings, tagline, taxes_pct: taxesPct, hero_image: heroImage, terms });
+  const ok = await beSaveSettingsRow({ tagline, taxes_pct: taxesPct, hero_image: heroImage, terms });
   if (!ok) return;
   beSettings = { ...beSettings, tagline, hero_image: heroImage, taxes_pct: taxesPct, terms };
   showToast('Settings saved ✓');
@@ -414,7 +449,7 @@ async function beSavePricingRules() {
     const v = parseInt(document.getElementById(`be-month-${m}`)?.value);
     if (!isNaN(v) && v !== 0) seasonal[String(m)] = v;
   }
-  const ok = await beDbSet('bookingEngineSettings', { ...beSettings, weekend_premium: weekendPct, seasonal_adjustments: seasonal });
+  const ok = await beSaveSettingsRow({ weekend_premium: weekendPct, seasonal_adjustments: seasonal });
   if (!ok) return;
   beSettings = { ...beSettings, weekend_premium: weekendPct, seasonal_adjustments: seasonal };
   showToast('Pricing rules saved ✓');
@@ -536,11 +571,13 @@ function beRequestRow(r) {
 
 async function beAssignRoom(id, room) {
   const r = beRequests.find(x => x.id === id); if (!r) return;
-  r.room = room;
-  const ok = await beDbSet('beBookingRequests', beRequests);
-  if (!ok) return;
-  showToast(`Room ${room} assigned ✓`);
-  beRenderRequests();
+  const prev = r.room; r.room = room;
+  try {
+    const { error } = await db.from('booking_requests').update({ room }).eq('id', id);
+    if (error) throw error;
+    showToast(`Room ${room} assigned ✓`);
+    beRenderRequests();
+  } catch (e) { r.room = prev; showToast('Error: ' + e.message); }
 }
 async function beAssignRoomManual(id) {
   const input = document.getElementById(`be-room-manual-${id}`);
@@ -634,39 +671,44 @@ async function beSaveDiscount() {
   if ((blackoutStart && !blackoutEnd) || (!blackoutStart && blackoutEnd)) { showToast('Enter both blackout dates, or leave both blank'); return; }
   if (blackoutStart && blackoutEnd && blackoutEnd < blackoutStart) { showToast('Blackout end date must be after the start date'); return; }
 
-  const dc = {
-    id: 'dc_' + Math.random().toString(36).slice(2, 10),
-    code, type, value, appliesTo,
-    maxUses: maxUses ? parseInt(maxUses) : null,
-    expiresAt: expires || null,
-    blackoutStart: blackoutStart || null,
-    blackoutEnd: blackoutEnd || null,
+  const row = {
+    code, type, value,
+    applies_to: appliesTo,
+    max_uses: maxUses ? parseInt(maxUses) : null,
+    expires_at: expires || null,
+    blackout_start: blackoutStart || null,
+    blackout_end: blackoutEnd || null,
     description: desc || null,
     active: true,
-    usedCount: 0,
+    used_count: 0,
   };
-  beDiscounts.unshift(dc);
-  const ok = await beDbSet('beDiscountCodes', beDiscounts);
-  if (!ok) { beDiscounts.shift(); return; }
-  showToast('Code created ✓');
-  beRenderDiscounts();
+  try {
+    const { data, error } = await db.from('be_discount_codes').insert(row).select().single();
+    if (error) throw error;
+    beDiscounts.unshift(_beSqlToApp(data));
+    showToast('Code created ✓');
+    beRenderDiscounts();
+  } catch (e) { showToast('Error: ' + e.message); }
 }
 
 async function beToggleDiscount(id, active) {
   const dc = beDiscounts.find(d => d.id === id); if (!dc) return;
   const prev = dc.active; dc.active = active;
-  const ok = await beDbSet('beDiscountCodes', beDiscounts);
-  if (!ok) { dc.active = prev; return; }
-  beRenderDiscounts();
+  try {
+    const { error } = await db.from('be_discount_codes').update({ active }).eq('id', id);
+    if (error) throw error;
+    beRenderDiscounts();
+  } catch (e) { dc.active = prev; showToast('Error: ' + e.message); }
 }
 async function beDeleteDiscount(id) {
   if (!confirm('Delete this discount code?')) return;
-  const prev = beDiscounts;
-  beDiscounts = beDiscounts.filter(d => d.id !== id);
-  const ok = await beDbSet('beDiscountCodes', beDiscounts);
-  if (!ok) { beDiscounts = prev; return; }
-  showToast('Code deleted');
-  beRenderDiscounts();
+  try {
+    const { error } = await db.from('be_discount_codes').delete().eq('id', id);
+    if (error) throw error;
+    beDiscounts = beDiscounts.filter(d => d.id !== id);
+    showToast('Code deleted');
+    beRenderDiscounts();
+  } catch (e) { showToast('Error: ' + e.message); }
 }
 
 // ─── ITEMS TAB — charge/item catalog, feeds the Venues "Add Charge" picker ────
@@ -831,7 +873,7 @@ async function beSaveEmailSettings() {
     email_staff_subject: document.getElementById('be-es-subject')?.value.trim() ?? '',
     email_staff_body:    document.getElementById('be-es-body')?.value ?? '',
   };
-  const ok = await beDbSet('bookingEngineSettings', { ...beSettings, ...fields });
+  const ok = await beSaveSettingsRow(fields);
   if (!ok) return;
   beSettings = { ...beSettings, ...fields };
   showToast('Email settings saved ✓');
