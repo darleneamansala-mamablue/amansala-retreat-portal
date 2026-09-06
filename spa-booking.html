@@ -110,13 +110,13 @@ async function init(){
     const [{data:sd},{data:ad},{data:rd},{data:bd}]=await Promise.all([
       db.from('app_store').select('value').eq('key','spa_data').single(),
       db.from('app_store').select('value').eq('key','spa_appointments').single(),
-      db.from('app_store').select('value').eq('key','regs').single(),
-      db.from('app_store').select('value').eq('key','bookings').single(),
+      db.from('registrations').select('id,booking_id,room,guests,charges'),
+      db.from('bookings').select('id,leader_name,booking_type,blocked_rooms,charges'),
     ]);
     if(sd?.value) SpaData=sd.value;
     SpaAppointments=(ad?.value)||[];
-    SBRegs=(rd?.value)||[];
-    SBBookings=(bd?.value)||[];
+    SBRegs=(rd||[]).map(r=>({id:r.id,bookingId:r.booking_id,room:r.room,guests:r.guests,charges:r.charges}));
+    SBBookings=(bd||[]).map(b=>({id:b.id,leaderName:b.leader_name,bookingType:b.booking_type,blockedRooms:b.blocked_rooms,charges:b.charges}));
   }catch(e){}
   const cancelId=new URLSearchParams(location.search).get('cancel');
   if(cancelId) return sbRenderCancelScreen(cancelId);
@@ -313,11 +313,11 @@ function renderStep4_Hotel(el){
 async function sbLookupStayWindow(clientName,roomNumber){
   try{
     const [{data:rd},{data:bd}]=await Promise.all([
-      db.from('app_store').select('value').eq('key','regs').single(),
-      db.from('app_store').select('value').eq('key','bookings').single(),
+      db.from('registrations').select('id,booking_id,room,guests,charges'),
+      db.from('bookings').select('id,leader_name,booking_type,blocked_rooms,charges,start_date,end_date'),
     ]);
-    const latestRegs=(rd?.value)||[];
-    const latestBookings=(bd?.value)||[];
+    const latestRegs=(rd||[]).map(r=>({id:r.id,bookingId:r.booking_id,room:r.room,guests:r.guests,charges:r.charges}));
+    const latestBookings=(bd||[]).map(b=>({id:b.id,leaderName:b.leader_name,bookingType:b.booking_type,blockedRooms:b.blocked_rooms,charges:b.charges,startDate:b.start_date,endDate:b.end_date}));
     SBRegs=latestRegs;SBBookings=latestBookings;
     const regMatch=sbFindGuestReg(clientName,roomNumber);
     if(regMatch){
@@ -689,8 +689,8 @@ async function sbFinalConfirm(){
     let folioPosted=false;
     if(isHotel){
       try{
-        const {data:rd}=await db.from('app_store').select('value').eq('key','regs').single();
-        const latestRegs=(rd?.value)||[];
+        const {data:rd}=await db.from('registrations').select('id,booking_id,room,guests,charges');
+        const latestRegs=(rd||[]).map(r=>({id:r.id,bookingId:r.booking_id,room:r.room,guests:r.guests,charges:r.charges}));
         SBRegs=latestRegs;
         const match=sbFindGuestReg(appt.clientName,SB.roomNumber);
         if(match){
@@ -698,11 +698,9 @@ async function sbFinalConfirm(){
           if(price!=null){
             const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
             const category=/massage/i.test(svc.name)?'Massage':'Spa';
-            const ri=latestRegs.findIndex(r=>r.id===match.reg.id);
-            if(ri>=0){
-              if(!latestRegs[ri].charges) latestRegs[ri].charges=[];
-              latestRegs[ri].charges.push({id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:match.guest.name,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'});
-              await db.from('app_store').upsert({key:'regs',value:latestRegs,updated_at:new Date().toISOString()});
+            const newCharges=[...(match.reg.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:match.guest.name,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'}];
+            const {error:chErr}=await db.from('registrations').update({charges:newCharges}).eq('id',match.reg.id);
+            if(!chErr){
               appt.folioStatus='POSTED';
               appt.folioChargeId=chargeId;
               appt.folioRegId=match.reg.id;
@@ -713,8 +711,8 @@ async function sbFinalConfirm(){
           // No reg match (e.g. Room Only / BBC / Restore & Renew guests have
           // no reg — see sbFindGuestBooking) — fall back to posting straight
           // onto the booking itself so the charge doesn't silently vanish.
-          const {data:bd}=await db.from('app_store').select('value').eq('key','bookings').single();
-          const latestBookings=(bd?.value)||[];
+          const {data:bd}=await db.from('bookings').select('id,leader_name,booking_type,blocked_rooms,charges');
+          const latestBookings=(bd||[]).map(b=>({id:b.id,leaderName:b.leader_name,bookingType:b.booking_type,blockedRooms:b.blocked_rooms,charges:b.charges}));
           SBBookings=latestBookings;
           const bkMatch=sbFindGuestBooking(appt.clientName,SB.roomNumber);
           if(bkMatch){
@@ -722,11 +720,9 @@ async function sbFinalConfirm(){
             if(price!=null){
               const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
               const category=/massage/i.test(svc.name)?'Massage':'Spa';
-              const bi=latestBookings.findIndex(b=>b.id===bkMatch.bk.id);
-              if(bi>=0){
-                if(!latestBookings[bi].charges) latestBookings[bi].charges=[];
-                latestBookings[bi].charges.push({id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:bkMatch.bk.leaderName,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'});
-                await db.from('app_store').upsert({key:'bookings',value:latestBookings,updated_at:new Date().toISOString()});
+              const newCharges=[...(bkMatch.bk.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:bkMatch.bk.leaderName,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'}];
+              const {error:chErr}=await db.from('bookings').update({charges:newCharges}).eq('id',bkMatch.bk.id);
+              if(!chErr){
                 appt.folioStatus='POSTED';
                 appt.folioChargeId=chargeId;
                 appt.folioBkId=bkMatch.bk.id;
@@ -810,22 +806,18 @@ async function sbDoCancel(apptId){
     if((sbApptDateTime(appt)-new Date())/3600000<12){showToast('Too close to your appointment time to cancel online.');SpaAppointments=latest;sbRenderCancelScreen(apptId);return;}
     if(appt.folioStatus==='POSTED'&&appt.folioChargeId&&appt.folioRegId){
       try{
-        const {data:rd}=await db.from('app_store').select('value').eq('key','regs').single();
-        const latestRegs=(rd?.value)||[];
-        const ri=latestRegs.findIndex(r=>r.id===appt.folioRegId);
-        if(ri>=0&&Array.isArray(latestRegs[ri].charges)){
-          latestRegs[ri].charges=latestRegs[ri].charges.filter(c=>c.id!==appt.folioChargeId);
-          await db.from('app_store').upsert({key:'regs',value:latestRegs,updated_at:new Date().toISOString()});
+        const {data:reg}=await db.from('registrations').select('charges').eq('id',appt.folioRegId).maybeSingle();
+        if(reg&&Array.isArray(reg.charges)){
+          const newCharges=reg.charges.filter(c=>c.id!==appt.folioChargeId);
+          await db.from('registrations').update({charges:newCharges}).eq('id',appt.folioRegId);
         }
       }catch(e){}
     }else if(appt.folioStatus==='POSTED'&&appt.folioChargeId&&appt.folioBkId){
       try{
-        const {data:bd}=await db.from('app_store').select('value').eq('key','bookings').single();
-        const latestBookings=(bd?.value)||[];
-        const bi=latestBookings.findIndex(b=>b.id===appt.folioBkId);
-        if(bi>=0&&Array.isArray(latestBookings[bi].charges)){
-          latestBookings[bi].charges=latestBookings[bi].charges.filter(c=>c.id!==appt.folioChargeId);
-          await db.from('app_store').upsert({key:'bookings',value:latestBookings,updated_at:new Date().toISOString()});
+        const {data:bk}=await db.from('bookings').select('charges').eq('id',appt.folioBkId).maybeSingle();
+        if(bk&&Array.isArray(bk.charges)){
+          const newCharges=bk.charges.filter(c=>c.id!==appt.folioChargeId);
+          await db.from('bookings').update({charges:newCharges}).eq('id',appt.folioBkId);
         }
       }catch(e){}
     }

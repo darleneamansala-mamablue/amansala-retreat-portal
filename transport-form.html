@@ -644,14 +644,13 @@
       const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
       const cutoffStr = cutoff.toISOString().slice(0,10);
 
-      const [{data: bkRow}, {data: regRow}] = await Promise.all([
-        _db.from('app_store').select('value').eq('key','bookings').maybeSingle(),
-        _db.from('app_store').select('value').eq('key','regs').maybeSingle()
+      const [{data: bookings}, {data: regs}] = await Promise.all([
+        _db.from('bookings').select('id,end_date'),
+        _db.from('registrations').select('booking_id,guests')
       ]);
-      const bookings = bkRow?.value || [];
-      const regs = regRow?.value || [];
-      const endDateByBkId = new Map(bookings.map(bk => [bk.id, bk.endDate || '']));
-      const eligibleRegs = regs.filter(r => (endDateByBkId.get(r.bookingId) || '') >= cutoffStr);
+      const endDateByBkId = new Map((bookings||[]).map(bk => [bk.id, bk.end_date || '']));
+      const eligibleRegs = (regs||[]).map(r=>({bookingId:r.booking_id,guests:r.guests}))
+        .filter(r => (endDateByBkId.get(r.bookingId) || '') >= cutoffStr);
 
       if (!eligibleRegs.length) return;
 
@@ -699,9 +698,9 @@
 
     async function getBookings() {
       try {
-        const { data, error } = await _db.from('app_store').select('value').eq('key','bookings').maybeSingle();
+        const { data, error } = await _db.from('bookings').select('id,leader_name,retreat_name,start_date,end_date,status');
         if (error) throw error;
-        return data?.value || [];
+        return (data||[]).filter(b=>b.status!=='cancelled').map(b=>({id:b.id,leaderName:b.leader_name,retreatName:b.retreat_name,startDate:b.start_date,endDate:b.end_date,status:b.status}));
       } catch (e) {
         console.warn('getBookings failed', e);
         return [];
