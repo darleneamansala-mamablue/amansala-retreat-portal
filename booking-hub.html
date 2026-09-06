@@ -4133,6 +4133,12 @@ async function syncToSupabase(){
     const regRows=AppData.regs.filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId)).map(appRegToSqlRow);
     if(regRows.length)await db.from('registrations').upsert(regRows);
     if(deletedRegIds.size)await db.from('registrations').delete().in('id',[...deletedRegIds]);
+    // payments is a separate table (booking_id FK) — flatten every booking's embedded
+    // payments array back out into rows. Payments are only ever added, never removed
+    // through the UI, so a plain upsert (no delete pass) is safe here.
+    const payRows=[];
+    AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
+    if(payRows.length)await db.from('payments').upsert(payRows);
   }catch(e){console.warn('SQL bookings/registrations sync failed:',e);}
   // Everything else (venRows, room types, staff, program blocks, etc.) stays on the
   // legacy app_store blob for now — out of scope for this phase.
@@ -4168,6 +4174,13 @@ function sqlBookingToApp(row){const bk={};for(const col in row){bk[_BOOKING_COL_
 function appBookingToSqlRow(bk){const row={};_BOOKING_COLUMNS.forEach(col=>{const field=_BOOKING_COL_TO_FIELD[col]||_s2c(col);row[col]=bk[field]!==undefined?bk[field]:null;});return row;}
 function sqlRegToApp(row){const r={};for(const col in row) r[_s2c(col)]=row[col];return r;}
 function appRegToSqlRow(r){const row={};_REG_COLUMNS.forEach(col=>{const field=_s2c(col);row[col]=r[field]!==undefined?r[field]:null;});return row;}
+// payments is a separate SQL table (booking_id foreign key), not a column on bookings —
+// the app's booking objects embed it as bk.payments, so attach/flatten it at the boundary.
+const _PAYMENT_COL_TO_FIELD={created_at:'ts'};
+const _PAYMENT_FIELD_TO_COL={ts:'created_at'};
+const _PAYMENT_COLUMNS=['id','booking_id','amount','date','method','ref','note'];
+function sqlPaymentToApp(row){const p={};for(const col in row) p[_PAYMENT_COL_TO_FIELD[col]||_s2c(col)]=row[col];return p;}
+function appPaymentToSqlRow(p,bookingId){const row={};_PAYMENT_COLUMNS.forEach(col=>{if(col==='booking_id'){row.booking_id=bookingId;return;}const field=_PAYMENT_FIELD_TO_COL[col]||_s2c(col);row[col]=p[field]!==undefined?p[field]:null;});return row;}
 async function _fetchAllRows(table,pageSize){
   pageSize=pageSize||1000;
   let all=[],from=0;
@@ -4212,8 +4225,11 @@ async function loadFromSupabase(){
     // the same live data retreat-portal.html already reads, and it's kept current by
     // active daily use, unlike the legacy app_store blob below. SQL wins outright.
     try{
-      const [sqlBookings,sqlRegs]=await Promise.all([_fetchAllRows('bookings'),_fetchAllRows('registrations')]);
+      const [sqlBookings,sqlRegs,sqlPayments]=await Promise.all([_fetchAllRows('bookings'),_fetchAllRows('registrations'),_fetchAllRows('payments')]);
       AppData.bookings=sqlBookings.map(sqlBookingToApp).filter(b=>!deletedBookingIds.has(b.id));
+      const _paysByBk=new Map();
+      sqlPayments.map(sqlPaymentToApp).forEach(p=>{const arr=_paysByBk.get(p.bookingId)||[];arr.push(p);_paysByBk.set(p.bookingId,arr);});
+      AppData.bookings.forEach(bk=>{bk.payments=_paysByBk.get(bk.id)||[];});
       AppData.regs=sqlRegs.map(sqlRegToApp).filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId));
       if(typeof regSelBk!=='undefined'&&regSelBk){
         const _synced=AppData.bookings.find(b=>b.id===regSelBk.id);
