@@ -33,30 +33,28 @@ function loadAddOns(){
 }
 let ADD_ONS=loadAddOns();
 const PKG_DISCOUNT=0.10;
-// ADD_ONS used to live ONLY in this browser's localStorage — never synced to
-// Supabase like every other data type in this app, so a customized activities
-// list silently vanished on any other device/browser. Fixed 2026-09-03: syncs
-// to app_store key 'addOns' now, same pattern as spa/transport/BBC schedules.
-// Local storage is kept as an instant-render cache; Supabase is the source of truth.
+// add_ons: read from the real SQL table (same one the new app manages) instead of the
+// legacy app_store blob — ADD_ONS_DEFAULT (above) stays only as an offline/fetch-failure
+// fallback. Confirmed real drift: Atik Cenote was $130 here vs $95 in the live table.
+const _ADDON_COL_TO_FIELD={description:'desc'};
+const _ADDON_FIELD_TO_COL={desc:'description'};
+const _ADDON_COLUMNS=['id','name','description','price','regular_price','category','duration','is_custom'];
+function sqlAddOnToApp(row){const a={};for(const col in row) a[_ADDON_COL_TO_FIELD[col]||_s2c(col)]=row[col];return a;}
+function appAddOnToSqlRow(a){const row={};_ADDON_COLUMNS.forEach(col=>{const field=_ADDON_COL_TO_FIELD[col]||_s2c(col);row[col]=a[field]!==undefined?a[field]:null;});return row;}
 async function syncAddOnsFromSupabase(){
   try{
-    const {data}=await db.from('app_store').select('value').eq('key','addOns').maybeSingle();
-    if(data?.value&&Array.isArray(data.value)&&data.value.length){
-      const stored=data.value;
-      const merged=ADD_ONS_DEFAULT.map(def=>{
-        const edit=stored.find(s=>s.id===def.id);
-        return edit?{...def,...edit}:{...def};
-      });
-      stored.filter(s=>!ADD_ONS_DEFAULT.find(d=>d.id===s.id)).forEach(c=>merged.push({...c}));
-      ADD_ONS=merged;
-      localStorage.setItem('amansala_addons',JSON.stringify(stored));
-      if(typeof regRender==='function')regRender();
-    }
-  }catch(e){console.warn('[retreat-builder] addOns Supabase sync failed',e);}
+    const {data,error}=await db.from('add_ons').select('*');
+    if(error||!data||!data.length)return;
+    ADD_ONS=data.map(sqlAddOnToApp);
+    localStorage.setItem('amansala_addons',JSON.stringify(ADD_ONS));
+    if(typeof regRender==='function')regRender();
+  }catch(e){console.warn('[retreat-builder] addOns SQL sync failed',e);}
 }
 async function saveAddOnsToSupabase(saved){
-  try{await db.from('app_store').upsert({key:'addOns',value:saved,updated_at:new Date().toISOString()});}
-  catch(e){console.warn('[retreat-builder] addOns Supabase save failed',e);}
+  try{
+    const rows=(saved||ADD_ONS).map(appAddOnToSqlRow);
+    if(rows.length)await db.from('add_ons').upsert(rows);
+  }catch(e){console.warn('[retreat-builder] addOns SQL save failed',e);}
 }
 syncAddOnsFromSupabase(); // pull any saved custom package rates on load -- without this call the sync/save functions above were dead code
 
