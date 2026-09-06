@@ -23,6 +23,31 @@ const DEF_STAFF=[
 let staffAccounts=[];
 let currentSession=null;
 
+// ── staff SQL table (real accounts, replacing the app_store blob) ──────────
+// Passwords are stored as a SHA-256 hex hash — same algorithm the new app's
+// js/data/staff.js already uses, so accounts created there also work here.
+const _STAFF_COLUMNS=['id','name','username','password_hash','role','active','permissions'];
+function sqlStaffToApp(row){const s={};for(const col in row) s[_s2c(col)]=row[col];return s;}
+function appStaffToSqlRow(s){const row={};_STAFF_COLUMNS.forEach(col=>{const field=_s2c(col);row[col]=s[field]!==undefined?s[field]:null;});return row;}
+async function hashPassword(password){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(password));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+// Refresh staffAccounts from the SQL table in the background (non-blocking) so the
+// Manage Staff list and login both see every real account, not just a stale cache.
+async function refreshStaffFromSql(){
+  try{
+    const{data,error}=await db.from('staff').select('*');
+    if(error||!data||!data.length)return;
+    const fresh=data.map(sqlStaffToApp);
+    const seen=new Map();
+    fresh.forEach(s=>s.username&&seen.set(s.username.toLowerCase(),s));
+    staffAccounts.forEach(s=>{if(s.username&&!seen.has(s.username.toLowerCase()))seen.set(s.username.toLowerCase(),s);});
+    staffAccounts=[...seen.values()];
+    localStorage.setItem('amansala_staff',JSON.stringify(staffAccounts));
+  }catch(e){console.warn('[staff] SQL refresh failed:',e);}
+}
+
 function loadStaff(){
   const raw=localStorage.getItem('amansala_staff');
   if(raw){try{staffAccounts=JSON.parse(raw);}catch{staffAccounts=DEF_STAFF.map(s=>({...s}));}}
@@ -38,7 +63,14 @@ function loadStaff(){
 }
 function saveStaff(){
   localStorage.setItem('amansala_staff',JSON.stringify(staffAccounts));
-  (async()=>{try{await db.from('app_store').upsert({key:'staffAccounts',value:staffAccounts,updated_at:new Date().toISOString()});}catch(e){console.warn('Staff sync failed:',e);}})();
+  (async()=>{
+    try{
+      // Only push rows that already have a real hash — skips DEF_STAFF/MASTER-shaped
+      // fallback entries that were never seeded with a passwordHash.
+      const rows=staffAccounts.filter(s=>s.passwordHash).map(appStaffToSqlRow);
+      if(rows.length)await db.from('staff').upsert(rows);
+    }catch(e){console.warn('Staff sync failed:',e);}
+  })();
 }
 
 function getCurrentSession(){
@@ -64,7 +96,7 @@ function applySession(session){
   document.querySelectorAll('.tab-btn').forEach(b=>b.style.pointerEvents='');
 }
 
-function staffLoginSubmit(){
+async function staffLoginSubmit(){
   const username=document.getElementById('staffLoginUser').value.trim().toLowerCase();
   const password=document.getElementById('staffLoginPass').value;
   const errEl=document.getElementById('staffLoginErr');
@@ -74,31 +106,21 @@ function staffLoginSubmit(){
     {id:'staff_001',name:'Darlene',username:'darlene',password:'amansala2024',role:'admin'},
     {id:'staff_002',name:'Front Desk',username:'frontdesk',password:'welcome1',role:'staff'},
   ];
+  const passwordHash=await hashPassword(password);
   function tryLogin(){
-    let account=staffAccounts.find(s=>s.active&&s.username.toLowerCase()===username&&s.password===password);
+    let account=staffAccounts.find(s=>s.active&&s.username.toLowerCase()===username&&s.passwordHash===passwordHash);
     if(!account){account=MASTER.find(s=>s.username===username&&s.password===password)||null;}
     return account;
   }
   let account=tryLogin();
   if(!account){
-    // Not found locally — pull latest from Supabase then retry once
+    // Not found locally — pull latest from the real staff SQL table then retry once
     errEl.textContent='Checking credentials…';
-    db.from('app_store').select('key,value').then(({data})=>{
-      if(data){
-        const row=data.find(r=>r.key==='staffAccounts');
-        if(row&&Array.isArray(row.value)&&row.value.length){
-          const seen=new Map();
-          row.value.forEach(s=>s.username&&seen.set(s.username.toLowerCase(),s));
-          staffAccounts.forEach(s=>{if(s.username&&!seen.has(s.username.toLowerCase()))seen.set(s.username.toLowerCase(),s);});
-          staffAccounts=[...seen.values()];
-          localStorage.setItem('amansala_staff',JSON.stringify(staffAccounts));
-        }
-      }
-      account=tryLogin();
-      if(!account){errEl.textContent='Incorrect username or password.';return;}
-      errEl.textContent='';
-      staffLoginComplete(account,MASTER);
-    }).catch(()=>{errEl.textContent='Incorrect username or password.';});
+    try{await refreshStaffFromSql();}catch(e){}
+    account=tryLogin();
+    if(!account){errEl.textContent='Incorrect username or password.';return;}
+    errEl.textContent='';
+    staffLoginComplete(account,MASTER);
     return;
   }
   staffLoginComplete(account,MASTER);
@@ -138,6 +160,7 @@ function initStaffLogin(){
   if(typeof IS_DRIVER_MODE!=='undefined'&&IS_DRIVER_MODE){initDriverMode();return;}
   if(typeof IS_STAFF_CONFIRM_MODE!=='undefined'&&IS_STAFF_CONFIRM_MODE){initStaffConfirmMode();return;}
   loadStaff();
+  refreshStaffFromSql(); // background — Manage Staff list & login stay current, not just the local cache
   let session=getCurrentSession();
   if(session){
     // Re-validate role: master accounts always get their correct role
@@ -274,8 +297,10 @@ function renderStaffList(){
 function copyStaffLogin(id){
   const s=staffAccounts.find(a=>a.id===id);if(!s)return;
   const url=window.location.origin+window.location.pathname;
-  const text=`Amansala Staff Portal Login\nURL: ${url}\nUsername: ${s.username}\nPassword: ${s.password}`;
-  navigator.clipboard.writeText(text).then(()=>showToast('Login info copied to clipboard!')).catch(()=>{
+  // Passwords are hashed server-side and can't be recovered — to share a login,
+  // set a new password via Edit first, then copy it before saving.
+  const text=`Amansala Staff Portal Login\nURL: ${url}\nUsername: ${s.username}\nPassword: (not retrievable — use Edit to set a new one, then share that)`;
+  navigator.clipboard.writeText(text).then(()=>showToast('Login info copied — set a new password via Edit to share one.')).catch(()=>{
     prompt('Copy this login info:',text);
   });
 }
@@ -293,12 +318,14 @@ function openEditStaff(id){
   document.getElementById('esId').value=s.id;
   document.getElementById('esName').value=s.name;
   document.getElementById('esUser').value=s.username;
-  document.getElementById('esPass').value=s.password;
+  const passEl=document.getElementById('esPass');
+  passEl.value=''; // password is hashed — can't be recovered/prefilled
+  passEl.placeholder='Leave blank to keep current password';
   document.getElementById('esRole').value=s.role;
   openModal('editStaffModal');
 }
 
-function saveStaffMember(){
+async function saveStaffMember(){
   try{
     const id=document.getElementById('esId')?document.getElementById('esId').value:'';
     const nameEl=document.getElementById('esName');
@@ -312,21 +339,26 @@ function saveStaffMember(){
     const role=roleEl.value;
     if(!name){showToast('Please enter a name.');return;}
     if(!username){showToast('Please enter a username.');return;}
-    if(!password){showToast('Please enter a password.');return;}
+    if(!id&&!password){showToast('Please enter a password.');return;} // required only when creating
+    let s;
     if(id){
-      const s=staffAccounts.find(a=>a.id===id);
-      if(s){s.name=name;s.username=username;s.password=password;s.role=role;}
+      s=staffAccounts.find(a=>a.id===id);
+      if(s){
+        s.name=name;s.username=username;s.role=role;
+        if(password)s.passwordHash=await hashPassword(password);
+      }
     }else{
-      staffAccounts.push({id:uid(),name,username,password,role,active:true});
+      s={id:uid(),name,username,passwordHash:await hashPassword(password),role,active:true};
+      staffAccounts.push(s);
     }
     localStorage.setItem('amansala_staff',JSON.stringify(staffAccounts));
     closeModal('editStaffModal');
     try{renderStaffList();}catch(e){console.warn('[staff] renderList:',e);}
     try{logActivity('Staff account '+(id?'updated':'added'),`${name} (@${username}, ${role})`,null);}catch(e){}
     showToast('Saving '+(id?'changes':'account')+'…');
-    db.from('app_store').upsert({key:'staffAccounts',value:staffAccounts,updated_at:new Date().toISOString()})
+    db.from('staff').upsert(appStaffToSqlRow(s))
       .then(({error})=>{
-        if(error)showToast('⚠️ Cloud sync failed — Kat may not be able to log in from another device. Try again.');
+        if(error)showToast('⚠️ Cloud sync failed — '+name+' may not be able to log in from another device. Try again.');
         else showToast('Staff member '+(id?'updated':'added')+': '+name+' ✓ Synced to cloud');
       }).catch(()=>showToast('⚠️ Cloud sync failed — staff account saved locally only.'));
   }catch(e){
