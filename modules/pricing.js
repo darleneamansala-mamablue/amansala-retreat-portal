@@ -42,7 +42,12 @@ function renderEstQuote(){
     const gc=reg?new Set((reg.guests||[]).filter(g=>g.name).map(g=>g.name.trim())).size:0;
     if(!gc)return;
     const _eCI=reg.checkIn||regSelBk.startDate;
-    const _eNights=(reg.checkIn&&reg.checkOut)?Math.max(1,Math.round((pd(reg.checkOut)-pd(reg.checkIn))/DAY_MS)):nights;
+    const _eNightsRaw=(reg.checkIn&&reg.checkOut)?Math.max(1,Math.round((pd(reg.checkOut)-pd(reg.checkIn))/DAY_MS)):nights;
+    // custom_nights_override/custom_tip_nights_override/custom_tip_rate_override: an admin-set
+    // billed-nights count for this registration, independent of the raw check-in/check-out span.
+    const _eNights=reg.customNightsOverride!=null?Number(reg.customNightsOverride):_eNightsRaw;
+    const _eTipNights=reg.customTipNightsOverride!=null?Number(reg.customTipNightsOverride):_eNights;
+    const _eTipRate=reg.customTipRateOverride!=null?Number(reg.customTipRateOverride):tipPer;
     const _isBd1Extra=rt.id==='bd1'&&reg.customRateOverride==null&&(gc>=2||_getSharedBeds(room).some(s=>blockedSet.has(s)&&(regByRoom[s]?.guests||[]).filter(g=>g.name).length>=2));
     const rate=reg.customRateOverride!=null?reg.customRateOverride:(_isBd1Extra?(isLowSeason(_eCI,_eNights)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):getRoomRate(rt,gc,_eCI,_eNights));
     const base=+(rate*gc*_eNights).toFixed(2);
@@ -50,7 +55,7 @@ function renderEstQuote(){
     const roomTax=+(base*roomTaxRate).toFixed(2);
     const pTax=+(pkgCost*pkgTaxRate).toFixed(2);
     const tax=+(roomTax+pTax).toFixed(2);
-    const tip=+(tipPer*gc*_eNights).toFixed(2);
+    const tip=+(_eTipRate*gc*_eTipNights).toFixed(2);
     const total=+(base+pkgCost+tax+tip).toFixed(2);
     const guestNames=[...new Set((reg.guests||[]).filter(g=>g.name).map(g=>g.name.trim()))].join(' & ');
     roomRows.push({room,rt,gc,rate,base,pkgCost,roomTax,pTax,tax,tip,total,guestNames,isTeacher:reg?.isTeacherRoom,regNights:_eNights});
@@ -87,6 +92,8 @@ function renderEstQuote(){
   // Right card: add-ons + grand total
   const eqDiscountAmt=+(regSelBk.eqDiscountAmt||0);
   const grandEstAfterDisc=+(grandEst-eqDiscountAmt).toFixed(2);
+  const totalPaid=(regSelBk.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
+  const estBalance=+(grandEstAfterDisc-totalPaid).toFixed(2);
 
   let addHtml=`<div style="display:flex;flex-direction:column;gap:14px">`;
   addHtml+=`<div class="eq-card"><div class="eq-card-title">Add-On Packages · ${estPax} guests</div>`;
@@ -111,6 +118,8 @@ function renderEstQuote(){
     ${IS_TEACHER_MODE?(eqDiscountAmt>0?`<div class="eq-row" style="color:#dc2626"><span>🏷 Discount</span><span style="color:#dc2626;font-weight:700">−${fmt$(eqDiscountAmt)}</span></div>`:''):`<div class="eq-row" style="color:#dc2626"><span style="display:flex;align-items:center;gap:6px">🏷 Discount $<input id="eqDiscountInput" type="number" min="0" step="0.01" value="${eqDiscountAmt||''}" placeholder="0" style="width:75px;padding:1px 5px;font-size:11px;border:1px solid #fca5a5;border-radius:4px;text-align:right;color:#dc2626;font-weight:700" onchange="setEqDiscountAmt(this.value)"></span><span style="color:#dc2626;font-weight:700">${eqDiscountAmt>0?`−${fmt$(eqDiscountAmt)}`:''}</span></div>`}
     <div style="border-top:2px solid #fcd34d;margin:8px 0"></div>
     <div class="eq-total" style="font-size:16px"><span>Est. Total Revenue</span><span style="color:var(--teal)">${fmt$(grandEstAfterDisc)}</span></div>
+    ${totalPaid>0?`<div class="eq-row" style="color:#16a34a"><span>✅ Paid</span><span>−${fmt$(totalPaid)}</span></div>
+    <div class="eq-total" style="font-size:15px;border-top:1px dashed #fcd34d;padding-top:6px"><span>Est. Balance Due</span><span style="color:${estBalance>0?'#dc2626':'#16a34a'}">${fmt$(estBalance)}</span></div>`:''}
   </div></div>`;
 
   document.getElementById('estQuoteBody').innerHTML=roomHtml+addHtml;
