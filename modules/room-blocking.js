@@ -74,6 +74,11 @@ async function openBlockModal(bkId){
   _blockModalOrigRooms=[...(bk.blockedRooms||[])];// snapshot BEFORE any Recover CB IDs could modify bk
   document.getElementById('blockModalSub').textContent=
     `${bk.leaderName||bk.retreatName} · ${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}${bk.pax?' · '+bk.pax+' estimated guests':''}`;
+  // Open the modal immediately with a loading placeholder — the Cloudbeds fetch below can
+  // take several seconds, and the modal used to stay invisible that whole time, making the
+  // button feel unresponsive/broken.
+  document.getElementById('blockModalBody').innerHTML='<div style="padding:50px 20px;text-align:center;color:var(--muted);font-size:13px">Loading room availability…</div>';
+  openModal('blockModal');
 
   // Fetch external Cloudbeds reservations for this booking's date range
   try{

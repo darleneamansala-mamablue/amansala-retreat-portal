@@ -162,7 +162,7 @@ function regRender(){
     const customBadge=hasBundle
       ?`<span style="background:#e0f2fe;color:#0e5a5a;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">bundle $${bundleDisplayPrice}/person</span>`
       :hasCustom?`<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">custom pricing</span>`:'';
-    const effectivePkgTotal=Math.round(calcPkgCost(regSelBk,1));
+    const effectivePkgTotal=+calcPkgCost(regSelBk,1).toFixed(2);
     const staffPriceBtn=!IS_TEACHER_MODE?`<button onclick="pkgTogglePriceEditor()" style="padding:3px 10px;font-size:11px;font-weight:600;color:#0e9494;background:#fff;border:1.5px solid #0e9494;border-radius:6px;cursor:pointer;font-family:inherit;margin-left:auto">✏ Custom Prices</button>`:'';
     // Extra (per-booking custom) packages
     const extraPkgs=regSelBk.extraPackages||[];
