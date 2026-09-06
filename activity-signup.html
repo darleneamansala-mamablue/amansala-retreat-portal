@@ -105,10 +105,13 @@ async function init(){
   const el=document.getElementById('mainContent');
   if(!bkId){el.innerHTML=`<div class="msg"><div class="msg-icon">❌</div><div class="msg-title">Invalid Link</div><div class="msg-sub">This link is missing a retreat ID. Please ask your retreat leader for the correct sign-up link.</div></div>`;return;}
   try{
-    const {data,error}=await db.from('app_store').select('value').eq('key','bookings').single();
-    if(error||!data){throw new Error('No data');}
-    const bookings=data.value||[];
-    bk=bookings.find(b=>b.id===bkId);
+    const {data:bkRow,error}=await db.from('bookings').select('*').eq('id',bkId).maybeSingle();
+    if(error)throw error;
+    bk=bkRow?{
+      id:bkRow.id,retreatName:bkRow.retreat_name,leaderName:bkRow.leader_name,
+      startDate:bkRow.start_date,endDate:bkRow.end_date,
+      retreatActivities:bkRow.retreat_activities,packages:bkRow.packages,
+    }:null;
     if(!bk){el.innerHTML=`<div class="msg"><div class="msg-icon">🔍</div><div class="msg-title">Retreat Not Found</div><div class="msg-sub">We couldn't find this retreat. The link may be outdated. Please contact your retreat leader.</div></div>`;return;}
     // Load existing signups
     const {data:sd}=await db.from('app_store').select('value').eq('key','act_signups_'+bkId).single();
