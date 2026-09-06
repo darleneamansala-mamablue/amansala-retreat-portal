@@ -4874,7 +4874,15 @@ function calcTeacherDiscount(bk,bkRegs){
   const totalCredit=results.reduce((s,t)=>s+t.credit,0);
   return{paidGuests,nights,tiers:results,totalCredit};
 }
-function calcBD(rt,gc,nights,dateStr,bk,reg){const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,nights);const base=rate*gc*nights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const tax=+(base*0.16+pkg*pkgTr).toFixed(2);const dip=getTip(bk)*gc*nights;return{rate,base:+base.toFixed(2),pkg:+pkg.toFixed(2),tax,dip,total:+(base+pkg+tax+dip).toFixed(2)};}
+function calcBD(rt,gc,nights,dateStr,bk,reg){
+  // custom_nights_override/custom_tip_nights_override/custom_tip_rate_override let an admin
+  // bill a guest's extended/shortened stay for fewer nights than the raw check-in/check-out
+  // date span implies (e.g. a comped or negotiated partial stay) — these live on the
+  // registration row itself, independent of whatever nights value the caller computed.
+  const rNights=reg?.customNightsOverride!=null?Number(reg.customNightsOverride):nights;
+  const tipNights=reg?.customTipNightsOverride!=null?Number(reg.customTipNightsOverride):rNights;
+  const tipRate=reg?.customTipRateOverride!=null?Number(reg.customTipRateOverride):getTip(bk);
+  const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,rNights);const base=rate*gc*rNights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const tax=+(base*0.16+pkg*pkgTr).toFixed(2);const dip=tipRate*gc*tipNights;return{rate,base:+base.toFixed(2),pkg:+pkg.toFixed(2),tax,dip,total:+(base+pkg+tax+dip).toFixed(2),nights:rNights,tipNights};}
 function togglePkg(aoId){
   if(!regSelBk)return;
   if(!regSelBk.packages)regSelBk.packages=[];

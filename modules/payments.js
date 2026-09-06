@@ -425,14 +425,19 @@ function _calcRoomRevenue(bk){
     const gc=reg?new Set((reg.guests||[]).filter(g=>g.name).map(g=>g.name.trim())).size:0;
     if(!gc)return;
     const _eCI=reg.checkIn||bk.startDate;
-    const _eNights=(reg.checkIn&&reg.checkOut)?Math.max(1,Math.round((pd(reg.checkOut)-pd(reg.checkIn))/DAY_MS)):nights;
+    const _eNightsRaw=(reg.checkIn&&reg.checkOut)?Math.max(1,Math.round((pd(reg.checkOut)-pd(reg.checkIn))/DAY_MS)):nights;
+    // custom_nights_override/custom_tip_nights_override/custom_tip_rate_override: an admin-set
+    // billed-nights count for this registration, independent of the raw check-in/check-out span.
+    const _eNights=reg.customNightsOverride!=null?Number(reg.customNightsOverride):_eNightsRaw;
+    const _eTipNights=reg.customTipNightsOverride!=null?Number(reg.customTipNightsOverride):_eNights;
+    const _eTipRate=reg.customTipRateOverride!=null?Number(reg.customTipRateOverride):tipPer;
     const _isBd1Extra=rt.id==='bd1'&&reg.customRateOverride==null&&(gc>=2||_getSharedBeds(room).some(s=>blockedSet.has(s)&&(regByRoom[s]?.guests||[]).filter(g=>g.name).length>=2));
     const rate=reg.customRateOverride!=null?reg.customRateOverride:(_isBd1Extra?(isLowSeason(_eCI,_eNights)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):getRoomRate(rt,gc,_eCI,_eNights));
     const base=+(rate*gc*_eNights).toFixed(2);
     const pkgCost=reg.customPkgPrice!=null?reg.customPkgPrice:(addOnItems.length?+(calcPkgCost(bk,gc)).toFixed(2):0);
     const roomTax=+(base*roomTaxRate).toFixed(2);
     const pTax=+(pkgCost*pkgTaxRate).toFixed(2);
-    const tip=+(tipPer*gc*_eNights).toFixed(2);
+    const tip=+(_eTipRate*gc*_eTipNights).toFixed(2);
     total+=+(base+pkgCost+roomTax+pTax+tip).toFixed(2);
   });
   const sr=bk.scheduleRequest;
