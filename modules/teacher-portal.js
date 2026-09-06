@@ -163,6 +163,9 @@ function regRender(){
       ?`<span style="background:#e0f2fe;color:#0e5a5a;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">bundle $${bundleDisplayPrice}/person</span>`
       :hasCustom?`<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">custom pricing</span>`:'';
     const effectivePkgTotal=+calcPkgCost(regSelBk,1).toFixed(2);
+    // Auto-expand whenever this retreat already has add-ons selected — matches staging's
+    // always-visible chip list; collapsed-by-default only makes sense for an empty selection.
+    const _pkgShowOpen=_pkgBarOpen||selPkgs.length>0;
     const staffPriceBtn=!IS_TEACHER_MODE?`<button onclick="pkgTogglePriceEditor()" style="padding:3px 10px;font-size:11px;font-weight:600;color:#0e9494;background:#fff;border:1.5px solid #0e9494;border-radius:6px;cursor:pointer;font-family:inherit;margin-left:auto">✏ Custom Prices</button>`:'';
     // Extra (per-booking custom) packages
     const extraPkgs=regSelBk.extraPackages||[];
@@ -183,9 +186,9 @@ function regRender(){
       pkgBar.innerHTML=`<div class="pkg-bar-hdr" style="display:flex;align-items:center;gap:8px">
         <span class="pkg-bar-title">Add-on Packages</span>
         <span class="pkg-bar-sub">${selPkgs.length?`${selPkgs.length} selected · $${effectivePkgTotal}/person`:'No add-on packages selected'}${contractBadgeHtml}${customBadge}</span>
-        <button id="pkgBarToggleBtn" onclick="pkgBarToggle()" title="View add-ons" style="margin-left:auto;background:${_pkgBarOpen?'#fef3c7':'#0e9494'};border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;color:${_pkgBarOpen?'#92400e':'#fff'};padding:6px 12px;font-family:'Jost',sans-serif;white-space:nowrap">${_pkgBarOpen?'▴ Hide Add-ons':'+ Add-ons'}</button>
+        <button id="pkgBarToggleBtn" onclick="pkgBarToggle()" title="View add-ons" style="margin-left:auto;background:${_pkgShowOpen?'#fef3c7':'#0e9494'};border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;color:${_pkgShowOpen?'#92400e':'#fff'};padding:6px 12px;font-family:'Jost',sans-serif;white-space:nowrap">${_pkgShowOpen?'▴ Hide Add-ons':'+ Add-ons'}</button>
       </div>
-      <div id="pkgBarBody" style="max-height:${_pkgBarOpen?'600px':'0'};overflow:${_pkgBarOpen?'visible':'hidden'}">
+      <div id="pkgBarBody" style="max-height:${_pkgShowOpen?'600px':'0'};overflow:${_pkgShowOpen?'visible':'hidden'}">
         ${selPkgs.length?`<div class="pkg-chips">${lockedChips}</div>`:''}
       </div>`;
     }else{
@@ -195,9 +198,9 @@ function regRender(){
         <span class="pkg-bar-sub">${selPkgs.length?`${selPkgs.length} selected · $${effectivePkgTotal}/person added to all rooms`:'Select packages — they will apply to every guest in this retreat'}${contractBadge}${customBadge}</span>
         ${staffPriceBtn}
         ${addCustomBtn}
-        <button id="pkgBarToggleBtn" onclick="pkgBarToggle()" title="View add-ons" style="background:${_pkgBarOpen?'#fef3c7':'#0e9494'};border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;color:${_pkgBarOpen?'#92400e':'#fff'};padding:6px 12px;font-family:'Jost',sans-serif;white-space:nowrap">${_pkgBarOpen?'▴ Hide Add-ons':'+ Add-ons'}</button>
+        <button id="pkgBarToggleBtn" onclick="pkgBarToggle()" title="View add-ons" style="background:${_pkgShowOpen?'#fef3c7':'#0e9494'};border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;color:${_pkgShowOpen?'#92400e':'#fff'};padding:6px 12px;font-family:'Jost',sans-serif;white-space:nowrap">${_pkgShowOpen?'▴ Hide Add-ons':'+ Add-ons'}</button>
       </div>
-      <div id="pkgBarBody" style="max-height:${_pkgBarOpen?'600px':'0'};overflow:${_pkgBarOpen?'visible':'hidden'}">
+      <div id="pkgBarBody" style="max-height:${_pkgShowOpen?'600px':'0'};overflow:${_pkgShowOpen?'visible':'hidden'}">
         <div class="pkg-chips">${ADD_ONS.filter(ao=>ao.price>0).map(ao=>{const on=selPkgs.includes(ao.id);const cp=customPrices[ao.id];const dispPrice=cp!=null?cp:ao.price;return`<button class="pkg-chip${on?' on':''}" onclick="togglePkg('${ao.id}')">${on?'<span class="pkg-check">✓</span>':''}${ao.name}<span class="pkg-price${cp!=null?' custom-price':''}">$${dispPrice}</span></button>`;}).join('')}${extraChips}</div>
         ${addCustomForm}
         <div id="pkgPriceEditor" style="display:none"></div>
