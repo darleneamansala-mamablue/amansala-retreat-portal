@@ -155,9 +155,10 @@ function regRender(){
     const fromContract=regSelBk.addOnsConfirmedAt&&selPkgs.length>0;
     pkgBar.style.display='block';
     const customPrices=regSelBk.packageCustomPrices||{};
-    const hasBundle=regSelBk.pkgBundle?.price!=null||regSelBk.pkgBundlePrice!=null;
+    const _cfgBundle=customPrices.__cfg__?.bundle;
+    const hasBundle=regSelBk.pkgBundle?.price!=null||regSelBk.pkgBundlePrice!=null||_cfgBundle?.price!=null;
     const hasCustom=hasBundle||Object.keys(customPrices).some(k=>selPkgs.includes(k));
-    const bundleDisplayPrice=regSelBk.pkgBundle?.price??regSelBk.pkgBundlePrice;
+    const bundleDisplayPrice=regSelBk.pkgBundle?.price??regSelBk.pkgBundlePrice??_cfgBundle?.price;
     const customBadge=hasBundle
       ?`<span style="background:#e0f2fe;color:#0e5a5a;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">bundle $${bundleDisplayPrice}/person</span>`
       :hasCustom?`<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">custom pricing</span>`:'';

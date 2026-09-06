@@ -4852,18 +4852,26 @@ function calcPkgItems(bk){
 }
 function calcPkgCost(bk,gc){
   if(!bk)return 0;
-  // Partial bundle: bundle.ids packages → bundle.price; remaining → individual rates
-  if(bk.pkgBundle&&bk.pkgBundle.price!=null&&(bk.pkgBundle.ids||[]).length){
-    const bundleIds=new Set(bk.pkgBundle.ids);
+  // Partial bundle: bundle.ids packages → bundle.price; remaining → individual rates.
+  // The real/current app stores this nested under packageCustomPrices.__cfg__.bundle
+  // rather than a top-level bk.pkgBundle — check bk.pkgBundle first (portal's own
+  // in-session editor writes there) and fall back to the persisted nested location.
+  const _bundle=bk.pkgBundle||bk.packageCustomPrices?.__cfg__?.bundle;
+  if(_bundle&&_bundle.price!=null&&(_bundle.ids||[]).length){
+    const bundleIds=new Set(_bundle.ids);
     const unbundled=calcPkgItems(bk).filter(a=>!bundleIds.has(a.id));
-    return(bk.pkgBundle.price+unbundled.reduce((s,a)=>s+a.price,0))*gc;
+    return(_bundle.price+unbundled.reduce((s,a)=>s+a.price,0))*gc;
   }
   // Legacy full bundle
   if(bk.pkgBundlePrice!=null)return bk.pkgBundlePrice*gc;
   return calcPkgItems(bk).reduce((s,a)=>s+a.price,0)*gc;
 }
 function getTip(bk){return(bk&&bk.tipPerNight!=null)?bk.tipPerNight:30;}
-function getBkTaxRate(bk){const r=bk?.taxRate;return(r===0||r===0.13||r===0.16)?r:0.16;}
+function getBkTaxRate(bk){
+  // Same nested-vs-top-level split as the package bundle above.
+  const r=bk?.taxRate??bk?.packageCustomPrices?.__cfg__?.taxRate;
+  return(r===0||r===0.13||r===0.16)?r:0.16;
+}
 function calcPrice(rt,gc,nights,dateStr,bk,reg){if(!rt||!nights)return 0;const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,nights);const base=rate*gc*nights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);return+(base*1.16+pkg*(1+pkgTr)+getTip(bk)*gc*nights).toFixed(2);}
 function calcTeacherDiscount(bk,bkRegs){
   const nights=getNights(bk);
