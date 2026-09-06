@@ -2,6 +2,9 @@
   publish = "."
   functions = "netlify/functions"
 
+[functions."cloudbeds"]
+  timeout = 26
+
 [[headers]]
   for = "/*.html"
   [headers.values]

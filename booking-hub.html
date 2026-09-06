@@ -4122,98 +4122,24 @@ async function syncToSupabase(){
     const lastAck=localStorage.getItem('amansala_clear_ack')||'';
     if(clearSig&&clearSig>lastAck)return; // not yet acknowledged — wait for loadFromSupabase to clear first
   }catch(e){}
+  // Bookings + registrations now live in the normalized SQL tables (same ones
+  // retreat-portal.html reads) instead of the legacy app_store blob — upsert every
+  // in-memory row directly; deletions are real SQL deletes so they're permanent
+  // across every device (no more JS-side field-by-field merge arbitration needed).
   try{
-    // Step 0: merge Supabase's deletedBookingIds with local so deletions from ANY device are permanent.
-    // Without this, a stale device pushes its smaller set back and resurrects deleted retreats.
-    let mergedDeletedIds=new Set(deletedBookingIds);
-    try{
-      const {data:delData}=await db.from('app_store').select('value').eq('key','deletedBookingIds').single();
-      if(delData?.value&&Array.isArray(delData.value))delData.value.forEach(id=>mergedDeletedIds.add(id));
-    }catch(e){}
-
-    // Step 1: merge authoritative Supabase FIELDS into existing local bookings only
-    // (higher pipeline status, newer teacher submission, payments etc.)
-    // IMPORTANT: do NOT add Supabase-only records to local bookings here —
-    // that is loadFromSupabase's job. Mutating bookings in a fire-and-forget
-    // background save causes state contamination in the schedule/add-ons/approval flows.
-    let bkToSave=AppData.bookings.filter(b=>!mergedDeletedIds.has(b.id));
-    try{
-      const {data}=await db.from('app_store').select('key,value').eq('key','bookings');
-      if(data&&data[0]&&Array.isArray(data[0].value)){
-        const supaBookings=data[0].value;
-        const supaMap=new Map(supaBookings.map(b=>[b.id,b]));
-        const bkRank=s=>(['requested','contract_sent','contract_signed','deposit_paid','room_list_sent','confirmed'].indexOf(s||'requested'));
-        // Merge authoritative Supabase fields into local bookings (field-level only, no new records)
-        bkToSave=bkToSave.map(bk=>{
-          const sb=supaMap.get(bk.id);if(!sb)return bk;
-          const supaSubAt=sb.scheduleRequest?.submittedAt||'';
-          const localSubAt=bk.scheduleRequest?.submittedAt||'';
-          if(supaSubAt>localSubAt)bk.scheduleRequest=sb.scheduleRequest;
-          // retreatActivities changes independently of scheduleRequest (e.g. admin
-          // auto-assign) — don't let a stale local copy overwrite a newer Supabase one.
-          const supaActUp=sb.retreatActivitiesUpdatedAt||'';
-          const localActUp=bk.retreatActivitiesUpdatedAt||'';
-          if(supaActUp>localActUp)bk.retreatActivities=sb.retreatActivities;
-          if(bkRank(sb.status)>bkRank(bk.status)){
-            bk.status=sb.status;
-            bk.statusChangedAt=sb.statusChangedAt||bk.statusChangedAt;
-            if(sb.contractSignedAt){bk.contractSignedAt=sb.contractSignedAt;bk.contractSignature=sb.contractSignature;}
-            if(sb.depositInvoice&&bkRank(sb.status)>=bkRank('contract_signed'))bk.depositInvoice=sb.depositInvoice;
-            if((sb.payments||[]).length>(bk.payments||[]).length)bk.payments=sb.payments;
-          }
-          // Never let a stale local device push rooms/unblocks over a newer edit already in Supabase
-          // (was comparing bk.rooms/sb.rooms — not a real field; blockedRooms is the actual field name).
-          const _sbBRAt2=sb.blockedRoomsUpdatedAt||'',_bkBRAt2=bk.blockedRoomsUpdatedAt||'';
-          if(_sbBRAt2||_bkBRAt2){
-            if(_sbBRAt2>_bkBRAt2){bk.blockedRooms=sb.blockedRooms;bk.blockedRoomsUpdatedAt=sb.blockedRoomsUpdatedAt;}
-          }else if((sb.blockedRooms||[]).length>(bk.blockedRooms||[]).length)bk.blockedRooms=sb.blockedRooms;
-          // CB IDs: if Supabase has more, restore them (guards against local ID loss)
-          if(Object.keys(sb.cbReservationIds||{}).length>Object.keys(bk.cbReservationIds||{}).length)bk.cbReservationIds=sb.cbReservationIds;
-          if(!bk.cbAllotmentBlockCode&&sb.cbAllotmentBlockCode)bk.cbAllotmentBlockCode=sb.cbAllotmentBlockCode;
-          return bk;
-        });
-        // Step 2: for the Supabase WRITE, also include records other users added
-        // (bookings in Supabase that are not in local and not deleted)
-        // These are appended only to the write payload — NOT to the local bookings array.
-        const localIds=new Set(bkToSave.map(b=>b.id));
-        const supabaseOnlyToPreserve=supaBookings.filter(sb=>!localIds.has(sb.id)&&!mergedDeletedIds.has(sb.id));
-        bkToSave=[...bkToSave,...supabaseOnlyToPreserve];
-      }
-    }catch(e){}
-    // Step 3: merge deletedRegIds with Supabase so reg deletions from any device are permanent.
-    let mergedDeletedRegIds=new Set(deletedRegIds);
-    try{
-      const {data:drData}=await db.from('app_store').select('value').eq('key','deletedRegIds').single();
-      if(drData?.value&&Array.isArray(drData.value))drData.value.forEach(id=>mergedDeletedRegIds.add(id));
-    }catch(e){}
-    // Step 4: merge regs — keep whichever device has more, but always exclude deleted reg IDs.
-    let regsToSave=AppData.regs.filter(r=>!mergedDeletedIds.has(r.bookingId)&&!mergedDeletedRegIds.has(r.id));
-    try{
-      const {data:regsData}=await db.from('app_store').select('value').eq('key','regs').single();
-      if(regsData?.value&&Array.isArray(regsData.value)){
-        const supaRegs=regsData.value.filter(r=>!mergedDeletedIds.has(r.bookingId)&&!mergedDeletedRegIds.has(r.id));
-        // ID-based union: newer updatedAt wins; Supabase fills in IDs not present locally.
-        const localById=new Map(regsToSave.map(r=>[r.id,r]));
-        supaRegs.forEach(r=>{
-          if(!localById.has(r.id)){localById.set(r.id,r);}
-          else{
-            const local=localById.get(r.id);
-            const supaTs=r.updatedAt||'';const localTs=local.updatedAt||'';
-            if(supaTs>localTs){
-              localById.set(r.id,r);
-              // Also update live memory so current session picks up the change without full reload
-              const liveReg=AppData.regs.find(x=>x.id===r.id);if(liveReg)Object.assign(liveReg,r);
-            }
-          }
-        });
-        regsToSave=[...localById.values()];
-      }
-    }catch(e){}
+    const bkRows=AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).map(appBookingToSqlRow);
+    if(bkRows.length)await db.from('bookings').upsert(bkRows);
+    if(deletedBookingIds.size)await db.from('bookings').delete().in('id',[...deletedBookingIds]);
+    const regRows=AppData.regs.filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId)).map(appRegToSqlRow);
+    if(regRows.length)await db.from('registrations').upsert(regRows);
+    if(deletedRegIds.size)await db.from('registrations').delete().in('id',[...deletedRegIds]);
+  }catch(e){console.warn('SQL bookings/registrations sync failed:',e);}
+  // Everything else (venRows, room types, staff, program blocks, etc.) stays on the
+  // legacy app_store blob for now — out of scope for this phase.
+  try{
     await db.from('app_store').upsert([
-      {key:'bookings',          value:bkToSave,                updated_at:new Date().toISOString()},
-      {key:'deletedBookingIds', value:[...mergedDeletedIds],      updated_at:new Date().toISOString()},
-      {key:'deletedRegIds',     value:[...mergedDeletedRegIds],  updated_at:new Date().toISOString()},
-      {key:'regs',              value:regsToSave,                updated_at:new Date().toISOString()},
+      {key:'deletedBookingIds', value:[...deletedBookingIds],  updated_at:new Date().toISOString()},
+      {key:'deletedRegIds',     value:[...deletedRegIds],      updated_at:new Date().toISOString()},
       {key:'venRows',           value:AppData.venRows,                 updated_at:new Date().toISOString()},
       {key:'programBlocks',     value:AppData.programBlocks,           updated_at:new Date().toISOString()},
       {key:'specialEvents',     value:AppData.specialEvents,           updated_at:new Date().toISOString()},
@@ -4225,6 +4151,35 @@ async function syncToSupabase(){
 async function syncRoomTypesToSupabase(){
   try{await db.from('app_store').upsert({key:'roomTypes',value:AppData.roomTypes,updated_at:new Date().toISOString()});}
   catch(e){console.warn('Room type sync failed:',e);}
+}
+
+// ── SQL <-> app-object field mapping for bookings/registrations (Phase 1 of the
+// move off the legacy app_store blob — see loadFromSupabase/syncToSupabase). The
+// SQL tables are the authoritative, actively-used data (same ones retreat-portal.html
+// already reads); the blob is legacy and increasingly stale, so no field-level merge
+// is needed here — SQL simply wins outright, same as retreat-portal.html already treats it.
+const _BOOKING_COL_TO_FIELD={venue_row:'row'};
+const _BOOKING_FIELD_TO_COL={row:'venue_row'};
+function _s2c(s){return s.replace(/_([a-z0-9])/g,(_,c)=>c.toUpperCase());}
+function _c2s(s){return s.replace(/([A-Z])/g,c=>'_'+c.toLowerCase());}
+const _BOOKING_COLUMNS=['id','leader_name','retreat_name','leader_email','leader_phone','start_date','end_date','venue_row','pax','status','notes','doc_link','meal_plan','blocked_rooms','packages','package_custom_prices','add_ons_confirmed_at','retreat_activities','contract_sent_at','contract_sent_via_portal','contract_signed_at','contract_signature','final_payment_requested','final_payment_date','deposit_invoice','deposit_invoice_sent_at','schedule_request','flags','status_changed_at','cancelled_at','cancelled_within_16_weeks','cancellation_fee','deposit_at_cancellation','cb_allotment_block_code','cb_reservation_ids','cb_guest_ids','cb_adjustment_ids','cb_note_ids','all_locked','contract_notes','tip_per_night','package_ids'];
+const _REG_COLUMNS=['id','booking_id','room','room_type_id','guests','custom_price','custom_rate_override','custom_pkg_price','amount_paid','is_teacher_room','locked','check_in','check_out','notes','custom_nights_override','custom_tip_nights_override','checked_in_at','checked_out_at','custom_tip_rate_override'];
+function sqlBookingToApp(row){const bk={};for(const col in row){bk[_BOOKING_COL_TO_FIELD[col]||_s2c(col)]=row[col];}return bk;}
+function appBookingToSqlRow(bk){const row={};_BOOKING_COLUMNS.forEach(col=>{const field=_BOOKING_COL_TO_FIELD[col]||_s2c(col);row[col]=bk[field]!==undefined?bk[field]:null;});return row;}
+function sqlRegToApp(row){const r={};for(const col in row) r[_s2c(col)]=row[col];return r;}
+function appRegToSqlRow(r){const row={};_REG_COLUMNS.forEach(col=>{const field=_s2c(col);row[col]=r[field]!==undefined?r[field]:null;});return row;}
+async function _fetchAllRows(table,pageSize){
+  pageSize=pageSize||1000;
+  let all=[],from=0;
+  while(true){
+    const{data,error}=await db.from(table).select('*').range(from,from+pageSize-1);
+    if(error)throw error;
+    if(!data||!data.length)break;
+    all=all.concat(data);
+    if(data.length<pageSize)break;
+    from+=pageSize;
+  }
+  return all;
 }
 
 async function loadFromSupabase(){
@@ -4250,103 +4205,25 @@ async function loadFromSupabase(){
       // Persist to localStorage so hard refresh also filters immediately (before next Supabase load)
       localStorage.setItem('amansala_deleted_booking_ids',JSON.stringify([...deletedBookingIds]));
     }
-    if(store.bookings!==undefined){
-      // Merge: Supabase wins for known IDs, but prefer local scheduleRequest if it was submitted more recently
-      const supaIds=new Set((store.bookings||[]).map(b=>b.id));
-      const localOnly=AppData.bookings.filter(b=>!supaIds.has(b.id)&&!deletedBookingIds.has(b.id));
-      const merged=(store.bookings||[]).filter(b=>!deletedBookingIds.has(b.id)).map(sb=>{
-        const local=AppData.bookings.find(b=>b.id===sb.id);
-        if(!local)return sb;
-        const supaSubAt=sb.scheduleRequest?.submittedAt||'';
-        const localSubAt=local.scheduleRequest?.submittedAt||'';
-        const statusRank=s=>({confirmed:3,changes:2,pending:1}[s]||0);
-        // Pick the schedule with the newer teacher submission; if equal, prefer local
-        let chosen=supaSubAt>localSubAt?{...sb}:{...sb,scheduleRequest:{...(local.scheduleRequest||{})}};
-        // retreatActivities has its own timestamp — it changes independently of
-        // scheduleRequest (e.g. admin auto-assign), so it must not ride on submittedAt.
-        const supaActUp=sb.retreatActivitiesUpdatedAt||'';
-        const localActUp=local.retreatActivitiesUpdatedAt||'';
-        if(localActUp>supaActUp)chosen.retreatActivities=local.retreatActivities;
-        else if(!chosen.retreatActivities)chosen.retreatActivities=local.retreatActivities||sb.retreatActivities;
-        // Always keep the highest adminStatus from either source (never downgrade a confirmation)
-        const bestStatus=statusRank(sb.scheduleRequest?.adminStatus)>=statusRank(local.scheduleRequest?.adminStatus)?sb.scheduleRequest?.adminStatus:local.scheduleRequest?.adminStatus;
-        if(chosen.scheduleRequest&&bestStatus)chosen.scheduleRequest.adminStatus=bestStatus;
-        // Preserve local fields if Supabase doesn't have them yet (race condition guard)
-        const bkStatusRank=s=>(['requested','contract_sent','contract_signed','deposit_paid','room_list_sent','confirmed'].indexOf(s||'requested'));
-        if(bkStatusRank(local.status)>bkStatusRank(sb.status)){
-          chosen.status=local.status;
-          chosen.statusChangedAt=local.statusChangedAt||chosen.statusChangedAt;
-          if(local.contractSignedAt)chosen.contractSignedAt=local.contractSignedAt;
-          if(local.contractSignature)chosen.contractSignature=local.contractSignature;
-          if(local.depositInvoice)chosen.depositInvoice=local.depositInvoice;
-          if(local.payments&&local.payments.length>=(sb.payments||[]).length)chosen.payments=local.payments;
-          if(local.roomListSentViaPortal)chosen.roomListSentViaPortal=local.roomListSentViaPortal;
-          if(local.roomListSentAt)chosen.roomListSentAt=local.roomListSentAt;
-          if(local.finalInvoicePaid)chosen.finalInvoicePaid=local.finalInvoicePaid;
-        }
-        // Preserve allLocked from local if Supabase doesn't have it yet (admin preview race condition)
-        if(local.allLocked!==undefined&&sb.allLocked===undefined)chosen.allLocked=local.allLocked;
-        // blockedRooms: prefer whichever side has the NEWER edit timestamp — a plain
-        // "keep whichever has more rooms" heuristic silently undoes unblocking a room,
-        // since removing rooms always looks "less safe" than the old, larger list.
-        // Fall back to the old length-based heuristic only for older records saved
-        // before blockedRoomsUpdatedAt existed.
-        const _localBRAt=local.blockedRoomsUpdatedAt||'';
-        const _sbBRAt=sb.blockedRoomsUpdatedAt||'';
-        if(_localBRAt||_sbBRAt){
-          if(_localBRAt>_sbBRAt)chosen.blockedRooms=local.blockedRooms,chosen.blockedRoomsUpdatedAt=local.blockedRoomsUpdatedAt;
-        }else if((local.blockedRooms||[]).length>(sb.blockedRooms||[]).length)chosen.blockedRooms=local.blockedRooms;
-        // CB IDs: use whichever has MORE entries (local wins on ties — protects against
-        // realtime-before-save race; Supabase wins if it has more — recovers IDs lost locally)
-        const _localCbN=Object.keys(local.cbReservationIds||{}).length;
-        const _sbCbN=Object.keys(sb.cbReservationIds||{}).length;
-        chosen.cbReservationIds=_sbCbN>_localCbN?sb.cbReservationIds:(local.cbReservationIds!==undefined?local.cbReservationIds:sb.cbReservationIds);
-        chosen.cbGuestIds=local.cbGuestIds!==undefined?local.cbGuestIds:sb.cbGuestIds;
-        chosen.cbAdjustmentIds=local.cbAdjustmentIds!==undefined?local.cbAdjustmentIds:sb.cbAdjustmentIds;
-        chosen.cbNoteIds=local.cbNoteIds!==undefined?local.cbNoteIds:sb.cbNoteIds;
-        // Block code: prefer local if set; fall back to Supabase if local is empty
-        chosen.cbAllotmentBlockCode=local.cbAllotmentBlockCode||sb.cbAllotmentBlockCode||null;
-        chosen.cbEventId=local.cbEventId||sb.cbEventId||null;
-        // In admin preview: sessionStorage overrides Supabase merge result for lock state
-        const _previewLockedId=sessionStorage.getItem('ama_preview_locked_bk');
-        if(_previewLockedId&&chosen.id===_previewLockedId)chosen.allLocked=true;
-        return chosen;
-      });
-      AppData.bookings=[...merged,...localOnly];
-      // Keep regSelBk pointing at the fresh object in the new bookings array
+    if(Array.isArray(store.deletedRegIds)){
+      store.deletedRegIds.forEach(id=>deletedRegIds.add(id));
+    }
+    // Bookings + registrations: read straight from the normalized SQL tables — this is
+    // the same live data retreat-portal.html already reads, and it's kept current by
+    // active daily use, unlike the legacy app_store blob below. SQL wins outright.
+    try{
+      const [sqlBookings,sqlRegs]=await Promise.all([_fetchAllRows('bookings'),_fetchAllRows('registrations')]);
+      AppData.bookings=sqlBookings.map(sqlBookingToApp).filter(b=>!deletedBookingIds.has(b.id));
+      AppData.regs=sqlRegs.map(sqlRegToApp).filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId));
       if(typeof regSelBk!=='undefined'&&regSelBk){
         const _synced=AppData.bookings.find(b=>b.id===regSelBk.id);
         if(_synced){
-          // Carry over any in-memory-only fields that weren't persisted yet
           if(regSelBk.showRealRooms!==undefined&&_synced.showRealRooms===undefined)_synced.showRealRooms=regSelBk.showRealRooms;
           if(regSelBk.allLocked!==undefined&&_synced.allLocked===undefined)_synced.allLocked=regSelBk.allLocked;
           regSelBk=_synced;
         }
       }
-      // Merge pending inquiries (written by leader-inquiry.html to a separate key,
-      // never overwritten by syncToSupabase — avoids the write race condition)
-      if(Array.isArray(store.inquiries)){
-        const existingIds=new Set(AppData.bookings.map(b=>b.id));
-        store.inquiries.filter(b=>!deletedBookingIds.has(b.id)&&!existingIds.has(b.id))
-          .forEach(b=>AppData.bookings.push(b));
-      }
-    }
-    if(Array.isArray(store.deletedRegIds)){
-      store.deletedRegIds.forEach(id=>deletedRegIds.add(id));
-    }
-    if(store.regs!==undefined){
-      // Merge: newer updatedAt wins; local-only regs are always kept — never restore deleted regs
-      const localById=new Map(AppData.regs.filter(r=>!deletedRegIds.has(r.id)).map(r=>[r.id,r]));
-      (store.regs||[]).filter(r=>!deletedRegIds.has(r.id)).forEach(sr=>{
-        const local=localById.get(sr.id);
-        if(!local){localById.set(sr.id,sr);}
-        else{
-          const supaTs=sr.updatedAt||'';const localTs=local.updatedAt||'';
-          if(supaTs>localTs)localById.set(sr.id,sr);
-        }
-      });
-      AppData.regs=[...localById.values()];
-    }
+    }catch(e){console.warn('SQL bookings/registrations load failed — keeping previous in-memory data:',e);}
     if(store.venRows       !==undefined) AppData.venRows       =store.venRows;
     if(store.roomTypes!==undefined){
       AppData.roomTypes=store.roomTypes;
