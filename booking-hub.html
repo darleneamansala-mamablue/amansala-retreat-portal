@@ -4126,33 +4126,44 @@ async function syncToSupabase(){
   // retreat-portal.html reads) instead of the legacy app_store blob — upsert every
   // in-memory row directly; deletions are real SQL deletes so they're permanent
   // across every device (no more JS-side field-by-field merge arbitration needed).
-  try{
-    const bkRows=AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).map(appBookingToSqlRow);
-    if(bkRows.length)await db.from('bookings').upsert(bkRows);
-    if(deletedBookingIds.size)await db.from('bookings').delete().in('id',[...deletedBookingIds]);
-    const regRows=AppData.regs.filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId)).map(appRegToSqlRow);
-    if(regRows.length)await db.from('registrations').upsert(regRows);
-    if(deletedRegIds.size)await db.from('registrations').delete().in('id',[...deletedRegIds]);
-    // payments is a separate table (booking_id FK) — flatten every booking's embedded
-    // payments array back out into rows. Payments are only ever added, never removed
-    // through the UI, so a plain upsert (no delete pass) is safe here.
-    const payRows=[];
-    AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
-    if(payRows.length)await db.from('payments').upsert(payRows);
-  }catch(e){console.warn('SQL bookings/registrations sync failed:',e);}
+  const _bkRegSync=(async()=>{
+    try{
+      const bkRows=AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).map(appBookingToSqlRow);
+      const regRows=AppData.regs.filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId)).map(appRegToSqlRow);
+      // payments is a separate table (booking_id FK) — flatten every booking's embedded
+      // payments array back out into rows. Payments are only ever added, never removed
+      // through the UI, so a plain upsert (no delete pass) is safe here.
+      const payRows=[];
+      AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
+      // These calls are all independent (different tables / disjoint id sets), so run them
+      // concurrently instead of one-at-a-time — a save was taking the SUM of every round-trip
+      // (each re-upserting the full bookings/registrations arrays), now it takes the MAX.
+      await Promise.all([
+        bkRows.length?db.from('bookings').upsert(bkRows):null,
+        deletedBookingIds.size?db.from('bookings').delete().in('id',[...deletedBookingIds]):null,
+        regRows.length?db.from('registrations').upsert(regRows):null,
+        deletedRegIds.size?db.from('registrations').delete().in('id',[...deletedRegIds]):null,
+        payRows.length?db.from('payments').upsert(payRows):null,
+      ]);
+    }catch(e){console.warn('SQL bookings/registrations sync failed:',e);}
+  })();
   // Everything else (venRows, room types, staff, program blocks, etc.) stays on the
-  // legacy app_store blob for now — out of scope for this phase.
-  try{
-    await db.from('app_store').upsert([
-      {key:'deletedBookingIds', value:[...deletedBookingIds],  updated_at:new Date().toISOString()},
-      {key:'deletedRegIds',     value:[...deletedRegIds],      updated_at:new Date().toISOString()},
-      {key:'venRows',           value:AppData.venRows,                 updated_at:new Date().toISOString()},
-      {key:'programBlocks',     value:AppData.programBlocks,           updated_at:new Date().toISOString()},
-      {key:'specialEvents',     value:AppData.specialEvents,           updated_at:new Date().toISOString()},
-      {key:'staffAccounts',     value:staffAccounts,           updated_at:new Date().toISOString()},
-      {key:'teacher_messages',  value:AppData.teacherMessages,         updated_at:new Date().toISOString()},
-    ]);
-  }catch(e){console.warn('Supabase sync failed:',e);}
+  // legacy app_store blob for now — out of scope for this phase. Runs concurrently
+  // with the SQL sync above (different tables, nothing depends on the other).
+  const _blobSync=(async()=>{
+    try{
+      await db.from('app_store').upsert([
+        {key:'deletedBookingIds', value:[...deletedBookingIds],  updated_at:new Date().toISOString()},
+        {key:'deletedRegIds',     value:[...deletedRegIds],      updated_at:new Date().toISOString()},
+        {key:'venRows',           value:AppData.venRows,                 updated_at:new Date().toISOString()},
+        {key:'programBlocks',     value:AppData.programBlocks,           updated_at:new Date().toISOString()},
+        {key:'specialEvents',     value:AppData.specialEvents,           updated_at:new Date().toISOString()},
+        {key:'staffAccounts',     value:staffAccounts,           updated_at:new Date().toISOString()},
+        {key:'teacher_messages',  value:AppData.teacherMessages,         updated_at:new Date().toISOString()},
+      ]);
+    }catch(e){console.warn('Supabase sync failed:',e);}
+  })();
+  await Promise.all([_bkRegSync,_blobSync]);
 }
 async function syncRoomTypesToSupabase(){
   try{
