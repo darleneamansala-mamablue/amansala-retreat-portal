@@ -269,7 +269,14 @@ function regRender(){
   const panel=document.getElementById('regPanel');
   panel.innerHTML='';
 
-  autoAssignTeacherRoom(regSelBk);
+  // DISABLED 2026-09-06: auto-injects a new "Garden Basic" registration + blocks a room every
+  // time this view loads, for any retreat whose real teacher registration isn't flagged
+  // is_teacher_room=true (true for most retreats created via the current app, which doesn't
+  // set that flag the same way) — was silently corrupting real bookings on every page view
+  // (confirmed: created a comped-in-name-only phantom room that still billed at full rate,
+  // since calcBD never checks reg.customPrice for teacher rooms). Needs a real fix before
+  // re-enabling — do not just uncomment this.
+  // autoAssignTeacherRoom(regSelBk);
   const blockedSet=new Set(regSelBk.blockedRooms||[]);
   // If a virtual-group parent room (rt8/rt9) is in blockedRooms, also add its sub-rooms so bd3/bd4 entries pass the filter
   AppData.roomTypes.forEach(vrt=>{if(!VIRTUAL_GROUP_RT_IDS.has(vrt.id))return;(vrt.rooms||[]).forEach(r=>{if(blockedSet.has(r))_getSharedBeds(r).forEach(s=>blockedSet.add(s));});});
