@@ -74,18 +74,34 @@ async function openBlockModal(bkId){
   _blockModalOrigRooms=[...(bk.blockedRooms||[])];// snapshot BEFORE any Recover CB IDs could modify bk
   document.getElementById('blockModalSub').textContent=
     `${bk.leaderName||bk.retreatName} · ${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}${bk.pax?' · '+bk.pax+' estimated guests':''}`;
-  // Open the modal immediately with a loading placeholder — the Cloudbeds fetch below can
-  // take several seconds, and the modal used to stay invisible that whole time, making the
-  // button feel unresponsive/broken.
-  document.getElementById('blockModalBody').innerHTML='<div style="padding:50px 20px;text-align:center;color:var(--muted);font-size:13px">Loading room availability…</div>';
   openModal('blockModal');
+  // Render immediately using whatever conflict data we already have — internal-conflict
+  // checking (other retreats' blockedRooms) is instant. External Cloudbeds conflicts
+  // (walk-ins/OTAs) patch in a moment later below once that slower external API call
+  // resolves — same 2-step pattern the current app's own Rooms calendar already uses.
+  _renderBlockRoomsGrid(bkId);
 
   // Fetch external Cloudbeds reservations for this booking's date range
   try{
     const extResp=await fetch('/.netlify/functions/cloudbeds?action=getExternalReservations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startDate:bk.startDate,endDate:bk.endDate})});
     const extData=await extResp.json();
-    if(extData?.success)externalReservations=extData.reservations||[];
+    if(extData?.success){
+      externalReservations=extData.reservations||[];
+      // Only re-render if this same booking's modal is still the one open (admin may have
+      // already closed it or opened a different retreat by the time this resolves).
+      if(blockEditBkId===bkId)_renderBlockRoomsGrid(bkId);
+    }
   }catch(e){console.warn('[openBlockModal] ext fetch failed',e);}
+}
+
+function _renderBlockRoomsGrid(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);
+  if(!bk)return;
+  // Preserve any not-yet-saved checkbox changes across a re-render (checking a box only
+  // updates the DOM until "Save" is clicked — it doesn't touch bk.blockedRooms) by reading
+  // the currently-checked rooms back out before rebuilding the grid from scratch.
+  const _existingGrid=document.getElementById('blockModalBody');
+  const _domChecked=_existingGrid?Array.from(_existingGrid.querySelectorAll('input[type=checkbox]:checked')).map(cb=>JSON.parse(cb.closest('.block-room-item')?.dataset.physical||'[]')).flat():null;
 
   // rooms blocked by other overlapping retreats
   const conflictMap=new Map();
@@ -108,7 +124,7 @@ async function openBlockModal(bkId){
     });
   });
 
-  const myBlocked=new Set(bk.blockedRooms||[]);
+  const myBlocked=new Set(_domChecked&&_domChecked.length?_domChecked:(bk.blockedRooms||[]));
   // Virtual group rooms (rt8/rt9): expand "11" → individual beds "11a/b/c/d" in block display.
   // Guard: only expand rooms that are actual virtual-group parents (rt8/rt9) — prevents
   // pure-number rooms like "3" from being incorrectly removed when "3B" is also in the block.
@@ -253,7 +269,6 @@ async function openBlockModal(bkId){
   }
 
   blockUpdateCount();
-  openModal('blockModal');
 }
 
 function blockSetChecked(cb,on,silent){
