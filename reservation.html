@@ -39,8 +39,6 @@
   </div>
 
 <script>
-const SUPA_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
-const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
 const token = new URLSearchParams(location.search).get('token');
 
 function fmtUSD(n) { return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -48,34 +46,31 @@ function fmtDate(s) { if (!s) return ''; const [y,m,d] = s.split('-'); return `$
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // This page is looked up by a long random token, never by the booking's
-// internal database id — the id, staff notes, and every other guest's
-// booking never leave this one match. (The underlying data store is one
-// JSON blob per key, so the full bookings array does transit over the
-// network to render this page — a known constraint of this app's storage
-// model, not something unique to this page. Nothing beyond the fields
-// below is ever placed into the rendered page.)
+// internal database id. get-booking-summary.js resolves the token server-side
+// (using the service key) and returns only the fields rendered below — staff
+// notes and every other guest's booking never leave the server.
 async function init() {
   const content = document.getElementById('content');
   if (!token) { content.innerHTML = '<div class="state">Missing reservation link. Please use the link sent to you.</div>'; return; }
 
   let bk;
   try {
-    const res = await fetch(`${SUPA_URL}/rest/v1/app_store?key=eq.bookings&select=value`, { headers: { apikey: SUPA_ANON } });
-    const rows = await res.json();
-    const bookings = rows[0]?.value ?? [];
-    bk = bookings.find(b => b.guestResToken === token);
-  } catch (e) { /* fall through to error below */ }
+    const res = await fetch('/.netlify/functions/get-booking-summary', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    bk = await res.json();
+    if (!res.ok || bk.error) { content.innerHTML = '<div class="state">We couldn\'t find this reservation. Please contact us.</div>'; return; }
+  } catch (e) {
+    content.innerHTML = '<div class="state">We couldn\'t find this reservation. Please contact us.</div>'; return;
+  }
 
-  if (!bk) { content.innerHTML = '<div class="state">We couldn\'t find this reservation. Please contact us.</div>'; return; }
-
-  const roomTotal = bk.roomRateTotal || 0;
-  const chargesTotal = (bk.charges||[]).reduce((s,c) => s + (c.amount||0), 0);
-  const total = +(roomTotal + chargesTotal).toFixed(2);
-  const paid = (bk.payments||[]).reduce((s,p) => s + (p.amount||0), 0);
+  const total = bk.total || 0;
+  const paid = bk.paid || 0;
   const balance = +(total - paid).toFixed(2);
   const isPaid = balance <= 0;
-  const additionalGuests = (bk.folioSplit?.mode === 'separate') ? bk.folioSplit.guestNames.slice(1) : [];
-  const nights = bk.roomRateNights || 0;
+  const additionalGuests = bk.additionalGuests || [];
+  const nights = bk.nights || 0;
 
   const dueDate = new Date((bk.startDate||'') + 'T00:00:00');
   dueDate.setDate(dueDate.getDate() - 42);
