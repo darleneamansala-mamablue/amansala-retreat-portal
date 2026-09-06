@@ -4205,7 +4205,11 @@ function appPaymentToSqlRow(p,bookingId){const row={};_PAYMENT_COLUMNS.forEach(c
 // room_types: the price columns don't follow the plain snake_case->camelCase pattern
 // (e.g. price_single_high -> price1, price_double_low -> price2_low), so this one
 // needs an explicit column map rather than the generic converter.
-const _ROOMTYPE_COL_MAP={id:'id',name:'name',property:'property',color:'color',max_occ:'maxOcc',description:'desc',price_single_high:'price1',price_single_low:'price1_low',price_double_high:'price2',price_double_low:'price2_low',rooms:'rooms',cb_room_type_id:'cbRoomTypeId',be_enabled:'beEnabled',be_photos:'bePhotos',be_description:'beDescription',be_amenities:'beAmenities',be_price_single:'bePriceSingle',be_price_double:'bePriceDouble',be_included_occ:'beIncludedOcc',be_extra_adult_price:'beExtraAdultPrice',be_extra_nights:'beExtraNights'};
+// be_* columns map to themselves (snake_case) — booking-engine-admin.js and the
+// public Booking Engine functions all read/write rt.be_enabled/rt.be_photos/etc.
+// directly (snake_case), never a beEnabled-style camelCase name; mapping them to
+// camelCase here silently desynced every be_* toggle/field from the real column.
+const _ROOMTYPE_COL_MAP={id:'id',name:'name',property:'property',color:'color',max_occ:'maxOcc',description:'desc',price_single_high:'price1',price_single_low:'price1_low',price_double_high:'price2',price_double_low:'price2_low',rooms:'rooms',cb_room_type_id:'cbRoomTypeId',be_enabled:'be_enabled',be_photos:'be_photos',be_description:'be_description',be_amenities:'be_amenities',be_price_single:'be_price_single',be_price_double:'be_price_double',be_included_occ:'be_included_occ',be_extra_adult_price:'be_extra_adult_price',be_extra_nights:'be_extra_nights'};
 function sqlRoomTypeToApp(row){const rt={};for(const col in row){rt[_ROOMTYPE_COL_MAP[col]||_s2c(col)]=row[col];}return rt;}
 function appRoomTypeToSqlRow(rt){const row={};Object.keys(_ROOMTYPE_COL_MAP).forEach(col=>{const field=_ROOMTYPE_COL_MAP[col];row[col]=rt[field]!==undefined?rt[field]:null;});return row;}
 async function _fetchAllRows(table,pageSize){
