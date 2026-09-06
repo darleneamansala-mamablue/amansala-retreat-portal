@@ -50,7 +50,7 @@ function renderEstQuote(){
     const rtA=AppData.roomTypes.find(t=>(t.rooms||[]).includes(a));
     const rtB=AppData.roomTypes.find(t=>(t.rooms||[]).includes(b));
     const ka=rtA?_roomSortKey(rtA):9999,kb=rtB?_roomSortKey(rtB):9999;
-    return ka!==kb?ka-kb:a.localeCompare(b);
+    return ka!==kb?ka-kb:a.localeCompare(b,undefined,{numeric:true});
   });
   _sortedBlocked.forEach(room=>{
     const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));

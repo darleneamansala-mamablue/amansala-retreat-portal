@@ -4285,6 +4285,10 @@ async function loadFromSupabase(){
         }});
         AppData.roomTypes.forEach(s=>{s.rooms=s.rooms.filter(r=>{const c=_defMap.get(r);return!c||c===s.id;});});
       }
+      // SQL doesn't guarantee row order — sort once here so every screen that just
+      // iterates AppData.roomTypes (teacher view, admin view, room calendar, etc.)
+      // shows rooms in the same canonical order, instead of each needing its own sort.
+      if(typeof _roomSortKey==='function')AppData.roomTypes.sort((a,b)=>_roomSortKey(a)-_roomSortKey(b));
     }
     if(store.programBlocks !==undefined) AppData.programBlocks =store.programBlocks;
     if(store.specialEvents !==undefined) AppData.specialEvents =store.specialEvents;
