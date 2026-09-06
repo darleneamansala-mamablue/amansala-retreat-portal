@@ -82,14 +82,6 @@ function toggleRetreatLock(){
   regRender();
   showToast(regSelBk.allLocked?'Retreat locked — teachers cannot move guests.':'Retreat unlocked.');
 }
-function toggleRealRooms(){
-  if(!regSelBk)return;
-  regSelBk.showRealRooms=!regSelBk.showRealRooms;
-  saveAll();
-  const btn=document.getElementById('regRealRoomsBtn');
-  if(btn)btn.innerHTML=regSelBk.showRealRooms?'🔢 Sequential':'🏷 Real Rooms';
-  regRender();
-}
 async function regOnRetreat(){
   const id=document.getElementById('regRetreatSel').value;
   // Cancel any pending watch when user picks a different retreat
@@ -140,7 +132,7 @@ function regRender(){
     const _bECI=reg.checkIn||regSelBk.startDate;
     const _bNights=(reg.checkIn&&reg.checkOut)?Math.max(1,Math.round((pd(reg.checkOut)-pd(reg.checkIn))/DAY_MS)):nights;
     const _isBd1ExtraB=rt.id==='bd1'&&reg.customRateOverride==null&&(gc>=2||_getSharedBeds(room).some(s=>_blockedSetEarly.has(s)&&(_regByRoom[s]?.guests||[]).filter(g=>g.name).length>=2));
-    const rate=reg.customRateOverride!=null?reg.customRateOverride:(_isBd1ExtraB?(isLowSeason(_bECI)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):getRoomRate(rt,gc,_bECI));
+    const rate=reg.customRateOverride!=null?reg.customRateOverride:(_isBd1ExtraB?(isLowSeason(_bECI,_bNights)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):getRoomRate(rt,gc,_bECI,_bNights));
     const base=rate*gc*_bNights;
     const pkgCost=reg.customPkgPrice!=null?reg.customPkgPrice:(_billAddOns.length?calcPkgCost(regSelBk,gc):0);
     const total=+(base+pkgCost+base*_rmTxR+pkgCost*_pkgTxR+_tipPer*gc*_bNights).toFixed(2);
@@ -307,7 +299,7 @@ function regRender(){
     const badge=occ===uiEntries.length?'occ-full':occ>0?'occ-half':'occ-empty';
     const badgeText=occ===uiEntries.length?'Full':occ>0?`${occ}/${uiEntries.length}`:'Vacant';
     const card=document.createElement('div');card.className='rt-card';
-    const _ls=isLowSeason(regSelBk?.startDate);const _p1=_ls?(rt.price1_low||rt.price1):rt.price1;const _p2=_ls?(rt.price2_low||rt.price2):rt.price2;
+    const _ls=isLowSeason(regSelBk?.startDate,nights);const _p1=_ls?(rt.price1_low||rt.price1):rt.price1;const _p2=_ls?(rt.price2_low||rt.price2):rt.price2;
     const priceTag=rt.maxOcc===1
       ?`Private: <b>${fmt$(_p1)}/night</b>`
       :`Solo: <b>${fmt$(_p1)}/night</b> &nbsp;·&nbsp; Sharing: <b>${fmt$(_p2)}/person/night</b>`;
@@ -366,7 +358,7 @@ function regRender(){
             const numTd=document.createElement('td');numTd.className='r-num';numTd.rowSpan=entry.physical.length;
             const _bdNote=entry.physical.map(p=>getRegForRoom(regSelBk.id,p)?.notes).filter(Boolean).join(' / ');
             const _bdNoteHtml=_bdNote?`<br><span style="font-size:9px;color:#b45309;font-style:italic;font-weight:400;white-space:normal;line-height:1.3">${_bdNote.replace(/</g,'&lt;')}</span>`:'';
-            if(IS_TEACHER_MODE&&!regSelBk?.showRealRooms)numTd.innerHTML=`Room ${gSeq}${_bdNoteHtml}`;
+            if(IS_TEACHER_MODE)numTd.innerHTML=`Room ${gSeq}${_bdNoteHtml}`;
             else numTd.innerHTML=`${room}${_bdNoteHtml}`;
             if(!IS_TEACHER_MODE){
               entry.physical.forEach(p=>{
@@ -420,12 +412,13 @@ function regRender(){
             priceTd.style.cssText='text-align:right;vertical-align:top;padding:10px 12px;min-width:160px;width:160px;';
             const _bdGc=bedG.length||1;
             const _bdSibHasExtra=rt.id==='bd1'&&_bdGc<2&&_getSharedBeds(physRoom).some(s=>(getRegForRoom(regSelBk.id,s)?.guests||[]).filter(g=>g.name).length>=2);
-            const _bdExtraRate=(rt.id==='bd1'&&(_bdGc>=2||_bdSibHasExtra)&&bedReg?.customRateOverride==null)?(isLowSeason(_bdEffCI||regSelBk?.startDate)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):null;
+            const _bdExtraRate=(rt.id==='bd1'&&(_bdGc>=2||_bdSibHasExtra)&&bedReg?.customRateOverride==null)?(isLowSeason(_bdEffCI||regSelBk?.startDate,_bdNights)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):null;
             const _bdRegCalc=_bdExtraRate!=null?{...bedReg,customRateOverride:_bdExtraRate}:bedReg;
             const bd1=calcBD(rt,_bdGc,_bdNights,_bdEffCI,regSelBk,_bdRegCalc);
-            const nRate1=_bdExtraRate!=null?_bdExtraRate:(bedReg?.customRateOverride!=null?bedReg.customRateOverride:getRoomRate(rt,_bdGc,_bdEffCI));
+            const nRate1=_bdExtraRate!=null?_bdExtraRate:(bedReg?.customRateOverride!=null?bedReg.customRateOverride:getRoomRate(rt,_bdGc,_bdEffCI,_bdNights));
             const pkgLine1=bd1.pkg>0?`<div class="pb-row addon"><span>Add-ons</span><span>${fmt$(bd1.pkg)}</span></div>`:'';
-            priceTd.innerHTML=`<details class="price-details"><summary><span class="price-summary-total">${fmt$(bd1.total)}</span><span class="price-toggle-arrow">&#9658;</span></summary><div class="price-breakdown-rows"><div class="pb-row"><span>Room ($${nRate1}/nt)</span><span>${fmt$(bd1.base)}</span></div>${pkgLine1}<div class="pb-row"><span>Tax (16%)</span><span>${fmt$(bd1.tax)}</span></div><div class="pb-row"><span>Tip ($30×${_bdNights}nt)</span><span>${fmt$(bd1.dip)}</span></div></div></details>`;
+            const rateCell1=IS_TEACHER_MODE?`$${nRate1}`:`$<input type="number" class="rate-inline-input" value="${nRate1}" title="Override nightly rate" onclick="event.stopPropagation()" onchange="regSaveRateOverride('${bedReg.id}',this.value)" style="width:46px;padding:0 3px;border:1px solid var(--border);border-radius:3px;font-size:11px;text-align:right;font-family:inherit;">`;
+            priceTd.innerHTML=`<details class="price-details"><summary><span class="price-summary-total">${fmt$(bd1.total)}</span><span class="price-toggle-arrow">&#9658;</span></summary><div class="price-breakdown-rows"><div class="pb-row"><span>Room (${rateCell1}/nt)</span><span>${fmt$(bd1.base)}</span></div>${pkgLine1}<div class="pb-row"><span>Tax (16%)</span><span>${fmt$(bd1.tax)}</span></div><div class="pb-row"><span>Tip ($30×${_bdNights}nt)</span><span>${fmt$(bd1.dip)}</span></div></div></details>`;
             tr.appendChild(priceTd);
             const notesTd=document.createElement('td');notesTd.className='r-notes';
             notesTd.innerHTML=`<input class="r-notes-input" value="${(g.notes||'').replace(/"/g,'&quot;')}" placeholder="Add note…" onchange="regSaveGuestNote('${bedReg.id}',0,this.value)">`;
@@ -448,7 +441,7 @@ function regRender(){
         tr.addEventListener('drop',e=>{e.preventDefault();tr.classList.remove('drag-over');regMoveGuest(e.dataTransfer.getData('text/plain'),room,rt.id);});
         const sub=entry.merged?` <span style="font-size:10px;color:#8a7e74">(${entry.physical.join(' · ')})</span>`:'';
         const _vNoteHtml=vReg?.notes?`<br><span style="font-size:9px;color:#b45309;font-style:italic;font-weight:400;white-space:normal;line-height:1.3">${(vReg.notes).replace(/</g,'&lt;')}</span>`:'';
-        const numLblV=(IS_TEACHER_MODE&&!regSelBk?.showRealRooms)?`Room ${gSeq}${_vNoteHtml}`:`${room}${_vNoteHtml}`;
+        const numLblV=IS_TEACHER_MODE?`Room ${gSeq}${_vNoteHtml}`:`${room}${_vNoteHtml}`;
         const _vBd2=calcBD(rt,1,nights,regSelBk.startDate,regSelBk);
         tr.innerHTML=`<td class="r-num">${numLblV}</td><td class="r-add"><button class="add-btn" onclick="gOpenAdd('${room}','${rt.id}')" title="Add guest">+</button></td><td colspan="4" class="r-vacant">Vacant — click + to add guest${sub}</td><td class="r-price" style="text-align:right;color:#aaa;font-size:12px">${fmt$(_vBd2.total)}<span style="font-size:10px;margin-left:2px">/solo</span></td><td class="r-notes"></td><td class="r-action"></td>`;
         tbody.appendChild(tr);
@@ -473,7 +466,7 @@ function regRender(){
           numTd.className='r-num';numTd.rowSpan=guests.length;
           const _rNote=roomRegs[0]?.notes;
           const _rNoteHtml=_rNote?`<br><span style="font-size:9px;color:#b45309;font-style:italic;font-weight:400;white-space:normal;line-height:1.3">${_rNote.replace(/</g,'&lt;')}</span>`:'';
-          if(IS_TEACHER_MODE&&!regSelBk?.showRealRooms){numTd.innerHTML=`Room ${gSeq}${_rNoteHtml}`;}
+          if(IS_TEACHER_MODE){numTd.innerHTML=`Room ${gSeq}${_rNoteHtml}`;}
           else{numTd.innerHTML=`${room}${_rNoteHtml}`;}
           tr.appendChild(numTd);
           const addTd=document.createElement('td');
@@ -516,17 +509,18 @@ function regRender(){
           priceTd.innerHTML=`<div style="font-weight:700;font-size:13px;color:var(--dark)">${fmt$(perCustom)}</div><div style="font-size:10.5px;color:#8a7e74;margin-top:2px">custom price${gc>1?' (per person)':''}</div>`;
         } else {
           const bd=calcBD(rt,gc,_regNights,_effCI,regSelBk,reg);
-          const nRate=reg.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,_effCI);
+          const nRate=reg.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,_effCI,_regNights);
           const pkgItems=calcPkgItems(regSelBk);
           const pkgLine=bd.pkg>0?`<div class="pb-row addon"><span>Add-ons (${pkgItems.map(p=>p.name).join(', ')})</span><span>${fmt$(+(bd.pkg/gc).toFixed(2))}</span></div>`:'';
           const perTotal=+(bd.total/gc).toFixed(2);
           const perBase=+(bd.base/gc).toFixed(2);
           const perTax=+(bd.tax/gc).toFixed(2);
           const perTip=+(bd.dip/gc).toFixed(2);
+          const rateCell=IS_TEACHER_MODE?`$${nRate}`:`$<input type="number" class="rate-inline-input" value="${nRate}" title="Override nightly rate" onclick="event.stopPropagation()" onchange="regSaveRateOverride('${reg.id}',this.value)" style="width:46px;padding:0 3px;border:1px solid var(--border);border-radius:3px;font-size:11px;text-align:right;font-family:inherit;">`;
           priceTd.innerHTML=`<details class="price-details">
             <summary><span class="price-summary-total">${fmt$(perTotal)}</span>${gc>1?`<span style="font-size:10px;color:#9ca3af;margin-left:4px">/person</span>`:''}<span class="price-toggle-arrow">&#9658;</span></summary>
             <div class="price-breakdown-rows">
-              <div class="pb-row"><span>Room ($${nRate}/nt)</span><span>${fmt$(perBase)}</span></div>
+              <div class="pb-row"><span>Room (${rateCell}/nt)</span><span>${fmt$(perBase)}</span></div>
               ${pkgLine}
               <div class="pb-row"><span>Tax (${bd.pkg>0&&getBkTaxRate(regSelBk)!==0.16?`16% rm / ${getBkTaxRate(regSelBk)===0?'0%':Math.round(getBkTaxRate(regSelBk)*100)+'%'} ext`:'16%'})</span><span>${fmt$(perTax)}</span></div>
               <div class="pb-row"><span>Tip ($30×${_regNights}nt)</span><span>${fmt$(perTip)}</span></div>
@@ -551,12 +545,24 @@ function regRender(){
   });
 }
 
-function regSaveNote(regId,val){const r=AppData.regs.find(x=>x.id===regId);if(r){r.notes=val;saveAll();syncNotesToCloudbeds(r);}}
+function regSaveNote(regId,val){const r=AppData.regs.find(x=>x.id===regId);if(r){r.notes=val;r.updatedAt=new Date().toISOString();saveAll();syncNotesToCloudbeds(r);}}
 function regSetTip(val){if(!regSelBk)return;const t=parseFloat(val);regSelBk.tipPerNight=(isNaN(t)||t<0)?30:t;saveAll();regRender();showToast(`Tip updated to $${regSelBk.tipPerNight}/person/night`);}
-function regSaveGuestNote(regId,guestIdx,val){const r=AppData.regs.find(x=>x.id===regId);if(r&&r.guests&&r.guests[guestIdx]){r.guests[guestIdx].notes=val;saveAll();syncNotesToCloudbeds(r);}}
+function regSaveGuestNote(regId,guestIdx,val){const r=AppData.regs.find(x=>x.id===regId);if(r&&r.guests&&r.guests[guestIdx]){r.guests[guestIdx].notes=val;r.updatedAt=new Date().toISOString();saveAll();syncNotesToCloudbeds(r);}}
 
-function regToggleReturning(regId,guestIdx){const r=AppData.regs.find(x=>x.id===regId);if(r&&r.guests&&r.guests[guestIdx]){r.guests[guestIdx].returning=!r.guests[guestIdx].returning;if(!r.guests[guestIdx].returning)r.guests[guestIdx].yearsAttending=null;saveAll();regRender();buildDashboard();}}
-function regSaveYears(regId,guestIdx,val){const r=AppData.regs.find(x=>x.id===regId);if(r&&r.guests&&r.guests[guestIdx]){r.guests[guestIdx].yearsAttending=parseInt(val)||null;saveAll();buildDashboard();}}
+// Inline nightly-rate edit directly from the room list price breakdown (e.g. a teacher
+// upgrades rooms but keeps their original rate) — same reg.customRateOverride field the
+// full guest-edit modal's rate override uses, just editable without opening that modal.
+function regSaveRateOverride(regId,val){
+  if(IS_TEACHER_MODE)return;
+  const r=AppData.regs.find(x=>x.id===regId);if(!r)return;
+  const parsed=parseFloat(val);
+  r.customRateOverride=(val!==''&&!isNaN(parsed))?parsed:null;
+  r.updatedAt=new Date().toISOString();
+  saveAll();regRender();buildDashboard();
+}
+
+function regToggleReturning(regId,guestIdx){const r=AppData.regs.find(x=>x.id===regId);if(r&&r.guests&&r.guests[guestIdx]){r.guests[guestIdx].returning=!r.guests[guestIdx].returning;if(!r.guests[guestIdx].returning)r.guests[guestIdx].yearsAttending=null;r.updatedAt=new Date().toISOString();saveAll();regRender();buildDashboard();}}
+function regSaveYears(regId,guestIdx,val){const r=AppData.regs.find(x=>x.id===regId);if(r&&r.guests&&r.guests[guestIdx]){r.guests[guestIdx].yearsAttending=parseInt(val)||null;r.updatedAt=new Date().toISOString();saveAll();buildDashboard();}}
 
 function regMoveGuest(regId,targetRoom,targetRtId){
   if(IS_TEACHER_MODE&&regSelBk?.allLocked){showToast('El retiro está bloqueado por el admin.');return;}
@@ -569,13 +575,14 @@ function regMoveGuest(regId,targetRoom,targetRtId){
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
   const guestNames=(reg.guests||[]).filter(g=>g.name).map(g=>g.name).join(' & ')||'';
   const fromRoom=reg.room;
+  const _moveTs=new Date().toISOString();
   if(existing){
     const existingNames=(existing.guests||[]).filter(g=>g.name).map(g=>g.name).join(' & ')||'a guest';
     if(!confirm(`Room ${physicalTarget} already has ${existingNames}. Swap with room ${reg.room}?`))return;
     const oldRoom=reg.room,oldRtId=reg.roomTypeId;
-    existing.room=oldRoom;existing.roomTypeId=oldRtId;existing.customPrice=null;
+    existing.room=oldRoom;existing.roomTypeId=oldRtId;existing.customPrice=null;existing.updatedAt=_moveTs;
   }
-  reg.room=physicalTarget;reg.roomTypeId=targetRtId;reg.customPrice=null;
+  reg.room=physicalTarget;reg.roomTypeId=targetRtId;reg.customPrice=null;reg.updatedAt=_moveTs;
   saveAll();regRender();
   logActivity('Room moved',`${bk?.leaderName||bk?.retreatName} — ${guestNames||'guest'}: Room ${fromRoom} → ${physicalTarget}`,reg.bookingId);
   showToast(`Moved to room ${targetRoom} — syncing with Cloudbeds…`);

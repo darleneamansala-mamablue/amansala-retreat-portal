@@ -522,12 +522,16 @@ function autoAssignTeacherRoom(bk){
   const chosenRoom=inBlocked||rt.rooms.find(r=>!assignedRooms.has(r));
   if(!chosenRoom){showToast('No Garden Basic rooms available — assign teacher room manually.');return;}
   const nights=getNights(bk);
-  const price=rt.price1*(nights||1);
+  // Garden Basic is comped for the teacher once the retreat has 10+ paying guests;
+  // below that, the teacher pays the normal room rate. Upgrading to a nicer room
+  // (upgradeTeacherRoom, below) always charges the full rate for that room regardless.
+  const isComped=registeredCount(bk.id)>=10;
+  const price=isComped?0:getRoomRate(rt,1,bk.startDate,nights)*(nights||1);
   AppData.regs.push({id:uid(),bookingId:bk.id,room:chosenRoom,roomTypeId:'rt5',isTeacherRoom:true,
     guests:[{name:bk.leaderName||'Retreat Leader',returning:false,yearsAttending:null,notes:'Teacher room (auto-assigned)'}],
-    customPrice:price,amountPaid:0,notes:'Teacher room — Garden Basic (auto-assigned)'});
-  if(!(bk.blockedRooms||[]).includes(chosenRoom)){if(!bk.blockedRooms)bk.blockedRooms=[];bk.blockedRooms.push(chosenRoom);}
-  logActivity('Teacher room auto-assigned',`${bk.leaderName||bk.retreatName} — ${chosenRoom} (Garden Basic) · $${price}`,bk.id);
+    customPrice:price,amountPaid:0,notes:isComped?'Teacher room — Garden Basic (comped, 10+ paying guests)':'Teacher room — Garden Basic (auto-assigned)'});
+  if(!(bk.blockedRooms||[]).includes(chosenRoom)){if(!bk.blockedRooms)bk.blockedRooms=[];bk.blockedRooms.push(chosenRoom);bk.blockedRoomsUpdatedAt=new Date().toISOString();}
+  logActivity('Teacher room auto-assigned',`${bk.leaderName||bk.retreatName} — ${chosenRoom} (Garden Basic) · ${isComped?'comped':'$'+price}`,bk.id);
 }
 
 function upgradeTeacherRoom(bkId,newRoom){
@@ -539,10 +543,11 @@ function upgradeTeacherRoom(bkId,newRoom){
   const oldRoom=teacherReg.room;
   teacherReg.room=newRoom;
   teacherReg.roomTypeId='rt4';
-  teacherReg.customPrice=gkType.price1*nights;
+  teacherReg.customPrice=getRoomRate(gkType,1,bk.startDate,nights)*nights;
   teacherReg.notes='Teacher room — upgraded to Garden King';
   if(!bk.blockedRooms)bk.blockedRooms=[];
   if(!bk.blockedRooms.includes(newRoom))bk.blockedRooms.push(newRoom);
+  bk.blockedRoomsUpdatedAt=new Date().toISOString();
   saveAll();buildDashboard();regRender();
   logActivity('Teacher room upgraded',`${bk.leaderName||bk.retreatName} — ${oldRoom} → ${newRoom} (Garden King)`,bkId);
   showToast(`Teacher moved to ${newRoom} (Garden King)`);
@@ -676,6 +681,7 @@ function teacherSignContract(){
   if(!bk.depositInvoice){
     bk.depositInvoice={number:getNextInvoiceNumber(),issuedAt:new Date().toISOString(),dueAt:new Date(Date.now()+7*86400000).toISOString(),amount:2500,status:'pending'};
   }
+  if(typeof pipeAutoAdvance==='function')pipeAutoAdvance(bk,'contract_signed');
   saveAll();
   const names=ADD_ONS.filter(a=>selectedPkgs.includes(a.id)).map(a=>a.name);
   logActivity('Contract signed',`${bk.leaderName||bk.retreatName} — signed by ${name}${names.length?' · '+names.join(', '):''}`,bk.id);

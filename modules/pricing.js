@@ -44,7 +44,7 @@ function renderEstQuote(){
     const _eCI=reg.checkIn||regSelBk.startDate;
     const _eNights=(reg.checkIn&&reg.checkOut)?Math.max(1,Math.round((pd(reg.checkOut)-pd(reg.checkIn))/DAY_MS)):nights;
     const _isBd1Extra=rt.id==='bd1'&&reg.customRateOverride==null&&(gc>=2||_getSharedBeds(room).some(s=>blockedSet.has(s)&&(regByRoom[s]?.guests||[]).filter(g=>g.name).length>=2));
-    const rate=reg.customRateOverride!=null?reg.customRateOverride:(_isBd1Extra?(isLowSeason(_eCI)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):getRoomRate(rt,gc,_eCI));
+    const rate=reg.customRateOverride!=null?reg.customRateOverride:(_isBd1Extra?(isLowSeason(_eCI,_eNights)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):getRoomRate(rt,gc,_eCI,_eNights));
     const base=+(rate*gc*_eNights).toFixed(2);
     const pkgCost=reg.customPkgPrice!=null?reg.customPkgPrice:(addOnItems.length?+(calcPkgCost(regSelBk,gc)).toFixed(2):0);
     const roomTax=+(base*roomTaxRate).toFixed(2);
@@ -167,7 +167,7 @@ function showRtTooltip(e,rtId){
   document.getElementById('priceTipEl')?.remove();
   const rt=AppData.roomTypes.find(t=>t.id===rtId);if(!rt)return;
   const nights=regSelBk?getNights(regSelBk):1;
-  const _ls=regSelBk&&isLowSeason(regSelBk.startDate);
+  const _ls=regSelBk&&isLowSeason(regSelBk.startDate,nights);
   const _tip=getTip(regSelBk);
   const pkgTaxRate=getBkTaxRate(regSelBk);
   const season=_ls?'Low Season (May–Sep)':'High Season (Oct–Apr)';
@@ -231,88 +231,6 @@ function openPriceList(){
   html+=`</tbody></table>`;
   document.getElementById('priceListBody').innerHTML=html;
   openModal('priceListModal');
-}
-
-
-// ===== PACKAGE RATES MANAGER =====
-function openPkgRates(){
-  const body=document.getElementById('pkgRatesBody');if(!body)return;
-  body.innerHTML=`
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#8a7e74;margin-bottom:12px">Base Rates — Per Person</div>
-    <table style="width:100%;border-collapse:collapse;font-size:13px" id="pkgRatesTbl">
-      <thead><tr style="border-bottom:2px solid #e8dfd4">
-        <th style="padding:7px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#a89e94;font-weight:700">Package</th>
-        <th style="padding:7px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#a89e94;font-weight:700">Description</th>
-        <th style="padding:7px 10px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#a89e94;font-weight:700">Default $</th>
-        <th style="padding:7px 10px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#a89e94;font-weight:700">Current $</th>
-        <th style="padding:7px 10px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#a89e94;font-weight:700"></th>
-      </tr></thead>
-      <tbody>${ADD_ONS.map(ao=>{
-        const def=ADD_ONS_DEFAULT.find(d=>d.id===ao.id);
-        const isCustom=!def;
-        return`<tr data-id="${ao.id}" style="border-bottom:1px solid #f0ece4">
-          <td style="padding:8px 10px;font-weight:600">${ao.name}${isCustom?'<span style="margin-left:6px;font-size:9px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-weight:700">CUSTOM</span>':''}</td>
-          <td style="padding:8px 10px;color:#8a7e74;font-size:12px"><input type="text" class="pr-desc" value="${ao.desc||''}" style="width:100%;padding:5px 8px;border:1.5px solid #e8dfd4;border-radius:6px;font-family:'Jost',sans-serif;font-size:12px;color:#5a5048;background:#faf8f5"></td>
-          <td style="padding:8px 10px;text-align:center;color:#a89e94">${def!=null?'$'+def.price:'—'}</td>
-          <td style="padding:8px 10px;text-align:center"><div style="display:flex;align-items:center;justify-content:center;gap:3px"><span style="color:#5a5048">$</span><input type="number" class="pr-price" value="${ao.price}" min="0" step="0.01" style="width:70px;padding:6px 8px;border:1.5px solid #c8bfb5;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;text-align:center"></div></td>
-          <td style="padding:8px 10px;text-align:center">${isCustom?`<button onclick="pkgRatesRemoveCustom('${ao.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px;line-height:1" title="Remove">×</button>`:''}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>`;
-  document.getElementById('pkgRatesModal').style.display='flex';
-}
-
-function pkgRatesSave(){
-  const rows=document.querySelectorAll('#pkgRatesTbl tbody tr[data-id]');
-  const saved=[];
-  rows.forEach(row=>{
-    const id=row.dataset.id;
-    const price=parseFloat(row.querySelector('.pr-price').value)||0;
-    const desc=row.querySelector('.pr-desc').value.trim();
-    const def=ADD_ONS_DEFAULT.find(d=>d.id===id);
-    // Only store if different from default, or if it's a custom package
-    if(!def||(price!==def.price||desc!==def.desc)){
-      saved.push({id,price,desc:desc||(def?.desc||'')});
-    }
-    // Also update the live ADD_ONS array
-    const ao=ADD_ONS.find(a=>a.id===id);
-    if(ao){ao.price=price;if(desc)ao.desc=desc;}
-  });
-  // Include custom packages not in defaults
-  ADD_ONS.filter(a=>!ADD_ONS_DEFAULT.find(d=>d.id===a.id)).forEach(c=>{
-    if(!saved.find(s=>s.id===c.id))saved.push({...c});
-  });
-  const toSave=saved.length?saved:[];
-  localStorage.setItem('amansala_addons',JSON.stringify(toSave));
-  saveAddOnsToSupabase(toSave);
-  closeModal('pkgRatesModal');regRender();showToast('Package rates saved.');
-}
-
-function pkgRatesAddCustom(){
-  const name=document.getElementById('newPkgName').value.trim();
-  const desc=document.getElementById('newPkgDesc').value.trim();
-  const price=parseFloat(document.getElementById('newPkgPrice').value)||0;
-  if(!name){alert('Enter a package name.');return;}
-  const id='cust_'+Date.now();
-  ADD_ONS.push({id,name,desc,price,custom:true});
-  document.getElementById('newPkgName').value='';
-  document.getElementById('newPkgDesc').value='';
-  document.getElementById('newPkgPrice').value='';
-  pkgRatesSave();openPkgRates();
-}
-
-function pkgRatesRemoveCustom(id){
-  if(!confirm('Remove this custom package?'))return;
-  ADD_ONS=ADD_ONS.filter(a=>a.id!==id);
-  pkgRatesSave();openPkgRates();
-}
-
-function pkgRatesReset(){
-  if(!confirm('Reset all package rates to defaults? Custom packages will also be removed.'))return;
-  localStorage.removeItem('amansala_addons');
-  saveAddOnsToSupabase([]);
-  ADD_ONS=ADD_ONS_DEFAULT.map(a=>({...a}));
-  closeModal('pkgRatesModal');regRender();showToast('Package rates reset to defaults.');
 }
 
 function openSettings(){

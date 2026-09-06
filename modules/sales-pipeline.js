@@ -54,6 +54,26 @@ const PIPE_ACTIVITY_TYPES=[
 ];
 function pipeActType(key){return PIPE_ACTIVITY_TYPES.find(t=>t.key===key);}
 
+// Auto-advance a lead's pipeline stage from a real app event (contract signed, deposit
+// recorded, etc.) instead of a manual "+ Log Activity" entry on the Kanban board. Applies
+// the same required-fields gate and non-regression rule as pipeSubmitActivity so an
+// automatic trigger can never skip the gate or move a card backward. Caller is responsible
+// for saveAll() — this only mutates the booking object.
+function pipeAutoAdvance(bk,typeKey){
+  const act=pipeActType(typeKey);if(!act)return;
+  bk.pipelineActivity=bk.pipelineActivity||[];
+  bk.pipelineActivity.unshift({
+    id:uid(),type:typeKey,at:new Date().toISOString(),
+    byUser:'System (auto)',notes:'',nextAction:null,followUpDate:null,assignedTo:null,meta:{auto:true},
+  });
+  bk.pipelineStage=bk.pipelineStage||pipeDeriveStageFromStatus(bk);
+  const targetStage=act.target(bk);
+  if(!targetStage)return;
+  if(pipeGateBlocksForward(bk,bk.pipelineStage,targetStage))return;
+  const curIdx=pipeMainIdx(bk.pipelineStage),newIdx=pipeMainIdx(targetStage);
+  if(curIdx===-1||newIdx>curIdx)bk.pipelineStage=targetStage;
+}
+
 // ===== DERIVED / EXISTING-FIELD READERS (no duplicate booleans — see plan) =====
 function pipeContractSent(bk){return!!bk.contractSentAt;}
 function pipeContractSigned(bk){return!!(bk.contractSignedAt||bk.contractSignature);}

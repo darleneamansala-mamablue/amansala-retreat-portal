@@ -218,13 +218,19 @@ async function openBlockModal(bkId){
       }
 
       const item=document.createElement('label');
-      item.className='block-room-item'+(isChecked?' br-checked':'')+(isOther?' br-other':'')+(isSuggested&&!isOther?' br-suggest':'')+(hasGuests?' br-has-guests':'');
+      // .br-other dims + disables pointer feel via CSS — only apply it while the room is NOT
+      // checked. A checked-but-conflicting room (double-blocked by mistake) must look and act
+      // normal/clickable so it can be unchecked; the BOOKED badge below still flags the conflict.
+      item.className='block-room-item'+(isChecked?' br-checked':'')+(isOther&&!isChecked?' br-other':'')+(isSuggested&&!isOther?' br-suggest':'')+(hasGuests?' br-has-guests':'');
       item.dataset.room=room;
       item.dataset.physical=JSON.stringify(entry.physical);
       item.dataset.hasGuests=hasGuests?'1':'';
       item.title=hasGuests?'Guests: '+guestNames.join(', '):(isOther?'Booked by: '+conflict:'')+(entry.merged?'\n(Cloudbeds: '+entry.physical.join(', ')+')':'');
       const lbl=entry.merged?`${room} <span style="font-size:9px;font-weight:600;color:#8a7e74">double</span>`:room;
-      item.innerHTML=`<input type="checkbox"${isChecked?' checked':''}${isOther?' disabled':''} onchange="blockToggle(this)">`
+      // A room already on THIS retreat's list must stay uncheckable-off even if it also
+      // conflicts with another retreat (e.g. it was double-blocked by mistake) — only block
+      // adding a not-yet-selected conflicting room, never removing one that's already checked.
+      item.innerHTML=`<input type="checkbox"${isChecked?' checked':''}${isOther&&!isChecked?' disabled':''} onchange="blockToggle(this)">`
         +`<span class="br-lbl">${lbl}</span>`
         +(hasGuests?`<span style="display:inline-flex;align-items:center;gap:2px;font-size:9px;font-weight:800;color:#0e9494;letter-spacing:.2px;margin-left:2px" title="${guestNames.join(', ')}"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${guestNames.length}</span><span onclick="clearBlockRoomGuests('${room.replace(/\\/g,'\\\\').replace(/'/g,'\\\'')}')" title="Remove ghost guest registrations" style="cursor:pointer;color:#9ca3af;font-size:11px;font-weight:900;margin-left:1px;line-height:1;padding:0 1px" onmouseenter="this.style.color='#dc2626'" onmouseleave="this.style.color='#9ca3af'">×</span>`:'')
         +(isOther?`<span style="font-size:9px;font-weight:800;color:#dc2626;letter-spacing:.3px;margin-left:2px" title="Booked by: ${conflict}">BOOKED</span>`:'')
@@ -377,6 +383,7 @@ function blockSave(){
   });
 
   bk.blockedRooms=selected;
+  bk.blockedRoomsUpdatedAt=new Date().toISOString();
   if(regSelBk&&regSelBk.id===bk.id)regSelBk=bk;
   saveAll();
   closeModal('blockModal');
@@ -481,7 +488,7 @@ function gUpdatePrice(){
   const final=ov!==''?parseFloat(ov)||0:_adjTotal;
   const paid=parseFloat(document.getElementById('gm-paid').value)||0;
   const bal=final-paid;
-  const season=isLowSeason(_effStart)?'Low Season (May – Sep)':'High Season (Oct – Apr)';
+  const season=isLowSeason(_effStart,nights)?'Low Season (May – Sep)':'High Season (Oct – Apr)';
   const _gtr=getBkTaxRate(regSelBk);
   document.getElementById('pbSeasonLbl').textContent=`Pricing — ${season} · +16% room tax · +$30/night tip`;
   document.getElementById('pbc-type').textContent=`${rt.name} · ${gc} guest${gc>1?'s':''} · ${nights} night${nights!==1?'s':''}`;
