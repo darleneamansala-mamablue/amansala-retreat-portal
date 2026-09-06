@@ -5,9 +5,9 @@
 // stripe.js (used by book.html/extra-nights.html) this never recomputes price
 // from room-type/season data, since that could silently drift from what staff
 // actually agreed with the guest.
-const SUPABASE_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
-const ANON_KEY = 'sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB';
+const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: '' };

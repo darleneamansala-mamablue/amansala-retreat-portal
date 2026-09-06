@@ -1,7 +1,7 @@
 'use strict';
 
 // Adapted from Jorge's version onto our app_store blob pattern (see get-availability.js).
-const SUPABASE_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 
 async function readAppStore(key, hdrs) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${encodeURIComponent(key)}&select=value`, { headers: hdrs });

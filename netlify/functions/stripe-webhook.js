@@ -5,7 +5,7 @@ const crypto = require('crypto');
 // Fulfillment target is a new app_store key `beBookingRequests` (Jorge's version used
 // a real `booking_requests` table) — read-modify-write the whole array, same pattern
 // used throughout this app for list-shaped data.
-const SUPABASE_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 
 async function readAppStore(key, hdrs) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${encodeURIComponent(key)}&select=value`, { headers: hdrs });

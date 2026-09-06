@@ -6,7 +6,7 @@
 // bare claim that a payment succeeded. Records into bk.payments[], the SAME array
 // every other payment (deposits, balances) already uses, so existing "is this paid"
 // logic elsewhere in the app picks it up automatically.
-const SUPABASE_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
 
 exports.handler = async (event) => {

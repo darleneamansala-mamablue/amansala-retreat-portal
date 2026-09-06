@@ -157,7 +157,7 @@ document.getElementById('lbl-honoree').innerHTML=cfg.honoreeLabel+' <span class=
 document.getElementById('f-honoree').placeholder=cfg.honoreePlaceholder;
 document.getElementById('fg-date').querySelector('label').innerHTML=cfg.dateLabel+' <span class="req">*</span>';
 
-const _db=supabase.createClient('https://fzresosiqafiyxfgeyvk.supabase.co','sb_publishable_SG-1dCQntmSYtb1zwgl7Vg_-nAlTrsB');
+const _db=supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A');
 function clearErr(id){document.getElementById(id)?.classList.remove('has-error');}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 

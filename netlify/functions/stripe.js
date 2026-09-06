@@ -3,7 +3,7 @@
 // Adapted from Jorge's version onto our app_store blob pattern (see get-availability.js).
 // Rate calculation mirrors get-rates.js exactly so what a guest sees on the room
 // card matches what they're actually charged.
-const SUPABASE_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
 
 async function readAppStore(key, hdrs) {

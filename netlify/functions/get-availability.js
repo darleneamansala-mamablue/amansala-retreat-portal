@@ -2,7 +2,7 @@
 
 // Adapted from Jorge's version: our Supabase has no relational room_types/bookings
 // tables — everything lives as one JSON blob per `key` in the `app_store` table.
-const SUPABASE_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 
 async function readAppStore(key, hdrs) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${encodeURIComponent(key)}&select=value`, { headers: hdrs });

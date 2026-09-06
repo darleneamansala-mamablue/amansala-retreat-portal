@@ -1,7 +1,7 @@
 'use strict';
 
 // Adapted from Jorge's version onto our app_store blob pattern (see get-availability.js).
-const SUPABASE_URL = 'https://fzresosiqafiyxfgeyvk.supabase.co';
+const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: '' };
