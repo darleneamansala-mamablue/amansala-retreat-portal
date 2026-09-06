@@ -2,6 +2,17 @@
 // Loaded as a classic script; shares global scope with booking-hub.html (same pattern as cb-portal-sync.js).
 // Do not add <script type="module"> here — onclick="..." handlers in the HTML rely on plain globals.
 
+// Matches ROOM_ORDER/_roomSortKey in the new app's js/modules/teachers.js exactly —
+// rooms sort by room-type display order first, then alphanumerically within a type.
+const ROOM_ORDER=['rt1','rt2','rt3','rt4','rt5','rt6','bd1','rt7','bd2','rt8','bd3','rt9','bd4','cg1','cg2','cg3','cg4','cg5','cg6','csh1','csh2','c4b','c4c'];
+const NAME_SORT_KEY={'casa master':12.5,'casa shanti':18.5,'casita 4':20.5};
+function _roomSortKey(rt){
+  const i=ROOM_ORDER.indexOf(rt.id);
+  if(i!==-1)return i;
+  const k=NAME_SORT_KEY[rt.name.toLowerCase().trim()];
+  return k!==undefined?k:9999;
+}
+
 // ===== ESTIMATED QUOTE =====
 let estQuoteOpen=false;
 function toggleEstQuote(){
@@ -35,7 +46,13 @@ function renderEstQuote(){
   let roomRows=[];
   let totalRoomBase=0,totalTip=0,totalRoomTax=0,totalPkgTax=0,totalPkg=0;
 
-  Array.from(blockedSet).forEach(room=>{
+  const _sortedBlocked=Array.from(blockedSet).sort((a,b)=>{
+    const rtA=AppData.roomTypes.find(t=>(t.rooms||[]).includes(a));
+    const rtB=AppData.roomTypes.find(t=>(t.rooms||[]).includes(b));
+    const ka=rtA?_roomSortKey(rtA):9999,kb=rtB?_roomSortKey(rtB):9999;
+    return ka!==kb?ka-kb:a.localeCompare(b);
+  });
+  _sortedBlocked.forEach(room=>{
     const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
     if(!rt)return;
     const reg=regByRoom[room];
