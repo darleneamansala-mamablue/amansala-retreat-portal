@@ -37,8 +37,6 @@
   </div>
 
 <script>
-const SUPA_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
-const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
 const params = new URLSearchParams(location.search);
 let bookingId = params.get('id');
 const resToken = params.get('token');
@@ -52,54 +50,48 @@ async function init() {
   const content = document.getElementById('content');
   if (!bookingId && !resToken) { content.innerHTML = '<div class="state">Missing reservation link. Please use the link sent to you.</div>'; return; }
 
-  let bk;
+  let data;
   try {
-    const res = await fetch(`${SUPA_URL}/rest/v1/app_store?key=eq.bookings&select=value`, { headers: { apikey: SUPA_ANON } });
-    const rows = await res.json();
-    const bookings = rows[0]?.value ?? [];
-    // Prefer the secure token (Phase 2 "Send to Guest" links) — falls back
-    // to the raw id for any link sent before tokens existed.
-    bk = resToken ? bookings.find(b => b.guestResToken === resToken) : bookings.find(b => b.id === bookingId);
-  } catch (e) { /* fall through to error below */ }
+    // Resolution (by id or token), balance calculation, and rate lookup all happen
+    // server-side against the real bookings/payments tables — the client never
+    // reads Supabase directly.
+    const res = await fetch('/.netlify/functions/create-booking-payment', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(resToken ? { token: resToken } : { bookingId }),
+    });
+    data = await res.json();
+    if (!res.ok || data.error) {
+      content.innerHTML = `<div class="state">${data?.error === 'Booking not found' ? "We couldn't find this reservation. Please contact us." : (data?.error || 'Something went wrong. Please contact us.')}</div>`;
+      return;
+    }
+  } catch (e) {
+    content.innerHTML = '<div class="state">We couldn\'t find this reservation. Please contact us.</div>';
+    return;
+  }
 
-  if (!bk) { content.innerHTML = '<div class="state">We couldn\'t find this reservation. Please contact us.</div>'; return; }
-  // Resolve to the real internal id for the payment-processing calls below —
-  // the token never appears in those requests, only used to find the record.
-  bookingId = bk.id;
-  if (bk.bookingType !== 'room_only' || !bk.roomRateTotal) { content.innerHTML = '<div class="state">This reservation isn\'t set up for online payment yet. Please contact us.</div>'; return; }
-
-  const room = (bk.blockedRooms || [])[0] || '';
-  const alreadyPaid = (bk.payments || []).reduce((s,p) => s + (p.amount||0), 0);
-  if (alreadyPaid >= bk.roomRateTotal) {
+  if (data.notSetUp) { content.innerHTML = '<div class="state">This reservation isn\'t set up for online payment yet. Please contact us.</div>'; return; }
+  if (data.alreadyPaidInFull) {
     content.innerHTML = `<div class="success-icon">✓</div><div class="state" style="font-weight:600;color:var(--ink)">This reservation has already been paid in full. Thank you!</div>`;
     return;
   }
 
-  const chargesTotal = (bk.charges || []).reduce((s,c) => s + (c.amount||0), 0);
-  const balanceDue = Math.round((bk.roomRateTotal + chargesTotal - alreadyPaid) * 100) / 100;
+  _piAmount = data.amount;
+  _paymentIntentId = data.paymentIntentId;
+  bookingId = data.bookingId;
   content.innerHTML = `
     <h1>Complete Your Payment</h1>
-    <div class="sub">${bk.leaderName || 'Guest'}</div>
-    <div class="detail-row"><span>Room</span><span>${room}</span></div>
-    <div class="detail-row"><span>Check-in</span><span>${fmtDate(bk.startDate)}</span></div>
-    <div class="detail-row"><span>Check-out</span><span>${fmtDate(bk.endDate)}</span></div>
-    ${alreadyPaid > 0 ? `<div class="detail-row"><span>Already Paid</span><span>${fmtUSD(alreadyPaid)}</span></div>` : ''}
-    <div class="detail-row total"><span>Balance Due</span><span id="amount-due">${fmtUSD(balanceDue)}</span></div>
+    <div class="sub">${data.leaderName || 'Guest'}</div>
+    <div class="detail-row"><span>Room</span><span>${data.room}</span></div>
+    <div class="detail-row"><span>Check-in</span><span>${fmtDate(data.startDate)}</span></div>
+    <div class="detail-row"><span>Check-out</span><span>${fmtDate(data.endDate)}</span></div>
+    ${data.alreadyPaid > 0 ? `<div class="detail-row"><span>Already Paid</span><span>${fmtUSD(data.alreadyPaid)}</span></div>` : ''}
+    <div class="detail-row total"><span>Balance Due</span><span id="amount-due">${fmtUSD(data.amount)}</span></div>
     <div id="stripe-element"></div>
-    <button class="btn-pay" id="btn-pay">Pay ${fmtUSD(balanceDue)}</button>
+    <button class="btn-pay" id="btn-pay">Pay ${fmtUSD(data.amount)}</button>
     <div class="err" id="err"></div>
   `;
 
   try {
-    const res = await fetch('/.netlify/functions/create-booking-payment', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bookingId }),
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error ?? 'Could not start payment');
-
-    _piAmount = data.amount;
-    _paymentIntentId = data.paymentIntentId;
     _stripe = Stripe(data.publishableKey);
     _stripeElems = _stripe.elements({
       clientSecret: data.clientSecret,

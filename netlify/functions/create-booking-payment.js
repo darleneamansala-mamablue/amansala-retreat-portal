@@ -7,7 +7,6 @@
 // actually agreed with the guest.
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
-const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: '' };
@@ -15,52 +14,77 @@ exports.handler = async (event) => {
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   const pubKey = process.env.STRIPE_PUBLISHABLE_KEY;
+  const supaKey = process.env.SUPABASE_SERVICE_KEY;
   if (!stripeKey || !pubKey) return jsonErr(500, 'Stripe not configured');
+  if (!supaKey) return jsonErr(500, 'Server config error');
 
   let body;
   try { body = JSON.parse(event.body); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { bookingId } = body;
-  if (!bookingId) return jsonErr(400, 'Missing bookingId');
+  let { bookingId, token } = body;
+  if (!bookingId && !token) return jsonErr(400, 'Missing bookingId or token');
+
+  const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}` };
 
   let bk;
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.bookings&select=value`, {
-      headers: { apikey: ANON_KEY },
-    });
-    if (!res.ok) throw new Error('bookings fetch failed');
-    const rows = await res.json();
-    const bookings = rows[0]?.value ?? [];
-    bk = bookings.find(b => b.id === bookingId);
+    // Prefer the secure token (Phase 2 "Send to Guest" links) — falls back to the
+    // raw id for any link sent before tokens existed. Resolved server-side so the
+    // client never needs read access to the bookings table directly.
+    const filter = token ? `guest_res_token=eq.${encodeURIComponent(token)}` : `id=eq.${encodeURIComponent(bookingId)}`;
+    const bkRes = await fetch(`${SUPABASE_URL}/rest/v1/bookings?${filter}&select=*`, { headers: hdrs });
+    if (!bkRes.ok) throw new Error('bookings fetch failed');
+    [bk] = await bkRes.json();
   } catch (err) {
     return jsonErr(500, 'Could not fetch booking');
   }
 
   if (!bk) return jsonErr(404, 'Booking not found');
-  if (bk.bookingType !== 'room_only') return jsonErr(400, 'Not a room-only booking');
-  if (!bk.roomRateTotal || bk.roomRateTotal <= 0) return jsonErr(400, 'Booking has no rate set');
+  bookingId = bk.id;
+
+  let payments;
+  try {
+    const payRes = await fetch(`${SUPABASE_URL}/rest/v1/payments?booking_id=eq.${encodeURIComponent(bookingId)}&select=amount`, { headers: hdrs });
+    payments = payRes.ok ? await payRes.json() : [];
+  } catch (err) {
+    payments = [];
+  }
+
+  if (bk.booking_type !== 'room_only' || !bk.room_rate_total || bk.room_rate_total <= 0) {
+    return {
+      statusCode: 200,
+      headers: { ...cors(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notSetUp: true, leaderName: bk.leader_name || '' }),
+    };
+  }
 
   // Charge the REMAINING balance, not the full total — a guest returning to
   // pay off a balance after an earlier deposit/payment must never be
   // charged the whole reservation amount again.
   const chargesTotal = (bk.charges || []).reduce((s, c) => s + (c.amount || 0), 0);
-  const alreadyPaid = (bk.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
-  const balanceDue = Math.round((bk.roomRateTotal + chargesTotal - alreadyPaid) * 100) / 100;
-  if (balanceDue <= 0) return jsonErr(400, 'This reservation is already paid in full');
+  const alreadyPaid = (payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+  const balanceDue = Math.round((bk.room_rate_total + chargesTotal - alreadyPaid) * 100) / 100;
+  if (balanceDue <= 0) {
+    return {
+      statusCode: 200,
+      headers: { ...cors(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alreadyPaidInFull: true, leaderName: bk.leader_name || '' }),
+    };
+  }
 
   const amountCents = Math.round(balanceDue * 100);
   if (amountCents < 50) return jsonErr(400, 'Amount too small');
 
-  const room = (bk.blockedRooms || [])[0] || '';
+  const room = (bk.blocked_rooms || [])[0] || '';
   const params = new URLSearchParams({
     amount: String(amountCents),
     currency: 'usd',
-    description: `Amansala Tulum · Room ${room} · ${bk.startDate} – ${bk.endDate}`.slice(0, 500),
-    ...(bk.leaderEmail ? { receipt_email: bk.leaderEmail } : {}),
+    description: `Amansala Tulum · Room ${room} · ${bk.start_date} – ${bk.end_date}`.slice(0, 500),
+    ...(bk.leader_email ? { receipt_email: bk.leader_email } : {}),
     'metadata[bookingId]': bookingId,
     'metadata[source]': 'room_booking',
-    'metadata[leaderName]': (bk.leaderName || '').slice(0, 100),
+    'metadata[leaderName]': (bk.leader_name || '').slice(0, 100),
     'metadata[room]': room.slice(0, 50),
   });
 
@@ -88,11 +112,13 @@ exports.handler = async (event) => {
       clientSecret: pi.client_secret,
       paymentIntentId: pi.id,
       publishableKey: pubKey,
+      bookingId,
       amount: balanceDue,
-      leaderName: bk.leaderName || '',
+      alreadyPaid,
+      leaderName: bk.leader_name || '',
       room,
-      startDate: bk.startDate,
-      endDate: bk.endDate,
+      startDate: bk.start_date,
+      endDate: bk.end_date,
     }),
   };
 };

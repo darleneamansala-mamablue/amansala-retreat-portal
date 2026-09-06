@@ -3,9 +3,9 @@
 // Verifies a PaymentIntent directly against Stripe's API (server-side, using the
 // secret key) before recording a payment on the booking -- this sidesteps needing
 // STRIPE_WEBHOOK_SECRET (not configured yet) while still never trusting a client's
-// bare claim that a payment succeeded. Records into bk.payments[], the SAME array
-// every other payment (deposits, balances) already uses, so existing "is this paid"
-// logic elsewhere in the app picks it up automatically.
+// bare claim that a payment succeeded. Records into the real `payments` table, the
+// SAME table every other payment (deposits, balances) already uses, so existing
+// "is this paid" logic elsewhere in the app picks it up automatically.
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
 
@@ -43,36 +43,46 @@ exports.handler = async (event) => {
   if ((pi.metadata || {}).bookingId !== bookingId) return jsonErr(400, 'Payment does not match this booking');
 
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.bookings&select=value`, { headers: hdrs });
-    if (!res.ok) throw new Error('bookings fetch failed');
-    const rows = await res.json();
-    const bookings = rows[0]?.value ?? [];
-    const bk = bookings.find(b => b.id === bookingId);
-    if (!bk) return jsonErr(404, 'Booking not found');
+    // Idempotency: skip if a payment row already references this PaymentIntent.
+    const existingRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/payments?booking_id=eq.${encodeURIComponent(bookingId)}&ref=eq.${encodeURIComponent(paymentIntentId)}&select=id`,
+      { headers: hdrs }
+    );
+    const existing = existingRes.ok ? await existingRes.json() : [];
+    if (existing.length) {
+      const bkRes = await fetch(`${SUPABASE_URL}/rest/v1/bookings?id=eq.${encodeURIComponent(bookingId)}&select=leader_name`, { headers: hdrs });
+      const [bk] = bkRes.ok ? await bkRes.json() : [{}];
+      return {
+        statusCode: 200,
+        headers: { ...cors(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ success: true, amount: pi.amount_received / 100, leaderName: bk?.leader_name || '' }),
+      };
+    }
 
-    if (!Array.isArray(bk.payments)) bk.payments = [];
-    const already = bk.payments.some(p => p.stripePaymentIntentId === paymentIntentId);
-    if (!already) {
-      bk.payments.push({
-        id: 'pay_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/payments`, {
+      method: 'POST',
+      headers: { ...hdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        booking_id: bookingId,
         amount: Math.round((pi.amount_received / 100) * 100) / 100,
         date: new Date().toISOString().slice(0, 10),
         method: 'stripe',
         ref: paymentIntentId,
         note: 'Paid via payment link',
-        stripePaymentIntentId: paymentIntentId,
-      });
-      await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.bookings`, {
-        method: 'PATCH',
-        headers: { ...hdrs, Prefer: 'return=minimal' },
-        body: JSON.stringify({ value: bookings, updated_at: new Date().toISOString() }),
-      });
+      }),
+    });
+    if (!insertRes.ok) {
+      const errBody = await insertRes.text();
+      return jsonErr(500, 'Could not record payment: ' + errBody);
     }
+
+    const bkRes = await fetch(`${SUPABASE_URL}/rest/v1/bookings?id=eq.${encodeURIComponent(bookingId)}&select=leader_name`, { headers: hdrs });
+    const [bk] = bkRes.ok ? await bkRes.json() : [{}];
 
     return {
       statusCode: 200,
       headers: { ...cors(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: true, amount: pi.amount_received / 100, leaderName: bk.leaderName || '' }),
+      body: JSON.stringify({ success: true, amount: pi.amount_received / 100, leaderName: bk?.leader_name || '' }),
     };
   } catch (err) {
     return jsonErr(500, 'Could not record payment: ' + err.message);
