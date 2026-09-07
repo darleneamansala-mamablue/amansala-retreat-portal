@@ -569,6 +569,11 @@ function regRender(){
       });
     });
   });
+  // Est. Quote panel (pricing.js) only recomputes when opened/closed — if it's
+  // already open while a tip/room/guest edit happens here, it goes stale and
+  // shows pre-edit numbers (e.g. old tip rate), making its total look wrong
+  // vs. the just-updated Bill Total above. Keep it live.
+  if(typeof estQuoteOpen!=='undefined'&&estQuoteOpen)renderEstQuote();
 }
 
 function regSaveNote(regId,val){const r=AppData.regs.find(x=>x.id===regId);if(r){r.notes=val;r.updatedAt=new Date().toISOString();saveAll();syncNotesToCloudbeds(r);}}
