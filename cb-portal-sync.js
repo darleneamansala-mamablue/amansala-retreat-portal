@@ -427,6 +427,41 @@ async function cbSyncNamesForBooking(bkId){
   showToast(`Nombres sincronizados: ${synced} cuarto${synced!==1?'s':''}${skipped?' ('+skipped+' sin huésped)':''}.`);
 }
 
+// Reverse direction of cbSyncNamesForBooking — pulls guest names FROM Cloudbeds
+// reservations INTO portal registrations (ported from staging's
+// _teacherImportCbNames; the getCbGuestNames backend action already existed here,
+// only this frontend caller was missing).
+async function importNamesFromCb(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);
+  if(!bk){showToast('Retiro no encontrado.');return;}
+  const cbIds=bk.cbReservationIds||{};
+  if(!Object.keys(cbIds).length){showToast('No CB IDs found — run Recover CB IDs first');return;}
+  showToast('Importing names from CB…');
+  try{
+    const resp=await fetch(`${CLOUDBEDS_PROXY}?action=getCbGuestNames`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({reservationIds:cbIds,groupName:bk.retreatName||bk.leaderName||''})});
+    const d=await resp.json();
+    if(!d.guestNames||!Object.keys(d.guestNames).length){showToast('No individual names found in CB');return;}
+    let created=0;
+    const _ts=new Date().toISOString();
+    Object.entries(d.guestNames).forEach(([room,guestName])=>{
+      const existing=AppData.regs.find(r=>r.bookingId===bkId&&r.room===room);
+      if(existing){
+        const hasName=(existing.guests||[]).some(g=>g.name);
+        if(!hasName){existing.guests=[{name:guestName,email:'',phone:'',notes:''}];existing.updatedAt=_ts;created++;}
+      }else{
+        const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
+        AppData.regs.push({id:uid(),bookingId:bkId,room,roomTypeId:rt?.id||null,guests:[{name:guestName,email:'',phone:'',notes:''}],updatedAt:_ts});
+        created++;
+      }
+    });
+    saveAll();
+    if(regSelBk&&regSelBk.id===bkId)regRender();
+    if(blockEditBkId===bkId)_renderBlockRoomsGrid(bkId);
+    showToast(`Imported ${created} guest name${created!==1?'s':''} from CB ✓`);
+  }catch(e){showToast('Import failed: '+e.message);}
+}
+
 // ===== CB SYNC ALL =====
 function openCbSyncAllModal(){
   const list=document.getElementById('cbSyncAllList');
