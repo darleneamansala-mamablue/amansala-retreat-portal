@@ -4988,6 +4988,59 @@ function pkgBarToggle(){
     btn.style.color=opening?'#92400e':'#fff';
   }
 }
+// One-off, per-guest custom add-ons (packageCustomPrices.__custom__) — the same field
+// Staging writes to (e.g. "3 Drink per day" on Rachel Nolan/Rare Soul). Shared by the
+// price editor below so both branches (with/without ADD_ONS selected) can show it.
+function _customAoSectionHtml(bk){
+  const list=(bk.packageCustomPrices?.__custom__||[]);
+  const rows=list.map((c,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fff;border:1.5px solid #e8dfd4;border-radius:8px;margin-bottom:6px">
+      <div style="flex:1;font-size:13px;font-weight:600;color:#2d2520">${(c.name||'').replace(/</g,'&lt;')}</div>
+      <div style="font-size:12px;color:#8a7e74;white-space:nowrap">$${c.price}/nt × ${c.nights||1}nt${c.taxRate?` +${Math.round(c.taxRate*100)}%`:''} = $${(Number(c.price||0)*Number(c.nights||1)*(1+Number(c.taxRate||0))).toFixed(2)}/guest</div>
+      <button onclick="removeCustomAddon(${i})" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:16px;padding:0;line-height:1" title="Quitar">×</button>
+    </div>`).join('');
+  return`<div style="background:#fff;border:1.5px solid #d97706;border-radius:10px;padding:14px 16px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#92400e;margin-bottom:10px">One-off Custom Add-ons (per guest, always applied — same as Staging)</div>
+    ${rows||'<div style="font-size:12px;color:#a89e94;font-style:italic;margin-bottom:8px">None yet.</div>'}
+    <div style="display:grid;grid-template-columns:1fr 90px 70px 100px auto;gap:8px;align-items:center;margin-top:8px">
+      <input id="caoName" type="text" placeholder="Add-on name" style="padding:7px 10px;border:1.5px solid #c8bfb5;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px">
+      <input id="caoPrice" type="number" min="0" step="0.01" placeholder="$/nt" style="padding:7px 6px;border:1.5px solid #c8bfb5;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px">
+      <input id="caoNights" type="number" min="1" step="1" value="${getNights(bk)||1}" style="padding:7px 6px;border:1.5px solid #c8bfb5;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;text-align:center">
+      <select id="caoTax" style="padding:7px 6px;border:1.5px solid #c8bfb5;border-radius:7px;font-family:'Jost',sans-serif;font-size:12px">
+        <option value="0">No tax</option><option value="0.13">13%</option><option value="0.16" selected>16%</option>
+      </select>
+      <button onclick="addCustomAddon()" style="padding:7px 14px;background:#d97706;color:#fff;border:none;border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Add</button>
+    </div>
+  </div>`;
+}
+async function addCustomAddon(){
+  if(!regSelBk)return;
+  const name=(document.getElementById('caoName').value||'').trim();
+  const price=parseFloat(document.getElementById('caoPrice').value);
+  const nightsRaw=parseInt(document.getElementById('caoNights').value,10);
+  const taxRate=parseFloat(document.getElementById('caoTax').value);
+  if(!name||isNaN(price)||price<0){showToast('Name and price are required');return;}
+  const nights=(!isNaN(nightsRaw)&&nightsRaw>=1)?nightsRaw:(getNights(regSelBk)||1);
+  if(!regSelBk.packageCustomPrices)regSelBk.packageCustomPrices={};
+  if(!regSelBk.packageCustomPrices.__custom__)regSelBk.packageCustomPrices.__custom__=[];
+  regSelBk.packageCustomPrices.__custom__.push({name,price,nights,taxRate:isNaN(taxRate)?0.16:taxRate});
+  saveAll();regRender();
+  // regRender() just rebuilt pkgBar (and reset #pkgPriceEditor to display:none) —
+  // one toggle call now reopens it, freshly populated with the new row.
+  pkgTogglePriceEditor();
+  try{await db.from('bookings').update({package_custom_prices:regSelBk.packageCustomPrices}).eq('id',regSelBk.id);}catch(e){}
+  showToast('Custom add-on added ✓');
+}
+async function removeCustomAddon(i){
+  if(!regSelBk||!confirm('Remove this custom add-on?'))return;
+  const arr=(regSelBk.packageCustomPrices?.__custom__||[]).slice();
+  arr.splice(i,1);
+  if(!regSelBk.packageCustomPrices)regSelBk.packageCustomPrices={};
+  regSelBk.packageCustomPrices.__custom__=arr;
+  saveAll();regRender();
+  pkgTogglePriceEditor();
+  try{await db.from('bookings').update({package_custom_prices:regSelBk.packageCustomPrices}).eq('id',regSelBk.id);}catch(e){}
+  showToast('Add-on removed');
+}
 function pkgTogglePriceEditor(){
   if(!regSelBk)return;
   const el=document.getElementById('pkgPriceEditor');if(!el)return;
@@ -4995,13 +5048,19 @@ function pkgTogglePriceEditor(){
   const selPkgs=regSelBk.packages||[];
   const customPrices=regSelBk.packageCustomPrices||{};
   const items=[...ADD_ONS,...(regSelBk.extraPackages||[])].filter(a=>selPkgs.includes(a.id)&&a.price>=0);
-  if(!items.length){el.innerHTML=`<div style="padding:10px 14px;font-size:12.5px;color:#8a7e74">No packages selected yet — add packages first.</div>`;el.style.display='block';return;}
-  const existingBundle=regSelBk.pkgBundle||{};
+  if(!items.length){el.innerHTML=_customAoSectionHtml(regSelBk)+`<div style="padding:10px 2px;font-size:12.5px;color:#8a7e74">No add-on packages selected — bundle/individual pricing needs at least one selected package first.</div>`;el.style.display='block';setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'nearest'}),60);return;}
+  // Bundle price is persisted at packageCustomPrices.__cfg__.bundle (the real, synced
+  // column staging also writes to) — regSelBk.pkgBundle/pkgBundlePrice are legacy
+  // in-memory-only fields that were never in the bookings table and never survived
+  // a refresh; keep reading them as a fallback but stop writing them (see below).
+  const existingBundle=regSelBk.pkgBundle||customPrices.__cfg__?.bundle||{};
   const existingBundleIds=new Set(existingBundle.ids||items.map(a=>a.id));
   const bundleVal=existingBundle.price!=null?existingBundle.price:(regSelBk.pkgBundlePrice!=null?regSelBk.pkgBundlePrice:'');
   const defaultTotal=items.reduce((s,a)=>s+a.price,0);
   const curTax=regSelBk.taxRate!=null?regSelBk.taxRate:0.16;
   el.innerHTML=`<div style="padding:14px 16px;background:#f9f5f0;border-top:1px solid #e8dfd4;border-radius:0 0 10px 10px">
+
+    ${_customAoSectionHtml(regSelBk)}
 
     <!-- Tax rate selector -->
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:#fff;border:1.5px solid #e8dfd4;border-radius:9px">
@@ -5077,26 +5136,35 @@ function pkgBundleChkChange(){
     if(lbl){lbl.style.borderColor=chk.checked?'#0e9494':'#d4cdc5';lbl.style.background=chk.checked?'#e0f2fe':'#fff';lbl.style.color=chk.checked?'#0e5a5a':'#8a7e74';}
   });
 }
-function savePkgCustomPrices(){
+async function savePkgCustomPrices(){
   if(!regSelBk)return;
+  // pkgBundle/pkgBundlePrice/top-level taxRate used to be the write targets here, but
+  // none of the three is a real bookings column (confirmed: bookings.tax_rate doesn't
+  // exist) — every one of these was silently lost on refresh, AND
+  // `delete regSelBk.packageCustomPrices` below used to wipe out __custom__/__cfg__
+  // (e.g. Rachel Nolan's "3 Drink per day") any time staff touched pricing on a retreat
+  // that had one. Write bundle + tax rate into packageCustomPrices.__cfg__ instead — the
+  // real, synced location calcPkgCost()/getBkTaxRate()/hasBundle already fall back to —
+  // and only ever clear the keys this form actually owns.
+  if(!regSelBk.packageCustomPrices)regSelBk.packageCustomPrices={};
   const taxRadio=document.querySelector('input[name="pkgTaxRate"]:checked');
-  if(taxRadio)regSelBk.taxRate=parseFloat(taxRadio.value);
+  if(taxRadio){
+    const tr=parseFloat(taxRadio.value);
+    regSelBk.taxRate=tr;
+    regSelBk.packageCustomPrices.__cfg__={...(regSelBk.packageCustomPrices.__cfg__||{}),taxRate:tr};
+  }
   const bundleInp=document.getElementById('pkgBundle');
   const bundleVal=bundleInp?bundleInp.value.trim():'';
   const selPkgs=regSelBk.packages||[];
   const items=[...ADD_ONS,...(regSelBk.extraPackages||[])].filter(a=>selPkgs.includes(a.id)&&a.price>=0);
-
+  delete regSelBk.pkgBundle;delete regSelBk.pkgBundlePrice;
   if(bundleVal!==''&&!isNaN(parseFloat(bundleVal))){
-    // Save bundle with selected package IDs
     const bundleIds=items.filter(ao=>document.getElementById('bi_'+ao.id)?.checked).map(a=>a.id);
-    regSelBk.pkgBundle={ids:bundleIds,price:parseFloat(bundleVal)};
-    delete regSelBk.pkgBundlePrice;
-    delete regSelBk.packageCustomPrices;
+    regSelBk.packageCustomPrices.__cfg__={...(regSelBk.packageCustomPrices.__cfg__||{}),bundle:{ids:bundleIds,price:parseFloat(bundleVal)}};
+    // A bundle price supersedes individual per-package overrides.
+    Object.keys(regSelBk.packageCustomPrices).forEach(k=>{if(k!=='__cfg__'&&k!=='__custom__')delete regSelBk.packageCustomPrices[k];});
   }else{
-    delete regSelBk.pkgBundle;
-    delete regSelBk.pkgBundlePrice;
-    // Individual prices
-    if(!regSelBk.packageCustomPrices)regSelBk.packageCustomPrices={};
+    if(regSelBk.packageCustomPrices.__cfg__)delete regSelBk.packageCustomPrices.__cfg__.bundle;
     items.forEach(ao=>{
       if(ao.id.startsWith('ep-'))return; // extra packages store price on themselves, not in packageCustomPrices
       const inp=document.getElementById('cprice_'+ao.id);
@@ -5105,14 +5173,25 @@ function savePkgCustomPrices(){
       if(v===''||isNaN(parseFloat(v))){delete regSelBk.packageCustomPrices[ao.id];}
       else{regSelBk.packageCustomPrices[ao.id]=parseFloat(v);}
     });
+  }
+  if(!Object.keys(regSelBk.packageCustomPrices).length)delete regSelBk.packageCustomPrices;
+  saveAll();regRender();
+  try{await db.from('bookings').update({package_custom_prices:regSelBk.packageCustomPrices||null}).eq('id',regSelBk.id);}catch(e){}
+}
+async function clearPkgCustomPrices(){
+  if(!regSelBk||!confirm('Remove bundle price & individual package overrides and revert to defaults? (one-off custom add-ons above are kept)'))return;
+  delete regSelBk.pkgBundle;delete regSelBk.pkgBundlePrice;
+  const pcp=regSelBk.packageCustomPrices;
+  if(pcp){
+    const _custom=pcp.__custom__;
+    const _whatsapp=pcp.__cfg__?.whatsapp;
+    regSelBk.packageCustomPrices={};
+    if(_custom)regSelBk.packageCustomPrices.__custom__=_custom;
+    if(_whatsapp)regSelBk.packageCustomPrices.__cfg__={whatsapp:_whatsapp};
     if(!Object.keys(regSelBk.packageCustomPrices).length)delete regSelBk.packageCustomPrices;
   }
   saveAll();regRender();
-}
-function clearPkgCustomPrices(){
-  if(!regSelBk||!confirm('Remove all custom prices and revert to defaults?'))return;
-  delete regSelBk.packageCustomPrices;
-  saveAll();regRender();
+  try{await db.from('bookings').update({package_custom_prices:regSelBk.packageCustomPrices||null}).eq('id',regSelBk.id);}catch(e){}
 }
 function uid(){return'id_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);}
 function statusLabel(s){return{requested:'Soft Hold',contract_sent:'Contract Sent',contract_signed:'Contract Signed',deposit_paid:'Deposit Paid',room_list_sent:'Room List Sent',confirmed:'Confirmed',cancelled:'Cancelled',pending:'Pending'}[s]||s||'—';}
