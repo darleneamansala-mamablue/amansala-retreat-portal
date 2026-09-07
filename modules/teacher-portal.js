@@ -140,7 +140,12 @@ function regRender(){
     const gc=reg?new Set((reg.guests||[]).filter(g=>g.name).map(g=>g.name.trim())).size:0;
     if(!gc)return;
     const _bECI=reg.checkIn||regSelBk.startDate;
-    const _bNightsRaw=(reg.checkIn&&reg.checkOut)?Math.max(1,Math.round((pd(reg.checkOut)-pd(reg.checkIn))/DAY_MS)):nights;
+    const _bECO=reg.checkOut||regSelBk.endDate;
+    // Independent per-side fallback (matches staging's getRegNights) — a registration
+    // with only check_in set (e.g. an early arrival) must still extend the nights count,
+    // not silently fall back to the booking's full-retreat nights just because check_out
+    // is unset.
+    const _bNightsRaw=Math.max(1,Math.round((pd(_bECO)-pd(_bECI))/DAY_MS));
     // custom_nights_override/custom_tip_nights_override/custom_tip_rate_override: an admin-set
     // billed-nights count for this registration, independent of the raw check-in/check-out span.
     const _bNights=reg.customNightsOverride!=null?Number(reg.customNightsOverride):_bNightsRaw;
@@ -429,7 +434,7 @@ function regRender(){
             retTd.innerHTML=`<button class="ret-toggle${isRet?' ret-on':''}" onclick="regToggleReturning('${bedReg.id}',0)">${isRet?'↩ Returning':'✦ New'}</button>${isRet?`<input class="ret-years" type="number" min="1" max="30" value="${yrs}" placeholder="yrs" title="Years attending" onchange="regSaveYears('${bedReg.id}',0,this.value)">`:''}`;
             tr.appendChild(retTd);
             const _bdEffCI=bedReg?.checkIn||regSelBk.startDate;const _bdEffCO=bedReg?.checkOut||regSelBk.endDate;
-            const _bdNights=(bedReg?.checkIn&&bedReg?.checkOut)?Math.max(1,Math.round((pd(bedReg.checkOut)-pd(bedReg.checkIn))/DAY_MS)):nights;
+            const _bdNights=Math.max(1,Math.round((pd(_bdEffCO)-pd(_bdEffCI))/DAY_MS));
             const datesTd=document.createElement('td');datesTd.className='r-dates';
             datesTd.textContent=`${fmtDate(_bdEffCI)} – ${fmtDate(_bdEffCO)}`;tr.appendChild(datesTd);
             const priceTd=document.createElement('td');priceTd.className='r-price';
@@ -518,7 +523,7 @@ function regRender(){
         tr.appendChild(retTd);
 
         const _effCI=reg.checkIn||regSelBk.startDate;const _effCO=reg.checkOut||regSelBk.endDate;
-        const _regNights=(reg.checkIn&&reg.checkOut)?Math.max(1,Math.round((pd(reg.checkOut)-pd(reg.checkIn))/DAY_MS)):nights;
+        const _regNights=Math.max(1,Math.round((pd(_effCO)-pd(_effCI))/DAY_MS));
         const datesTd=document.createElement('td');
         datesTd.className='r-dates';
         datesTd.textContent=`${fmtDate(_effCI)} – ${fmtDate(_effCO)}`;

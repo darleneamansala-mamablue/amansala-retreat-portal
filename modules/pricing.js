@@ -67,7 +67,10 @@ function renderEstQuote(){
     const gc=reg?new Set((reg.guests||[]).filter(g=>g.name).map(g=>g.name.trim())).size:0;
     if(!gc)return;
     const _eCI=reg.checkIn||regSelBk.startDate;
-    const _eNightsRaw=(reg.checkIn&&reg.checkOut)?Math.max(1,Math.round((pd(reg.checkOut)-pd(reg.checkIn))/DAY_MS)):nights;
+    const _eCO=reg.checkOut||regSelBk.endDate;
+    // Independent per-side fallback (matches staging's getRegNights) — a check-in-only
+    // override must still extend the nights count, not fall back to full-retreat nights.
+    const _eNightsRaw=Math.max(1,Math.round((pd(_eCO)-pd(_eCI))/DAY_MS));
     // custom_nights_override/custom_tip_nights_override/custom_tip_rate_override: an admin-set
     // billed-nights count for this registration, independent of the raw check-in/check-out span.
     const _eNights=reg.customNightsOverride!=null?Number(reg.customNightsOverride):_eNightsRaw;
