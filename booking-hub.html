@@ -4889,7 +4889,11 @@ function calcPkgCost(bk,gc){
   if(bk.pkgBundlePrice!=null)return bk.pkgBundlePrice*gc;
   return calcPkgItems(bk).reduce((s,a)=>s+a.price,0)*gc;
 }
-function getTip(bk){return(bk&&bk.tipPerNight!=null)?bk.tipPerNight:30;}
+// Staging treats an unset tip_per_night as "no tip yet" (shows blank, bills $0),
+// not a silent $30/night default -- confirmed 2026-09-07: 83 of 106 active
+// retreats have tip_per_night unset, so the old 30-default was inflating most
+// retreats' Bill Total relative to what staging (the source of truth) shows.
+function getTip(bk){return(bk&&bk.tipPerNight!=null)?bk.tipPerNight:0;}
 function getBkTaxRate(bk){
   // Same nested-vs-top-level split as the package bundle above.
   const r=bk?.taxRate??bk?.packageCustomPrices?.__cfg__?.taxRate;

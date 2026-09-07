@@ -572,7 +572,7 @@ function regRender(){
 }
 
 function regSaveNote(regId,val){const r=AppData.regs.find(x=>x.id===regId);if(r){r.notes=val;r.updatedAt=new Date().toISOString();saveAll();syncNotesToCloudbeds(r);}}
-function regSetTip(val){if(!regSelBk)return;const t=parseFloat(val);regSelBk.tipPerNight=(isNaN(t)||t<0)?30:t;saveAll();regRender();showToast(`Tip updated to $${regSelBk.tipPerNight}/person/night`);}
+function regSetTip(val){if(!regSelBk)return;const t=parseFloat(val);regSelBk.tipPerNight=(isNaN(t)||t<0)?0:t;saveAll();regRender();showToast(`Tip updated to $${regSelBk.tipPerNight}/person/night`);}
 function regSaveGuestNote(regId,guestIdx,val){const r=AppData.regs.find(x=>x.id===regId);if(r&&r.guests&&r.guests[guestIdx]){r.guests[guestIdx].notes=val;r.updatedAt=new Date().toISOString();saveAll();syncNotesToCloudbeds(r);}}
 
 // Inline nightly-rate edit directly from the room list price breakdown (e.g. a teacher
