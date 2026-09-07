@@ -2037,6 +2037,13 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
   }
   // Transfer Cloudbeds IDs to the new room and move the reservation in Cloudbeds
   const _cbResId=(bk.cbReservationIds||{})[fromRoom];
+  if(!_cbResId){
+    // fromRoom was never pushed to Cloudbeds (e.g. blocked but Save Block/Push to CB
+    // hasn't run yet) — the move only happened in portal. Say so instead of silently
+    // skipping the Cloudbeds side with no indication at all.
+    saveAll();rcBuild();showToast(`Moved ${fromRoom} → ${toRoom} in portal (no Cloudbeds reservation on ${fromRoom} yet — nothing to sync)`);
+    return;
+  }
   if(_cbResId){
     if(!bk.cbReservationIds)bk.cbReservationIds={};
     bk.cbReservationIds[toRoom]=_cbResId; delete bk.cbReservationIds[fromRoom];
