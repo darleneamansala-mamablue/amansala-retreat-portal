@@ -906,7 +906,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>
     <span class="tab-label">Teacher Profiles</span>
   </button>
-  <button class="tab-btn" onclick="switchTab('builder',this)">
+  <button class="tab-btn" id="builderTabBtn" onclick="switchTab('builder',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
     <span class="tab-label">Builder</span>
   </button>
@@ -2774,6 +2774,33 @@
   </div>
 </div>
 
+<!-- ===== REAL ROOMS MODAL ===== -->
+<div class="modal-overlay" id="realRoomsModal">
+  <div class="modal" style="width:720px;max-width:97vw;">
+    <div class="modal-hdr"><div><h2>Real Rooms</h2><div class="modal-sub" id="realRoomsSub"></div></div><button class="modal-x" onclick="closeModal('realRoomsModal')">&times;</button></div>
+    <div class="modal-body" id="realRoomsBody" style="max-height:72vh;overflow-y:auto;padding:20px 24px;"></div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('realRoomsModal')">Close</button></div></div>
+  </div>
+</div>
+
+<!-- ===== PACKAGE RATES MODAL ===== -->
+<div class="modal-overlay" id="pkgRatesModal">
+  <div class="modal" style="width:640px;max-width:97vw;">
+    <div class="modal-hdr"><div><h2>Package Rates</h2><div class="modal-sub">All available add-on packages</div></div><button class="modal-x" onclick="closeModal('pkgRatesModal')">&times;</button></div>
+    <div class="modal-body" id="pkgRatesBody" style="max-height:72vh;overflow-y:auto;padding:20px 24px;"></div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('pkgRatesModal')">Close</button></div></div>
+  </div>
+</div>
+
+<!-- ===== BOT ACTIVITY LOG MODAL ===== -->
+<div class="modal-overlay" id="botLogModal">
+  <div class="modal" style="width:680px;max-width:97vw;">
+    <div class="modal-hdr"><div><h2>🤖 Bot Activity Log</h2><div class="modal-sub" id="botLogSub"></div></div><button class="modal-x" onclick="closeModal('botLogModal')">&times;</button></div>
+    <div class="modal-body" id="botLogBody" style="max-height:72vh;overflow-y:auto;padding:20px 24px;"></div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('botLogModal')">Close</button></div></div>
+  </div>
+</div>
+
 <!-- ============================= TAB 5: DATE FINDER ============================= -->
 <div class="tab-panel" id="tab-datefinder">
   <div class="df-toolbar">
@@ -3983,19 +4010,39 @@ function regBuildActionsMenu(bk){
   if(!menu)return;
   if(!bk){menu.innerHTML='';return;}
   const locked=!!bk.allLocked;
+  const hideRooms=bk.packageCustomPrices?.__cfg__?.hideRoomNumbers??true;
+  const flags=bk.flags||[];
+  const paysArrival=flags.includes('teacher_pays_arrival_transport');
+  const paysDeparture=flags.includes('teacher_pays_departure_transport');
   menu.innerHTML=
     _regActionMenuItem('🛏 Block Rooms',"openBlockModal(regSelBk&&regSelBk.id)")+
+    _regActionMenuItem('🏠 Real Rooms',"openRealRoomsPanel()")+
     _regActionMenuItem('💰 Price List',"openPriceList()")+
+    _regActionMenuItem('📦 Package Rates',"openPkgRatesPanel()")+
     _regActionMenuItem('💳 Bulk Charge',"openBulkChargeModal()")+
     `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
+    _regActionMenuItem(paysArrival?'🚌 Teacher Pays Arrival ✓':'🚌 Teacher Pays Arrival',"toggleTransportPay('arrival')",paysArrival)+
+    _regActionMenuItem(paysDeparture?'🚌 Teacher Pays Departure ✓':'🚌 Teacher Pays Departure',"toggleTransportPay('departure')",paysDeparture)+
+    `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
+    _regActionMenuItem(hideRooms?'🏠 Room #s Hidden ✓':'⚠️ Room #s Visible',"toggleHideRoomNumbers()",hideRooms)+
     _regActionMenuItem(locked?'🔒 Locked for Teacher':'🔓 Lock for Teacher',"toggleRetreatLock()",locked)+
     _regActionMenuItem('📋 Daily Report',"openDailyReport()")+
     _regActionMenuItem('🍽️ Dietary Sheet',"openDietaryReport()")+
-    `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
     _regActionMenuItem('🔗 Teacher Access',"showTeacherCode()")+
     _regActionMenuItem('👁 Preview as Teacher',"if(regSelBk)openTeacherPortal(regSelBk.id)")+
+    `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
+    _regActionMenuItem('💰 Add Payment',"openPaymentModal(regSelBk&&regSelBk.id)")+
+    `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
     _regActionMenuItem('📧 Send to Teacher',"openTeacherEmailModal()")+
+    _regActionMenuItem('💳 Send Deposit Info',"sendDepositEmail()")+
     _regActionMenuItem(bk.roomListSentViaPortal?'📋 Resend Room List to Portal':'📋 Send Room List to Portal',"sendRoomListToPortal()")+
+    _regActionMenuItem('☁️ Sync Names → CB',"cbSyncNamesForBooking(regSelBk&&regSelBk.id)")+
+    `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
+    _regActionMenuItem('✏️ Edit Booking',"switchTab('builder',document.getElementById('builderTabBtn'));bldLoadFromBooking(regSelBk.id)")+
+    `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
+    _regActionMenuItem('🔧 Sync Rooms → Rooms View',"syncBlockedRoomsFromRegs()")+
+    `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
+    _regActionMenuItem('🤖 Bot Activity Log',"openBotLogModal()")+
     (bk.docLink?`<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+_regActionMenuItem('📄 Retreat Document',`window.open('${bk.docLink.replace(/'/g,"\\'")}','_blank')`):'')+
     `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
     _regActionMenuItem('⚙️ Settings',"openSettings()");

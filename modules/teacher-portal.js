@@ -113,6 +113,11 @@ function regRender(){
   }
   document.body.classList.toggle('retreat-locked',!!(IS_TEACHER_MODE&&regSelBk?.allLocked));
   const _teacherLocked=IS_TEACHER_MODE&&!!regSelBk?.allLocked;
+  // Real Rooms → "Room #s Hidden/Visible" toggle (packageCustomPrices.__cfg__.hideRoomNumbers,
+  // defaults true) — only actually hide the real room number from a teacher when this
+  // per-retreat setting says to; matches staging exactly instead of always substituting
+  // "Room N" whenever IS_TEACHER_MODE is true.
+  const _hideRoomNums=IS_TEACHER_MODE&&(regSelBk?.packageCustomPrices?.__cfg__?.hideRoomNumbers??true);
   const nights=getNights(regSelBk);
   const allRegs=getRegsForBk(regSelBk.id);
   const _blockedSetEarly=new Set(regSelBk.blockedRooms||[]);
@@ -399,7 +404,7 @@ function regRender(){
           }
           if(pi===0){
             const numTd=document.createElement('td');numTd.className='r-num';numTd.rowSpan=entry.physical.length;
-            if(IS_TEACHER_MODE)numTd.innerHTML=`Room ${gSeq}`;
+            if(_hideRoomNums)numTd.innerHTML=`Room ${gSeq}`;
             else numTd.innerHTML=`${room}`;
             if(!IS_TEACHER_MODE){
               entry.physical.forEach(p=>{
@@ -482,7 +487,7 @@ function regRender(){
         tr.addEventListener('dragleave',()=>tr.classList.remove('drag-over'));
         tr.addEventListener('drop',e=>{e.preventDefault();tr.classList.remove('drag-over');regMoveGuest(e.dataTransfer.getData('text/plain'),room,rt.id);});
         const sub=entry.merged?` <span style="font-size:10px;color:#8a7e74">(${entry.physical.join(' · ')})</span>`:'';
-        const numLblV=IS_TEACHER_MODE?`Room ${gSeq}`:`${room}`;
+        const numLblV=_hideRoomNums?`Room ${gSeq}`:`${room}`;
         const _vNoteHtml=vReg?.notes?`<div style="font-size:9px;color:#b45309;font-style:italic;line-height:1.3">${(vReg.notes).replace(/</g,'&lt;')}</div>`:'';
         const _vBd2=calcBD(rt,1,nights,regSelBk.startDate,regSelBk);
         tr.innerHTML=`<td class="r-num">${numLblV}</td><td class="r-add"><button class="add-btn" onclick="gOpenAdd('${room}','${rt.id}')" title="Add guest">+</button></td><td colspan="4" class="r-vacant">Vacant — click + to add guest${sub}</td><td class="r-price" style="text-align:right;color:#aaa;font-size:12px">${fmt$(_vBd2.total)}<span style="font-size:10px;margin-left:2px">/solo</span></td><td class="r-notes">${_vNoteHtml}</td><td class="r-action"></td>`;
@@ -506,7 +511,7 @@ function regRender(){
         if(gi===0){
           const numTd=document.createElement('td');
           numTd.className='r-num';numTd.rowSpan=guests.length;
-          if(IS_TEACHER_MODE){numTd.innerHTML=`Room ${gSeq}`;}
+          if(_hideRoomNums){numTd.innerHTML=`Room ${gSeq}`;}
           else{numTd.innerHTML=`${room}`;}
           tr.appendChild(numTd);
           const addTd=document.createElement('td');
@@ -5024,5 +5029,162 @@ function drSaveUpgradeGroup(regId,val){
   r.updatedAt=new Date().toISOString();
   saveAll();
   showToast('Saved.');
+}
+
+// ===== ACTIONS ▾ MENU — features ported from Staging (js/modules/teachers.js) =====
+
+// ── Real Rooms — what the teacher actually sees vs. the real room numbers ──
+function openRealRoomsPanel(){
+  if(!regSelBk)return;
+  const bk=regSelBk;
+  const blocked=bk.blockedRooms||[];
+  const hideRooms=bk.packageCustomPrices?.__cfg__?.hideRoomNumbers??true;
+  const sortedBlocked=[...blocked].sort((a,b)=>{
+    const rtA=AppData.roomTypes.find(t=>(t.rooms||[]).includes(a));
+    const rtB=AppData.roomTypes.find(t=>(t.rooms||[]).includes(b));
+    const ka=rtA?_roomSortKey(rtA):9999,kb=rtB?_roomSortKey(rtB):9999;
+    return ka!==kb?ka-kb:a.localeCompare(b,undefined,{numeric:true});
+  });
+  const cards=blocked.length?blocked.map(room=>{
+    const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
+    const reg=getRegForRoom(bk.id,room);
+    const guestNames=(reg?.guests||[]).filter(g=>g.name).map(g=>g.name).join(' & ');
+    const used=!!guestNames;
+    const teacherLabel='Room '+(sortedBlocked.indexOf(room)+1);
+    return`<div style="padding:8px 12px;border-radius:8px;background:${used?'#f0fdf4':'#fff'};border:1.5px solid ${used?'#86efac':'var(--border)'};min-width:130px">
+      <div style="font-size:12.5px;font-weight:700;color:var(--dark)">${escHtml(room)}</div>
+      <div style="font-size:11px;color:var(--muted)">${rt?escHtml(rt.name):''}</div>
+      ${hideRooms?`<div style="font-size:10px;color:#0e9494;font-weight:600;margin-top:2px">Teacher sees: ${teacherLabel}</div>`:''}
+      <div style="font-size:11px;font-weight:600;margin-top:3px;color:${used?'#16a34a':'#9ca3af'}">${used?'✓ '+escHtml(guestNames):'Available'}</div>
+    </div>`;
+  }).join(''):'<div style="color:var(--muted);font-size:13px">No rooms blocked yet</div>';
+  const stateBadge=hideRooms
+    ?`<span style="background:#0e5a5a;color:#fff;font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:10px;margin-left:8px">Room numbers hidden from teacher</span>`
+    :`<span style="background:#f0fdf4;color:#15803d;font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:10px;margin-left:8px;border:1px solid #86efac">Room numbers visible to teacher</span>`;
+  document.getElementById('realRoomsSub').textContent=`${bk.leaderName||bk.retreatName} · ${blocked.length} rooms`;
+  document.getElementById('realRoomsBody').innerHTML=`<div style="display:flex;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:6px">
+    <span style="font-size:13px;font-weight:700;color:var(--dark)">Real Rooms (${blocked.length})</span>
+    ${stateBadge}
+    <button class="btn btn-secondary" style="margin-left:auto;font-size:12px;padding:6px 12px" onclick="toggleHideRoomNumbers()">${hideRooms?'👁 Show Real Numbers to Teacher':'🙈 Hide Real Numbers from Teacher'}</button>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">${cards}</div>`;
+  openModal('realRoomsModal');
+}
+// hideRoomNumbers lives in packageCustomPrices.__cfg__ (matches staging exactly) — read
+// by regRender()'s three room-number cells (numTd) below so IS_TEACHER_MODE actually
+// respects this per-retreat setting instead of always showing "Room N".
+async function toggleHideRoomNumbers(){
+  if(!regSelBk)return;
+  const pcp=regSelBk.packageCustomPrices||{};
+  const cfg=pcp.__cfg__||{};
+  const newVal=!(cfg.hideRoomNumbers??true);
+  regSelBk.packageCustomPrices={...pcp,__cfg__:{...cfg,hideRoomNumbers:newVal}};
+  saveAll();regRender();
+  try{await db.from('bookings').update({package_custom_prices:regSelBk.packageCustomPrices}).eq('id',regSelBk.id);}catch(e){}
+  showToast(newVal?'Room numbers hidden from teacher ✓':'Room numbers visible to teacher ✓');
+  if(document.getElementById('realRoomsModal')?.classList.contains('open'))openRealRoomsPanel();
+}
+
+// ── Package Rates — read-only reference table of the ADD_ONS catalog ──
+function openPkgRatesPanel(){
+  const rows=ADD_ONS.map(ao=>`<tr style="border-top:1px solid var(--border)">
+    <td style="padding:6px 10px;font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(ao.name)}</td>
+    <td style="padding:6px 10px;font-size:11.5px;color:var(--muted)">${ao.desc?escHtml(ao.desc):'—'}</td>
+    <td style="padding:6px 10px;text-align:right;font-size:12.5px;font-weight:700;color:var(--teal)">${ao.price!=null?fmt$(ao.price):'—'}</td>
+  </tr>`).join('');
+  document.getElementById('pkgRatesBody').innerHTML=`<table style="border-collapse:collapse;width:100%">
+    <thead><tr style="background:var(--sand)">
+      <th style="padding:6px 10px;text-align:left;font-size:10.5px;color:var(--muted);text-transform:uppercase">Package</th>
+      <th style="padding:6px 10px;text-align:left;font-size:10.5px;color:var(--muted);text-transform:uppercase">Description</th>
+      <th style="padding:6px 10px;text-align:right;font-size:10.5px;color:var(--muted);text-transform:uppercase">Price/person</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+  openModal('pkgRatesModal');
+}
+
+// ── Teacher Pays Arrival/Departure Transport — flag toggle ──
+async function toggleTransportPay(direction){
+  if(!regSelBk)return;
+  const flagKey='teacher_pays_'+direction+'_transport';
+  const flags=regSelBk.flags||[];
+  const newFlags=flags.includes(flagKey)?flags.filter(f=>f!==flagKey):[...flags,flagKey];
+  regSelBk.flags=newFlags;
+  saveAll();regRender();
+  try{await db.from('bookings').update({flags:newFlags}).eq('id',regSelBk.id);}catch(e){}
+  const on=newFlags.includes(flagKey);
+  showToast(`Teacher Pays ${direction==='arrival'?'Arrival':'Departure'} Transport ${on?'ON ✓':'OFF'}`);
+}
+
+// ── Bot Activity Log — reads the shared bot_log table (written by the WhatsApp bot) ──
+async function openBotLogModal(){
+  if(!regSelBk)return;
+  document.getElementById('botLogSub').textContent=regSelBk.leaderName||regSelBk.retreatName||'';
+  document.getElementById('botLogBody').innerHTML=`<div style="text-align:center;color:var(--muted);font-size:13px;padding:40px">Loading...</div>`;
+  openModal('botLogModal');
+  try{
+    const{data,error}=await db.from('bot_log').select('*').eq('booking_id',regSelBk.id).order('created_at',{ascending:false}).limit(100);
+    const body=document.getElementById('botLogBody');
+    if(error||!data||!data.length){body.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:40px">No bot activity yet for this retreat.</div>';return;}
+    const fmtTime=ts=>new Date(ts).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    const TOOL_LABELS={
+      add_room_by_type:{icon:'➕',label:'Room Added',color:'#dcfce7',border:'#86efac',text:'#15803d'},
+      remove_room_by_type:{icon:'➖',label:'Room Removed',color:'#fee2e2',border:'#fca5a5',text:'#b91c1c'},
+      get_available_room_types:{icon:'🔍',label:'Checked Availability',color:'#f0f9ff',border:'#bae6fd',text:'#0369a1'},
+      get_my_room_types:{icon:'🏠',label:'Viewed Rooms',color:'#f8fafc',border:'#e2e8f0',text:'#475569'},
+      get_pricing_info:{icon:'💰',label:'Viewed Pricing',color:'#fefce8',border:'#fde68a',text:'#92400e'},
+      get_estimated_quote:{icon:'📊',label:'Viewed Quote',color:'#fefce8',border:'#fde68a',text:'#92400e'},
+      get_rooming_list:{icon:'👥',label:'Viewed Rooming',color:'#f8fafc',border:'#e2e8f0',text:'#475569'},
+      get_retreat_info:{icon:'ℹ️',label:'Viewed Info',color:'#f8fafc',border:'#e2e8f0',text:'#475569'},
+    };
+    body.innerHTML=data.map(log=>{
+      const t=TOOL_LABELS[log.tool_name]||{icon:'⚙️',label:log.tool_name,color:'#f8fafc',border:'#e2e8f0',text:'#374151'};
+      const result=log.tool_result||{};
+      const detail=result.type_added?`Type: ${result.type_added}`:result.type_removed?`Type: ${result.type_removed}`:result.success===false?`Not done: ${result.reason||''}`:'';
+      return`<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);align-items:flex-start">
+        <div style="flex-shrink:0;margin-top:2px"><span style="background:${t.color};border:1px solid ${t.border};color:${t.text};font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;white-space:nowrap">${t.icon} ${t.label}</span></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;color:var(--dark);font-style:italic;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(log.user_message||'')}">"${escHtml((log.user_message||'').slice(0,80))}${(log.user_message||'').length>80?'…':''}"</div>
+          ${detail?`<div style="font-size:11px;color:${t.text};font-weight:600">${escHtml(detail)}</div>`:''}
+        </div>
+        <div style="font-size:10px;color:var(--muted);white-space:nowrap;flex-shrink:0">${fmtTime(log.created_at)}</div>
+      </div>`;
+    }).join('');
+  }catch(e){document.getElementById('botLogBody').innerHTML=`<div style="color:#dc2626;font-size:13px;padding:20px">Error loading log: ${escHtml(String(e))}</div>`;}
+}
+
+// ── Send Deposit Info — wire/Zelle/Venmo instructions email (ported from Staging) ──
+async function sendDepositEmail(){
+  if(!regSelBk)return;
+  const bk=regSelBk;
+  if(!bk.leaderEmail){showToast('No email on file for this retreat leader');return;}
+  if(!confirm(`Send deposit instructions to ${bk.leaderEmail}?\n\nThis will send wire transfer and payment details for the $2,500 deposit.`))return;
+  const dueDate=(()=>{const d=new Date();d.setDate(d.getDate()+7);return d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});})();
+  const ref=`${bk.leaderName||'Retreat'} - ${bk.startDate?fmtDate(bk.startDate):''}`;
+  const fmtRange=`${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}`;
+  const retreat=bk.retreatName||bk.leaderName||'Retreat';
+  const depositHtml=`<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif"><table width="100%" cellpadding="0" cellspacing="0"><tr><td><table style="max-width:580px;margin:20px auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08)" cellpadding="0" cellspacing="0" width="100%"><tr><td style="background:#1a2332;padding:22px 32px"><span style="color:#4db6ac;font-size:22px;font-weight:700;letter-spacing:3px">AMANSALA</span></td></tr><tr><td style="background:#ffffff;padding:32px;color:#374151;font-size:14px;line-height:1.7"><p>Hi ${bk.leaderName},</p><p>Thank you for signing your retreat contract! To confirm your dates, please submit your <strong>$2,500 deposit by ${dueDate}</strong>.</p><p style="font-size:13px;color:#6b7280">If the deposit is not received within 7 days of signing, Amansala reserves the right to release your dates.</p><table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:13px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden"><tr style="background:#1a2332"><td colspan="2" style="padding:10px 14px;color:#4db6ac;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.8px">Wire Transfer — Wells Fargo</td></tr><tr style="background:#fff"><td style="padding:9px 14px;color:#9ca3af;width:45%">Bank Name</td><td style="padding:9px 14px;font-weight:600;color:#111827">Wells Fargo</td></tr><tr style="background:#f8fafc"><td style="padding:9px 14px;color:#9ca3af">Account Name</td><td style="padding:9px 14px;font-weight:600;color:#111827">Amansala LLC</td></tr><tr style="background:#fff"><td style="padding:9px 14px;color:#9ca3af">Account Number</td><td style="padding:9px 14px;font-weight:600;color:#111827">1639211174</td></tr><tr style="background:#f8fafc"><td style="padding:9px 14px;color:#9ca3af">Routing (RTN/ABA)</td><td style="padding:9px 14px;font-weight:600;color:#111827">121000248</td></tr><tr style="background:#fff"><td style="padding:9px 14px;color:#9ca3af">SWIFT/BIC</td><td style="padding:9px 14px;font-weight:600;color:#111827">WFBIUS6S</td></tr><tr style="background:#f8fafc"><td style="padding:9px 14px;color:#9ca3af">Account Address</td><td style="padding:9px 14px;font-weight:600;color:#111827">22219 N 39th Street, Phoenix AZ 85050, USA</td></tr><tr style="background:#fff"><td style="padding:9px 14px;color:#9ca3af">Bank Address</td><td style="padding:9px 14px;font-weight:600;color:#111827">21040 N Tatum Blvd, Phoenix AZ 85050, United States</td></tr><tr style="background:#f8fafc"><td style="padding:9px 14px;color:#9ca3af">Reference</td><td style="padding:9px 14px;font-weight:700;color:#2d6a6a">${ref}<br><span style="font-weight:400;color:#6b7280;font-size:12px">Please include retreat leader name and arrival date</span></td></tr></table><table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:13px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden"><tr style="background:#1a2332"><td colspan="2" style="padding:10px 14px;color:#4db6ac;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.8px">Other Payment Options</td></tr><tr style="background:#fff"><td style="padding:9px 14px;color:#9ca3af;width:45%">Zelle</td><td style="padding:9px 14px;font-weight:600;color:#111827">payments@amansala.com</td></tr><tr style="background:#f8fafc"><td style="padding:9px 14px;color:#9ca3af">Venmo</td><td style="padding:9px 14px;font-weight:600;color:#111827">@amansala</td></tr></table><p style="font-size:13px;color:#6b7280;background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:12px 16px">⚠️ <strong>All payments must be made via bank wire or bank transfer. Credit cards are not accepted.</strong><br>Please email <a href="mailto:retreats@amansala.com" style="color:#2d6a6a">retreats@amansala.com</a> with your confirmation once payment is sent.</p><table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:13px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden"><tr style="background:#fff"><td style="padding:10px 14px;color:#9ca3af;width:40%">Retreat</td><td style="padding:10px 14px;font-weight:600;color:#111827">${retreat}</td></tr><tr style="background:#f8fafc"><td style="padding:10px 14px;color:#9ca3af">Dates</td><td style="padding:10px 14px;font-weight:600;color:#111827">${fmtRange}</td></tr><tr style="background:#fff"><td style="padding:10px 14px;color:#9ca3af">Deposit Due</td><td style="padding:10px 14px;font-weight:700;color:#dc2626">${dueDate}</td></tr></table><p>We can't wait to welcome you to Amansala! 🌴</p></td></tr><tr><td style="background:#f1f5f9;padding:16px 32px;text-align:center;font-size:12px;color:#9ca3af">Amansala Bikini Boot Camp &amp; Retreat Center &nbsp;·&nbsp; Tulum, Mexico</td></tr></table></td></tr></table></body></html>`;
+  try{
+    await _sendEmail(bk.leaderEmail.split(',').map(e=>e.trim()).filter(Boolean),`Deposit Instructions — ${retreat} · ${fmtRange}`,depositHtml,'retreats@amansala.com');
+  }catch(e){showToast('Email failed: '+e.message);return;}
+  showToast('Deposit instructions sent to '+bk.leaderEmail+' ✓');
+  logActivity('email_sent',`Deposit instructions → ${bk.leaderName} (${bk.leaderEmail})`,bk.id);
+}
+
+// ── Sync blocked_rooms from registrations — repairs drift where a registration's
+// room isn't reflected in the booking's blocked_rooms list (the exact "orphaned
+// registration" pattern behind several balance-mismatch bugs fixed this session) ──
+async function syncBlockedRoomsFromRegs(){
+  if(!regSelBk)return;
+  const regRooms=[...new Set(AppData.regs.filter(r=>r.bookingId===regSelBk.id&&r.room).map(r=>r.room))];
+  if(!regRooms.length){showToast('No rooms assigned in registrations yet');return;}
+  const existing=new Set(regSelBk.blockedRooms||[]);
+  const added=regRooms.filter(r=>!existing.has(r));
+  if(!added.length){showToast('blocked_rooms already in sync ✓');return;}
+  const newBlocked=[...existing,...added];
+  regSelBk.blockedRooms=newBlocked;
+  saveAll();regRender();
+  try{await db.from('bookings').update({blocked_rooms:newBlocked}).eq('id',regSelBk.id);}catch(e){}
+  showToast(`Rooms synced: ${added.join(', ')} added to blocked_rooms ✓`);
 }
 
