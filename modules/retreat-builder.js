@@ -828,7 +828,11 @@ function buildDashboard(){
   const in7wStr=fmtISO(addDays(today,49));
   const in30Str=fmtISO(addDays(today,30));
 
-  const active=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate>=todayStr);
+  // Extra Nights (extra-nights.html) purchases create a real bookings row so the
+  // room shows on the venue calendar, but they aren't a teacher retreat moving
+  // through the sales pipeline — exclude them so they don't clutter the pipeline
+  // stages and arrivals widget as if they were retreat "events".
+  const active=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate>=todayStr&&b.retreatName!=='Extra Night');
 
   // Payment alerts — the Sales Pipeline (CRM) now owns early-lead tracking
   // (soft holds, contract follow-up, deposit reminders), so the Dashboard only

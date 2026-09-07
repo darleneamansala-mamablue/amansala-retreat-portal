@@ -382,10 +382,8 @@ function regRender(){
           }
           if(pi===0){
             const numTd=document.createElement('td');numTd.className='r-num';numTd.rowSpan=entry.physical.length;
-            const _bdNote=entry.physical.map(p=>getRegForRoom(regSelBk.id,p)?.notes).filter(Boolean).join(' / ');
-            const _bdNoteHtml=_bdNote?`<br><span style="font-size:9px;color:#b45309;font-style:italic;font-weight:400;white-space:normal;line-height:1.3">${_bdNote.replace(/</g,'&lt;')}</span>`:'';
-            if(IS_TEACHER_MODE)numTd.innerHTML=`Room ${gSeq}${_bdNoteHtml}`;
-            else numTd.innerHTML=`${room}${_bdNoteHtml}`;
+            if(IS_TEACHER_MODE)numTd.innerHTML=`Room ${gSeq}`;
+            else numTd.innerHTML=`${room}`;
             if(!IS_TEACHER_MODE){
               entry.physical.forEach(p=>{
                 const _pReg=getRegForRoom(regSelBk.id,p);
@@ -447,7 +445,8 @@ function regRender(){
             priceTd.innerHTML=`<details class="price-details"><summary><span class="price-summary-total">${fmt$(bd1.total)}</span><span class="price-toggle-arrow">&#9658;</span></summary><div class="price-breakdown-rows"><div class="pb-row"><span>Room (${rateCell1}/nt)</span><span>${fmt$(bd1.base)}</span></div>${pkgLine1}<div class="pb-row"><span>Tax (16%)</span><span>${fmt$(bd1.tax)}</span></div><div class="pb-row"><span>Tip ($30×${_bdNights}nt)</span><span>${fmt$(bd1.dip)}</span></div></div></details>`;
             tr.appendChild(priceTd);
             const notesTd=document.createElement('td');notesTd.className='r-notes';
-            notesTd.innerHTML=`<input class="r-notes-input" value="${(g.notes||'').replace(/"/g,'&quot;')}" placeholder="Add note…" onchange="regSaveGuestNote('${bedReg.id}',0,this.value)">`;
+            const _bdRoomNoteHtml=bedReg?.notes?`<div style="font-size:9px;color:#b45309;font-style:italic;line-height:1.3;margin-bottom:2px">${bedReg.notes.replace(/</g,'&lt;')}</div>`:'';
+            notesTd.innerHTML=`${_bdRoomNoteHtml}<input class="r-notes-input" value="${(g.notes||'').replace(/"/g,'&quot;')}" placeholder="Add note…" onchange="regSaveGuestNote('${bedReg.id}',0,this.value)">`;
             tr.appendChild(notesTd);
             const actionTd=document.createElement('td');actionTd.className='r-action';
             actionTd.innerHTML=`<button class="edit-btn" onclick="gOpenEdit('${physRoom}','${rt.id}')">Edit</button>`;
@@ -466,10 +465,10 @@ function regRender(){
         tr.addEventListener('dragleave',()=>tr.classList.remove('drag-over'));
         tr.addEventListener('drop',e=>{e.preventDefault();tr.classList.remove('drag-over');regMoveGuest(e.dataTransfer.getData('text/plain'),room,rt.id);});
         const sub=entry.merged?` <span style="font-size:10px;color:#8a7e74">(${entry.physical.join(' · ')})</span>`:'';
-        const _vNoteHtml=vReg?.notes?`<br><span style="font-size:9px;color:#b45309;font-style:italic;font-weight:400;white-space:normal;line-height:1.3">${(vReg.notes).replace(/</g,'&lt;')}</span>`:'';
-        const numLblV=IS_TEACHER_MODE?`Room ${gSeq}${_vNoteHtml}`:`${room}${_vNoteHtml}`;
+        const numLblV=IS_TEACHER_MODE?`Room ${gSeq}`:`${room}`;
+        const _vNoteHtml=vReg?.notes?`<div style="font-size:9px;color:#b45309;font-style:italic;line-height:1.3">${(vReg.notes).replace(/</g,'&lt;')}</div>`:'';
         const _vBd2=calcBD(rt,1,nights,regSelBk.startDate,regSelBk);
-        tr.innerHTML=`<td class="r-num">${numLblV}</td><td class="r-add"><button class="add-btn" onclick="gOpenAdd('${room}','${rt.id}')" title="Add guest">+</button></td><td colspan="4" class="r-vacant">Vacant — click + to add guest${sub}</td><td class="r-price" style="text-align:right;color:#aaa;font-size:12px">${fmt$(_vBd2.total)}<span style="font-size:10px;margin-left:2px">/solo</span></td><td class="r-notes"></td><td class="r-action"></td>`;
+        tr.innerHTML=`<td class="r-num">${numLblV}</td><td class="r-add"><button class="add-btn" onclick="gOpenAdd('${room}','${rt.id}')" title="Add guest">+</button></td><td colspan="4" class="r-vacant">Vacant — click + to add guest${sub}</td><td class="r-price" style="text-align:right;color:#aaa;font-size:12px">${fmt$(_vBd2.total)}<span style="font-size:10px;margin-left:2px">/solo</span></td><td class="r-notes">${_vNoteHtml}</td><td class="r-action"></td>`;
         tbody.appendChild(tr);
         return;
       }
@@ -490,10 +489,8 @@ function regRender(){
         if(gi===0){
           const numTd=document.createElement('td');
           numTd.className='r-num';numTd.rowSpan=guests.length;
-          const _rNote=roomRegs[0]?.notes;
-          const _rNoteHtml=_rNote?`<br><span style="font-size:9px;color:#b45309;font-style:italic;font-weight:400;white-space:normal;line-height:1.3">${_rNote.replace(/</g,'&lt;')}</span>`:'';
-          if(IS_TEACHER_MODE){numTd.innerHTML=`Room ${gSeq}${_rNoteHtml}`;}
-          else{numTd.innerHTML=`${room}${_rNoteHtml}`;}
+          if(IS_TEACHER_MODE){numTd.innerHTML=`Room ${gSeq}`;}
+          else{numTd.innerHTML=`${room}`;}
           tr.appendChild(numTd);
           const addTd=document.createElement('td');
           addTd.className='r-add';addTd.rowSpan=guests.length;
@@ -557,7 +554,8 @@ function regRender(){
 
         const notesTd=document.createElement('td');
         notesTd.className='r-notes';
-        notesTd.innerHTML=`<input class="r-notes-input" value="${(g.notes||'').replace(/"/g,'&quot;')}" placeholder="Add note…" onchange="regSaveGuestNote('${reg.id}',${gi},this.value)">`;
+        const _roomNoteHtml=reg?.notes?`<div style="font-size:9px;color:#b45309;font-style:italic;line-height:1.3;margin-bottom:2px">${reg.notes.replace(/</g,'&lt;')}</div>`:'';
+        notesTd.innerHTML=`${_roomNoteHtml}<input class="r-notes-input" value="${(g.notes||'').replace(/"/g,'&quot;')}" placeholder="Add note…" onchange="regSaveGuestNote('${reg.id}',${gi},this.value)">`;
         tr.appendChild(notesTd);
 
         const actionTd=document.createElement('td');
