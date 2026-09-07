@@ -311,6 +311,16 @@ async function loadData() {
       const key = `${em || (fn + '_' + ln)}|${d.arrivalDate || ''}|${d.departureDate || ''}`;
       const cur = map.get(key);
       if (!cur) { map.set(key, row); continue; }
+      // A row whose booking_id no longer resolves to a real, active booking (a stale
+      // resubmission through an old bookmarked transport-form link, e.g. against a
+      // booking id that was later replaced) must never win over one that does —
+      // otherwise this picks a row id the admin board's manual grouping
+      // (settings.transport_groups, keyed by the real row's id) was never built
+      // against, silently breaking the group for this guest.
+      const curValid = !!(cur.booking_id && bkMap[cur.booking_id]);
+      const rowValid = !!(row.booking_id && bkMap[row.booking_id]);
+      if (rowValid && !curValid) { map.set(key, row); continue; }
+      if (curValid && !rowValid) { continue; }
       const curHasBk = !!cur.booking_id;
       const rowHasBk = !!row.booking_id;
       if (rowHasBk && !curHasBk) map.set(key, row);
