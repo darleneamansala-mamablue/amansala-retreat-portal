@@ -387,10 +387,15 @@ function trVehicleType(size){
 }
 
 // ── Ride sharing ─────────────────────────────────────────────────────────
-// Two subs auto-group within 20 min of each other. Staff can also force any
-// subs to share a ride via a common shareGroupId (trMarkSharing), which
-// overrides the time window — this is how "slide them together" works and
-// why the per-person price recalculates via trGetPrice(airport, grp.length).
+// Two subs auto-group within a time window of each other (30 min in Teacher
+// Portal, 20 min in the admin Transport board / driver-view.html). Staff can
+// also manually drag-and-drop entries together in the admin board — that
+// override lives in settings.transport_groups (tr2UserGroupMap / tr2Drop /
+// tr2SaveGroupSetting) keyed by `${arrival|departure}|${transport.id}`, shared
+// live by Teacher Portal (_trGroupWithOverrides) and driver-view.html
+// (colorMap/buildPickupGroups/buildEtaGroups) — not a per-sub shareGroupId
+// field. It overrides the time window and can span retreats, which is why
+// per-person price recalculates via trGetPrice(airport, grp.length).
 
 function trAddMins(t,mins){
   if(!t)return'—';

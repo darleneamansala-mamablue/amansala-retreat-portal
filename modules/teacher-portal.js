@@ -3502,7 +3502,7 @@ function _trGroupWithOverrides(list,type,timeField){
     const gk=(typeof tr2UserGroupMap!=='undefined')?tr2UserGroupMap.get(`${type}|${s.id}`):null;
     if(gk){
       if(ugAssigned.has(gk))groups[ugAssigned.get(gk)].push(s);
-      else{ugAssigned.set(gk,groups.length);groups.push([s]);}
+      else{const g=[s];g.__ugKey=gk;ugAssigned.set(gk,groups.length);groups.push(g);}
     }else rest.push(s);
   });
   if(rest.length){
@@ -3517,6 +3517,21 @@ function _trGroupWithOverrides(list,type,timeField){
   groups.sort((a,b)=>trTimeToMins(a[0][timeField])-trTimeToMins(b[0][timeField]));
   return groups;
 }
+// A manual admin group (drag-and-drop in the Transport tab) can span retreats — this
+// booking's "My Transport" only ever loads its OWN guests, so a group's visible g.length
+// undercounts the real ride size whenever it's been combined with another retreat.
+// Scans the full transport list (allTr, already loaded for the cross-retreat hint below)
+// to find the true combined headcount for pricing/vehicle purposes.
+function _trGlobalGroupPax(type,groupKey,allTr){
+  if(!groupKey||typeof tr2UserGroupMap==='undefined')return null;
+  let n=0;
+  allTr.forEach(s=>{
+    if(type==='arrival'){if(s.arrivalOT||!s.arrivalDate||!s.arrivalTime||!s.arrivalAirport)return;}
+    else{if(s.departureOT||!s.departureDate||!s.departureTime)return;}
+    if(tr2UserGroupMap.get(`${type}|${s.id}`)===groupKey)n++;
+  });
+  return n;
+}
 function renderTeacherTransport(bkId){
   const wrap=document.getElementById('teacherTransportContent');if(!wrap)return;
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk){wrap.innerHTML='';return;}
@@ -3530,6 +3545,7 @@ function _renderTeacherTransportInner(bkId){
   const {roster,matchedSubs,missing,submittedCount,orphanSubs}=getTransportRoster(bkId);
   const subs=matchedSubs;
   const MNTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const _allTr=loadTransport(); // all retreats — needed for cross-retreat pricing/matching below
 
   if(!roster.length){
     wrap.innerHTML=`<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0;max-width:420px;margin:0 auto;line-height:1.65">
@@ -3588,8 +3604,6 @@ function _renderTeacherTransportInner(bkId){
         <span style="font-size:16px;flex-shrink:0">💡</span>
         <p style="font-size:12px;color:#2d6a6a;line-height:1.6;margin:0"><b>Please note:</b> We do our best to match guests arriving alone with guests from other retreats to reduce transfer costs. The pricing shown is based on your group only — the final cost per person may decrease if we are able to arrange a cross-retreat share.</p>
       </div>`;
-  // Load ALL transport for cross-retreat matching
-  const _allTr=loadTransport();
     const byAD={};
     arrivals.forEach(s=>{const k=s.arrivalAirport+'|'+s.arrivalDate;if(!byAD[k])byAD[k]=[];byAD[k].push(s);});
     Object.entries(byAD).forEach(([key,list])=>{
@@ -3604,13 +3618,17 @@ function _renderTeacherTransportInner(bkId){
         <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
         ${groups.map((g,gi)=>{
           const sharers=g.filter(s=>s.willingToShare);
-          const price=trGetPrice(airport,g.length);
-          const isSolo=g.length===1;
+          const globalPax=_trGlobalGroupPax('arrival',g.__ugKey,_allTr);
+          const combinedAcrossRetreats=globalPax!=null&&globalPax>g.length;
+          const payCount=globalPax!=null?globalPax:g.length;
+          const price=trGetPrice(airport,payCount);
+          const isSolo=payCount===1;
           const priceLabel=isSolo?`$${price} private transfer`:`$${price}/person`;
-          const vehicle=trVehicleType(g.length);
-          // Cross-retreat match: only for groups of 1-2, find others from different retreats arriving within 30 min same airport/date
+          const vehicle=trVehicleType(payCount);
+          const combinedNote=combinedAcrossRetreats?`<div style="font-size:11px;color:#065f46;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:6px 10px;margin-top:8px">🔗 Combined with ${globalPax-g.length} guest${globalPax-g.length!==1?'s':''} from another retreat — price above reflects the shared ride of ${globalPax}.</div>`:'';
+          // Cross-retreat match: only for groups of 1-2 not already manually combined, find others from different retreats arriving within 30 min same airport/date
           let crossHtml='';
-          if(g.length<=2){
+          if(g.length<=2&&!g.__ugKey){
             const anchor=trTimeToMins(g[0].arrivalTime);
             const crossMatches=_allTr.filter(s=>
               s.bookingId!==bkId&&!s.arrivalOT&&
@@ -3652,6 +3670,7 @@ function _renderTeacherTransportInner(bkId){
                 <td style="padding:4px 0 2px;white-space:nowrap;text-align:right;min-width:46px">${s.willingToShare?'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:5px;padding:1px 6px">shares</span>':''}</td>
               </tr>`).join('')}
             </table>
+            ${combinedNote}
             ${crossHtml}
           </div>`;
         }).join('')}
@@ -3714,10 +3733,14 @@ function _renderTeacherTransportInner(bkId){
         <div style="background:#fffbf5;padding:10px 16px;border-bottom:1px solid #fde8c8;font-size:12.5px;font-weight:700;color:#b45309">${airLabel} · ${dateLabel}</div>
         <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
         ${groups.map((g,gi)=>{
-          const price=trGetPrice(airport==='unknown'?'cancun':airport,g.length);
-          const isSolo=g.length===1;
+          const globalPax=_trGlobalGroupPax('departure',g.__ugKey,_allTr);
+          const combinedAcrossRetreats=globalPax!=null&&globalPax>g.length;
+          const payCount=globalPax!=null?globalPax:g.length;
+          const price=trGetPrice(airport==='unknown'?'cancun':airport,payCount);
+          const isSolo=payCount===1;
           const priceLabel=isSolo?`$${price} private transfer`:`$${price}/person`;
-          const vehicle=trVehicleType(g.length);
+          const vehicle=trVehicleType(payCount);
+          const combinedNote=combinedAcrossRetreats?`<div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:6px 10px;margin-top:8px">🔗 Combined with ${globalPax-g.length} guest${globalPax-g.length!==1?'s':''} from another retreat — price above reflects the shared ride of ${globalPax}.</div>`:'';
           return`<div style="background:${gi%2===0?'#fffbf5':'#fef9f0'};border:1px solid ${g.length>1?'#fcd9a0':'#fde8c8'};border-radius:9px;padding:10px 14px">
             <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <span>Group ${gi+1}</span>
@@ -3733,6 +3756,7 @@ function _renderTeacherTransportInner(bkId){
                 <td style="padding:4px 0 2px;color:#b45309;font-weight:600;white-space:nowrap;text-align:right">${tsFmt(s.departureTime)}</td>
               </tr>`).join('')}
             </table>
+            ${combinedNote}
           </div>`;
         }).join('')}
         </div>
