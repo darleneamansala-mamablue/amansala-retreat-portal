@@ -3647,7 +3647,7 @@ function _renderTeacherTransportInner(bkId){
                   ${s.firstName} ${s.lastName}
                   ${s.notes?`<div style="font-size:10.5px;color:#8a7e74;font-style:italic;font-weight:400;margin-top:1px">${s.notes}</div>`:''}
                 </td>
-                <td style="padding:4px 8px 2px;color:#8a7e74;white-space:nowrap;text-align:right">${s.flightNumber||'—'}</td>
+                <td style="padding:4px 8px 2px;color:#8a7e74;white-space:nowrap;text-align:right">${s.flightNumber?s.flightNumber:'<span style="font-size:10px;font-weight:700;background:#fef9c3;color:#92400e;border-radius:5px;padding:2px 7px">Missing Flight Info</span>'}</td>
                 <td style="padding:4px 8px 2px;color:#0e9494;font-weight:600;white-space:nowrap;text-align:right">${tsFmt(s.arrivalTime)}</td>
                 <td style="padding:4px 0 2px;white-space:nowrap;text-align:right;min-width:46px">${s.willingToShare?'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:5px;padding:1px 6px">shares</span>':''}</td>
               </tr>`).join('')}
@@ -3729,7 +3729,7 @@ function _renderTeacherTransportInner(bkId){
             <table style="width:100%;border-collapse:collapse;font-size:12px">
               ${g.map(s=>`<tr>
                 <td style="padding:4px 8px 2px 0;font-weight:600;color:#2d2520;width:100%">${s.firstName} ${s.lastName}</td>
-                <td style="padding:4px 8px 2px;color:#8a7e74;white-space:nowrap;text-align:right">${s.flightNumber||s.departureFlight||'—'}</td>
+                <td style="padding:4px 8px 2px;color:#8a7e74;white-space:nowrap;text-align:right">${(s.flightNumber||s.departureFlight)?(s.flightNumber||s.departureFlight):'<span style="font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;border-radius:5px;padding:2px 7px">Missing Flight Info</span>'}</td>
                 <td style="padding:4px 0 2px;color:#b45309;font-weight:600;white-space:nowrap;text-align:right">${tsFmt(s.departureTime)}</td>
               </tr>`).join('')}
             </table>
@@ -3759,6 +3759,21 @@ function _renderTeacherTransportInner(bkId){
             </tr>`;}).join('')}
           </tbody>
         </table>
+      </div>
+    </div>`;
+  }
+
+  // Submitted transport info but left flight number blank (the form only requires
+  // date/time/airport unless OT — flight number is optional, so this is the one gap
+  // that can slip through after a real submission).
+  const missingFlightSubs=subs.filter(s=>!(s.arrivalOT&&s.departureOT)&&!(s.flightNumber||'').trim());
+  if(missingFlightSubs.length){
+    html+=`<div style="background:#fff;border:1px solid #fde68a;border-radius:12px;margin-bottom:18px;overflow:hidden">
+      <div style="background:#fffbeb;padding:12px 18px;border-bottom:1px solid #fde68a">
+        <span style="font-size:12.5px;font-weight:700;color:#92400e">✈ Submitted, but missing flight number (${missingFlightSubs.length})</span>
+      </div>
+      <div style="padding:12px 18px;display:flex;flex-wrap:wrap;gap:8px">
+        ${missingFlightSubs.map(s=>`<span style="font-size:12px;padding:3px 10px;background:#fef9c3;border:1px solid #fcd34d;border-radius:6px;color:#92400e">${s.firstName} ${s.lastName}</span>`).join('')}
       </div>
     </div>`;
   }
