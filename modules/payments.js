@@ -449,7 +449,10 @@ function _calcRoomRevenue(bk){
     const roomTax=+(base*roomTaxRate).toFixed(2);
     const pTax=+(pkgCost*pkgTaxRate).toFixed(2);
     const tip=+(_eTipRate*gc*_eTipNights).toFixed(2);
-    total+=+(base+pkgCost+roomTax+pTax+tip).toFixed(2);
+    // Already tax-inclusive (each custom add-on uses its own tax rate, which can differ
+    // from pkgTaxRate) — add on top, don't fold into roomTax/pTax.
+    const cao=calcCustomAoCost(bk,gc,reg);
+    total+=+(base+pkgCost+roomTax+pTax+tip+cao).toFixed(2);
   });
   const sr=bk.scheduleRequest;
   if(sr?.bowlRental&&sr.bowlQty&&sr.bowlDays){const slots=(sr.bowlDays||[]).reduce((n,e)=>n+(e.am?1:0)+(e.pm?1:0),0);total+=sr.bowlQty*slots*15;}

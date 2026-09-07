@@ -155,7 +155,11 @@ function regRender(){
     const rate=reg.customRateOverride!=null?reg.customRateOverride:(_isBd1ExtraB?(isLowSeason(_bECI,_bNights)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):getRoomRate(rt,gc,_bECI,_bNights));
     const base=rate*gc*_bNights;
     const pkgCost=reg.customPkgPrice!=null?reg.customPkgPrice:(_billAddOns.length?calcPkgCost(regSelBk,gc):0);
-    const total=+(base+pkgCost+base*_rmTxR+pkgCost*_pkgTxR+_bTipRate*gc*_bTipNights).toFixed(2);
+    // calcCustomAoCost already returns a tax-inclusive $ total (each item taxed at its
+    // own rate, which can differ from _pkgTxR) — add it directly, don't run it through
+    // _pkgTxR again.
+    const cao=calcCustomAoCost(regSelBk,gc,reg);
+    const total=+(base+pkgCost+base*_rmTxR+pkgCost*_pkgTxR+_bTipRate*gc*_bTipNights+cao).toFixed(2);
     grandTotal+=total;
     _regedRooms.add(room);totalGuests+=gc;
   });

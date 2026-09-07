@@ -4872,16 +4872,25 @@ function calcPkgItems(bk){
     ADD_ONS.filter(a=>bk.packages.includes(a.id)).forEach(a=>items.push({...a,price:bk.packageCustomPrices?.[a.id]??a.price}));
     (bk.extraPackages||[]).filter(ep=>bk.packages.includes(ep.id)).forEach(ep=>items.push({...ep}));
   }
-  // packageCustomPrices.__custom__: staging's ad-hoc per-guest add-ons (e.g. "3 Drink
-  // per day"), stored as {name,price,nights} — always applied, not gated behind the
-  // bk.packages toggle list. Portal never read this array, so any retreat whose custom
-  // add-ons were entered in staging (the only place that writes it) silently priced
-  // them at $0 here — confirmed on Rachel Nolan/Rare Soul (Nov 18, 2026).
-  (bk.packageCustomPrices?.__custom__||[]).forEach((c,i)=>{
-    const p=Number(c.price||0),nt=Number(c.nights||1);
-    items.push({id:'__custom_'+i,name:c.name||'Custom add-on',price:+(p*nt).toFixed(2)});
-  });
   return items;
+}
+// packageCustomPrices.__custom__: staging's ad-hoc per-guest add-ons (e.g. "3 Drink per
+// day", "Afrobeats class..."), stored as {name,price,nights,taxRate} — always applied,
+// not gated behind the bk.packages toggle list, and skipped for a registration that has
+// its own custom_pkg_price override (matches staging's getRegNights-adjacent logic
+// exactly). Each item carries its OWN tax rate, which can differ from the booking's
+// general package tax rate (confirmed: Adesina Cash's custom add-on is taxed at 13%
+// while her booking's default package tax rate is 16%) — so this is intentionally NOT
+// folded into calcPkgItems()/calcPkgCost() (which share one tax rate across everything);
+// it returns an already tax-inclusive dollar total to be added on top of the room total.
+function calcCustomAoCost(bk,gc,reg){
+  if(!bk||reg?.customPkgPrice!=null)return 0;
+  const list=bk.packageCustomPrices?.__custom__||[];
+  if(!list.length)return 0;
+  return+list.reduce((s,c)=>{
+    const p=Number(c.price||0),nt=Number(c.nights||1),tr=Number(c.taxRate||0);
+    return s+(p*nt*gc)+(p*nt*gc*tr);
+  },0).toFixed(2);
 }
 function calcPkgCost(bk,gc){
   if(!bk)return 0;
@@ -4909,7 +4918,7 @@ function getBkTaxRate(bk){
   const r=bk?.taxRate??bk?.packageCustomPrices?.__cfg__?.taxRate;
   return(r===0||r===0.13||r===0.16)?r:0.16;
 }
-function calcPrice(rt,gc,nights,dateStr,bk,reg){if(!rt||!nights)return 0;const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,nights);const base=rate*gc*nights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);return+(base*1.16+pkg*(1+pkgTr)+getTip(bk)*gc*nights).toFixed(2);}
+function calcPrice(rt,gc,nights,dateStr,bk,reg){if(!rt||!nights)return 0;const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,nights);const base=rate*gc*nights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);return+(base*1.16+pkg*(1+pkgTr)+getTip(bk)*gc*nights+calcCustomAoCost(bk,gc,reg)).toFixed(2);}
 function calcTeacherDiscount(bk,bkRegs){
   const nights=getNights(bk);
   // Count named guests only — exclude teacher's own room (isTeacherRoom) to avoid double-counting
@@ -4937,7 +4946,7 @@ function calcBD(rt,gc,nights,dateStr,bk,reg){
   const rNights=reg?.customNightsOverride!=null?Number(reg.customNightsOverride):nights;
   const tipNights=reg?.customTipNightsOverride!=null?Number(reg.customTipNightsOverride):rNights;
   const tipRate=reg?.customTipRateOverride!=null?Number(reg.customTipRateOverride):getTip(bk);
-  const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,rNights);const base=rate*gc*rNights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const tax=+(base*0.16+pkg*pkgTr).toFixed(2);const dip=tipRate*gc*tipNights;return{rate,base:+base.toFixed(2),pkg:+pkg.toFixed(2),tax,dip,total:+(base+pkg+tax+dip).toFixed(2),nights:rNights,tipNights};}
+  const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,rNights);const base=rate*gc*rNights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const tax=+(base*0.16+pkg*pkgTr).toFixed(2);const dip=tipRate*gc*tipNights;const cao=calcCustomAoCost(bk,gc,reg);return{rate,base:+base.toFixed(2),pkg:+pkg.toFixed(2),tax,dip,cao,total:+(base+pkg+tax+dip+cao).toFixed(2),nights:rNights,tipNights};}
 function togglePkg(aoId){
   if(!regSelBk)return;
   if(!regSelBk.packages)regSelBk.packages=[];

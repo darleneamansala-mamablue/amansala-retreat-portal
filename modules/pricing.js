@@ -52,7 +52,7 @@ function renderEstQuote(){
   });
 
   let roomRows=[];
-  let totalRoomBase=0,totalTip=0,totalRoomTax=0,totalPkgTax=0,totalPkg=0;
+  let totalRoomBase=0,totalTip=0,totalRoomTax=0,totalPkgTax=0,totalPkg=0,totalCao=0;
 
   const _sortedBlocked=Array.from(blockedSet).sort((a,b)=>{
     const rtA=AppData.roomTypes.find(t=>(t.rooms||[]).includes(a));
@@ -84,14 +84,17 @@ function renderEstQuote(){
     const pTax=+(pkgCost*pkgTaxRate).toFixed(2);
     const tax=+(roomTax+pTax).toFixed(2);
     const tip=+(_eTipRate*gc*_eTipNights).toFixed(2);
-    const total=+(base+pkgCost+tax+tip).toFixed(2);
+    // Already tax-inclusive (each custom add-on uses its own tax rate, which can differ
+    // from pkgTaxRate) — add on top of tax, don't fold into roomTax/pTax.
+    const cao=calcCustomAoCost(regSelBk,gc,reg);
+    const total=+(base+pkgCost+tax+tip+cao).toFixed(2);
     const guestNames=[...new Set((reg.guests||[]).filter(g=>g.name).map(g=>g.name.trim()))].join(' & ');
-    roomRows.push({room,rt,gc,rate,base,pkgCost,roomTax,pTax,tax,tip,total,guestNames,isTeacher:reg?.isTeacherRoom,regNights:_eNights});
-    totalRoomBase+=base;totalTip+=tip;totalRoomTax+=roomTax;totalPkgTax+=pTax;totalPkg+=pkgCost;
+    roomRows.push({room,rt,gc,rate,base,pkgCost,roomTax,pTax,tax,tip,cao,total,guestNames,isTeacher:reg?.isTeacherRoom,regNights:_eNights});
+    totalRoomBase+=base;totalTip+=tip;totalRoomTax+=roomTax;totalPkgTax+=pTax;totalPkg+=pkgCost;totalCao+=cao;
   });
 
   const totalTax=+(totalRoomTax+totalPkgTax).toFixed(2);
-  const grandEst=+(totalRoomBase+totalPkg+totalTax+totalTip).toFixed(2);
+  const grandEst=+(totalRoomBase+totalPkg+totalTax+totalTip+totalCao).toFixed(2);
   document.getElementById('estQuoteLbl').textContent=`${estPax} est. guests · ${nights} nights · ${blockedSet.size} rooms · ${roomRows.length} registered`;
 
   // Left card: per-room itemized breakdown
@@ -112,6 +115,7 @@ function renderEstQuote(){
         <span>ISH hab. (${roomTaxRate===0?'0%':'16%'})</span><span>${fmt$(r.roomTax)}</span>
         ${r.pTax>0?`<span>IVA extras (${Math.round(pkgTaxRate*100)}%)</span><span>${fmt$(r.pTax)}</span>`:''}
         <span>Gratuity ($${tipPer}×${r.gc}×${r.regNights}nt)</span><span>${fmt$(r.tip)}</span>
+        ${r.cao>0?`<span>Custom add-ons (tax incl.)</span><span>${fmt$(r.cao)}</span>`:''}
       </div>
     </div>`;
   });
@@ -140,6 +144,7 @@ function renderEstQuote(){
     <div class="eq-card-title" style="color:#92400e">Estimated Grand Total</div>
     <div class="eq-row"><span>🏠 Room rates (base)</span><span>${fmt$(+totalRoomBase.toFixed(2))}</span></div>
     ${totalPkg>0?`<div class="eq-row"><span>📦 Packages</span><span>${fmt$(+totalPkg.toFixed(2))}</span></div>`:''}
+    ${totalCao>0?`<div class="eq-row"><span>🎁 Custom add-ons (tax incl.)</span><span>${fmt$(+totalCao.toFixed(2))}</span></div>`:''}
     <div class="eq-row" style="color:#0891b2"><span>🤝 Gratuity ($${tipPer}/guest/night)</span><span>${fmt$(+totalTip.toFixed(2))}</span></div>
     ${totalRoomTax>0?`<div class="eq-row" style="color:#7c3aed"><span>🏛 ISH hab. (16%)</span><span>${fmt$(+totalRoomTax.toFixed(2))}</span></div>`:''}
     ${totalPkgTax>0?`<div class="eq-row" style="color:#7c3aed"><span>🏛 IVA extras (${Math.round(pkgTaxRate*100)}%)</span><span>${fmt$(+totalPkgTax.toFixed(2))}</span></div>`:''}
