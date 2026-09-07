@@ -3490,6 +3490,33 @@ function renderTeacherActivities(bkId){
   wrap.innerHTML=html;
 }
 
+// Groups a same-airport/date list of subs into ride groups, honoring any manual
+// grouping the admin Transport board saved (tr2UserGroupMap, shared via
+// settings.transport_groups — same map driver-view.html reads) before falling
+// back to auto-clustering the rest by a 30-min window, same as before this existed.
+function _trGroupWithOverrides(list,type,timeField){
+  const groups=[];
+  const ugAssigned=new Map();
+  const rest=[];
+  list.forEach(s=>{
+    const gk=(typeof tr2UserGroupMap!=='undefined')?tr2UserGroupMap.get(`${type}|${s.id}`):null;
+    if(gk){
+      if(ugAssigned.has(gk))groups[ugAssigned.get(gk)].push(s);
+      else{ugAssigned.set(gk,groups.length);groups.push([s]);}
+    }else rest.push(s);
+  });
+  if(rest.length){
+    let cur=[rest[0]];
+    for(let i=1;i<rest.length;i++){
+      if(trTimeToMins(rest[i][timeField])-trTimeToMins(cur[0][timeField])<=30)cur.push(rest[i]);
+      else{groups.push(cur);cur=[rest[i]];}
+    }
+    groups.push(cur);
+  }
+  groups.forEach(g=>g.sort((a,b)=>trTimeToMins(a[timeField])-trTimeToMins(b[timeField])));
+  groups.sort((a,b)=>trTimeToMins(a[0][timeField])-trTimeToMins(b[0][timeField]));
+  return groups;
+}
 function renderTeacherTransport(bkId){
   const wrap=document.getElementById('teacherTransportContent');if(!wrap)return;
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk){wrap.innerHTML='';return;}
@@ -3571,12 +3598,7 @@ function _renderTeacherTransportInner(bkId){
       const etaMins=airport==='cancun'?90:45;
       const dt=new Date(date+'T00:00:00');
       const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
-      const groups=[];let cur=[list[0]];
-      for(let i=1;i<list.length;i++){
-        if(trTimeToMins(list[i].arrivalTime)-trTimeToMins(cur[0].arrivalTime)<=30)cur.push(list[i]);
-        else{groups.push(cur);cur=[list[i]];}
-      }
-      groups.push(cur);
+      const groups=_trGroupWithOverrides(list,'arrival','arrivalTime');
       html+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;margin-bottom:10px;overflow:hidden">
         <div style="background:#f2f8f6;padding:10px 16px;border-bottom:1px solid #c8d8d4;font-size:12.5px;font-weight:700;color:#0e9494">${airLabel} · ${dateLabel}</div>
         <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
@@ -3687,12 +3709,7 @@ function _renderTeacherTransportInner(bkId){
       const airLabel=airport==='cancun'?'Cancún Airport':airport==='tulum'?'<span style="color:#065f46">Tulum Airport</span>':'Airport not specified';
       const dt=new Date(date+'T00:00:00');
       const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
-      const groups=[];let cur=[list[0]];
-      for(let i=1;i<list.length;i++){
-        if(trTimeToMins(list[i].departureTime)-trTimeToMins(cur[0].departureTime)<=30)cur.push(list[i]);
-        else{groups.push(cur);cur=[list[i]];}
-      }
-      groups.push(cur);
+      const groups=_trGroupWithOverrides(list,'departure','departureTime');
       html+=`<div style="background:#fff;border:1px solid #fde8c8;border-radius:12px;margin-bottom:10px;overflow:hidden">
         <div style="background:#fffbf5;padding:10px 16px;border-bottom:1px solid #fde8c8;font-size:12.5px;font-weight:700;color:#b45309">${airLabel} · ${dateLabel}</div>
         <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">

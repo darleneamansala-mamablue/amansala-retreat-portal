@@ -320,6 +320,14 @@ async function syncTransportFromSupabase(){
     localStorage.setItem('amansala_deleted_transport_ids',JSON.stringify([...deletedTransportIds]));
   }catch(e){}
 
+  // Refresh the shared manual-grouping map (same `settings.transport_groups` row the
+  // admin Transport board writes via tr2SaveGroupSetting, and driver-view.html reads
+  // independently) so Teacher Portal's "My Transport" grouping stays consistent with it.
+  try{
+    const {data:setRow}=await db.from('settings').select('value').eq('key','transport_groups').maybeSingle();
+    tr2UserGroupMap=new Map(setRow?.value||[]);
+  }catch(e){}
+
   const remote=await loadTransportFromSupabase();
   if(!remote)return;
   const local=loadTransport();
