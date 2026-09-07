@@ -413,8 +413,16 @@ function _calcRoomRevenue(bk){
   const nights=getNights(bk);
   const blockedSet=new Set(bk.blockedRooms||[]);
   const bkRegs=getRegsForBk(bk.id);
+  // Prefer whichever registration has more named guests when a room has more than one
+  // (e.g. a stale empty placeholder left behind after a guest was added via a separate
+  // row) — matches staging's _billRegByRoom fix, avoids silently picking the empty one.
   const regByRoom={};
-  bkRegs.forEach(r=>{if(blockedSet.has(r.room))regByRoom[r.room]=r;});
+  bkRegs.forEach(r=>{
+    if(!blockedSet.has(r.room))return;
+    const prev=regByRoom[r.room];
+    if(!prev){regByRoom[r.room]=r;return;}
+    if((r.guests||[]).filter(g=>g.name).length>(prev.guests||[]).filter(g=>g.name).length)regByRoom[r.room]=r;
+  });
   const tipPer=getTip(bk),pkgTaxRate=getBkTaxRate(bk),roomTaxRate=pkgTaxRate===0?0:0.16;
   const addOnItems=calcPkgItems(bk);
   let total=0;

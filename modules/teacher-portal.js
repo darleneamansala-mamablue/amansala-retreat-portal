@@ -118,9 +118,19 @@ function regRender(){
   const _blockedSetEarly=new Set(regSelBk.blockedRooms||[]);
   let totalGuests=0,grandTotal=0;
   const _regedRooms=new Set();
-  // Mirror renderEstQuote exactly: one reg per room (last wins), rt from physical room, fresh calc
+  // Mirror renderEstQuote exactly: one reg per room, rt from physical room, fresh calc.
+  // When a room has more than one registration (e.g. a stale empty placeholder left behind
+  // after a guest was added via a separate row), prefer whichever has more named guests
+  // instead of "whoever the fetch happened to return last" — matches staging's
+  // _billRegByRoom fix (js/modules/teachers.js), which no longer silently drops a named
+  // guest to an empty duplicate depending on unordered fetch results.
   const _regByRoom={};
-  allRegs.forEach(r=>{if(_blockedSetEarly.has(r.room))_regByRoom[r.room]=r;});
+  allRegs.forEach(r=>{
+    if(!_blockedSetEarly.has(r.room))return;
+    const prev=_regByRoom[r.room];
+    if(!prev){_regByRoom[r.room]=r;return;}
+    if((r.guests||[]).filter(g=>g.name).length>(prev.guests||[]).filter(g=>g.name).length)_regByRoom[r.room]=r;
+  });
   const _pkgTxR=getBkTaxRate(regSelBk),_rmTxR=_pkgTxR===0?0:0.16,_tipPer=getTip(regSelBk);
   const _billAddOns=calcPkgItems(regSelBk);
   Array.from(_blockedSetEarly).forEach(room=>{

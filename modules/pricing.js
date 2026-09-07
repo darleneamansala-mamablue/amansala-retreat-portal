@@ -40,8 +40,16 @@ function renderEstQuote(){
 
   // Room breakdown: actual registered guests where available, solo estimate for vacant
   const bkRegs=getRegsForBk(regSelBk.id);
+  // Prefer whichever registration has more named guests when a room has more than one
+  // (e.g. a stale empty placeholder left behind after a guest was added via a separate
+  // row) — matches staging's _billRegByRoom fix, avoids silently picking the empty one.
   const regByRoom={};
-  bkRegs.forEach(r=>{if(blockedSet.has(r.room))regByRoom[r.room]=r;});
+  bkRegs.forEach(r=>{
+    if(!blockedSet.has(r.room))return;
+    const prev=regByRoom[r.room];
+    if(!prev){regByRoom[r.room]=r;return;}
+    if((r.guests||[]).filter(g=>g.name).length>(prev.guests||[]).filter(g=>g.name).length)regByRoom[r.room]=r;
+  });
 
   let roomRows=[];
   let totalRoomBase=0,totalTip=0,totalRoomTax=0,totalPkgTax=0,totalPkg=0;
