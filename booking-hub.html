@@ -4872,6 +4872,15 @@ function calcPkgItems(bk){
     ADD_ONS.filter(a=>bk.packages.includes(a.id)).forEach(a=>items.push({...a,price:bk.packageCustomPrices?.[a.id]??a.price}));
     (bk.extraPackages||[]).filter(ep=>bk.packages.includes(ep.id)).forEach(ep=>items.push({...ep}));
   }
+  // packageCustomPrices.__custom__: staging's ad-hoc per-guest add-ons (e.g. "3 Drink
+  // per day"), stored as {name,price,nights} — always applied, not gated behind the
+  // bk.packages toggle list. Portal never read this array, so any retreat whose custom
+  // add-ons were entered in staging (the only place that writes it) silently priced
+  // them at $0 here — confirmed on Rachel Nolan/Rare Soul (Nov 18, 2026).
+  (bk.packageCustomPrices?.__custom__||[]).forEach((c,i)=>{
+    const p=Number(c.price||0),nt=Number(c.nights||1);
+    items.push({id:'__custom_'+i,name:c.name||'Custom add-on',price:+(p*nt).toFixed(2)});
+  });
   return items;
 }
 function calcPkgCost(bk,gc){
