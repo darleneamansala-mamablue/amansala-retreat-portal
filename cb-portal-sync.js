@@ -173,11 +173,13 @@ async function pushReservationsToCloudbeds(bk){
   // Main loop: create one individual Cloudbeds reservation per blocked room.
   // This applies to ALL room types including Casa Grande (cg1-cg5) and Casa Shanti (csh1-csh2)
   // which now each have their own physical room in Cloudbeds via Split Inventory.
+  let _pushCreated=0,_pushFailed=0,_pushSkipped=0;const _pushFailedRooms=[];
   for(const roomName of bk.blockedRooms){
     if(bk.cbReservationIds[roomName]){
       // Already verified active in the pre-verify pass above — safe to skip
       const existingId=bk.cbReservationIds[roomName];
       {
+        _pushSkipped++;
         const reg=AppData.regs.find(r=>r.bookingId===bk.id&&r.room===roomName);
         const guestNames=(reg?.guests||[]).filter(g=>g.name).map(g=>g.name.trim());
         if(guestNames.length){
@@ -211,11 +213,11 @@ async function pushReservationsToCloudbeds(bk){
       const d=await res.json();
       console.log('[CB push] response for',roomName,':',JSON.stringify(d).slice(0,200));
       if(!res.ok||d.error)throw new Error(d.error||`HTTP ${res.status}`);
-      if(d.reservationId){bk.cbReservationIds[roomName]=d.reservationId;console.log('[CB push] SUCCESS portal='+roomName+' → cbRoomName='+d.cbRoomName+' resId='+d.reservationId+' roomAssign='+JSON.stringify(d.roomAssign)+' rateApply='+JSON.stringify(d.rateApply)+' adjustmentId='+d.adjustmentId);}
+      if(d.reservationId){bk.cbReservationIds[roomName]=d.reservationId;_pushCreated++;console.log('[CB push] SUCCESS portal='+roomName+' → cbRoomName='+d.cbRoomName+' resId='+d.reservationId+' roomAssign='+JSON.stringify(d.roomAssign)+' rateApply='+JSON.stringify(d.rateApply)+' adjustmentId='+d.adjustmentId);}
       if(d.guestId)bk.cbGuestIds[roomName]=d.guestId;
       if(!bk.cbAdjustmentIds)bk.cbAdjustmentIds={};
       bk.cbAdjustmentIds[roomName]=d.adjustmentId||null;
-    }catch(err){console.warn(`[CB block] ${roomName}: ${err.message}`);}
+    }catch(err){_pushFailed++;_pushFailedRooms.push(roomName);console.warn(`[CB block] ${roomName}: ${err.message}`);}
   }
   // If a Supabase realtime sync fired during this async function, the bookings array
   // was replaced and bk is now a stale reference. Re-apply our CB changes to the
@@ -235,6 +237,17 @@ async function pushReservationsToCloudbeds(bk){
   saveAll();
   // Second save after 2s to catch any realtime update that fires right after the first save
   setTimeout(()=>{_reapplyCbToBk();saveAll();},2000);
+  // This ran silently before (fire-and-forget from blockSave(), no toast either way) —
+  // staff had no way to tell a Cloudbeds push actually happened, let alone that part of
+  // it failed. Always surface a result: new rooms created, already-synced rooms verified,
+  // or a partial failure to retry.
+  if(_pushFailed){
+    showToast(`Cloudbeds: ${_pushCreated} new, ${_pushSkipped} already synced, ${_pushFailed} FAILED (${_pushFailedRooms.slice(0,3).join(', ')}${_pushFailedRooms.length>3?'…':''}) — retry with ↑ Push to CB`);
+  }else if(_pushCreated){
+    showToast(`Cloudbeds: ${_pushCreated} new room${_pushCreated!==1?'s':''} pushed, ${_pushSkipped} already synced ✓`);
+  }else if(_pushSkipped){
+    showToast(`Cloudbeds: all ${_pushSkipped} room${_pushSkipped!==1?'s':''} already synced ✓`);
+  }
 }
 
 async function restoreCancelledReservations(reservationIds){
