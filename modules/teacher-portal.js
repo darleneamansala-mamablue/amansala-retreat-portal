@@ -572,7 +572,18 @@ function regRender(){
 }
 
 function regSaveNote(regId,val){const r=AppData.regs.find(x=>x.id===regId);if(r){r.notes=val;r.updatedAt=new Date().toISOString();saveAll();syncNotesToCloudbeds(r);}}
-function regSetTip(val){if(!regSelBk)return;const t=parseFloat(val);regSelBk.tipPerNight=(isNaN(t)||t<0)?0:t;saveAll();regRender();showToast(`Tip updated to $${regSelBk.tipPerNight}/person/night`);}
+async function regSetTip(val){
+  if(!regSelBk)return;
+  const t=parseFloat(val);
+  regSelBk.tipPerNight=(isNaN(t)||t<0)?0:t;
+  saveAll(); // fire-and-forget bulk sync, as usual — kept for every other field
+  regRender();
+  // saveAll()'s bulk sync doesn't await Supabase before returning, so a refresh
+  // moments after editing could beat it there and load the old value back in —
+  // write this specific field directly and immediately so it's durable right away.
+  try{await db.from('bookings').update({tip_per_night:regSelBk.tipPerNight}).eq('id',regSelBk.id);}catch(e){}
+  showToast(`Tip updated to $${regSelBk.tipPerNight}/person/night`);
+}
 function regSaveGuestNote(regId,guestIdx,val){const r=AppData.regs.find(x=>x.id===regId);if(r&&r.guests&&r.guests[guestIdx]){r.guests[guestIdx].notes=val;r.updatedAt=new Date().toISOString();saveAll();syncNotesToCloudbeds(r);}}
 
 // Inline nightly-rate edit directly from the room list price breakdown (e.g. a teacher
