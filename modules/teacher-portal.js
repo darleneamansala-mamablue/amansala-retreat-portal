@@ -404,7 +404,7 @@ function regRender(){
           }
           if(pi===0){
             const numTd=document.createElement('td');numTd.className='r-num';numTd.rowSpan=entry.physical.length;
-            if(_hideRoomNums)numTd.innerHTML=`Room ${gSeq}`;
+            if(_hideRoomNums)numTd.innerHTML=`Room`;
             else numTd.innerHTML=`${room}`;
             if(!IS_TEACHER_MODE){
               entry.physical.forEach(p=>{
@@ -487,7 +487,7 @@ function regRender(){
         tr.addEventListener('dragleave',()=>tr.classList.remove('drag-over'));
         tr.addEventListener('drop',e=>{e.preventDefault();tr.classList.remove('drag-over');regMoveGuest(e.dataTransfer.getData('text/plain'),room,rt.id);});
         const sub=entry.merged?` <span style="font-size:10px;color:#8a7e74">(${entry.physical.join(' · ')})</span>`:'';
-        const numLblV=_hideRoomNums?`Room ${gSeq}`:`${room}`;
+        const numLblV=_hideRoomNums?`Room`:`${room}`;
         const _vNoteHtml=vReg?.notes?`<div style="font-size:9px;color:#b45309;font-style:italic;line-height:1.3">${(vReg.notes).replace(/</g,'&lt;')}</div>`:'';
         const _vBd2=calcBD(rt,1,nights,regSelBk.startDate,regSelBk);
         tr.innerHTML=`<td class="r-num">${numLblV}</td><td class="r-add"><button class="add-btn" onclick="gOpenAdd('${room}','${rt.id}')" title="Add guest">+</button></td><td colspan="4" class="r-vacant">Vacant — click + to add guest${sub}</td><td class="r-price" style="text-align:right;color:#aaa;font-size:12px">${fmt$(_vBd2.total)}<span style="font-size:10px;margin-left:2px">/solo</span></td><td class="r-notes">${_vNoteHtml}</td><td class="r-action"></td>`;
@@ -511,7 +511,7 @@ function regRender(){
         if(gi===0){
           const numTd=document.createElement('td');
           numTd.className='r-num';numTd.rowSpan=guests.length;
-          if(_hideRoomNums){numTd.innerHTML=`Room ${gSeq}`;}
+          if(_hideRoomNums){numTd.innerHTML=`Room`;}
           else{numTd.innerHTML=`${room}`;}
           tr.appendChild(numTd);
           const addTd=document.createElement('td');
@@ -5039,22 +5039,15 @@ function openRealRoomsPanel(){
   const bk=regSelBk;
   const blocked=bk.blockedRooms||[];
   const hideRooms=bk.packageCustomPrices?.__cfg__?.hideRoomNumbers??true;
-  const sortedBlocked=[...blocked].sort((a,b)=>{
-    const rtA=AppData.roomTypes.find(t=>(t.rooms||[]).includes(a));
-    const rtB=AppData.roomTypes.find(t=>(t.rooms||[]).includes(b));
-    const ka=rtA?_roomSortKey(rtA):9999,kb=rtB?_roomSortKey(rtB):9999;
-    return ka!==kb?ka-kb:a.localeCompare(b,undefined,{numeric:true});
-  });
   const cards=blocked.length?blocked.map(room=>{
     const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
     const reg=getRegForRoom(bk.id,room);
     const guestNames=(reg?.guests||[]).filter(g=>g.name).map(g=>g.name).join(' & ');
     const used=!!guestNames;
-    const teacherLabel='Room '+(sortedBlocked.indexOf(room)+1);
     return`<div style="padding:8px 12px;border-radius:8px;background:${used?'#f0fdf4':'#fff'};border:1.5px solid ${used?'#86efac':'var(--border)'};min-width:130px">
       <div style="font-size:12.5px;font-weight:700;color:var(--dark)">${escHtml(room)}</div>
       <div style="font-size:11px;color:var(--muted)">${rt?escHtml(rt.name):''}</div>
-      ${hideRooms?`<div style="font-size:10px;color:#0e9494;font-weight:600;margin-top:2px">Teacher sees: ${teacherLabel}</div>`:''}
+      ${hideRooms?`<div style="font-size:10px;color:#0e9494;font-weight:600;margin-top:2px">Teacher sees: Room</div>`:''}
       <div style="font-size:11px;font-weight:600;margin-top:3px;color:${used?'#16a34a':'#9ca3af'}">${used?'✓ '+escHtml(guestNames):'Available'}</div>
     </div>`;
   }).join(''):'<div style="color:var(--muted);font-size:13px">No rooms blocked yet</div>';
