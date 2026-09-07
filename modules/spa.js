@@ -72,7 +72,7 @@ const SPA_DEFAULT_ROOMS = [
 
 async function spaLoad() {
   try {
-    const { data } = await db.from('app_store').select('value').eq('key', 'spa_data').single();
+    const { data } = await db.from('app_store').select('value').eq('key', 'spa_data').maybeSingle();
     if (data && data.value && (data.value.services || []).length) {
       SpaData = data.value;
     } else {

@@ -4257,7 +4257,12 @@ async function syncToSupabase(){
   // If this device hasn't acknowledged the latest clear signal yet, skip writing
   // so we don't push stale local data back up before loadFromSupabase has run.
   try{
-    const {data:sigData}=await db.from('app_store').select('value').eq('key','clear_signal').single();
+    // maybeSingle(), not single() — this app_store row may legitimately not exist yet
+    // (no clear-signal has ever been issued on this site), and single() 406s on zero
+    // rows. The 406 was harmless (caught below, sync proceeds either way) but spammed
+    // the console on every save — including every Push to CB, which runs saveAll()
+    // twice (once immediately, once again 2s later).
+    const {data:sigData}=await db.from('app_store').select('value').eq('key','clear_signal').maybeSingle();
     const clearSig=sigData?.value||'';
     const lastAck=localStorage.getItem('amansala_clear_ack')||'';
     if(clearSig&&clearSig>lastAck)return; // not yet acknowledged — wait for loadFromSupabase to clear first

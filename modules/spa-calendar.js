@@ -41,7 +41,7 @@ function spaCalSetGroupFilter(key) {
 
 async function spaCalLoad() {
   try {
-    const { data } = await db.from('app_store').select('value').eq('key', 'spa_appointments').single();
+    const { data } = await db.from('app_store').select('value').eq('key', 'spa_appointments').maybeSingle();
     SpaAppointments = (data && data.value) || [];
   } catch (e) {
     SpaAppointments = [];

@@ -788,7 +788,7 @@ function actSheetRenderSummary() {
 
 async function actOpsLoad() {
   try {
-    const {data} = await db.from('app_store').select('value').eq('key','act_ops').single();
+    const {data} = await db.from('app_store').select('value').eq('key','act_ops').maybeSingle();
     if (data?.value) actOpsData = data.value;
   } catch(e) {}
 }
@@ -1100,7 +1100,7 @@ async function actAdminSaveSignup(bkId) {
   const checked=[...document.querySelectorAll('#adminSuActs input[type=checkbox]:checked')].map(c=>c.value);
   if(!checked.length){showToast('Select at least one activity.');return;}
   try {
-    const {data:sd}=await db.from('app_store').select('value').eq('key','act_signups_'+bkId).single();
+    const {data:sd}=await db.from('app_store').select('value').eq('key','act_signups_'+bkId).maybeSingle();
     let signups=sd?.value||[];
     const isMine=s=>s.firstName?.toLowerCase()===first.toLowerCase()&&s.lastName?.toLowerCase()===last.toLowerCase();
     signups=signups.filter(s=>!isMine(s));
