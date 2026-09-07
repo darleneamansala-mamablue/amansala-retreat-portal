@@ -4816,16 +4816,17 @@ function roomAbbrev(rt){
 // be priced as if the whole stay were low season just because it starts in September.
 // Ties (equal nights in each season) go to high season. Pass `nights` whenever it's known;
 // omitting it (or passing 1) checks only the single date, for callers that don't have a range.
+// Staging (js/utils/pricing.js) determines season by the CHECK-IN date's month
+// alone -- not a majority-of-nights vote across the whole stay. Confirmed wrong
+// here 2026-09-07 (Jen Sloan): a retreat starting Sep 30 (low season) but mostly
+// in October (high season) was being billed at high-season rates by the old
+// majority rule, while staging correctly bills it low-season off the check-in
+// date. `nights` is kept as a parameter for call-site compatibility but no
+// longer affects the result.
 function isLowSeason(dateStr,nights){
   if(!dateStr)return false;
-  if(!nights||nights<=1){const m=pd(dateStr).getMonth()+1;return m>=5&&m<=9;}
-  let lowNights=0,highNights=0,d=pd(dateStr);
-  for(let i=0;i<nights;i++){
-    const m=d.getMonth()+1;
-    if(m>=5&&m<=9)lowNights++;else highNights++;
-    d=addDays(d,1);
-  }
-  return lowNights>highNights;
+  const m=pd(dateStr).getMonth()+1;
+  return m>=5&&m<=9;
 }
 
 // ── ROOM ONLY seasonal pricing ───────────────────────────────────────────
