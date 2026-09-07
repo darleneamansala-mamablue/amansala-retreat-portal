@@ -5,21 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Amansala — Driver View</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;600;700;800&family=Cormorant+Garamond:wght@600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Jost', sans-serif; background: #f0f4f8; min-height: 100vh; }
-
-/* ── Login (mirrors booking-hub.html's .staff-login-* driver login screen) ── */
-.staff-login-overlay{position:fixed;inset:0;background:#f0ece4;z-index:9999;display:flex;align-items:center;justify-content:center;}
-.staff-login-card{background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.12);padding:44px 48px;width:400px;max-width:93vw;text-align:center;}
-.staff-login-brand{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:600;color:#2d6a6a;letter-spacing:1px;margin-bottom:4px;}
-.staff-login-sub{font-size:11.5px;letter-spacing:3px;text-transform:uppercase;color:#7f8c9a;margin-bottom:28px;}
-.staff-login-field{width:100%;padding:11px 14px;border:1.5px solid #e0d8cc;border-radius:9px;font-family:'Jost',sans-serif;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:12px;background:#f7f4ef;}
-.staff-login-field:focus{border-color:#2d6a6a;}
-.staff-login-err{color:#dc2626;font-size:12.5px;min-height:18px;margin:-4px 0 10px;}
-.staff-login-btn{width:100%;padding:13px;font-size:14px;border-radius:10px;border:none;background:#2d6a6a;color:#fff;font-family:'Jost',sans-serif;font-weight:700;cursor:pointer;}
-.staff-login-btn:hover{background:#255757;}
 
 .header {
   background: #1a2332;
@@ -35,9 +24,6 @@ body { font-family: 'Jost', sans-serif; background: #f0f4f8; min-height: 100vh; 
 .header-brand { color: #4db6ac; font-size: 18px; font-weight: 800; letter-spacing: 3px; }
 .header-driver { color: #fff; font-size: 14px; font-weight: 700; }
 .header-co { color: #4db6ac; font-size: 11px; font-weight: 600; letter-spacing: .5px; }
-.header-signout { background:none; border:1.5px solid rgba(255,255,255,.3); color:#fff; padding:6px 14px; border-radius:8px; font-family:'Jost',sans-serif; font-size:11.5px; cursor:pointer; margin-left:12px; }
-.header-signout:hover { border-color:#fff; }
-.header-right { display:flex; align-items:center; }
 
 .filters {
   background: #fff;
@@ -77,6 +63,24 @@ body { font-family: 'Jost', sans-serif; background: #f0f4f8; min-height: 100vh; 
 
 .body { padding: 16px; max-width: 960px; margin: 0 auto; }
 
+.date-header {
+  font-size: 13px;
+  font-weight: 800;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  padding: 4px 0 10px;
+  margin-top: 8px;
+}
+.date-header.today { color: #0f766e; }
+
+.pickup-group { margin-bottom: 14px; }
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
 .pickup-label {
   display: inline-flex;
   align-items: center;
@@ -113,6 +117,29 @@ body { font-family: 'Jost', sans-serif; background: #f0f4f8; min-height: 100vh; 
 .confirm-btn.pending { background: #f1f5f9; color: #6b7280; }
 .confirm-btn.done    { background: #d1fae5; color: #065f46; }
 
+.card {
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  transition: border-color .2s;
+}
+.card.confirmed { border-color: #6ee7b7; }
+.card-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+.card-body { flex: 1; min-width: 0; }
+.card-name { font-size: 15px; font-weight: 700; color: #111827; }
+.card-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
+.card-time { font-size: 14px; font-weight: 700; color: #374151; }
+.card-flight { font-size: 13px; color: #6b7280; }
+.card-room { font-size: 12px; background: #f1f5f9; color: #374151; padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+.card-eta { font-size: 12px; color: #6b7280; }
+.card-notes { font-size: 12px; color: #9ca3af; font-style: italic; margin-top: 4px; }
+.card-retreat { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+
 .badge {
   font-size: 10px;
   font-weight: 700;
@@ -123,6 +150,7 @@ body { font-family: 'Jost', sans-serif; background: #f0f4f8; min-height: 100vh; 
 .badge-dep    { background: #fce7f3; color: #9d174d; }
 .badge-cun    { background: #eff6ff; color: #2563eb; }
 .badge-tqo    { background: #f0fdf4; color: #16a34a; }
+.badge-ot     { background: #fef2f2; color: #dc2626; }
 .badge-share  { background: #f0fdf4; color: #16a34a; }
 .badge-conf   { background: #d1fae5; color: #065f46; }
 
@@ -133,6 +161,20 @@ body { font-family: 'Jost', sans-serif; background: #f0f4f8; min-height: 100vh; 
 }
 .empty-icon { font-size: 40px; margin-bottom: 12px; }
 .empty-title { font-size: 15px; font-weight: 700; color: #374151; margin-bottom: 6px; }
+
+.ot-section { margin-top: 16px; }
+.ot-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+}
 
 .stats-bar {
   background: #fff;
@@ -148,174 +190,260 @@ body { font-family: 'Jost', sans-serif; background: #f0f4f8; min-height: 100vh; 
 </head>
 <body>
 
-<!-- LOGIN -->
-<div class="staff-login-overlay" id="driverLoginOverlay">
-  <div class="staff-login-card">
-    <div class="staff-login-brand">Amansala</div>
-    <div class="staff-login-sub">Driver Portal</div>
-    <input type="text" class="staff-login-field" id="driverLoginUser" placeholder="Username" autocomplete="username">
-    <input type="password" class="staff-login-field" id="driverLoginPass" placeholder="Password" autocomplete="current-password">
-    <div class="staff-login-err" id="driverLoginErr"></div>
-    <button class="staff-login-btn" onclick="driverLoginSubmit()">Sign In</button>
-    <div style="margin-top:20px;font-size:11.5px;color:#7f8c9a">Need access? Contact <a href="mailto:darlene@amansala.com" style="color:#2d6a6a">darlene@amansala.com</a></div>
+<div class="header">
+  <div class="header-brand">AMANSALA</div>
+  <div style="text-align:right">
+    <div class="header-driver" id="hdr-driver">Driver View</div>
+    <div class="header-co" id="hdr-co"></div>
   </div>
 </div>
 
-<!-- DASHBOARD (hidden until login) -->
-<div id="dashboard" style="display:none">
-  <div class="header">
-    <div class="header-brand">AMANSALA</div>
-    <div style="display:flex;align-items:center">
-      <div style="text-align:right">
-        <div class="header-driver" id="hdr-driver">Driver View</div>
-        <div class="header-co" id="hdr-co"></div>
-      </div>
-      <button class="header-signout" onclick="driverLogout()">Sign Out</button>
-    </div>
-  </div>
-
-  <div class="filters">
-    <button class="filter-btn active" id="f-upcoming" onclick="setFilter('upcoming')">Upcoming</button>
-    <button class="filter-btn" id="f-today" onclick="setFilter('today')">Today</button>
-    <button class="filter-btn" id="f-tomorrow" onclick="setFilter('tomorrow')">Tomorrow</button>
-    <input type="date" class="date-input" id="f-date" onchange="setFilter('date',this.value)" title="Pick a specific date">
-  </div>
-
-  <div class="stats-bar" id="stats-bar"></div>
-  <div class="body" id="main-body">
-    <div class="empty"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div>
-  </div>
+<div class="filters">
+  <button class="filter-btn active" id="f-upcoming" onclick="setFilter('upcoming')">Upcoming</button>
+  <button class="filter-btn" id="f-today" onclick="setFilter('today')">Today</button>
+  <button class="filter-btn" id="f-tomorrow" onclick="setFilter('tomorrow')">Tomorrow</button>
+  <input type="date" class="date-input" id="f-date" onchange="setFilter('date',this.value)" title="Pick a specific date">
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<div class="stats-bar" id="stats-bar"></div>
+<div class="body" id="main-body">
+  <div class="empty"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div>
+</div>
+
 <script>
-const _db = supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A');
-
-// ── Driver accounts / session — same keys & shape as modules/driver-portal.js,
-// kept 100% interoperable with the embedded ?mode=driver view in booking-hub.html ──
-const DEF_DRIVERS=[
-  {id:'drv_irving',name:'Irving',username:'irving',password:'irving2026',active:true},
-  {id:'drv_salamon',name:'Salamon',username:'salamon',password:'salamon2026',active:true},
-];
-let driverAccounts=[];
-let currentDriverSession=null;
-let driverConfirmations={};
-
-function loadDrivers(){
-  const raw=localStorage.getItem('amansala_drivers');
-  if(raw){try{driverAccounts=JSON.parse(raw);}catch{driverAccounts=DEF_DRIVERS.map(d=>({...d}));}}
-  else{driverAccounts=DEF_DRIVERS.map(d=>({...d}));localStorage.setItem('amansala_drivers',JSON.stringify(driverAccounts));}
-  driverAccounts.forEach(d=>{if(d.active===undefined)d.active=true;});
-  if(!driverAccounts.length)driverAccounts=DEF_DRIVERS.map(d=>({...d}));
-}
-function saveDrivers(){
-  localStorage.setItem('amansala_drivers',JSON.stringify(driverAccounts));
-  (async()=>{try{await _db.from('app_store').upsert({key:'driverAccounts',value:driverAccounts,updated_at:new Date().toISOString()});}catch(e){console.warn('Driver account sync failed:',e);}})();
-}
-
-function loadDriverConfirmationsLocal(){
-  const raw=localStorage.getItem('amansala_driver_confirmations');
-  if(raw){try{driverConfirmations=JSON.parse(raw);}catch{driverConfirmations={};}}
-}
-async function syncDriverConfirmationsFromSupabase(){
-  try{
-    const{data}=await _db.from('app_store').select('value').eq('key','driverConfirmations').maybeSingle();
-    if(data?.value){driverConfirmations={...driverConfirmations,...data.value};localStorage.setItem('amansala_driver_confirmations',JSON.stringify(driverConfirmations));}
-  }catch(e){}
-}
-function saveDriverConfirmations(){
-  localStorage.setItem('amansala_driver_confirmations',JSON.stringify(driverConfirmations));
-  (async()=>{try{await _db.from('app_store').upsert({key:'driverConfirmations',value:driverConfirmations,updated_at:new Date().toISOString()});}catch(e){console.warn('Driver confirmation sync failed:',e);}})();
-}
-
-function getDriverSession(){
-  if(currentDriverSession)return currentDriverSession;
-  const raw=sessionStorage.getItem('amansala_driver_session');
-  if(raw){try{currentDriverSession=JSON.parse(raw);}catch{currentDriverSession=null;}}
-  return currentDriverSession;
-}
-
-function driverLoginSubmit(){
-  const username=document.getElementById('driverLoginUser').value.trim().toLowerCase();
-  const password=document.getElementById('driverLoginPass').value;
-  const errEl=document.getElementById('driverLoginErr');
-  errEl.textContent='';
-  if(!username||!password){errEl.textContent='Please enter your username and password.';return;}
-  function tryLogin(){
-    return driverAccounts.find(d=>d.active&&d.username.toLowerCase()===username&&d.password===password)
-      ||DEF_DRIVERS.find(d=>d.username===username&&d.password===password)||null;
-  }
-  let account=tryLogin();
-  if(!account){
-    errEl.textContent='Checking credentials…';
-    _db.from('app_store').select('value').eq('key','driverAccounts').maybeSingle().then(({data})=>{
-      if(data?.value&&Array.isArray(data.value)&&data.value.length){
-        const seen=new Map();
-        data.value.forEach(d=>d.username&&seen.set(d.username.toLowerCase(),d));
-        driverAccounts.forEach(d=>{if(d.username&&!seen.has(d.username.toLowerCase()))seen.set(d.username.toLowerCase(),d);});
-        driverAccounts=[...seen.values()];
-        localStorage.setItem('amansala_drivers',JSON.stringify(driverAccounts));
-      }
-      account=tryLogin();
-      if(!account){errEl.textContent='Incorrect username or password.';return;}
-      errEl.textContent='';
-      driverLoginComplete(account);
-    }).catch(()=>{errEl.textContent='Incorrect username or password.';});
-    return;
-  }
-  driverLoginComplete(account);
-}
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('driverLoginOverlay')?.style.display!=='none')driverLoginSubmit();});
-
-function driverLoginComplete(account){
-  const session={id:account.id,name:account.name,username:account.username.toLowerCase()};
-  sessionStorage.setItem('amansala_driver_session',JSON.stringify(session));
-  sessionStorage.setItem('ama_driver_mode','1');
-  localStorage.setItem('ama_driver_persist','1');
-  currentDriverSession=session;
-  document.getElementById('driverLoginOverlay').style.display='none';
-  document.getElementById('dashboard').style.display='block';
-  document.getElementById('hdr-driver').textContent=session.name;
-  document.getElementById('hdr-co').textContent='Driver View';
-  loadData();
-}
-function driverLogout(){
-  if(!confirm('Sign out?'))return;
-  sessionStorage.removeItem('amansala_driver_session');
-  sessionStorage.removeItem('ama_driver_mode');
-  localStorage.removeItem('ama_driver_persist');
-  currentDriverSession=null;
-  location.reload();
-}
-
-function bootstrap(){
-  loadDrivers();
-  loadDriverConfirmationsLocal();
-  const session=getDriverSession();
-  if(session){
-    document.getElementById('driverLoginOverlay').style.display='none';
-    document.getElementById('dashboard').style.display='block';
-    document.getElementById('hdr-driver').textContent=session.name;
-    document.getElementById('hdr-co').textContent='Driver View';
-    loadData();
-    return;
-  }
-  document.getElementById('driverLoginOverlay').style.display='flex';
-  setTimeout(()=>document.getElementById('driverLoginUser')?.focus(),120);
-}
-
-// ── Trip data + assignment (mirrors trComputeDriverAssignments in modules/transport.js,
-// generalized across every date present in the data instead of a single day, so the
-// Upcoming/Today/Tomorrow filters below have a full dataset to filter from) ──
+const SUPA_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
 
 const PASTEL = ['#eff6ff','#f0fdf4','#faf5ff','#fffbeb','#fdf2f8','#f0fdfa','#fff7ed','#f0f9ff'];
 const TR_LEAD = { cancun: 240, tulum: 150 };
 const TR_ETA  = { cancun: 90,  tulum: 45  };
 
+// Parse URL param
+const params = new URLSearchParams(location.search);
+const CO = (params.get('co') || '').toLowerCase();
+
+// Company config
+const COMPANIES = {
+  irving:  { name: 'Irving', label: 'TQO Arrivals · TQO Departures · CUN Departures' },
+  salomon: { name: 'Salomón', label: 'CUN Arrivals' },
+};
+
+const co = COMPANIES[CO];
+if (!co) {
+  document.getElementById('main-body').innerHTML = `<div class="empty">
+    <div class="empty-icon">🚫</div>
+    <div class="empty-title">Link inválido</div>
+    <div>Usa ?co=irving o ?co=salomon</div>
+  </div>`;
+} else {
+  document.getElementById('hdr-driver').textContent = co.name;
+  document.getElementById('hdr-co').textContent = co.label;
+  loadData();
+}
+
+function matchesCo(airport, type) {
+  if (CO === 'irving') {
+    if (airport === 'tulum') return true;
+    if (airport === 'cancun' && type === 'departure') return true;
+    return false;
+  }
+  if (CO === 'salomon') {
+    return airport === 'cancun' && type === 'arrival';
+  }
+  return false;
+}
+
 let _entries = [];
+let _userGroupMap = new Map();
 let _filter  = 'upcoming';
 let _filterDate = '';
-let regsData = [];
+
+async function supa(path) {
+  const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
+    headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+  });
+  return r.json();
+}
+
+async function supaUpdate(rowId, body) {
+  return fetch(`${SUPA_URL}/rest/v1/transport?id=eq.${rowId}`, {
+    method: 'PATCH',
+    headers: {
+      apikey: SUPA_KEY,
+      Authorization: `Bearer ${SUPA_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function loadData() {
+  const [rows, bookings, regs, settingsData] = await Promise.all([
+    supa('transport?select=id,booking_id,data,submitted_at'),
+    supa('bookings?select=id,leader_name,retreat_name,start_date,end_date,status&status=neq.cancelled'),
+    supa('registrations?select=booking_id,room,guests'),
+    supa('settings?key=eq.transport_groups&select=value&limit=1'),
+  ]);
+  _userGroupMap = new Map(settingsData?.[0]?.value ?? []);
+
+  const bkMap = {};
+  (bookings || []).forEach(b => { bkMap[b.id] = b; });
+
+  // Room lookup by name
+  const roomLookup = {};
+  (regs || []).forEach(r => {
+    (r.guests || []).forEach(g => {
+      if (g.name && r.booking_id) {
+        roomLookup[`${r.booking_id}|${g.name.toLowerCase()}`] = r.room || '';
+      }
+    });
+  });
+
+  // Dedup: collapse same-guest duplicate submissions
+  const dedupedRows = (() => {
+    const map = new Map();
+    for (const row of rows || []) {
+      const d  = row.data || {};
+      const em = (d.email || '').toLowerCase().trim();
+      const fn = (d.firstName || '').toLowerCase().trim();
+      const ln = (d.lastName  || '').toLowerCase().trim();
+      const key = `${em || (fn + '_' + ln)}|${d.arrivalDate || ''}|${d.departureDate || ''}`;
+      const cur = map.get(key);
+      if (!cur) { map.set(key, row); continue; }
+      const curHasBk = !!cur.booking_id;
+      const rowHasBk = !!row.booking_id;
+      if (rowHasBk && !curHasBk) map.set(key, row);
+      else if (rowHasBk === curHasBk && row.id > cur.id) map.set(key, row);
+    }
+    return [...map.values()];
+  })();
+
+  _entries = [];
+  for (const row of dedupedRows) {
+    const d   = row.data || {};
+    const bk  = bkMap[row.booking_id];
+    const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
+    const room = roomLookup[`${row.booking_id}|${name.toLowerCase()}`] || '';
+    const retreatLabel = bk ? [bk.retreat_name, bk.leader_name].filter(Boolean).join(' · ') : '';
+
+    // Arrival
+    if (d.arrivalDate && d.arrivalTime && !d.arrivalOT) {
+      const ap = (d.arrivalAirport || '').toLowerCase();
+      if (matchesCo(ap, 'arrival')) {
+        const etaMins = TR_ETA[ap] ?? 90;
+        _entries.push({
+          rowId: row.id, rawData: d,
+          confirmed: !!d.driver_confirmed,
+          type: 'arrival', date: d.arrivalDate, time: d.arrivalTime,
+          airport: ap, flight: d.flightNumber || '', name, room,
+          eta: addMins(d.arrivalTime, etaMins),
+          share: !!d.willingToShare, notes: d.notes || '',
+          retreatLabel, ot: false,
+        });
+      }
+    }
+    // Arrival OT
+    if (d.arrivalDate && d.arrivalOT) {
+      const ap = (d.arrivalAirport || '').toLowerCase();
+      if (matchesCo(ap, 'arrival')) {
+        _entries.push({
+          rowId: row.id, rawData: d,
+          confirmed: !!d.driver_confirmed,
+          type: 'arrival', date: d.arrivalDate, time: d.arrivalTime || '',
+          airport: ap, flight: d.flightNumber || '', name, room,
+          eta: null, share: false, notes: d.notes || '',
+          retreatLabel, ot: true,
+        });
+      }
+    }
+
+    // Departure
+    if (d.departureDate && d.departureTime && !d.departureOT) {
+      const ap = (d.departureAirport || '').toLowerCase();
+      if (matchesCo(ap, 'departure')) {
+        const leadMins = TR_LEAD[ap] ?? 240;
+        _entries.push({
+          rowId: row.id, rawData: d,
+          confirmed: !!d.driver_confirmed,
+          type: 'departure', date: d.departureDate, time: d.departureTime,
+          airport: ap, flight: d.flightNumber || '', name, room,
+          pickup: addMins(d.departureTime, -leadMins),
+          share: !!d.willingToShare, notes: d.notes || '',
+          retreatLabel, ot: false,
+        });
+      }
+    }
+    // Departure OT
+    if (d.departureDate && d.departureOT) {
+      const ap = (d.departureAirport || '').toLowerCase();
+      if (matchesCo(ap, 'departure')) {
+        _entries.push({
+          rowId: row.id, rawData: d,
+          confirmed: !!d.driver_confirmed,
+          type: 'departure', date: d.departureDate, time: d.departureTime || '',
+          airport: ap, flight: d.flightNumber || '', name, room,
+          pickup: null, share: false, notes: d.notes || '',
+          retreatLabel, ot: true,
+        });
+      }
+    }
+  }
+
+  render();
+}
+
+// Confirm / unconfirm a group of rowIds
+async function confirmGroup(idsStr, confirmed) {
+  const rowIds = idsStr.split(',').filter(Boolean);
+  if (!rowIds.length) return;
+
+  // 1. Update UI immediately (optimistic)
+  rowIds.forEach(rowId => {
+    _entries.forEach(e => { if (e.rowId === rowId) e.confirmed = confirmed; });
+  });
+  render();
+
+  // 2. Persist to Supabase
+  const failed = [];
+  await Promise.all(rowIds.map(async rowId => {
+    const entry = _entries.find(e => e.rowId === rowId);
+    if (!entry) return;
+    const newData = { ...(entry.rawData || {}), driver_confirmed: confirmed };
+    try {
+      const resp = await supaUpdate(rowId, { data: newData });
+      if (resp.ok || resp.status === 204) {
+        entry.rawData = newData;
+      } else {
+        const txt = await resp.text().catch(() => '');
+        console.error('Confirm failed:', resp.status, txt);
+        failed.push(rowId);
+      }
+    } catch(err) {
+      console.error('Confirm error:', err);
+      failed.push(rowId);
+    }
+  }));
+
+  // 3. Revert if all failed
+  if (failed.length === rowIds.length) {
+    rowIds.forEach(rowId => {
+      _entries.forEach(e => { if (e.rowId === rowId) e.confirmed = !confirmed; });
+    });
+    render();
+    alert('No se pudo guardar la confirmación. Verifica tu conexión.');
+  }
+}
+
+function setFilter(f, val) {
+  _filter = f;
+  _filterDate = val || '';
+  ['upcoming','today','tomorrow'].forEach(k => {
+    document.getElementById('f-' + k)?.classList.toggle('active', k === f);
+  });
+  if (f !== 'date') document.getElementById('f-date').value = '';
+  render();
+}
 
 function toMins(t) {
   if (!t) return null;
@@ -337,168 +465,6 @@ function fmtDate(d) {
   const dt = new Date(d + 'T12:00:00');
   return dt.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
 }
-function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-async function fetchAppStoreValue(key){
-  try{
-    const {data} = await _db.from('app_store').select('value').eq('key',key).maybeSingle();
-    return data?.value || [];
-  }catch(e){ console.warn('fetchAppStoreValue failed for '+key, e); return []; }
-}
-
-// Dedup: collapse same-guest duplicate submissions (mirrors Jorge's dedupedRows logic)
-function dedupeEntries(entries){
-  const map = new Map();
-  for (const e of entries) {
-    const em = (e.email || '').toLowerCase().trim();
-    const fn = (e.firstName || '').toLowerCase().trim();
-    const ln = (e.lastName  || '').toLowerCase().trim();
-    const key = `${em || (fn + '_' + ln)}|${e.arrivalDate || ''}|${e.departureDate || ''}`;
-    const cur = map.get(key);
-    if (!cur) { map.set(key, e); continue; }
-    const curHasBk = !!cur.bookingId && cur.bookingId !== 'individual';
-    const eHasBk   = !!e.bookingId && e.bookingId !== 'individual';
-    if (eHasBk && !curHasBk) map.set(key, e);
-    else if (eHasBk === curHasBk && e.id > cur.id) map.set(key, e);
-  }
-  return [...map.values()];
-}
-
-function lookupRoom(bookingId, email, firstName, lastName){
-  const match = regsData.find(r=>r.bookingId===bookingId && r.room && (r.guests||[]).some(g=>
-    (g.email && email && g.email.toLowerCase().trim()===email.toLowerCase().trim()) ||
-    (g.name && firstName && g.name.toLowerCase().trim()===(firstName+' '+lastName).toLowerCase().trim())
-  ));
-  return match ? match.room : '';
-}
-
-function trTimeToMinsLocal(t){ if(!t) return 0; const [h,m]=t.split(':').map(Number); return h*60+(m||0); }
-
-// Exact port of trComputeDriverAssignments(date) from modules/transport.js, looped
-// over every distinct date present in the data (the original took one date at a time).
-function computeAllAssignments(allSubs, bookingsById){
-  const dates = new Set();
-  allSubs.forEach(s=>{ if(s.arrivalDate) dates.add(s.arrivalDate); if(s.departureDate) dates.add(s.departureDate); });
-  let salamon=[], irving=[];
-  dates.forEach(date=>{
-    const arrivals = allSubs.filter(s=>s.arrivalDate===date&&s.arrivalTime&&s.arrivalAirport)
-      .map(s=>({...s,_kind:'arrival',room:lookupRoom(s.bookingId,s.email,s.firstName,s.lastName),
-        retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(bookingsById[s.bookingId]?.leaderName||bookingsById[s.bookingId]?.retreatName||'Unknown')}))
-      .sort((a,b)=>a.arrivalTime.localeCompare(b.arrivalTime));
-    const departures = allSubs.filter(s=>s.departureDate===date&&s.departureTime&&s.departureAirport)
-      .map(s=>({...s,_kind:'departure',room:lookupRoom(s.bookingId,s.email,s.firstName,s.lastName),
-        retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(bookingsById[s.bookingId]?.leaderName||bookingsById[s.bookingId]?.retreatName||'Unknown')}))
-      .sort((a,b)=>a.departureTime.localeCompare(b.departureTime));
-
-    const claimedDepIds = new Set();
-    arrivals.forEach(a=>{
-      if (a.arrivalAirport==='cancun') {
-        salamon.push({...a,note:''});
-        const anchor = trTimeToMinsLocal(a.arrivalTime);
-        const match = departures.find(d=>!claimedDepIds.has(d.id)&&d.departureAirport==='cancun'&&
-          trTimeToMinsLocal(d.departureTime)>=anchor&&trTimeToMinsLocal(d.departureTime)<=anchor+30);
-        if (match) {
-          claimedDepIds.add(match.id);
-          salamon.push({...match,note:`Round trip — combined with ${a.firstName} ${a.lastName}'s ${fmtTime(a.arrivalTime)} arrival`});
-        }
-      } else {
-        irving.push({...a,note:''});
-      }
-    });
-    departures.forEach(d=>{ if(!claimedDepIds.has(d.id)) irving.push({...d,note:''}); });
-  });
-  return {salamon, irving};
-}
-
-function toRenderEntry(t){
-  const isArr = t._kind==='arrival';
-  const airport = (isArr ? t.arrivalAirport : t.departureAirport || '').toLowerCase();
-  const time = isArr ? t.arrivalTime : t.departureTime;
-  const ot = isArr ? !!t.arrivalOT : !!t.departureOT;
-  const key = t.id + '_' + t._kind;
-  return {
-    key,
-    confirmed: driverConfirmations[key]?.status==='confirmed'||driverConfirmations[key]?.status==='completed',
-    type: isArr ? 'arrival' : 'departure',
-    date: isArr ? t.arrivalDate : t.departureDate,
-    time, airport,
-    flight: t.flightNumber || '',
-    name: `${t.firstName||''} ${t.lastName||''}`.trim(),
-    room: t.room || '',
-    eta: (isArr && !ot) ? addMins(time, TR_ETA[airport] ?? 90) : null,
-    pickup: (!isArr && !ot) ? addMins(time, -(TR_LEAD[airport] ?? 240)) : null,
-    share: !!t.willingToShare,
-    notes: t.notes || '',
-    retreatLabel: t.retreatLabel || '',
-    ot,
-    note: t.note || '',
-  };
-}
-
-async function loadData(){
-  const session = getDriverSession(); if(!session) return;
-  const [bookings, regs, transportRows] = await Promise.all([
-    fetchAppStoreValue('bookings'),
-    fetchAppStoreValue('regs'),
-    _db.from('transport').select('*').then(({data})=>data||[]).catch(()=>[]),
-  ]);
-  regsData = regs || [];
-  const bookingsById = {};
-  (bookings||[]).forEach(b=>{ bookingsById[b.id]=b; });
-
-  const flatEntries = (transportRows||[])
-    .map(row => ({...(row.data||{}), id: row.data?.id || row.id, bookingId: row.data?.bookingId || row.booking_id}))
-    .filter(e => e.id);
-  const deduped = dedupeEntries(flatEntries);
-
-  await syncDriverConfirmationsFromSupabase();
-
-  const {salamon, irving} = computeAllAssignments(deduped, bookingsById);
-  const trips = session.name==='Irving' ? irving : salamon;
-  _entries = trips.map(toRenderEntry);
-
-  render();
-}
-
-// Writes the same rich status shape modules/driver-portal.js uses (status/
-// driverId/history/etc) instead of the old flat {driver,confirmedAt} —
-// this page shares the driverConfirmations store with the embedded
-// dashboard in booking-hub.html, so a stale write shape here would corrupt
-// records the admin side and the embedded dashboard both depend on.
-async function confirmGroup(keysStr, confirmed){
-  const session = getDriverSession(); if(!session) return;
-  const keys = keysStr.split(',').filter(Boolean);
-  if(!keys.length) return;
-  keys.forEach(k=>{
-    let rec = driverConfirmations[k];
-    if (!rec) rec = driverConfirmations[k] = {status:'pending',driverId:session.id,assignedBy:null,assignedAt:new Date().toISOString(),
-      viewedAt:null,confirmedAt:null,confirmedBy:null,declineReason:null,declinedAt:null,version:1,confirmedVersion:null,note:null,changeMessage:null,history:[]};
-    if (rec.driverId && rec.driverId !== session.id) return; // not this driver's assignment
-    if (!rec.history) rec.history = [];
-    if (confirmed) {
-      rec.status='confirmed'; rec.confirmedAt=new Date().toISOString(); rec.confirmedBy=session.name; rec.confirmedVersion=rec.version||1;
-      rec.history.push({at:rec.confirmedAt,event:'confirmed',by:session.name,detail:null});
-    } else {
-      rec.status='pending'; rec.confirmedAt=null; rec.confirmedBy=null;
-      rec.history.push({at:new Date().toISOString(),event:'unconfirmed',by:session.name,detail:null});
-    }
-    _entries.forEach(e=>{ if(e.key===k) e.confirmed=confirmed; });
-  });
-  render();
-  saveDriverConfirmations();
-}
-
-function setFilter(f, val) {
-  _filter = f;
-  _filterDate = val || '';
-  ['upcoming','today','tomorrow'].forEach(k => {
-    document.getElementById('f-' + k)?.classList.toggle('active', k === f);
-  });
-  if (f !== 'date') document.getElementById('f-date').value = '';
-  render();
-}
 
 function filterEntries() {
   const today    = new Date().toISOString().slice(0,10);
@@ -511,15 +477,26 @@ function filterEntries() {
   });
 }
 
-// Greedy 20-min window → color map (per-driver view, no manual grouping override — that's
-// a Jorge-only feature backed by a settings table we don't have; every entry falls through
-// to auto-clustering here)
+// Greedy 20-min window → color map
 function colorMap(entries) {
   const map = new Map();
   const clusters = [];
+  const ugColors = new Map(); // ugKey → color
   let ci = 0;
+
+  // First pass: user-defined groups get consistent colors
   for (const e of entries) {
     if (e.ot) continue;
+    const ugKey = _userGroupMap.get(`${e.type}|${e.rowId}`);
+    if (ugKey) {
+      if (!ugColors.has(ugKey)) ugColors.set(ugKey, PASTEL[ci++ % PASTEL.length]);
+      map.set(e, ugColors.get(ugKey));
+    }
+  }
+
+  // Second pass: auto 20-min window for the rest
+  for (const e of entries) {
+    if (e.ot || _userGroupMap.get(`${e.type}|${e.rowId}`)) continue;
     const sortT = e.type === 'departure' ? (e.pickup || e.time) : e.time;
     const mins = toMins(sortT);
     if (!e.date || mins === null) continue;
@@ -540,12 +517,26 @@ function colorMap(entries) {
   return map;
 }
 
+// Earliest pickup in a time-cluster for departures (same airport only)
 function buildPickupGroups(entries) {
   const groups = [];
+  const ugAssigned = new Map();
+
   for (const e of entries) {
     const t = e.pickup || e.time;
+    const ugKey = _userGroupMap.get(`${e.type}|${e.rowId}`);
+    if (ugKey) {
+      if (ugAssigned.has(ugKey)) {
+        groups[ugAssigned.get(ugKey)].members.push(e);
+      } else {
+        ugAssigned.set(ugKey, groups.length);
+        groups.push({ pickup: t, airport: e.airport, members: [e], userGroup: true });
+      }
+      continue;
+    }
     let joined = false;
     for (const g of groups) {
+      if (g.userGroup) continue;
       if (g.airport !== e.airport) continue;
       if (Math.abs(toMins(g.pickup) - toMins(t)) <= 20) { g.members.push(e); joined = true; break; }
     }
@@ -563,10 +554,23 @@ function buildPickupGroups(entries) {
 
 function buildEtaGroups(entries) {
   const groups = [];
+  const ugAssigned = new Map();
+
   for (const e of entries) {
+    const ugKey = _userGroupMap.get(`${e.type}|${e.rowId}`);
+    if (ugKey) {
+      if (ugAssigned.has(ugKey)) {
+        groups[ugAssigned.get(ugKey)].members.push(e);
+      } else {
+        ugAssigned.set(ugKey, groups.length);
+        groups.push({ eta: e.eta || e.time, airport: e.airport, members: [e], userGroup: true });
+      }
+      continue;
+    }
     const mins = toMins(e.eta || e.time);
     let joined = false;
     for (const g of groups) {
+      if (g.userGroup) continue;
       if (g.airport !== e.airport) continue;
       if (Math.abs(toMins(g.eta) - mins) <= 20) { g.members.push(e); joined = true; break; }
     }
@@ -588,6 +592,7 @@ function render() {
   const ot     = filtered.filter(e => e.ot);
   const cmap   = colorMap(normal);
 
+  // Stats
   const arrCount = filtered.filter(e => e.type==='arrival').length;
   const depCount = filtered.filter(e => e.type==='departure').length;
   const confCount = filtered.filter(e => e.confirmed && !e.ot).length;
@@ -607,6 +612,7 @@ function render() {
     return;
   }
 
+  // Group by date
   const byDate = new Map();
   normal.forEach(e => {
     if (!byDate.has(e.date)) byDate.set(e.date, { arr:[], dep:[] });
@@ -628,15 +634,14 @@ function render() {
       const etaGroups = buildEtaGroups(arr);
       etaGroups.forEach((g, gi) => {
         if (gi > 0) html += `<tr><td colspan="8" style="padding:6px;background:#fff;border:none"></td></tr>`;
-        const keysStr = g.members.map(e => e.key).join(',');
+        const idsStr  = g.members.map(e => e.rowId).join(',');
         const allDone = g.members.every(e => e.confirmed);
         const grpBg   = cmap.get(g.members[0]) || '#f9fafb';
         html += `<tr style="background:${grpBg}"><td colspan="8" style="padding:5px 10px">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px">
             <span class="eta-label">🛬 ETA hotel ~${fmtTime(g.eta)}</span>
             <span style="font-size:10px;font-weight:600;color:#6b7280">${g.members.length} pax</span>
-            <button class="confirm-btn ${allDone?'done':'pending'}" onclick="confirmGroup('${keysStr}',${!allDone})">${allDone?'✓ Confirmado':'Confirmar ✓'}</button>
-            ${g.members[0].note?`<span style="font-size:11px;color:#15803d;font-weight:700">${esc(g.members[0].note)}</span>`:''}
+            <button class="confirm-btn ${allDone?'done':'pending'}" onclick="confirmGroup('${idsStr}',${!allDone})">${allDone?'✓ Confirmado':'Confirmar ✓'}</button>
           </div></td></tr>`;
         g.members.forEach(e => { html += renderRow(e, cmap.get(e)); });
       });
@@ -647,15 +652,14 @@ function render() {
       const pickupGroups = buildPickupGroups(dep);
       pickupGroups.forEach((g, gi) => {
         if (gi > 0) html += `<tr><td colspan="8" style="padding:6px;background:#fff;border:none"></td></tr>`;
-        const keysStr = g.members.map(e => e.key).join(',');
+        const idsStr  = g.members.map(e => e.rowId).join(',');
         const allDone = g.members.every(e => e.confirmed);
         const grpBg   = cmap.get(g.members[0]) || '#f9fafb';
         html += `<tr style="background:${grpBg}"><td colspan="8" style="padding:5px 10px">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px">
             <span class="pickup-label">🚐 Pick-up ${fmtTime(g.pickup)}</span>
             <span style="font-size:10px;font-weight:600;color:#6b7280">${g.members.length} pax</span>
-            <button class="confirm-btn ${allDone?'done':'pending'}" onclick="confirmGroup('${keysStr}',${!allDone})">${allDone?'✓ Confirmado':'Confirmar ✓'}</button>
-            ${g.members[0].note?`<span style="font-size:11px;color:#15803d;font-weight:700">${esc(g.members[0].note)}</span>`:''}
+            <button class="confirm-btn ${allDone?'done':'pending'}" onclick="confirmGroup('${idsStr}',${!allDone})">${allDone?'✓ Confirmado':'Confirmar ✓'}</button>
           </div></td></tr>`;
         g.members.forEach(e => { html += renderRow(e, cmap.get(e)); });
       });
@@ -682,17 +686,22 @@ function renderRow(e, color) {
     ? '<span class="badge badge-arr">🛬 Arrival</span>'
     : '<span class="badge badge-dep">🛫 Dep</span>';
 
-  // Flight status badge — we have no live flight-tracking integration, so this always
-  // falls back to a simple date-based SCHEDULED/LANDED/DEPARTED label.
+  // Flight status badge — from monitor-flights (arrivals) or local fallback (arrivals + departures)
   const flightStatusBadge = (() => {
     if (!e.flight) return '';
     const today = new Date().toISOString().slice(0, 10);
-    let lbl;
-    if (e.date < today) lbl = isArr ? 'LANDED' : 'DEPARTED';
-    else                lbl = 'SCHEDULED';
-    const past      = lbl === 'LANDED' || lbl === 'DEPARTED';
-    const bg = past ? '#f1f5f9' : '#f0fdf4';
-    const cl = past ? '#9ca3af' : '#15803d';
+    let lbl = isArr ? (e.rawData?.flightLabel ?? null) : null;
+    if (!lbl) {
+      if (e.date < today)  lbl = isArr ? 'LANDED'   : 'DEPARTED';
+      else                 lbl = 'SCHEDULED';
+    }
+    const cancelled  = lbl === 'CANCELLED';
+    const delayed    = lbl.startsWith('DELAYED');
+    const early      = lbl.startsWith('EARLY');
+    const past       = lbl === 'LANDED' || lbl === 'DEPARTED';
+    const scheduled  = lbl === 'SCHEDULED';
+    const bg = cancelled ? '#fef2f2' : delayed ? '#fff7ed' : early ? '#eff6ff' : (past || scheduled) ? '#f1f5f9' : '#f0fdf4';
+    const cl = cancelled ? '#dc2626' : delayed ? '#c2410c' : early ? '#1d4ed8' : (past || scheduled) ? '#9ca3af' : '#15803d';
     return `<div style="margin-top:3px"><span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px;background:${bg};color:${cl};white-space:nowrap">${lbl}</span></div>`;
   })();
 
@@ -719,7 +728,9 @@ function renderRow(e, color) {
   </tr>`;
 }
 
-bootstrap();
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 </script>
 </body>
 </html>

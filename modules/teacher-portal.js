@@ -3,6 +3,27 @@
 // Do not add <script type="module"> here — onclick="..." handlers in the HTML rely on plain globals.
 
 // ===== TEACHER REGISTRATION =====
+// Transport rows for the currently-selected retreat, fetched once on retreat select
+// (matches Staging's own selectBooking() — not on every regRender(), just when the
+// retreat changes) — feeds the "★ Teacher Pays Transport" banner below.
+let regTransportRows=[];
+const _TR_RATES={cancun:[195,100,80,65,55,45],tulum:[145,80,65,55,45,40]};
+function _calcTransportTotal(rows,direction){
+  let total=0,isCharged=false;
+  for(const r of rows){
+    const d=r.data||{};
+    const hasTrip=direction==='arrival'?(d.arrivalDate&&d.arrivalTime&&!d.arrivalOT):(d.departureDate&&d.departureTime&&!d.departureOT);
+    if(!hasTrip)continue;
+    if(direction==='arrival'&&d.folioCharged?.arrivalFolioItemId){total+=d.folioCharged.arrivalAmount||0;isCharged=true;}
+    else if(direction==='departure'&&d.folioCharged?.departureFolioItemId){total+=d.folioCharged.departureAmount||0;isCharged=true;}
+    else{
+      const airport=direction==='arrival'?(d.arrivalAirport||''):(d.departureAirport||'');
+      const c=d.serviceCost!=null?Number(d.serviceCost):(_TR_RATES[airport]?.[0]||0);
+      total+=c;
+    }
+  }
+  return total>0?{total,exact:isCharged}:null;
+}
 function regInitSel(){
   const srch=document.getElementById('regRetreatSearch');
   const hid=document.getElementById('regRetreatSel');
@@ -102,7 +123,12 @@ async function regOnRetreat(){
   _updateRegButtons(bk);
   document.getElementById('regTeacherCodeWrap').style.display='none';
   document.getElementById('estQuotePanel').style.display='none';
+  regTransportRows=[];
   regRender();
+  try{
+    const{data}=await db.from('transport').select('id,booking_id,data').eq('booking_id',bk.id);
+    if(regSelBk&&regSelBk.id===bk.id){regTransportRows=data||[];regRender();}
+  }catch(e){}
 }
 
 function regRender(){
@@ -300,6 +326,19 @@ function regRender(){
     const rstatPkgEl=document.getElementById('rstatPkg');if(rstatPkgEl)rstatPkgEl.textContent=fmt$(pkgBillTotal);
   }
   const taxSel=document.getElementById('rstatTaxRate');if(taxSel)taxSel.value=String(getBkTaxRate(regSelBk));
+  const rstatTrWrap=document.getElementById('rstatTransportWrap');
+  if(rstatTrWrap){
+    const _trFlags=regSelBk.flags||[];
+    const _paysArr=_trFlags.includes('teacher_pays_arrival_transport');
+    const _paysDep=_trFlags.includes('teacher_pays_departure_transport');
+    const _arrInfo=_paysArr?_calcTransportTotal(regTransportRows,'arrival'):null;
+    const _depInfo=_paysDep?_calcTransportTotal(regTransportRows,'departure'):null;
+    const _trParts=[];
+    if(_arrInfo)_trParts.push(`🛬 ${fmt$(_arrInfo.total)}${_arrInfo.exact?'':' est.'}`);
+    if(_depInfo)_trParts.push(`🛫 ${fmt$(_depInfo.total)}${_depInfo.exact?'':' est.'}`);
+    if(_trParts.length){rstatTrWrap.style.display='';document.getElementById('rstatTransport').textContent=_trParts.join(' · ');}
+    else rstatTrWrap.style.display='none';
+  }
   // Room-list completion — named/registered guests vs the retreat's expected
   // pax count. bkPax is the leader's original headcount estimate; without
   // it there's nothing to measure completion against.

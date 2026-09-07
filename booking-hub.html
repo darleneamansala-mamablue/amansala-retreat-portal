@@ -1914,6 +1914,7 @@
     <span class="rstat-pill" style="background:#f5f3ff;color:#6d28d9;display:none" id="rstatPkgWrap">PKG <span id="rstatPkg">$0</span></span>
     <span class="rstat-pill" style="background:#f0fdf4;color:#16a34a">PAID <span id="rstatPaid">$0</span></span>
     <span class="rstat-pill" id="rstatBal">$0</span>
+    <span class="rstat-pill" style="background:#fffbeb;color:#92400e;display:none" id="rstatTransportWrap" title="Teacher pays transport">★ Transport: <span id="rstatTransport"></span></span>
     <div style="margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span class="teacher-admin-only" style="display:flex;align-items:center;gap:5px">
         <span style="font-size:11px;font-weight:700;color:var(--muted)">TIP/NT</span>$<input id="rstatTip" type="number" min="0" step="1" value="30" style="width:46px;padding:2px 4px;border:1.5px solid var(--border);border-radius:5px;font-family:'Jost',sans-serif;font-size:13px;font-weight:700;color:var(--dark)" onchange="regSetTip(this.value)">
@@ -2989,71 +2990,13 @@
   </div>
 </div>
 
+<!-- Transport tab — ported from Staging's admin board (see modules/transport.js:
+     trInit() and everything after the "TRANSPORT ADMIN BOARD" comment). Rendered
+     entirely by JS into #tab-transport-body, matching Staging's own render(container)
+     pattern instead of the old hand-built Month/Retreat/Day/Individual/Drivers/Status
+     view HTML that used to live here. -->
 <div class="tab-panel" id="tab-transport" style="flex-direction:column">
-  <div style="flex:1;overflow-y:auto;padding:28px 36px;background:#f5f1eb">
-
-    <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px">
-      <div>
-        <h2 style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:#2d2520;margin:0">Transportation</h2>
-        <p style="font-size:12.5px;color:#8a7e74;margin:4px 0 0">Guest flight &amp; transfer information</p>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <button onclick="trCopyIndividualLink()" style="padding:7px 14px;border:1.5px solid #2d6a6a;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;font-weight:600;cursor:pointer;color:#2d6a6a;white-space:nowrap">🔗 Individual Guest Link</button>
-        <!-- View toggle -->
-        <div style="display:flex;background:#e8dfd4;border-radius:10px;padding:3px;gap:2px">
-          <button id="trViewMonth" onclick="trSetView('month')" style="padding:7px 16px;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;background:#fff;color:#0e9494;box-shadow:0 1px 4px rgba(0,0,0,.08)">Month View</button>
-          <button id="trViewRetreat" onclick="trSetView('retreat')" style="padding:7px 16px;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:#8a7e74">By Retreat</button>
-          <button id="trViewAll" onclick="trSetView('all')" style="padding:7px 16px;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:#8a7e74">Day Detail</button>
-          <button id="trViewIndividual" onclick="trSetView('individual')" style="padding:7px 16px;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:#8a7e74">Individual</button>
-          <button id="trViewDrivers" onclick="trSetView('drivers')" style="padding:7px 16px;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:#8a7e74">Drivers</button>
-          <button id="trViewStatus" onclick="trSetView('status')" style="padding:7px 16px;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;background:transparent;color:#8a7e74">Status</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Month view controls -->
-    <div id="trMonthControls" style="display:none;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
-      <button onclick="trMonthNav(-1)" style="padding:6px 14px;border:1.5px solid #c8bfb5;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:13px;cursor:pointer;color:#2d2520">← Prev</button>
-      <div id="trMonthLabel" style="font-size:14px;font-weight:700;color:#2d2520;min-width:130px;text-align:center"></div>
-      <button onclick="trMonthNav(1)" style="padding:6px 14px;border:1.5px solid #c8bfb5;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:13px;cursor:pointer;color:#2d2520">Next →</button>
-      <button onclick="trMonthGoToday()" style="padding:6px 14px;border:1.5px solid #0e9494;border-radius:8px;background:#f0fdfb;font-family:'Jost',sans-serif;font-size:12.5px;cursor:pointer;color:#0e9494;font-weight:600">Today</button>
-    </div>
-
-    <!-- Retreat view controls -->
-    <div id="trRetreatControls" style="display:flex;gap:8px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
-      <div style="position:relative;min-width:260px">
-        <input id="trRetreatSearch" type="text" placeholder="Search retreat leader…" autocomplete="off"
-          oninput="trFilterDropdown(this.value)"
-          onfocus="trFilterDropdown(this.value);document.getElementById('trDropdownList').style.display='block'"
-          style="width:100%;box-sizing:border-box;padding:8px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;color:#2d2520">
-        <div id="trDropdownList" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #c8bfb5;border-radius:9px;margin-top:3px;max-height:220px;overflow-y:auto;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
-      </div>
-      <button onclick="trCopyFormLink()" class="btn btn-secondary" style="font-size:12px;white-space:nowrap">Copy Guest Form Link</button>
-      <button onclick="fillSampleTransportData()" class="btn btn-secondary" style="font-size:12px;white-space:nowrap;background:#fef3c7;border-color:#f59e0b;color:#92400e">⚡ Fill Demo Data</button>
-    </div>
-
-    <!-- All-arrivals controls -->
-    <div id="trAllControls" style="display:none;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
-      <label style="font-size:13px;font-weight:600;color:#5a5048">Date</label>
-      <input type="date" id="trAllDate" onchange="trBuildAllArrivals()" style="padding:8px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;color:#2d2520">
-      <button onclick="trBuildAllArrivals()" class="btn btn-secondary" style="font-size:12px">Refresh</button>
-    </div>
-
-    <!-- Driver view controls -->
-    <div id="trDriversControls" style="display:none;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
-      <label style="font-size:13px;font-weight:600;color:#5a5048">Date</label>
-      <input type="date" id="trDriversDate" onchange="trBuildDriverView()" style="padding:8px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;color:#2d2520">
-      <button onclick="trBuildDriverView()" class="btn btn-secondary" style="font-size:12px">Refresh</button>
-    </div>
-
-    <!-- Individual guest controls -->
-    <div id="trIndividualControls" style="display:none;gap:8px;align-items:center;margin-bottom:18px;flex-wrap:wrap">
-      <button onclick="trCopyIndividualLink()" class="btn btn-secondary" style="font-size:12px;white-space:nowrap">Copy Individual Guest Form Link</button>
-    </div>
-
-    <div id="trContent" style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0">Select a retreat to view transportation submissions.</div>
-  </div>
+  <div id="tab-transport-body" style="flex:1;overflow:hidden;display:flex;flex-direction:column"></div>
 </div>
 
 <!-- ===== SPECIAL EVENTS TAB ===== -->

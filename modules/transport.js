@@ -2,11 +2,7 @@
 // Loaded as a classic script; shares global scope with booking-hub.html (same pattern as cb-portal-sync.js).
 // Do not add <script type="module"> here — onclick="..." handlers in the HTML rely on plain globals.
 
-// ===== TRANSPORTATION =====
 const TRANSPORT_KEY='amansala_transport';
-let trSelBkId=null;
-let trCurrentView='month'; // 'month' | 'retreat' | 'all' | 'individual'
-let trMonthOffset=0; // months from today's month
 let deletedTransportIds=new Set(JSON.parse(localStorage.getItem('amansala_deleted_transport_ids')||'[]'));
 
 function loadTransport(){try{return(JSON.parse(localStorage.getItem(TRANSPORT_KEY)||'[]')).filter(s=>!deletedTransportIds.has(s.id));}catch{return[];}}
@@ -269,6 +265,7 @@ function getTransportRoster(bkId){
 }
 // Shared red/orange/green coding for "how much of this retreat's transport is
 // filled out" — used on the Transport tab's Status view and the Dashboard.
+
 function trCompletionColor(have,total){
   if(total===0)return'#6b7280';
   if(have===0)return'#dc2626';
@@ -281,29 +278,31 @@ function trCompletionLabel(have,total){
   if(have<total)return'Partially filled out';
   return'All filled out';
 }
-function trBuildStatusView(){
-  const wrap=document.getElementById('trContent');if(!wrap)return;
-  const today=fmtISO(new Date());
-  const bookings=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate>=today)
-    .sort((a,b)=>a.startDate.localeCompare(b.startDate));
-  const rowsHtml=bookings.map(bk=>{
-    const ros=getTransportRoster(bk.id);
-    const have=ros.submittedCount,total=ros.roster.length;
-    const color=trCompletionColor(have,total);
-    return`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 18px;border-bottom:1px solid #f0ece4">
-      <div>
-        <div style="font-weight:600;font-size:13px;color:#2d2520">${bk.leaderName||bk.retreatName||'Untitled Retreat'}</div>
-        <div style="font-size:11px;color:#8a7e74">${fmtDate(bk.startDate)}</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-weight:800;font-size:14px;color:${color}">${total?have+'/'+total:'—'}</div>
-        <div style="font-size:10.5px;color:${color};font-weight:600">${trCompletionLabel(have,total)}</div>
-      </div>
-    </div>`;
+
+function trRosterStatusHtml(roster,missing){
+  if(!roster.length)return'';
+  const missingSet=new Set(missing.map(g=>trNormName(g.name)));
+  const rows=roster.map(g=>{
+    const done=!missingSet.has(trNormName(g.name));
+    const status=done
+      ?'<span style="font-size:10.5px;font-weight:700;color:#15803d;background:#dcfce7;border-radius:5px;padding:2px 8px">Received</span>'
+      :'<span style="font-size:10.5px;font-weight:700;color:#92400e;background:#fef9c3;border-radius:5px;padding:2px 8px">Missing</span>';
+    return`<tr style="border-bottom:1px solid #f0ece4">
+      <td style="padding:8px 14px;font-weight:600;color:#2d2520">${g.name}</td>
+      <td style="padding:8px 14px;color:#8a7e74">${g.room||'—'}</td>
+      <td style="padding:8px 14px;text-align:right">${status}</td>
+    </tr>`;
   }).join('');
-  wrap.innerHTML=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;overflow:hidden">
-    <div style="padding:12px 18px;border-bottom:1px solid #c8d8d4;background:#f2f8f6;font-size:12.5px;font-weight:700;color:#0e9494">Transport Completion — All Upcoming Retreats</div>
-    ${rowsHtml||'<div style="padding:24px;text-align:center;color:#8a7e74;font-size:13px">No upcoming retreats found.</div>'}
+  return`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;margin-bottom:20px;overflow:hidden">
+    <div style="background:#f2f8f6;padding:10px 16px;border-bottom:1px solid #c8d8d4;font-size:12px;font-weight:700;color:#0e9494">Room List — Transport Status</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:#faf7f2">
+        <th style="padding:7px 14px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Guest</th>
+        <th style="padding:7px 14px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Room</th>
+        <th style="padding:7px 14px;text-align:right;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Transport</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
   </div>`;
 }
 
@@ -354,335 +353,6 @@ async function syncTransportFromSupabase(){
     if(anyChanged&&typeof saveDriverConfirmations==='function')saveDriverConfirmations();
   }
 }
-async function refreshTransport(){
-  await syncTransportFromSupabase();
-  if(trCurrentView==='month')trBuildMonthView();
-  else if(trCurrentView==='all')trBuildAllArrivals();
-  else if(trCurrentView==='individual')trBuildIndividual();
-  else if(trCurrentView==='status')trBuildStatusView();
-  else if(trSelBkId)trSelectRetreat(trSelBkId);
-}
-
-function trSetView(v){
-  trCurrentView=v;
-  const mBtn=document.getElementById('trViewMonth'),rBtn=document.getElementById('trViewRetreat'),aBtn=document.getElementById('trViewAll'),iBtn=document.getElementById('trViewIndividual'),dBtn=document.getElementById('trViewDrivers'),sBtn=document.getElementById('trViewStatus');
-  const mCtrl=document.getElementById('trMonthControls'),rCtrl=document.getElementById('trRetreatControls'),aCtrl=document.getElementById('trAllControls'),iCtrl=document.getElementById('trIndividualControls'),dCtrl=document.getElementById('trDriversControls');
-  const activeStyle='background:#fff;color:#0e9494;box-shadow:0 1px 4px rgba(0,0,0,.08)';
-  const inactiveStyle='background:transparent;color:#8a7e74;box-shadow:none';
-  [mBtn,rBtn,aBtn,iBtn,dBtn,sBtn].forEach(b=>{if(b)b.style.cssText=b.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+inactiveStyle;});
-  [mCtrl,rCtrl,aCtrl,iCtrl,dCtrl].forEach(c=>{if(c)c.style.display='none';});
-  if(v==='status'){
-    if(sBtn)sBtn.style.cssText=sBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
-    trBuildStatusView();
-    syncTransportFromSupabase().then(()=>trBuildStatusView());
-  } else if(v==='month'){
-    if(mBtn)mBtn.style.cssText=mBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
-    if(mCtrl)mCtrl.style.display='flex';
-    trBuildMonthView();
-    syncTransportFromSupabase().then(()=>trBuildMonthView());
-  } else if(v==='retreat'){
-    if(rBtn)rBtn.style.cssText=rBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
-    if(rCtrl)rCtrl.style.display='flex';
-    trSelectRetreat(trSelBkId||'');
-    syncTransportFromSupabase().then(()=>{if(trSelBkId)trSelectRetreat(trSelBkId);});
-  } else if(v==='individual'){
-    if(iBtn)iBtn.style.cssText=iBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
-    if(iCtrl)iCtrl.style.display='flex';
-    trBuildIndividual();
-    syncTransportFromSupabase().then(()=>trBuildIndividual());
-  } else if(v==='drivers'){
-    if(dBtn)dBtn.style.cssText=dBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
-    if(dCtrl)dCtrl.style.display='flex';
-    const ddEl=document.getElementById('trDriversDate');
-    if(ddEl&&!ddEl.value)ddEl.value=fmtISO(new Date());
-    trBuildDriverView();
-    (async()=>{
-      if(typeof syncDriverConfirmationsFromSupabase==='function')await syncDriverConfirmationsFromSupabase();
-      await syncTransportFromSupabase();
-      trBuildDriverView();
-    })();
-  } else {
-    if(aBtn)aBtn.style.cssText=aBtn.style.cssText.replace(/background[^;]+;|color[^;]+;|box-shadow[^;]+;/g,'')+activeStyle;
-    if(aCtrl)aCtrl.style.display='flex';
-    const dEl=document.getElementById('trAllDate');
-    if(dEl&&!dEl.value)dEl.value=fmtISO(new Date());
-    trBuildAllArrivals();
-    syncTransportFromSupabase().then(()=>trBuildAllArrivals());
-  }
-}
-function trMonthNav(dir){trMonthOffset+=dir;trBuildMonthView();}
-function trMonthGoToday(){trMonthOffset=0;trBuildMonthView();}
-
-let _trAllRetreats=[];
-let _trInitDone=false;
-function trInit(){
-  const inp=document.getElementById('trRetreatSearch');if(!inp)return;
-  const today=fmtISO(new Date());
-  _trAllRetreats=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate>=today)
-    .sort((a,b)=>a.startDate.localeCompare(b.startDate))
-    .map(b=>({id:b.id,label:`${b.leaderName||b.retreatName} — ${fmtDate(b.startDate)} to ${fmtDate(b.endDate)}`}));
-  if(trSelBkId){
-    const bk=AppData.bookings.find(b=>b.id===trSelBkId);
-    if(bk)inp.value=bk.leaderName||bk.retreatName||'';
-  }
-  if(!_trInitDone){
-    // Close dropdown when clicking outside
-    document.addEventListener('click',e=>{
-      if(!e.target.closest('#trRetreatSearch')&&!e.target.closest('#trDropdownList'))
-        document.getElementById('trDropdownList').style.display='none';
-    },{capture:true});
-    _trInitDone=true;
-  }
-  // Show month view immediately from localStorage, then refresh from Supabase
-  trSetView('month');
-  const wrap=document.getElementById('trContent');
-  // Sync from Supabase in background and re-render once done
-  syncTransportFromSupabase().then(()=>{
-    if(trCurrentView==='month')trBuildMonthView();
-    else if(trCurrentView==='all')trBuildAllArrivals();
-    else if(trCurrentView==='individual')trBuildIndividual();
-    else if(trSelBkId)trSelectRetreat(trSelBkId);
-  });
-}
-function trFilterDropdown(q){
-  const list=document.getElementById('trDropdownList');if(!list)return;
-  const matches=q.trim()===''?_trAllRetreats:_trAllRetreats.filter(r=>r.label.toLowerCase().includes(q.toLowerCase()));
-  if(!matches.length){list.innerHTML='<div style="padding:10px 14px;font-size:12.5px;color:#9ca3af">No retreats found</div>';list.style.display='block';return;}
-  list.innerHTML=matches.map(r=>`<div onclick="trPickRetreat('${r.id}','${r.label.replace(/'/g,'&#39;')}')" style="padding:10px 14px;font-size:13px;color:#2d2520;cursor:pointer;font-family:'Jost',sans-serif;border-bottom:1px solid #f3f0eb" onmouseover="this.style.background='#f5f1eb'" onmouseout="this.style.background=''">${r.label}</div>`).join('');
-  list.style.display='block';
-}
-function trPickRetreat(id,label){
-  document.getElementById('trRetreatSearch').value=label;
-  document.getElementById('trDropdownList').style.display='none';
-  trSelectRetreat(id);
-}
-
-function trRosterStatusHtml(roster,missing){
-  if(!roster.length)return'';
-  const missingSet=new Set(missing.map(g=>trNormName(g.name)));
-  const rows=roster.map(g=>{
-    const done=!missingSet.has(trNormName(g.name));
-    const status=done
-      ?'<span style="font-size:10.5px;font-weight:700;color:#15803d;background:#dcfce7;border-radius:5px;padding:2px 8px">Received</span>'
-      :'<span style="font-size:10.5px;font-weight:700;color:#92400e;background:#fef9c3;border-radius:5px;padding:2px 8px">Missing</span>';
-    return`<tr style="border-bottom:1px solid #f0ece4">
-      <td style="padding:8px 14px;font-weight:600;color:#2d2520">${g.name}</td>
-      <td style="padding:8px 14px;color:#8a7e74">${g.room||'—'}</td>
-      <td style="padding:8px 14px;text-align:right">${status}</td>
-    </tr>`;
-  }).join('');
-  return`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;margin-bottom:20px;overflow:hidden">
-    <div style="background:#f2f8f6;padding:10px 16px;border-bottom:1px solid #c8d8d4;font-size:12px;font-weight:700;color:#0e9494">Room List — Transport Status</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="background:#faf7f2">
-        <th style="padding:7px 14px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Guest</th>
-        <th style="padding:7px 14px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Room</th>
-        <th style="padding:7px 14px;text-align:right;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Transport</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>`;
-}
-
-function trSelectRetreat(bkId){
-  trSelBkId=bkId||null;
-  const wrap=document.getElementById('trContent');if(!wrap)return;
-  if(!bkId){wrap.innerHTML='<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0">Select a retreat to view transportation submissions.</div>';return;}
-  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk){wrap.innerHTML='';return;}
-  const {roster,matchedSubs,missing,submittedCount,orphanSubs}=getTransportRoster(bkId);
-  const subs=matchedSubs;
-
-  if(!roster.length){
-    wrap.innerHTML=`<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0;max-width:440px;margin:0 auto;line-height:1.65">
-      No guests on the room list for this retreat yet. Add guests in <b>Room Registrations</b> first — transport tracking compares submissions against that roster.
-    </div>`;
-    return;
-  }
-
-  // Stats bar (room list = source of truth)
-  let html=`<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:120px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:#374151">${roster.length}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">On Room List</div>
-    </div>
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:120px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:#0e9494">${submittedCount}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">Transport Received</div>
-    </div>
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:120px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:${missing.length?'#d97706':'#15803d'}">${missing.length}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">Missing</div>
-    </div>
-  </div>`;
-  if(orphanSubs.length){
-    html+=`<div style="background:#fff;border:1px solid #fecaca;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#991b1b;line-height:1.55">
-      <b>${orphanSubs.length} submission${orphanSubs.length!==1?'s':''}</b> not matched to the room list:
-      ${orphanSubs.map(s=>`${s.firstName} ${s.lastName}`.trim()).join(', ')}.
-    </div>`;
-  }
-  html+=trRosterStatusHtml(roster,missing);
-
-  // Arrivals grouped (OT excluded from groups, shown separately at bottom)
-  html+=trBuildGroups(subs,'arrival','Arrivals',true);
-  html+=trBuildGroups(subs,'departure','Departures',false);
-
-  // OT — own transport arrivals
-  const MNTHS2=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const otArrivals=subs.filter(s=>s.arrivalOT&&s.arrivalDate&&s.arrivalTime).sort((a,b)=>a.arrivalDate===b.arrivalDate?a.arrivalTime.localeCompare(b.arrivalTime):a.arrivalDate.localeCompare(b.arrivalDate));
-  const otDepartures=subs.filter(s=>s.departureOT&&s.departureDate&&s.departureTime).sort((a,b)=>a.departureDate===b.departureDate?a.departureTime.localeCompare(b.departureTime):a.departureDate.localeCompare(b.departureDate));
-  function otTable(list,timeKey,dateKey){
-    return`<table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr style="background:#faf7f2"><th style="padding:6px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Guest</th><th style="padding:6px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Date</th><th style="padding:6px 12px;text-align:right;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Est. Time</th></tr></thead>
-      <tbody>${list.map((s,i)=>{const dt=new Date(s[dateKey]+'T00:00:00');return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}"><td style="padding:6px 12px;font-weight:600;color:#dc2626">${s.firstName} ${s.lastName} <span style="font-size:10px;font-weight:700;background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 5px">OT</span></td><td style="padding:6px 12px;color:#8a7e74">${MNTHS2[dt.getMonth()]+' '+dt.getDate()}</td><td style="padding:6px 12px;text-align:right;font-weight:600;color:#5a5048">${tsFmt(s[timeKey])}</td></tr>`;}).join('')}</tbody>
-    </table>`;
-  }
-  if(otArrivals.length)html+=`<div style="margin-bottom:18px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:8px">OT — Own Transport Arrivals</div><div style="background:#fff;border:1.5px dashed #c8bfb5;border-radius:12px;overflow:hidden"><div style="background:#f5f1eb;padding:9px 14px;border-bottom:1px solid #e8dfd4;font-size:11.5px;color:#5a5048;font-style:italic">Arranging own transfer — listed for ETA reference only</div>${otTable(otArrivals,'arrivalTime','arrivalDate')}</div></div>`;
-  if(otDepartures.length)html+=`<div style="margin-bottom:18px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:8px">OT — Own Transport Departures</div><div style="background:#fff;border:1.5px dashed #c8bfb5;border-radius:12px;overflow:hidden"><div style="background:#f5f1eb;padding:9px 14px;border-bottom:1px solid #e8dfd4;font-size:11.5px;color:#5a5048;font-style:italic">Arranging own transfer — listed for reference only</div>${otTable(otDepartures,'departureTime','departureDate')}</div></div>`;
-
-  // Missing guests
-  if(missing.length){
-    html+=`<div style="background:#fff;border:1px solid #fde68a;border-radius:12px;margin-bottom:18px;overflow:hidden">
-      <div style="background:#fffbeb;padding:12px 18px;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:8px">
-        <span style="font-size:12.5px;font-weight:700;color:#92400e">⚠ Missing Transport Info — ${missing.length} guest${missing.length!==1?'s':''}</span>
-      </div>
-      <div style="padding:12px 18px;display:flex;flex-wrap:wrap;gap:8px">
-        ${missing.map(g=>`<span style="font-size:12px;padding:3px 10px;background:#fef9c3;border:1px solid #fcd34d;border-radius:6px;color:#92400e">${g.name}${g.email?' · <span style="opacity:.7">'+g.email+'</span>':''}</span>`).join('')}
-      </div>
-    </div>`;
-  }
-
-  // Ride groups for this retreat's arrivals (shared logic — respects manual sharing overrides)
-  const subsWithArrival=subs.filter(s=>s.arrivalDate&&s.arrivalTime&&s.arrivalAirport);
-  const trGroupMap=trGroupMapByEmail(trComputeRideGroups(subsWithArrival,'arrivalTime','arrivalAirport'));
-
-  // All arrivals table — same columns as All Arrivals view
-  if(subs.length){
-    const sorted=subsWithArrival.sort((a,b)=>a.arrivalTime.localeCompare(b.arrivalTime));
-    html+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;overflow:hidden">
-      <div style="background:#f2f8f6;padding:12px 18px;border-bottom:1px solid #c8d8d4;display:flex;align-items:center;gap:10px">
-        <span style="font-size:12.5px;font-weight:700;color:#0e9494">All Arrivals</span>
-        <span style="font-size:11px;background:#0e9494;color:#fff;border-radius:99px;padding:1px 9px;font-weight:700">${sorted.length}</span>
-      </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:#f5f1eb">
-            <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Guest Name</th>
-            <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4;white-space:nowrap">Room #</th>
-            <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Flight</th>
-            <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4;white-space:nowrap">Arrival Time</th>
-            <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Airport</th>
-            <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">ETA</th>
-            <th style="padding:8px 12px;text-align:right;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Owes</th>
-            <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4;white-space:nowrap">Onsite Upgrade</th>
-          </tr></thead>
-          <tbody>${sorted.map((s,i)=>{
-            const gm=trGroupMap[s.email];
-            const room=trGuestRoom(bkId,s.email,s.firstName,s.lastName);
-            const eta=s.arrivalAirport==='cancun'?trAddMins(s.arrivalTime,120):trAddMins(s.arrivalTime,60);
-            const airChip=s.arrivalAirport==='cancun'
-              ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
-              :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
-            const priceCell=gm
-              ?(gm.groupSize===1
-                ?`<span style="font-weight:800;color:#5a5048">$${gm.pricePerPax}</span> <span style="font-size:10px;color:#8a7e74">Private</span>`
-                :`<span style="font-weight:800;color:#15803d">$${gm.pricePerPax}</span> <span style="font-size:10px;color:#8a7e74">sharing</span>`)
-              :'—';
-            const upg=trGetUpgrade(bkId,room);
-            const upgCell=trUpgradeCellHtml(upg,s,11);
-            const roomCat=trRoomCat(room);
-            return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
-              <td style="padding:9px 12px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
-              <td style="padding:9px 12px;white-space:nowrap"><span style="font-weight:700;color:#2d2520">${room}</span>${roomCat?`<br><span style="font-size:10px;color:#8a7e74;font-weight:400">${roomCat}</span>`:''}</td>
-              <td style="padding:9px 12px;color:#5a5048">${s.flightNumber||'—'}</td>
-              <td style="padding:9px 12px;font-weight:700;color:#0e9494;white-space:nowrap">${tsFmt(s.arrivalTime)}</td>
-              <td style="padding:9px 12px">${airChip}</td>
-              <td style="padding:9px 12px;color:#2d2520;font-weight:600;white-space:nowrap">${eta}</td>
-              <td style="padding:9px 12px;text-align:right">${priceCell}</td>
-              <td style="padding:9px 12px">${upgCell}</td>
-            </tr>`;}).join('')}</tbody>
-        </table>
-      </div>
-    </div>`;
-  }
-
-  wrap.innerHTML=html;
-}
-
-function trBuildGroups(subs,direction,heading,showUpgrade=false){
-  const MNTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const dateKey=direction+'Date', timeKey=direction+'Time', airportKey=direction+'Airport';
-  // Airport is optional for departures — still show if date+time are present; exclude OT guests (shown separately)
-  const otKey=direction+'OT';
-  const valid=subs.filter(s=>!s[otKey]&&s[dateKey]&&s[timeKey]);
-  if(!valid.length)return'';
-  const byAD={};
-  valid.forEach(s=>{const k=s[airportKey]+'|'+s[dateKey];if(!byAD[k])byAD[k]=[];byAD[k].push(s);});
-  let out=`<div style="margin-bottom:18px">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:10px">${heading}</div>`;
-  Object.entries(byAD).forEach(([key,list])=>{
-    const [airport,date]=key.split('|');
-    const airportLabel=airport==='cancun'?'Cancún Airport':'Tulum Airport';
-    const dt=new Date(date+'T00:00:00');
-    const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
-    list.sort((a,b)=>a[timeKey].localeCompare(b[timeKey]));
-    const rideGroups=trComputeRideGroups(list,timeKey,airportKey);
-    const groups=rideGroups.map(rg=>rg.guests);
-    const shareCandidates=direction==='arrival'?trFindShareCandidates(rideGroups,timeKey):[];
-    out+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;margin-bottom:10px;overflow:hidden">
-      <div style="background:#f2f8f6;padding:10px 16px;border-bottom:1px solid #c8d8d4;font-size:12.5px;font-weight:700;color:#0e9494">${airportLabel} · ${dateLabel}</div>
-      <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
-        ${shareCandidates.map(c=>trShareAlertHtml(c.a,c.b,c.gap)).join('')}
-        ${groups.map((g,gi)=>{
-          const pricePerPax=trGetPrice(airport,g.length);
-          const soloPax=trGetPrice(airport,1);
-          const saves=soloPax-pricePerPax;
-          const isSolo=g.length===1;
-          const isManualShare=g.length>1&&g[0].shareGroupId&&g.every(x=>x.shareGroupId===g[0].shareGroupId);
-          const priceLabel=isSolo?`$${pricePerPax} Private Transport`:`$${pricePerPax}/person`;
-          return`<div style="background:${gi%2===0?'#faf7f2':'#f2f8f6'};border:1px solid ${g.length>1?'#9dd1d1':'#e8dfd4'};border-radius:9px;padding:10px 14px">
-          <div style="font-size:11px;font-weight:700;color:#0e9494;margin-bottom:7px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span>Group ${gi+1}</span>
-            <span style="background:#0e9494;color:#fff;border-radius:99px;padding:1px 8px;font-size:10px">${g.length} guest${g.length!==1?'s':''}</span>
-            <span style="color:#8a7e74;font-weight:400">${tsFmt(g[0][timeKey])}${g.length>1?' – '+tsFmt(g[g.length-1][timeKey]):''}</span>
-            <span style="font-weight:700;color:${isSolo?'#5a5048':'#0e9494'};font-size:11px">${priceLabel}</span>
-            ${saves>0?`<span style="background:#d1fae5;color:#065f46;border-radius:99px;padding:1px 8px;font-size:10px;font-weight:700">save $${saves} each</span>`:''}
-            ${isManualShare?`<button onclick="trUnshareGroup('${g.map(x=>x.id).join(',')}')" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;cursor:pointer">Undo Share</button>`:''}
-          </div>
-          <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:rgba(255,255,255,.5)">
-              <th style="padding:5px 8px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Guest Name</th>
-              <th style="padding:5px 8px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Room #</th>
-              <th style="padding:5px 8px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Flight</th>
-              <th style="padding:5px 8px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Arrival Time</th>
-              <th style="padding:5px 8px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">ETA</th>
-              <th style="padding:5px 8px;text-align:right;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Owes</th>
-              ${showUpgrade?'<th style="padding:5px 8px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Onsite Upgrade</th>':''}
-            </tr></thead>
-            <tbody>${g.map(s=>{
-              const sRoom=trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName);
-              const sEta=s[airportKey]==='cancun'?trAddMins(s[timeKey],120):trAddMins(s[timeKey],60);
-              const sUpg=showUpgrade?trGetUpgrade(s.bookingId,sRoom):null;
-              const sUpgCell=showUpgrade?trUpgradeCellHtml(sUpg,s,10):'';
-              const sRoomCat=trRoomCat(sRoom);
-              return`<tr style="border-bottom:1px solid rgba(0,0,0,.04)">
-                <td style="padding:6px 8px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
-                <td style="padding:6px 8px;white-space:nowrap"><span style="font-weight:700;color:#2d2520">${sRoom}</span>${sRoomCat?`<br><span style="font-size:10px;color:#8a7e74">${sRoomCat}</span>`:''}</td>
-                <td style="padding:6px 8px;color:#5a5048">${s.flightNumber||'—'}</td>
-                <td style="padding:6px 8px;font-weight:600;color:#0e9494;white-space:nowrap">${tsFmt(s[timeKey])}</td>
-                <td style="padding:6px 8px;color:#2d2520;font-weight:600;white-space:nowrap">${sEta}</td>
-                <td style="padding:6px 8px;text-align:right;font-weight:800;color:${isSolo?'#5a5048':'#15803d'};white-space:nowrap">$${pricePerPax}</td>
-                ${showUpgrade?`<td style="padding:6px 8px">${sUpgCell}</td>`:''}
-              </tr>`;}).join('')}
-            </tbody>
-          </table>
-          </div>
-        </div>`;}).join('')}
-      </div>
-    </div>`;
-  });
-  return out+'</div>';
-}
 
 function trTimeToMins(t){if(!t)return 0;const[h,m]=(t||'').split(':');return parseInt(h)*60+parseInt(m);}
 
@@ -692,65 +362,7 @@ function trTimeToMins(t){if(!t)return 0;const[h,m]=(t||'').split(':');return par
 // Room" button (spaChargeApptToRoom in modules/spa.js), reusing the
 // roster/email-or-name guest matching already used to check who has
 // submitted transport info (trGuestMatchesSub/getTransportRoster above).
-function trFindRegForTransportSub(sub){
-  for(const reg of (AppData.regs||[])){
-    if(reg.bookingId!==sub.bookingId)continue;
-    const idx=(reg.guests||[]).findIndex(g=>trGuestMatchesSub({name:g.name,email:g.email||reg.email||''},sub));
-    if(idx>=0)return{reg,guest:reg.guests[idx],guestIdx:idx};
-  }
-  return null;
-}
-function trChargeTransport(subId,price){
-  const all=loadTransport();
-  const sub=all.find(s=>s.id===subId);if(!sub)return;
-  if(sub.chargedAt){showToast('Already charged.');return;}
-  const match=trFindRegForTransportSub(sub);
-  if(!match){showToast(`No matching registered guest found for ${sub.firstName} ${sub.lastName}.`);return;}
-  if(price==null){showToast('No price set for this ride yet.');return;}
-  const airportLabel=sub.arrivalAirport==='cancun'?'Cancún':'Tulum';
-  if(!confirm(`Charge ${match.guest.name}'s room folio ${fmt$(price)} for airport transport?`))return;
-  if(!match.reg.charges)match.reg.charges=[];
-  const chargeId=uid();
-  match.reg.charges.push({id:chargeId,date:sub.arrivalDate,category:'Transport',description:`Airport Transport (${airportLabel})`,amount:price,guestName:match.guest.name,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff',source:'transport'});
-  sub.chargedAt=new Date().toISOString();
-  sub.chargeId=chargeId;
-  sub.chargeAmount=price;
-  saveAll();
-  saveTransport(all);
-  logActivity('Charge added',`${fmt$(price)} — Airport Transport — ${match.guest.name}`,match.reg.bookingId);
-  showToast(`Charged ${fmt$(price)} to ${match.guest.name}'s folio ✓`);
-  refreshTransport();
-}
-function trChargeAllArrivals(date){
-  const all=loadTransport();
-  const todays=all.filter(s=>s.arrivalDate===date&&s.arrivalTime&&s.arrivalAirport&&s.status!=='cancelled'&&!s.chargedAt);
-  if(!todays.length){showToast('Nothing left to charge for this date.');return;}
-  if(!confirm(`Charge transport to room folios for all ${todays.length} guest(s) arriving on this date?`))return;
-  const groups=trComputeRideGroups(all.filter(s=>s.arrivalDate===date&&s.arrivalTime&&s.arrivalAirport),'arrivalTime','arrivalAirport');
-  const gMap=trGroupMapByEmail(groups);
-  let charged=0,skipped=0;
-  todays.forEach(sub=>{
-    const match=trFindRegForTransportSub(sub);
-    if(!match){skipped++;return;}
-    const info=gMap[sub.email]||{pricePerPax:trGetPrice(sub.arrivalAirport,1)};
-    const price=info.pricePerPax;
-    const airportLabel=sub.arrivalAirport==='cancun'?'Cancún':'Tulum';
-    if(!match.reg.charges)match.reg.charges=[];
-    const chargeId=uid();
-    match.reg.charges.push({id:chargeId,date:sub.arrivalDate,category:'Transport',description:`Airport Transport (${airportLabel})`,amount:price,guestName:match.guest.name,addedAt:new Date().toISOString(),addedBy:getCurrentSession()?.name||'Staff',source:'transport'});
-    sub.chargedAt=new Date().toISOString();
-    sub.chargeId=chargeId;
-    sub.chargeAmount=price;
-    charged++;
-  });
-  saveAll();
-  saveTransport(all);
-  logActivity('Bulk charge added',`Airport Transport charged for ${charged} guest(s)`,null);
-  showToast(`Charged ${charged} guest${charged!==1?'s':''}${skipped?`, ${skipped} skipped (no match)`:''} ✓`);
-  refreshTransport();
-}
 
-// Transport pricing table
 function trGetPrice(airport,size){
   const c=airport==='cancun';
   if(size>=6)return c?45:40;
@@ -771,110 +383,6 @@ function trVehicleType(size){
 // subs to share a ride via a common shareGroupId (trMarkSharing), which
 // overrides the time window — this is how "slide them together" works and
 // why the per-person price recalculates via trGetPrice(airport, grp.length).
-const TR_SHARE_WINDOW=40; // minutes — proximity threshold for the "ask about sharing?" alert
-
-function trComputeRideGroups(subs,timeKey,airportKey){
-  const groups=[];
-  ['cancun','tulum'].forEach(airport=>{
-    const subset=subs.filter(s=>s[airportKey]===airport&&s[timeKey]).sort((a,b)=>a[timeKey].localeCompare(b[timeKey]));
-    const used=new Set();
-    subset.forEach((s,i)=>{
-      if(used.has(i))return;
-      const grp=[s];used.add(i);
-      const anchor=trTimeToMins(s[timeKey]);
-      let changed=true;
-      while(changed){
-        changed=false;
-        subset.forEach((s2,j)=>{
-          if(used.has(j))return;
-          const withinAuto=Math.abs(trTimeToMins(s2[timeKey])-anchor)<=20;
-          const manualMatch=grp.some(g=>g.shareGroupId&&s2.shareGroupId&&g.shareGroupId===s2.shareGroupId);
-          if(withinAuto||manualMatch){grp.push(s2);used.add(j);changed=true;}
-        });
-      }
-      grp.sort((a,b)=>a[timeKey].localeCompare(b[timeKey]));
-      groups.push({airport,guests:grp,pricePerPax:trGetPrice(airport,grp.length),soloPrice:trGetPrice(airport,1)});
-    });
-  });
-  return groups.sort((a,b)=>a.guests[0][timeKey].localeCompare(b.guests[0][timeKey]));
-}
-
-function trGroupMapByEmail(groups){
-  const map={};
-  groups.forEach((g,gi)=>{g.guests.forEach(s=>{map[s.email]={gid:gi,groupSize:g.guests.length,pricePerPax:g.pricePerPax,soloPrice:g.soloPrice,airport:g.airport};});});
-  return map;
-}
-
-// Adjacent DIFFERENT groups (same airport) whose closest guests arrive within
-// TR_SHARE_WINDOW mins of each other — candidates to ask about sharing.
-function trFindShareCandidates(groups,timeKey){
-  const out=[];
-  ['cancun','tulum'].forEach(airport=>{
-    const list=groups.filter(g=>g.airport===airport).sort((a,b)=>a.guests[0][timeKey].localeCompare(b.guests[0][timeKey]));
-    for(let i=0;i<list.length-1;i++){
-      const aLast=list[i].guests[list[i].guests.length-1],bFirst=list[i+1].guests[0];
-      const gap=trTimeToMins(bFirst[timeKey])-trTimeToMins(aLast[timeKey]);
-      if(gap>=0&&gap<=TR_SHARE_WINDOW&&!(aLast.shareDismissedWith||[]).includes(bFirst.id)){
-        out.push({a:aLast,b:bFirst,gap});
-      }
-    }
-  });
-  return out;
-}
-
-function trShareAlertHtml(a,b,gap){
-  const idsCsv=a.id+','+b.id;
-  return`<div style="background:#fffbeb;border:1.5px dashed #fbbf24;border-radius:10px;padding:9px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-    <span style="font-size:12px;color:#92400e;flex:1;min-width:220px">🚐 <b>${b.firstName} ${b.lastName}</b> arrives ${gap} min after <b>${a.firstName} ${a.lastName}</b> — ask if they'd like to share a ride?</span>
-    <button onclick="trMarkSharing('${idsCsv}')" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:7px;border:none;background:#15803d;color:#fff;cursor:pointer">Mark as Sharing</button>
-    <button onclick="trDismissShare('${idsCsv}')" style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:7px;border:1px solid #d6c7ae;background:#fff;color:#8a7e74;cursor:pointer">Asked — Not Sharing</button>
-  </div>`;
-}
-
-function trMarkSharing(idsCsv){
-  const ids=idsCsv.split(',');
-  const data=loadTransport();
-  const subs=ids.map(id=>data.find(s=>s.id===id)).filter(Boolean);
-  if(subs.length<2)return;
-  const gid=subs.find(s=>s.shareGroupId)?.shareGroupId||('share_'+subs[0].id);
-  subs.forEach(s=>{s.shareGroupId=gid;s.updatedAt=new Date().toISOString();});
-  saveTransport(data);
-  refreshTransport();
-  showToast('Marked as sharing a ride — price updated.');
-}
-
-function trDismissShare(idsCsv){
-  const ids=idsCsv.split(',');
-  const data=loadTransport();
-  const subs=ids.map(id=>data.find(s=>s.id===id)).filter(Boolean);
-  if(subs.length<2)return;
-  subs.forEach(s=>{
-    s.shareDismissedWith=s.shareDismissedWith||[];
-    ids.forEach(id=>{if(id!==s.id&&!s.shareDismissedWith.includes(id))s.shareDismissedWith.push(id);});
-    s.updatedAt=new Date().toISOString();
-  });
-  saveTransport(data);
-  refreshTransport();
-  showToast('Noted — marked as asked.');
-}
-
-function trUnshareGroup(idsCsv){
-  const ids=idsCsv.split(',');
-  const data=loadTransport();
-  ids.forEach(id=>{const s=data.find(x=>x.id===id);if(s){delete s.shareGroupId;s.updatedAt=new Date().toISOString();}});
-  saveTransport(data);
-  refreshTransport();
-  showToast('Ride sharing undone.');
-}
-
-function trSaveUpgradeRoom(subId,val){
-  const data=loadTransport();
-  const sub=data.find(s=>s.id===subId);
-  if(!sub)return;
-  sub.upgradeRoomAssigned=val;
-  sub.updatedAt=new Date().toISOString();
-  saveTransport(data);
-}
 
 function trAddMins(t,mins){
   if(!t)return'—';
@@ -883,25 +391,6 @@ function trAddMins(t,mins){
   return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
 }
 
-function trGuestRoom(bkId,email,firstName,lastName){
-  const match=AppData.regs.find(r=>r.bookingId===bkId&&r.room&&(r.guests||[]).some(g=>
-    (g.email&&email&&g.email.toLowerCase().trim()===email.toLowerCase().trim())||
-    (g.name&&firstName&&g.name.toLowerCase().trim()===(firstName+' '+lastName).toLowerCase().trim())
-  ));
-  if(match)return match.room;
-  return '<span style="font-size:10px;color:#d97706;font-weight:600">not in room list</span>';
-}
-function trRoomCat(roomNum){
-  if(!roomNum)return'';
-  const rt=AppData.roomTypes.find(r=>r.rooms&&r.rooms.includes(roomNum));
-  return rt?rt.name:'';
-}
-
-// ── Onsite upgrade helper ────────────────────────────────────────────────────
-// Category names used on pricing chart (guest-facing)
-// Upgrade targets — each starting room type maps to the one room type it upgrades
-// to. Not a strict price ladder (nicer isn't always pricier), so each pairing is
-// set explicitly here rather than inferred from price or room-list order.
 const TR_UPGRADE_MAP={rt5:'rt4',rt4:'rt6',rt3:'rt2',rt2:'rt1'};
 
 function trGetUpgrade(bkId,roomNum){
@@ -964,759 +453,1154 @@ function trGetUpgrade(bkId,roomNum){
   };
 }
 
-function trConfirmUpgradeInterest(regId){
-  const reg=AppData.regs.find(r=>r.id===regId);
-  if(!reg)return;
-  reg.upgradeBothInterested=true;
-  reg.updatedAt=new Date().toISOString();
-  saveAll();
-  refreshTransport();
-  showToast('Marked — both guests interested in upgrading.');
+
+
+
+// ===== TRANSPORT ADMIN BOARD (ported from Staging's js/modules/transport.js) =====
+// Reads bookings/registrations/room types from AppData (already loaded, camelCase,
+// kept live by saveAll()/loadFromSupabase()) instead of separate raw fetches — avoids
+// a second, potentially-stale copy of the same data. Everything else (the `transport`
+// table itself, `staff`, `commissions`, `settings.transport_groups`) has no AppData
+// equivalent, so those go straight to Supabase, matching staging's exact table/column
+// shapes (confirmed via staging's js/data/*.js).
+//
+// getTransportRoster/trCompletionColor/trCompletionLabel/trGetUpgrade/trTimeToMins/
+// trGetPrice/trVehicleType/trAddMins/trRosterStatusHtml/loadTransport/saveTransport/
+// syncTransportFromSupabase/the driver-confirmation-workflow block above are ALL kept
+// exactly as they were — Venues' roster badge, Teacher Portal's own "My Transport" view,
+// Daily Report's upgrade column, and driver-portal.js all depend on them and have no
+// staging equivalent to replace them with (confirmed 2026-09-07).
+
+const TR2_RATES = {
+  cancun: [195, 100, 80, 65, 55, 45],
+  tulum:  [145,  80, 65, 55, 45, 40],
+};
+function tr2AutoRate(e, groupPax) {
+  groupPax = groupPax || 1;
+  if (e.ot) return 0;
+  const tbl = e.airport === 'cancun' ? TR2_RATES.cancun : e.airport === 'tulum' ? TR2_RATES.tulum : null;
+  if (!tbl) return null;
+  return tbl[Math.min(groupPax - 1, tbl.length - 1)];
 }
 
-// Shared "Onsite Upgrade" cell — used everywhere the badge is rendered so the
-// blank-room-input and both-interested confirmation stay consistent.
-function trUpgradeCellHtml(upg,sub,fontSize){
-  fontSize=fontSize||10;
-  if(!upg)return'<span style="color:#c0b8b0;font-size:11px">—</span>';
-  if(upg.needsConfirmation){
-    return`<button onclick="trConfirmUpgradeInterest('${upg.regId}')" title="Doubles only upgrade if both roommates want to split the cost" style="font-size:${fontSize}px;font-weight:600;padding:3px 8px;border-radius:6px;border:1px dashed #d6c7ae;background:#faf7f2;color:#8a7e74;cursor:pointer;white-space:nowrap">↑ ${upg.toName}? Ask both</button>`;
-  }
-  return`<div style="display:inline-flex;flex-direction:column;gap:2px">
-    <span style="font-size:${fontSize}px;font-weight:700;color:#fff;background:#15803d;border-radius:5px;padding:2px 7px;white-space:nowrap">↑ ${upg.toName}</span>
-    <input type="text" placeholder="Room #" value="${sub.upgradeRoomAssigned||''}" onchange="trSaveUpgradeRoom('${sub.id}',this.value)" style="font-size:${fontSize}px;width:56px;padding:2px 5px;border:1px solid #bbf7d0;border-radius:5px;color:#15803d;font-weight:700" />
-    <span style="font-size:${fontSize}px;font-weight:700;color:#15803d">+$${upg.upgradeNightly}/night${upg.isSolo?'':' pp'} · ${upg.availableCount} avail.</span>
-  </div>`;
+let tr2View          = 'arrivals';
+let tr2RetreatFilter = '';
+let tr2DateFrom      = '';
+let tr2DateTo        = '';
+let tr2ShowArchived  = false;
+let tr2AllEntries    = [];
+let tr2ActiveBooks   = [];
+let tr2RawRows       = {};   // id → full row (for edit modal)
+let tr2NameMap       = {};   // normalizedName → { bkId, retreatLabel, origName }
+let tr2UserGroupMap  = new Map(); // dirId → groupKey (loaded from settings.transport_groups)
+let tr2GroupKeyMap   = new Map(); // dirId → groupKey (current render snapshot, for drop targets)
+let tr2DragSrc       = null;
+let tr2UgCounter     = 0;
+let tr2UpgradeMode   = false;
+let tr2RoomNameToRtId = {};
+let tr2StaffList     = [];
+const tr2ConfirmedUpgrades = new Map();
+
+const TR2_UPGRADE_PATH = {
+  rt5: ['rt4', 'rt3', 'rt2', 'rt1'],
+  rt4: ['rt3', 'rt2', 'rt1'],
+  rt3: ['rt2', 'rt1'],
+  rt2: ['rt1'],
+  rt1: [],
+  bd2: ['bd1'],
+  bd1: [],
+  rt8: [], rt9: [], bd3: [], bd4: [],
+};
+const TR2_LATERAL_ONLY = new Set(['rt8', 'rt9', 'bd3', 'bd4']);
+
+function tr2IsHighSeason(dateStr) {
+  if (!dateStr) return true;
+  const m = pd(dateStr).getMonth() + 1;
+  return !(m >= 5 && m <= 9);
 }
 
-function trBuildMonthView(){
-  const wrap=document.getElementById('trContent');if(!wrap)return;
-  const MNTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const MNTHS3=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const now=new Date();
-  const viewDate=new Date(now.getFullYear(),now.getMonth()+trMonthOffset,1);
-  const yr=viewDate.getFullYear(),mo=viewDate.getMonth();
-  const monthLabel=MNTHS[mo]+' '+yr;
-  const lbl=document.getElementById('trMonthLabel');
-  if(lbl)lbl.textContent=monthLabel;
-
-  const allSubs=loadTransport();
-  const today=fmtISO(now);
-
-  // Build day-by-day data for this month
-  const daysInMonth=new Date(yr,mo+1,0).getDate();
-  const days=[];
-  for(let d=1;d<=daysInMonth;d++){
-    const iso=`${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const dow=new Date(iso+'T00:00:00').getDay();
-    // Transport submissions arriving/departing this day
-    const arrivals=allSubs.filter(s=>s.arrivalDate===iso&&s.arrivalTime);
-    const departures=allSubs.filter(s=>s.departureDate===iso&&s.departureTime);
-    // Bookings checking in or out this day
-    const checkIns=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.startDate===iso);
-    const checkOuts=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate===iso);
-    // Active retreats this day (started but not ended)
-    const active=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.startDate<=iso&&b.endDate>=iso);
-    days.push({iso,d,dow,arrivals,departures,checkIns,checkOuts,active});
-  }
-
-  // Summary stats
-  const totalArrivals=days.reduce((s,d)=>s+d.arrivals.length,0);
-  const totalDepartures=days.reduce((s,d)=>s+d.departures.length,0);
-  const activeRetreats=new Set(AppData.bookings.filter(b=>b.status!=='cancelled'&&b.startDate<=`${yr}-${String(mo+1).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`&&b.endDate>=`${yr}-${String(mo+1).padStart(2,'0')}-01`).map(b=>b.id)).size;
-
-  let html=`<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:110px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:#0e9494">${totalArrivals}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">Arrivals This Month</div>
-    </div>
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:110px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:#d97706">${totalDepartures}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">Departures This Month</div>
-    </div>
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:110px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:#7c3aed">${activeRetreats}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">Retreats This Month</div>
-    </div>
-  </div>`;
-
-  html+='<div style="display:flex;flex-direction:column;gap:6px">';
-  days.forEach(day=>{
-    const hasActivity=day.arrivals.length||day.departures.length||day.checkIns.length||day.checkOuts.length||day.active.length;
-    if(!hasActivity){
-      // Compact empty day row
-      const isToday=day.iso===today;
-      const dayName=DAYS[day.dow];
-      html+=`<div style="background:${isToday?'#f0fdfb':'#faf8f5'};border:1px solid ${isToday?'#0e9494':'#e8dfd4'};border-radius:9px;padding:7px 16px;display:flex;align-items:center;gap:10px;opacity:.55">
-        <span style="font-size:11px;font-weight:700;color:#8a7e74;min-width:36px">${dayName}</span>
-        <span style="font-size:12.5px;color:#5a5048;font-weight:600">${MNTHS3[mo]} ${day.d}</span>
-        <span style="font-size:11px;color:#c8bfb5;margin-left:auto">No activity</span>
-      </div>`;
-      return;
-    }
-    const isToday=day.iso===today;
-    const isPast=day.iso<today;
-    const borderColor=isToday?'#0e9494':day.arrivals.length?'#6ee7b7':day.checkOuts.length?'#fcd34d':'#e8dfd4';
-    const bgColor=isToday?'#f0fdfb':isPast?'#faf7f2':'#fff';
-    const dayName=DAYS[day.dow];
-    const dayLabelShort=MNTHS3[mo]+' '+day.d;
-
-    // Retreat activity chips
-    const retreatChips=[];
-    day.checkIns.forEach(b=>{
-      retreatChips.push(`<span style="font-size:11px;background:#dcfce7;color:#15803d;border:1px solid #6ee7b7;padding:2px 9px;border-radius:99px;font-weight:700;white-space:nowrap">▶ ${b.leaderName||b.retreatName||'Retreat'} check-in</span>`);
-    });
-    day.checkOuts.forEach(b=>{
-      retreatChips.push(`<span style="font-size:11px;background:#fef9c3;color:#854d0e;border:1px solid #fcd34d;padding:2px 9px;border-radius:99px;font-weight:700;white-space:nowrap">■ ${b.leaderName||b.retreatName||'Retreat'} check-out</span>`);
-    });
-    // Active retreats not checking in/out today
-    const checkInIds=new Set(day.checkIns.map(b=>b.id));
-    const checkOutIds=new Set(day.checkOuts.map(b=>b.id));
-    day.active.filter(b=>!checkInIds.has(b.id)&&!checkOutIds.has(b.id)).forEach(b=>{
-      retreatChips.push(`<span style="font-size:11px;background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;padding:2px 9px;border-radius:99px;white-space:nowrap">● ${b.leaderName||b.retreatName||'Retreat'}</span>`);
-    });
-
-    // Arrival/departure summary
-    let movementHtml='';
-    if(day.arrivals.length){
-      const enriched=day.arrivals.map(s=>{
-        const bk=AppData.bookings.find(b=>b.id===s.bookingId)||{};
-        const etaMins=s.arrivalAirport==='cancun'?120:60;
-        const room=trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName);
-        return{...s,retreatLabel:bk.leaderName||bk.retreatName||'Unknown',eta:trAddMins(s.arrivalTime,etaMins),room};
-      }).sort((a,b)=>a.arrivalTime.localeCompare(b.arrivalTime));
-      movementHtml+=`<div style="margin-top:10px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#15803d;margin-bottom:6px">Arrivals (${day.arrivals.length})</div>
-        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">
-          <thead><tr style="background:#f0fdf4">
-            <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0;white-space:nowrap">Time</th>
-            <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">Airport</th>
-            <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">ETA</th>
-            <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">Guest</th>
-            <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">Room</th>
-            <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">Flight</th>
-            <th style="padding:5px 10px;text-align:left;color:#15803d;font-weight:700;border-bottom:1px solid #bbf7d0">Retreat</th>
-            <th style="padding:5px 10px;border-bottom:1px solid #bbf7d0"></th>
-            <th style="padding:5px 10px;border-bottom:1px solid #bbf7d0"></th>
-          </tr></thead>
-          <tbody>${enriched.map((s,i)=>{
-            const airChip=s.arrivalAirport==='cancun'
-              ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 5px;font-weight:700">CUN</span>'
-              :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 5px;font-weight:700">TQO</span>';
-            const mRoomCat=trRoomCat(s.room);
-            const isCancelled=s.status==='cancelled';
-            return`<tr style="border-bottom:1px solid #f0fdf4;background:${i%2===0?'#fff':'#f9fefe'};opacity:${isCancelled?.5:1}">
-              <td style="padding:6px 10px;font-weight:700;color:#0e9494;white-space:nowrap">${tsFmt(s.arrivalTime)}</td>
-              <td style="padding:6px 10px">${airChip}</td>
-              <td style="padding:6px 10px;color:#2d2520;font-weight:600;white-space:nowrap">${s.eta}</td>
-              <td style="padding:6px 10px;font-weight:600;color:#2d2520;white-space:nowrap;text-decoration:${isCancelled?'line-through':'none'}">${s.firstName} ${s.lastName}</td>
-              <td style="padding:6px 10px;white-space:nowrap"><span style="font-weight:700;color:#2d2520">${s.room}</span>${mRoomCat?`<br><span style="font-size:10px;color:#8a7e74">${mRoomCat}</span>`:''}</td>
-              <td style="padding:6px 10px;color:#5a5048">${s.flightNumber||'—'}</td>
-              <td style="padding:6px 10px;color:#8a7e74;font-size:11px">${s.retreatLabel}</td>
-              <td style="padding:6px 10px">${trStatusBadge(s)}</td>
-              <td style="padding:6px 10px;text-align:right"><button onclick="trDeleteArrival('${s.id}')" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" title="Remove">✕</button></td>
-            </tr>`;}).join('')}
-          </tbody>
-        </table></div>
-      </div>`;
-    }
-    if(day.departures.length){
-      const enrichedDep=day.departures.map(s=>{
-        const bk=AppData.bookings.find(b=>b.id===s.bookingId)||{};
-        return{...s,retreatLabel:bk.leaderName||bk.retreatName||'Unknown'};
-      }).sort((a,b)=>a.departureTime.localeCompare(b.departureTime));
-      movementHtml+=`<div style="margin-top:10px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#b45309;margin-bottom:6px">Departures (${day.departures.length})</div>
-        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">
-          <thead><tr style="background:#fffbeb">
-            <th style="padding:5px 10px;text-align:left;color:#b45309;font-weight:700;border-bottom:1px solid #fcd34d;white-space:nowrap">Time</th>
-            <th style="padding:5px 10px;text-align:left;color:#b45309;font-weight:700;border-bottom:1px solid #fcd34d">Airport</th>
-            <th style="padding:5px 10px;text-align:left;color:#b45309;font-weight:700;border-bottom:1px solid #fcd34d">Guest</th>
-            <th style="padding:5px 10px;text-align:left;color:#b45309;font-weight:700;border-bottom:1px solid #fcd34d">Flight</th>
-            <th style="padding:5px 10px;text-align:left;color:#b45309;font-weight:700;border-bottom:1px solid #fcd34d">Retreat</th>
-          </tr></thead>
-          <tbody>${enrichedDep.map((s,i)=>{
-            const airChip=s.departureAirport==='cancun'
-              ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 5px;font-weight:700">CUN</span>'
-              :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 5px;font-weight:700">TQO</span>';
-            return`<tr style="border-bottom:1px solid #fffbeb;background:${i%2===0?'#fff':'#fffdf5'}">
-              <td style="padding:6px 10px;font-weight:700;color:#d97706;white-space:nowrap">${tsFmt(s.departureTime)}</td>
-              <td style="padding:6px 10px">${airChip}</td>
-              <td style="padding:6px 10px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
-              <td style="padding:6px 10px;color:#5a5048">${s.flightNumber||s.departureFlight||'—'}</td>
-              <td style="padding:6px 10px;color:#8a7e74;font-size:11px">${s.retreatLabel}</td>
-            </tr>`;}).join('')}
-          </tbody>
-        </table></div>
-      </div>`;
-    }
-
-    html+=`<div style="background:${bgColor};border:1.5px solid ${borderColor};border-radius:13px;overflow:hidden">
-      <div style="display:flex;align-items:center;gap:12px;padding:12px 18px;cursor:pointer;user-select:none" onclick="this.parentElement.querySelector('.trDayBody').style.display=this.parentElement.querySelector('.trDayBody').style.display==='none'?'block':'none'">
-        <div style="min-width:52px">
-          <div style="font-size:11px;font-weight:700;color:${isPast?'#9ca3af':isToday?'#0e9494':'#5a5048'};text-transform:uppercase;letter-spacing:.5px">${dayName}</div>
-          <div style="font-size:20px;font-weight:800;color:${isToday?'#0e9494':isPast?'#9ca3af':'#2d2520'};line-height:1.1">${day.d}</div>
-        </div>
-        <div style="flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-          ${retreatChips.join('')}
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
-          ${(()=>{
-            if(!day.arrivals.length)return'';
-            const totalArrPax=day.checkIns.reduce((s,b)=>s+(b.pax||0),0);
-            const submitted=day.arrivals.filter(s=>!s.arrivalOT).length;
-            const missing=totalArrPax>0?totalArrPax-submitted:0;
-            const label=totalArrPax>0?`${submitted} / ${totalArrPax}`:`${submitted}`;
-            const chipColor=missing>0?'#dc2626':'#15803d';
-            const chipBg=missing>0?'#fee2e2':'#dcfce7';
-            return`<span style="font-size:11.5px;font-weight:700;color:${chipColor};background:${chipBg};padding:3px 10px;border-radius:99px;white-space:nowrap">▲ ${label} arriving</span>`;
-          })()}
-          ${(()=>{
-            if(!day.departures.length)return'';
-            const totalDepPax=day.checkOuts.reduce((s,b)=>s+(b.pax||0),0);
-            const submitted=day.departures.filter(s=>!s.departureOT).length;
-            const label=totalDepPax>0?`${submitted} / ${totalDepPax}`:`${submitted}`;
-            const missing=totalDepPax>0?totalDepPax-submitted:0;
-            const chipColor=missing>0?'#b45309':'#b45309';
-            return`<span style="font-size:11.5px;font-weight:700;color:${chipColor};background:#fef9c3;padding:3px 10px;border-radius:99px;white-space:nowrap">▼ ${label} departing</span>`;
-          })()}
-          <span style="font-size:16px;color:#c8bfb5">${(day.arrivals.length||day.departures.length)?'▾':'›'}</span>
-        </div>
-      </div>
-      <div class="trDayBody" style="display:${(day.arrivals.length||day.departures.length)?'block':'none'};padding:0 18px 14px">
-        ${movementHtml||'<div style="color:#8a7e74;font-size:12.5px;padding:8px 0">No transport submissions for this day.</div>'}
-      </div>
-    </div>`;
-  });
-  html+='</div>';
-  wrap.innerHTML=html;
+function tr2AvailableRoomsOfType(rtId, bkStart, bkEnd, ownBkId) {
+  const rt = AppData.roomTypes.find(r => r.id === rtId);
+  if (!rt) return [];
+  return (rt.rooms || []).filter(roomName =>
+    !tr2ActiveBooks.some(b => {
+      if (b.id === ownBkId || b.status === 'cancelled') return false;
+      if (b.endDate < bkStart || b.startDate > bkEnd) return false;
+      return (b.blockedRooms || []).includes(roomName);
+    })
+  );
 }
 
-// ── DRIVER ASSIGNMENT ────────────────────────────────────────────────────────
-// Default: Salamon covers Cancún airport ARRIVALS only. Irving covers all Tulum
-// airport arrivals and ALL departures (to either airport). Exception: if Salamon
-// is already at Cancún for an arrival and a Cancún-bound departure leaves within
-// 30 minutes after that arrival's flight lands, Salamon does that departure too
-// (round trip) instead of sending Irving out separately — this is uncommon.
-// Shared by the staff Drivers view and the drivers' own login-gated view —
-// keeps the Salamon/Irving assignment logic in exactly one place.
-function trComputeDriverAssignments(date){
-  const allSubs=loadTransport();
-  const arrivals=allSubs.filter(s=>s.arrivalDate===date&&s.arrivalTime&&s.arrivalAirport)
-    .map(s=>({...s,_kind:'arrival',room:trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName),
-      retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(AppData.bookings.find(b=>b.id===s.bookingId)?.leaderName||AppData.bookings.find(b=>b.id===s.bookingId)?.retreatName||'Unknown')}))
-    .sort((a,b)=>a.arrivalTime.localeCompare(b.arrivalTime));
-  const departures=allSubs.filter(s=>s.departureDate===date&&s.departureTime&&s.departureAirport)
-    .map(s=>({...s,_kind:'departure',room:trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName),
-      retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(AppData.bookings.find(b=>b.id===s.bookingId)?.leaderName||AppData.bookings.find(b=>b.id===s.bookingId)?.retreatName||'Unknown')}))
-    .sort((a,b)=>a.departureTime.localeCompare(b.departureTime));
-
-  // Default grouping (unchanged from the original heuristic): Cancún
-  // arrivals — plus their same-day round-trip departure when one exists —
-  // go to Salamon; everything else goes to Irving. This stays the DEFAULT;
-  // an explicit arrivalDriverId/departureDriverId override (set via
-  // trDrvSetAssignedDriver) takes priority and can move a trip to any
-  // driver, including one added later.
-  const defaultBuckets={drv_salamon:[],drv_irving:[]};
-  const claimedDepIds=new Set();
-
-  arrivals.forEach(a=>{
-    if(a.arrivalAirport==='cancun'){
-      defaultBuckets.drv_salamon.push({...a,note:'',_defaultDriverId:'drv_salamon'});
-      const anchor=trTimeToMins(a.arrivalTime);
-      const match=departures.find(d=>!claimedDepIds.has(d.id)&&d.departureAirport==='cancun'&&
-        trTimeToMins(d.departureTime)>=anchor&&trTimeToMins(d.departureTime)<=anchor+30);
-      if(match){
-        claimedDepIds.add(match.id);
-        defaultBuckets.drv_salamon.push({...match,note:`Round trip — combined with ${a.firstName} ${a.lastName}'s ${tsFmt(a.arrivalTime)} arrival`,_defaultDriverId:'drv_salamon',_pairKey:trDrvKey(a,'arrival')});
-      }
-    } else {
-      defaultBuckets.drv_irving.push({...a,note:'',_defaultDriverId:'drv_irving'});
-    }
-  });
-  departures.forEach(d=>{
-    if(!claimedDepIds.has(d.id))defaultBuckets.drv_irving.push({...d,note:'',_defaultDriverId:'drv_irving'});
-  });
-
-  // Apply explicit overrides + ensure every leg has a confirmation record,
-  // then bucket by the FINAL assigned driver (override or default).
-  const byDriverId={};
-  const allTrips=[...defaultBuckets.drv_salamon,...defaultBuckets.drv_irving];
-  allTrips.forEach(t=>{
-    const finalId=trDrvAssignedId(t,t._kind,t._defaultDriverId);
-    t._assignedDriverId=finalId;
-    if(typeof driverConfirmations!=='undefined'){
-      const rec=trDrvEnsureRec(t,t._kind);
-      t._drvRec=rec;
-    }
-    if(!byDriverId[finalId])byDriverId[finalId]=[];
-    byDriverId[finalId].push(t);
-  });
-  Object.values(byDriverId).forEach(list=>list.sort((a,b)=>(a.arrivalTime||a.departureTime).localeCompare(b.arrivalTime||b.departureTime)));
-  return{salamon:byDriverId.drv_salamon||[],irving:byDriverId.drv_irving||[],byDriverId,allTrips};
-}
-
-function trDrvReassignSelect(t){
-  const list=(typeof driverAccounts!=='undefined'&&driverAccounts.length)?driverAccounts.filter(d=>d.active):(typeof DEF_DRIVERS!=='undefined'?DEF_DRIVERS:[]);
-  const curId=t._assignedDriverId;
-  return`<select onchange="trDrvSetAssignedDriver('${t.id}','${t._kind}',this.value,(typeof getCurrentSession==='function'?getCurrentSession()?.name:null)||'Staff')" style="font-size:11px;padding:4px 6px;border:1px solid #e8dfd4;border-radius:6px;font-family:'Jost',sans-serif;background:#fff;color:#2d2520">
-    ${list.map(d=>`<option value="${d.id}" ${d.id===curId?'selected':''}>${escHtml(d.name)}</option>`).join('')}
-  </select>`;
-}
-function trBuildDriverView(){
-  const wrap=document.getElementById('trContent');if(!wrap)return;
-  const dEl=document.getElementById('trDriversDate');
-  const date=dEl?dEl.value:fmtISO(new Date());
-  if(!date){wrap.innerHTML='<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0">Select a date to view driver assignments.</div>';return;}
-  const{byDriverId}=trComputeDriverAssignments(date);
-  const driverList=(typeof driverAccounts!=='undefined'&&driverAccounts.length)?driverAccounts:(typeof DEF_DRIVERS!=='undefined'?DEF_DRIVERS:[]);
-
-  const dt=new Date(date+'T00:00:00');
-  const MNTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
-  const CARD_COLORS=['#0e9494','#d97706','#7c3aed','#be185d','#0369a1'];
-
-  function driverCard(name,trips,color){
-    if(!trips.length)return '';
-    const bg=color+'0d';
-    return `<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;margin-bottom:16px;overflow:hidden">
-      <div style="background:${bg};padding:12px 18px;border-bottom:1px solid ${color}44">
-        <span style="font-size:14px;font-weight:800;color:${color}">${escHtml(name)}</span>
-        <span style="font-size:11px;background:${color};color:#fff;border-radius:99px;padding:1px 9px;font-weight:700;margin-left:8px">${trips.length} trip${trips.length!==1?'s':''}</span>
-      </div>
-      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
-        <thead><tr style="background:#faf7f2">
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Type</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Time</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Guest</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Room</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Flight</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Retreat</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Notes</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Driver Confirmation</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700">Reassign</th>
-        </tr></thead>
-        <tbody>${trips.map((t,i)=>{
-          const isArr=t._kind==='arrival';
-          const time=isArr?t.arrivalTime:t.departureTime;
-          const airport=isArr?t.arrivalAirport:t.departureAirport;
-          const airChip=airport==='cancun'
-            ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
-            :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
-          const rec=t._drvRec||(typeof driverConfirmations!=='undefined'?driverConfirmations[trDrvKey(t,t._kind)]:null);
-          const st=TR_DRV_STATUS[rec?.status||'pending'];
-          const confBadge=`<div><span style="font-size:10.5px;font-weight:700;color:${st.color};background:${st.bg};border:1px solid ${st.border};border-radius:99px;padding:2px 9px;white-space:nowrap;display:inline-block">${st.label}</span>
-            ${rec?.status==='confirmed'&&rec.confirmedAt?`<div style="font-size:10px;color:#8a7e74;margin-top:3px">${rec.confirmedBy} · ${trFmtTulum(rec.confirmedAt)}</div>`:''}
-            ${rec?.status==='reconfirm'&&rec.changeMessage?`<div style="font-size:10px;color:#c2410c;margin-top:3px;max-width:220px">${rec.changeMessage}</div>`:''}
-            ${rec?.status==='declined'&&rec.declineReason?`<div style="font-size:10px;color:#dc2626;margin-top:3px;max-width:220px">${rec.declineReason}</div>`:''}
-          </div>`;
-          return `<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
-            <td style="padding:8px 12px;font-weight:700;color:${isArr?'#0e9494':'#d97706'}">${isArr?'↓ Arrival':'↑ Departure'} ${airChip}</td>
-            <td style="padding:8px 12px;font-weight:700;color:#2d2520;white-space:nowrap">${tsFmt(time)}</td>
-            <td style="padding:8px 12px;font-weight:600;color:#2d2520;white-space:nowrap">${t.firstName} ${t.lastName}</td>
-            <td style="padding:8px 12px;white-space:nowrap">${t.room||'—'}</td>
-            <td style="padding:8px 12px;color:#5a5048">${t.flightNumber||'—'}</td>
-            <td style="padding:8px 12px;color:#8a7e74;font-size:11.5px">${t.retreatLabel}</td>
-            <td style="padding:8px 12px;color:${t.note?'#15803d':'#c0b8b0'};font-size:11.5px;font-weight:${t.note?700:400}">${t.note||'—'}</td>
-            <td style="padding:8px 12px">${confBadge}</td>
-            <td style="padding:8px 12px">${trDrvReassignSelect(t)}</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table></div>
+function tr2UpgradeCell(e) {
+  if (!e.room) return `<span style="color:#d1d5db;font-size:11px">—</span>`;
+  const confirmed = tr2ConfirmedUpgrades.get(e.rowId);
+  let confirmedBadgeHtml = '';
+  if (confirmed) {
+    const badge = confirmed.lateral
+      ? `<span style="color:#6b7280;font-size:10px;font-weight:600">↔ ${escHtml(confirmed.newRoom)}</span>`
+      : `<span style="color:#0d9488;font-size:10px;font-weight:600">⬆ ${escHtml(confirmed.newRoom)}</span>`;
+    const staffBadge = confirmed.staffName ? ` <span style="color:#6b7280;font-size:9.5px">· ${escHtml(confirmed.staffName)}</span>` : '';
+    confirmedBadgeHtml = `<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">
+      ${badge}${staffBadge}
+      <button onclick="event.stopPropagation();tr2ClearUpgrade('${e.rowId}')" title="Limpiar upgrade confirmado"
+        style="background:none;border:none;color:#9ca3af;font-size:10px;cursor:pointer;padding:0 2px;line-height:1;margin-left:2px">×</button>
     </div>`;
   }
 
-  let html=trDrvAlertsHtml();
-  html+=`<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:12px">Driver Assignments · ${dateLabel}</div>`;
-  driverList.forEach((d,i)=>{html+=driverCard(d.name,byDriverId[d.id]||[],CARD_COLORS[i%CARD_COLORS.length]);});
-  if(!driverList.some(d=>(byDriverId[d.id]||[]).length))html+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;padding:20px;text-align:center;color:#8a7e74;font-size:13px">No trips for ${dateLabel}.</div>`;
-  wrap.innerHTML=html;
+  const rtId = tr2RoomNameToRtId[e.room];
+  if (!rtId) return confirmedBadgeHtml || `<span style="color:#9ca3af;font-size:11px">Sin tipo</span>`;
+  const bk = tr2ActiveBooks.find(b => b.id === e.retreatId);
+  if (!bk) return confirmedBadgeHtml || `<span style="color:#9ca3af;font-size:11px">—</span>`;
+  const nights = Math.max(1, Math.round((pd(bk.endDate) - pd(bk.startDate)) / DAY_MS));
+  const high   = tr2IsHighSeason(bk.startDate);
+  const fromRt = AppData.roomTypes.find(r => r.id === rtId);
+  const fromP  = high ? fromRt?.price1 : fromRt?.price1_low;
+  const upgrades = TR2_UPGRADE_PATH[rtId] || [];
+
+  const opts = [];
+  for (const toRtId of upgrades) {
+    const toRt = AppData.roomTypes.find(r => r.id === toRtId);
+    if (!toRt) continue;
+    const avail = tr2AvailableRoomsOfType(toRtId, bk.startDate, bk.endDate, bk.id);
+    if (!avail.length) continue;
+    const toP = high ? toRt.price1 : toRt.price1_low;
+    const diff = (fromP != null && toP != null) ? (toP - fromP) : null;
+    opts.push({ toRtId, name: toRt.name, avail, diff, toP, lateral: false });
+  }
+  if (TR2_LATERAL_ONLY.has(rtId)) {
+    const avail = tr2AvailableRoomsOfType(rtId, bk.startDate, bk.endDate, bk.id).filter(r => r.toLowerCase() !== e.room.toLowerCase());
+    if (avail.length) opts.push({ toRtId: rtId, name: fromRt?.name || '', avail, diff: 0, lateral: true });
+  }
+
+  if (!opts.length) {
+    const noOptsMsg = upgrades.length === 0 && !TR2_LATERAL_ONLY.has(rtId)
+      ? `<span style="color:#15803d;font-size:11px;font-weight:600">★ Top</span>`
+      : `<span style="color:#9ca3af;font-size:11px">Sin disponibilidad</span>`;
+    return confirmedBadgeHtml ? `<div>${confirmedBadgeHtml}${noOptsMsg}</div>` : noOptsMsg;
+  }
+
+  const staffSelId = `tr2-upg-staff-${e.rowId}`;
+  const staffSel = tr2StaffList.length
+    ? `<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+        <span style="font-size:9px;font-weight:700;color:#6b7280;white-space:nowrap">Staff:</span>
+        <select id="${staffSelId}" style="font-size:10px;border:1px solid #d1d5db;border-radius:4px;padding:1px 4px;font-family:'Jost',sans-serif">
+          <option value="">—</option>
+          ${tr2StaffList.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('')}
+        </select>
+      </div>`
+    : '';
+
+  const chips = opts.map(opt => {
+    const selId = `tr2-upg-${e.rowId}-${opt.toRtId}${opt.lateral ? 'l' : ''}`;
+    const priceTag = opt.lateral
+      ? `<span style="color:#6b7280;font-size:9.5px">sin costo</span>`
+      : opt.diff != null && opt.diff > 0
+        ? `<span style="color:#059669;font-size:9.5px;font-weight:700">+$${opt.diff}/n · $${opt.diff * nights} total</span>`
+        : opt.toP != null
+          ? `<span style="color:#0369a1;font-size:9.5px;font-weight:600">$${opt.toP}/n · $${opt.toP * nights} total</span>`
+          : `<span style="color:#9ca3af;font-size:9.5px">ver precio</span>`;
+    const nightlyRate = opt.lateral ? 0 : (opt.diff != null && opt.diff > 0) ? opt.diff : (opt.toP != null) ? opt.toP : null;
+    const pretaxTotal = nightlyRate != null ? nightlyRate * nights : null;
+    const pretaxArg = pretaxTotal != null ? pretaxTotal : 'null';
+    const rateArg = nightlyRate != null ? nightlyRate : 'null';
+    return `<span style="display:inline-flex;align-items:center;gap:4px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:3px 5px;white-space:nowrap">
+      <span style="font-size:10px;font-weight:700;color:#111827">${escHtml(opt.name)}</span>
+      ${priceTag}
+      <select id="${selId}" style="font-size:10px;border:1px solid #d1d5db;border-radius:4px;padding:1px 2px;max-width:72px;font-family:'Jost',sans-serif">
+        ${opt.avail.map(r => `<option value="${escHtml(r)}">${escHtml(r)}</option>`).join('')}
+      </select>
+      <button onclick="tr2ConfirmUpgrade('${e.rowId}','${opt.toRtId}','${selId}','${staffSelId}',${pretaxArg},${nights},${rateArg})"
+        style="background:${opt.lateral ? '#6b7280' : '#0d9488'};color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">
+        ${opt.lateral ? 'Mover' : 'OK'}
+      </button>
+    </span>`;
+  }).join(' ');
+
+  return `<div>${confirmedBadgeHtml}<div>${staffSel}<div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">${chips}</div></div></div>`;
 }
 
-function trBuildAllArrivals(){
-  const wrap=document.getElementById('trContent');if(!wrap)return;
-  const dEl=document.getElementById('trAllDate');
-  const date=dEl?dEl.value:'';
-  if(!date){wrap.innerHTML='<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0">Select a date to view all arrivals.</div>';return;}
-  const MNTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const allSubs=loadTransport().filter(s=>s.arrivalDate===date&&s.arrivalTime&&s.arrivalAirport);
-  if(!allSubs.length){
-    // Build upcoming arrivals for the rest of the month
-    const selDt=new Date(date+'T00:00:00');
-    const monthEnd=new Date(selDt.getFullYear(),selDt.getMonth()+1,0).toISOString().slice(0,10);
-    const upcoming=loadTransport().filter(s=>s.arrivalDate>date&&s.arrivalDate<=monthEnd&&s.arrivalTime&&s.arrivalAirport)
-      .sort((a,b)=>a.arrivalDate===b.arrivalDate?a.arrivalTime.localeCompare(b.arrivalTime):a.arrivalDate.localeCompare(b.arrivalDate));
-    let html='<div style="color:#8a7e74;font-size:13px;text-align:center;padding:30px 0 20px">No arrivals recorded for this date.</div>';
-    if(upcoming.length){
-      // Group by date
-      const byDate={};
-      upcoming.forEach(s=>{if(!byDate[s.arrivalDate])byDate[s.arrivalDate]=[];byDate[s.arrivalDate].push(s);});
-      html+=`<div style="margin-top:4px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:12px">Upcoming Arrivals This Month</div>`;
-      Object.entries(byDate).forEach(([d,subs])=>{
-        const dt2=new Date(d+'T00:00:00');
-        const dayLabel=MNTHS[dt2.getMonth()]+' '+dt2.getDate()+', '+dt2.getFullYear();
-        const enriched2=subs.map(s=>{
-          const bk=AppData.bookings.find(b=>b.id===s.bookingId)||{};
-          const etaMins=s.arrivalAirport==='cancun'?120:60;
-          return{...s,retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(bk.leaderName||bk.retreatName||'Unknown Retreat'),
-            room:trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName),
-            eta:trAddMins(s.arrivalTime,etaMins)};
-        });
-        html+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;margin-bottom:10px;overflow:hidden">
-          <div style="background:#f2f8f6;padding:9px 16px;border-bottom:1px solid #c8d8d4;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="document.getElementById('trAllDate').value='${d}';trBuildAllArrivals()">
-            <span style="font-size:12.5px;font-weight:700;color:#0e9494">${dayLabel}</span>
-            <span style="font-size:11px;background:#0e9494;color:#fff;border-radius:99px;padding:1px 8px;font-weight:700">${enriched2.length} arrival${enriched2.length!==1?'s':''}</span>
-            <span style="font-size:11px;color:#8a7e74;margin-left:auto">click to view →</span>
-          </div>
-          <div style="overflow-x:auto">
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
-              <thead><tr style="background:#f5f1eb">
-                <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Time</th>
-                <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Airport</th>
-                <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">ETA</th>
-                <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Flight</th>
-                <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Room #</th>
-                <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Guest</th>
-                <th style="padding:7px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Retreat</th>
-                <th style="padding:7px 12px;border-bottom:1px solid #e8dfd4"></th>
-                <th style="padding:7px 12px;border-bottom:1px solid #e8dfd4"></th>
-              </tr></thead>
-              <tbody>${enriched2.map((s,i)=>{
-                const airChip=s.arrivalAirport==='cancun'
-                  ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
-                  :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
-                const isCancelled=s.status==='cancelled';
-                return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'};opacity:${isCancelled?.5:1}">
-                  <td style="padding:8px 12px;font-weight:700;color:#0e9494;white-space:nowrap">${tsFmt(s.arrivalTime)}</td>
-                  <td style="padding:8px 12px">${airChip}</td>
-                  <td style="padding:8px 12px;color:#2d2520;font-weight:600;white-space:nowrap">${s.eta}</td>
-                  <td style="padding:8px 12px;color:#5a5048">${s.flightNumber||'—'}</td>
-                  <td style="padding:8px 12px;white-space:nowrap"><span style="font-weight:700;color:#2d2520">${s.room}</span>${trRoomCat(s.room)?`<br><span style="font-size:10px;color:#8a7e74">${trRoomCat(s.room)}</span>`:''}</td>
-                  <td style="padding:8px 12px;font-weight:600;color:#2d2520;white-space:nowrap;text-decoration:${isCancelled?'line-through':'none'}">${s.firstName} ${s.lastName}</td>
-                  <td style="padding:8px 12px;color:#8a7e74;font-size:11.5px">${s.retreatLabel}</td>
-                  <td style="padding:8px 12px">${trStatusBadge(s)}</td>
-                  <td style="padding:8px 12px;text-align:right"><button onclick="trDeleteArrival('${s.id}')" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" title="Remove">✕</button></td>
-                </tr>`;}).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>`;
+function tr2ApplyTabStyles() {
+  const ACT = `background:#fff;border:none;padding:5px 13px;border-radius:6px;font-size:12.5px;font-weight:600;color:#111827;cursor:pointer;font-family:'Jost',sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.1)`;
+  const INA = `background:transparent;border:none;padding:5px 13px;border-radius:6px;font-size:12.5px;font-weight:500;color:#6b7280;cursor:pointer;font-family:'Jost',sans-serif`;
+  document.getElementById('tr2-tab-arr')?.setAttribute('style', tr2View === 'arrivals'   ? ACT : INA);
+  document.getElementById('tr2-tab-dep')?.setAttribute('style', tr2View === 'departures' ? ACT : INA);
+  document.getElementById('tr2-tab-all')?.setAttribute('style', tr2View === 'all'        ? ACT : INA);
+}
+function tr2Btn(bg, c) { return `background:${bg};color:${c};border:none;padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif`; }
+
+function trInit() {
+  const container = document.getElementById('tab-transport-body');
+  if (!container) return;
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:16px 20px;background:#fff;border-bottom:1px solid #e5e7eb;flex-shrink:0;flex-wrap:wrap">
+        <h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">Transport</h2>
+        <div style="display:flex;background:#f1f5f9;border-radius:8px;padding:3px;gap:2px">
+          <button id="tr2-tab-arr" onclick="tr2SetView('arrivals')">Arrivals</button>
+          <button id="tr2-tab-dep" onclick="tr2SetView('departures')">Departures</button>
+          <button id="tr2-tab-all" onclick="tr2SetView('all')">All</button>
+        </div>
+        <div style="flex:1"></div>
+        <button id="tr2-automatch-btn" onclick="tr2AutoMatch()" style="display:none;${tr2Btn('#fef3c7','#92400e')};font-size:12px" title="Asignar entradas sin retiro automáticamente por nombre">🔍 Auto-asignar</button>
+        <button onclick="tr2CopyIndividualLink()" style="${tr2Btn('#f1f5f9','#374151')};font-size:12px" title="Link para huéspedes individuales (sin grupo)">🔗 Individual Link</button>
+        <button id="tr2-copy-link-btn" onclick="tr2CopyFormLink()" style="${tr2Btn('#4db6ac','#fff')};font-size:12px" title="Copiar link del formulario para el retiro seleccionado">📋 Copy Guest Link</button>
+        <button onclick="tr2OpenDriverView('irving')" style="${tr2Btn('#f5f3ff','#6d28d9')};font-size:12px" title="Vista chofer — Irving (TQO + CUN salidas)">🚐 Irving</button>
+        <button onclick="tr2OpenDriverView('salomon')" style="${tr2Btn('#fff7ed','#c2410c')};font-size:12px" title="Vista chofer — Salomón (CUN llegadas)">🚐 Salomón</button>
+        <button onclick="tr2ResetGroups()" style="${tr2Btn('#f3f4f6','#374151')};font-size:12px" title="Deshacer grupos manuales">↩ Grupos</button>
+        <button id="tr2-upgrade-btn" onclick="tr2ToggleUpgradeMode()" style="${tr2Btn('#f3f4f6','#374151')};font-size:12px" title="Vista de upgrades disponibles">⬆ Upgrades</button>
+        <button id="tr2-charge-btn" onclick="tr2RunAutoCharge()" style="${tr2Btn('#d1fae5','#065f46')};font-size:12px" title="Cargar transport al folio">💳 Charge</button>
+        <button onclick="trInit()" style="${tr2Btn('#f3f4f6','#374151')}">↺</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 20px;background:#f8fafc;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">
+        <select id="tr2-retreat-sel" onchange="tr2SetRetreat(this.value)"
+          style="padding:6px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px;font-family:'Jost',sans-serif;color:#374151;outline:none;min-width:180px;max-width:280px">
+          <option value="">All retreats</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">From</span>
+          <input type="date" id="tr2-date-from" onchange="tr2SetDateFrom(this.value)"
+            style="padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px;font-family:'Jost',sans-serif;color:#374151;outline:none">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">To</span>
+          <input type="date" id="tr2-date-to" onchange="tr2SetDateTo(this.value)"
+            style="padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px;font-family:'Jost',sans-serif;color:#374151;outline:none">
+        </div>
+        <button id="tr2-clear-btn" onclick="tr2ClearFilters()" style="display:none;background:#fef2f2;color:#dc2626;border:none;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">✕ Clear</button>
+        <div style="flex:1"></div>
+        <button id="tr2-archive-btn" onclick="tr2ToggleArchived()" style="background:#f1f5f9;color:#6b7280;border:1.5px solid #e5e7eb;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif" title="Ver entradas anteriores">📦 Archived</button>
+      </div>
+      <div id="tr2-body" style="flex:1;overflow-y:auto;padding:20px"></div>
+    </div>`;
+
+  tr2View = localStorage.getItem('ama_tr2_view') || 'arrivals';
+  tr2ApplyTabStyles();
+  tr2LoadData();
+}
+
+function tr2SetView(v) {
+  tr2View = v;
+  if (v !== 'arrivals') tr2UpgradeMode = false;
+  localStorage.setItem('ama_tr2_view', v);
+  tr2ApplyTabStyles();
+  tr2BuildView();
+}
+function tr2SetRetreat(v) {
+  tr2RetreatFilter = v;
+  tr2SyncClearBtn();
+  const btn = document.getElementById('tr2-copy-link-btn');
+  if (btn) btn.textContent = v ? '📋 Copy Retreat Link' : '📋 Copy Guest Link';
+  tr2BuildView();
+}
+function tr2SetDateFrom(v) { tr2DateFrom = v; tr2SyncClearBtn(); tr2BuildView(); }
+function tr2SetDateTo(v)   { tr2DateTo   = v; tr2SyncClearBtn(); tr2BuildView(); }
+function tr2ClearFilters() {
+  tr2RetreatFilter = ''; tr2DateFrom = ''; tr2DateTo = '';
+  const sel = document.getElementById('tr2-retreat-sel'); if (sel) sel.value = '';
+  const df  = document.getElementById('tr2-date-from');   if (df)  df.value  = '';
+  const dt  = document.getElementById('tr2-date-to');     if (dt)  dt.value  = '';
+  tr2SyncClearBtn();
+  tr2BuildView();
+}
+function tr2SyncClearBtn() {
+  const btn = document.getElementById('tr2-clear-btn');
+  if (btn) btn.style.display = (tr2RetreatFilter || tr2DateFrom || tr2DateTo) ? '' : 'none';
+}
+function tr2ToggleArchived() {
+  tr2ShowArchived = !tr2ShowArchived;
+  const btn = document.getElementById('tr2-archive-btn');
+  if (btn) { btn.style.background = tr2ShowArchived ? '#1a2332' : ''; btn.style.color = tr2ShowArchived ? '#fff' : ''; }
+  tr2BuildView();
+}
+
+async function tr2LoadData() {
+  const body = document.getElementById('tr2-body');
+  if (body) body.innerHTML = `<div style="padding:20px;color:#9ca3af;text-align:center">Loading…</div>`;
+
+  const [{ data: rows }, { data: staffData }] = await Promise.all([
+    db.from('transport').select('*').order('submitted_at', { ascending: false }),
+    db.from('staff').select('id,name,username,role,active').order('name', { ascending: true }),
+  ]);
+
+  tr2StaffList = (staffData || []).filter(s => s.active);
+  tr2RoomNameToRtId = {};
+  AppData.roomTypes.forEach(rt => { (rt.rooms || []).forEach(name => { tr2RoomNameToRtId[name] = rt.id; }); });
+
+  tr2ActiveBooks = AppData.bookings.filter(b => b.status !== 'cancelled');
+  const bkMap = {};
+  tr2ActiveBooks.forEach(b => { bkMap[b.id] = b; });
+
+  const roomLookup = {}, firstNameIdx = {}, emailRoomIdx = {};
+  tr2NameMap = {};
+  tr2ActiveBooks.forEach(bk => {
+    const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
+    AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => {
+      (reg.guests || []).forEach(g => {
+        if (g.name) {
+          roomLookup[`${bk.id}|${g.name.toLowerCase()}`] = reg.room || '';
+          const firstName = g.name.trim().split(/\s+/)[0].toLowerCase();
+          if (firstName.length >= 3) {
+            const fk = `${bk.id}|${firstName}`;
+            if (!firstNameIdx[fk]) firstNameIdx[fk] = { room: reg.room || '', count: 0 };
+            firstNameIdx[fk].count++;
+          }
+          const key = tr2NormName(g.name);
+          if (key) tr2NameMap[key] = { bkId: bk.id, retreatLabel, origName: g.name };
+        }
+        if (g.email) {
+          const ek = `${bk.id}|${g.email.toLowerCase().trim()}`;
+          if (!emailRoomIdx[ek]) emailRoomIdx[ek] = { room: reg.room || '', count: 0 };
+          emailRoomIdx[ek].count++;
+        }
       });
-      html+='</div>';
-    } else {
-      html+='<div style="color:#8a7e74;font-size:12.5px;text-align:center;padding-bottom:20px">No upcoming arrivals recorded for the rest of this month.</div>';
-    }
-    wrap.innerHTML=html;return;
-  }
-
-  // Enrich with retreat + room data
-  const enriched=allSubs.map(s=>{
-    const bk=AppData.bookings.find(b=>b.id===s.bookingId)||{};
-    const etaMins=s.arrivalAirport==='cancun'?120:60;
-    return{...s,
-      retreatLabel:(s.bookingId==='individual'||s.isIndividual)?'Individual Guest':(bk.leaderName||bk.retreatName||'Unknown Retreat'),
-      room:trGuestRoom(s.bookingId,s.email,s.firstName,s.lastName),
-      eta:trAddMins(s.arrivalTime,etaMins)
-    };
+    });
   });
 
-  // Sort ALL arrivals chronologically
-  enriched.sort((a,b)=>a.arrivalAirport===b.arrivalAirport?a.arrivalTime.localeCompare(b.arrivalTime):a.arrivalTime.localeCompare(b.arrivalTime));
+  const sel = document.getElementById('tr2-retreat-sel');
+  if (sel) {
+    const sorted = [...tr2ActiveBooks].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+    sel.innerHTML = `<option value="">All retreats</option>` +
+      sorted.map(b => `<option value="${b.id}">${escHtml(b.leaderName)}${b.retreatName ? ` · ${escHtml(b.retreatName)}` : ''} (${fmtDate(b.startDate)})</option>`).join('');
+    if (tr2RetreatFilter) sel.value = tr2RetreatFilter;
+  }
 
-  // ── Group EVERYONE by airport into ride groups (respects manual sharing) ───
-  const computedGroups=trComputeRideGroups(enriched,'arrivalTime','arrivalAirport');
-  const groupMap=trGroupMapByEmail(computedGroups);
-  const rideGroups=computedGroups.map((rg,gi)=>({...rg,airLabel:rg.airport==='cancun'?'Cancún (CUN)':'Tulum (TQO)',eta:rg.guests[0].eta,gid:'grp_'+gi}));
-  const shareCandidates=trFindShareCandidates(computedGroups,'arrivalTime');
+  const normDate = s => { if (!s) return ''; const p = String(s).trim().split('-'); return p.length === 3 ? `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}` : String(s).trim(); };
+  const pickBetter = (cur, row) => {
+    const score = r => { const d = r.data || {}; return (d.arrivalDate?2:0)+(d.flightNumber?1:0)+(d.departureDate?1:0)+(r.booking_id?1:0); };
+    if (score(row) > score(cur)) return row;
+    if (score(row) === score(cur) && String(row.id) > String(cur.id)) return row;
+    return cur;
+  };
+  const dedupedRows = (() => {
+    const map = new Map();
+    for (const row of rows || []) {
+      const d = row.data || {};
+      const em = (d.email || '').toLowerCase().trim();
+      const fn = (d.firstName || '').toLowerCase().trim();
+      const ln = (d.lastName || '').toLowerCase().trim();
+      const bk = row.booking_id || (d.bookingId || '');
+      const key = em ? `email|${bk}|${em}` : `name|${fn}_${ln}|${normDate(d.arrivalDate)}|${normDate(d.departureDate)}`;
+      const cur = map.get(key);
+      map.set(key, cur ? pickBetter(cur, row) : row);
+    }
+    const map2 = new Map();
+    for (const row of map.values()) {
+      const d = row.data || {};
+      const key2 = `${row.booking_id || (d.bookingId||'')}|${(d.firstName||'').toLowerCase().trim()}_${(d.lastName||'').toLowerCase().trim()}|${normDate(d.arrivalDate)}`;
+      const cur2 = map2.get(key2);
+      map2.set(key2, cur2 ? pickBetter(cur2, row) : row);
+    }
+    return [...map2.values()];
+  })();
 
-  const dt=new Date(date+'T00:00:00');
-  const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
+  tr2AllEntries = [];
+  tr2RawRows = {};
+  for (const row of dedupedRows) {
+    tr2RawRows[row.id] = row;
+    const d = row.data || {};
+    const bkId = row.booking_id;
+    const bk = bkMap[bkId];
+    const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
+    const room = roomLookup[`${bkId}|${name.toLowerCase()}`] ?? (() => {
+      const fn = (d.firstName || '').trim().toLowerCase();
+      if (fn.length >= 3) { const fi = firstNameIdx[`${bkId}|${fn}`]; if (fi && fi.count === 1) return fi.room; }
+      const em = (d.email || '').toLowerCase().trim();
+      if (em && bkId) { const ei = emailRoomIdx[`${bkId}|${em}`]; if (ei && ei.count === 1) return ei.room; }
+      return '';
+    })();
+    const retreatLabel = bk ? [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ') : 'Sin retiro asignado';
 
-  // ── Ride Groups panel ──────────────────────────────────────────────────────
-  const GROUP_COLORS=['#e8f5f5','#faf5ff','#fff7ed','#f0fdf4','#eff6ff','#fdf4ff'];
-  let html=`<div style="margin-bottom:20px">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:12px">Ride Groups · ${dateLabel}</div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-    ${shareCandidates.map(c=>trShareAlertHtml(c.a,c.b,c.gap)).join('')}
-    ${rideGroups.map((rg,gi)=>{
-      const saves=rg.soloPrice-rg.pricePerPax;
-      const bg=GROUP_COLORS[gi%GROUP_COLORS.length];
-      const isManualShare=rg.guests.length>1&&rg.guests[0].shareGroupId&&rg.guests.every(x=>x.shareGroupId===rg.guests[0].shareGroupId);
-      return`<div style="background:${bg};border:1.5px solid #c8d8d4;border-radius:12px;padding:14px 18px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-          <span style="font-size:13px;font-weight:700;color:#0e9494">Ride ${gi+1}</span>
-          <span style="font-size:11px;background:#0e9494;color:#fff;border-radius:99px;padding:2px 10px;font-weight:700">${rg.guests.length} person${rg.guests.length!==1?'s':''}</span>
-          <span style="font-size:11.5px;color:#5a5048">${rg.airLabel}</span>
-          <span style="font-size:11.5px;color:#8a7e74">ETA ${rg.eta}</span>
-          <span style="font-size:13px;font-weight:800;color:${rg.guests.length===1?'#5a5048':'#15803d'};margin-left:auto">$${rg.pricePerPax} <span style="font-size:10.5px;font-weight:500;color:#8a7e74">${rg.guests.length===1?'Private Transport':'per person'}</span></span>
-          ${saves>0?`<span style="font-size:11px;background:#d1fae5;color:#065f46;border-radius:99px;padding:2px 10px;font-weight:700">save $${saves} vs solo</span>`:''}
-          ${isManualShare?`<button onclick="trUnshareGroup('${rg.guests.map(x=>x.id).join(',')}')" style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;cursor:pointer">Undo Share</button>`:''}
-        </div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="background:rgba(255,255,255,.6)">
-              <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4">Guest Name</th>
-              <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4;white-space:nowrap">Room #</th>
-              <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4">Flight</th>
-              <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4;white-space:nowrap">Arrival Time</th>
-              <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4">Airport</th>
-              <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4">ETA</th>
-              <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4">Retreat</th>
-              <th style="padding:6px 10px;text-align:right;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4">Owes</th>
-              <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4;white-space:nowrap">Onsite Upgrade</th>
-              <th style="padding:6px 10px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #c8d8d4;white-space:nowrap">Folio</th>
-            </tr></thead>
-            <tbody>${rg.guests.map(g=>{
-              const airChipSm=g.arrivalAirport==='cancun'
-                ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
-                :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
-              const gUpg=trGetUpgrade(g.bookingId,g.room);
-              const gUpgCell=trUpgradeCellHtml(gUpg,g,10);
-              const chargeCell=g.chargedAt
-                ?`<span style="font-size:10.5px;font-weight:700;color:#15803d">✓ Charged $${g.chargeAmount}</span>`
-                :`<button onclick="trChargeTransport('${g.id}',${rg.pricePerPax})" style="font-size:10.5px;font-weight:700;color:#fff;background:#0e9494;border:none;border-radius:6px;padding:4px 9px;cursor:pointer;white-space:nowrap">💳 Charge $${rg.pricePerPax}</button>`;
-              return`<tr style="border-bottom:1px solid rgba(200,216,212,.4)">
-              <td style="padding:7px 10px;font-weight:600;color:#2d2520;white-space:nowrap">${g.firstName} ${g.lastName}</td>
-              <td style="padding:7px 10px;font-weight:700;color:#2d2520">${g.room}</td>
-              <td style="padding:7px 10px;color:#5a5048">${g.flightNumber||'—'}</td>
-              <td style="padding:7px 10px;font-weight:600;color:#0e9494;white-space:nowrap">${tsFmt(g.arrivalTime)}</td>
-              <td style="padding:7px 10px">${airChipSm}</td>
-              <td style="padding:7px 10px;color:#2d2520;font-weight:600;white-space:nowrap">${g.eta}</td>
-              <td style="padding:7px 10px;color:#8a7e74;font-size:11.5px">${g.retreatLabel}</td>
-              <td style="padding:7px 10px;text-align:right;font-weight:800;color:${rg.guests.length===1?'#5a5048':'#15803d'};white-space:nowrap">$${rg.pricePerPax}</td>
-              <td style="padding:7px 10px">${gUpgCell}</td>
-              <td style="padding:7px 10px;white-space:nowrap">${chargeCell}</td>
-            </tr>`;}).join('')}</tbody>
-          </table>
-        </div>
-      </div>`;
-    }).join('')}
-    </div>
-  </div>`;
+    if (d.arrivalDate && d.arrivalTime) {
+      tr2AllEntries.push({
+        rowId: row.id, type: 'arrival', date: d.arrivalDate, time: d.arrivalTime, guest: name,
+        email: d.email || '', flight: d.flightNumber || '', airport: d.arrivalAirport || '',
+        ot: !!d.arrivalOT, share: !!d.willingToShare, notes: d.notes || '', room, retreatId: bkId, retreatLabel,
+        eta: d.arrivalOT ? null : tr2AddMins(d.arrivalTime, d.arrivalAirport === 'cancun' ? 90 : 45),
+        driverConfirmed: !!d.driver_confirmed, cost: d.serviceCost != null ? Number(d.serviceCost) : null,
+      });
+    }
+    if (d.departureDate && d.departureTime) {
+      const depAirport = d.departureAirport || '';
+      const pickup = (!d.departureOT && depAirport) ? tr2AddMins(d.departureTime, depAirport === 'cancun' ? -240 : -150) : null;
+      tr2AllEntries.push({
+        rowId: row.id, type: 'departure', date: d.departureDate, time: d.departureTime, guest: name,
+        email: d.email || '', flight: d.flightNumber || '', airport: depAirport,
+        ot: !!d.departureOT, share: !!d.willingToShare, notes: d.notes || '', room, retreatId: bkId, retreatLabel,
+        eta: null, pickup, driverConfirmed: !!d.driver_confirmed, cost: d.serviceCost != null ? Number(d.serviceCost) : null,
+      });
+    }
+  }
 
-  // ── Master chronological table with group + price columns ─────────────────
-  const unchargedCount=enriched.filter(s=>s.status!=='cancelled'&&!s.chargedAt).length;
-  html+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;overflow:hidden">
-    <div style="background:#f2f8f6;padding:10px 18px;border-bottom:1px solid #c8d8d4;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="font-size:12px;font-weight:700;color:#0e9494">All Arrivals · ${dateLabel}</span>
-      <span style="font-size:11px;background:#0e9494;color:#fff;border-radius:99px;padding:1px 9px;font-weight:700">${enriched.length} total</span>
-      ${unchargedCount?`<button onclick="trChargeAllArrivals('${date}')" style="margin-left:auto;font-size:11.5px;font-weight:700;color:#fff;background:#0e9494;border:none;border-radius:7px;padding:6px 14px;cursor:pointer;white-space:nowrap">💳 Charge All (${unchargedCount})</button>`:`<span style="margin-left:auto;font-size:11px;color:#15803d;font-weight:700">✓ All charged</span>`}
-    </div>
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="background:#f5f1eb">
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Guest Name</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Room #</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Flight</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Arrival Time</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Airport</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">ETA</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Retreat</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Ride</th>
-          <th style="padding:8px 12px;text-align:right;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Price</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Onsite Upgrade</th>
-          <th style="padding:8px 12px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4;white-space:nowrap">Folio</th>
-        </tr></thead>
-        <tbody>${enriched.map((s,i)=>{
-          const gInfo=groupMap[s.email];
-          const gNum=gInfo?rideGroups.findIndex(r=>r.gid===gInfo.gid)+1:null;
-          const airChip=s.arrivalAirport==='cancun'
-            ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
-            :'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>';
-          const rideChip=gNum?`<span style="font-size:10px;background:${GROUP_COLORS[(gNum-1)%GROUP_COLORS.length]};border:1px solid #c8d8d4;color:#0e9494;border-radius:4px;padding:1px 7px;font-weight:700">Ride ${gNum}</span>`:'—';
-          const priceCell=gInfo
-            ?(gInfo.groupSize===1
-              ?`<span style="font-weight:800;color:#5a5048">$${gInfo.pricePerPax}</span> <span style="font-size:10px;color:#8a7e74">Private</span>`
-              :`<span style="font-weight:800;color:#15803d">$${gInfo.pricePerPax}</span> <span style="font-size:10px;color:#8a7e74">sharing</span>`)
-            :'—';
-          const mUpg=trGetUpgrade(s.bookingId,s.room);
-          const mUpgCell=trUpgradeCellHtml(mUpg,s,10);
-          const chargePrice=gInfo?gInfo.pricePerPax:trGetPrice(s.arrivalAirport,1);
-          const chargeCell=s.chargedAt
-            ?`<span style="font-size:10.5px;font-weight:700;color:#15803d">✓ $${s.chargeAmount}</span>`
-            :`<button onclick="trChargeTransport('${s.id}',${chargePrice})" style="font-size:10.5px;font-weight:700;color:#fff;background:#0e9494;border:none;border-radius:6px;padding:4px 9px;cursor:pointer;white-space:nowrap">💳 Charge</button>`;
-          return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
-            <td style="padding:9px 12px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName} ${s.lastName}</td>
-            <td style="padding:9px 12px;font-weight:700;color:#2d2520">${s.room}</td>
-            <td style="padding:9px 12px;color:#5a5048">${s.flightNumber||'—'}</td>
-            <td style="padding:9px 12px;font-weight:700;color:#0e9494;white-space:nowrap">${tsFmt(s.arrivalTime)}</td>
-            <td style="padding:9px 12px">${airChip}</td>
-            <td style="padding:9px 12px;color:#2d2520;font-weight:600;white-space:nowrap">${s.eta}</td>
-            <td style="padding:9px 12px;color:#8a7e74;font-size:11.5px">${s.retreatLabel}</td>
-            <td style="padding:9px 12px">${rideChip}</td>
-            <td style="padding:9px 12px;text-align:right">${priceCell}</td>
-            <td style="padding:9px 12px">${mUpgCell}</td>
-            <td style="padding:9px 12px;white-space:nowrap">${chargeCell}</td>
-          </tr>`;}).join('')}</tbody>
-      </table>
-    </div>
-  </div>`;
+  // Synthetic OT entries — registered guests with no transport form submission,
+  // so upgrades can still be offered to guests using their own transport.
+  const transportedKeys   = new Set(tr2AllEntries.map(e => `${e.retreatId}|${tr2NormName(e.guest)}`));
+  const transportedEmails = new Set(tr2AllEntries.filter(e => e.email?.trim()).map(e => `${e.retreatId}|${e.email.toLowerCase().trim()}`));
+  tr2ActiveBooks.forEach(bk => {
+    const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
+    AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => {
+      const room = reg.room || '';
+      (reg.guests || []).forEach(g => {
+        if (!g.name) return;
+        if (transportedKeys.has(`${bk.id}|${tr2NormName(g.name)}`)) return;
+        if (g.email?.trim() && transportedEmails.has(`${bk.id}|${g.email.toLowerCase().trim()}`)) return;
+        tr2AllEntries.push({
+          rowId: `synth-${reg.id}-${tr2NormName(g.name)}`, type: 'arrival', date: bk.startDate, time: '',
+          guest: g.name, email: g.email || '', flight: '', airport: '', ot: true, share: false, notes: '',
+          room, retreatId: bk.id, retreatLabel, eta: null, driverConfirmed: false, cost: null, isSynthetic: true,
+        });
+      });
+    });
+  });
 
-  wrap.innerHTML=html;
+  for (const row of dedupedRows) {
+    const uc = row.data?.upgradeConfirmed;
+    if (uc && !tr2ConfirmedUpgrades.has(row.id)) tr2ConfirmedUpgrades.set(row.id, uc);
+  }
+
+  tr2UserGroupMap = new Map();
+  tr2UgCounter = 0;
+  try {
+    const { data: setRow } = await db.from('settings').select('value').eq('key', 'transport_groups').maybeSingle();
+    const savedGroups = setRow?.value || [];
+    for (const [rowId, gk] of savedGroups) {
+      tr2UserGroupMap.set(rowId, gk);
+      if (gk.startsWith('ug_')) { const n = parseInt(gk.slice(3)); if (n > tr2UgCounter) tr2UgCounter = n; }
+    }
+  } catch (e) {}
+
+  tr2BuildView();
 }
 
-function trCopyFormLink(){
-  const bk=trSelBkId?AppData.bookings.find(b=>b.id===trSelBkId):null;
-  const url=`${location.origin}/transport-form.html`+(bk?'?bk='+bk.id:'');
-  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>showToast('Form link copied to clipboard!'));}
-  else{prompt('Copy this link:',url);}
+const TR2_PASTEL = ['#eff6ff','#f0fdf4','#faf5ff','#fffbeb','#fdf2f8','#f0fdfa','#fff7ed','#f0f9ff'];
+function tr2ToMins(t) { if (!t) return null; const [h,m] = t.split(':').map(Number); return h*60+(m||0); }
+function tr2AssignGroupColors(entries) {
+  const colorMap = new Map();
+  const clusters = [];
+  for (const e of entries) {
+    const sortTime = e.type === 'departure' ? (e.pickup || e.time) : e.time;
+    const mins = tr2ToMins(sortTime);
+    if (!e.date || mins === null) continue;
+    const key = `${e.date}|${e.airport}|${e.type}`;
+    let joined = false;
+    for (const cl of clusters) {
+      if (cl.key !== key) continue;
+      if (cl.idxs.some(id => Math.abs(tr2ToMins(entries.find(x => x.rowId === id)?.[e.type === 'departure' ? 'pickup' : 'time'] || '') - mins) <= 20)) {
+        cl.idxs.push(e.rowId); joined = true; break;
+      }
+    }
+    if (!joined) clusters.push({ key, idxs: [e.rowId] });
+  }
+  let ci = 0;
+  clusters.forEach(cl => { const color = TR2_PASTEL[ci++ % TR2_PASTEL.length]; cl.idxs.forEach(id => colorMap.set(id, color)); });
+  return colorMap;
 }
 
-function trCopyIndividualLink(){
-  const url=`${location.origin}/transport-form.html`;
-  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>showToast('Individual form link copied!'));}
-  else{prompt('Copy this link:',url);}
-}
+function tr2BuildView() {
+  const body = document.getElementById('tr2-body');
+  if (!body) return;
+  tr2GroupKeyMap = new Map();
+  let arrTotal = 0, depTotal = 0;
 
-function trTombstoneDelete(id){
-  deletedTransportIds.add(id);
-  localStorage.setItem('amansala_deleted_transport_ids',JSON.stringify([...deletedTransportIds]));
-  const data=loadTransport(); // already excludes deleted ids
-  localStorage.setItem(TRANSPORT_KEY,JSON.stringify(data));
-  deleteTransportFromSupabase(id);
-  try{
-    db.from('app_store').upsert({key:'deletedTransportIds',value:[...deletedTransportIds],updated_at:new Date().toISOString()});
-  }catch(e){}
-}
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const archived = tr2AllEntries.filter(e => !e.isSynthetic && e.date < todayStr);
+  const archBtn = document.getElementById('tr2-archive-btn');
+  if (archBtn) {
+    archBtn.textContent = archived.length ? `📦 Archived (${archived.length})` : '📦 Archived';
+    archBtn.style.background = tr2ShowArchived ? '#1a2332' : '';
+    archBtn.style.color = tr2ShowArchived ? '#fff' : '';
+  }
 
-function trDeleteIndividualSub(id){
-  if(!confirm('Remove this transport submission?'))return;
-  trTombstoneDelete(id);
-  trBuildIndividual();
-  showToast('Submission removed.');
-}
+  const filtered = tr2AllEntries.filter(e => {
+    if (tr2View === 'arrivals' && e.type !== 'arrival') return false;
+    if (tr2View === 'departures' && e.type !== 'departure') return false;
+    if (tr2RetreatFilter && e.retreatId !== tr2RetreatFilter) return false;
+    if (tr2DateFrom && e.date < tr2DateFrom) return false;
+    if (tr2DateTo && e.date > tr2DateTo) return false;
+    if (!tr2ShowArchived && !tr2DateFrom && !tr2DateTo && !tr2RetreatFilter && e.date < todayStr) return false;
+    return true;
+  }).sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    const aSort = a.type === 'departure' ? (a.pickup || a.time || '') : (a.time || '');
+    const bSort = b.type === 'departure' ? (b.pickup || b.time || '') : (b.time || '');
+    return aSort.localeCompare(bSort);
+  });
 
-function trBuildIndividual(){
-  const wrap=document.getElementById('trContent');if(!wrap)return;
-  const subs=loadTransport().filter(s=>s.bookingId==='individual'||s.isIndividual)
-    .sort((a,b)=>(b.submittedAt||'').localeCompare(a.submittedAt||''));
-
-  if(!subs.length){
-    wrap.innerHTML=`<div style="color:#8a7e74;font-size:13px;text-align:center;padding:60px 0;max-width:440px;margin:0 auto;line-height:1.65">
-      No individual guest transport submissions yet.<br>
-      <span style="font-size:12px">Share the form link (button above) with guests who booked directly — not part of a retreat group.</span>
+  if (!filtered.length) {
+    body.innerHTML = `<div style="padding:60px 20px;text-align:center;color:#9ca3af">
+      <div style="font-size:32px;margin-bottom:12px">✈️</div>
+      <div style="font-size:15px;font-weight:600;color:#374151;margin-bottom:6px">No transport entries</div>
+      <div style="font-size:13px">${tr2RetreatFilter || tr2DateFrom || tr2DateTo ? 'Try adjusting the filters' : 'Guests submit their flight info via the transport form'}</div>
     </div>`;
     return;
   }
 
-  const MNTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  function fmtD(iso){if(!iso)return'—';const[y,m,d]=iso.split('-');return MNTHS[parseInt(m,10)-1]+' '+parseInt(d,10)+', '+y;}
+  const otEntries = filtered.filter(e => e.ot);
+  const normalEntries = filtered.filter(e => !e.ot);
+  const colorMap = tr2AssignGroupColors(normalEntries);
+  const today = new Date().toISOString().slice(0,10);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0,10);
 
-  let html=`<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:110px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:#0e9494">${subs.length}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">Total Submissions</div>
-    </div>
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:110px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:#0e9494">${subs.filter(s=>s.arrivalDate&&s.arrivalDate>=fmtISO(new Date())).length}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">Upcoming Arrivals</div>
-    </div>
-  </div>`;
+  const TH = (t, w) => `<th style="padding:7px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;text-align:left;white-space:nowrap;${w?'width:'+w:''}border-bottom:2px solid #e5e7eb">${t}</th>`;
+  const timeColLabel = tr2View === 'departures' ? 'Pick-up · Hora vuelo' : tr2View === 'arrivals' ? 'Hora vuelo → Hotel' : 'Hora';
+  const upgBtn = document.getElementById('tr2-upgrade-btn');
+  if (upgBtn) { upgBtn.style.background = tr2UpgradeMode ? '#0d9488' : ''; upgBtn.style.color = tr2UpgradeMode ? '#fff' : ''; }
+  const tableHeader = `<thead><tr>
+    ${TH('Habitación','80px')}${TH('Nombre')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}
+    ${tr2UpgradeMode ? TH('Upgrade','200px') : TH('Notas')}
+    ${TH('Costo','70px')}${TH('','40px')}
+  </tr></thead>`;
 
-  html+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;overflow:hidden">
-    <div style="background:#f2f8f6;padding:12px 18px;border-bottom:1px solid #c8d8d4;font-size:12.5px;font-weight:700;color:#0e9494">Individual Guest Submissions</div>
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="background:#f5f1eb">
-          <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Name</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Email</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Flight</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Arrival</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Airport</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Departure</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4">Notes</th>
-          <th style="padding:8px 12px;text-align:left;font-weight:700;color:#5a5048;border-bottom:1px solid #e8dfd4;white-space:nowrap">Submitted</th>
-          <th style="padding:8px 12px;border-bottom:1px solid #e8dfd4"></th>
-        </tr></thead>
-        <tbody>${subs.map((s,i)=>{
-          const airChipArr=s.arrivalAirport==='cancun'
-            ?'<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 6px;font-weight:700">CUN</span>'
-            :s.arrivalAirport==='tulum'
-              ?'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-weight:700">TQO</span>'
-              :(s.arrivalOT?'<span style="font-size:10px;background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 6px;font-weight:700">OT</span>':'—');
-          const arrTime=s.arrivalOT?`Own transport — ${fmtD(s.arrivalDate)}`:(s.arrivalDate?`${fmtD(s.arrivalDate)} ${tsFmt(s.arrivalTime)||''}`.trim():'—');
-          const depTime=s.departureOT?`Own transport — ${fmtD(s.departureDate)}`:(s.departureDate?`${fmtD(s.departureDate)} ${tsFmt(s.departureTime)||''}`.trim():'—');
-          const subDt=s.submittedAt?new Date(s.submittedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';
-          return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
-            <td style="padding:9px 12px;font-weight:600;color:#2d2520;white-space:nowrap">${s.firstName||''} ${s.lastName||''}</td>
-            <td style="padding:9px 12px;color:#5a5048;font-size:11.5px">${s.email||'—'}</td>
-            <td style="padding:9px 12px;color:#5a5048">${s.flightNumber||'—'}</td>
-            <td style="padding:9px 12px;color:#2d2520;white-space:nowrap">${arrTime}</td>
-            <td style="padding:9px 12px">${airChipArr}</td>
-            <td style="padding:9px 12px;color:#2d2520;white-space:nowrap">${depTime}</td>
-            <td style="padding:9px 12px;color:#8a7e74;font-size:11px;max-width:160px">${s.notes?s.notes.substring(0,80)+(s.notes.length>80?'…':''):'—'}</td>
-            <td style="padding:9px 12px;color:#8a7e74;font-size:11px;white-space:nowrap">${subDt}</td>
-            <td style="padding:9px 12px;text-align:right"><button onclick="trDeleteIndividualSub('${s.id}')" style="font-size:11px;color:#dc2626;background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" title="Remove">✕</button></td>
-          </tr>`;}).join('')}</tbody>
-      </table>
-    </div>
-  </div>`;
+  let html = `<div style="padding:0 0 20px"><table style="width:100%;border-collapse:collapse;font-family:'Jost',sans-serif">${tableHeader}<tbody>`;
 
-  wrap.innerHTML=html;
-}
+  if (normalEntries.length) {
+    const groups = new Map();
+    normalEntries.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
+    for (const [date, items] of groups) {
+      const isToday = date === today, isTmrw = date === tomorrow;
+      const label = isToday ? 'Today' : isTmrw ? 'Tomorrow' : fmtDate(date);
+      const bg = isToday ? '#ccfbf1' : '#f1f5f9', color = isToday ? '#0f766e' : '#374151';
+      html += `<tr><td colspan="9" style="padding:8px 12px;background:${bg};font-size:11px;font-weight:700;color:${color};border-top:2px solid #e5e7eb">${label}</td></tr>`;
 
-function trDeleteSub(id){
-  if(!confirm('Remove this transport submission?'))return;
-  trTombstoneDelete(id);
-  trSelectRetreat(trSelBkId);
-  showToast('Submission removed.');
-}
+      const serviceGroups = [];
+      const seen = new Map();
+      items.forEach(e => {
+        const autoKey = colorMap.get(e.rowId) || ('__solo__' + e.rowId);
+        const dirKey = `${e.type}|${e.rowId}`;
+        const gk = tr2UserGroupMap.has(dirKey) ? tr2UserGroupMap.get(dirKey) : autoKey;
+        if (!seen.has(gk)) { seen.set(gk, serviceGroups.length); serviceGroups.push({ key: gk, color: colorMap.get(e.rowId), entries: [] }); }
+        serviceGroups[seen.get(gk)].entries.push(e);
+        if (serviceGroups[seen.get(gk)].entries.length === 1) serviceGroups[seen.get(gk)].color = colorMap.get(e.rowId);
+      });
 
-function trDeleteArrival(id){
-  if(!confirm('Remove this transport submission?'))return;
-  trTombstoneDelete(id);
-  refreshTransport();
-  showToast('Submission removed.');
-}
-
-async function trSetStatus(id,status){
-  const data=loadTransport();
-  const sub=data.find(s=>s.id===id);
-  if(!sub)return;
-  sub.status=status;
-  saveTransport(data);
-  // Cancelling the transport request itself also moves any driver
-  // confirmation for its legs to Cancelled — a driver shouldn't keep
-  // seeing a trip as active/needing confirmation once it's been called
-  // off, and un-cancelling puts it back to Pending so it's re-noticed.
-  // driverConfirmations may not be loaded in this browser tab at all yet
-  // (staff can reach this button without ever opening the Drivers view or
-  // driver mode) — always pull the latest copy from Supabase first so the
-  // propagation is reliable regardless of what else has or hasn't loaded.
-  if(typeof syncDriverConfirmationsFromSupabase==='function')await syncDriverConfirmationsFromSupabase();
-  if(typeof driverConfirmations!=='undefined'){
-    let changed=false;
-    ['arrival','departure'].forEach(kind=>{
-      const key=trDrvKey(sub,kind);
-      const rec=driverConfirmations[key];
-      if(!rec)return;
-      if(status==='cancelled'&&rec.status!=='cancelled'){
-        rec.status='cancelled';
-        trDrvPushHistory(rec,'cancelled',(typeof getCurrentSession==='function'?getCurrentSession()?.name:null)||'Staff',null);
-        changed=true;
-      }else if(status!=='cancelled'&&rec.status==='cancelled'){
-        rec.status='pending';
-        trDrvPushHistory(rec,'reactivated',(typeof getCurrentSession==='function'?getCurrentSession()?.name:null)||'Staff',null);
-        changed=true;
-      }
-    });
-    if(changed&&typeof saveDriverConfirmations==='function')saveDriverConfirmations();
+      serviceGroups.forEach((svc, si) => {
+        const pax = svc.entries.length;
+        svc.entries.forEach(e => tr2GroupKeyMap.set(`${e.type}|${e.rowId}`, svc.key));
+        const firstDirId = `${svc.entries[0].type}|${svc.entries[0].rowId}`;
+        html += `<tr style="background:${svc.color || '#f9fafb'}"
+          ondragover="event.preventDefault();this.style.outline='2px solid #4db6ac'"
+          ondragleave="this.style.outline=''"
+          ondrop="event.preventDefault();this.style.outline='';tr2Drop('${firstDirId}')">
+          <td colspan="9" style="padding:3px 12px;font-size:10px;font-weight:700;color:#6b7280;letter-spacing:.3px">${pax} pax · <span style="font-weight:400;opacity:.7">arrastra aquí para unir</span></td>
+        </tr>`;
+        svc.entries.forEach(e => {
+          if (!e.ot) { const c = e.cost ?? tr2AutoRate(e, pax); if (c != null) { if (e.type === 'arrival') arrTotal += c; else depTotal += c; } }
+          html += tr2RenderRow(e, svc.color, pax);
+        });
+        if (si < serviceGroups.length - 1) html += `<tr><td colspan="9" style="padding:8px;background:#fff;border:none"></td></tr>`;
+      });
+    }
   }
-  refreshTransport();
-  showToast(status==='cancelled'?'Marked as cancelled — no longer counted as transport received.':'Marked as confirmed.');
+
+  if (otEntries.length) {
+    html += `<tr><td colspan="9" style="padding:8px 12px;background:#fef2f2;font-size:11px;font-weight:700;color:#dc2626;border-top:2px solid #e5e7eb">Own Transport (${otEntries.length})</td></tr>`;
+    otEntries.forEach(e => { html += tr2RenderRow(e, null); });
+  }
+
+  html += `</tbody></table></div>`;
+
+  let summaryBanner = '';
+  if (tr2RetreatFilter) {
+    const bk = tr2ActiveBooks.find(b => b.id === tr2RetreatFilter);
+    const flags = bk?.flags || [];
+    const paysArr = flags.includes('teacher_pays_arrival_transport');
+    const paysDep = flags.includes('teacher_pays_departure_transport');
+    if (paysArr || paysDep) {
+      const parts = [];
+      if (paysArr) parts.push(`🛬 Arrivals: <strong>${arrTotal > 0 ? '$' + arrTotal : '—'}</strong>`);
+      if (paysDep) parts.push(`🛫 Departures: <strong>${depTotal > 0 ? '$' + depTotal : '—'}</strong>`);
+      summaryBanner = `<div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;font-size:12.5px;color:#92400e">
+        <span style="font-size:15px">★</span><span><strong>Teacher pays transport</strong> &nbsp;·&nbsp; ${parts.join(' &nbsp;&nbsp; ')}</span>
+      </div>`;
+    }
+  }
+  body.innerHTML = summaryBanner + html;
+
+  const hasUnassigned = tr2AllEntries.some(e => !tr2ActiveBooks.find(b => b.id === e.retreatId));
+  const autoBtn = document.getElementById('tr2-automatch-btn');
+  if (autoBtn) autoBtn.style.display = hasUnassigned ? '' : 'none';
 }
 
-function trStatusBadge(s){
-  const cancelled=s.status==='cancelled';
-  return`<button onclick="trSetStatus('${s.id}','${cancelled?'confirmed':'cancelled'}')" title="Click to ${cancelled?'confirm':'cancel'}" style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px;border:1px solid ${cancelled?'#fca5a5':'#86efac'};background:${cancelled?'#fef2f2':'#f0fdf4'};color:${cancelled?'#dc2626':'#15803d'};cursor:pointer;white-space:nowrap">${cancelled?'✕ Cancelled':'✓ Confirmed'}</button>`;
+function tr2RenderRow(e, color, groupPax) {
+  groupPax = groupPax || 1;
+  const isArr = e.type === 'arrival';
+  const displayCost = e.cost ?? tr2AutoRate(e, groupPax);
+  const TD = (content, style) => `<td style="padding:9px 12px;font-size:12.5px;color:#374151;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:middle;${style||''}">${content}</td>`;
+
+  const typeBadge = isArr
+    ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#dbeafe;color:#1d4ed8">🛬 Arrival</span>`
+    : `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fce7f3;color:#9d174d">🛫 Departure</span>`;
+  const airportBadge = e.ot
+    ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fef2f2;color:#dc2626">OT</span>`
+    : e.airport === 'cancun'
+      ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#eff6ff;color:#2563eb">CUN</span>`
+      : e.airport === 'tulum'
+        ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#f0fdf4;color:#16a34a">TQO</span>`
+        : `<span style="font-size:10px;color:#9ca3af">—</span>`;
+
+  const raw = tr2RawRows[e.rowId]?.data || {};
+  const charged = isArr ? raw.folioCharged?.arrivalFolioItemId : raw.folioCharged?.departureFolioItemId;
+  const paidBy  = isArr ? raw.folioCharged?.arrivalPaidBy      : raw.folioCharged?.departurePaidBy;
+  const chargedBadge = charged
+    ? `<span style="font-size:9px;padding:1px 6px;border-radius:10px;background:#d1fae5;color:#065f46;font-weight:700">💳 ${paidBy === 'teacher' ? 'Teacher' : 'Folio'} ✓</span>` : '';
+
+  const flightLabelRaw = isArr ? (raw.flightLabel ?? null) : null;
+  const flightStatusBadge = (() => {
+    if (!isArr || !e.flight) return '';
+    const today = new Date().toISOString().slice(0, 10);
+    let lbl = flightLabelRaw;
+    if (!lbl) lbl = e.date < today ? 'LANDED' : 'SCHEDULED';
+    const cancelled = lbl === 'CANCELLED', delayed = lbl.startsWith('DELAYED'), early = lbl.startsWith('EARLY'), landed = lbl === 'LANDED', scheduled = lbl === 'SCHEDULED';
+    const bg = cancelled?'#fef2f2':delayed?'#fff7ed':early?'#eff6ff':(landed||scheduled)?'#f1f5f9':'#f0fdf4';
+    const cl = cancelled?'#dc2626':delayed?'#c2410c':early?'#1d4ed8':(landed||scheduled)?'#9ca3af':'#15803d';
+    return `<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:${bg};color:${cl};white-space:nowrap;display:inline-block">${lbl}</span>`;
+  })();
+
+  const timeCell = isArr
+    ? (e.time ? `<span style="font-weight:700">${tr2FmtTime(e.time)}</span>${e.eta ? `<span style="color:#9ca3af;font-size:11px"> → ~${tr2FmtTime(e.eta)}</span>` : ''}${(e.flight || flightStatusBadge) ? `<div style="font-size:10.5px;color:#6b7280;margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">${e.flight ? escHtml(e.flight) : ''}${flightStatusBadge}</div>` : ''}` : '—')
+    : (e.pickup ? `<span style="color:#7e22ce;font-weight:700">🚐 ${tr2FmtTime(e.pickup)}</span>${e.time ? `<span style="color:#9ca3af;font-size:11px"> ✈ ${tr2FmtTime(e.time)}</span>` : ''}` : (e.time ? tr2FmtTime(e.time) : '—'));
+
+  const nameCell = `<div style="font-weight:700;color:#111827">${escHtml(e.guest)}</div>
+    ${e.driverConfirmed ? `<span style="font-size:9px;padding:1px 5px;border-radius:10px;background:#d1fae5;color:#065f46;font-weight:600">✓ Chofer</span>` : ''}
+    ${e.share ? `<span style="font-size:9px;padding:1px 5px;border-radius:10px;background:#f0fdf4;color:#16a34a;font-weight:600">Shared</span>` : ''}
+    ${chargedBadge}`;
+
+  const costCell = displayCost != null
+    ? `<span style="font-weight:700;color:#0f766e">$${displayCost}</span>${e.cost == null ? `<span style="font-size:9px;color:#9ca3af;margin-left:2px">auto</span>` : ''}`
+    : `<span style="color:#d1d5db;font-size:11px">—</span>`;
+
+  const rowBg = color ? `background:${color}` : '';
+
+  return `<tr style="${rowBg};cursor:grab" draggable="true" ondragstart="tr2DragStart(event,'${e.type}|${e.rowId}')" ondragend="this.style.opacity=''">
+    ${TD(e.room ? escHtml(e.room) : `<span style="color:#d1d5db">—</span>`, 'font-weight:600')}
+    ${TD(nameCell)}
+    ${TD(typeBadge)}
+    ${TD(airportBadge, 'text-align:center')}
+    ${TD(timeCell)}
+    ${TD(e.retreatLabel ? `<span style="font-size:11px;color:#6b7280">${escHtml(e.retreatLabel)}</span>` : '')}
+    ${tr2UpgradeMode ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2UpgradeCell(e)}</td>` : TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.notes)}</span>` : '')}
+    ${TD(costCell)}
+    <td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap">
+      ${!e.isSynthetic && groupPax > 1 ? `<button onclick="tr2SplitEntry('${e.type}|${e.rowId}')" title="Separar del grupo" style="background:#fef2f2;border:none;border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;color:#dc2626;line-height:1;margin-right:3px">⊗</button>` : ''}
+      <button onclick="tr2EditEntry('${e.rowId}')" title="${e.isSynthetic ? 'Agregar info de vuelo' : 'Editar'}" style="background:#f1f5f9;border:none;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;color:#374151;line-height:1">✏️</button>
+    </td>
+  </tr>`;
+}
+
+// ── Drag and drop grouping ──
+function tr2DragStart(event, rowId) { tr2DragSrc = rowId; event.dataTransfer.effectAllowed = 'move'; event.currentTarget?.style && (event.currentTarget.style.opacity = '0.5'); }
+async function tr2Drop(targetFirstDirId) {
+  if (!tr2DragSrc) return;
+  const src = tr2DragSrc; tr2DragSrc = null;
+  if (src === targetFirstDirId) return;
+  const srcType = src.split('|')[0], tgtType = targetFirstDirId.split('|')[0];
+  if (srcType !== tgtType) return;
+  let targetKey = tr2GroupKeyMap.get(targetFirstDirId);
+  if (!targetKey) return;
+
+  const direction = srcType;
+  const dirKey = direction === 'arrival' ? 'arrivalFolioItemId' : 'departureFolioItemId';
+  const srcRowId = src.split('|')[1], tgtRowId = targetFirstDirId.split('|')[1];
+  const oldSrcKey = tr2GroupKeyMap.get(src);
+  const oldSrcGroupChargedIds = oldSrcKey
+    ? [...tr2GroupKeyMap.entries()].filter(([dk, gk]) => gk === oldSrcKey && dk !== src && dk.startsWith(direction + '|'))
+        .filter(([dk]) => !!tr2RawRows[dk.split('|')[1]]?.data?.folioCharged?.[dirKey]).map(([dk]) => dk.split('|')[1])
+    : [];
+
+  if (targetKey.startsWith('#') || targetKey.startsWith('__solo__')) {
+    const ugKey = 'ug_' + (++tr2UgCounter);
+    for (const [dirId, gk] of tr2GroupKeyMap) { if (gk === targetKey) tr2UserGroupMap.set(dirId, ugKey); }
+    targetKey = ugKey;
+  }
+  tr2UserGroupMap.set(src, targetKey);
+  tr2BuildView();
+  await tr2SaveGroupSetting();
+
+  const srcHasCharge = !!tr2RawRows[srcRowId]?.data?.folioCharged?.[dirKey];
+  const tgtHasCharge = !!tr2RawRows[tgtRowId]?.data?.folioCharged?.[dirKey];
+  if (srcHasCharge || tgtHasCharge || oldSrcGroupChargedIds.length) {
+    const seenBkIds = new Set();
+    const tryAdjust = async (rId) => {
+      const bkId = tr2RawRows[rId]?.booking_id;
+      const key = bkId ? `${bkId}|${direction}` : `null|${rId}`;
+      if (seenBkIds.has(key)) return; seenBkIds.add(key);
+      await tr2AdjustCharge(rId, direction);
+    };
+    if (srcHasCharge) await tryAdjust(srcRowId);
+    if (tgtHasCharge) await tryAdjust(tgtRowId);
+    for (const rId of oldSrcGroupChargedIds) await tryAdjust(rId);
+    await tr2LoadData();
+  }
+}
+async function tr2SaveGroupSetting() {
+  try { await db.from('settings').upsert({ key: 'transport_groups', value: [...tr2UserGroupMap], updated_at: new Date().toISOString() }, { onConflict: 'key' }); } catch (e) {}
+}
+async function tr2ResetGroups() { tr2UserGroupMap.clear(); tr2BuildView(); await tr2SaveGroupSetting(); }
+async function tr2SplitEntry(dirId) {
+  const actualRowId = dirId.split('|')[1], direction = dirId.split('|')[0];
+  const dirKey = direction === 'arrival' ? 'arrivalFolioItemId' : 'departureFolioItemId';
+  const oldGroupKey = tr2GroupKeyMap.get(dirId);
+  const otherChargedIds = oldGroupKey
+    ? [...tr2GroupKeyMap.entries()].filter(([dk, gk]) => gk === oldGroupKey && dk !== dirId && dk.startsWith(direction + '|'))
+        .filter(([dk]) => !!tr2RawRows[dk.split('|')[1]]?.data?.folioCharged?.[dirKey]).map(([dk]) => dk.split('|')[1])
+    : [];
+  tr2UserGroupMap.delete(dirId);
+  tr2BuildView();
+  await tr2SaveGroupSetting();
+  const thisHasCharge = !!tr2RawRows[actualRowId]?.data?.folioCharged?.[dirKey];
+  if (thisHasCharge || otherChargedIds.length) {
+    const seenBkIds = new Set();
+    const tryAdjust = async (rId) => {
+      const bkId = tr2RawRows[rId]?.booking_id;
+      const key = bkId ? `${bkId}|${direction}` : `null|${rId}`;
+      if (seenBkIds.has(key)) return; seenBkIds.add(key);
+      await tr2AdjustCharge(rId, direction);
+    };
+    if (thisHasCharge) await tryAdjust(actualRowId);
+    for (const rId of otherChargedIds) await tryAdjust(rId);
+    await tr2LoadData();
+  }
+}
+
+// ── Upgrades ──
+function tr2ToggleUpgradeMode() {
+  if (tr2View !== 'arrivals') { showToast('Upgrades solo disponible en Arrivals'); return; }
+  tr2UpgradeMode = !tr2UpgradeMode;
+  tr2BuildView();
+}
+async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, nights, nightlyRate) {
+  const newRoom = document.getElementById(selId)?.value;
+  if (!newRoom) return;
+  const entry = tr2AllEntries.find(e => e.rowId === rowId);
+  if (!entry?.room || !entry.retreatId) { showToast('Sin cuarto asignado'); return; }
+
+  const reg = getRegForRoom(entry.retreatId, entry.room);
+  if (!reg) { showToast('No se encontró el registro del huésped'); return; }
+
+  try { await db.from('registrations').update({ room: newRoom, room_type_id: toRtId }).eq('id', reg.id); } catch (e) { showToast('Error: ' + e.message); return; }
+  reg.room = newRoom; reg.roomTypeId = toRtId; saveAll();
+
+  const lateral = toRtId === tr2RoomNameToRtId[entry.room];
+  const bk = tr2ActiveBooks.find(b => b.id === entry.retreatId);
+  if (bk) {
+    const oldRoom = entry.room.trim();
+    const updatedBlocked = (bk.blockedRooms || []).map(r => r.trim().toLowerCase() === oldRoom.toLowerCase() ? newRoom : r);
+    try { await db.from('bookings').update({ blocked_rooms: updatedBlocked }).eq('id', bk.id); bk.blockedRooms = updatedBlocked; saveAll(); }
+    catch (e) { showToast('Upgrade OK — error actualizando blocked_rooms: ' + e.message); }
+  }
+
+  let staffName = '', staffId = '';
+  if (staffSelId) {
+    const rawId = document.getElementById(staffSelId)?.value;
+    if (rawId) { staffId = rawId; staffName = tr2StaffList.find(s => s.id === rawId)?.name || ''; }
+  }
+
+  let folioOk = false;
+  if (pretaxTotal != null && pretaxTotal > 0) {
+    const upgradeTotal = +(pretaxTotal * 1.16).toFixed(2);
+    const commissionAmount = +(pretaxTotal * 0.05).toFixed(2);
+    const folioDesc = (nightlyRate && nights) ? `Upgrade $${nightlyRate} × ${nights} noches` : `Room Upgrade: ${entry.room} → ${newRoom}`;
+    try {
+      const fcRes = await fetch('/.netlify/functions/create-folio-charge', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registrationId: reg.id, guestName: entry.guest, description: folioDesc, qty: nights || 1, unitPrice: nightlyRate || pretaxTotal, taxRate: 16 }),
+      });
+      const fcJson = await fcRes.json().catch(() => ({}));
+      if (!fcRes.ok) showToast('Error folio (' + fcRes.status + '): ' + (fcJson.error || JSON.stringify(fcJson)));
+      else folioOk = true;
+    } catch (e) { showToast('Error folio (red): ' + e.message); }
+
+    if (staffId) {
+      try {
+        await db.from('commissions').insert({
+          staff_id: staffId, staff_name: staffName, type: 'upgrade', guest_name: entry.guest, booking_id: entry.retreatId,
+          room_from: entry.room, room_to: newRoom, upgrade_pretax: pretaxTotal, upgrade_total: upgradeTotal,
+          commission_rate: 0.05, commission_amount: commissionAmount, date: entry.date, status: 'pending',
+        });
+        showToast(`Upgrade confirmado: ${entry.guest} → ${newRoom}${folioOk ? ' · Cargo en folio ✓' : ''} · Comisión $${commissionAmount} para ${staffName} ✓`);
+      } catch (e) { showToast('Upgrade OK — error al guardar comisión: ' + e.message); }
+    } else {
+      showToast(`Upgrade confirmado: ${entry.guest} → ${newRoom}${folioOk ? ' · Cargo en folio ✓' : ''}`);
+    }
+  } else {
+    showToast(`${lateral ? 'Movido' : 'Upgrade confirmado'}: ${entry.guest} → ${newRoom} ✓`);
+  }
+
+  tr2ConfirmedUpgrades.set(rowId, { newRoom, staffName, lateral });
+  const rawRow = tr2RawRows[rowId];
+  if (rawRow) {
+    const updatedData = { ...(rawRow.data || {}), upgradeConfirmed: { newRoom, staffName, lateral } };
+    fetch('/.netlify/functions/patch-transport', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rawRow.id, data: updatedData }) }).catch(() => {});
+  } else if (rowId.startsWith('synth-')) {
+    const nameParts = entry.guest.trim().split(/\s+/);
+    try {
+      await db.from('transport').insert({ booking_id: entry.retreatId, data: {
+        firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '', email: entry.email || '',
+        arrivalDate: entry.date || '', arrivalOT: true, departureOT: true,
+        upgradeConfirmed: { newRoom, staffName, lateral },
+      }});
+    } catch (e) {}
+  }
+  await tr2LoadData();
+}
+async function tr2ClearUpgrade(rowId) {
+  tr2ConfirmedUpgrades.delete(rowId);
+  const rawRow = tr2RawRows[rowId];
+  if (rawRow) {
+    const updatedData = { ...(rawRow.data || {}) };
+    delete updatedData.upgradeConfirmed;
+    fetch('/.netlify/functions/patch-transport', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rawRow.id, data: updatedData }) }).catch(() => {});
+    rawRow.data = updatedData;
+  }
+  tr2BuildView();
+}
+
+// ── Manual auto-charge (real Cloudbeds folio charge) ──
+function tr2RunAutoCharge() {
+  const isArr = tr2View !== 'departures';
+  const typeKey = isArr ? 'arrival' : 'departure';
+  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
+  const visibleDates = [...new Set(tr2AllEntries.filter(e => e.type === typeKey && !e.ot && e.date).map(e => e.date))].sort();
+  const defaultDate = tr2DateFrom || visibleDates[0] || tomorrow;
+
+  const modal = document.createElement('div');
+  modal.id = 'tr2-charge-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <span style="font-size:16px;font-weight:700;color:#111827">💳 Cargar ${isArr ? 'llegadas' : 'salidas'} al folio</span>
+        <button onclick="document.getElementById('tr2-charge-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">×</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">Fecha de ${isArr ? 'llegada' : 'salida'}:</label>
+        <input id="tr2-charge-date" type="date" value="${defaultDate}"
+          oninput="document.getElementById('tr2-charge-preview').innerHTML=tr2ChargePreview(this.value,'${typeKey}')"
+          style="padding:6px 9px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;outline:none">
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+        <thead><tr style="background:#f8fafc">
+          <th style="padding:6px 8px;font-size:11px;font-weight:700;color:#6b7280;text-align:left">Huésped</th>
+          <th style="padding:6px 8px;font-size:11px;font-weight:700;color:#6b7280;text-align:left">Retiro</th>
+          <th style="padding:6px 8px;font-size:11px;font-weight:700;color:#6b7280;text-align:center">Estado</th>
+        </tr></thead>
+        <tbody id="tr2-charge-preview">${tr2ChargePreview(defaultDate, typeKey)}</tbody>
+      </table>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button onclick="document.getElementById('tr2-charge-modal').remove()" style="${tr2Btn('#f3f4f6','#374151')}">Cancelar</button>
+        <button id="tr2-charge-confirm" onclick="tr2DoCharge(document.getElementById('tr2-charge-date').value,'${typeKey}')" style="${tr2Btn('#065f06','#fff')}">Cargar ahora</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+function tr2ChargePreview(date, type) {
+  type = type || 'arrival';
+  if (!date) return '';
+  const isArr = type === 'arrival';
+  const chargedF = isArr ? 'arrivalFolioItemId' : 'departureFolioItemId';
+  const paidByF  = isArr ? 'arrivalPaidBy' : 'departurePaidBy';
+  const tFlag    = isArr ? 'teacher_pays_arrival_transport' : 'teacher_pays_departure_transport';
+  const rows = tr2AllEntries.filter(e => e.type === type && !e.ot && e.date === date);
+  if (!rows.length) return `<tr><td colspan="3" style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">Sin ${isArr ? 'llegadas' : 'salidas'} para esta fecha</td></tr>`;
+  return rows.map(e => {
+    const charged = !!(tr2RawRows[e.rowId]?.data?.folioCharged?.[chargedF]);
+    const paidBy  = tr2RawRows[e.rowId]?.data?.folioCharged?.[paidByF];
+    const noRetiro = !e.retreatId;
+    const bk = tr2ActiveBooks.find(b => b.id === e.retreatId);
+    const teacherPays = (bk?.flags || []).includes(tFlag);
+    return `<tr style="font-size:12px;border-bottom:1px solid #f3f4f6">
+      <td style="padding:5px 8px;font-weight:600">${escHtml(e.guest)}</td>
+      <td style="padding:5px 8px;color:#6b7280">${escHtml(e.retreatLabel || '—')}</td>
+      <td style="padding:5px 8px;text-align:center">
+        ${charged && paidBy === 'teacher' ? `<span style="background:#fef9c3;color:#854d0e;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px">💳 Teacher ✓</span>`
+        : charged ? `<span style="background:#d1fae5;color:#065f46;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px">💳 Folio ✓</span>`
+        : noRetiro && !e.guest ? `<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px">Sin nombre</span>`
+        : noRetiro ? `<span style="background:#eff6ff;color:#1d4ed8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px">Al huésped (sin retiro)</span>`
+        : teacherPays ? `<span style="background:#fef9c3;color:#854d0e;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px">★ Al teacher</span>`
+        : `<span style="background:#eff6ff;color:#1d4ed8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px">Al huésped</span>`}
+      </td>
+    </tr>`;
+  }).join('');
+}
+async function tr2DoCharge(date, type) {
+  type = type || 'arrival';
+  if (!date) return;
+  const btn = document.getElementById('tr2-charge-confirm');
+  if (btn) { btn.disabled = true; btn.textContent = 'Cargando…'; }
+  try {
+    const res = await fetch(`/.netlify/functions/auto-charge-transport?date=${encodeURIComponent(date)}&type=${type}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, type }),
+    });
+    const rawText = await res.text();
+    let json = {}; try { json = JSON.parse(rawText); } catch (e) {}
+    document.getElementById('tr2-charge-modal')?.remove();
+    if (!res.ok) { showToast(`Error ${res.status}: ${rawText.slice(0, 120)}`); return; }
+    const charged = json.charged?.length || 0, errors = json.errors?.length || 0, skipped = json.skipped?.length || 0;
+    if (errors > 0) { const detail = json.errors.slice(0, 3).map(e => e.name ? `${e.name}: ${e.reason}` : e.reason).join(' · '); showToast(`${charged} cargados · ${errors} errores: ${detail}`); }
+    else if (charged === 0) showToast(`Sin entradas nuevas para cargar el ${date}${skipped ? ` · ${skipped} ya cargados` : ''}`);
+    else showToast(`💳 ${charged} cargo${charged !== 1 ? 's' : ''} aplicado${charged !== 1 ? 's' : ''} para ${date} ✓`);
+    await tr2LoadData();
+  } catch (err) {
+    showToast('Error: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Cargar ahora'; }
+  }
+}
+async function tr2AdjustCharge(rowId, direction) {
+  try {
+    const res = await fetch('/.netlify/functions/adjust-transport-charge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rowId: String(rowId), direction }) });
+    const rawText = await res.text();
+    let json = {}; try { json = JSON.parse(rawText); } catch (e) {}
+    if (!res.ok) { showToast(`Error ajustando cargo (${res.status}): ${rawText.slice(0, 120)}`); return false; }
+    const { voided, recharged } = json;
+    const msg = recharged?.length
+      ? (recharged[0].paidBy === 'teacher' ? `Cargo ajustado ✓ — $${recharged[0].total} (teacher)` : `Cargo ajustado ✓ — ${recharged.length} huésped${recharged.length !== 1 ? 'es' : ''}`)
+      : voided?.length ? `Cargo anulado — sin entradas elegibles` : `Sin cambios de cargo`;
+    showToast(msg);
+    return true;
+  } catch (e) { showToast(`Error ajustando cargo: ${e.message}`); return false; }
+}
+
+// ── Driver view / copy links ──
+function tr2OpenDriverView(co) { window.open(`${location.origin}/driver-view.html?co=${co}`, '_blank'); }
+function tr2CopyFormLink() {
+  const url = `${location.origin}/transport-form.html` + (tr2RetreatFilter ? `?bk=${tr2RetreatFilter}` : '');
+  navigator.clipboard?.writeText(url).then(() => showToast('Link copiado ✓')) ?? prompt('Copia este link:', url);
+}
+function tr2CopyIndividualLink() {
+  const url = `${location.origin}/transport-form.html`;
+  navigator.clipboard?.writeText(url).then(() => showToast('Individual link copiado ✓')) ?? prompt('Copia este link:', url);
+}
+
+// ── Helpers ──
+function tr2AddMins(timeStr, mins) {
+  if (!timeStr) return null;
+  const [h, m] = timeStr.split(':').map(Number);
+  const total = ((h * 60 + m + mins) % 1440 + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
+}
+function tr2FmtTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM'; const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
+// ── Edit modal ──
+const TR2_INPUT_S = "width:100%;box-sizing:border-box;padding:6px 9px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;color:#111827;outline:none";
+const TR2_LBL_S = 'display:block;font-size:11px;font-weight:600;color:#6b7280;margin-bottom:3px';
+function tr2EditEntry(rowId) {
+  const isSynth = rowId.startsWith('synth-');
+  const row = tr2RawRows[rowId];
+  if (!row && !isSynth) return;
+  const entry = isSynth ? tr2AllEntries.find(e => e.rowId === rowId) : null;
+  const nameParts = entry ? entry.guest.trim().split(/\s+/) : [];
+  const d = row?.data || { firstName: nameParts[0]||'', lastName: nameParts.slice(1).join(' ')||'', email: entry?.email||'', arrivalOT:true, departureOT:true };
+
+  const sel = (id, opts, val) => `<select id="${id}" style="${TR2_INPUT_S}">${opts.map(o => `<option value="${o.v}"${o.v===val?' selected':''}>${o.l}</option>`).join('')}</select>`;
+  const inp = (id, type, val, placeholder) => `<input id="${id}" type="${type}" value="${escHtml(val==null?'':val)}" placeholder="${placeholder||''}" style="${TR2_INPUT_S}">`;
+  const chk = (id, checked, label) => `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#374151;cursor:pointer"><input id="${id}" type="checkbox" ${checked?'checked':''}> ${label}</label>`;
+  const airportOpts = [{v:'cancun',l:'CUN – Cancún'},{v:'tulum',l:'TQO – Tulum'}];
+
+  const modal = document.createElement('div');
+  modal.id = 'tr2-edit-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+        <span style="font-size:16px;font-weight:700;color:#111827">Editar transporte</span>
+        <button onclick="document.getElementById('tr2-edit-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="${TR2_LBL_S}">Nombre</label>${inp('tr2-e-fn','text',d.firstName)}</div>
+        <div><label style="${TR2_LBL_S}">Apellido</label>${inp('tr2-e-ln','text',d.lastName)}</div>
+        <div style="grid-column:1/-1"><label style="${TR2_LBL_S}">Email</label>${inp('tr2-e-email','email',d.email)}</div>
+      </div>
+      <div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Llegada</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="${TR2_LBL_S}">Fecha</label>${inp('tr2-e-arr-date','date',d.arrivalDate)}</div>
+        <div><label style="${TR2_LBL_S}">Hora</label>${inp('tr2-e-arr-time','time',d.arrivalTime)}</div>
+        <div><label style="${TR2_LBL_S}">Aeropuerto</label>${sel('tr2-e-arr-airport',airportOpts,d.arrivalAirport||'cancun')}</div>
+        <div><label style="${TR2_LBL_S}">Vuelo</label>${inp('tr2-e-flight','text',d.flightNumber,'AA1234')}</div>
+        <div style="grid-column:1/-1">${chk('tr2-e-arr-ot',!!d.arrivalOT,'Own Transport (no necesita transfer)')}</div>
+      </div>
+      <div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Salida</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="${TR2_LBL_S}">Fecha</label>${inp('tr2-e-dep-date','date',d.departureDate)}</div>
+        <div><label style="${TR2_LBL_S}">Hora</label>${inp('tr2-e-dep-time','time',d.departureTime)}</div>
+        <div><label style="${TR2_LBL_S}">Aeropuerto</label>${sel('tr2-e-dep-airport',airportOpts,d.departureAirport||'cancun')}</div>
+        <div style="grid-column:1/-1">${chk('tr2-e-dep-ot',!!d.departureOT,'Own Transport (no necesita transfer)')}</div>
+      </div>
+      <div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Extra</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${chk('tr2-e-share',!!d.willingToShare,'Dispuesto a compartir transfer')}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label style="${TR2_LBL_S}">Costo del servicio (USD)</label>${inp('tr2-e-cost','number',d.serviceCost??'','95')}</div>
+        </div>
+        <div><label style="${TR2_LBL_S}">Notas</label><textarea id="tr2-e-notes" rows="2" style="${TR2_INPUT_S};resize:vertical">${escHtml(d.notes||'')}</textarea></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:20px;gap:8px">
+        ${!isSynth ? `<button onclick="tr2DeleteEntry('${rowId}')" style="background:#fef2f2;color:#dc2626;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">Eliminar</button>` : '<div></div>'}
+        <div style="display:flex;gap:8px">
+          <button onclick="document.getElementById('tr2-edit-modal').remove()" style="${tr2Btn('#f3f4f6','#374151')}">Cancelar</button>
+          <button onclick="tr2SaveEdit('${rowId}')" style="${tr2Btn('#0f766e','#fff')}">Guardar</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+async function tr2SaveEdit(rowId) {
+  const isSynth = rowId.startsWith('synth-');
+  const g = id => document.getElementById(id);
+  const oldData = tr2RawRows[rowId]?.data || {};
+  const updatedData = {
+    ...oldData,
+    firstName: g('tr2-e-fn')?.value.trim() || '', lastName: g('tr2-e-ln')?.value.trim() || '', email: g('tr2-e-email')?.value.trim() || '',
+    arrivalDate: g('tr2-e-arr-date')?.value || '', arrivalTime: g('tr2-e-arr-time')?.value || '', arrivalAirport: g('tr2-e-arr-airport')?.value || 'cancun',
+    flightNumber: g('tr2-e-flight')?.value.trim() || '', arrivalOT: g('tr2-e-arr-ot')?.checked || false,
+    departureDate: g('tr2-e-dep-date')?.value || '', departureTime: g('tr2-e-dep-time')?.value || '', departureAirport: g('tr2-e-dep-airport')?.value || 'cancun',
+    departureOT: g('tr2-e-dep-ot')?.checked || false, willingToShare: g('tr2-e-share')?.checked || false, notes: g('tr2-e-notes')?.value.trim() || '',
+    serviceCost: g('tr2-e-cost')?.value !== '' ? Number(g('tr2-e-cost').value) : null,
+  };
+
+  const hadArrCharge = !!oldData.folioCharged?.arrivalFolioItemId, hadDepCharge = !!oldData.folioCharged?.departureFolioItemId;
+  const arrChanged = hadArrCharge && (oldData.arrivalTime !== updatedData.arrivalTime || oldData.arrivalAirport !== updatedData.arrivalAirport || !!oldData.arrivalOT !== updatedData.arrivalOT);
+  const depChanged = hadDepCharge && (oldData.departureTime !== updatedData.departureTime || oldData.departureAirport !== updatedData.departureAirport || !!oldData.departureOT !== updatedData.departureOT);
+
+  const thisBkId = tr2RawRows[rowId]?.booking_id;
+  const crossGroupCharged = (direction, dirKey) => {
+    const groupKey = tr2GroupKeyMap.get(`${direction}|${rowId}`);
+    if (!groupKey) return [];
+    return [...tr2GroupKeyMap.entries()].filter(([dk, gk]) => gk === groupKey && dk !== `${direction}|${rowId}` && dk.startsWith(direction + '|'))
+      .filter(([dk]) => { const rId = dk.split('|')[1]; return !!tr2RawRows[rId]?.data?.folioCharged?.[dirKey] && tr2RawRows[rId]?.booking_id !== thisBkId; })
+      .map(([dk]) => dk.split('|')[1]);
+  };
+  const arrCrossCharged = arrChanged ? crossGroupCharged('arrival', 'arrivalFolioItemId') : [];
+  const depCrossCharged = depChanged ? crossGroupCharged('departure', 'departureFolioItemId') : [];
+
+  const btn = document.querySelector('#tr2-edit-modal button[onclick*="tr2SaveEdit"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+
+  if (isSynth) {
+    const entry = tr2AllEntries.find(e => e.rowId === rowId);
+    try {
+      await db.from('transport').insert({ booking_id: entry?.retreatId || null, data: updatedData });
+      document.getElementById('tr2-edit-modal')?.remove();
+      showToast('Transporte creado ✓');
+      await tr2LoadData();
+    } catch (e) { showToast('Error al guardar: ' + e.message); if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; } }
+    return;
+  }
+
+  try {
+    await db.from('transport').update({ data: updatedData }).eq('id', rowId);
+    document.getElementById('tr2-edit-modal')?.remove();
+    showToast('Transporte actualizado ✓');
+    if (arrChanged) {
+      await tr2AdjustCharge(rowId, 'arrival');
+      const seen = new Set([thisBkId]);
+      for (const rId of arrCrossCharged) { const bkId = tr2RawRows[rId]?.booking_id; if (!seen.has(bkId)) { seen.add(bkId); await tr2AdjustCharge(rId, 'arrival'); } }
+    }
+    if (depChanged) {
+      await tr2AdjustCharge(rowId, 'departure');
+      const seen = new Set([thisBkId]);
+      for (const rId of depCrossCharged) { const bkId = tr2RawRows[rId]?.booking_id; if (!seen.has(bkId)) { seen.add(bkId); await tr2AdjustCharge(rId, 'departure'); } }
+    }
+    await tr2LoadData();
+  } catch (e) { showToast('Error al guardar: ' + e.message); if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; } }
+}
+async function tr2DeleteEntry(rowId) {
+  if (!confirm('¿Eliminar este registro de transporte?')) return;
+  try {
+    await db.from('transport').delete().eq('id', rowId);
+    document.getElementById('tr2-edit-modal')?.remove();
+    showToast('Registro eliminado');
+    await tr2LoadData();
+  } catch (e) { showToast('Error al eliminar: ' + e.message); }
+}
+
+// ── Auto-match (name-based, for entries with no retreat assigned) ──
+function tr2NormName(name) {
+  return (name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z\s]/g, '').trim().split(/\s+/).sort().join(' ');
+}
+function tr2AutoMatch() {
+  const unassignedRowIds = new Set(tr2AllEntries.filter(e => !tr2ActiveBooks.find(b => b.id === e.retreatId)).map(e => e.rowId));
+  if (!unassignedRowIds.size) { showToast('No hay entradas sin retiro'); return; }
+  const proposed = [], unmatched = [];
+  for (const rowId of unassignedRowIds) {
+    const row = tr2RawRows[rowId]; if (!row) continue;
+    const d = row.data || {};
+    const guestName = [d.firstName, d.lastName].filter(Boolean).join(' ');
+    const key = tr2NormName(guestName);
+    const match = tr2NameMap[key];
+    const keyFirst = tr2NormName(d.firstName || ''), keyLast = tr2NormName(d.lastName || '');
+    const partialMatch = !match && Object.entries(tr2NameMap).find(([k]) => k.includes(keyFirst) && keyFirst.length > 2 && k.includes(keyLast) && keyLast.length > 2);
+    if (match) proposed.push({ rowId, guestName, email: d.email || '', match, confidence: 'Alta' });
+    else if (partialMatch) proposed.push({ rowId, guestName, email: d.email || '', match: partialMatch[1], confidence: 'Media', note: `Nombre registrado: ${partialMatch[1].origName}` });
+    else unmatched.push({ rowId, guestName, email: d.email || '' });
+  }
+
+  const modal = document.createElement('div');
+  modal.id = 'tr2-match-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const rowsHtml = proposed.map((p, i) => `
+    <tr style="border-bottom:1px solid #f3f4f6">
+      <td style="padding:8px 10px">
+        <input type="checkbox" id="tr2-match-chk-${i}" checked style="margin-right:6px">
+        <span style="font-size:13px;font-weight:600;color:#111827">${escHtml(p.guestName)}</span>
+        ${p.email ? `<div style="font-size:11px;color:#9ca3af">${escHtml(p.email)}</div>` : ''}
+      </td>
+      <td style="padding:8px 10px;font-size:12px;color:#374151">
+        ${escHtml(p.match.retreatLabel)}
+        ${p.note ? `<div style="font-size:11px;color:#f59e0b">${escHtml(p.note)}</div>` : ''}
+      </td>
+      <td style="padding:8px 10px;text-align:center">
+        <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:${p.confidence==='Alta'?'#dcfce7':'#fef3c7'};color:${p.confidence==='Alta'?'#166534':'#92400e'}">${p.confidence}</span>
+      </td>
+    </tr>`).join('');
+  const unmatchedHtml = unmatched.length ? `
+    <div style="margin-top:12px;padding:10px;background:#fef2f2;border-radius:8px;font-size:12px;color:#dc2626">
+      <strong>Sin match (${unmatched.length}):</strong> ${unmatched.map(u => escHtml(u.guestName || u.email || 'Desconocido')).join(', ')}
+    </div>` : '';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:16px;font-weight:700;color:#111827">Asignación automática por nombre</span>
+        <button onclick="document.getElementById('tr2-match-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">×</button>
+      </div>
+      <p style="font-size:12px;color:#6b7280;margin:0 0 14px">Matches encontrados comparando el nombre del huésped con las registrations. Desmarca los que no sean correctos.</p>
+      ${proposed.length ? `
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:#f8fafc">
+          <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Huésped</th>
+          <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:600">Retiro propuesto</th>
+          <th style="padding:7px 10px;text-align:center;font-size:11px;color:#6b7280;font-weight:600">Confianza</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>` : `<p style="color:#9ca3af;font-size:13px;text-align:center;padding:20px">No se encontraron matches por nombre.</p>`}
+      ${unmatchedHtml}
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px">
+        <button onclick="document.getElementById('tr2-match-modal').remove()" style="${tr2Btn('#f3f4f6','#374151')}">Cancelar</button>
+        ${proposed.length ? `<button onclick="tr2ConfirmMatches(${JSON.stringify(proposed.map((p,i)=>({rowId:p.rowId,bkId:p.match.bkId,idx:i})))})" style="${tr2Btn('#0f766e','#fff')}">Confirmar seleccionados</button>` : ''}
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+async function tr2ConfirmMatches(items) {
+  const toSave = items.filter(item => document.getElementById(`tr2-match-chk-${item.idx}`)?.checked);
+  if (!toSave.length) { showToast('Ninguno seleccionado'); return; }
+  const btn = document.querySelector('#tr2-match-modal button[onclick*="tr2ConfirmMatches"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+  let ok = 0, fail = 0;
+  await Promise.all(toSave.map(async ({ rowId, bkId }) => {
+    try { await db.from('transport').update({ booking_id: bkId }).eq('id', rowId); ok++; } catch (e) { fail++; }
+  }));
+  document.getElementById('tr2-match-modal')?.remove();
+  showToast(ok ? `${ok} asignados correctamente${fail ? `, ${fail} fallaron` : ''}` : 'Error al guardar');
+  if (ok) await tr2LoadData();
 }
 
 // Hook into tab switch
-const _origSwitchTab=window.switchTab;
-window.switchTab=function(id,btn){
-  if(typeof _origSwitchTab==='function')_origSwitchTab(id,btn);
-  if(id==='transport')trInit();
+const _origSwitchTab = window.switchTab;
+window.switchTab = function(id, btn) {
+  if (typeof _origSwitchTab === 'function') _origSwitchTab(id, btn);
+  if (id === 'transport') trInit();
 };
-
