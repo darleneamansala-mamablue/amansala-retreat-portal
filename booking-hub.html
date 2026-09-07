@@ -1801,6 +1801,19 @@
       <input type="hidden" id="regRetreatSel">
       <div id="regRetreatDrop" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:340px;background:#fff;border:1.5px solid var(--border);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.13);z-index:300;max-height:280px;overflow-y:auto"></div>
     </div>
+    <!-- Consolidated "Actions ▾" dropdown (matches Staging's Teachers toolbar) — built
+         in regBuildActionsMenu() (teacher-portal.js), which calls these SAME onclick
+         handlers. The individual buttons below are kept (not deleted) so none of their
+         existing show/hide logic — CSS teacher-mode rules, the bk?-based visibility
+         toggle in regRenderToolbarBtns() — has to change; they're just visually hidden
+         now that the dropdown is the single entry point. -->
+    <div id="regActionsWrap" class="teacher-admin-only" style="position:relative;display:none">
+      <button id="regActionsBtn" onclick="regToggleActionsMenu()" style="padding:7px 14px;background:#111827;color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap">
+        Actions <span style="font-size:10px;opacity:.7">▾</span>
+      </button>
+      <div id="regActionsMenu" style="display:none;position:fixed;z-index:1000;background:#fff;border:1.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:230px;max-height:80vh;overflow-y:auto;padding:4px 0"></div>
+    </div>
+    <div style="display:none">
     <button class="btn btn-secondary" id="regPriceListBtn" style="display:none" onclick="openPriceList()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Price List
@@ -1854,6 +1867,7 @@
     <button class="btn btn-icon teacher-admin-only" onclick="openSettings()" title="Room type settings">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
+    </div>
   </div>
   <!-- Room list view wrapper (toggled by teacher dashboard nav) -->
   <div id="roomListView" style="display:flex;flex-direction:column">
@@ -3951,6 +3965,57 @@ function _updateRegButtons(bk){
   if(bk){const rlLbl=document.getElementById('regPortalRoomListLbl');if(rlLbl)rlLbl.textContent=bk.roomListSentViaPortal?'Resend Room List to Portal':'Send Room List to Portal';}
   const docBtn=document.getElementById('regDocLinkBtn');
   if(bk&&bk.docLink){docBtn.href=bk.docLink;docBtn.style.display='inline-flex';}else{docBtn.style.display='none';}
+  const actWrap=document.getElementById('regActionsWrap');
+  if(actWrap)actWrap.style.display=bk?'':'none';
+  regBuildActionsMenu(bk);
+}
+// Consolidated "Actions ▾" menu (matches Staging's Teachers toolbar) — every item below
+// just calls the same onclick handler the old individual button used, so no action logic
+// is duplicated, only how it's exposed in the toolbar.
+function _regActionMenuItem(label,onclick,active){
+  const bg=active?'#f0fdf4':'transparent',clr=active?'#15803d':'var(--dark)';
+  return`<button onclick="${onclick};document.getElementById('regActionsMenu').style.display='none'"
+    style="display:block;width:100%;text-align:left;padding:9px 16px;background:${bg};color:${clr};border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:'Jost',sans-serif;white-space:nowrap"
+    onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='${bg}'">${label}</button>`;
+}
+function regBuildActionsMenu(bk){
+  const menu=document.getElementById('regActionsMenu');
+  if(!menu)return;
+  if(!bk){menu.innerHTML='';return;}
+  const locked=!!bk.allLocked;
+  menu.innerHTML=
+    _regActionMenuItem('🛏 Block Rooms',"openBlockModal(regSelBk&&regSelBk.id)")+
+    _regActionMenuItem('💰 Price List',"openPriceList()")+
+    _regActionMenuItem('💳 Bulk Charge',"openBulkChargeModal()")+
+    `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
+    _regActionMenuItem(locked?'🔒 Locked for Teacher':'🔓 Lock for Teacher',"toggleRetreatLock()",locked)+
+    _regActionMenuItem('📋 Daily Report',"openDailyReport()")+
+    _regActionMenuItem('🍽️ Dietary Sheet',"openDietaryReport()")+
+    `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
+    _regActionMenuItem('🔗 Teacher Access',"showTeacherCode()")+
+    _regActionMenuItem('👁 Preview as Teacher',"if(regSelBk)openTeacherPortal(regSelBk.id)")+
+    _regActionMenuItem('📧 Send to Teacher',"openTeacherEmailModal()")+
+    _regActionMenuItem(bk.roomListSentViaPortal?'📋 Resend Room List to Portal':'📋 Send Room List to Portal',"sendRoomListToPortal()")+
+    (bk.docLink?`<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+_regActionMenuItem('📄 Retreat Document',`window.open('${bk.docLink.replace(/'/g,"\\'")}','_blank')`):'')+
+    `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
+    _regActionMenuItem('⚙️ Settings',"openSettings()");
+}
+function regToggleActionsMenu(){
+  const menu=document.getElementById('regActionsMenu');
+  if(!menu)return;
+  const opening=menu.style.display==='none'||!menu.style.display;
+  if(!opening){menu.style.display='none';return;}
+  const btn=document.getElementById('regActionsBtn');
+  const rect=btn?.getBoundingClientRect();
+  if(rect){menu.style.position='fixed';menu.style.top=(rect.bottom+4)+'px';menu.style.left=rect.left+'px';}
+  menu.style.display='';
+  setTimeout(()=>{
+    document.addEventListener('click',function _outside(e){
+      const wrap=document.getElementById('regActionsWrap');
+      if(!wrap||!wrap.contains(e.target)){const m=document.getElementById('regActionsMenu');if(m)m.style.display='none';}
+      else document.addEventListener('click',_outside,{once:true});
+    },{once:true});
+  },0);
 }
 
 window.addEventListener('beforeunload',()=>{

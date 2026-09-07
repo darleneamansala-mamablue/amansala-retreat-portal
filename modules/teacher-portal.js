@@ -589,6 +589,10 @@ function regRender(){
   // shows pre-edit numbers (e.g. old tip rate), making its total look wrong
   // vs. the just-updated Bill Total above. Keep it live.
   if(typeof estQuoteOpen!=='undefined'&&estQuoteOpen)renderEstQuote();
+  // Keep the Actions ▾ menu's lock label / room-list label in sync — regRender() runs
+  // after almost every edit (e.g. toggleRetreatLock()), but _updateRegButtons() (which
+  // builds this menu) only runs when the retreat is first selected.
+  if(typeof regBuildActionsMenu==='function')regBuildActionsMenu(regSelBk);
 }
 
 function regSaveNote(regId,val){const r=AppData.regs.find(x=>x.id===regId);if(r){r.notes=val;r.updatedAt=new Date().toISOString();saveAll();syncNotesToCloudbeds(r);}}
