@@ -678,43 +678,250 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 
 
 // ===== DASHBOARD =====
-// ---- ACTIVITY NOTIFICATIONS (contract signed / payment recorded) ----
-const _ACTV_KEY='amansala_actv_dismissed';
-function _actvDismissed(){try{return new Set(JSON.parse(localStorage.getItem(_ACTV_KEY)||'null')||[]);}catch(e){return new Set();}}
-function _actvSave(s){try{localStorage.setItem(_ACTV_KEY,JSON.stringify([...s]));}catch(e){}}
+// ---- ACTIVITY NOTIFICATIONS ----
+// Ported from staging's js/modules/dashboard.js computeNotifications()/renderNotifPanel()
+// — same 7 categories (Room Sold, Flights, Chat Bot, Schedule, Contracts, Payments,
+// Transport), same dismiss/seen state shared via the real `settings` table (not
+// localStorage), so dismissing here dismisses in staging too. NOT ported: transport
+// charge notifications — staging's version reads transport.data.folioCharged, a field
+// portal's transport.js never writes (no "who pays for the airport transfer" folio-charge
+// feature exists here yet), so there would never be any real data to show.
 function _timeAgo(ts){const d=Date.now()-ts,m=Math.floor(d/60000);if(m<1)return'just now';if(m<60)return m+'m ago';const h=Math.floor(m/60);if(h<24)return h+'h ago';const dy=Math.floor(h/24);return dy===1?'yesterday':dy+'d ago';}
-function _buildActivityNotifs(){
-  const THIRTY=30*24*60*60*1000;const now=Date.now();
-  const dismissed=_actvDismissed();
-  const firstRun=localStorage.getItem(_ACTV_KEY)===null;
-  const notifs=[];
-  const ML={wire:'Wire Transfer',cheque:'Cheque',check:'Cheque',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',cash:'Cash',other:'Other'};
-  AppData.bookings.forEach(bk=>{
-    if(bk.status==='cancelled')return;
-    if(bk.contractSignedAt){
-      const ts=new Date(bk.contractSignedAt).getTime();
-      const id='ntf_c_'+bk.id+'_'+bk.contractSignedAt;
-      if(firstRun)dismissed.add(id);
-      else if(!dismissed.has(id)&&(now-ts)<THIRTY)
-        notifs.push({id,type:'contract',bk,label:(bk.leaderName||bk.retreatName||'Unnamed')+' signed the contract',sub:bk.contractSignature?'Signed by '+bk.contractSignature:'',ts});
-    }
-    (bk.payments||[]).forEach(p=>{
-      if(!p.ts||!p.id)return;
-      const ts=new Date(p.ts).getTime();
-      const id='ntf_p_'+p.id;
-      if(firstRun)dismissed.add(id);
-      else if(!dismissed.has(id)&&(now-ts)<THIRTY)
-        notifs.push({id,type:'payment',bk,label:fmt$(p.amount)+' payment — '+(bk.leaderName||bk.retreatName||'Unnamed'),sub:[(ML[p.method]||p.method||''),p.note?'· '+p.note:''].filter(Boolean).join(' '),ts});
-    });
-  });
-  if(firstRun)_actvSave(dismissed);
-  return notifs.sort((a,b)=>b.ts-a.ts);
+function _freeRoomsCountForNotif(rtId,startDate,endDate){
+  const rt=AppData.roomTypes.find(r=>r.id===rtId);if(!rt)return 0;
+  const overlaps=(s1,e1,s2,e2)=>s1<e2&&e1>s2;
+  const blocked=new Set();
+  AppData.bookings.forEach(b=>{if(b.status!=='cancelled'&&overlaps(b.startDate,b.endDate,startDate,endDate))(b.blockedRooms||[]).forEach(r=>blocked.add(r));});
+  return (rt.rooms||[]).filter(r=>!blocked.has(r)).length;
 }
-function _dismissActvNotif(id){const s=_actvDismissed();s.add(id);_actvSave(s);buildDashboard();}
+function _calcRoomTagsForNotif(bk){
+  const regs=getRegsForBk(bk.id);
+  const byType={};
+  (bk.blockedRooms||[]).forEach(room=>{
+    const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
+    if(!rt)return;
+    if(!byType[rt.id])byType[rt.id]={id:rt.id,name:rt.name,blocked:0,filled:0};
+    byType[rt.id].blocked++;
+  });
+  regs.forEach(reg=>{
+    if(reg.roomTypeId&&byType[reg.roomTypeId]&&(reg.guests||[]).some(g=>g.name))byType[reg.roomTypeId].filled++;
+  });
+  return Object.values(byType).filter(t=>t.blocked>0);
+}
+function computeActivityNotifs(){
+  const LOOKBACK_MS=60*24*60*60*1000;
+  const cutoff=new Date(Date.now()-LOOKBACK_MS);
+  const seenDate=notifSeenAt;
+  const dismissed=notifDismissed;
+  const notifs=[];
+
+  AppData.bookings.forEach(bk=>{
+    if((bk.flags||[]).includes('archived'))return;
+    if(bk.status==='cancelled')return;
+    const label=(bk.leaderName||'')+(bk.retreatName?' · '+bk.retreatName:'');
+
+    const tags=_calcRoomTagsForNotif(bk);
+    const soldOut=tags.filter(t=>t.blocked>0&&t.filled>=t.blocked);
+    if(soldOut.length>0){
+      const typeKey=soldOut.map(t=>t.name).sort().join(',');
+      const id=`sold_out_${bk.id}_${typeKey}`;
+      if(!dismissed.has(id))
+        notifs.push({id,type:'sold_out',bookingId:bk.id,label,ts:null,isNew:false,
+          soldOutTypes:soldOut.map(t=>({name:t.name,free:_freeRoomsCountForNotif(t.id,bk.startDate,bk.endDate)}))});
+    }
+
+    if(bk.scheduleRequest?._preferences){
+      const submittedAt=bk.scheduleRequest._submitted_at;
+      const sid=`schedule_submitted_${bk.id}`;
+      if(!dismissed.has(sid)){
+        if(submittedAt){
+          const ts=new Date(submittedAt);
+          if(ts>=cutoff){
+            const isNew=!seenDate||ts>seenDate;
+            notifs.push({id:sid,type:'schedule_submitted',bookingId:bk.id,label,ts,isNew});
+          }
+        }else{
+          notifs.push({id:sid,type:'schedule_submitted',bookingId:bk.id,label,ts:null,isNew:false});
+        }
+      }
+    }
+
+    if(bk.contractSignedAt){
+      const ts=new Date(bk.contractSignedAt);
+      if(ts>=cutoff){
+        const isNew=!seenDate||ts>seenDate;
+        const cid=`contract_signed_${bk.id}`;
+        if(!dismissed.has(cid))
+          notifs.push({id:cid,type:'contract_signed',bookingId:bk.id,label,ts,isNew,signer:bk.contractSignature||bk.leaderName});
+        if(bk.leaderEmail){
+          const did=`deposit_email_${bk.id}`;
+          if(!dismissed.has(did))
+            notifs.push({id:did,type:'deposit_email',bookingId:bk.id,label,ts,isNew,email:bk.leaderEmail});
+        }
+      }
+    }
+  });
+
+  notifBotLog.forEach(entry=>{
+    const id=`bot_room_${entry.id}`;
+    if(dismissed.has(id))return;
+    const ts=new Date(entry.created_at);
+    if(ts<cutoff)return;
+    const isNew=!seenDate||ts>seenDate;
+    const bk=AppData.bookings.find(b=>b.id===entry.booking_id);
+    const bkLabel=bk?(bk.leaderName||'')+(bk.retreatName?' · '+bk.retreatName:''):entry.booking_id;
+    const isAdd=entry.tool_name==='add_room_by_type';
+    const rtName=entry.tool_result?.type_added??entry.tool_result?.type_removed??'—';
+    notifs.push({id,type:'bot_room',ts,isNew,isAdd,rtName,bkLabel});
+  });
+
+  notifPaidRequests.forEach(pr=>{
+    const id=`payment_received_${pr.id}`;
+    if(dismissed.has(id))return;
+    const ts=new Date(pr.created_at);
+    if(ts<cutoff)return;
+    const isNew=!seenDate||ts>seenDate;
+    const name=`${pr.first_name||''} ${pr.last_name||''}`.trim();
+    notifs.push({id,type:'payment_received',ts,isNew,name,room:pr.room_type_name||'',amount:pr.amount_paid||0});
+  });
+
+  notifFlightAlerts.forEach(a=>{
+    if(dismissed.has(a.id))return;
+    if(a.dismissed)return;
+    const ts=a.detectedAt?new Date(a.detectedAt):null;
+    if(ts&&ts<cutoff)return;
+    const isNew=!seenDate||(ts&&ts>seenDate);
+    notifs.push({id:a.id,type:'flight_alert',ts,isNew,flight:a.flight,guest:a.guest,date:a.date,label:a.label,
+      oldTime:a.oldTime,newTime:a.newTime,chargeAdjusted:a.chargeAdjusted,
+      needsAction:a.status==='cancelled'&&a.chargeAdjusted==='pending_admin_review'});
+  });
+
+  notifs.sort((a,b)=>{
+    const aPriority=(a.type==='sold_out'||(a.type==='flight_alert'&&a.needsAction))?1:0;
+    const bPriority=(b.type==='sold_out'||(b.type==='flight_alert'&&b.needsAction))?1:0;
+    if(aPriority!==bPriority)return bPriority-aPriority;
+    return (b.ts?.getTime()||0)-(a.ts?.getTime()||0);
+  });
+  return notifs;
+}
+async function _saveNotifDismissed(){
+  try{await db.from('settings').upsert({key:'notif_dismissed',value:[...notifDismissed],updated_at:new Date().toISOString()},{onConflict:'key'});}catch(e){}
+}
+function _dismissActvNotif(id){notifDismissed.add(id);buildDashboard();_saveNotifDismissed();}
 function _dismissAllActvNotifs(){
-  const s=_actvDismissed();
-  _buildActivityNotifs().forEach(n=>s.add(n.id));
-  _actvSave(s);buildDashboard();
+  computeActivityNotifs().forEach(n=>notifDismissed.add(n.id));
+  buildDashboard();_saveNotifDismissed();
+}
+function openBookingFromNotif(bkId){
+  if(!bkId)return;
+  switchTab('teacherreg',document.getElementById('teacherregTabBtn'));
+  setTimeout(()=>regSelectRetreat(bkId),80);
+}
+function _actvNotifSectionOpen(id){return localStorage.getItem('ama_notif_sec_'+id)==='1';}
+function _toggleActvNotifSection(id){localStorage.setItem('ama_notif_sec_'+id,_actvNotifSectionOpen(id)?'0':'1');buildDashboard();}
+function _actvNotifRowHtml(n){
+  const bg=n.isNew?'background:#fffbeb;border-left:3px solid #f59e0b':'background:#f9fafb;border-left:3px solid #e5e7eb';
+  const newBadge=n.isNew?'<span style="font-size:9px;font-weight:700;background:#f59e0b;color:#fff;padding:1px 6px;border-radius:10px;flex-shrink:0">NEW</span>':'';
+  const dismissBtn=`<button onclick="event.stopPropagation();_dismissActvNotif('${n.id}')" title="Dismiss" style="margin-left:auto;background:none;border:none;font-size:14px;color:#9ca3af;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0">×</button>`;
+  if(n.type==='sold_out'){
+    const types=n.soldOutTypes.map(t=>{
+      const freeBadge=t.free>0?` <span style="font-size:9.5px;font-weight:700;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px">${t.free} empty</span>`:'';
+      return `<strong>${escHtml(t.name)}</strong>${freeBadge}`;
+    }).join(' + ');
+    return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">🔴</span>
+      <span style="cursor:pointer" onclick="openBookingFromNotif('${n.bookingId}')"><strong>Room Sold</strong> — ${escHtml(n.label)} — ${types}</span>
+      ${dismissBtn}</div>`;
+  }
+  if(n.type==='schedule_submitted'){
+    return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">📅</span>
+      <span style="cursor:pointer" onclick="openBookingFromNotif('${n.bookingId}')"><strong>Schedule submitted</strong> — ${escHtml(n.label)}</span>
+      ${newBadge}${n.ts?`<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>`:''}
+      ${dismissBtn}</div>`;
+  }
+  if(n.type==='contract_signed'){
+    return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">📝</span>
+      <span style="cursor:pointer" onclick="openBookingFromNotif('${n.bookingId}')"><strong>Contract signed</strong> — ${escHtml(n.label)} — by ${escHtml(n.signer)}</span>
+      ${newBadge}<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>
+      ${dismissBtn}</div>`;
+  }
+  if(n.type==='deposit_email'){
+    return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">✉️</span>
+      <span style="cursor:pointer" onclick="openBookingFromNotif('${n.bookingId}')"><strong>Contract signed — send deposit info?</strong> — ${escHtml(n.label)} — ${escHtml(n.email)}</span>
+      ${newBadge}<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>
+      ${dismissBtn}</div>`;
+  }
+  if(n.type==='bot_room'){
+    const icon=n.isAdd?'🤖➕':'🤖➖';
+    const action=n.isAdd?'Bot added room':'Bot removed room';
+    return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">${icon}</span>
+      <span><strong>${action}</strong> — ${escHtml(n.bkLabel)} — <strong>${escHtml(n.rtName)}</strong></span>
+      ${newBadge}<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>
+      ${dismissBtn}</div>`;
+  }
+  if(n.type==='payment_received'){
+    const amt=n.amount>0?` — <strong>${fmt$(n.amount)}</strong>`:'';
+    return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">💳</span>
+      <span><strong>Payment received</strong> — ${escHtml(n.name)}${n.room?' · '+escHtml(n.room):''}${amt}</span>
+      ${newBadge}<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>
+      ${dismissBtn}</div>`;
+  }
+  if(n.type==='flight_alert'){
+    const isCancelled=n.label==='CANCELLED';
+    const rowBg=isCancelled?'background:#fef2f2;border-left:3px solid #dc2626':bg;
+    const icon=isCancelled?'⛔':'⚠️';
+    const timeChg=(n.oldTime&&n.newTime)?` · ${escHtml(n.oldTime)} → <strong>${escHtml(n.newTime)}</strong>`:'';
+    return `<div style="${rowBg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">${icon}</span>
+      <span><strong>${escHtml(n.label)}</strong> — ${escHtml(n.flight)} · ${escHtml(n.guest)} · ${escHtml(n.date)}${timeChg}</span>
+      ${newBadge}${n.ts?`<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>`:''}
+      ${dismissBtn}</div>`;
+  }
+  return '';
+}
+const ACTV_NOTIF_SECTIONS=[
+  {id:'room_sold',label:'Room Sold',icon:'🔴',types:['sold_out']},
+  {id:'flights',label:'Flights',icon:'✈️',types:['flight_alert']},
+  {id:'chat_bot',label:'Chat Bot',icon:'🤖',types:['bot_room']},
+  {id:'schedule',label:'Schedule',icon:'📅',types:['schedule_submitted']},
+  {id:'contracts',label:'Contracts',icon:'📝',types:['contract_signed','deposit_email']},
+  {id:'payments',label:'Payments',icon:'💳',types:['payment_received']},
+];
+function renderActvNotifPanel(notifs){
+  if(!notifs.length)return'';
+  const newCount=notifs.filter(n=>n.isNew).length;
+  const sectionsHtml=ACTV_NOTIF_SECTIONS.map(sec=>{
+    const items=notifs.filter(n=>sec.types.includes(n.type));
+    if(!items.length)return'';
+    const secNew=items.filter(n=>n.isNew).length;
+    const secOpen=_actvNotifSectionOpen(sec.id);
+    return `<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+      <div onclick="_toggleActvNotifSection('${sec.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;user-select:none;background:#f9fafb">
+        <span style="font-size:13px">${sec.icon}</span>
+        <span style="font-size:12.5px;font-weight:700;color:#111827">${sec.label}</span>
+        <span style="font-size:11px;color:#6b7280;font-weight:600">${items.length}</span>
+        ${secNew>0?`<span style="background:#f59e0b;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px">${secNew} new</span>`:''}
+        <div style="flex:1"></div>
+        <span style="color:#9ca3af;font-size:11px">${secOpen?'▲':'▼'}</span>
+      </div>
+      ${secOpen?`<div style="display:flex;flex-direction:column;gap:4px;padding:6px 8px 8px">${items.map(_actvNotifRowHtml).filter(Boolean).join('')}</div>`:''}
+    </div>`;
+  }).filter(Boolean).join('');
+  return `<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;margin-bottom:22px;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:10px;padding:13px 20px;background:#eef2ff;border-bottom:1px solid #c7d2fe">
+      <span style="font-size:1.1rem">🔔</span>
+      <span style="font-size:13px;font-weight:700;color:#3730a3">Notifications</span>
+      ${newCount>0?`<span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">${newCount} new</span>`:''}
+      <div style="flex:1"></div>
+      <button onclick="_dismissAllActvNotifs()" style="padding:4px 12px;background:transparent;border:1px solid #6366f1;border-radius:6px;font-family:inherit;font-size:11.5px;font-weight:600;color:#4f46e5;cursor:pointer">Dismiss all</button>
+    </div>
+    <div style="padding:12px;display:flex;flex-direction:column;gap:6px">${sectionsHtml}</div>
+  </div>`;
 }
 // ---- INQUIRY NOTIFICATIONS ----
 function getSeenInquiries(){return new Set(JSON.parse(localStorage.getItem('amansala_inquiry_seen')||'[]'));}
@@ -1132,29 +1339,9 @@ function buildDashboard(){
   // Events tab/module itself is untouched, just no longer summarized here.
   const sections=pipeline+(allActive.length?'':noActiveMsg);
 
-  // ── ACTIVITY NOTIFICATIONS ──
-  const actvNotifs=_buildActivityNotifs();
-  let actvSection='';
-  if(actvNotifs.length){
-    actvSection=`<div style="background:#fff;border:1.5px solid #a5b4fc;border-radius:14px;overflow:hidden;margin-bottom:22px;box-shadow:0 2px 8px rgba(99,102,241,.10)">
-      <div style="padding:13px 20px;display:flex;align-items:center;gap:10px;background:#eef2ff;border-bottom:1px solid #c7d2fe">
-        <span style="font-size:1.1rem">🔔</span>
-        <span style="font-size:13px;font-weight:700;color:#3730a3;flex:1">${actvNotifs.length} New Activit${actvNotifs.length>1?'ies':'y'}</span>
-        <button onclick="_dismissAllActvNotifs()" style="padding:4px 12px;background:transparent;border:1px solid #6366f1;border-radius:6px;font-family:inherit;font-size:11.5px;font-weight:600;color:#4f46e5;cursor:pointer">Dismiss all</button>
-      </div>
-      ${actvNotifs.map(n=>{
-        const isContract=n.type==='contract';
-        return`<div style="padding:12px 20px;border-bottom:1px solid #e0e7ff;display:flex;align-items:center;gap:12px">
-          <div style="width:34px;height:34px;border-radius:50%;background:${isContract?'#ecfdf5':'#eff6ff'};border:1.5px solid ${isContract?'#6ee7b7':'#93c5fd'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px">${isContract?'✍️':'💰'}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:700;color:#1e1b4b">${n.label}</div>
-            <div style="font-size:11.5px;color:#6b7280;margin-top:2px">${[n.sub,_timeAgo(n.ts)].filter(Boolean).join(' · ')}</div>
-          </div>
-          <button onclick="_dismissActvNotif('${n.id}')" title="Dismiss" style="width:26px;height:26px;border-radius:50%;background:transparent;border:1.5px solid #c7d2fe;color:#6366f1;font-size:14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1">×</button>
-        </div>`;
-      }).join('')}
-    </div>`;
-  }
+  // ── ACTIVITY NOTIFICATIONS ── (ported from staging's dashboard.js — see comment
+  // above computeActivityNotifs() in this file for exactly what matches/doesn't)
+  const actvSection=renderActvNotifPanel(computeActivityNotifs());
 
   // ── INQUIRY NOTIFICATIONS ──
   const seen=getSeenInquiries();
