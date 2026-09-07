@@ -256,8 +256,8 @@
     .reg-retreat-sel-row{background:#fff;border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;}
     .retreat-dropdown{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:14px;color:var(--text);outline:none;min-width:200px;max-width:100%;}
     .retreat-dropdown:focus{border-color:var(--teal);}
-    .reg-stats-bar{background:#fff;border-bottom:1px solid var(--border);padding:10px 20px;display:flex;gap:18px;align-items:center;flex-shrink:0;overflow-x:auto;scrollbar-width:none;}
-    .reg-stats-bar::-webkit-scrollbar{display:none;}
+    .reg-stats-bar{background:#fff;border-bottom:1px solid var(--border);padding:9px 20px;display:flex;gap:10px;align-items:center;flex-shrink:0;flex-wrap:wrap;}
+    .rstat-pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap;}
     /* ===== TEACHER DASHBOARD ===== */
     .teacher-nav{background:#fff;border-bottom:1px solid var(--border);display:flex;gap:0;flex-shrink:0;padding:0 28px;overflow-x:auto;position:sticky;top:0;z-index:15;}
     .tn-btn{padding:13px 22px;font-family:'Jost',sans-serif;font-size:13px;font-weight:500;color:var(--muted);background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;transition:all .15s;margin-bottom:-1px;white-space:nowrap;flex-shrink:0;}
@@ -1899,28 +1899,37 @@
     <div id="tcUpgradesList" style="display:flex;flex-wrap:wrap;gap:8px"></div>
   </div>
   <!-- LIVE BILL bar -->
+  <!-- Compact single-line info bar (matches Staging's Teachers toolbar) — same IDs as
+       before, populated by the exact same regRender() code (_updateRegButtons/regRender
+       below), just restyled from boxed labeled columns into colored pill badges. No
+       calculation changed, only how the already-computed values are displayed. -->
   <div class="reg-stats-bar" id="regStatsBar" style="display:none">
-    <div class="rstat"><span class="rstat-lbl">Retreat</span><span class="rstat-val" id="rstatName" style="font-size:15px;font-family:'Jost',sans-serif;font-weight:600"></span></div>
-    <div class="rstat-div"></div>
-    <div class="rstat"><span class="rstat-lbl">Dates</span><span class="rstat-val" id="rstatDates" style="font-size:13px;font-family:'Jost',sans-serif;font-weight:500"></span></div>
-    <div class="rstat-div"></div>
-    <div class="rstat"><span class="rstat-lbl">Est. Guests</span><span class="rstat-val" id="rstatPax" style="display:flex;align-items:center;gap:6px">—</span></div>
-    <div class="rstat-div"></div>
-    <div class="rstat"><span class="rstat-lbl">Guests Registered</span><span class="rstat-val" id="rstatGuests">0</span></div>
-    <div class="rstat-div"></div>
-    <div class="rstat"><span class="rstat-lbl">Room List</span><span class="rstat-val" id="rstatRoomListStatus">—</span></div>
-    <div class="rstat-div"></div>
-    <div class="rstat teacher-admin-only"><span class="rstat-lbl">Tip/nt</span><span class="rstat-val" style="display:flex;align-items:center;gap:4px">$<input id="rstatTip" type="number" min="0" step="1" value="30" style="width:46px;padding:2px 4px;border:1.5px solid var(--border);border-radius:5px;font-family:'Jost',sans-serif;font-size:13px;font-weight:700;color:var(--dark)" onchange="regSetTip(this.value)"></span></div>
-    <div class="rstat-div"></div>
-    <div class="rstat"><span class="rstat-lbl">Bill Total</span><span class="rstat-val" id="rstatTotal">$0</span></div>
-    <div class="rstat-div"></div>
-    <div class="rstat"><span class="rstat-lbl">Paid</span><span class="rstat-val green" id="rstatPaid">$0</span></div>
-    <div class="rstat-div"></div>
-    <div class="rstat"><span class="rstat-lbl">Balance Due</span><span class="rstat-val red" id="rstatBal">$0</span></div>
-    <div style="margin-left:auto">
+    <span style="font-size:13px;font-weight:700;color:var(--dark)" id="rstatName"></span>
+    <span style="font-size:11.5px;color:var(--muted)" id="rstatDates"></span>
+    <span class="rstat-pill" style="background:#f0f9ff;color:#0369a1">
+      <span id="rstatGuests">0</span> guests<span id="rstatPax" style="margin-left:5px;display:inline-flex;align-items:center;gap:5px"></span>
+    </span>
+    <span class="rstat-pill" style="background:#f0fdf4;color:#16a34a" id="rstatRoomListStatus">—</span>
+    <span class="rstat-pill" style="background:#fefce8;color:#854d0e">BILL <span id="rstatTotal">$0</span></span>
+    <span class="rstat-pill" style="background:#f5f3ff;color:#6d28d9;display:none" id="rstatPkgWrap">PKG <span id="rstatPkg">$0</span></span>
+    <span class="rstat-pill" style="background:#f0fdf4;color:#16a34a">PAID <span id="rstatPaid">$0</span></span>
+    <span class="rstat-pill" id="rstatBal">$0</span>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="teacher-admin-only" style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:11px;font-weight:700;color:var(--muted)">TIP/NT</span>$<input id="rstatTip" type="number" min="0" step="1" value="30" style="width:46px;padding:2px 4px;border:1.5px solid var(--border);border-radius:5px;font-family:'Jost',sans-serif;font-size:13px;font-weight:700;color:var(--dark)" onchange="regSetTip(this.value)">
+      </span>
+      <span class="teacher-admin-only" style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:11px;font-weight:700;color:var(--muted)">TAX</span>
+        <select id="rstatTaxRate" onchange="regSetTaxRate(this.value)" style="padding:3px 5px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:'Jost',sans-serif;background:#fff">
+          <option value="0">0%</option><option value="0.13">13%</option><option value="0.16">16%</option><option value="0.19">19%</option><option value="0.21">21%</option>
+        </select>
+      </span>
       <button class="btn btn-secondary btn-sm" id="estQuoteBtn" onclick="toggleEstQuote()" style="display:none;gap:5px">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         Est. Quote
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="if(regSelBk)showBookingLogModal(regSelBk.id)" style="display:flex;gap:5px">
+        📋 Log
       </button>
     </div>
   </div>
@@ -2798,6 +2807,15 @@
     <div class="modal-hdr"><div><h2>🤖 Bot Activity Log</h2><div class="modal-sub" id="botLogSub"></div></div><button class="modal-x" onclick="closeModal('botLogModal')">&times;</button></div>
     <div class="modal-body" id="botLogBody" style="max-height:72vh;overflow-y:auto;padding:20px 24px;"></div>
     <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('botLogModal')">Close</button></div></div>
+  </div>
+</div>
+
+<!-- ===== BOOKING ACTIVITY LOG MODAL ===== -->
+<div class="modal-overlay" id="bookingLogModal">
+  <div class="modal" style="width:680px;max-width:97vw;">
+    <div class="modal-hdr"><div><h2>📋 Activity Log</h2><div class="modal-sub" id="bookingLogSub"></div></div><button class="modal-x" onclick="closeModal('bookingLogModal')">&times;</button></div>
+    <div class="modal-body" id="bookingLogBody" style="max-height:72vh;overflow-y:auto;padding:20px 24px;"></div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('bookingLogModal')">Close</button></div></div>
   </div>
 </div>
 

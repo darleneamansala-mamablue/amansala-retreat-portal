@@ -121,7 +121,7 @@ function regRender(){
   const nights=getNights(regSelBk);
   const allRegs=getRegsForBk(regSelBk.id);
   const _blockedSetEarly=new Set(regSelBk.blockedRooms||[]);
-  let totalGuests=0,grandTotal=0;
+  let totalGuests=0,grandTotal=0,pkgBillTotal=0;
   const _regedRooms=new Set();
   // Mirror renderEstQuote exactly: one reg per room, rt from physical room, fresh calc.
   // When a room has more than one registration (e.g. a stale empty placeholder left behind
@@ -166,6 +166,10 @@ function regRender(){
     const cao=calcCustomAoCost(regSelBk,gc,reg);
     const total=+(base+pkgCost+base*_rmTxR+pkgCost*_pkgTxR+_bTipRate*gc*_bTipNights+cao).toFixed(2);
     grandTotal+=total;
+    // Pure display sub-total (packages + their tax + custom add-ons) — not a separate
+    // calculation, just breaking out what's already folded into `total` above so the
+    // compact info bar can show a "PKG" figure like staging does.
+    pkgBillTotal+=+(pkgCost+pkgCost*_pkgTxR+cao).toFixed(2);
     _regedRooms.add(room);totalGuests+=gc;
   });
   grandTotal=+(grandTotal-(regSelBk.eqDiscountAmt||0)).toFixed(2);
@@ -284,21 +288,34 @@ function regRender(){
   document.getElementById('rstatGuests').textContent=totalGuests;
   document.getElementById('rstatTotal').textContent=fmt$(grandTotal);
   document.getElementById('rstatPaid').textContent=fmt$(totalPaid);
-  document.getElementById('rstatBal').textContent=fmt$(bal);
-  document.getElementById('rstatBal').className='rstat-val '+(bal>0?'red':bal<0?'orange':'green');
+  const _balPos=bal>0,_balNeg=bal<0;
+  const rstatBalEl=document.getElementById('rstatBal');
+  rstatBalEl.textContent=_balPos?`BAL DUE ${fmt$(bal)}`:_balNeg?`CREDIT ${fmt$(Math.abs(bal))}`:'PAID ✓';
+  rstatBalEl.className='rstat-pill';
+  rstatBalEl.style.background=_balPos?'#fef2f2':_balNeg?'#fff7ed':'#f0fdf4';
+  rstatBalEl.style.color=_balPos?'#dc2626':_balNeg?'#c2410c':'#16a34a';
+  const rstatPkgWrap=document.getElementById('rstatPkgWrap');
+  if(rstatPkgWrap){
+    rstatPkgWrap.style.display=pkgBillTotal>0?'':'none';
+    const rstatPkgEl=document.getElementById('rstatPkg');if(rstatPkgEl)rstatPkgEl.textContent=fmt$(pkgBillTotal);
+  }
+  const taxSel=document.getElementById('rstatTaxRate');if(taxSel)taxSel.value=String(getBkTaxRate(regSelBk));
   // Room-list completion — named/registered guests vs the retreat's expected
   // pax count. bkPax is the leader's original headcount estimate; without
   // it there's nothing to measure completion against.
   const rlStatusEl=document.getElementById('rstatRoomListStatus');
   if(rlStatusEl){
+    rlStatusEl.className='rstat-pill';
     if(bkPax>0){
       const pct=Math.min(100,Math.round(totalGuests/bkPax*100));
       const complete=totalGuests>=bkPax;
       rlStatusEl.textContent=`${totalGuests}/${bkPax} roomed (${pct}%)`;
-      rlStatusEl.className='rstat-val '+(complete?'green':totalGuests>0?'orange':'red');
+      rlStatusEl.style.background=complete?'#f0fdf4':totalGuests>0?'#fff7ed':'#fef2f2';
+      rlStatusEl.style.color=complete?'#16a34a':totalGuests>0?'#c2410c':'#dc2626';
     }else{
       rlStatusEl.textContent=`${totalGuests} roomed`;
-      rlStatusEl.className='rstat-val';
+      rlStatusEl.style.background='#f0fdf4';
+      rlStatusEl.style.color='#16a34a';
     }
   }
 
@@ -5167,6 +5184,61 @@ async function sendDepositEmail(){
 // ── Sync blocked_rooms from registrations — repairs drift where a registration's
 // room isn't reflected in the booking's blocked_rooms list (the exact "orphaned
 // registration" pattern behind several balance-mismatch bugs fixed this session) ──
+// ── Tax rate quick-select (compact info bar) — writes to the same real,
+// synced location getBkTaxRate()/calcPkgCost() already read (packageCustomPrices
+// .__cfg__.taxRate), same fix as savePkgCustomPrices() above ──
+async function regSetTaxRate(val){
+  if(!regSelBk)return;
+  const tr=parseFloat(val);
+  if(isNaN(tr))return;
+  regSelBk.taxRate=tr;
+  if(!regSelBk.packageCustomPrices)regSelBk.packageCustomPrices={};
+  regSelBk.packageCustomPrices.__cfg__={...(regSelBk.packageCustomPrices.__cfg__||{}),taxRate:tr};
+  saveAll();regRender();
+  try{await db.from('bookings').update({package_custom_prices:regSelBk.packageCustomPrices}).eq('id',regSelBk.id);}catch(e){}
+  showToast(`Tax rate ${Math.round(tr*100)}% saved ✓`);
+}
+
+// ── Booking Activity Log — read-only viewer over the real activity_log table ──
+const ACTIVITY_LOG_LABELS={
+  booking_create:{icon:'✦',label:'Booking created',color:'#16a34a'},
+  booking_cancel:{icon:'✕',label:'Booking cancelled',color:'#dc2626'},
+  guest_create:{icon:'+',label:'Guest added',color:'#0369a1'},
+  guest_update:{icon:'✎',label:'Guest edited',color:'#0369a1'},
+  guest_delete:{icon:'−',label:'Guest removed',color:'#b91c1c'},
+  payment_add:{icon:'$',label:'Payment recorded',color:'#16a34a'},
+  payment_delete:{icon:'$',label:'Payment deleted',color:'#b91c1c'},
+  room_move:{icon:'🛏',label:'Room moved',color:'#7c3aed'},
+  room_block:{icon:'🛏',label:'Room blocked',color:'#7c3aed'},
+  room_unblock:{icon:'🛏',label:'Room unblocked',color:'#9ca3af'},
+  lock_toggle:{icon:'🔒',label:'Lock changed',color:'#d97706'},
+  email_sent:{icon:'✉',label:'Email sent',color:'#0891b2'},
+  cb_push:{icon:'☁',label:'Pushed to Cloudbeds',color:'#6366f1'},
+  cb_recover:{icon:'☁',label:'CB IDs recovered',color:'#6366f1'},
+};
+async function showBookingLogModal(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  document.getElementById('bookingLogSub').textContent=bk.leaderName||bk.retreatName||'';
+  document.getElementById('bookingLogBody').innerHTML=`<div style="text-align:center;color:var(--muted);font-size:13px;padding:40px">Loading...</div>`;
+  openModal('bookingLogModal');
+  try{
+    const{data,error}=await db.from('activity_log').select('*').eq('booking_id',bkId).order('created_at',{ascending:false}).limit(200);
+    const body=document.getElementById('bookingLogBody');
+    if(error||!data||!data.length){body.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:40px">No activity logged yet for this retreat.</div>';return;}
+    body.innerHTML=data.map(l=>{
+      const meta=ACTIVITY_LOG_LABELS[l.action]||{icon:'•',label:l.action,color:'#374151'};
+      return`<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);align-items:flex-start">
+        <div style="flex-shrink:0;margin-top:2px"><span style="color:${meta.color};font-weight:700;font-size:13px">${meta.icon} ${meta.label}</span></div>
+        <div style="flex:1;min-width:0">
+          ${l.detail?`<div style="font-size:12.5px;color:var(--dark)">${escHtml(l.detail)}</div>`:''}
+          <div style="font-size:11px;color:var(--muted)">${escHtml(l.user_name||'—')}${l.user_role?` · ${escHtml(l.user_role)}`:''}</div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);white-space:nowrap;flex-shrink:0">${new Date(l.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+      </div>`;
+    }).join('');
+  }catch(e){document.getElementById('bookingLogBody').innerHTML=`<div style="color:#dc2626;font-size:13px;padding:20px">Error loading log: ${escHtml(String(e))}</div>`;}
+}
+
 async function syncBlockedRoomsFromRegs(){
   if(!regSelBk)return;
   const regRooms=[...new Set(AppData.regs.filter(r=>r.bookingId===regSelBk.id&&r.room).map(r=>r.room))];
