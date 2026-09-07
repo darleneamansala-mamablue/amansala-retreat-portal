@@ -478,8 +478,12 @@ function gSetupTabs(rt){
 function gSwitchTab(idx){
   gCurTab=idx;
   const rt=AppData.roomTypes.find(t=>t.id===gEditRtId);
-  const maxOcc=gExtraGuestMode?2:(rt?rt.maxOcc:1);
-  for(let i=0;i<maxOcc;i++){document.getElementById('gtab'+i)?.classList.toggle('active',i===idx);document.getElementById('gp'+i).style.display=i===idx?'block':'none';}
+  // The guest modal only ever has 4 physical guest-slot divs (gp0-gp3) — a room type
+  // with max_occ > 4 (whole-villa types like Casa Shanti/Casa Master/Casita 4, or a
+  // bad data value) must never drive this loop past that, or getElementById('gp4')
+  // returns null and .style throws, crashing the whole "Add Guest" modal.
+  const maxOcc=Math.min(gExtraGuestMode?2:(rt?rt.maxOcc:1),4);
+  for(let i=0;i<maxOcc;i++){document.getElementById('gtab'+i)?.classList.toggle('active',i===idx);const p=document.getElementById('gp'+i);if(p)p.style.display=i===idx?'block':'none';}
   gUpdatePrice();
 }
 function gCountGuests(){let n=0;for(let i=0;i<4;i++){const el=document.getElementById('g'+i+'-name');if(el&&el.value.trim())n=i+1;}return Math.max(1,n);}
