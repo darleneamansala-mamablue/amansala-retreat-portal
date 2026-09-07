@@ -907,7 +907,7 @@ const TR_UPGRADE_MAP={rt5:'rt4',rt4:'rt6',rt3:'rt2',rt2:'rt1'};
 function trGetUpgrade(bkId,roomNum){
   if(!roomNum||roomNum==='—')return null;
   // Find the guest's reg to get roomTypeId
-  const reg=AppData.regs.find(r=>r.bookingId===bkId&&r.room===roomNum);
+  const reg=getRegForRoom(bkId,roomNum);
   const rtId=reg?reg.roomTypeId:null;
   let rt=AppData.roomTypes.find(r=>r.id===rtId)||AppData.roomTypes.find(r=>r.rooms.includes(roomNum));
   if(!rt)return null;

@@ -2024,8 +2024,11 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
   if(conflict){showToast(`Room ${toRoom} is already blocked by ${conflict.leaderName||conflict.retreatName}.`);return;}
   // Swap in blockedRooms
   bk.blockedRooms=(bk.blockedRooms||[]).map(r=>r===fromRoom?toRoom:r);
-  // Update any guest reg pointing at fromRoom
-  const reg=AppData.regs.find(r=>r.bookingId===bkId&&r.room===fromRoom);
+  // Update any guest reg pointing at fromRoom -- if fromRoom has more than one
+  // registration (a stale empty duplicate alongside the real named guest), moving
+  // the WRONG one here is exactly how a room move can silently orphan a real
+  // guest's registration at the old room label while an empty one "moves" instead.
+  const reg=getRegForRoom(bkId,fromRoom);
   if(reg){
     const targetRt=AppData.roomTypes.find(rt=>rt.rooms.includes(toRoom));
     reg.room=toRoom;
@@ -2052,7 +2055,7 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
       if(!d?.success)showToast(`⚠ Cuarto movido en portal — verifica Cloudbeds para ${toRoom}`);
       else{
         // Update guest name on the reservation now in toRoom
-        const movedReg=AppData.regs.find(r=>r.bookingId===bk.id&&r.room===toRoom);
+        const movedReg=getRegForRoom(bk.id,toRoom);
         const movedNames=(movedReg?.guests||[]).filter(g=>g.name).map(g=>g.name.trim());
         const _cbGuestIdMv=(bk.cbGuestIds||{})[toRoom]||null;
         fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},

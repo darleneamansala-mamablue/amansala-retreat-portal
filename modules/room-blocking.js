@@ -201,8 +201,8 @@ function _renderBlockRoomsGrid(bkId){
       ?rt.rooms.map(r=>({display:r,physical:[r],merged:false}))
       :buildUiRoomEntries(rt);
     const uiEntries=blkEntries.sort((a,b)=>{
-      const aGuests=a.physical.some(p=>{const reg=AppData.regs.find(r=>r.bookingId===blockEditBkId&&r.room===p);return(reg?.guests||[]).filter(g=>g.name).length>0;});
-      const bGuests=b.physical.some(p=>{const reg=AppData.regs.find(r=>r.bookingId===blockEditBkId&&r.room===p);return(reg?.guests||[]).filter(g=>g.name).length>0;});
+      const aGuests=a.physical.some(p=>{const reg=getRegForRoom(blockEditBkId,p);return(reg?.guests||[]).filter(g=>g.name).length>0;});
+      const bGuests=b.physical.some(p=>{const reg=getRegForRoom(blockEditBkId,p);return(reg?.guests||[]).filter(g=>g.name).length>0;});
       if(aGuests!==bGuests)return aGuests?-1:1;
       // Note: selected rooms are NOT bubbled to the top here — they're already highlighted
       // (blue border) inline, and pulling them out would split their building group in two.
@@ -218,7 +218,7 @@ function _renderBlockRoomsGrid(bkId){
       const isChecked=entry.physical.some(p=>myBlocked.has(p))||(noRoomsYet&&isSuggested);
       const guestNames=[];
       entry.physical.forEach(p=>{
-        const roomReg=AppData.regs.find(r=>r.bookingId===blockEditBkId&&r.room===p);
+        const roomReg=getRegForRoom(blockEditBkId,p);
         (roomReg?.guests||[]).filter(g=>g.name).forEach(g=>guestNames.push(g.name+(entry.merged&&entry.physical.length>1?` (${p})`:'')));
       });
       const hasGuests=guestNames.length>0;
@@ -276,7 +276,7 @@ function blockSetChecked(cb,on,silent){
   if(!on&&item.dataset.hasGuests==='1'&&!silent){
     const physical=JSON.parse(item.dataset.physical||'[]');
     const names=physical.flatMap(room=>{
-      const reg=AppData.regs.find(r=>r.bookingId===blockEditBkId&&r.room===room);
+      const reg=getRegForRoom(blockEditBkId,room);
       return(reg?.guests||[]).filter(g=>g.name).map(g=>g.name);
     }).join(', ');
     const room=item.dataset.room;

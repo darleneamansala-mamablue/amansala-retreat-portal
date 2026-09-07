@@ -5106,7 +5106,16 @@ function clearPkgCustomPrices(){
 }
 function uid(){return'id_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);}
 function statusLabel(s){return{requested:'Soft Hold',contract_sent:'Contract Sent',contract_signed:'Contract Signed',deposit_paid:'Deposit Paid',room_list_sent:'Room List Sent',confirmed:'Confirmed',cancelled:'Cancelled',pending:'Pending'}[s]||s||'—';}
-function getRegForRoom(bkId,room){return AppData.regs.find(r=>r.bookingId===bkId&&r.room===room)||null;}
+// When a room has more than one registration (e.g. a stale empty placeholder left
+// behind after a guest was added via a separate row), prefer whichever has more
+// named guests instead of "whichever the array happens to list first" -- matches
+// the same _regByRoom/_billRegByRoom fix used for Bill Total/Guests Registered,
+// so the detailed room list doesn't show "Vacant" for a room that's actually taken.
+function getRegForRoom(bkId,room){
+  const matches=AppData.regs.filter(r=>r.bookingId===bkId&&r.room===room);
+  if(!matches.length)return null;
+  return matches.reduce((best,r)=>(r.guests||[]).filter(g=>g.name).length>(best.guests||[]).filter(g=>g.name).length?r:best);
+}
 function getRegsForBk(bkId){return AppData.regs.filter(r=>r.bookingId===bkId);}
 function getRoomBks(room){return AppData.regs.filter(r=>r.room===room).map(reg=>{const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return null;return{...reg,startDate:bk.startDate,endDate:bk.endDate,leaderName:bk.leaderName||bk.retreatName,retreatName:bk.retreatName,status:bk.status||'confirmed',guests:(reg.guests||[]).filter(g=>g.name).map(g=>g.name)};}).filter(Boolean);}
 
