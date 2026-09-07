@@ -180,11 +180,19 @@ function regRender(){
     const effectivePkgTotal=+calcPkgCost(regSelBk,1).toFixed(2);
     // Auto-expand whenever this retreat already has add-ons selected — matches staging's
     // always-visible chip list; collapsed-by-default only makes sense for an empty selection.
-    const _pkgShowOpen=_pkgBarOpen||selPkgs.length>0;
+    const _pkgShowOpen=_pkgBarOpen||selPkgs.length>0||!!(regSelBk.packageCustomPrices?.__custom__||[]).length;
     const staffPriceBtn=!IS_TEACHER_MODE?`<button onclick="pkgTogglePriceEditor()" style="padding:3px 10px;font-size:11px;font-weight:600;color:#0e9494;background:#fff;border:1.5px solid #0e9494;border-radius:6px;cursor:pointer;font-family:inherit;margin-left:auto">✏ Custom Prices</button>`:'';
     // Extra (per-booking custom) packages
     const extraPkgs=regSelBk.extraPackages||[];
     const extraChips=extraPkgs.map(ep=>{const on=selPkgs.includes(ep.id);return`<button class="pkg-chip${on?' on':''}" onclick="togglePkg('${ep.id}')" style="position:relative">${on?'<span class="pkg-check">✓</span>':''}${ep.name}<span class="pkg-price custom-price">$${ep.price}</span>${!IS_TEACHER_MODE?`<span onclick="event.stopPropagation();removeExtraPkg('${ep.id}')" title="Remove custom package" style="margin-left:5px;color:#dc2626;font-size:12px;font-weight:700;line-height:1">×</span>`:''}</button>`;}).join('');
+    // packageCustomPrices.__custom__: one-off ad-hoc add-ons entered in Staging (e.g.
+    // "3 Drink per day"), always applied to every guest — not gated by selPkgs like the
+    // ADD_ONS/extraPackages chips above. calcPkgItems() already folds their $ into every
+    // total; show them here too so staff/teachers can see what they're paying for.
+    const customAoChips=(regSelBk.packageCustomPrices?.__custom__||[]).map(c=>{
+      const price=+(Number(c.price||0)*Number(c.nights||1)).toFixed(2);
+      return`<div class="pkg-chip on" style="cursor:default" title="Custom add-on entered in Staging — always applied">✓ ${c.name||'Custom add-on'}<span class="pkg-price custom-price">$${price}</span></div>`;
+    }).join('');
     const addCustomBtn='';
     const addCustomForm=!IS_TEACHER_MODE?`<div id="extraPkgForm" style="display:none;align-items:center;gap:8px;margin-top:10px;padding:10px 14px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;flex-wrap:wrap">
       <input id="extraPkgName" type="text" placeholder="Package name" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;width:180px;outline:none">
@@ -204,7 +212,7 @@ function regRender(){
         <button id="pkgBarToggleBtn" onclick="pkgBarToggle()" title="View add-ons" style="margin-left:auto;background:${_pkgShowOpen?'#fef3c7':'#0e9494'};border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;color:${_pkgShowOpen?'#92400e':'#fff'};padding:6px 12px;font-family:'Jost',sans-serif;white-space:nowrap">${_pkgShowOpen?'▴ Hide Add-ons':'+ Add-ons'}</button>
       </div>
       <div id="pkgBarBody" style="max-height:${_pkgShowOpen?'600px':'0'};overflow:${_pkgShowOpen?'visible':'hidden'}">
-        ${selPkgs.length?`<div class="pkg-chips">${lockedChips}</div>`:''}
+        ${(selPkgs.length||customAoChips)?`<div class="pkg-chips">${lockedChips}${customAoChips}</div>`:''}
       </div>`;
     }else{
       const contractBadge=fromContract?`<span style="background:#d1fae5;color:#065f46;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">from contract</span>`:'';
@@ -216,7 +224,7 @@ function regRender(){
         <button id="pkgBarToggleBtn" onclick="pkgBarToggle()" title="View add-ons" style="background:${_pkgShowOpen?'#fef3c7':'#0e9494'};border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;color:${_pkgShowOpen?'#92400e':'#fff'};padding:6px 12px;font-family:'Jost',sans-serif;white-space:nowrap">${_pkgShowOpen?'▴ Hide Add-ons':'+ Add-ons'}</button>
       </div>
       <div id="pkgBarBody" style="max-height:${_pkgShowOpen?'600px':'0'};overflow:${_pkgShowOpen?'visible':'hidden'}">
-        <div class="pkg-chips">${ADD_ONS.filter(ao=>ao.price>0).map(ao=>{const on=selPkgs.includes(ao.id);const cp=customPrices[ao.id];const dispPrice=cp!=null?cp:ao.price;return`<button class="pkg-chip${on?' on':''}" onclick="togglePkg('${ao.id}')">${on?'<span class="pkg-check">✓</span>':''}${ao.name}<span class="pkg-price${cp!=null?' custom-price':''}">$${dispPrice}</span></button>`;}).join('')}${extraChips}</div>
+        <div class="pkg-chips">${ADD_ONS.filter(ao=>ao.price>0).map(ao=>{const on=selPkgs.includes(ao.id);const cp=customPrices[ao.id];const dispPrice=cp!=null?cp:ao.price;return`<button class="pkg-chip${on?' on':''}" onclick="togglePkg('${ao.id}')">${on?'<span class="pkg-check">✓</span>':''}${ao.name}<span class="pkg-price${cp!=null?' custom-price':''}">$${dispPrice}</span></button>`;}).join('')}${extraChips}${customAoChips}</div>
         ${addCustomForm}
         <div id="pkgPriceEditor" style="display:none"></div>
       </div>`;
