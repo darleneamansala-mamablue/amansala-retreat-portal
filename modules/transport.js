@@ -1529,6 +1529,13 @@ async function tr2DeleteEntry(rowId) {
   if (!confirm('¿Eliminar este registro de transporte?')) return;
   try {
     await db.from('transport').delete().eq('id', rowId);
+    // Tombstone it — without this, any browser tab whose localStorage still has this
+    // row cached (loaded before this delete) will see it as "local-only, not yet in
+    // Supabase" on its next syncTransportFromSupabase() and push it right back up,
+    // silently resurrecting a deleted duplicate.
+    deletedTransportIds.add(rowId);
+    localStorage.setItem('amansala_deleted_transport_ids', JSON.stringify([...deletedTransportIds]));
+    try { await db.from('app_store').upsert({ key: 'deletedTransportIds', value: [...deletedTransportIds], updated_at: new Date().toISOString() }); } catch (e) {}
     document.getElementById('tr2-edit-modal')?.remove();
     showToast('Registro eliminado');
     await tr2LoadData();
