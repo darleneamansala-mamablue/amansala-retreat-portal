@@ -2419,8 +2419,8 @@
         <div class="fg"><label>Room Notes</label><textarea id="gm-notes" rows="2" placeholder="e.g. Needs ground floor · Sharing with daughter · Wants room 25" title="Special room requests, preferences, or notes for the admin team" style="resize:vertical"></textarea></div>
       </div>
       <div class="frow" id="gm-dates-row" style="display:none">
-        <div class="fg"><label>Check-in</label><input type="date" id="gm-checkin" oninput="gUpdatePrice()"></div>
-        <div class="fg"><label>Check-out</label><input type="date" id="gm-checkout" oninput="gUpdatePrice()"></div>
+        <div class="fg"><label>Check-in <span style="font-weight:400;text-transform:none;letter-spacing:0">(whole room — all guests)</span></label><input type="date" id="gm-checkin" oninput="gUpdatePrice()"></div>
+        <div class="fg"><label>Check-out <span style="font-weight:400;text-transform:none;letter-spacing:0">(whole room — all guests)</span></label><input type="date" id="gm-checkout" oninput="gUpdatePrice()"></div>
       </div>
     </div>
     <div class="modal-foot"><div class="l" style="display:flex;align-items:center;gap:8px"><button class="btn btn-danger btn-sm" id="gDelBtn" onclick="gDelete()" style="display:none">Remove</button></div><div class="r"><button class="btn btn-secondary" onclick="gExtraGuestMode=false;closeModal('guestModal')">Cancel</button><button class="btn btn-primary" onclick="gSave()">Save</button></div></div>

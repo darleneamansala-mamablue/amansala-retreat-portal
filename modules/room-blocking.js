@@ -668,9 +668,18 @@ function gSave(){
   }
 }
 function gDelete(){
-  if(!gEditRegId||!confirm('Remove guest?'))return;
+  if(!gEditRegId)return;
   const reg=AppData.regs.find(r=>r.id===gEditRegId);
   const namedGuests=(reg?.guests||[]).filter(g=>g.name);
+  // Removing the LAST named guest deletes the whole room assignment (dates, notes,
+  // teacher-room flag, Cloudbeds links — everything), not just that one guest slot.
+  // A real incident: an admin removed guests one at a time from a 3-guest room not
+  // realizing the last "Remove" click would wipe the room entirely, then had to
+  // re-add from scratch and forgot one guest. Say so explicitly before it happens.
+  const confirmMsg=namedGuests.length>1
+    ?'Remove this guest?'
+    :'This is the only guest left — removing them deletes the ENTIRE room assignment (dates, notes, Cloudbeds link). Continue?';
+  if(!confirm(confirmMsg))return;
 
   // If the room has more than 1 named guest, only remove the active tab's guest and keep the reg
   if(reg&&namedGuests.length>1){
