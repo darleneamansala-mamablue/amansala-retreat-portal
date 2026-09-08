@@ -45,12 +45,60 @@ async function syncRoomTypesFromCloudbeds(){
   // DO NOT replace roomTypes — portal room configuration is managed here, not in Cloudbeds
 }
 
+// ── Push progress modal — a step-by-step view of what pushReservationsToCloudbeds()
+// is doing to each room, so staff aren't left guessing whether a push happened at all
+// (it previously ran silently in the background with only a toast at the very end).
+function _cbPushRowId(room){return room.replace(/[^a-zA-Z0-9]/g,'_');}
+function _cbPushModalOpen(rooms){
+  const body=document.getElementById('cbPushModalBody');
+  const sub=document.getElementById('cbPushModalSub');
+  if(!body||!sub)return;
+  sub.textContent=`0 / ${rooms.length} rooms checked`;
+  body.innerHTML=rooms.map(r=>`
+    <div id="cbPushRow-${_cbPushRowId(r)}" style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid var(--border);font-size:13px">
+      <span>${escHtml(r)}</span>
+      <span class="cbPushStatus" style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">
+        <span class="cbPushSpinner"></span>Waiting…
+      </span>
+    </div>`).join('');
+  openModal('cbPushModal');
+}
+function _cbPushModalSetStatus(room,status,detail){
+  const el=document.getElementById('cbPushRow-'+_cbPushRowId(room));
+  const statusEl=el?.querySelector('.cbPushStatus');
+  if(!statusEl)return;
+  const map={
+    created:{icon:'✓',color:'#15803d',label:'Created',settled:true},
+    skipped:{icon:'✓',color:'#0369a1',label:'Already synced',settled:true},
+    failed:{icon:'✕',color:'#dc2626',label:detail||'Failed',settled:true},
+    checking:{icon:'',color:'var(--muted)',label:detail||'Checking…',settled:false},
+  };
+  const m=map[status]||{icon:'',color:'var(--muted)',label:status,settled:false};
+  statusEl.innerHTML=m.icon
+    ?`<span style="color:${m.color};font-weight:700">${m.icon}</span><span style="color:${m.color}">${escHtml(m.label)}</span>`
+    :`<span class="cbPushSpinner"></span><span>${escHtml(m.label)}</span>`;
+  if(el)el.dataset.settled=m.settled?'1':'0';
+  const body=document.getElementById('cbPushModalBody');
+  const sub=document.getElementById('cbPushModalSub');
+  if(body&&sub){
+    const total=body.children.length;
+    const done=body.querySelectorAll('[data-settled="1"]').length;
+    sub.textContent=`${done} / ${total} rooms checked`;
+  }
+}
+function _cbPushModalFinish(created,skipped,failed){
+  const sub=document.getElementById('cbPushModalSub');
+  if(sub)sub.textContent=failed
+    ?`Done — ${created} created, ${skipped} already synced, ${failed} failed`
+    :`Done — ${created} created, ${skipped} already synced ✓`;
+}
 async function pushReservationsToCloudbeds(bk){
   console.log('[CB push] blockedRooms:',JSON.stringify(bk.blockedRooms),'existingIds:',JSON.stringify(bk.cbReservationIds||{}));
   if(!bk.blockedRooms||!bk.blockedRooms.length){console.log('[CB push] no rooms, exit');return;}
   if(!bk.cbReservationIds)bk.cbReservationIds={};
   if(!bk.cbGuestIds)bk.cbGuestIds={};
   if(!bk.cbAdjustmentIds)bk.cbAdjustmentIds={};
+  _cbPushModalOpen(bk.blockedRooms);
 
 
   // Create Group Profile → Event → AllotmentBlock (once per booking, skip if already done)
@@ -189,9 +237,11 @@ async function pushReservationsToCloudbeds(bk){
           fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(up)}).catch(e=>console.warn('[CB name sync]',e));
         }
         console.log('[CB push] skip (existing)',roomName,'id:',existingId,guestNames.length?'→ name synced':'→ no guest yet');
+        _cbPushModalSetStatus(roomName,'skipped');
         continue;
       }
     }
+    _cbPushModalSetStatus(roomName,'checking','Creating…');
     try{
       const mapped=cbMapping.find(m=>m.portalRoom===roomName);
       const payload={roomName,startDate:bk.startDate,endDate:bk.endDate,groupName:bk.retreatName||bk.row||'',leaderName:bk.leaderName||'',adults:1,dailyRate:0,bookingId:bk.id};
@@ -217,7 +267,8 @@ async function pushReservationsToCloudbeds(bk){
       if(d.guestId)bk.cbGuestIds[roomName]=d.guestId;
       if(!bk.cbAdjustmentIds)bk.cbAdjustmentIds={};
       bk.cbAdjustmentIds[roomName]=d.adjustmentId||null;
-    }catch(err){_pushFailed++;_pushFailedRooms.push(roomName);console.warn(`[CB block] ${roomName}: ${err.message}`);}
+      _cbPushModalSetStatus(roomName,'created');
+    }catch(err){_pushFailed++;_pushFailedRooms.push(roomName);console.warn(`[CB block] ${roomName}: ${err.message}`);_cbPushModalSetStatus(roomName,'failed',err.message);}
   }
   // If a Supabase realtime sync fired during this async function, the bookings array
   // was replaced and bk is now a stale reference. Re-apply our CB changes to the
@@ -248,6 +299,7 @@ async function pushReservationsToCloudbeds(bk){
   }else if(_pushSkipped){
     showToast(`Cloudbeds: all ${_pushSkipped} room${_pushSkipped!==1?'s':''} already synced ✓`);
   }
+  _cbPushModalFinish(_pushCreated,_pushSkipped,_pushFailed);
 }
 
 async function restoreCancelledReservations(reservationIds){
