@@ -482,13 +482,26 @@ async function cbSyncNamesForBooking(bkId){
     const guestNames=(reg?.guests||[]).filter(g=>g.name).map(g=>g.name.trim());
     if(!guestNames.length){skipped++;continue;}
     try{
-      await fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
+      // updateReservationGuest can fall back server-side to cancel+recreate when a
+      // direct name update is rejected by Cloudbeds (replaceReservation's putGuest
+      // fallback) — that returns a BRAND NEW reservationId. Discarding the response
+      // (as this used to) leaves cbReservationIds pointing at the now-cancelled old
+      // one; the next sync/push can no longer find it, treats the room as unsynced,
+      // and creates yet another reservation — a real duplication bug reported live.
+      const r=await fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({reservationId:existingId,roomName,startDate:bk.startDate,endDate:bk.endDate,
           guestFirstName:guestNames.join(' & '),groupName:bk.retreatName||bk.row||'',
           leaderName:bk.leaderName||'',adults:guestNames.length,dailyRate:0})});
+      const d=await r.json();
+      if(d.reservationId&&d.reservationId!==existingId){
+        bk.cbReservationIds[roomName]=d.reservationId;
+        if(d.guestId){if(!bk.cbGuestIds)bk.cbGuestIds={};bk.cbGuestIds[roomName]=d.guestId;}
+        console.log('[CB sync names] reservation replaced for',roomName,existingId,'→',d.reservationId);
+      }
       synced++;
     }catch(e){console.warn('[CB sync names]',roomName,e);}
   }
+  saveAll();
   showToast(`Nombres sincronizados: ${synced} cuarto${synced!==1?'s':''}${skipped?' ('+skipped+' sin huésped)':''}.`);
 }
 
@@ -589,10 +602,19 @@ async function cbSyncAllNames(){
       const guestNames=(reg?.guests||[]).filter(g=>g.name).map(g=>g.name.trim());
       if(!guestNames.length)continue;
       try{
-        await fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
+        // See cbSyncNamesForBooking — updateReservationGuest can fall back server-side
+        // to cancel+recreate, returning a NEW reservationId. Must capture it or the
+        // next sync creates a duplicate reservation for this room.
+        const r=await fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({reservationId:existingId,roomName,startDate:bk.startDate,endDate:bk.endDate,
             guestFirstName:guestNames.join(' & '),groupName:bk.retreatName||bk.row||'',
             leaderName:bk.leaderName||'',adults:guestNames.length,dailyRate:0})});
+        const d=await r.json();
+        if(d.reservationId&&d.reservationId!==existingId){
+          bk.cbReservationIds[roomName]=d.reservationId;
+          if(d.guestId){if(!bk.cbGuestIds)bk.cbGuestIds={};bk.cbGuestIds[roomName]=d.guestId;}
+          _cbSyncLog((bk.retreatName||bk.id)+' › '+roomName+' — reservation replaced ('+existingId+' → '+d.reservationId+')');
+        }
         roomsDone++;synced++;
         _cbSyncLog((bk.retreatName||bk.id)+' › '+roomName+' → '+guestNames.join(' & '));
       }catch(e){_cbSyncLog('ERROR '+roomName+': '+e.message);}
@@ -600,6 +622,7 @@ async function cbSyncAllNames(){
     if(rowEl)rowEl.textContent=roomsDone?roomsDone+' updated':'no guests';
     done++;
     if(status)status.textContent='Synced '+done+'/'+bks.length+' retreats…';
+    saveAll();
   }
   if(status)status.textContent='Done — '+synced+' name'+(synced!==1?'s':'')+' synced to Cloudbeds.';
   if(btn)btn.disabled=false;if(fixBtn)fixBtn.disabled=false;
