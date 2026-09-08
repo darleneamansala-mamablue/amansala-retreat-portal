@@ -933,6 +933,9 @@
     <span class="tab-label">Schedule</span>
   </button>
   <button class="tab-btn" id="activityTabBtn" onclick="switchTab('activity',this)" style="display:none"></button>
+  <button class="tab-btn" id="itemsTabBtn" onclick="switchTab('items',this)" style="display:none"></button>
+  <button class="tab-btn" id="commissionsTabBtn" onclick="switchTab('commissions',this)" style="display:none"></button>
+  <button class="tab-btn" id="botLogAdminTabBtn" onclick="switchTab('botlogadmin',this)" style="display:none"></button>
   <button class="tab-btn" id="transportTabBtn" onclick="switchTab('transport',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.5H2M17 3H7L3 16.5h18L17 3z"/><circle cx="7.5" cy="20" r="1.5"/><circle cx="16.5" cy="20" r="1.5"/></svg>
     <span class="tab-label">Transport</span>
@@ -993,6 +996,18 @@
     <button class="tab-btn tab-btn-sub" id="staffSideBtn" onclick="openManageStaff()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       <span class="tab-label">Staff</span>
+    </button>
+    <button class="tab-btn tab-btn-sub" onclick="switchTab('items',document.getElementById('itemsTabBtn'));document.getElementById('itemsTabBtn').style.display='flex'" style="color:#f59e0b">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+      <span class="tab-label">Items</span>
+    </button>
+    <button class="tab-btn tab-btn-sub" onclick="switchTab('commissions',document.getElementById('commissionsTabBtn'));document.getElementById('commissionsTabBtn').style.display='flex'" style="color:#34d399">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      <span class="tab-label">Commissions</span>
+    </button>
+    <button class="tab-btn tab-btn-sub" onclick="switchTab('botlogadmin',document.getElementById('botLogAdminTabBtn'));document.getElementById('botLogAdminTabBtn').style.display='flex'" style="color:#a78bfa">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h4M9 15h5"/><circle cx="17" cy="17" r="3" fill="#a78bfa" stroke="none"/><path d="M17 15.5v1.5l1 1" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>
+      <span class="tab-label">Bot Log</span>
     </button>
   </div>
 </div>
@@ -2811,6 +2826,21 @@
   <div class="act-feed" id="actFeed">
     <div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;font-style:italic">No activity yet.</div>
   </div>
+</div>
+
+<!-- ===== ITEMS (admin) — ported from staging's new modular app ===== -->
+<div class="tab-panel" id="tab-items" style="flex-direction:column">
+  <div id="itemsContent" style="flex:1;overflow-y:auto;background:#f0ece4"></div>
+</div>
+
+<!-- ===== COMMISSIONS (admin) — ported from staging's new modular app ===== -->
+<div class="tab-panel" id="tab-commissions" style="flex-direction:column">
+  <div id="commissionsContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column"></div>
+</div>
+
+<!-- ===== BOT LOG (admin, cross-retreat) — ported from staging's new modular app ===== -->
+<div class="tab-panel" id="tab-botlogadmin" style="flex-direction:column">
+  <div id="botLogAdminContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column"></div>
 </div>
 
 <!-- ===== SCHEDULE TAB (SKEDDA-LIKE) ===== -->
@@ -5352,6 +5382,9 @@ function switchTab(id,btn){
   if(id==='builder')   bldInitTab();
   if(id==='datefinder') dfInit();
   if(id==='activity')  buildActivityLog();
+  if(id==='items')     adminItemsRender();
+  if(id==='commissions') commissionsRender();
+  if(id==='botlogadmin') adminBotLogRender();
   if(id==='actsheet')  actSheetInit().catch(()=>actSheetRenderWeek());
   if(id==='skedda'){loadFromSupabase().then(()=>{skedBuild();if(skedSubViewMode==='retreats')buildRetreatSchedulesPanel();});}
   if(id==='events')    evtBuild();
@@ -5374,6 +5407,9 @@ function switchTab(id,btn){
 // ===== QUICK RESERVE — moved to modules/venues.js (loaded above) =====
 // ===== ROOM CALENDAR — moved to modules/venues.js (loaded above) =====
 </script>
+<script src="modules/admin-items.js"></script>
+<script src="modules/commissions.js"></script>
+<script src="modules/admin-bot-log.js"></script>
 <script src="modules/teacher-portal.js"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
