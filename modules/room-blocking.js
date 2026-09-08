@@ -352,20 +352,25 @@ function clearBlockRoomGuests(displayRoom){
 function blockSave(){
   const bk=AppData.bookings.find(b=>b.id===blockEditBkId);
   if(!bk)return;
-  const selected=Array.from(document.querySelectorAll('#blockModalBody .block-room-item input:checked'))
+  let selected=Array.from(document.querySelectorAll('#blockModalBody .block-room-item input:checked'))
     .flatMap(cb=>{
       const item=cb.closest('.block-room-item');
       const physical=JSON.parse(item?.dataset.physical||'[]');
       return physical.length?physical:[item?.dataset.room].filter(Boolean);
     });
 
-  // Hard validation: reject any room already blocked by an overlapping retreat or external Cloudbeds reservation
+  // Validation: a room already blocked by an overlapping retreat or external Cloudbeds
+  // reservation is dropped from THIS save rather than aborting the whole thing — an
+  // all-or-nothing reject here used to silently lose every other room the user picked
+  // if just one of them conflicted, with only a blocking alert() (easy to click through
+  // without registering) as the only sign anything went wrong.
   const conflicts=[];
+  const conflictingRooms=new Set();
   AppData.bookings.forEach(other=>{
     if(other.id===bk.id)return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(room=>{
-      if(selected.includes(room))conflicts.push(`Room ${room} → ${other.leaderName||other.retreatName}`);
+      if(selected.includes(room)){conflicts.push(`Room ${room} → ${other.leaderName||other.retreatName}`);conflictingRooms.add(room);}
     });
   });
   const _bsPortalIds=new Set();
@@ -374,13 +379,13 @@ function blockSave(){
     if(_bsPortalIds.has(String(r.reservationID)))return;
     if(!datesOverlap(bk.startDate,bk.endDate,r.startDate,r.endDate))return;
     (r.rooms||[]).forEach(room=>{
-      if(selected.some(s=>s.toLowerCase()===room.toLowerCase()))
-        conflicts.push(`Room ${room} → ${r.guestName} (${r.sourceName||'Cloudbeds'})`);
+      const match=selected.find(s=>s.toLowerCase()===room.toLowerCase());
+      if(match){conflicts.push(`Room ${room} → ${r.guestName} (${r.sourceName||'Cloudbeds'})`);conflictingRooms.add(match);}
     });
   });
   if(conflicts.length){
-    alert('Cannot save — the following rooms are already blocked by another retreat on overlapping dates:\n\n'+conflicts.join('\n'));
-    return;
+    selected=selected.filter(r=>!conflictingRooms.has(r));
+    alert(`${conflictingRooms.size} room${conflictingRooms.size!==1?'s were':' was'} skipped — already blocked by another retreat on overlapping dates:\n\n${conflicts.join('\n')}\n\nThe rest of your selection will still be saved.`);
   }
 
   // Cancel Cloudbeds reservations for rooms removed from the block.
@@ -412,6 +417,25 @@ function blockSave(){
   buildDashboard();
   showToast(`${bk.blockedRooms.length} rooms blocked for this retreat.`);
   pushReservationsToCloudbeds(bk).catch(e=>console.warn('[CB push]',e));
+  _verifyBlockSavePersisted(bk.id,selected);
+}
+// saveAll() upserts this device's FULL in-memory AppData.bookings snapshot. If another
+// open tab/session with a stale copy of THIS booking saves anything around the same
+// time, its own full-array upsert can silently overwrite blockedRooms back to whatever
+// it still has in memory — no error, no alert, the change just quietly doesn't stick.
+// Re-read this one booking a few seconds later and warn if it doesn't match what we
+// just saved, so at least the loss is visible instead of discovered days later.
+async function _verifyBlockSavePersisted(bkId,expected){
+  await new Promise(r=>setTimeout(r,4000));
+  try{
+    const {data,error}=await db.from('bookings').select('blocked_rooms').eq('id',bkId).maybeSingle();
+    if(error||!data)return;
+    const actual=(data.blocked_rooms||[]).slice().sort();
+    const exp=expected.slice().sort();
+    if(JSON.stringify(actual)!==JSON.stringify(exp)){
+      showToast(`⚠ Room block for this retreat may have been overwritten by another open tab — reopen Block Rooms to check (expected ${exp.length}, found ${actual.length}).`);
+    }
+  }catch(e){}
 }
 
 // Guest modal
