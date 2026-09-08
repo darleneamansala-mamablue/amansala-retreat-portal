@@ -534,8 +534,18 @@ function gOpenEdit(room,rtId){
   const last=(reg.guests||[]).reduce((a,g,i)=>g.name?i:a,-1);
   gSetupTabs(rt);gSwitchTab(Math.max(0,last));gUpdatePrice();openModal('guestModal');
 }
+// Room types where the true occupancy (rt.maxOcc) includes an extra guest slot that
+// only an admin/staff user may fill — teachers still see the older, lower cap here so
+// they can't add that extra person themselves, but the slot (once filled by an admin)
+// still shows up, prices, and syncs everywhere else since it's a normal guest[] entry.
+const TEACHER_OCC_CAP={cg1:2,cg3:1};
+function gRoleMaxOcc(rt){
+  const trueMax=rt?rt.maxOcc:1;
+  if(IS_TEACHER_MODE&&rt&&TEACHER_OCC_CAP[rt.id]!=null)return Math.min(TEACHER_OCC_CAP[rt.id],trueMax);
+  return trueMax;
+}
 function gSetupTabs(rt){
-  const maxOcc=gExtraGuestMode?2:(rt?rt.maxOcc:1);
+  const maxOcc=gExtraGuestMode?2:gRoleMaxOcc(rt);
   const tabsEl=document.getElementById('gTabs');
   if(maxOcc>=2){tabsEl.style.display='flex';[0,1,2,3].forEach(i=>{const t=document.getElementById('gtab'+i);if(t)t.style.display=i<maxOcc?'':'none';});}
   else tabsEl.style.display='none';
@@ -549,7 +559,7 @@ function gSwitchTab(idx){
   // with max_occ > 4 (whole-villa types like Casa Shanti/Casa Master/Casita 4, or a
   // bad data value) must never drive this loop past that, or getElementById('gp4')
   // returns null and .style throws, crashing the whole "Add Guest" modal.
-  const maxOcc=Math.min(gExtraGuestMode?2:(rt?rt.maxOcc:1),4);
+  const maxOcc=Math.min(gExtraGuestMode?2:gRoleMaxOcc(rt),4);
   for(let i=0;i<maxOcc;i++){document.getElementById('gtab'+i)?.classList.toggle('active',i===idx);const p=document.getElementById('gp'+i);if(p)p.style.display=i===idx?'block':'none';}
   gUpdatePrice();
 }

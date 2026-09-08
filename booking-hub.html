@@ -4581,9 +4581,9 @@ const DEF_ROOM_TYPES=[
   {id:'c4c',name:'Casita 4 / 2 Beds',property:'AMANSALA',   color:'#b45309',maxOcc:1,price1:275,price2:275,price1_low:245,price2_low:245,rooms:['Casita 4 /2a','Casita 4 /2b','Casita 4 /3a','Casita 4 /3b']},
   // === CASA MASTER ===
   {id:'cm1',name:'Casa Master',       property:'AMANSALA',   color:'#b45309',maxOcc:9,price1:2500,price2:278,price1_low:2100,price2_low:233,rooms:['Casa Master']},
-  {id:'cg1',name:'Casa King Downstairs',           property:'AMANSALA',color:'#b45309',maxOcc:2,price1:345,price2:240,price1_low:300,price2_low:200,desc:'King room on the ground floor of Casa Grande.',rooms:['Casa King Downstairs']},
+  {id:'cg1',name:'Casa King Downstairs',           property:'AMANSALA',color:'#b45309',maxOcc:3,price1:345,price2:240,price1_low:300,price2_low:200,desc:'King room on the ground floor of Casa Grande.',rooms:['Casa King Downstairs']},
   {id:'cg2',name:'Casa Grande Up King',            property:'AMANSALA',color:'#d97706',maxOcc:2,price1:345,price2:240,price1_low:300,price2_low:200,desc:'King room for 2 in Casa Grande upstairs.',rooms:['Casa Grande Up King']},
-  {id:'cg3',name:'Casa Grande 2 Queen Downstairs', property:'AMANSALA',color:'#92400e',maxOcc:1,price1:295,price2:295,price1_low:265,price2_low:265,desc:'Individual queen room in Casa Grande downstairs.',rooms:['Queen Downstairs A','Queen Downstairs B']},
+  {id:'cg3',name:'Casa Grande 2 Queen Downstairs', property:'AMANSALA',color:'#92400e',maxOcc:2,price1:295,price2:295,price1_low:265,price2_low:265,desc:'Queen bed in Casa Grande downstairs — admin can add a 2nd guest to share it.',rooms:['Queen Downstairs A','Queen Downstairs B']},
   {id:'cg4',name:'Casa Grande Upstairs Individual',property:'AMANSALA',color:'#a16207',maxOcc:1,price1:295,price2:295,price1_low:265,price2_low:265,desc:'Individual upstairs bed in Casa Grande.',rooms:['Upstairs Individual Bed']},
   {id:'cg5',name:'Casa Grande Up Shared 2 Queen',  property:'AMANSALA',color:'#ca8a04',maxOcc:1,price1:295,price2:295,price1_low:265,price2_low:265,desc:'Individual queen room upstairs with shared bathroom.',rooms:['Casa Grande Up A','Casa Grande Up B']},
   // === CASA SHANTI ===
@@ -4874,6 +4874,20 @@ function loadAll(){
     });
     localStorage.setItem('amansala_room_migration_v10','1');
     // Push corrected room types to Supabase so all devices get the fix
+    setTimeout(()=>syncRoomTypesToSupabase(),2000);
+  }
+  // Room migration v11 — Casa King Downstairs can now hold 3 guests (was 2), and each
+  // Casa Grande 2 Queen Downstairs bed can now hold 2 (was 1 — private only). The extra
+  // slot is admin-only: teachers still see the old cap in the guest modal (TEACHER_OCC_CAP
+  // in room-blocking.js), but once an admin fills it, it prices/syncs/reports like any
+  // other guest everywhere else since it's a normal guests[] entry.
+  if(!localStorage.getItem('amansala_room_migration_v11')){
+    ['cg1','cg3'].forEach(id=>{
+      const def=DEF_ROOM_TYPES.find(d=>d.id===id);
+      const stored=AppData.roomTypes.find(rt=>rt.id===id);
+      if(def&&stored)stored.maxOcc=def.maxOcc;
+    });
+    localStorage.setItem('amansala_room_migration_v11','1');
     setTimeout(()=>syncRoomTypesToSupabase(),2000);
   }
   // Cleanup: remove any auto-injected $2,500 deposit payments from previous migration
