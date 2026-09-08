@@ -3494,34 +3494,11 @@ function renderTeacherActivities(bkId){
 // grouping the admin Transport board saved (tr2UserGroupMap, shared via
 // settings.transport_groups — same map driver-view.html reads) before falling
 // back to auto-clustering the rest by a 30-min window, same as before this existed.
-function _trGroupWithOverrides(list,type,timeField){
-  const groups=[];
-  const ugAssigned=new Map();
-  const rest=[];
-  list.forEach(s=>{
-    const gk=(typeof tr2UserGroupMap!=='undefined')?tr2UserGroupMap.get(`${type}|${s.id}`):null;
-    if(gk){
-      if(ugAssigned.has(gk))groups[ugAssigned.get(gk)].push(s);
-      else{const g=[s];g.__ugKey=gk;ugAssigned.set(gk,groups.length);groups.push(g);}
-    }else rest.push(s);
-  });
-  if(rest.length){
-    let cur=[rest[0]];
-    for(let i=1;i<rest.length;i++){
-      if(trTimeToMins(rest[i][timeField])-trTimeToMins(cur[0][timeField])<=30)cur.push(rest[i]);
-      else{groups.push(cur);cur=[rest[i]];}
-    }
-    groups.push(cur);
-  }
-  groups.forEach(g=>g.sort((a,b)=>trTimeToMins(a[timeField])-trTimeToMins(b[timeField])));
-  groups.sort((a,b)=>trTimeToMins(a[0][timeField])-trTimeToMins(b[0][timeField]));
-  return groups;
-}
 // A manual admin group (drag-and-drop in the Transport tab) can span retreats — this
-// booking's "My Transport" only ever loads its OWN guests, so a group's visible g.length
-// undercounts the real ride size whenever it's been combined with another retreat.
-// Scans the full transport list (allTr, already loaded for the cross-retreat hint below)
-// to find the true combined headcount for pricing/vehicle purposes.
+// booking's "My Transport" only ever loads its OWN guests, so a group's visible pax
+// count undercounts the real ride size whenever it's been combined with another
+// retreat. Scans the full transport list to find the true combined headcount for
+// pricing purposes.
 function _trGlobalGroupPax(type,groupKey,allTr){
   if(!groupKey||typeof tr2UserGroupMap==='undefined')return null;
   let n=0;
@@ -3531,6 +3508,176 @@ function _trGlobalGroupPax(type,groupKey,allTr){
     if(tr2UserGroupMap.get(`${type}|${s.id}`)===groupKey)n++;
   });
   return n;
+}
+function _trMinsToTime(m){const w=((m%1440)+1440)%1440;return String(Math.floor(w/60)).padStart(2,'0')+':'+String(w%60).padStart(2,'0');}
+function _trPickupTime(airport,flightTime){
+  if(!flightTime)return null;
+  const lead=(airport||'').toLowerCase()==='tulum'?150:240;
+  return _trMinsToTime(trTimeToMins(flightTime)-lead);
+}
+// Ported from staging's retreat-portal.html Transport tab: a single flat table per
+// direction (not per-airport cards) with unsubmitted guests shown inline instead of
+// in a separate list. Groups: a manual admin override (tr2UserGroupMap) always wins;
+// otherwise guests who opted in to sharing auto-cluster within 30 min at the same
+// airport/date, and everyone else gets their own private-rate row.
+function _trAssignRideGroups(guests,type,allTr){
+  const isArr=type==='arr';
+  const info=guests.map((g,idx)=>{
+    const tr=g.tr;
+    const ot=isArr?tr?.arrivalOT:tr?.departureOT;
+    const date=isArr?tr?.arrivalDate:tr?.departureDate;
+    const time=isArr?tr?.arrivalTime:tr?.departureTime;
+    const ap=((isArr?tr?.arrivalAirport:tr?.departureAirport)||'').toLowerCase();
+    const ugKey=(tr?.id&&typeof tr2UserGroupMap!=='undefined')?tr2UserGroupMap.get(`${isArr?'arrival':'departure'}|${tr.id}`):null;
+    return{idx,hasTr:!!tr,ot:!!ot,date:date||'',ap,mins:trTimeToMins(time),share:!!tr?.willingToShare,ugKey};
+  });
+  const groups=[];
+  const groupOf=new Array(guests.length).fill(null);
+  const ugAssigned=new Map();
+  for(const e of info){
+    if(!e.hasTr||e.ot||!e.date||e.mins===null)continue;
+    if(e.ugKey){
+      if(ugAssigned.has(e.ugKey)){
+        const gi=ugAssigned.get(e.ugKey);
+        groups[gi].idxs.push(e.idx);groups[gi].minMins=Math.min(groups[gi].minMins,e.mins);
+        groupOf[e.idx]=gi;
+      }else{
+        const gi=groups.length;
+        ugAssigned.set(e.ugKey,gi);
+        groups.push({ap:e.ap,date:e.date,idxs:[e.idx],userGroup:true,ugKey:e.ugKey,minMins:e.mins});
+        groupOf[e.idx]=gi;
+      }
+      continue;
+    }
+    if(!e.share){
+      groupOf[e.idx]=groups.length;
+      groups.push({ap:e.ap,date:e.date,idxs:[e.idx],priv:true,minMins:e.mins});
+      continue;
+    }
+    let joined=false;
+    for(let gi=0;gi<groups.length;gi++){
+      const grp=groups[gi];
+      if(grp.priv||grp.userGroup||grp.ap!==e.ap||grp.date!==e.date)continue;
+      if(grp.idxs.some(mi=>Math.abs(info[mi].mins-e.mins)<=30)){
+        grp.idxs.push(e.idx);grp.minMins=Math.min(grp.minMins,e.mins);groupOf[e.idx]=gi;joined=true;break;
+      }
+    }
+    if(!joined){groupOf[e.idx]=groups.length;groups.push({ap:e.ap,date:e.date,idxs:[e.idx],minMins:e.mins});}
+  }
+  const PASTEL=['#eff6ff','#f0fdf4','#faf5ff','#fffbeb','#fdf2f8','#f0fdfa','#fff7ed','#f0f9ff'];
+  let colorIdx=0;
+  const prices=new Array(guests.length).fill(null);
+  groups.forEach(grp=>{
+    const globalPax=grp.userGroup?_trGlobalGroupPax(isArr?'arrival':'departure',grp.ugKey,allTr):null;
+    const payCount=globalPax!=null?globalPax:grp.idxs.length;
+    grp.color=PASTEL[colorIdx++%PASTEL.length];
+    grp.combinedExtra=(globalPax!=null&&globalPax>grp.idxs.length)?(globalPax-grp.idxs.length):0;
+    grp.pax=payCount;
+    grp.priv=grp.priv||payCount===1;
+    const pp=trGetPrice(grp.ap,payCount);
+    grp.idxs.forEach(idx=>{prices[idx]={pp,pax:payCount,priv:grp.priv,ap:grp.ap,combinedExtra:grp.combinedExtra};});
+  });
+  return{groups,groupOf,prices};
+}
+function _trRateRows(tiers){
+  const labels=['1','2','3','4','5','6+'];
+  return tiers.map((r,i)=>`<tr><td style="padding:1px 14px 1px 0;color:#8a7e74;font-size:11.5px">${labels[i]} pax</td><td style="font-weight:700;color:#2d2520;font-size:11.5px">$${r}</td></tr>`).join('');
+}
+function _trBuildTransportTable(guests,type,result){
+  const{prices,groupOf,groups}=result;
+  const isArr=type==='arr';
+  if(!guests.length)return`<div style="padding:28px;text-align:center;color:#8a7e74;font-size:12px">No guests registered yet.</div>`;
+  const thS=`padding:9px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#8a7e74;text-align:left;font-weight:700`;
+  const dash=`<span style="color:#d1c9bd">—</span>`;
+
+  const indexed=guests.map((g,i)=>({g,i,gi:groupOf[i]??-1}));
+  indexed.sort((a,b)=>{if(a.gi!==b.gi)return(a.gi===-1?999:a.gi)-(b.gi===-1?999:b.gi);return 0;});
+
+  let lastGi;
+  const rows=indexed.map(({g,i})=>{
+    const tr=g.tr;
+    const ot=isArr?tr?.arrivalOT:tr?.departureOT;
+    const date=isArr?tr?.arrivalDate:tr?.departureDate;
+    const time=isArr?tr?.arrivalTime:tr?.departureTime;
+    const ap=isArr?tr?.arrivalAirport:tr?.departureAirport;
+    const p=prices[i];
+    const grp=(groupOf[i]!=null&&groupOf[i]>=0)?groups[groupOf[i]]:null;
+    const rowBg=grp?.color?grp.color:'#fff';
+
+    const dot=tr
+      ?`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#15803d;margin-right:6px;vertical-align:middle"></span>`
+      :`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#e5e0d6;margin-right:6px;vertical-align:middle"></span>`;
+    const driverBadge=tr?.driver_confirmed
+      ?`<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;background:#d1fae5;color:#065f46;margin-left:6px;white-space:nowrap">✓ Driver confirmed</span>`
+      :'';
+
+    let dateCell=dash;
+    if(ot)dateCell=`<span style="font-size:11px;color:#8a7e74;font-style:italic">Own transport</span>`;
+    else if(date)dateCell=`<span style="font-weight:600">${date}</span>`;
+
+    const timeCell=time?`<span style="color:#2d2520">${tsFmt(time)}</span>`:dash;
+    const apLabel=ap==='cancun'?'CUN':ap==='tulum'?'TQO':(ap||'').toUpperCase();
+    const apCell=ap?`<span style="font-size:11px;font-weight:700;background:#f2f0ea;padding:2px 6px;border-radius:4px;color:#5a5048">${apLabel}</span>`:dash;
+
+    let flightCell=dash;
+    if(tr&&ot)flightCell=`<span style="font-size:11px;color:#8a7e74">—</span>`;
+    else if(tr)flightCell=tr.flightNumber
+      ?`<span style="font-weight:600;color:#2d2520">${escHtml(tr.flightNumber)}</span>`
+      :`<span style="font-size:10px;font-weight:700;background:#fef9c3;color:#92400e;border-radius:5px;padding:2px 7px;white-space:nowrap">Missing Flight Info</span>`;
+
+    let priceCell=dash;
+    if(ot)priceCell=`<span style="font-size:11px;color:#8a7e74">Own</span>`;
+    else if(p?.pp!=null){
+      const shared=!p.priv&&p.pax>1;
+      const bg=shared?'#f0fdf9':'#f8f6f2';
+      const cl=shared?'#065f46':'#5a5048';
+      const tag=shared?` · ${p.pax}✕`:'';
+      priceCell=`<span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;background:${bg};color:${cl}">$${p.pp}${tag}</span>${p.combinedExtra?`<div style="font-size:9.5px;color:#065f46;margin-top:2px">🔗 +${p.combinedExtra} from another retreat</div>`:''}`;
+    }
+
+    const shareCell=isArr
+      ?`<td style="padding:10px 12px;font-size:12px">${tr?.willingToShare?`<span style="font-size:11px;font-weight:600;color:#0e9494">✓</span>`:dash}</td>`
+      :'';
+
+    const puFlight=(!isArr&&grp&&grp.minMins!=null)?_trMinsToTime(grp.minMins):time;
+    const pu=(!isArr&&!ot&&puFlight)?_trPickupTime(ap,puFlight):null;
+    const pickupCell=!isArr
+      ?`<td style="padding:10px 12px;font-size:12px">${pu?`<span style="font-weight:700;color:#b45309">${tsFmt(pu)}</span>`:dash}</td>`
+      :'';
+
+    const curGi=groupOf[i]??-1;
+    const sep=(lastGi!==undefined&&curGi!==lastGi)
+      ?`<tr><td colspan="8" style="padding:6px;background:#fff;border:none"></td></tr>`
+      :'';
+    lastGi=curGi;
+
+    return sep+`<tr style="border-bottom:1px solid #f0ece4;background:${rowBg}">
+      <td style="padding:10px 12px;font-size:13px;font-weight:600;white-space:nowrap">${dot}${escHtml(g.name)}${driverBadge}</td>
+      <td style="padding:10px 12px;font-size:12px;color:#8a7e74;white-space:nowrap">${g.room?escHtml(g.room):'—'}</td>
+      <td style="padding:10px 12px;font-size:12px">${dateCell}</td>
+      <td style="padding:10px 12px;font-size:12px">${timeCell}</td>
+      <td style="padding:10px 12px;font-size:12px">${apCell}</td>
+      <td style="padding:10px 12px;font-size:12px">${flightCell}</td>
+      ${pickupCell}
+      <td style="padding:10px 12px;font-size:12px">${priceCell}</td>
+      ${shareCell}
+    </tr>`;
+  }).join('');
+
+  return`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:#faf7f2">
+      <th style="${thS}">Guest</th>
+      <th style="${thS}">Room</th>
+      <th style="${thS}">Date</th>
+      <th style="${thS}">Time</th>
+      <th style="${thS}">Airport</th>
+      <th style="${thS}">Flight</th>
+      ${!isArr?`<th style="${thS}">Pickup</th>`:''}
+      <th style="${thS}">Est. Cost</th>
+      ${isArr?`<th style="${thS}">Share</th>`:''}
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
 }
 function renderTeacherTransport(bkId){
   const wrap=document.getElementById('teacherTransportContent');if(!wrap)return;
@@ -3542,10 +3689,8 @@ function renderTeacherTransport(bkId){
 function _renderTeacherTransportInner(bkId){
   const wrap=document.getElementById('teacherTransportContent');if(!wrap)return;
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk){wrap.innerHTML='';return;}
-  const {roster,matchedSubs,missing,submittedCount,orphanSubs}=getTransportRoster(bkId);
-  const subs=matchedSubs;
-  const MNTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const _allTr=loadTransport(); // all retreats — needed for cross-retreat pricing/matching below
+  const {roster,guestsWithTransport,submittedCount,orphanSubs}=getTransportRoster(bkId);
+  const _allTr=loadTransport(); // all retreats — needed for cross-retreat pricing
 
   if(!roster.length){
     wrap.innerHTML=`<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0;max-width:420px;margin:0 auto;line-height:1.65">
@@ -3554,265 +3699,101 @@ function _renderTeacherTransportInner(bkId){
     return;
   }
 
-  // Stats (room list = denominator)
-  let html=`<div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:110px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:#374151">${roster.length}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">On Room List</div>
-    </div>
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:110px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:#0e9494">${submittedCount}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">Transport Received</div>
-    </div>
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:110px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:${missing.length?'#d97706':'#15803d'}">${missing.length}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">Not Yet Submitted</div>
-    </div>
-    <div style="background:#fff;border:1px solid #e8dfd4;border-radius:11px;padding:14px 20px;flex:1;min-width:110px;text-align:center">
-      <div style="font-size:22px;font-weight:700;color:#374151">${subs.filter(s=>s.willingToShare).length}</div>
-      <div style="font-size:11px;color:#8a7e74;font-weight:600;margin-top:2px">Willing to Share</div>
+  function sortKey(g,type){
+    const tr=g.tr;
+    const date=type==='arr'?tr?.arrivalDate:tr?.departureDate;
+    const time=type==='arr'?tr?.arrivalTime:tr?.departureTime;
+    const ot=type==='arr'?tr?.arrivalOT:tr?.departureOT;
+    if(!date&&!ot)return'9999-99-99 99:99 '+g.name;
+    if(ot)return'9998-99-99 99:99 '+g.name;
+    return(date||'9999')+' '+(time||'99:99')+' '+g.name;
+  }
+  const arrGuests=[...guestsWithTransport].sort((a,b)=>sortKey(a,'arr').localeCompare(sortKey(b,'arr')));
+  const depGuests=[...guestsWithTransport].sort((a,b)=>sortKey(a,'dep').localeCompare(sortKey(b,'dep')));
+  const arrResult=_trAssignRideGroups(arrGuests,'arr',_allTr);
+  const depResult=_trAssignRideGroups(depGuests,'dep',_allTr);
+  const arrCount=guestsWithTransport.filter(g=>g.tr?.arrivalDate||g.tr?.arrivalOT).length;
+  const depCount=guestsWithTransport.filter(g=>g.tr?.departureDate||g.tr?.departureOT).length;
+
+  // Teacher pays transport banner
+  const _tpFlags=bk.flags||[];
+  const _tpPaysArr=_tpFlags.includes('teacher_pays_arrival_transport');
+  const _tpPaysDep=_tpFlags.includes('teacher_pays_departure_transport');
+  let _tpArrTotal=0,_tpDepTotal=0;
+  if(_tpPaysArr)arrGuests.forEach((g,i)=>{const p=arrResult.prices[i];if(p?.pp)_tpArrTotal+=p.pp;});
+  if(_tpPaysDep)depGuests.forEach((g,i)=>{const p=depResult.prices[i];if(p?.pp)_tpDepTotal+=p.pp;});
+  const _tpBanner=(!_tpPaysArr&&!_tpPaysDep)?'':`<div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+    <span style="font-size:18px">★</span>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:3px">Teacher paying transportation</div>
+      <div style="font-size:12px;color:#78350f">${[
+        _tpPaysArr?(_tpArrTotal>0?`🛬 Arrivals total: <strong>$${_tpArrTotal}</strong> <span style="font-size:10px;opacity:.7">(est.)</span>`:'🛬 Arrivals: pending submissions'):'',
+        _tpPaysDep?(_tpDepTotal>0?`🛫 Departures total: <strong>$${_tpDepTotal}</strong> <span style="font-size:10px;opacity:.7">(est.)</span>`:'🛫 Departures: pending submissions'):''
+      ].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div>
     </div>
   </div>`;
+
   const _trFormUrl=`${location.origin}/transport-form.html?bk=${bkId}`;
-  html+=`<div style="background:linear-gradient(135deg,#2d6a6a,#3d8080);border-radius:14px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
-    <div>
-      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:3px">Share this link with your guests</div>
-      <div style="font-size:11.5px;color:rgba(255,255,255,0.75)">Each guest fills in their flight details so we can coordinate transfers</div>
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <span style="font-size:12px;color:#8a7e74">${submittedCount} / ${roster.length} guests submitted</span>
+    <div style="display:flex;gap:8px">
+      <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${_trFormUrl}').then(()=>{this.textContent='✓ Copied!';setTimeout(()=>this.textContent='🔗 Copy Form Link',1800)})" style="padding:6px 14px;border:1px solid #e8dfd4;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;cursor:pointer;color:#5a5048">🔗 Copy Form Link</button>
+      <button onclick="renderTeacherTransport('${bkId}')" style="padding:6px 14px;border:1px solid #e8dfd4;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;cursor:pointer;color:#5a5048">↻ Refresh</button>
     </div>
-    <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${_trFormUrl}').then(()=>{this.textContent='✓ Copied!';setTimeout(()=>this.textContent='Copy Transport Link',2000)});this.textContent='✓ Copied!'" style="padding:9px 18px;background:#fff;color:#2d6a6a;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">Copy Transport Link</button>
-  </div>
-  <p style="font-size:12px;color:#8a7e74;margin:-8px 0 16px;line-height:1.55">Tracking <b>${submittedCount} of ${roster.length}</b> guests on your room list.</p>`;
+  </div>`;
+
   if(orphanSubs.length){
     html+=`<div style="background:#fff;border:1px solid #fecaca;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#991b1b;line-height:1.55">
       <b>${orphanSubs.length} transport form${orphanSubs.length!==1?'s':''}</b> received from people not on your room list:
-      ${orphanSubs.map(s=>`${s.firstName} ${s.lastName}`.trim()).join(', ')}.
+      ${orphanSubs.map(s=>escHtml(`${s.firstName} ${s.lastName}`.trim())).join(', ')}.
       Ask Amansala to align these with your room list if they should be in your group.
     </div>`;
   }
-  html+=trRosterStatusHtml(roster,missing);
 
-  // Arrivals grouped by date → 30-min windows (exclude OT guests)
-  const arrivalOTs=subs.filter(s=>s.arrivalOT&&s.arrivalDate&&s.arrivalTime)
-    .sort((a,b)=>a.arrivalDate===b.arrivalDate?a.arrivalTime.localeCompare(b.arrivalTime):a.arrivalDate.localeCompare(b.arrivalDate));
-  const arrivals=subs.filter(s=>!s.arrivalOT&&s.arrivalDate&&s.arrivalTime&&s.arrivalAirport)
-    .sort((a,b)=>a.arrivalDate===b.arrivalDate?a.arrivalTime.localeCompare(b.arrivalTime):a.arrivalDate.localeCompare(b.arrivalDate));
+  const cardS='background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px;border:1px solid #e8dfd4';
+  const hdS='padding:14px 20px;border-bottom:1px solid #e8dfd4;display:flex;align-items:center;gap:10px';
 
-  if(arrivals.length){
-    html+=`<div style="margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:10px">Arrivals</div>
-      <div style="background:#f0fdfb;border:1.5px solid #9dd1d1;border-radius:11px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px">
-        <span style="font-size:16px;flex-shrink:0">💡</span>
-        <p style="font-size:12px;color:#2d6a6a;line-height:1.6;margin:0"><b>Please note:</b> We do our best to match guests arriving alone with guests from other retreats to reduce transfer costs. The pricing shown is based on your group only — the final cost per person may decrease if we are able to arrange a cross-retreat share.</p>
-      </div>`;
-    const byAD={};
-    arrivals.forEach(s=>{const k=s.arrivalAirport+'|'+s.arrivalDate;if(!byAD[k])byAD[k]=[];byAD[k].push(s);});
-    Object.entries(byAD).forEach(([key,list])=>{
-      const [airport,date]=key.split('|');
-      const airLabel=airport==='cancun'?'Cancún Airport':'<span style="color:#065f46">Tulum Airport</span>';
-      const etaMins=airport==='cancun'?90:45;
-      const dt=new Date(date+'T00:00:00');
-      const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
-      const groups=_trGroupWithOverrides(list,'arrival','arrivalTime');
-      html+=`<div style="background:#fff;border:1px solid #e8dfd4;border-radius:12px;margin-bottom:10px;overflow:hidden">
-        <div style="background:#f2f8f6;padding:10px 16px;border-bottom:1px solid #c8d8d4;font-size:12.5px;font-weight:700;color:#0e9494">${airLabel} · ${dateLabel}</div>
-        <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
-        ${groups.map((g,gi)=>{
-          const sharers=g.filter(s=>s.willingToShare);
-          const globalPax=_trGlobalGroupPax('arrival',g.__ugKey,_allTr);
-          const combinedAcrossRetreats=globalPax!=null&&globalPax>g.length;
-          const payCount=globalPax!=null?globalPax:g.length;
-          const price=trGetPrice(airport,payCount);
-          const isSolo=payCount===1;
-          const priceLabel=isSolo?`$${price} private transfer`:`$${price}/person`;
-          const vehicle=trVehicleType(payCount);
-          const combinedNote=combinedAcrossRetreats?`<div style="font-size:11px;color:#065f46;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:6px 10px;margin-top:8px">🔗 Combined with ${globalPax-g.length} guest${globalPax-g.length!==1?'s':''} from another retreat — price above reflects the shared ride of ${globalPax}.</div>`:'';
-          // Cross-retreat match: only for groups of 1-2 not already manually combined, find others from different retreats arriving within 30 min same airport/date
-          let crossHtml='';
-          if(g.length<=2&&!g.__ugKey){
-            const anchor=trTimeToMins(g[0].arrivalTime);
-            const crossMatches=_allTr.filter(s=>
-              s.bookingId!==bkId&&!s.arrivalOT&&
-              s.arrivalAirport===airport&&s.arrivalDate===date&&s.arrivalTime&&
-              Math.abs(trTimeToMins(s.arrivalTime)-anchor)<=30
-            );
-            if(crossMatches.length){
-              const combined=g.length+crossMatches.length;
-              const newPrice=trGetPrice(airport,Math.min(combined,13));
-              const saves=price-newPrice;
-              crossHtml=`<div style="background:#fefce8;border:1.5px solid #fde047;border-radius:8px;padding:8px 12px;margin-top:8px;display:flex;align-items:flex-start;gap:8px">
-                <span style="font-size:15px;flex-shrink:0">🔗</span>
-                <div style="font-size:11.5px;color:#713f12;line-height:1.5">
-                  <b>${crossMatches.length} guest${crossMatches.length!==1?'s':''} from another retreat</b> arriving at a similar time at the same airport.
-                  If matched, combined group of <b>${combined}</b> → <b>$${newPrice}/person</b>${saves>0?` <span style="color:#15803d;font-weight:700">(save $${saves} each)</span>`:''}.
-                  Amansala will coordinate if guests are willing to share.
-                </div>
-              </div>`;
-            }
-          }
-          return`<div style="background:${gi%2===0?'#faf7f2':'#f2f8f6'};border:1px solid ${sharers.length>1?'#9dd1d1':'#e8dfd4'};border-radius:9px;padding:10px 14px">
-            <div style="font-size:11px;font-weight:700;color:#0e9494;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span>Group ${gi+1}</span>
-              <span style="background:#0e9494;color:#fff;border-radius:99px;padding:1px 8px;font-size:10px">${g.length} guest${g.length!==1?'s':''}</span>
-              <span style="background:#f0fdf4;color:#15803d;border-radius:99px;padding:1px 8px;font-size:10px;font-weight:600">🚐 ${vehicle}</span>
-              <span style="color:#8a7e74;font-weight:400">${tsFmt(g[0].arrivalTime)}${g.length>1?' – '+tsFmt(g[g.length-1].arrivalTime):''}</span>
-              <span style="color:#5a5048;font-weight:400;font-size:11px">· ETA ${trAddMins(g[0].arrivalTime,etaMins)}</span>
-              <span style="background:#e8f5f5;color:#0e9494;border-radius:99px;padding:1px 9px;font-size:10.5px;font-weight:700;margin-left:auto">${priceLabel}</span>
-              ${sharers.length>1?`<span style="background:#d1fae5;color:#065f46;border-radius:99px;padding:1px 8px;font-size:10px;font-weight:700">🤝 ${sharers.length} willing to share</span>`:''}
-            </div>
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
-              ${g.map(s=>`<tr>
-                <td style="padding:4px 8px 2px 0;font-weight:600;color:#2d2520;width:100%">
-                  ${s.firstName} ${s.lastName}
-                  ${s.notes?`<div style="font-size:10.5px;color:#8a7e74;font-style:italic;font-weight:400;margin-top:1px">${s.notes}</div>`:''}
-                </td>
-                <td style="padding:4px 8px 2px;color:#8a7e74;white-space:nowrap;text-align:right">${s.flightNumber?s.flightNumber:'<span style="font-size:10px;font-weight:700;background:#fef9c3;color:#92400e;border-radius:5px;padding:2px 7px">Missing Flight Info</span>'}</td>
-                <td style="padding:4px 8px 2px;color:#0e9494;font-weight:600;white-space:nowrap;text-align:right">${tsFmt(s.arrivalTime)}</td>
-                <td style="padding:4px 0 2px;white-space:nowrap;text-align:right;min-width:46px">${s.willingToShare?'<span style="font-size:10px;background:#d1fae5;color:#065f46;border-radius:5px;padding:1px 6px">shares</span>':''}</td>
-              </tr>`).join('')}
-            </table>
-            ${combinedNote}
-            ${crossHtml}
-          </div>`;
-        }).join('')}
-        </div>
-      </div>`;
-    });
-    html+='</div>';
-  }
+  html+=`<div style="${cardS}">
+    <div style="${hdS}">
+      <span style="font-size:15px">✈️</span>
+      <span style="font-size:13px;font-weight:700;color:#2d2520">Arrivals</span>
+      <span style="font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;background:#f0fdf9;color:#0e9494">${arrCount} submitted</span>
+    </div>
+    ${_trBuildTransportTable(arrGuests,'arr',arrResult)}
+  </div>
 
-  // OT arrivals block
-  if(arrivalOTs.length){
-    const otByDate={};
-    arrivalOTs.forEach(s=>{if(!otByDate[s.arrivalDate])otByDate[s.arrivalDate]=[];otByDate[s.arrivalDate].push(s);});
-    html+=`<div style="margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:10px">Own Transport — Arrivals (OT)</div>
-      <div style="background:#fff;border:1.5px dashed #c8bfb5;border-radius:12px;overflow:hidden">
-        <div style="background:#f5f1eb;padding:10px 16px;border-bottom:1px solid #e8dfd4;font-size:12px;color:#5a5048;font-style:italic">These guests are arranging their own arrival transfer. Listed for ETA reference only.</div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:#faf7f2"><th style="padding:7px 14px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Guest</th><th style="padding:7px 14px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Date</th><th style="padding:7px 14px;text-align:right;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Est. Arrival</th></tr></thead>
-          <tbody>${arrivalOTs.map((s,i)=>{
-            const dt=new Date(s.arrivalDate+'T00:00:00');
-            const dl=MNTHS[dt.getMonth()]+' '+dt.getDate();
-            return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
-              <td style="padding:7px 14px;font-weight:600;color:#dc2626">${s.firstName} ${s.lastName} <span style="font-size:10px;font-weight:700;background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 5px">OT</span></td>
-              <td style="padding:7px 14px;color:#8a7e74">${dl}</td>
-              <td style="padding:7px 14px;text-align:right;color:#5a5048;font-weight:600">${tsFmt(s.arrivalTime)}</td>
-            </tr>`;}).join('')}
-          </tbody>
-        </table>
+  <div style="${cardS}">
+    <div style="${hdS}">
+      <span style="font-size:15px">🛫</span>
+      <span style="font-size:13px;font-weight:700;color:#2d2520">Departures</span>
+      <span style="font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;background:#fffbf0;color:#b45309">${depCount} submitted</span>
+    </div>
+    ${_trBuildTransportTable(depGuests,'dep',depResult)}
+  </div>
+
+  ${_tpBanner}
+
+  <div style="background:#fff;border-radius:12px;border:1px solid #e8dfd4;padding:16px 20px;margin-bottom:16px">
+    <div style="font-size:12px;font-weight:700;color:#5a5048;margin-bottom:12px">Transport Rates — per person</div>
+    <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#0e9494;margin-bottom:6px">Cancún (CUN)</div>
+        <table style="border-collapse:collapse">${_trRateRows(_TR_RATES.cancun)}</table>
       </div>
-    </div>`;
-  }
-
-  // Departures grouped by date → sorted by time (exclude OT)
-  const departureOTs=subs.filter(s=>s.departureOT&&s.departureDate&&s.departureTime)
-    .sort((a,b)=>a.departureDate===b.departureDate?a.departureTime.localeCompare(b.departureTime):a.departureDate.localeCompare(b.departureDate));
-  const departures=subs.filter(s=>!s.departureOT&&s.departureDate&&s.departureTime)
-    .sort((a,b)=>a.departureDate===b.departureDate?a.departureTime.localeCompare(b.departureTime):a.departureDate.localeCompare(b.departureDate));
-
-  if(departures.length){
-    html+=`<div style="margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:10px">Departures</div>
-      <div style="background:#fffbf0;border:1.5px solid #fcd9a0;border-radius:11px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px">
-        <span style="font-size:16px;flex-shrink:0">💡</span>
-        <p style="font-size:12px;color:#92400e;line-height:1.6;margin:0"><b>Please note:</b> We do our best to match guests departing alone with guests from other retreats to reduce transfer costs. The pricing shown is based on your group only — the final cost per person may decrease if we are able to arrange a cross-retreat share.</p>
-      </div>`;
-    const byDD={};
-    departures.forEach(s=>{
-      const airport=s.departureAirport||'unknown';
-      const k=airport+'|'+s.departureDate;
-      if(!byDD[k])byDD[k]=[];byDD[k].push(s);
-    });
-    Object.entries(byDD).sort(([a],[b])=>a.split('|')[1].localeCompare(b.split('|')[1])).forEach(([key,list])=>{
-      const [airport,date]=key.split('|');
-      const airLabel=airport==='cancun'?'Cancún Airport':airport==='tulum'?'<span style="color:#065f46">Tulum Airport</span>':'Airport not specified';
-      const dt=new Date(date+'T00:00:00');
-      const dateLabel=MNTHS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();
-      const groups=_trGroupWithOverrides(list,'departure','departureTime');
-      html+=`<div style="background:#fff;border:1px solid #fde8c8;border-radius:12px;margin-bottom:10px;overflow:hidden">
-        <div style="background:#fffbf5;padding:10px 16px;border-bottom:1px solid #fde8c8;font-size:12.5px;font-weight:700;color:#b45309">${airLabel} · ${dateLabel}</div>
-        <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
-        ${groups.map((g,gi)=>{
-          const globalPax=_trGlobalGroupPax('departure',g.__ugKey,_allTr);
-          const combinedAcrossRetreats=globalPax!=null&&globalPax>g.length;
-          const payCount=globalPax!=null?globalPax:g.length;
-          const price=trGetPrice(airport==='unknown'?'cancun':airport,payCount);
-          const isSolo=payCount===1;
-          const priceLabel=isSolo?`$${price} private transfer`:`$${price}/person`;
-          const vehicle=trVehicleType(payCount);
-          const combinedNote=combinedAcrossRetreats?`<div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:6px 10px;margin-top:8px">🔗 Combined with ${globalPax-g.length} guest${globalPax-g.length!==1?'s':''} from another retreat — price above reflects the shared ride of ${globalPax}.</div>`:'';
-          return`<div style="background:${gi%2===0?'#fffbf5':'#fef9f0'};border:1px solid ${g.length>1?'#fcd9a0':'#fde8c8'};border-radius:9px;padding:10px 14px">
-            <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span>Group ${gi+1}</span>
-              <span style="background:#b45309;color:#fff;border-radius:99px;padding:1px 8px;font-size:10px">${g.length} guest${g.length!==1?'s':''}</span>
-              <span style="color:#8a7e74;font-weight:400">${tsFmt(g[0].departureTime)}${g.length>1?' – '+tsFmt(g[g.length-1].departureTime):''}</span>
-              <span style="background:#fef3c7;color:#92400e;border-radius:99px;padding:1px 8px;font-size:10px;font-weight:600">🚐 ${vehicle}</span>
-              <span style="background:#fef3c7;color:#92400e;border-radius:99px;padding:1px 9px;font-size:10.5px;font-weight:700;margin-left:auto">${priceLabel}</span>
-            </div>
-            <table style="width:100%;border-collapse:collapse;font-size:12px">
-              ${g.map(s=>`<tr>
-                <td style="padding:4px 8px 2px 0;font-weight:600;color:#2d2520;width:100%">${s.firstName} ${s.lastName}</td>
-                <td style="padding:4px 8px 2px;color:#8a7e74;white-space:nowrap;text-align:right">${(s.flightNumber||s.departureFlight)?(s.flightNumber||s.departureFlight):'<span style="font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;border-radius:5px;padding:2px 7px">Missing Flight Info</span>'}</td>
-                <td style="padding:4px 0 2px;color:#b45309;font-weight:600;white-space:nowrap;text-align:right">${tsFmt(s.departureTime)}</td>
-              </tr>`).join('')}
-            </table>
-            ${combinedNote}
-          </div>`;
-        }).join('')}
-        </div>
-      </div>`;
-    });
-    html+='</div>';
-  }
-
-  // OT departures block
-  if(departureOTs.length){
-    html+=`<div style="margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#8a7e74;margin-bottom:10px">Own Transport — Departures (OT)</div>
-      <div style="background:#fff;border:1.5px dashed #c8bfb5;border-radius:12px;overflow:hidden">
-        <div style="background:#f5f1eb;padding:10px 16px;border-bottom:1px solid #e8dfd4;font-size:12px;color:#5a5048;font-style:italic">These guests are arranging their own departure transfer. Listed for reference only.</div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead><tr style="background:#faf7f2"><th style="padding:7px 14px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Guest</th><th style="padding:7px 14px;text-align:left;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Date</th><th style="padding:7px 14px;text-align:right;color:#5a5048;font-weight:700;border-bottom:1px solid #e8dfd4">Est. Departure</th></tr></thead>
-          <tbody>${departureOTs.map((s,i)=>{
-            const dt=new Date(s.departureDate+'T00:00:00');
-            const dl=MNTHS[dt.getMonth()]+' '+dt.getDate();
-            return`<tr style="border-bottom:1px solid #f0ece4;background:${i%2===0?'#fff':'#faf7f2'}">
-              <td style="padding:7px 14px;font-weight:600;color:#dc2626">${s.firstName} ${s.lastName} <span style="font-size:10px;font-weight:700;background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 5px">OT</span></td>
-              <td style="padding:7px 14px;color:#8a7e74">${dl}</td>
-              <td style="padding:7px 14px;text-align:right;color:#5a5048;font-weight:600">${tsFmt(s.departureTime)}</td>
-            </tr>`;}).join('')}
-          </tbody>
-        </table>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:6px">Tulum (TQO)</div>
+        <table style="border-collapse:collapse">${_trRateRows(_TR_RATES.tulum)}</table>
       </div>
-    </div>`;
-  }
+      <div style="flex:1;min-width:200px;font-size:11.5px;color:#8a7e74;line-height:1.9;border-left:2px solid #f0ece4;padding-left:20px">
+        Guests arriving at the same airport within <strong style="color:#5a5048">30 minutes</strong> of each other, who opt in to sharing, are grouped for shared pricing.<br>
+        <span style="color:#065f46;font-weight:600">Tinted rows = shared group</span> · white = private transfer
+      </div>
+    </div>
+  </div>
 
-  // Submitted transport info but left flight number blank (the form only requires
-  // date/time/airport unless OT — flight number is optional, so this is the one gap
-  // that can slip through after a real submission).
-  const missingFlightSubs=subs.filter(s=>!(s.arrivalOT&&s.departureOT)&&!(s.flightNumber||'').trim());
-  if(missingFlightSubs.length){
-    html+=`<div style="background:#fff;border:1px solid #fde68a;border-radius:12px;margin-bottom:18px;overflow:hidden">
-      <div style="background:#fffbeb;padding:12px 18px;border-bottom:1px solid #fde68a">
-        <span style="font-size:12.5px;font-weight:700;color:#92400e">✈ Submitted, but missing flight number (${missingFlightSubs.length})</span>
-      </div>
-      <div style="padding:12px 18px;display:flex;flex-wrap:wrap;gap:8px">
-        ${missingFlightSubs.map(s=>`<span style="font-size:12px;padding:3px 10px;background:#fef9c3;border:1px solid #fcd34d;border-radius:6px;color:#92400e">${s.firstName} ${s.lastName}</span>`).join('')}
-      </div>
-    </div>`;
-  }
-
-  // Missing guests
-  if(missing.length){
-    html+=`<div style="background:#fff;border:1px solid #fde68a;border-radius:12px;margin-bottom:18px;overflow:hidden">
-      <div style="background:#fffbeb;padding:12px 18px;border-bottom:1px solid #fde68a">
-        <span style="font-size:12.5px;font-weight:700;color:#92400e">⚠ Guests who haven't submitted transport info yet (${missing.length})</span>
-      </div>
-      <div style="padding:12px 18px;display:flex;flex-wrap:wrap;gap:8px">
-        ${missing.map(g=>`<span style="font-size:12px;padding:3px 10px;background:#fef9c3;border:1px solid #fcd34d;border-radius:6px;color:#92400e">${g.name}</span>`).join('')}
-      </div>
-    </div>`;
-  }
+  <div style="background:#f0fdf9;border:1px solid #9dd1d1;border-radius:10px;padding:14px 18px;font-size:12.5px;color:#0e5f5f;line-height:1.7">
+    <strong>Need transport assistance?</strong> Contact us at <a href="mailto:retreats@amansala.com" style="color:#0e9494;font-weight:700">retreats@amansala.com</a> and we'll be happy to help arrange airport transfers or shared shuttles.
+  </div>`;
 
   wrap.innerHTML=html;
 }

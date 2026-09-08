@@ -249,9 +249,10 @@ function getTransportRoster(bkId){
   });
   const matchedSubs=[];
   const usedIdx=new Set();
+  const guestSub=new Map(); // guest (roster entry) → matched sub, for a 1:1 per-guest view
   roster.forEach(guest=>{
     const idx=allSubs.findIndex((s,i)=>!usedIdx.has(i)&&trGuestMatchesSub(guest,s));
-    if(idx>=0){matchedSubs.push(allSubs[idx]);usedIdx.add(idx);}
+    if(idx>=0){matchedSubs.push(allSubs[idx]);usedIdx.add(idx);guestSub.set(guest,allSubs[idx]);}
   });
   const missing=roster.filter(guest=>!matchedSubs.some(s=>trGuestMatchesSub(guest,s)));
   return{
@@ -260,7 +261,10 @@ function getTransportRoster(bkId){
     matchedSubs,
     missing,
     submittedCount:roster.length-missing.length,
-    orphanSubs:allSubs.filter((_,i)=>!usedIdx.has(i))
+    orphanSubs:allSubs.filter((_,i)=>!usedIdx.has(i)),
+    // One row per room-list guest, whether or not they've submitted — for views that
+    // need to show "not yet submitted" guests inline instead of in a separate list.
+    guestsWithTransport:roster.map(guest=>({...guest,tr:guestSub.get(guest)||null}))
   };
 }
 // Shared red/orange/green coding for "how much of this retreat's transport is
@@ -392,10 +396,11 @@ function trVehicleType(size){
 // also manually drag-and-drop entries together in the admin board — that
 // override lives in settings.transport_groups (tr2UserGroupMap / tr2Drop /
 // tr2SaveGroupSetting) keyed by `${arrival|departure}|${transport.id}`, shared
-// live by Teacher Portal (_trGroupWithOverrides) and driver-view.html
-// (colorMap/buildPickupGroups/buildEtaGroups) — not a per-sub shareGroupId
-// field. It overrides the time window and can span retreats, which is why
-// per-person price recalculates via trGetPrice(airport, grp.length).
+// live by Teacher Portal (_trAssignRideGroups / _trGlobalGroupPax) and
+// driver-view.html (colorMap/buildPickupGroups/buildEtaGroups) — not a
+// per-sub shareGroupId field. It overrides the time window and can span
+// retreats, which is why per-person price recalculates via
+// trGetPrice(airport, grp.length) (or the true cross-retreat headcount).
 
 function trAddMins(t,mins){
   if(!t)return'—';
