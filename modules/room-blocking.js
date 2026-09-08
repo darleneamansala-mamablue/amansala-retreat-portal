@@ -492,7 +492,7 @@ function gOpenAdd(room,rtId){
     const cc=document.getElementById('g'+i+'-cc');if(cc)cc.value='';
     const ci=document.getElementById('g'+i+'-checkin');if(ci)ci.value='';
     const co=document.getElementById('g'+i+'-checkout');if(co)co.value='';
-    const dr=document.getElementById('g'+i+'-dates-row');if(dr)dr.style.display=IS_TEACHER_MODE?'none':'flex';
+    const dr=document.getElementById('g'+i+'-dates-row');if(dr)dr.style.display=IS_TEACHER_MODE?'none':'block';
   }
   document.getElementById('gm-override').value='';document.getElementById('gm-paid').value='0';document.getElementById('gm-notes').value='';
   const _pkgPriceEl=document.getElementById('gm-pkg-price');if(_pkgPriceEl)_pkgPriceEl.value='';
@@ -524,7 +524,7 @@ function gOpenEdit(room,rtId){
     const cc=document.getElementById('g'+i+'-cc');if(cc)cc.value='';
     const ci=document.getElementById('g'+i+'-checkin');if(ci)ci.value=g.checkIn||'';
     const co=document.getElementById('g'+i+'-checkout');if(co)co.value=g.checkOut||'';
-    const dr=document.getElementById('g'+i+'-dates-row');if(dr)dr.style.display=IS_TEACHER_MODE?'none':'flex';
+    const dr=document.getElementById('g'+i+'-dates-row');if(dr)dr.style.display=IS_TEACHER_MODE?'none':'block';
   }
   document.getElementById('gm-override').value=reg.customPrice!=null?reg.customPrice:'';
   document.getElementById('gm-paid').value=reg.amountPaid||'0';
@@ -609,6 +609,7 @@ function gUpdatePrice(){
   const _effEnd=_coV||regSelBk?.endDate||'';
   const nights=(_effStart&&_effEnd)?Math.max(1,Math.round((pd(_effEnd)-pd(_effStart))/DAY_MS)):(regSelBk?getNights(regSelBk):1);
   const gc=gCountGuests();
+  const _dHint=document.getElementById('gm-dates-hint');if(_dHint)_dHint.style.display=(gc>=2&&!IS_TEACHER_MODE)?'block':'none';
   const draft=gDraftRegOverrides();
   const bd=calcBD(rt,gc,nights,_effStart,regSelBk,draft);
   const ov=document.getElementById('gm-override').value;
