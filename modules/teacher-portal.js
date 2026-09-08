@@ -635,10 +635,16 @@ function regRender(){
           const tipRateDisp=reg.customTipRateOverride!=null?reg.customTipRateOverride:getTip(regSelBk);
           const pkgLine=perPkg>0?`<div class="pb-row addon"><span>Add-ons (${pkgItems.map(p=>p.name).join(', ')})</span><span>${fmt$(perPkg)}</span></div>`:'';
           const rateCell=IS_TEACHER_MODE?`$${nRate}`:`$<input type="number" class="rate-inline-input" value="${nRate}" title="Override nightly rate" onclick="event.stopPropagation()" onchange="regSaveRateOverride('${reg.id}',this.value)" style="width:46px;padding:0 3px;border:1px solid var(--border);border-radius:3px;font-size:11px;text-align:right;font-family:inherit;">`;
+          // gShare.extraNights>0 means this guest has their own extraNightRate applied to
+          // nights outside the retreat's dates — show the split instead of one flat line
+          // so the room total isn't a mystery when it doesn't equal rate×nights.
+          const roomLine=(gShare&&gShare.extraNights>0)
+            ?`<div class="pb-row"><span>Room (${rateCell}/nt×${gShare.overlapNights}nt retreat)</span><span>${fmt$(+(nRate*gShare.overlapNights).toFixed(2))}</span></div><div class="pb-row"><span>Room ($${gShare.extraRate}/nt×${gShare.extraNights}nt extra)</span><span>${fmt$(+(gShare.extraRate*gShare.extraNights).toFixed(2))}</span></div>`
+            :`<div class="pb-row"><span>Room (${rateCell}/nt×${gNights}nt)</span><span>${fmt$(perBase)}</span></div>`;
           priceTd.innerHTML=`<details class="price-details">
             <summary><span class="price-summary-total">${fmt$(perTotal)}</span>${gc>1?`<span style="font-size:10px;color:#9ca3af;margin-left:4px">/person</span>`:''}<span class="price-toggle-arrow">&#9658;</span></summary>
             <div class="price-breakdown-rows">
-              <div class="pb-row"><span>Room (${rateCell}/nt×${gNights}nt)</span><span>${fmt$(perBase)}</span></div>
+              ${roomLine}
               ${pkgLine}
               <div class="pb-row"><span>Tax (${bd.pkg>0&&getBkTaxRate(regSelBk)!==0.16?`16% rm / ${getBkTaxRate(regSelBk)===0?'0%':Math.round(getBkTaxRate(regSelBk)*100)+'%'} ext`:'16%'})</span><span>${fmt$(perTax)}</span></div>
               <div class="pb-row"><span>Tip ($${tipRateDisp}×${gTipNights}nt)</span><span>${fmt$(perTip)}</span></div>

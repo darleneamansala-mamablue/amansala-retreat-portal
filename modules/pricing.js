@@ -79,12 +79,13 @@ function renderEstQuote(){
     const _isBd1Extra=rt.id==='bd1'&&reg.customRateOverride==null&&(gc>=2||_getSharedBeds(room).some(s=>blockedSet.has(s)&&(regByRoom[s]?.guests||[]).filter(g=>g.name).length>=2));
     const rate=reg.customRateOverride!=null?reg.customRateOverride:(_isBd1Extra?(isLowSeason(_eCI,_eNights)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):getRoomRate(rt,gc,_eCI,_eNights));
     // Per-guest checkIn/checkOut overrides (2+ unrelated guests sharing one room with
-    // different actual stays) — sum each guest's own nights instead of assuming every
-    // guest in the room stays the uniform _eNights/_eTipNights span. Falls back to
-    // gc*_eNights when nobody has a per-guest override, identical to the old formula.
-    const _roomNightsSum=sumGuestNights(reg,regSelBk,_eNights)??(gc*_eNights);
+    // different actual stays) — sum each guest's own nights (and, when a guest has their
+    // own extraNightRate, their own blended rate for nights outside the retreat's dates)
+    // instead of assuming every guest in the room stays the uniform _eNights span at one
+    // rate. Falls back to gc*_eNights when nobody has a per-guest override, identical to
+    // the old formula.
+    const base=+sumGuestRoomCost(reg,regSelBk,rate,_eNights,gc).toFixed(2);
     const _tipNightsSum=sumGuestNights(reg,regSelBk,_eTipNights)??(gc*_eTipNights);
-    const base=+(rate*_roomNightsSum).toFixed(2);
     const pkgCost=reg.customPkgPrice!=null?reg.customPkgPrice:(addOnItems.length?+(calcPkgCost(regSelBk,gc)).toFixed(2):0);
     const roomTax=+(base*roomTaxRate).toFixed(2);
     const pTax=+(pkgCost*pkgTaxRate).toFixed(2);
