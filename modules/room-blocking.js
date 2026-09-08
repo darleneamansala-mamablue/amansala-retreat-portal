@@ -585,7 +585,7 @@ function gDraftRegOverrides(){
   const rateOv=num('gm-rate-override'),pkgOv=num('gm-pkg-price'),nightsOv=num('gm-nights-override'),tipNightsOv=num('gm-tip-nights-override'),tipRateOv=num('gm-tip-rate-override');
   // Mirrors gSave()'s guest-collection loop (name + per-guest checkIn/checkOut) so the
   // live price preview reflects per-guest date overrides before the reg is even saved —
-  // sumGuestNights() reads this same shape off a real saved reg.
+  // guestNightsSplit()/guestTipNights() read this same shape off a real saved reg.
   const guests=[];
   for(let i=0;i<4;i++){
     const n=(document.getElementById('g'+i+'-name')?.value||'').trim();

@@ -85,7 +85,7 @@ function renderEstQuote(){
     // rate. Falls back to gc*_eNights when nobody has a per-guest override, identical to
     // the old formula.
     const base=+sumGuestRoomCost(reg,regSelBk,rate,_eNights,gc).toFixed(2);
-    const _tipNightsSum=sumGuestNights(reg,regSelBk,_eTipNights)??(gc*_eTipNights);
+    const _tipNightsSum=sumGuestTipNights(reg,regSelBk,_eTipNights,gc);
     const pkgCost=reg.customPkgPrice!=null?reg.customPkgPrice:(addOnItems.length?+(calcPkgCost(regSelBk,gc)).toFixed(2):0);
     const roomTax=+(base*roomTaxRate).toFixed(2);
     const pTax=+(pkgCost*pkgTaxRate).toFixed(2);

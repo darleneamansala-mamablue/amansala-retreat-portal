@@ -5135,10 +5135,26 @@ function guestNights(g,reg,bk,fallbackNights){
 }
 // Returns null (not 0) when there are no named guests to sum, so callers can fall back
 // to gc*fallbackNights instead of silently billing $0 for a room with an empty reg.
-function sumGuestNights(reg,bk,fallbackNights){
+// Gratuity only ever covers nights that actually overlap the retreat — a guest's own
+// extra nights before/after the retreat (whether or not they have their own
+// extraNightRate) aren't retreat nights and shouldn't be tipped on, even though those
+// same nights DO still count toward the room charge above. An explicit admin override
+// (customNightsOverride or customTipNightsOverride) still wins uniformly, same as always.
+function guestTipNights(g,reg,bk,fallbackNights){
+  if(reg?.customNightsOverride!=null||reg?.customTipNightsOverride!=null)return fallbackNights;
+  if(!bk?.startDate||!bk?.endDate)return guestNights(g,reg,bk,fallbackNights);
+  const ci=g?.checkIn||reg?.checkIn||bk.startDate;
+  const co=g?.checkOut||reg?.checkOut||bk.endDate;
+  const bkStart=pd(bk.startDate),bkEnd=pd(bk.endDate);
+  const gStart=pd(ci),gEnd=pd(co);
+  const ovStart=gStart>bkStart?gStart:bkStart;
+  const ovEnd=gEnd<bkEnd?gEnd:bkEnd;
+  return Math.max(0,Math.round((ovEnd-ovStart)/DAY_MS));
+}
+function sumGuestTipNights(reg,bk,fallbackNights,gc){
   const named=(reg?.guests||[]).filter(g=>g.name);
-  if(!named.length)return null;
-  return named.reduce((s,g)=>s+guestNights(g,reg,bk,fallbackNights),0);
+  if(!named.length)return gc*fallbackNights;
+  return named.reduce((s,g)=>s+guestTipNights(g,reg,bk,fallbackNights),0);
 }
 // guest.customRateOverride (optional, admin-only, per GUEST — distinct from the
 // registration-level reg.customRateOverride set via the Options grid, which is just this
@@ -5186,7 +5202,7 @@ function calcBD(rt,gc,nights,dateStr,bk,reg){
   const tipRate=reg?.customTipRateOverride!=null?Number(reg.customTipRateOverride):getTip(bk);
   const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,rNights);
   const base=sumGuestRoomCost(reg,bk,rate,rNights,gc);
-  const tipNightsSum=sumGuestNights(reg,bk,tipNights)??(gc*tipNights);
+  const tipNightsSum=sumGuestTipNights(reg,bk,tipNights,gc);
   const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const tax=+(base*0.16+pkg*pkgTr).toFixed(2);const dip=tipRate*tipNightsSum;const cao=calcCustomAoCost(bk,gc,reg);
   // Per-guest share: each named guest pays for their OWN room nights (guestNightsSplit,
   // including any extraNightRate discount for nights outside the retreat) and their own
@@ -5197,7 +5213,7 @@ function calcBD(rt,gc,nights,dateStr,bk,reg){
   const pkgShare=gc?+(pkg/gc).toFixed(2):0,caoShare=gc?+(cao/gc).toFixed(2):0;
   const perGuest=named.length?named.map(g=>{
     const sp=guestNightsSplit(g,reg,bk,rate,rNights);
-    const gTipNights=guestNights(g,reg,bk,tipNights);
+    const gTipNights=guestTipNights(g,reg,bk,tipNights);
     const gTax=+(sp.cost*0.16+pkgShare*pkgTr).toFixed(2);
     const gDip=+(tipRate*gTipNights).toFixed(2);
     return{name:g.name,nights:sp.nights,overlapNights:sp.overlapNights,extraNights:sp.extraNights,overlapRate:sp.overlapRate,extraRate:sp.extraRate,tipNights:gTipNights,base:sp.cost,pkg:pkgShare,tax:gTax,dip:gDip,cao:caoShare,total:+(sp.cost+pkgShare+gTax+gDip+caoShare).toFixed(2)};
@@ -5608,7 +5624,7 @@ function switchTab(id,btn){
 <script src="modules/admin-items.js"></script>
 <script src="modules/commissions.js"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20260908b"></script>
+<script src="modules/teacher-portal.js?v=20260908c"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
 // ===== TEACHER REGISTRATION — moved to modules/teacher-portal.js =====
@@ -5617,14 +5633,14 @@ function switchTab(id,btn){
 // ===== AUTO FLAGS — moved to modules/teacher-portal.js (loaded above) =====
 // ===== FLAGS MODAL — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/pricing.js?v=20260908b"></script>
+<script src="modules/pricing.js?v=20260908c"></script>
 <script>
 // ===== ESTIMATED QUOTE — moved to modules/pricing.js =====
 // ===== PRICE TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20260908b"></script>
+<script src="modules/room-blocking.js?v=20260908c"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====
@@ -5640,7 +5656,7 @@ function switchTab(id,btn){
 // ===== CONTRACT GENERATOR — moved to modules/contracts.js (loaded above) =====
 // ===== SIGNATURE PAD — moved to modules/contracts.js (loaded above) =====
 </script>
-<script src="modules/payments.js?v=20260908b"></script>
+<script src="modules/payments.js?v=20260908c"></script>
 <script src="modules/booking-detail.js"></script>
 <script>
 // ===== PAYMENT RECORDING — moved to modules/payments.js =====
