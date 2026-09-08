@@ -5151,7 +5151,24 @@ function calcBD(rt,gc,nights,dateStr,bk,reg){
   const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,rNights);
   const roomNightsSum=sumGuestNights(reg,bk,rNights)??(gc*rNights);
   const tipNightsSum=sumGuestNights(reg,bk,tipNights)??(gc*tipNights);
-  const base=rate*roomNightsSum;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const tax=+(base*0.16+pkg*pkgTr).toFixed(2);const dip=tipRate*tipNightsSum;const cao=calcCustomAoCost(bk,gc,reg);return{rate,base:+base.toFixed(2),pkg:+pkg.toFixed(2),tax,dip,cao,total:+(base+pkg+tax+dip+cao).toFixed(2),nights:rNights,tipNights};}
+  const base=rate*roomNightsSum;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const tax=+(base*0.16+pkg*pkgTr).toFixed(2);const dip=tipRate*tipNightsSum;const cao=calcCustomAoCost(bk,gc,reg);
+  // Per-guest share: each named guest pays for their OWN room nights and tip nights
+  // (guestNights() falls back to rNights/tipNights when they have no override of their
+  // own, so a guest without a per-guest date splits identically to before). Packages and
+  // custom add-ons aren't night-based, so they still split evenly across gc. Summing
+  // every perGuest[i].total back up equals the aggregate `total` below (modulo per-guest
+  // rounding), so this is a breakdown of the same money, not a separate calculation.
+  const named=(reg?.guests||[]).filter(g=>g.name);
+  const pkgShare=gc?+(pkg/gc).toFixed(2):0,caoShare=gc?+(cao/gc).toFixed(2):0;
+  const perGuest=named.length?named.map(g=>{
+    const gNights=guestNights(g,reg,bk,rNights);
+    const gTipNights=guestNights(g,reg,bk,tipNights);
+    const gBase=+(rate*gNights).toFixed(2);
+    const gTax=+(gBase*0.16+pkgShare*pkgTr).toFixed(2);
+    const gDip=+(tipRate*gTipNights).toFixed(2);
+    return{name:g.name,nights:gNights,tipNights:gTipNights,base:gBase,pkg:pkgShare,tax:gTax,dip:gDip,cao:caoShare,total:+(gBase+pkgShare+gTax+gDip+caoShare).toFixed(2)};
+  }):null;
+  return{rate,base:+base.toFixed(2),pkg:+pkg.toFixed(2),tax,dip,cao,total:+(base+pkg+tax+dip+cao).toFixed(2),nights:rNights,tipNights,perGuest};}
 function togglePkg(aoId){
   if(!regSelBk)return;
   if(!regSelBk.packages)regSelBk.packages=[];

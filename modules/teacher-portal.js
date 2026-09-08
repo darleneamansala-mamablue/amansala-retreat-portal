@@ -617,21 +617,31 @@ function regRender(){
           priceTd.innerHTML=`<div style="font-weight:700;font-size:13px;color:var(--dark)">${fmt$(perCustom)}</div><div style="font-size:10.5px;color:#8a7e74;margin-top:2px">custom price${gc>1?' (per person)':''}</div>`;
         } else {
           const bd=calcBD(rt,gc,_regNights,_effCI,regSelBk,reg);
+          // Per-guest share: each guest pays for their OWN nights (room + tip) instead of
+          // an even split of the room total — a guest staying extra nights in a shared
+          // room pays more than one staying the standard span. Packages/custom add-ons
+          // (not night-based) still split evenly. Falls back to an even split only if
+          // calcBD couldn't build a per-guest breakdown (no named guests on the reg).
+          const gShare=bd.perGuest?.[gi];
           const nRate=reg.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,_effCI,_regNights);
           const pkgItems=calcPkgItems(regSelBk);
-          const pkgLine=bd.pkg>0?`<div class="pb-row addon"><span>Add-ons (${pkgItems.map(p=>p.name).join(', ')})</span><span>${fmt$(+(bd.pkg/gc).toFixed(2))}</span></div>`:'';
-          const perTotal=+(bd.total/gc).toFixed(2);
-          const perBase=+(bd.base/gc).toFixed(2);
-          const perTax=+(bd.tax/gc).toFixed(2);
-          const perTip=+(bd.dip/gc).toFixed(2);
+          const perTotal=gShare?gShare.total:+(bd.total/gc).toFixed(2);
+          const perBase=gShare?gShare.base:+(bd.base/gc).toFixed(2);
+          const perPkg=gShare?gShare.pkg:+(bd.pkg/gc).toFixed(2);
+          const perTax=gShare?gShare.tax:+(bd.tax/gc).toFixed(2);
+          const perTip=gShare?gShare.dip:+(bd.dip/gc).toFixed(2);
+          const gNights=gShare?gShare.nights:_regNights;
+          const gTipNights=gShare?gShare.tipNights:_regNights;
+          const tipRateDisp=reg.customTipRateOverride!=null?reg.customTipRateOverride:getTip(regSelBk);
+          const pkgLine=perPkg>0?`<div class="pb-row addon"><span>Add-ons (${pkgItems.map(p=>p.name).join(', ')})</span><span>${fmt$(perPkg)}</span></div>`:'';
           const rateCell=IS_TEACHER_MODE?`$${nRate}`:`$<input type="number" class="rate-inline-input" value="${nRate}" title="Override nightly rate" onclick="event.stopPropagation()" onchange="regSaveRateOverride('${reg.id}',this.value)" style="width:46px;padding:0 3px;border:1px solid var(--border);border-radius:3px;font-size:11px;text-align:right;font-family:inherit;">`;
           priceTd.innerHTML=`<details class="price-details">
             <summary><span class="price-summary-total">${fmt$(perTotal)}</span>${gc>1?`<span style="font-size:10px;color:#9ca3af;margin-left:4px">/person</span>`:''}<span class="price-toggle-arrow">&#9658;</span></summary>
             <div class="price-breakdown-rows">
-              <div class="pb-row"><span>Room (${rateCell}/nt)</span><span>${fmt$(perBase)}</span></div>
+              <div class="pb-row"><span>Room (${rateCell}/nt×${gNights}nt)</span><span>${fmt$(perBase)}</span></div>
               ${pkgLine}
               <div class="pb-row"><span>Tax (${bd.pkg>0&&getBkTaxRate(regSelBk)!==0.16?`16% rm / ${getBkTaxRate(regSelBk)===0?'0%':Math.round(getBkTaxRate(regSelBk)*100)+'%'} ext`:'16%'})</span><span>${fmt$(perTax)}</span></div>
-              <div class="pb-row"><span>Tip ($30×${_regNights}nt)</span><span>${fmt$(perTip)}</span></div>
+              <div class="pb-row"><span>Tip ($${tipRateDisp}×${gTipNights}nt)</span><span>${fmt$(perTip)}</span></div>
             </div>
           </details>`;
         }
