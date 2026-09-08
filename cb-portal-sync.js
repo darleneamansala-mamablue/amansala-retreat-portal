@@ -52,7 +52,9 @@ function _cbPushRowId(room){return room.replace(/[^a-zA-Z0-9]/g,'_');}
 function _cbPushModalOpen(rooms){
   const body=document.getElementById('cbPushModalBody');
   const sub=document.getElementById('cbPushModalSub');
+  const groupRow=document.getElementById('cbPushGroupRow');
   if(!body||!sub)return;
+  if(groupRow)groupRow.style.display='none';
   sub.textContent=`0 / ${rooms.length} rooms checked`;
   body.innerHTML=rooms.map(r=>`
     <div id="cbPushRow-${_cbPushRowId(r)}" style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid var(--border);font-size:13px">
@@ -62,6 +64,27 @@ function _cbPushModalOpen(rooms){
       </span>
     </div>`).join('');
   openModal('cbPushModal');
+}
+// The AllotmentBlock (room block) and the Cloudbeds "Event" are two separate things —
+// createGroupEvent() treats Event creation as non-fatal and silently proceeds with just
+// the block if it fails, which is exactly how a retreat ends up with reservations but no
+// visible Event. Surface that step explicitly instead of leaving it invisible.
+function _cbPushGroupStatus(status,detail){
+  const row=document.getElementById('cbPushGroupRow');
+  const el=document.getElementById('cbPushGroupStatus');
+  if(!row||!el)return;
+  row.style.display='flex';
+  const map={
+    existing:{icon:'✓',color:'#0369a1',label:'Using existing block'},
+    creating:{icon:'',color:'var(--muted)',label:'Creating…'},
+    created:{icon:'✓',color:'#15803d',label:'Event + block created'},
+    'no-event':{icon:'⚠',color:'#b45309',label:'Block created, but no Event in Cloudbeds'},
+    failed:{icon:'✕',color:'#dc2626',label:detail||'Failed — reservations may be unlinked'},
+  };
+  const m=map[status]||{icon:'',color:'var(--muted)',label:status};
+  el.innerHTML=m.icon
+    ?`<span style="color:${m.color};font-weight:700">${m.icon}</span><span style="color:${m.color}">${escHtml(m.label)}</span>`
+    :`<span class="cbPushSpinner"></span><span>${escHtml(m.label)}</span>`;
 }
 function _cbPushModalSetStatus(room,status,detail){
   const el=document.getElementById('cbPushRow-'+_cbPushRowId(room));
@@ -207,12 +230,21 @@ async function pushReservationsToCloudbeds(bk){
   // we still need an event (otherwise rooms are created unlinked / "outside the event").
   if(!allotmentBlockCode&&newRooms.length>0){
     // Fresh block: create new event + allotment block
+    _cbPushGroupStatus('creating');
     try{
       const gRes=await fetch(`${CLOUDBEDS_PROXY}?action=createGroupEvent`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({retreatName:bk.retreatName||bk.row||'',leaderName:bk.leaderName||'',startDate:bk.startDate,endDate:bk.endDate,rooms:bk.blockedRooms})});
       const gd=await gRes.json();
-      if(gd.allotmentBlockCode){allotmentBlockCode=gd.allotmentBlockCode;bk.cbAllotmentBlockCode=allotmentBlockCode;bk.cbGroupCode=gd.eventCode||null;bk.cbEventId=gd.eventId;bk.cbProfileId=gd.profileId;console.log('[CB group] event='+gd.eventId+' block='+allotmentBlockCode);}
-      else console.warn('[CB group] no allotmentBlockCode:',JSON.stringify(gd).slice(0,200));
-    }catch(e){console.warn('[CB group] failed, proceeding without group:',e.message);}
+      if(gd.allotmentBlockCode){
+        allotmentBlockCode=gd.allotmentBlockCode;bk.cbAllotmentBlockCode=allotmentBlockCode;bk.cbGroupCode=gd.eventCode||null;bk.cbEventId=gd.eventId;bk.cbProfileId=gd.profileId;
+        console.log('[CB group] event='+gd.eventId+' block='+allotmentBlockCode);
+        _cbPushGroupStatus(gd.eventId?'created':'no-event');
+      } else{
+        console.warn('[CB group] no allotmentBlockCode:',JSON.stringify(gd).slice(0,200));
+        _cbPushGroupStatus('failed',gd.error||'No block code returned');
+      }
+    }catch(e){console.warn('[CB group] failed, proceeding without group:',e.message);_cbPushGroupStatus('failed',e.message);}
+  }else if(allotmentBlockCode){
+    _cbPushGroupStatus('existing');
   }
   // Use the manual mapping from Cloudbeds Settings if available
   const cbCfg=JSON.parse(localStorage.getItem('ama_cb_config')||'{}');
