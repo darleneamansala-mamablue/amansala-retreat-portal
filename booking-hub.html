@@ -4196,10 +4196,62 @@ async function syncToSupabase(){
   // retreat-portal.html reads) instead of the legacy app_store blob — upsert every
   // in-memory row directly; deletions are real SQL deletes so they're permanent
   // across every device (no more JS-side field-by-field merge arbitration needed).
+  //
+  // GUARD (added after a real incident): every saveAll() re-uploads EVERY booking/reg
+  // this browser tab has in memory, not just what changed. A tab left open long enough
+  // (stale localStorage, never refreshed) can have old uid()-generated bookings/regs
+  // that were since replaced/removed some other way (not via this app's own delete —
+  // those are already excluded above via deletedBookingIds/deletedRegIds). Blindly
+  // upserting the stale snapshot silently resurrects that old data as new rows (11 empty
+  // duplicate retreats appeared this way in one incident) and can revert a registration's
+  // guests/notes back to an old value if someone else edited it more recently. Before
+  // upserting, fetch what's actually in Supabase right now and:
+  //  - never re-create a booking/reg missing from Supabase unless it looks genuinely
+  //    new (a uid() id whose embedded timestamp is from the last 24h — an old timestamp
+  //    means it's a zombie, not a fresh local creation);
+  //  - never overwrite an existing registration with a local copy unless the local
+  //    copy's own updatedAt is newer than the row's current updated_at in Supabase.
+  function _isRecentLocalId(id){
+    const m=/^id_(\d+)_/.exec(id||'');
+    if(!m)return true; // not a uid()-style id (e.g. a real UUID) — nothing to second-guess
+    return (Date.now()-parseInt(m[1],10))<24*60*60*1000;
+  }
   const _bkRegSync=(async()=>{
     try{
-      const bkRows=AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).map(appBookingToSqlRow);
-      const regRows=AppData.regs.filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId)).map(appRegToSqlRow);
+      // registrations can exceed PostgREST's 1000-row page cap (1900+ rows in
+      // production) — a plain .select() would silently truncate remoteRegMap and
+      // make every registration past row 1000 look "missing from Supabase", which
+      // is exactly the false-positive this guard exists to prevent. Page through it.
+      const [{data:remoteBks},remoteRegs]=await Promise.all([
+        db.from('bookings').select('id'),
+        _fetchAllRows('registrations',1000,'id,updated_at'),
+      ]);
+      const remoteBkIds=new Set((remoteBks||[]).map(r=>r.id));
+      const remoteRegMap=new Map((remoteRegs||[]).map(r=>[r.id,r.updated_at]));
+
+      const _bkCandidates=AppData.bookings.filter(b=>!deletedBookingIds.has(b.id));
+      const _staleZombieBks=[];
+      const bkRows=_bkCandidates.filter(b=>{
+        if(remoteBkIds.has(b.id))return true; // known row — normal update
+        if(_isRecentLocalId(b.id))return true; // genuinely new, never synced yet
+        _staleZombieBks.push(b.id);return false; // old id, gone from Supabase — don't resurrect
+      }).map(appBookingToSqlRow);
+      if(_staleZombieBks.length)console.warn('[sync guard] skipped resurrecting',_staleZombieBks.length,'stale local booking(s) missing from Supabase:',_staleZombieBks);
+
+      const _regCandidates=AppData.regs.filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId));
+      const _staleZombieRegs=[],_staleOverwriteRegs=[];
+      const regRows=_regCandidates.filter(r=>{
+        const remoteUpdatedAt=remoteRegMap.get(r.id);
+        if(remoteUpdatedAt===undefined){
+          if(_isRecentLocalId(r.id))return true;
+          _staleZombieRegs.push(r.id);return false;
+        }
+        if(!r.updatedAt||new Date(r.updatedAt)<new Date(remoteUpdatedAt)){_staleOverwriteRegs.push(r.id);return false;}
+        return true;
+      }).map(appRegToSqlRow);
+      if(_staleZombieRegs.length)console.warn('[sync guard] skipped resurrecting',_staleZombieRegs.length,'stale local registration(s) missing from Supabase:',_staleZombieRegs);
+      if(_staleOverwriteRegs.length)console.warn('[sync guard] skipped overwriting',_staleOverwriteRegs.length,'registration(s) with an older local copy:',_staleOverwriteRegs);
+
       // payments is a separate table (booking_id FK) — flatten every booking's embedded
       // payments array back out into rows. Payments are only ever added, never removed
       // through the UI, so a plain upsert (no delete pass) is safe here.
@@ -4274,11 +4326,11 @@ function appPaymentToSqlRow(p,bookingId){const row={};_PAYMENT_COLUMNS.forEach(c
 const _ROOMTYPE_COL_MAP={id:'id',name:'name',property:'property',color:'color',max_occ:'maxOcc',description:'desc',price_single_high:'price1',price_single_low:'price1_low',price_double_high:'price2',price_double_low:'price2_low',rooms:'rooms',cb_room_type_id:'cbRoomTypeId',be_enabled:'be_enabled',be_photos:'be_photos',be_description:'be_description',be_amenities:'be_amenities',be_price_single:'be_price_single',be_price_double:'be_price_double',be_included_occ:'be_included_occ',be_extra_adult_price:'be_extra_adult_price',be_extra_nights:'be_extra_nights'};
 function sqlRoomTypeToApp(row){const rt={};for(const col in row){rt[_ROOMTYPE_COL_MAP[col]||_s2c(col)]=row[col];}return rt;}
 function appRoomTypeToSqlRow(rt){const row={};Object.keys(_ROOMTYPE_COL_MAP).forEach(col=>{const field=_ROOMTYPE_COL_MAP[col];row[col]=rt[field]!==undefined?rt[field]:null;});return row;}
-async function _fetchAllRows(table,pageSize){
+async function _fetchAllRows(table,pageSize,selectCols){
   pageSize=pageSize||1000;
   let all=[],from=0;
   while(true){
-    const{data,error}=await db.from(table).select('*').range(from,from+pageSize-1);
+    const{data,error}=await db.from(table).select(selectCols||'*').range(from,from+pageSize-1);
     if(error)throw error;
     if(!data||!data.length)break;
     all=all.concat(data);
