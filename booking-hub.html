@@ -5300,6 +5300,25 @@ function toggleSidebar(){
 }
 (()=>{if(localStorage.getItem('ama_sidebar_collapsed')==='1'){const n=document.getElementById('sideNav');if(n)n.classList.add('collapsed');}})();
 
+// Belt-and-suspenders fix for the sidebar not scrolling at some zoom levels — the flex
+// min-height:0 chain (#appBody/.tab-bar) should be enough on its own, but browser zoom
+// changes how flex heights get resolved in ways that were still cutting the nav off
+// with no scroll at 100% zoom. Explicitly pin #sideNav's height in pixels instead of
+// trusting flex to bound it, so overflow-y:auto has an unambiguous box to scroll within.
+function _pinSideNavHeight(){
+  const nav=document.getElementById('sideNav');
+  const header=document.querySelector('.app-header');
+  const banner=document.getElementById('backupReminderBanner');
+  if(!nav||!header)return;
+  const headerH=header.getBoundingClientRect().height;
+  const bannerH=(banner&&banner.style.display!=='none')?banner.getBoundingClientRect().height:0;
+  nav.style.height=`${window.innerHeight-headerH-bannerH}px`;
+}
+window.addEventListener('resize',_pinSideNavHeight);
+window.addEventListener('load',_pinSideNavHeight);
+_pinSideNavHeight();
+setTimeout(_pinSideNavHeight,300);
+
 function toggleAdminSection(){
   const btn=document.getElementById('adminSideToggle');
   const sec=document.getElementById('adminSideSection');
