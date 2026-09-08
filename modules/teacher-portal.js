@@ -634,12 +634,17 @@ function regRender(){
           const gTipNights=gShare?gShare.tipNights:_regNights;
           const tipRateDisp=reg.customTipRateOverride!=null?reg.customTipRateOverride:getTip(regSelBk);
           const pkgLine=perPkg>0?`<div class="pb-row addon"><span>Add-ons (${pkgItems.map(p=>p.name).join(', ')})</span><span>${fmt$(perPkg)}</span></div>`:'';
-          const rateCell=IS_TEACHER_MODE?`$${nRate}`:`$<input type="number" class="rate-inline-input" value="${nRate}" title="Override nightly rate" onclick="event.stopPropagation()" onchange="regSaveRateOverride('${reg.id}',this.value)" style="width:46px;padding:0 3px;border:1px solid var(--border);border-radius:3px;font-size:11px;text-align:right;font-family:inherit;">`;
+          // The inline-editable rate input writes to reg.customRateOverride (the whole
+          // room's default rate) via regSaveRateOverride — only safe to show as editable
+          // when this guest doesn't have their OWN customRateOverride; otherwise it would
+          // look editable but silently apply to the wrong thing.
+          const gHasOwnRate=gShare&&gShare.overlapRate!==nRate;
+          const rateCell=gHasOwnRate?`$${gShare.overlapRate}`:(IS_TEACHER_MODE?`$${nRate}`:`$<input type="number" class="rate-inline-input" value="${nRate}" title="Override nightly rate" onclick="event.stopPropagation()" onchange="regSaveRateOverride('${reg.id}',this.value)" style="width:46px;padding:0 3px;border:1px solid var(--border);border-radius:3px;font-size:11px;text-align:right;font-family:inherit;">`);
           // gShare.extraNights>0 means this guest has their own extraNightRate applied to
           // nights outside the retreat's dates — show the split instead of one flat line
           // so the room total isn't a mystery when it doesn't equal rate×nights.
           const roomLine=(gShare&&gShare.extraNights>0)
-            ?`<div class="pb-row"><span>Room (${rateCell}/nt×${gShare.overlapNights}nt retreat)</span><span>${fmt$(+(nRate*gShare.overlapNights).toFixed(2))}</span></div><div class="pb-row"><span>Room ($${gShare.extraRate}/nt×${gShare.extraNights}nt extra)</span><span>${fmt$(+(gShare.extraRate*gShare.extraNights).toFixed(2))}</span></div>`
+            ?`<div class="pb-row"><span>Room (${rateCell}/nt×${gShare.overlapNights}nt retreat)</span><span>${fmt$(+(gShare.overlapRate*gShare.overlapNights).toFixed(2))}</span></div><div class="pb-row"><span>Room ($${gShare.extraRate}/nt×${gShare.extraNights}nt extra)</span><span>${fmt$(+(gShare.extraRate*gShare.extraNights).toFixed(2))}</span></div>`
             :`<div class="pb-row"><span>Room (${rateCell}/nt×${gNights}nt)</span><span>${fmt$(perBase)}</span></div>`;
           priceTd.innerHTML=`<details class="price-details">
             <summary><span class="price-summary-total">${fmt$(perTotal)}</span>${gc>1?`<span style="font-size:10px;color:#9ca3af;margin-left:4px">/person</span>`:''}<span class="price-toggle-arrow">&#9658;</span></summary>
