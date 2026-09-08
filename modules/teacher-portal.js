@@ -3834,6 +3834,15 @@ function enterTeacherView(bkId){
       bk.teacherSeenCount=(bk.teacherSeenCount||0)+1;
       saveAll();
     }
+    // Retreat Assistant help tip — brief nudge the first time the button appears
+    setTimeout(()=>{
+      const tip=document.getElementById('ama-help-tip');
+      if(tip){tip.style.opacity='1';tip.style.transform='translateY(0)';}
+    },1200);
+    setTimeout(()=>{
+      const tip=document.getElementById('ama-help-tip');
+      if(tip){tip.style.opacity='0';tip.style.transform='translateY(8px)';}
+    },7000);
   }
   // If admin entered via "Preview as Teacher", show the return button
   if(sessionStorage.getItem('ama_teacher_mode')==='1'){
@@ -5341,4 +5350,114 @@ async function syncBlockedRoomsFromRegs(){
   try{await db.from('bookings').update({blocked_rooms:newBlocked}).eq('id',regSelBk.id);}catch(e){}
   showToast(`Rooms synced: ${added.join(', ')} added to blocked_rooms ✓`);
 }
+
+// ══════════════════════════════════════════════════════════════
+//  RETREAT ASSISTANT (AI chat) — ported from staging's retreat-portal.html.
+//  netlify/functions/chat-teacher.js is already byte-identical to staging (does
+//  all the room-availability/add/remove tool-calling server-side); this is just
+//  the frontend widget. Uses the same teacher_bk_id everything else in Teacher
+//  Portal reads, instead of retreat-portal.html's ?bk= URL param.
+// ══════════════════════════════════════════════════════════════
+let _chatHistory=[],_chatOpen=false,_chatBusy=false;
+function _chatBkId(){return localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id');}
+function _chatStorageKey(){return `ama_chat_${_chatBkId()}`;}
+function _chatSaveLocal(){try{localStorage.setItem(_chatStorageKey(),JSON.stringify(_chatHistory.slice(-60)));}catch(e){}}
+function _chatLoadLocal(){try{const raw=localStorage.getItem(_chatStorageKey());return raw?JSON.parse(raw):[];}catch(e){return[];}}
+function _chatToggle(){
+  _chatOpen=!_chatOpen;
+  const panel=document.getElementById('ama-chat-panel');
+  const btn=document.getElementById('ama-chat-btn');
+  if(!panel||!btn)return;
+  panel.style.display=_chatOpen?'flex':'none';
+  btn.style.background=_chatOpen?'#1a2332':'#3d8a8a';
+  if(_chatOpen&&_chatHistory.length===0){
+    const saved=_chatLoadLocal();
+    if(saved.length>0){_chatHistory=saved;saved.forEach(m=>_chatAppend(m.role,m.content));}
+    else _chatAppend('assistant',"Hi! I'm your Amansala Retreat Assistant. I can check room availability, add or remove rooms from your retreat, and answer your questions. How can I help you?");
+  }
+  if(_chatOpen)setTimeout(()=>document.getElementById('ama-chat-inp')?.focus(),100);
+}
+function _chatAppend(role,text,actions){
+  const msgs=document.getElementById('ama-chat-msgs');
+  if(!msgs)return;
+  const isUser=role==='user';
+  const wrap=document.createElement('div');
+  wrap.style.cssText=`display:flex;justify-content:${isUser?'flex-end':'flex-start'};margin-bottom:10px;`;
+  const bubble=document.createElement('div');
+  bubble.style.cssText=`
+    max-width:80%;padding:10px 13px;border-radius:${isUser?'14px 14px 4px 14px':'14px 14px 14px 4px'};
+    font-size:13px;line-height:1.55;font-family:'Jost',sans-serif;white-space:pre-wrap;word-break:break-word;
+    background:${isUser?'#3d8a8a':'#f1f5f9'};color:${isUser?'#fff':'#1a2332'};
+    box-shadow:0 1px 3px rgba(0,0,0,.08);
+  `;
+  bubble.innerHTML=escHtml(text)
+    .replace(/(https?:\/\/[^\s<*_`]+)/g,'<a href="$1" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;word-break:break-all">$1</a>')
+    .replace(/\n/g,'<br>');
+  wrap.appendChild(bubble);
+  msgs.appendChild(wrap);
+  if(actions&&actions.length>0){
+    actions.forEach(a=>{
+      if(a.tool==='add_room_by_type'||a.tool==='remove_room_by_type'){
+        const badge=document.createElement('div');
+        badge.style.cssText='display:flex;justify-content:flex-start;margin-bottom:6px;margin-top:-4px;';
+        const pill=document.createElement('div');
+        pill.style.cssText=`
+          font-size:10px;font-weight:700;padding:3px 9px;border-radius:8px;font-family:'Jost',sans-serif;
+          background:${a.result?.success?'#dcfce7':'#fee2e2'};
+          color:${a.result?.success?'#15803d':'#b91c1c'};
+          border:1px solid ${a.result?.success?'#86efac':'#fca5a5'};
+        `;
+        const icon=a.tool==='add_room_by_type'?'+ ':'− ';
+        pill.textContent=icon+(a.result?.message||a.result?.reason||a.result?.error||a.tool);
+        badge.appendChild(pill);
+        msgs.appendChild(badge);
+      }
+    });
+  }
+  msgs.scrollTop=msgs.scrollHeight;
+}
+function _chatShowTyping(){
+  const msgs=document.getElementById('ama-chat-msgs');
+  if(!msgs)return null;
+  const el=document.createElement('div');
+  el.id='ama-typing';
+  el.style.cssText='display:flex;justify-content:flex-start;margin-bottom:10px;';
+  el.innerHTML=`<div style="background:#f1f5f9;border-radius:14px 14px 14px 4px;padding:10px 14px;display:flex;gap:4px;align-items:center">
+    <span style="width:6px;height:6px;border-radius:50%;background:#9ca3af;animation:ama-blink 1.2s infinite .0s"></span>
+    <span style="width:6px;height:6px;border-radius:50%;background:#9ca3af;animation:ama-blink 1.2s infinite .4s"></span>
+    <span style="width:6px;height:6px;border-radius:50%;background:#9ca3af;animation:ama-blink 1.2s infinite .8s"></span>
+  </div>`;
+  msgs.appendChild(el);
+  msgs.scrollTop=msgs.scrollHeight;
+  return el;
+}
+async function _chatSend(){
+  if(_chatBusy)return;
+  const inp=document.getElementById('ama-chat-inp');
+  const text=inp?.value.trim();
+  const bkId=_chatBkId();
+  if(!text||!bkId)return;
+  inp.value='';
+  _chatBusy=true;
+  _chatAppend('user',text);
+  _chatHistory.push({role:'user',content:text});
+  _chatSaveLocal();
+  const typing=_chatShowTyping();
+  try{
+    const res=await fetch('/.netlify/functions/chat-teacher',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bookingId:bkId,messages:_chatHistory})});
+    const data=await res.json();
+    typing?.remove();
+    if(data.error){_chatAppend('assistant','Lo siento, hubo un error. Intenta de nuevo.');}
+    else{
+      _chatAppend('assistant',data.response,data.actions);
+      _chatHistory.push({role:'assistant',content:data.response});
+      _chatSaveLocal();
+      // A tool call may have changed rooms/registrations server-side — refresh so the
+      // rest of Teacher Portal reflects it without needing a manual reload.
+      if(data.actions&&data.actions.length)loadFromSupabase().then(()=>{if(regSelBk)regRender();});
+    }
+  }catch(e){typing?.remove();_chatAppend('assistant','Error de conexión. Por favor intenta de nuevo.');}
+  _chatBusy=false;
+}
+function _chatKeydown(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();_chatSend();}}
 
