@@ -3579,9 +3579,30 @@ function _trAssignRideGroups(guests,type,allTr){
   });
   return{groups,groupOf,prices};
 }
-function _trRateRows(tiers){
-  const labels=['1','2','3','4','5','6+'];
-  return tiers.map((r,i)=>`<tr><td style="padding:1px 14px 1px 0;color:#8a7e74;font-size:11.5px">${labels[i]} pax</td><td style="font-weight:700;color:#2d2520;font-size:11.5px">$${r}</td></tr>`).join('');
+// Compact teal pricing-reference card, styled after staging's "TRANSFER PRICING
+// REFERENCE" panel — placed at the very bottom of the page, below everything else.
+function _trPricingCardHtml(){
+  const block=(label,tiers)=>{
+    const rows=tiers.map((price,i)=>{
+      const rowLabel=i===0?'Private transfer':(i===tiers.length-1?`${i+1}+ sharing`:`${i+1} sharing`);
+      const priceHtml=i===0?`<b>$${price}</b>`:`<b>$${price}</b> <span style="opacity:.65;font-weight:400">each</span>`;
+      return`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;background:rgba(255,255,255,${i===0?0.16:0.08});border-radius:6px;margin-bottom:3px;font-size:11px;color:#fff">
+        <span>${rowLabel}</span><span>${priceHtml}</span>
+      </div>`;
+    }).join('');
+    return`<div style="flex:1;min-width:150px;background:rgba(255,255,255,.06);border-radius:9px;padding:10px">
+      <div style="font-size:11.5px;font-weight:700;color:#fff;margin-bottom:6px">✈️ ${label}</div>
+      ${rows}
+    </div>`;
+  };
+  return`<div style="background:linear-gradient(135deg,#2d6a6a,#3d8080);border-radius:12px;padding:14px 16px;margin-top:20px">
+    <div style="font-size:9.5px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,.75);margin-bottom:8px;text-transform:uppercase">Transfer Pricing Reference</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${block('Cancún Airport (CUN)',_TR_RATES.cancun)}
+      ${block('Tulum Airport (TQO)',_TR_RATES.tulum)}
+    </div>
+    <div style="text-align:center;font-size:10px;color:rgba(255,255,255,.65);margin-top:8px">Prices are per person · Amansala coordinates all shared ride groupings</div>
+  </div>`;
 }
 function _trBuildTransportTable(guests,type,result){
   const{prices,groupOf,groups}=result;
@@ -3773,27 +3794,11 @@ function _renderTeacherTransportInner(bkId){
 
   ${_tpBanner}
 
-  <div style="background:#fff;border-radius:12px;border:1px solid #e8dfd4;padding:16px 20px;margin-bottom:16px">
-    <div style="font-size:12px;font-weight:700;color:#5a5048;margin-bottom:12px">Transport Rates — per person</div>
-    <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start">
-      <div>
-        <div style="font-size:11px;font-weight:700;color:#0e9494;margin-bottom:6px">Cancún (CUN)</div>
-        <table style="border-collapse:collapse">${_trRateRows(_TR_RATES.cancun)}</table>
-      </div>
-      <div>
-        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:6px">Tulum (TQO)</div>
-        <table style="border-collapse:collapse">${_trRateRows(_TR_RATES.tulum)}</table>
-      </div>
-      <div style="flex:1;min-width:200px;font-size:11.5px;color:#8a7e74;line-height:1.9;border-left:2px solid #f0ece4;padding-left:20px">
-        Guests arriving at the same airport within <strong style="color:#5a5048">30 minutes</strong> of each other, who opt in to sharing, are grouped for shared pricing.<br>
-        <span style="color:#065f46;font-weight:600">Tinted rows = shared group</span> · white = private transfer
-      </div>
-    </div>
+  <div style="background:#f0fdf9;border:1px solid #9dd1d1;border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:12.5px;color:#0e5f5f;line-height:1.7">
+    <strong>Need transport assistance?</strong> Contact us at <a href="mailto:retreats@amansala.com" style="color:#0e9494;font-weight:700">retreats@amansala.com</a> and we'll be happy to help arrange airport transfers or shared shuttles.
   </div>
 
-  <div style="background:#f0fdf9;border:1px solid #9dd1d1;border-radius:10px;padding:14px 18px;font-size:12.5px;color:#0e5f5f;line-height:1.7">
-    <strong>Need transport assistance?</strong> Contact us at <a href="mailto:retreats@amansala.com" style="color:#0e9494;font-weight:700">retreats@amansala.com</a> and we'll be happy to help arrange airport transfers or shared shuttles.
-  </div>`;
+  ${_trPricingCardHtml()}`;
 
   wrap.innerHTML=html;
 }
