@@ -400,8 +400,8 @@
     .modal-x{background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;padding:2px 6px;line-height:1;}
     .modal-x:hover{color:var(--dark);}
     .modal-body{padding:20px 24px;}
-    .modal-foot{padding:12px 24px 20px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);}
-    .modal-foot .l,.modal-foot .r{display:flex;gap:8px;}
+    .modal-foot{padding:12px 24px 20px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);flex-wrap:wrap;gap:10px;}
+    .modal-foot .l,.modal-foot .r{display:flex;gap:8px;flex-wrap:wrap;row-gap:8px;}
     .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
     .frow.full{grid-template-columns:1fr;}
     .fg{display:flex;flex-direction:column;gap:4px;}
@@ -3651,13 +3651,13 @@
     <div class="modal-foot">
       <div class="l"><span id="blockSelCount" style="font-size:13px;color:var(--muted)">0 rooms selected</span></div>
       <div class="r">
-        <button class="btn btn-secondary" id="blockAutoBtn" onclick="blockAutoAssign()" style="display:none">⚡ Auto-Assign</button>
-        <button class="btn btn-secondary" style="color:#0e5a5a;border-color:#0e5a5a" onclick="pushReservationsToCloudbeds(AppData.bookings.find(b=>b.id===blockEditBkId)).catch(e=>console.warn('[CB push]',e))" title="Create/verify Cloudbeds reservations for every blocked room right now, without waiting for Save">↑ Push to CB</button>
-        <button class="btn btn-secondary" style="color:#0369a1;border-color:#0369a1" onclick="recoverCbReservationIds()" title="Find existing Cloudbeds reservations for this block and link their IDs to the portal">↓ Recover CB IDs</button>
-        <button class="btn btn-secondary" style="color:#15803d;border-color:#15803d" onclick="importNamesFromCb(blockEditBkId)" title="Pull guest names from Cloudbeds reservations into unnamed portal rooms">↓ Import Names from CB</button>
-        <button class="btn btn-secondary" style="color:#0e7490;border-color:#0e7490" onclick="cbSyncNamesForBooking(blockEditBkId)" title="Push current guest names to Cloudbeds for this retreat only">⇌ Sync Names to CB</button>
-        <button class="btn btn-secondary" style="color:#6d28d9;border-color:#6d28d9" onclick="openCbIdsModal()" title="Manually enter Cloudbeds reservation IDs for each room">✏ Edit CB IDs</button>
-        <button class="btn btn-secondary" style="color:#b45309;border-color:#b45309" onclick="resetCbReservationIds()" title="Clear stored Cloudbeds reservation IDs so rooms re-sync on next save">↺ Reset CB Sync</button>
+        <button class="btn btn-secondary btn-sm" id="blockAutoBtn" onclick="blockAutoAssign()" style="display:none">⚡ Auto-Assign</button>
+        <button class="btn btn-secondary btn-sm" style="color:#0e5a5a;border-color:#0e5a5a" onclick="pushReservationsToCloudbeds(AppData.bookings.find(b=>b.id===blockEditBkId)).catch(e=>console.warn('[CB push]',e))" title="Create/verify Cloudbeds reservations for every blocked room right now, without waiting for Save">↑ Push to CB</button>
+        <button class="btn btn-secondary btn-sm" style="color:#0369a1;border-color:#0369a1" onclick="recoverCbReservationIds()" title="Find existing Cloudbeds reservations for this block and link their IDs to the portal">↓ Recover IDs</button>
+        <button class="btn btn-secondary btn-sm" style="color:#15803d;border-color:#15803d" onclick="importNamesFromCb(blockEditBkId)" title="Pull guest names from Cloudbeds reservations into unnamed portal rooms">↓ Import Names</button>
+        <button class="btn btn-secondary btn-sm" style="color:#0e7490;border-color:#0e7490" onclick="cbSyncNamesForBooking(blockEditBkId)" title="Push current guest names to Cloudbeds for this retreat only">⇌ Sync Names</button>
+        <button class="btn btn-secondary btn-sm" style="color:#6d28d9;border-color:#6d28d9" onclick="openCbIdsModal()" title="Manually enter Cloudbeds reservation IDs for each room">✏ Edit IDs</button>
+        <button class="btn btn-secondary btn-sm" style="color:#b45309;border-color:#b45309" onclick="resetCbReservationIds()" title="Clear stored Cloudbeds reservation IDs so rooms re-sync on next save">↺ Reset Sync</button>
         <button class="btn btn-secondary" onclick="closeModal('blockModal')">Cancel</button>
         <button class="btn btn-primary" onclick="blockSave()">Save Block</button>
       </div>
