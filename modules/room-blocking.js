@@ -477,6 +477,14 @@ function gToggleTeacher(){
 function gOpenAddExtraGuest(room,rtId){gExtraGuestMode=true;gOpenEdit(room,rtId);}
 function gOpenAdd(room,rtId){
   if(IS_TEACHER_MODE&&regSelBk?.allLocked){showToast('El retiro está bloqueado por el admin.');return;}
+  // A "Vacant" room can still have an existing-but-empty registration underneath it (an
+  // import placeholder, or a previous Remove that cleared the guest but kept the reg
+  // row) — reuse that reg via gOpenEdit instead of blindly starting a new one, or
+  // gSave()'s "room already assigned" duplicate-guard trips on our OWN leftover empty
+  // reg for this exact room (real incident: Carter retreat, Queen Downstairs A).
+  // Mirrors gSave()'s own "taken" check exactly (same !isTeacherRoom filter) so a
+  // teacher-room placeholder sharing this room doesn't wrongly redirect a normal Add.
+  if(regSelBk&&AppData.regs.some(r=>r.bookingId===regSelBk.id&&r.room===room&&!r.isTeacherRoom))return gOpenEdit(room,rtId);
   gEditRegId=null;
   gEditRoom=regSelBk?resolvePhysicalRoomForGuest(regSelBk.id,room,rtId):room;
   gEditRtId=rtId;
