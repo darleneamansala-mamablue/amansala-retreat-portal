@@ -2366,7 +2366,7 @@
 
 <!-- ===== GUEST MODAL ===== -->
 <div class="modal-overlay" id="guestModal">
-  <div class="modal">
+  <div class="modal wide">
     <div class="modal-hdr"><div><h2 id="gModalTitle">Add Guest</h2><div class="modal-sub" id="gModalSub"></div></div><button class="modal-x" onclick="closeModal('guestModal')">&times;</button></div>
     <div class="modal-body">
       <div class="gtabs" id="gTabs" style="display:none">
@@ -2375,10 +2375,10 @@
         <div class="gtab" id="gtab2" onclick="gSwitchTab(2)" style="display:none">Guest 3</div>
         <div class="gtab" id="gtab3" onclick="gSwitchTab(3)" style="display:none">Guest 4</div>
       </div>
-      <div id="gp0"><div class="frow"><div class="fg"><label>Full Name</label><input type="text" id="g0-name" placeholder="First Last"></div><div class="fg"><label>Email</label><input type="email" id="g0-email" placeholder="email@example.com"></div></div><div class="frow"><div class="fg"><label>Phone</label><div style="display:flex;gap:6px"><select id="g0-cc" class="gm-cc" onchange="gApplyCc(0)" style="flex:0 0 88px;padding:8px 4px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;outline:none;"></select><input type="tel" id="g0-phone" placeholder="555 000 0000" style="flex:1"></div></div><div class="fg"><label>Notes / Allergies</label><input type="text" id="g0-note" placeholder="Dietary needs, allergies, arrival info…" title="Note any dietary restrictions or allergies. Amansala is dairy-light. Guests with severe allergies are responsible for bringing their own EpiPen or allergy medication."></div></div></div>
-      <div id="gp1" style="display:none"><div class="frow"><div class="fg"><label>Full Name</label><input type="text" id="g1-name" placeholder="First Last (optional)"></div><div class="fg"><label>Email</label><input type="email" id="g1-email" placeholder="email@example.com"></div></div><div class="frow"><div class="fg"><label>Phone</label><div style="display:flex;gap:6px"><select id="g1-cc" class="gm-cc" onchange="gApplyCc(1)" style="flex:0 0 88px;padding:8px 4px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;outline:none;"></select><input type="tel" id="g1-phone" style="flex:1"></div></div><div class="fg"><label>Notes</label><input type="text" id="g1-note"></div></div></div>
-      <div id="gp2" style="display:none"><div class="frow"><div class="fg"><label>Full Name</label><input type="text" id="g2-name" placeholder="First Last (optional)"></div><div class="fg"><label>Email</label><input type="email" id="g2-email"></div></div><div class="frow"><div class="fg"><label>Phone</label><div style="display:flex;gap:6px"><select id="g2-cc" class="gm-cc" onchange="gApplyCc(2)" style="flex:0 0 88px;padding:8px 4px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;outline:none;"></select><input type="tel" id="g2-phone" style="flex:1"></div></div><div class="fg"><label>Notes</label><input type="text" id="g2-note"></div></div></div>
-      <div id="gp3" style="display:none"><div class="frow"><div class="fg"><label>Full Name</label><input type="text" id="g3-name" placeholder="First Last (optional)"></div><div class="fg"><label>Email</label><input type="email" id="g3-email"></div></div><div class="frow"><div class="fg"><label>Phone</label><div style="display:flex;gap:6px"><select id="g3-cc" class="gm-cc" onchange="gApplyCc(3)" style="flex:0 0 88px;padding:8px 4px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;outline:none;"></select><input type="tel" id="g3-phone" style="flex:1"></div></div><div class="fg"><label>Notes</label><input type="text" id="g3-note"></div></div></div>
+      <div id="gp0"><div class="frow"><div class="fg"><label>Full Name</label><input type="text" id="g0-name" placeholder="First Last"></div><div class="fg"><label>Email</label><input type="email" id="g0-email" placeholder="email@example.com"></div></div><div class="frow"><div class="fg"><label>Phone</label><div style="display:flex"><select id="g0-cc" class="gm-cc" onchange="gApplyCc(0)" style="flex:0 0 92px;padding:8px 4px;border:1.5px solid var(--border);border-right:none;border-radius:8px 0 0 8px;font-family:'Jost',sans-serif;font-size:12px;background:#f9fafb;outline:none;"></select><input type="tel" id="g0-phone" placeholder="555 000 0000" style="flex:1;border-radius:0 8px 8px 0;min-width:0"></div></div><div class="fg"><label>Notes / Allergies</label><input type="text" id="g0-note" placeholder="Dietary needs, allergies, arrival info…" title="Note any dietary restrictions or allergies. Amansala is dairy-light. Guests with severe allergies are responsible for bringing their own EpiPen or allergy medication."></div></div></div>
+      <div id="gp1" style="display:none"><div class="frow"><div class="fg"><label>Full Name</label><input type="text" id="g1-name" placeholder="First Last (optional)"></div><div class="fg"><label>Email</label><input type="email" id="g1-email" placeholder="email@example.com"></div></div><div class="frow"><div class="fg"><label>Phone</label><div style="display:flex"><select id="g1-cc" class="gm-cc" onchange="gApplyCc(1)" style="flex:0 0 92px;padding:8px 4px;border:1.5px solid var(--border);border-right:none;border-radius:8px 0 0 8px;font-family:'Jost',sans-serif;font-size:12px;background:#f9fafb;outline:none;"></select><input type="tel" id="g1-phone" style="flex:1;border-radius:0 8px 8px 0;min-width:0"></div></div><div class="fg"><label>Notes</label><input type="text" id="g1-note"></div></div></div>
+      <div id="gp2" style="display:none"><div class="frow"><div class="fg"><label>Full Name</label><input type="text" id="g2-name" placeholder="First Last (optional)"></div><div class="fg"><label>Email</label><input type="email" id="g2-email"></div></div><div class="frow"><div class="fg"><label>Phone</label><div style="display:flex"><select id="g2-cc" class="gm-cc" onchange="gApplyCc(2)" style="flex:0 0 92px;padding:8px 4px;border:1.5px solid var(--border);border-right:none;border-radius:8px 0 0 8px;font-family:'Jost',sans-serif;font-size:12px;background:#f9fafb;outline:none;"></select><input type="tel" id="g2-phone" style="flex:1;border-radius:0 8px 8px 0;min-width:0"></div></div><div class="fg"><label>Notes</label><input type="text" id="g2-note"></div></div></div>
+      <div id="gp3" style="display:none"><div class="frow"><div class="fg"><label>Full Name</label><input type="text" id="g3-name" placeholder="First Last (optional)"></div><div class="fg"><label>Email</label><input type="email" id="g3-email"></div></div><div class="frow"><div class="fg"><label>Phone</label><div style="display:flex"><select id="g3-cc" class="gm-cc" onchange="gApplyCc(3)" style="flex:0 0 92px;padding:8px 4px;border:1.5px solid var(--border);border-right:none;border-radius:8px 0 0 8px;font-family:'Jost',sans-serif;font-size:12px;background:#f9fafb;outline:none;"></select><input type="tel" id="g3-phone" style="flex:1;border-radius:0 8px 8px 0;min-width:0"></div></div><div class="fg"><label>Notes</label><input type="text" id="g3-note"></div></div></div>
 
       <div id="gm-teacher-row" style="display:none;margin:2px 0 14px;">
         <label style="display:flex;align-items:center;gap:9px;padding:10px 14px;border:1.5px solid #fcd34d;background:#fffbeb;border-radius:9px;cursor:pointer;">
@@ -2389,20 +2389,19 @@
 
       <div id="gm-options-section" style="display:none;">
         <div class="fg" style="margin-bottom:8px"><label style="color:#92400e">Options (admin)</label></div>
-        <div class="frow">
-          <div class="fg"><label>Custom Rate ($/person/night)</label><input type="number" id="gm-rate-override" placeholder="default" oninput="gUpdatePrice()" title="Override the nightly per-person rate"></div>
-          <div class="fg"><label>Package Price Override</label><input type="number" id="gm-pkg-price" placeholder="default" oninput="gUpdatePrice()" title="Override the total package price for this room"></div>
-        </div>
-        <div class="frow">
-          <div class="fg"><label>Nights to Charge</label><input type="number" id="gm-nights-override" placeholder="auto" oninput="gUpdatePrice()" title="Override the number of nights the room rate is charged for"></div>
-          <div class="fg"><label>Tip Nights</label><input type="number" id="gm-tip-nights-override" placeholder="auto" oninput="gUpdatePrice()" title="Override the number of nights the tip fee is charged for"></div>
-        </div>
-        <div class="frow">
-          <div class="fg"><label>Tip Rate Override ($/guest/night)</label><input type="number" id="gm-tip-rate-override" placeholder="default" oninput="gUpdatePrice()" title="Override the tip fee rate"></div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px">
+          <div class="fg"><label>Custom Rate <span style="font-weight:400;text-transform:none;letter-spacing:0">($/person/night)</span></label><input type="number" id="gm-rate-override" placeholder="Default" oninput="gUpdatePrice()" title="Override the nightly per-person rate"></div>
+          <div class="fg"><label>Nights to Charge</label><input type="number" id="gm-nights-override" placeholder="All" oninput="gUpdatePrice()" title="Override the number of nights the room rate is charged for"></div>
+          <div class="fg"><label>Tip Nights</label><input type="number" id="gm-tip-nights-override" placeholder="= room" oninput="gUpdatePrice()" title="Override the number of nights the tip fee is charged for"></div>
+          <div class="fg"><label>Tip/Night <span style="font-weight:400;text-transform:none;letter-spacing:0">($/guest)</span></label><input type="number" id="gm-tip-rate-override" placeholder="Global" oninput="gUpdatePrice()" title="Override the tip fee rate"></div>
           <div class="fg"><label>Amount Paid</label><input type="number" id="gm-paid" value="0" oninput="gUpdatePrice()"></div>
         </div>
+        <div class="frow">
+          <div class="fg"><label>Package Price Override <span style="font-weight:400;text-transform:none;letter-spacing:0">(per person · 0 = free)</span></label><input type="number" id="gm-pkg-price" placeholder="Leave blank for default" oninput="gUpdatePrice()" title="Override the total package price for this room"></div>
+          <div></div>
+        </div>
         <div class="frow full">
-          <div class="fg"><label>Total Override</label><input type="number" id="gm-override" placeholder="leave blank to use calculated total" oninput="gUpdatePrice()" title="Override the final total price entirely"></div>
+          <div class="fg"><label>Total Override</label><input type="number" id="gm-override" placeholder="Leave blank to use calculated total" oninput="gUpdatePrice()" title="Override the final total price entirely"></div>
         </div>
       </div>
 
@@ -2417,7 +2416,7 @@
       </div>
       <input type="hidden" id="gm-balance" value="">
       <div class="frow">
-        <div class="fg"><label>Room Notes</label><input type="text" id="gm-notes" placeholder="e.g. Needs ground floor · Sharing with daughter · Wants room 25" title="Special room requests, preferences, or notes for the admin team"></div>
+        <div class="fg"><label>Room Notes</label><textarea id="gm-notes" rows="2" placeholder="e.g. Needs ground floor · Sharing with daughter · Wants room 25" title="Special room requests, preferences, or notes for the admin team" style="resize:vertical"></textarea></div>
       </div>
       <div class="frow" id="gm-dates-row" style="display:none">
         <div class="fg"><label>Check-in</label><input type="date" id="gm-checkin" oninput="gUpdatePrice()"></div>
