@@ -3814,6 +3814,7 @@ function _renderTeacherTransportInner(bkId){
 function enterTeacherView(bkId){
   document.getElementById('teacherLoginScreen').style.display='none';
   document.body.classList.add('teacher-mode');
+  if(typeof _pinSideNav==='function')_pinSideNav();
   if(sessionStorage.getItem('ama_admin_viewing')==='1')document.body.classList.add('admin-preview');
   // Apply lock immediately (before Supabase merge) so CSS takes effect from first render
   const _previewLockedId=sessionStorage.getItem('ama_preview_locked_bk');
