@@ -769,6 +769,14 @@ function regMoveGuest(regId,targetRoom,targetRtId){
           if(res.adjustmentId)bk.cbAdjustmentIds[room]=res.adjustmentId;
           else delete bk.cbAdjustmentIds[room];
         }
+        // updateReservationGuest can fall back server-side to cancel+recreate when a
+        // direct name update is rejected — returns a NEW reservationId. Not capturing
+        // it here leaves cbReservationIds pointing at the now-cancelled reservation,
+        // so the next move/sync/push can't find it and creates a duplicate.
+        if(res.reservationId&&res.reservationId!==cbResIds[room]){
+          bk.cbReservationIds[room]=res.reservationId;
+          if(res.guestId){if(!bk.cbGuestIds)bk.cbGuestIds={};bk.cbGuestIds[room]=res.guestId;}
+        }
       });
       saveAll();
       const ok=results.every(r=>!r||r.updated!==false);

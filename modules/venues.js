@@ -2068,6 +2068,15 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
         fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({reservationId:_cbResId,guestId:_cbGuestIdMv,roomName:toRoom,startDate:bk.startDate,endDate:bk.endDate,
             guestFirstName:movedNames.join(' & '),groupName:bk.retreatName||bk.row||'',leaderName:bk.leaderName||'',adults:Math.max(1,movedNames.length),dailyRate:0})
+        }).then(r=>r.json()).then(nd=>{
+          // updateReservationGuest can fall back server-side to cancel+recreate,
+          // returning a NEW reservationId — capture it or the next move/sync/push
+          // can't find this room and creates a duplicate reservation.
+          if(nd.reservationId&&nd.reservationId!==_cbResId){
+            bk.cbReservationIds[toRoom]=nd.reservationId;
+            if(nd.guestId){if(!bk.cbGuestIds)bk.cbGuestIds={};bk.cbGuestIds[toRoom]=nd.guestId;}
+            saveAll();
+          }
         }).catch(e=>console.warn('[CB rcMove name]',e));
       }
     }).catch(e=>console.warn('[CB rcMove]',e));

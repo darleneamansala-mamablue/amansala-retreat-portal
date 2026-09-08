@@ -630,7 +630,16 @@ function gDelete(){
         body:JSON.stringify({reservationId:_cbResId,roomName:gEditRoom||'',startDate:regSelBk.startDate||'',endDate:regSelBk.endDate||'',guestFirstName:_names.join(' & '),groupName:regSelBk.retreatName||regSelBk.row||'',leaderName:regSelBk.leaderName||'',adults:_names.length,adjustmentId:_prevAdjId,isGuestRemoval:true})
       }).then(r=>r.json()).then(d=>{
         if(!regSelBk.cbAdjustmentIds)regSelBk.cbAdjustmentIds={};
-        regSelBk.cbAdjustmentIds[gEditRoom]=d.adjustmentId||null;saveAll();
+        regSelBk.cbAdjustmentIds[gEditRoom]=d.adjustmentId||null;
+        // updateReservationGuest can fall back server-side to cancel+recreate — capture
+        // the new reservationId or the next sync/push can't find this room and
+        // creates a duplicate reservation.
+        if(d.reservationId&&d.reservationId!==_cbResId){
+          if(!regSelBk.cbReservationIds)regSelBk.cbReservationIds={};
+          regSelBk.cbReservationIds[gEditRoom]=d.reservationId;
+          if(d.guestId){if(!regSelBk.cbGuestIds)regSelBk.cbGuestIds={};regSelBk.cbGuestIds[gEditRoom]=d.guestId;}
+        }
+        saveAll();
       }).catch(e=>console.warn('[CB update after partial remove]',e));
     }
     return;
@@ -645,7 +654,15 @@ function gDelete(){
         fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({reservationId:_rid,roomName:gEditRoom||'',startDate:regSelBk.startDate||'',endDate:regSelBk.endDate||'',guestFirstName:'',groupName:regSelBk.retreatName||regSelBk.row||'',leaderName:regSelBk.leaderName||'',adults:1,adjustmentId:_prevAdjIdDel,isGuestRemoval:true})
         }).then(r=>r.json()).then(d=>{
-          if(d.guestId){if(!regSelBk.cbGuestIds)regSelBk.cbGuestIds={};regSelBk.cbGuestIds[gEditRoom]=d.guestId;}if(!regSelBk.cbAdjustmentIds)regSelBk.cbAdjustmentIds={};regSelBk.cbAdjustmentIds[gEditRoom]=null;saveAll();
+          if(d.guestId){if(!regSelBk.cbGuestIds)regSelBk.cbGuestIds={};regSelBk.cbGuestIds[gEditRoom]=d.guestId;}
+          if(!regSelBk.cbAdjustmentIds)regSelBk.cbAdjustmentIds={};
+          regSelBk.cbAdjustmentIds[gEditRoom]=d.adjustmentId||null;
+          // Same cancel+recreate fallback risk as above — capture the new reservationId.
+          if(d.reservationId&&d.reservationId!==_rid){
+            if(!regSelBk.cbReservationIds)regSelBk.cbReservationIds={};
+            regSelBk.cbReservationIds[gEditRoom]=d.reservationId;
+          }
+          saveAll();
         }).catch(e=>console.warn('[CB reset guest]',e));
       }
     }
