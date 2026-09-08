@@ -595,11 +595,18 @@ function regRender(){
         retTd.innerHTML=`<button class="ret-toggle${isRet?' ret-on':''}" onclick="regToggleReturning('${reg.id}',${gi})">${isRet?'↩ Returning':'✦ New'}</button>${isRet?`<input class="ret-years" type="number" min="1" max="30" value="${yrs}" placeholder="yrs" title="Years attending" onchange="regSaveYears('${reg.id}',${gi},this.value)">`:''}`;
         tr.appendChild(retTd);
 
+        // _effCI/_effCO/_regNights stay room-level (never per-guest) — they're the
+        // FALLBACK calcBD uses for whichever guest in this room has no override of
+        // their own, so every guest-row in the same room must pass the same fallback
+        // or a guest without an override would price differently depending on which
+        // row happened to render. The Dates column below shows THIS guest's own
+        // effective dates (g.checkIn/checkOut when set) independently of that.
         const _effCI=reg.checkIn||regSelBk.startDate;const _effCO=reg.checkOut||regSelBk.endDate;
         const _regNights=Math.max(1,Math.round((pd(_effCO)-pd(_effCI))/DAY_MS));
+        const _gCI=g.checkIn||_effCI;const _gCO=g.checkOut||_effCO;
         const datesTd=document.createElement('td');
         datesTd.className='r-dates';
-        datesTd.textContent=`${fmtDate(_effCI)} – ${fmtDate(_effCO)}`;
+        datesTd.textContent=`${fmtDate(_gCI)} – ${fmtDate(_gCO)}`;
         tr.appendChild(datesTd);
 
         const priceTd=document.createElement('td');

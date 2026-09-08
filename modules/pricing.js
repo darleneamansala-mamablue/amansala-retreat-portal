@@ -78,12 +78,18 @@ function renderEstQuote(){
     const _eTipRate=reg.customTipRateOverride!=null?Number(reg.customTipRateOverride):tipPer;
     const _isBd1Extra=rt.id==='bd1'&&reg.customRateOverride==null&&(gc>=2||_getSharedBeds(room).some(s=>blockedSet.has(s)&&(regByRoom[s]?.guests||[]).filter(g=>g.name).length>=2));
     const rate=reg.customRateOverride!=null?reg.customRateOverride:(_isBd1Extra?(isLowSeason(_eCI,_eNights)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):getRoomRate(rt,gc,_eCI,_eNights));
-    const base=+(rate*gc*_eNights).toFixed(2);
+    // Per-guest checkIn/checkOut overrides (2+ unrelated guests sharing one room with
+    // different actual stays) — sum each guest's own nights instead of assuming every
+    // guest in the room stays the uniform _eNights/_eTipNights span. Falls back to
+    // gc*_eNights when nobody has a per-guest override, identical to the old formula.
+    const _roomNightsSum=sumGuestNights(reg,regSelBk,_eNights)??(gc*_eNights);
+    const _tipNightsSum=sumGuestNights(reg,regSelBk,_eTipNights)??(gc*_eTipNights);
+    const base=+(rate*_roomNightsSum).toFixed(2);
     const pkgCost=reg.customPkgPrice!=null?reg.customPkgPrice:(addOnItems.length?+(calcPkgCost(regSelBk,gc)).toFixed(2):0);
     const roomTax=+(base*roomTaxRate).toFixed(2);
     const pTax=+(pkgCost*pkgTaxRate).toFixed(2);
     const tax=+(roomTax+pTax).toFixed(2);
-    const tip=+(_eTipRate*gc*_eTipNights).toFixed(2);
+    const tip=+(_eTipRate*_tipNightsSum).toFixed(2);
     // Already tax-inclusive (each custom add-on uses its own tax rate, which can differ
     // from pkgTaxRate) — add on top of tax, don't fold into roomTax/pTax.
     const cao=calcCustomAoCost(regSelBk,gc,reg);
