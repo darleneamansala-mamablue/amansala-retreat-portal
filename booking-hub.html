@@ -4495,13 +4495,15 @@ async function loadFromSupabase(){
     // this fails, never blocks the main bookings/registrations load above.
     try{
       const _notifCutoff=new Date(Date.now()-60*24*60*60*1000).toISOString();
-      const [botRes,paidRes,setRes]=await Promise.all([
+      const [botRes,paidRes,setRes,wtRes]=await Promise.all([
         db.from('bot_log').select('id,booking_id,tool_name,tool_result,created_at').in('tool_name',['add_room_by_type','remove_room_by_type']).gte('created_at',_notifCutoff).order('created_at',{ascending:false}).limit(200),
         db.from('booking_requests').select('id,first_name,last_name,room_type_name,amount_paid,created_at').eq('status','paid').gte('created_at',_notifCutoff).order('created_at',{ascending:false}),
         db.from('settings').select('key,value').in('key',['notif_dismissed','notif_seen_at','flight_alerts']),
+        db.from('app_store').select('value').eq('key','weTravelPaymentLog'),
       ]);
       notifBotLog=(botRes.data||[]).filter(r=>r.tool_result?.success!==false);
       notifPaidRequests=paidRes.data||[];
+      notifWeTravelPayments=(wtRes.data&&wtRes.data[0]&&Array.isArray(wtRes.data[0].value))?wtRes.data[0].value:[];
       const _setMap={};(setRes.data||[]).forEach(r=>_setMap[r.key]=r.value);
       // Merge in any pre-existing per-device dismissals from before this was shared —
       // same one-time migration staging's own settings.js load does.
@@ -4735,7 +4737,7 @@ let deletedRegIds=new Set();
 // notifSeenAt live in the shared `settings` table (same one staging's
 // js/data/settings.js reads/writes), so dismissing a notification here also
 // dismisses it in staging and vice versa.
-let notifBotLog=[],notifPaidRequests=[],notifDismissed=new Set(),notifSeenAt=null,notifFlightAlerts=[];
+let notifBotLog=[],notifPaidRequests=[],notifDismissed=new Set(),notifSeenAt=null,notifFlightAlerts=[],notifWeTravelPayments=[];
 let externalReservations=[];
 let venYear=new Date().getFullYear();
 let rcStart=new Date(2026,4,1), rcShowDays=30;

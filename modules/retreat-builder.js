@@ -785,6 +785,15 @@ function computeActivityNotifs(){
     notifs.push({id,type:'payment_received',ts,isNew,name,room:pr.room_type_name||'',amount:pr.amount_paid||0});
   });
 
+  notifWeTravelPayments.forEach(p=>{
+    if(dismissed.has(p.id))return;
+    const ts=p.ts?new Date(p.ts):null;
+    if(ts&&ts<cutoff)return;
+    const isNew=!seenDate||(ts&&ts>seenDate);
+    notifs.push({id:p.id,type:'wetravel_payment',ts,isNew,bookingId:p.bookingId,guestName:p.guestName||'',
+      amount:p.amount||0,kind:p.kind||'created'});
+  });
+
   notifFlightAlerts.forEach(a=>{
     if(dismissed.has(a.id))return;
     if(a.dismissed)return;
@@ -871,6 +880,15 @@ function _actvNotifRowHtml(n){
       ${newBadge}<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>
       ${dismissBtn}</div>`;
   }
+  if(n.type==='wetravel_payment'){
+    const label=n.kind==='created'?'We Travel booking paid':'We Travel payment received';
+    const amt=n.amount>0?` — <strong>${fmt$(n.amount)}</strong>`:'';
+    return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">🧳</span>
+      <span style="cursor:pointer" onclick="openBookingFromNotif('${n.bookingId}')"><strong>${label}</strong>${n.guestName?' — '+escHtml(n.guestName):''}${amt}</span>
+      ${newBadge}${n.ts?`<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>`:''}
+      ${dismissBtn}</div>`;
+  }
   if(n.type==='flight_alert'){
     const isCancelled=n.label==='CANCELLED';
     const rowBg=isCancelled?'background:#fef2f2;border-left:3px solid #dc2626':bg;
@@ -891,6 +909,7 @@ const ACTV_NOTIF_SECTIONS=[
   {id:'schedule',label:'Schedule',icon:'📅',types:['schedule_submitted']},
   {id:'contracts',label:'Contracts',icon:'📝',types:['contract_signed','deposit_email']},
   {id:'payments',label:'Payments',icon:'💳',types:['payment_received']},
+  {id:'wetravel',label:'We Travel',icon:'🧳',types:['wetravel_payment']},
 ];
 function renderActvNotifPanel(notifs){
   if(!notifs.length)return'';

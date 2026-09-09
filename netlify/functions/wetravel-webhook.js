@@ -94,6 +94,24 @@ function verifySvixSignature(headers, rawBody) {
   return { ok: match, reason: match ? null : 'signature mismatch' };
 }
 
+// ─── Dashboard "We Travel" activity notifications ──────────────────────────
+// Stored in app_store (key='weTravelPaymentLog') as a small append-only log —
+// booking-hub.html's notification loader reads this the same way it already
+// reads bot_log/booking_requests, and computeActivityNotifs() in
+// retreat-builder.js turns each entry into a dismissible Dashboard notification.
+// Deduped by id (the Svix delivery id when available) so retries don't double up.
+async function logWeTravelNotif(key, entry) {
+  try {
+    const rows = await supa(key, `app_store?select=value&key=eq.weTravelPaymentLog`, 'GET');
+    let log = (rows && rows[0] && rows[0].value) || [];
+    if (log.some(e => e.id === entry.id)) return;
+    log = [...log, entry].slice(-200);
+    await supa(key, 'app_store', 'POST', [{ key: 'weTravelPaymentLog', value: log, updated_at: new Date().toISOString() }]);
+  } catch (e) {
+    console.warn('[wetravel-webhook] could not log dashboard notification:', e.message);
+  }
+}
+
 // ─── Trip title -> portal retreat name ──────────────────────────────────────
 // Admin wants the portal's retreat name/label to read as the program's short
 // code rather than WeTravel's own trip title (e.g. "Bikini Bootcamp - Dec 28 -
@@ -162,8 +180,30 @@ exports.handler = async (event) => {
   const tripUuid = d.trip_uuid || d.trip?.uuid || d.trip_id || null;
   const orderId = d.order_id || d.id || d.booking?.id || null;
 
+  const svixId = (event.headers && (event.headers['svix-id'] || event.headers['Svix-Id'])) || null;
+
   if (eventType !== 'booking.created') {
-    console.log('[wetravel-webhook] ignoring event type:', eventType);
+    // WeTravel accounts on a payment plan fire further events as installments
+    // come in — the exact event name/payload for those isn't confirmed yet (only
+    // booking.created has been seen live), so rather than silently drop anything
+    // that looks payment-related, log a best-effort Dashboard notification for it.
+    // Safe to broaden/tighten this match once a real installment event is logged.
+    const isPaymentish = supaKey && (/payment/i.test(eventType) || eventType === 'booking.updated');
+    if (isPaymentish) {
+      const guestName = (d.buyer && (d.buyer.full_name || [d.buyer.first_name, d.buyer.last_name].filter(Boolean).join(' '))) || '';
+      const amount = (d.amount ?? d.paid_amount ?? d.total_paid_amount ?? 0) / 100;
+      await logWeTravelNotif(supaKey, {
+        id: svixId || `${eventType}_${orderId || tripUuid || Date.now()}`,
+        ts: new Date().toISOString(),
+        kind: 'payment',
+        bookingId: tripUuid ? `wt_${tripUuid}` : null,
+        guestName,
+        amount,
+      });
+      console.log(`[wetravel-webhook] logged Dashboard notification for event type ${eventType}`);
+    } else {
+      console.log('[wetravel-webhook] ignoring event type:', eventType);
+    }
     return ok(200, { received: true, processed: false, reason: 'event type not handled yet' });
   }
   if (!tripUuid || !orderId) {
@@ -327,6 +367,18 @@ exports.handler = async (event) => {
     }
 
     console.log(`[wetravel-webhook] order ${order.id}: created ${newRegs.length} registration(s), ${foliosCreated} folio pair(s) on booking ${bkId}`);
+
+    if (newRegs.length) {
+      await logWeTravelNotif(supaKey, {
+        id: svixId || `booking_created_${order.id}`,
+        ts: new Date().toISOString(),
+        kind: 'created',
+        bookingId: bkId,
+        guestName: guestList.map(g => g.name).filter(Boolean).join(', '),
+        amount: (order.paid_amount || 0) / 100,
+      });
+    }
+
     return ok(200, { received: true, processed: true, bookingId: bkId, registrations: newRegs.length, folios: foliosCreated });
   } catch (e) {
     console.error('[wetravel-webhook] processing failed:', e.message);
