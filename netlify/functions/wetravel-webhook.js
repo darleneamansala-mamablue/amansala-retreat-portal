@@ -373,6 +373,16 @@ exports.handler = async (event) => {
     // of showing an unrelated number.
     const tripNights = Math.max(1, Math.round((new Date(trip.end_date) - new Date(trip.start_date)) / 86400000));
 
+    // Some guests already have a real reservation entered directly in Cloudbeds
+    // (front desk double-entry, or a manual backfill for someone who already had
+    // a Cloudbeds reservation before We Travel sync existed) — for those, the
+    // room is already occupied/tracked on the Cloudbeds side, so auto-assigning
+    // a second room here would just create a phantom double-booking. Setting
+    // this flag on the payload still creates the booking/registration/folios
+    // (so payment tracking and the We Travel tab work normally) but leaves room
+    // unassigned instead of calling pickFreeRoom.
+    const skipRoomAssignment = d.skip_room_assignment === true;
+
     for (const pkg of packages) {
       const roomTypeId = pkgMap[pkg.name];
       if (!roomTypeId) {
@@ -380,9 +390,12 @@ exports.handler = async (event) => {
         await recordUnmappedPackage(supaKey, pkg.name, tripUuid, orderId);
         continue;
       }
-      const room = await pickFreeRoom(supaKey, roomTypeId, trip.start_date, trip.end_date, [...blockedRooms, ...usedThisBooking]);
-      if (!room) { console.warn(`[wetravel-webhook] no free room of type ${roomTypeId} for ${trip.start_date}-${trip.end_date}`); continue; }
-      usedThisBooking.push(room);
+      let room = null;
+      if (!skipRoomAssignment) {
+        room = await pickFreeRoom(supaKey, roomTypeId, trip.start_date, trip.end_date, [...blockedRooms, ...usedThisBooking]);
+        if (!room) { console.warn(`[wetravel-webhook] no free room of type ${roomTypeId} for ${trip.start_date}-${trip.end_date}`); continue; }
+      }
+      if (room) usedThisBooking.push(room);
       // Single-package orders (the common case) get every active participant in
       // that one room; multi-package orders split participants across rooms by
       // however many this package covers (min 1) — best effort without a
