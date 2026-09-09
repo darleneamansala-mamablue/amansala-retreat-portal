@@ -72,15 +72,44 @@ async function openBlockModal(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);
   if(!bk)return;
   blockEditBkId=bkId;
-  _blockModalOrigRooms=[...(bk.blockedRooms||[])];// snapshot BEFORE any Recover CB IDs could modify bk
-  _blockModalOrigUpdatedAt=bk.blockedRoomsUpdatedAt||null;
   document.getElementById('blockModalSub').textContent=
     `${bk.leaderName||bk.retreatName} · ${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}${bk.pax?' · '+bk.pax+' estimated guests':''}`;
   openModal('blockModal');
-  // Render immediately using whatever conflict data we already have — internal-conflict
-  // checking (other retreats' blockedRooms) is instant. External Cloudbeds conflicts
-  // (walk-ins/OTAs) patch in a moment later below once that slower external API call
-  // resolves — same 2-step pattern the current app's own Rooms calendar already uses.
+  document.getElementById('blockModalBody').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">Loading current room data…</div>';
+
+  // Pull THIS booking's blocked_rooms + registrations fresh from Supabase before showing
+  // any checkboxes — never trust whatever this browser tab has had in memory since page
+  // load. Real incident: a tab open for hours had a stale, incomplete picture of which
+  // rooms were blocked; the grid rendered from that stale picture, and Save then treated
+  // every room missing from it as intentionally removed — cancelling its Cloudbeds
+  // reservation and deleting its guest registration outright, even though nothing else
+  // was touching the booking. A page that's simply been open a while is enough to trigger
+  // this, so re-fetching on every open (not just guarding at save time) is what actually
+  // closes the gap.
+  try{
+    const [{data:freshBkRow},{data:freshRegRows,error:regErr}]=await Promise.all([
+      db.from('bookings').select('blocked_rooms,blocked_rooms_updated_at,cb_reservation_ids,cb_guest_ids,cb_adjustment_ids,cb_note_ids').eq('id',bkId).maybeSingle(),
+      db.from('registrations').select('*').eq('booking_id',bkId),
+    ]);
+    if(regErr)throw regErr;
+    if(freshBkRow){
+      bk.blockedRooms      =freshBkRow.blocked_rooms||[];
+      bk.blockedRoomsUpdatedAt=freshBkRow.blocked_rooms_updated_at||null;
+      bk.cbReservationIds  =freshBkRow.cb_reservation_ids||{};
+      bk.cbGuestIds        =freshBkRow.cb_guest_ids||{};
+      bk.cbAdjustmentIds   =freshBkRow.cb_adjustment_ids||{};
+      bk.cbNoteIds         =freshBkRow.cb_note_ids||{};
+    }
+    // Replace (not merge) this booking's regs with the fresh server copy, so a reg that
+    // no longer exists server-side disappears here too instead of lingering in memory.
+    AppData.regs=AppData.regs.filter(r=>r.bookingId!==bkId).concat((freshRegRows||[]).map(sqlRegToApp));
+  }catch(e){
+    console.warn('[openBlockModal] fresh fetch failed — falling back to in-memory data',e);
+    showToast('⚠ No se pudo confirmar el estado más reciente de este retiro — revisa con cuidado antes de guardar.');
+  }
+
+  _blockModalOrigRooms=[...(bk.blockedRooms||[])];// snapshot AFTER the fresh fetch above
+  _blockModalOrigUpdatedAt=bk.blockedRoomsUpdatedAt||null;
   _renderBlockRoomsGrid(bkId);
 
   // Fetch external Cloudbeds reservations for this booking's date range
