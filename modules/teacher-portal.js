@@ -527,7 +527,11 @@ function regRender(){
             tr.appendChild(priceTd);
             const notesTd=document.createElement('td');notesTd.className='r-notes';
             const _bdRoomNoteHtml=bedReg?.notes?`<div style="font-size:9px;color:#b45309;font-style:italic;line-height:1.3;margin-bottom:2px">${bedReg.notes.replace(/</g,'&lt;')}</div>`:'';
-            notesTd.innerHTML=`${_bdRoomNoteHtml}<input class="r-notes-input" value="${(g.notes||'').replace(/"/g,'&quot;')}" placeholder="Add note…" onchange="regSaveGuestNote('${bedReg.id}',0,this.value)">`;
+            // A bed can hold 2 named guests (bd1's "+1 extra guest"); each needs their
+            // own note input at their own guest index, or the second guest's note has
+            // no field of its own and typing it overwrites the first guest's instead.
+            const _bdNoteInput=(guest,idx,ph,extraStyle)=>`<input class="r-notes-input" style="${extraStyle||''}" value="${(guest.notes||'').replace(/"/g,'&quot;')}" placeholder="${ph}" onchange="regSaveGuestNote('${bedReg.id}',${idx},this.value)">`;
+            notesTd.innerHTML=`${_bdRoomNoteHtml}${_bdNoteInput(g,0,'Add note…')}${g2?_bdNoteInput(g2,1,`Note for ${escHtml(g2.name)}…`,'display:block;margin-top:3px;padding-top:3px;border-top:1px dashed var(--border);'):''}`;
             tr.appendChild(notesTd);
             const actionTd=document.createElement('td');actionTd.className='r-action';
             actionTd.innerHTML=`<button class="edit-btn" onclick="gOpenEdit('${physRoom}','${rt.id}')">Edit</button>`;
