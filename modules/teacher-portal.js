@@ -137,10 +137,10 @@ async function regOnRetreat(){
 // global type (Cloudbeds, every other retreat, pricing anywhere else in the app)
 // is never touched. Stored per-booking in packageCustomPrices.__cfg__ (same bag
 // already used for the hideRoomNumbers setting) rather than a new DB column.
-// True for admin's own internal Registration tab (not teacher mode at all) AND for an
-// admin's "Preview as Teacher" session. False only for a real teacher's own session —
-// that's the one case this control must stay hidden from.
-function _regIsAdminPreview(){return !IS_TEACHER_MODE||sessionStorage.getItem('ama_admin_viewing')==='1';}
+// True only for admin's own internal Registration tab (not teacher mode at all).
+// "Preview as Teacher" is meant to faithfully mirror what a real teacher sees, so this
+// stays hidden there too, not just for an actual teacher session.
+function _regIsAdminPreview(){return !IS_TEACHER_MODE;}
 function _regTypeOverrideControl(room,rt){
   if(!_regIsAdminPreview())return'';
   if(BED_RT_IDS.has(rt.id)||VIRTUAL_GROUP_RT_IDS.has(rt.id))return'';
