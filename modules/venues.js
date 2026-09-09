@@ -1830,10 +1830,12 @@ function rcBuild(){
   dr.appendChild(dc);hdr.appendChild(dr);
 
   // "Happening now" strip — third header row, right under the date numbers, so it
-  // scrolls/stays sticky together with them instead of living outside the grid.
-  const lr=document.createElement('div');lr.className='g-hrow';lr.id='rcTodayLegend';lr.style.cssText='display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px 6px 0;background:#fff;border-bottom:1px solid var(--border);';
-  const c3=document.createElement('div');c3.className='g-corner';c3.style.cssText='width:160px;min-width:160px;flex-shrink:0;';lr.appendChild(c3);
-  const legendCells=document.createElement('div');legendCells.id='rcTodayLegendCells';legendCells.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap;';lr.appendChild(legendCells);
+  // scrolls/stays sticky together with them instead of living outside the grid. Pills
+  // are positioned like mini Gantt bars (left/width in _rcRenderTodayLegend), lined up
+  // with the day columns in dc above, not just listed in a flex row.
+  const lr=document.createElement('div');lr.className='g-hrow';lr.id='rcTodayLegend';lr.style.cssText='display:none;background:#fff;border-bottom:1px solid var(--border);';
+  const c3=document.createElement('div');c3.className='g-corner';c3.id='rcTodayLegendLabel';c3.style.cssText='width:160px;min-width:160px;flex-shrink:0;display:flex;align-items:center;padding:0 10px;';lr.appendChild(c3);
+  const legendCells=document.createElement('div');legendCells.id='rcTodayLegendCells';legendCells.style.position='relative';lr.appendChild(legendCells);
   hdr.appendChild(lr);
 
   body.appendChild(hdr);
@@ -1981,25 +1983,42 @@ function rcBuild(){
 // the grid below, so the two stay visually consistent.
 function _rcRenderTodayLegend(){
   const el=document.getElementById('rcTodayLegend');const cells=document.getElementById('rcTodayLegendCells');
-  if(!el||!cells)return;
-  const winStartStr=fmtISO(rcStart);
-  const winEndStr=fmtISO(addDays(rcStart,rcShowDays));
+  const lbl=document.getElementById('rcTodayLegendLabel');
+  if(!el||!cells||!lbl)return;
+  const winStartMs=rcStart.getTime(),winEndMs=winStartMs+rcShowDays*DAY_MS;
+  const winStartStr=fmtISO(rcStart),winEndStr=fmtISO(new Date(winEndMs));
   const todayStr=fmtISO(new Date());
   const isTodayInView=todayStr>=winStartStr&&todayStr<winEndStr;
   const active=AppData.bookings.filter(bk=>bk.status!=='cancelled'&&bk.startDate&&bk.endDate&&bk.startDate<winEndStr&&bk.endDate>winStartStr);
-  if(!active.length){el.style.display='none';cells.innerHTML='';return;}
-  active.sort((a,b)=>(a.leaderName||a.retreatName||'').localeCompare(b.leaderName||b.retreatName||''));
+  if(!active.length){el.style.display='none';cells.innerHTML='';cells.style.height='';return;}
+  active.sort((a,b)=>a.startDate.localeCompare(b.startDate));
+
+  // Lane assignment so overlapping retreats stack instead of colliding — same
+  // approach venBuild() already uses for its per-row bars.
+  const lanes=[];const bkLane=new Map();
+  active.forEach(bk=>{
+    let lane=-1;
+    for(let i=0;i<lanes.length;i++){
+      if(lanes[i].every(o=>!(bk.startDate<o.endDate&&bk.endDate>o.startDate))){lane=i;break;}
+    }
+    if(lane===-1){lane=lanes.length;lanes.push([]);}
+    lanes[lane].push({startDate:bk.startDate,endDate:bk.endDate});
+    bkLane.set(bk.id,lane);
+  });
+  const LANE_H=24;
   el.style.display='flex';
-  const label=isTodayInView?'Happening now':'Active in this view';
-  cells.innerHTML=`<span class="rtl-label">${label}</span>`+active.map(bk=>{
+  lbl.textContent=isTodayInView?'Happening now':'Active in this view';
+  cells.style.height=(lanes.length*LANE_H)+'px';
+  cells.innerHTML=active.map(bk=>{
+    const bkS=Math.max(pd(bk.startDate).getTime(),winStartMs);
+    const bkE=Math.min(pd(bk.endDate).getTime(),winEndMs);
+    const li=Math.round((bkS-winStartMs)/DAY_MS);
+    const wi=Math.max(1,Math.round((bkE-bkS)/DAY_MS));
+    const lane=bkLane.get(bk.id)||0;
     const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk)];
     const name=bk.leaderName||bk.retreatName||'—';
-    return `<span class="rtl-pill" style="background:${pc.bg};border-color:${pc.border};color:${pc.text}" onclick="_rcJumpToToday('${bk.id}')" title="Jump to ${escHtml(name)} in the calendar">${escHtml(name)}</span>`;
+    return `<span class="rtl-pill" onclick="_bdGoToRegistration('${bk.id}')" title="Open ${escHtml(name)}'s Registration tab" style="position:absolute;display:flex;left:${li*36+1}px;width:${wi*36-2}px;top:${lane*LANE_H+1}px;height:${LANE_H-3}px;background:${pc.bg};border-color:${pc.border};color:${pc.text};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;justify-content:flex-start;box-sizing:border-box;">${escHtml(name)}</span>`;
   }).join('');
-}
-function _rcJumpToToday(bkId){
-  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
-  rcJumpToBooking(bk);rcBuild();
 }
 
 async function rcFetchExternalReservations(startMs){
