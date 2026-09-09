@@ -506,7 +506,10 @@ function regRender(){
             const isRet=g.returning||false;const yrs=g.yearsAttending||'';
             retTd.innerHTML=`<button class="ret-toggle${isRet?' ret-on':''}" onclick="regToggleReturning('${bedReg.id}',0)">${isRet?'↩ Returning':'✦ New'}</button>${isRet?`<input class="ret-years" type="number" min="1" max="30" value="${yrs}" placeholder="yrs" title="Years attending" onchange="regSaveYears('${bedReg.id}',0,this.value)">`:''}`;
             tr.appendChild(retTd);
-            const _bdEffCI=bedReg?.checkIn||regSelBk.startDate;const _bdEffCO=bedReg?.checkOut||regSelBk.endDate;
+            // g.checkIn/checkOut (this guest's own override, e.g. an extra night before/
+            // after the retreat) must win over the registration-level dates, or an extra
+            // night never shows up here even though it's saved and priced correctly.
+            const _bdEffCI=g.checkIn||bedReg?.checkIn||regSelBk.startDate;const _bdEffCO=g.checkOut||bedReg?.checkOut||regSelBk.endDate;
             const _bdNights=Math.max(1,Math.round((pd(_bdEffCO)-pd(_bdEffCI))/DAY_MS));
             const datesTd=document.createElement('td');datesTd.className='r-dates';
             datesTd.textContent=`${fmtDate(_bdEffCI)} – ${fmtDate(_bdEffCO)}`;tr.appendChild(datesTd);
