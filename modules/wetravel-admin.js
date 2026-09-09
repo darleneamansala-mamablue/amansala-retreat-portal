@@ -130,14 +130,20 @@ function _wtRenderReservations(){
     <tbody>
       ${bks.map(bk=>{
         const regs=getRegsForBk(bk.id);
-        const guests=regs.flatMap(r=>(r.guests||[]).filter(g=>g.name).map(g=>g.name));
+        // Each guest opens their own Rooms/folio view (booking-detail.js) — the same
+        // accurate view booking-detail already gets right (Room Total, Source, real
+        // folios) — not the Teachers/Registration retreat-management screen, which
+        // doesn't apply to an individually-booked We Travel guest.
+        const guestLinks=regs.flatMap(r=>(r.guests||[]).filter(g=>g.name).map(g=>
+          `<span onclick="event.stopPropagation();openBookingDetailForReg('${r.id}','${escHtml(g.name).replace(/'/g,"\\'")}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(g.name)}</span>`
+        ));
         const rooms=regs.map(r=>r.room).filter(Boolean);
         const paid=regs.reduce((s,r)=>s+(r.amountPaid||0),0);
         const st=_wtStatusBadge(bk);
-        return `<tr style="border-top:1px solid var(--border);cursor:pointer" onclick="openBookingFromNotif('${bk.id}')">
+        return `<tr style="border-top:1px solid var(--border)">
           <td style="padding:8px 14px;font-size:12.5px;font-weight:700">${escHtml(bk.leaderName||bk.retreatName||'')}</td>
           <td style="padding:8px 14px;font-size:12px;color:var(--muted);white-space:nowrap">${fmtDate(bk.startDate)} → ${fmtDate(bk.endDate)}</td>
-          <td style="padding:8px 14px;font-size:12px">${escHtml(guests.join(', ')||'—')}</td>
+          <td style="padding:8px 14px;font-size:12px">${guestLinks.join(', ')||'—'}</td>
           <td style="padding:8px 14px;font-size:12px">${escHtml(rooms.join(', ')||'—')}</td>
           <td style="padding:8px 14px;font-size:12.5px;text-align:right;font-weight:700;color:#059669">${fmt$(paid)}</td>
           <td style="padding:8px 14px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${st.bg};color:${st.fg}">${st.label}</span></td>

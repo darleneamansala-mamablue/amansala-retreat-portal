@@ -5256,7 +5256,11 @@ function calcBD(rt,gc,nights,dateStr,bk,reg){
   const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,rNights);
   const base=sumGuestRoomCost(reg,bk,rate,rNights,gc);
   const tipNightsSum=sumGuestTipNights(reg,bk,tipNights,gc);
-  const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const tax=+(base*0.16+pkg*pkgTr).toFixed(2);const dip=tipRate*tipNightsSum;const cao=calcCustomAoCost(bk,gc,reg);
+  // A We Travel booking's customRateOverride already IS the guest's real, final,
+  // tax-inclusive total (derived from what they actually paid on WeTravel) — the
+  // usual 16% room tax would double-tax it. Real retreats are unaffected.
+  const rmTax=bk?.source==='wetravel'?0:0.16;
+  const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const tax=+(base*rmTax+pkg*pkgTr).toFixed(2);const dip=tipRate*tipNightsSum;const cao=calcCustomAoCost(bk,gc,reg);
   // Per-guest share: each named guest pays for their OWN room nights (guestNightsSplit,
   // including any extraNightRate discount for nights outside the retreat) and their own
   // tip nights. Packages and custom add-ons aren't night-based, so they still split
@@ -5267,7 +5271,7 @@ function calcBD(rt,gc,nights,dateStr,bk,reg){
   const perGuest=named.length?named.map(g=>{
     const sp=guestNightsSplit(g,reg,bk,rate,rNights);
     const gTipNights=guestTipNights(g,reg,bk,tipNights);
-    const gTax=+(sp.cost*0.16+pkgShare*pkgTr).toFixed(2);
+    const gTax=+(sp.cost*rmTax+pkgShare*pkgTr).toFixed(2);
     const gDip=+(tipRate*gTipNights).toFixed(2);
     return{name:g.name,nights:sp.nights,overlapNights:sp.overlapNights,extraNights:sp.extraNights,overlapRate:sp.overlapRate,extraRate:sp.extraRate,tipNights:gTipNights,base:sp.cost,pkg:pkgShare,tax:gTax,dip:gDip,cao:caoShare,total:+(sp.cost+pkgShare+gTax+gDip+caoShare).toFixed(2)};
   }):null;
