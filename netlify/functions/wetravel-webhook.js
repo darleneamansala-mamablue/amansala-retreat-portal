@@ -278,19 +278,38 @@ exports.handler = async (event) => {
       const existingKeys = new Set((existingFolios || []).map(f => `${f.registration_id}::${f.guest_name}`));
       const toCreate = folioPlan.filter(f => !existingKeys.has(`${f.registrationId}::${f.guestName}`));
       if (toCreate.length) {
-        const folioRows = toCreate.flatMap(f => [
-          { registration_id: f.registrationId, guest_name: f.guestName, name: 'Room Charges', payment_token: crypto.randomUUID().replace(/-/g, ''), status: 'closed', _plan: f },
-          { registration_id: f.registrationId, guest_name: f.guestName, name: 'Extras', payment_token: crypto.randomUUID().replace(/-/g, ''), status: 'open' },
-        ]);
-        const createdFolios = await supa(supaKey, 'folios', 'POST', folioRows.map(({ _plan, ...row }) => row));
-        const roomChargeTokens = new Set(folioRows.filter(r => r.name === 'Room Charges').map(r => r.payment_token));
-        const planByToken = new Map(folioRows.filter(r => r.name === 'Room Charges').map(r => [r.payment_token, r._plan]));
-        const items = (createdFolios || [])
-          .filter(f => roomChargeTokens.has(f.payment_token))
-          .map(f => {
-            const plan = planByToken.get(f.payment_token);
-            return { folio_id: f.id, description: plan.description, qty: 1, unit_price: plan.amount, tax_rate: 0 };
-          });
+        const roomChargesTokenOf = new Map(); // regId::guestName -> token
+        const extrasTokenOf = new Map();
+        const folioRows = toCreate.flatMap(f => {
+          const rcToken = crypto.randomUUID().replace(/-/g, '');
+          const exToken = crypto.randomUUID().replace(/-/g, '');
+          roomChargesTokenOf.set(`${f.registrationId}::${f.guestName}`, rcToken);
+          extrasTokenOf.set(`${f.registrationId}::${f.guestName}`, exToken);
+          return [
+            { registration_id: f.registrationId, guest_name: f.guestName, name: 'Room Charges', payment_token: rcToken, status: 'closed' },
+            { registration_id: f.registrationId, guest_name: f.guestName, name: 'Extras', payment_token: exToken, status: 'open' },
+          ];
+        });
+        const createdFolios = await supa(supaKey, 'folios', 'POST', folioRows);
+        const folioByToken = new Map((createdFolios || []).map(f => [f.payment_token, f]));
+        const items = [];
+        toCreate.forEach(f => {
+          const key = `${f.registrationId}::${f.guestName}`;
+          const rcFolio = folioByToken.get(roomChargesTokenOf.get(key));
+          if (rcFolio) items.push({ folio_id: rcFolio.id, description: f.description, qty: 1, unit_price: f.amount, tax_rate: 0 });
+          // Every WeTravel booking (BBC or RNR) includes two spa credits as part of
+          // the package price — logged as line items in the open Extras folio (per
+          // admin request) so staff can see/redeem them, each paired with an
+          // offsetting credit so they don't inflate Balance Due (they're already
+          // paid for via the WeTravel order, not something owed).
+          const exFolio = folioByToken.get(extrasTokenOf.get(key));
+          if (exFolio) {
+            for (let n = 1; n <= 2; n++) {
+              items.push({ folio_id: exFolio.id, description: `Spa Credit ${n} (included – WeTravel)`, qty: 1, unit_price: 95, tax_rate: 13 });
+              items.push({ folio_id: exFolio.id, description: `Spa Credit ${n} — included in package`, qty: 1, unit_price: -95, tax_rate: 13 });
+            }
+          }
+        });
         if (items.length) await supa(supaKey, 'folio_items', 'POST', items);
         foliosCreated = toCreate.length;
       }
