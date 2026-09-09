@@ -4277,7 +4277,15 @@ async function syncToSupabase(){
         return true;
       }).map(appRegToSqlRow);
       if(_staleZombieRegs.length)console.warn('[sync guard] skipped resurrecting',_staleZombieRegs.length,'stale local registration(s) missing from Supabase:',_staleZombieRegs);
-      if(_staleOverwriteRegs.length)console.warn('[sync guard] skipped overwriting',_staleOverwriteRegs.length,'registration(s) with an older local copy:',_staleOverwriteRegs);
+      if(_staleOverwriteRegs.length){
+        console.warn('[sync guard] skipped overwriting',_staleOverwriteRegs.length,'registration(s) with an older local copy:',_staleOverwriteRegs);
+        // This guard exists to stop a stale tab from clobbering someone else's more recent
+        // edit — but the flip side is a save that LOOKED like it worked (the toast fires
+        // the instant local state updates, before this background sync even runs) silently
+        // never reaching Supabase. Surface it instead of only logging it, or the person
+        // finds out on their next reload with no idea why.
+        if(typeof showToast==='function')showToast('⚠ Un cambio no se guardó — esta pestaña tiene datos desactualizados. Recarga la página (Cmd+Shift+R) antes de seguir editando.');
+      }
 
       // payments is a separate table (booking_id FK) — flatten every booking's embedded
       // payments array back out into rows. Payments are only ever added, never removed
@@ -4294,7 +4302,10 @@ async function syncToSupabase(){
         deletedRegIds.size?db.from('registrations').delete().in('id',[...deletedRegIds]):null,
         payRows.length?db.from('payments').upsert(payRows):null,
       ]);
-    }catch(e){console.warn('SQL bookings/registrations sync failed:',e);}
+    }catch(e){
+      console.warn('SQL bookings/registrations sync failed:',e);
+      if(typeof showToast==='function')showToast('⚠ No se pudo guardar en el servidor — revisa tu conexión y vuelve a intentar. ('+(e?.message||'error desconocido')+')');
+    }
   })();
   // Everything else (venRows, room types, staff, program blocks, etc.) stays on the
   // legacy app_store blob for now — out of scope for this phase. Runs concurrently
