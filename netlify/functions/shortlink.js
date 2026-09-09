@@ -28,7 +28,12 @@ function idSuffix(id) {
 }
 
 exports.handler = async (event) => {
-  const raw = (event.queryStringParameters && event.queryStringParameters.slug) || '';
+  const fromQuery = (event.queryStringParameters && event.queryStringParameters.slug) || '';
+  // event.path is /.netlify/functions/shortlink/<slug> when reached via the
+  // /:slug -> /.netlify/functions/shortlink/:slug rewrite — fall back to the
+  // last path segment if the query param isn't populated.
+  const fromPath = (event.path || '').split('/').filter(Boolean).pop() || '';
+  const raw = fromQuery || (fromPath !== 'shortlink' ? fromPath : '');
   const slug = raw.toLowerCase().replace(/^\/+|\/+$/g, '');
   if (!slug) return { statusCode: 404, body: 'Not found' };
 

@@ -2,4 +2,4 @@
 # by netlify/functions/shortlink.js (302 redirect to booking-hub.html?mode=teacher&bk=...).
 # Only applies to paths that don't match a real file (booking-hub.html, /js/*, images, etc.
 # keep working normally) -- see shortlink.js for the slug/disambiguation rules.
-/:slug  /.netlify/functions/shortlink?slug=:slug  200
+/:slug  /.netlify/functions/shortlink/:slug  200
