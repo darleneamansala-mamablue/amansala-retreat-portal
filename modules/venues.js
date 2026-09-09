@@ -2018,8 +2018,7 @@ function _rcRenderTodayLegend(){
     const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk)];
     const name=bk.leaderName||bk.retreatName||'—';
     const regCount=registeredCount(bk.id);
-    const countLbl=bk.pax?`${regCount}/${bk.pax}`:String(regCount);
-    return `<span class="rtl-pill" onclick="_bdGoToRegistration('${bk.id}')" title="Open ${escHtml(name)}'s Registration tab — ${regCount} guest${regCount!==1?'s':''} registered${bk.pax?` of ${bk.pax} expected`:''}" style="position:absolute;display:flex;align-items:center;left:${li*36+1}px;width:${wi*36-2}px;top:${lane*LANE_H+1}px;height:${LANE_H-3}px;background:${pc.bg};border-color:${pc.border};color:${pc.text};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;justify-content:flex-start;box-sizing:border-box;">${escHtml(name)}<span style="margin-left:5px;font-size:9.5px;font-weight:800;opacity:.7;flex-shrink:0">${countLbl}</span></span>`;
+    return `<span class="rtl-pill" onclick="_bdGoToRegistration('${bk.id}')" title="Open ${escHtml(name)}'s Registration tab — ${regCount} guest${regCount!==1?'s':''} registered" style="position:absolute;display:flex;align-items:center;left:${li*36+1}px;width:${wi*36-2}px;top:${lane*LANE_H+1}px;height:${LANE_H-3}px;background:${pc.bg};border-color:${pc.border};color:${pc.text};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;justify-content:flex-start;box-sizing:border-box;">${escHtml(name)}<span style="margin-left:5px;font-size:9.5px;font-weight:800;opacity:.7;flex-shrink:0">${regCount}</span></span>`;
   }).join('');
 }
 
