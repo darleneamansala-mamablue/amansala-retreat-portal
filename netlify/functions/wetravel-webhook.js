@@ -118,7 +118,15 @@ async function pickFreeRoom(key, roomTypeId, startDate, endDate, alreadyUsedThis
 function ok(status, body) { return { statusCode: status, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }; }
 
 exports.handler = async (event) => {
+  // Svix/browsers probe a newly-added endpoint with a HEAD/GET or an empty body before
+  // ever sending a real signed event — answer those with a plain 200 instead of trying
+  // to parse a webhook payload out of nothing, or endpoint creation itself shows as
+  // failing in the Svix UI before this ever receives a real event.
   const rawBody = event.body || '';
+  if (event.httpMethod !== 'POST' || !rawBody.trim()) {
+    return ok(200, { ready: true });
+  }
+
   const sig = verifySvixSignature(event.headers || {}, rawBody);
   if (!sig.ok) {
     console.warn('[wetravel-webhook] signature check failed:', sig.reason);
@@ -129,7 +137,7 @@ exports.handler = async (event) => {
   }
 
   let payload;
-  try { payload = JSON.parse(rawBody); } catch { return ok(400, { error: 'invalid JSON' }); }
+  try { payload = JSON.parse(rawBody); } catch { console.warn('[wetravel-webhook] non-JSON body:', rawBody.slice(0,300)); return ok(200, { received: true, processed: false, reason: 'non-JSON body' }); }
   console.log('[wetravel-webhook] event:', JSON.stringify(payload).slice(0, 2000));
 
   const eventType = payload.type || payload.event || payload.event_type || 'unknown';
