@@ -228,6 +228,13 @@ exports.handler = async (event) => {
     // plus a separate empty *open* "Extras" folio for any incidentals added later.
     const folioPlan = [];
     let guestCursor = 0;
+    // booking-detail.js's "Room Total" line multiplies nights × a per-night rate
+    // (custom_rate_override when set) — without an override it falls back to the
+    // room_type's published nightly rate, which has nothing to do with what the
+    // guest actually paid on WeTravel. Deriving the override from the real paid
+    // amount makes that line reconcile with the closed Room Charges folio instead
+    // of showing an unrelated number.
+    const tripNights = Math.max(1, Math.round((new Date(trip.end_date) - new Date(trip.start_date)) / 86400000));
 
     for (const pkg of packages) {
       const roomTypeId = pkgMap[pkg.name];
@@ -244,13 +251,15 @@ exports.handler = async (event) => {
       guestCursor += take;
       const regId = `wt_order_${order.id}_${pkg.id || pkg.trip_option_id || room}`;
       const finalGuests = roomGuests.length ? roomGuests : [{ name: 'WeTravel Guest', email: '' }];
+      const regAmountPaid = (order.paid_amount || 0) / 100;
       newRegs.push({
         id: regId,
         booking_id: bkId,
         room,
         room_type_id: roomTypeId,
         guests: finalGuests.map(g => ({ ...g, notes: `WeTravel order #${order.id} — package: ${pkg.name}` })),
-        amount_paid: (order.paid_amount || 0) / 100,
+        amount_paid: regAmountPaid,
+        custom_rate_override: +(regAmountPaid / tripNights).toFixed(2),
       });
 
       const perGuestPaid = (order.paid_amount || 0) / 100 / finalGuests.length;
