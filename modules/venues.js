@@ -1354,9 +1354,9 @@ function venAddMoreRooms(){
   openBlockModal(venEditId);
 }
 
-// Point the Room Calendar at a booking's dates, with 6 days of context before and after
-function rcJumpToBooking(bk){
-  const pad=6;
+// Point the Room Calendar at a booking's dates, with `pad` days of context before and after
+function rcJumpToBooking(bk,pad){
+  pad=pad!=null?pad:6;
   rcStart=addDays(pd(bk.startDate),-pad);
   const spanDays=Math.round((pd(bk.endDate)-pd(bk.startDate))/DAY_MS);
   rcShowDays=spanDays+pad*2+1;

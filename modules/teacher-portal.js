@@ -87,6 +87,15 @@ function regSelectRetreat(bkId){
   regOnRetreat();
 }
 
+// Jump from Registration straight to the Rooms (Room Calendar) tab, centered on
+// this retreat's dates with 4 days of context on either side — for when staff
+// need to actually drag/edit the room list visually instead of just this table.
+function regJumpToRoomCalendar(){
+  if(!regSelBk)return;
+  rcJumpToBooking(regSelBk,4);
+  switchTab('roomcal',document.querySelector('.tab-btn[onclick*="roomcal"]'));
+}
+
 function _updateLockAllBtn(){
   const btn=document.getElementById('regLockAllBtn');
   if(!btn)return;
