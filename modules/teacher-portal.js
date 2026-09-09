@@ -3287,10 +3287,21 @@ function openTeacherPortal(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);
   if(bk?.allLocked)sessionStorage.setItem('ama_preview_locked_bk',bkId);
   else sessionStorage.removeItem('ama_preview_locked_bk');
-  window.open(teacherPortalLink(bkId),'_blank');
+  // Open the real ?mode=teacher&bk=... URL directly (skips the short-link's own
+  // redirect hop) and stash the short slug — once the new tab has actually loaded
+  // the booking, initTeacherMode()'s _loginWith() swaps the visible address bar to
+  // it via history.replaceState. That's purely cosmetic and safe to do only AFTER
+  // load: mode/bk are read from location.search once, into consts, right at the
+  // top of this script, and nothing downstream re-parses the URL — so changing what
+  // the address bar shows afterwards can't affect which booking loads.
+  const slug=computeShortSlug(bkId);
+  if(slug)sessionStorage.setItem('ama_preview_slug',slug);
+  else sessionStorage.removeItem('ama_preview_slug');
+  window.open(`${location.origin}/booking-hub.html?mode=teacher&bk=${bkId}`,'_blank');
   sessionStorage.removeItem('ama_admin_viewing');
   sessionStorage.removeItem('ama_teacher_mode');
   sessionStorage.removeItem('ama_preview_locked_bk');
+  sessionStorage.removeItem('ama_preview_slug');
 }
 function exitTeacherModeFully(){
   const returnBkId=(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id'))||localStorage.getItem('teacher_bk_id');
@@ -3318,7 +3329,11 @@ function initTeacherMode(){
     // Transport, Financial, Activities, Contract) looks up the booking via
     // localStorage.teacher_bk_id||sessionStorage.teacher_bk_id — without this,
     // that lookup comes back empty and those tabs silently render nothing.
-    else{sessionStorage.setItem('teacher_bk_id',bk.id);}
+    else{
+      sessionStorage.setItem('teacher_bk_id',bk.id);
+      const _previewSlug=sessionStorage.getItem('ama_preview_slug');
+      if(_previewSlug){history.replaceState(null,'','/'+_previewSlug);sessionStorage.removeItem('ama_preview_slug');}
+    }
     enterTeacherView(bk.id);
   };
   const _findLocal=()=>{
