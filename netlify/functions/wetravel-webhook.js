@@ -314,7 +314,7 @@ exports.handler = async (event) => {
           const exFolio = folioByToken.get(extrasTokenOf.get(key));
           if (exFolio) {
             for (let n = 1; n <= 2; n++) {
-              items.push({ folio_id: exFolio.id, description: `Spa Credit ${n} (included – WeTravel)`, qty: 1, unit_price: -95, tax_rate: 13 });
+              items.push({ folio_id: exFolio.id, description: `Spa Credit (included – WeTravel)`, qty: 1, unit_price: -95, tax_rate: 13 });
             }
           }
         });
