@@ -3284,9 +3284,7 @@ function openTeacherPortal(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);
   if(bk?.allLocked)sessionStorage.setItem('ama_preview_locked_bk',bkId);
   else sessionStorage.removeItem('ama_preview_locked_bk');
-  const slug=computeShortSlug(bkId);
-  const url=slug?`${location.origin}/${slug}`:`${location.origin}/booking-hub.html?mode=teacher&bk=${bkId}`;
-  window.open(url,'_blank');
+  window.open(teacherPortalLink(bkId),'_blank');
   sessionStorage.removeItem('ama_admin_viewing');
   sessionStorage.removeItem('ama_teacher_mode');
   sessionStorage.removeItem('ama_preview_locked_bk');
@@ -4066,7 +4064,8 @@ function enterTeacherView(bkId){
 
 // Admin: show teacher code in Teacher Reg toolbar
 function teacherPortalLink(bkId){
-  return `${location.origin}/booking-hub.html?mode=teacher&bk=${bkId}`;
+  const slug=computeShortSlug(bkId);
+  return slug?`${location.origin}/${slug}`:`${location.origin}/booking-hub.html?mode=teacher&bk=${bkId}`;
 }
 
 function showTeacherCode(){
