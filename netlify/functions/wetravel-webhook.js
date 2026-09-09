@@ -230,6 +230,16 @@ exports.handler = async (event) => {
     };
     if (!trip.start_date || !trip.end_date) throw new Error('no trip dates available (trip lookup failed and webhook payload had none either)');
 
+    // WeTravel supports payment plans, so a booking.created event doesn't always
+    // mean the guest paid in full — the webhook payload itself (not the orders
+    // API, which only exposes paid_amount) carries the real total/due amounts.
+    // When total_due_amount is missing (older payload shape) fall back to
+    // treating whatever's paid as paid-in-full, same as before this fix.
+    const totalPriceAmount = d.total_price_amount != null ? d.total_price_amount / 100 : null;
+    const totalDueAmount = d.total_due_amount != null ? d.total_due_amount / 100 : null;
+    const totalPaidAmount = (d.total_paid_amount != null ? d.total_paid_amount : order.paid_amount || 0) / 100;
+    const isFullyPaid = totalDueAmount != null ? totalDueAmount <= 0 : true;
+
     const bkId = `wt_${tripUuid}`;
     const existing = await supa(supaKey, `bookings?select=id,blocked_rooms&id=eq.${bkId}`, 'GET');
     let blockedRooms = (existing[0] && existing[0].blocked_rooms) || [];
@@ -242,7 +252,7 @@ exports.handler = async (event) => {
       retreat_name: portalName,
       start_date: trip.start_date,
       end_date: trip.end_date,
-      status: existing[0] ? undefined : 'deposit_paid',
+      status: existing[0] ? undefined : (isFullyPaid ? 'confirmed' : 'deposit_paid'),
       source: 'wetravel',
       notes: `Synced from WeTravel — ${trip.title || ''} — ${trip.url || ''}`.trim(),
     }]);
@@ -291,23 +301,29 @@ exports.handler = async (event) => {
       guestCursor += take;
       const regId = `wt_order_${order.id}_${pkg.id || pkg.trip_option_id || room}`;
       const finalGuests = roomGuests.length ? roomGuests : [{ name: 'WeTravel Guest', email: '' }];
-      const regAmountPaid = (order.paid_amount || 0) / 100;
+      // Room Total should reconcile with the full package price, not just what's
+      // paid so far — a deposit-only order otherwise shows a tiny Room Total that
+      // grows unpredictably as installments come in. Falls back to whatever's
+      // paid when WeTravel didn't report a total (older payload shape).
+      const regChargeTotal = totalPriceAmount != null ? totalPriceAmount : totalPaidAmount;
       newRegs.push({
         id: regId,
         booking_id: bkId,
         room,
         room_type_id: roomTypeId,
         guests: finalGuests.map(g => ({ ...g, notes: `WeTravel order #${order.id} — package: ${pkg.name}` })),
-        amount_paid: regAmountPaid,
-        custom_rate_override: +(regAmountPaid / tripNights).toFixed(2),
+        amount_paid: totalPaidAmount,
+        custom_rate_override: +(regChargeTotal / tripNights).toFixed(2),
       });
 
-      const perGuestPaid = (order.paid_amount || 0) / 100 / finalGuests.length;
+      const perGuestCharge = regChargeTotal / finalGuests.length;
+      const perGuestPaid = totalPaidAmount / finalGuests.length;
       finalGuests.forEach(g => folioPlan.push({
         registrationId: regId,
         guestName: g.name,
         description: `${pkg.name} (order #${order.id})`,
-        amount: perGuestPaid,
+        chargeAmount: perGuestCharge,
+        paidAmount: perGuestPaid,
       }));
     }
 
@@ -335,7 +351,10 @@ exports.handler = async (event) => {
           roomChargesTokenOf.set(`${f.registrationId}::${f.guestName}`, rcToken);
           extrasTokenOf.set(`${f.registrationId}::${f.guestName}`, exToken);
           return [
-            { registration_id: f.registrationId, guest_name: f.guestName, name: 'Room Charges', payment_token: rcToken, status: 'closed' },
+            // Only closed (PAID) when the order is actually paid in full — a
+            // deposit-only booking leaves this open so the unpaid remainder
+            // correctly shows up in Balance Due, same as any other room charge.
+            { registration_id: f.registrationId, guest_name: f.guestName, name: 'Room Charges', payment_token: rcToken, status: isFullyPaid ? 'closed' : 'open' },
             { registration_id: f.registrationId, guest_name: f.guestName, name: 'Extras', payment_token: exToken, status: 'open' },
           ];
         });
@@ -346,8 +365,8 @@ exports.handler = async (event) => {
           const key = `${f.registrationId}::${f.guestName}`;
           const rcFolio = folioByToken.get(roomChargesTokenOf.get(key));
           if (rcFolio) {
-            items.push({ folio_id: rcFolio.id, description: f.description, qty: 1, unit_price: f.amount, tax_rate: 0 });
-            items.push({ folio_id: rcFolio.id, description: 'Payment — We Travel', qty: 1, unit_price: -f.amount, tax_rate: 0 });
+            items.push({ folio_id: rcFolio.id, description: f.description, qty: 1, unit_price: f.chargeAmount, tax_rate: 0 });
+            if (f.paidAmount > 0) items.push({ folio_id: rcFolio.id, description: 'Payment — We Travel', qty: 1, unit_price: -f.paidAmount, tax_rate: 0 });
           }
           // Every WeTravel booking (BBC or RNR) includes two spa credits as part of
           // the package price — logged as a single credit line each in the open
@@ -372,10 +391,10 @@ exports.handler = async (event) => {
       await logWeTravelNotif(supaKey, {
         id: svixId || `booking_created_${order.id}`,
         ts: new Date().toISOString(),
-        kind: 'created',
+        kind: isFullyPaid ? 'created' : 'deposit',
         bookingId: bkId,
         guestName: guestList.map(g => g.name).filter(Boolean).join(', '),
-        amount: (order.paid_amount || 0) / 100,
+        amount: totalPaidAmount,
       });
     }
 

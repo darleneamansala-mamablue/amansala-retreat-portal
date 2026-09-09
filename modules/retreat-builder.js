@@ -881,7 +881,7 @@ function _actvNotifRowHtml(n){
       ${dismissBtn}</div>`;
   }
   if(n.type==='wetravel_payment'){
-    const label=n.kind==='created'?'We Travel booking paid':'We Travel payment received';
+    const label=n.kind==='created'?'We Travel booking paid':n.kind==='deposit'?'We Travel deposit received':'We Travel payment received';
     const amt=n.amount>0?` — <strong>${fmt$(n.amount)}</strong>`:'';
     return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
       <span style="font-size:14px;flex-shrink:0">🧳</span>
