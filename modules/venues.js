@@ -1963,7 +1963,29 @@ function rcBuild(){
   ar.appendChild(acells);body.appendChild(ar);
   document.getElementById('rcAvailBar').innerHTML=`<strong>${totalRooms}</strong> total rooms &nbsp;·&nbsp; <strong>${rcShowDays}</strong> days &nbsp;·&nbsp; Avg avail: <strong>${Math.round(totAvail/rcShowDays)}</strong>/day`;
   localStorage.setItem('amansala_cal_start',fmtISO(rcStart));localStorage.setItem('amansala_cal_show',String(rcShowDays));
+  _rcRenderTodayLegend();
   rcFetchExternalReservations(startMs);
+}
+
+// Color-coded strip of whichever retreats are actually on property TODAY (real
+// calendar date, independent of whatever date range the grid below is scrolled to)
+// — same colors as their bars in the grid, so the two stay visually consistent.
+function _rcRenderTodayLegend(){
+  const el=document.getElementById('rcTodayLegend');if(!el)return;
+  const todayStr=fmtISO(new Date());
+  const active=AppData.bookings.filter(bk=>bk.status!=='cancelled'&&bk.startDate&&bk.endDate&&bk.startDate<=todayStr&&bk.endDate>todayStr);
+  if(!active.length){el.style.display='none';el.innerHTML='';return;}
+  active.sort((a,b)=>(a.leaderName||a.retreatName||'').localeCompare(b.leaderName||b.retreatName||''));
+  el.style.display='flex';
+  el.innerHTML=`<span class="rtl-label">Happening now</span>`+active.map(bk=>{
+    const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk.id)];
+    const name=bk.leaderName||bk.retreatName||'—';
+    return `<span class="rtl-pill" style="background:${pc.bg};border-color:${pc.border};color:${pc.text}" onclick="_rcJumpToToday('${bk.id}')" title="Jump to ${escHtml(name)} in the calendar">${escHtml(name)}</span>`;
+  }).join('');
+}
+function _rcJumpToToday(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  rcJumpToBooking(bk);rcBuild();
 }
 
 async function rcFetchExternalReservations(startMs){
