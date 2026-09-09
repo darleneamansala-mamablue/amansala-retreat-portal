@@ -219,7 +219,13 @@ function regRender(){
     if(!prev){_regByRoom[r.room]=r;return;}
     if((r.guests||[]).filter(g=>g.name).length>(prev.guests||[]).filter(g=>g.name).length)_regByRoom[r.room]=r;
   });
-  const _pkgTxR=getBkTaxRate(regSelBk),_rmTxR=_pkgTxR===0?0:0.16,_tipPer=getTip(regSelBk);
+  // A We Travel booking's custom_rate_override already represents the guest's real,
+  // final, tax-inclusive total (derived from what they actually paid on WeTravel) —
+  // layering the usual 16% room tax on top of that here would inflate the shown
+  // Bill well past what was actually charged. Real (non-WeTravel) retreats keep
+  // the normal tax behavior untouched.
+  const _isWeTravel=regSelBk.source==='wetravel';
+  const _pkgTxR=getBkTaxRate(regSelBk),_rmTxR=_isWeTravel?0:(_pkgTxR===0?0:0.16),_tipPer=getTip(regSelBk);
   const _billAddOns=calcPkgItems(regSelBk);
   Array.from(_blockedSetEarly).forEach(room=>{
     const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
@@ -256,11 +262,21 @@ function regRender(){
     _regedRooms.add(room);totalGuests+=gc;
   });
   grandTotal=+(grandTotal-(regSelBk.eqDiscountAmt||0)).toFixed(2);
-  // Use booking-level payments (bk.payments) — that's where admin records actual money received
-  const totalPaid=(regSelBk.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
+  // Use booking-level payments (bk.payments) — that's where admin records actual money
+  // received. A We Travel booking never gets a bk.payments entry (the payment happened
+  // on WeTravel's side, not through this app's Record Payment flow) — its real paid
+  // amount lives on each registration instead (set by the webhook), same field
+  // booking-detail.js's folio view and the We Travel admin tab already read.
+  const totalPaid=_isWeTravel
+    ?allRegs.reduce((s,r)=>s+(r.amountPaid||0),0)
+    :(regSelBk.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
   // Packages bar
   const pkgBar=document.getElementById('pkgBar');
-  if(pkgBar){
+  if(pkgBar&&_isWeTravel){
+    // Add-ons don't apply here — whatever the guest bought is already fully covered
+    // by their WeTravel package price, not something staff configures per retreat.
+    pkgBar.style.display='none';
+  }else if(pkgBar){
     const selPkgs=regSelBk.packages||[];
     const pkgTotal=calcPkgItems(regSelBk).reduce((s,a)=>s+a.price,0);
     const fromContract=regSelBk.addOnsConfirmedAt&&selPkgs.length>0;
