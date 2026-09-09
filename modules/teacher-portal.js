@@ -161,12 +161,39 @@ function regSetRoomTypeOverride(room,newRtId){
   showToast('Reclassified for this retreat only.');
 }
 
+// Admin-only (same rule as room-type reassignment: hidden in teacher mode, preview
+// included — a preview should show exactly what the teacher sees). Lets an admin
+// pick this retreat's color on the Room Calendar / Venues Gantt from the same
+// 5-swatch RETREAT_PALETTE everything already uses, instead of the auto-hashed
+// default — handy when two active retreats happen to hash to similar colors.
+function _regRenderColorPicker(){
+  const wrap=document.getElementById('regColorPickerWrap');if(!wrap)return;
+  if(!regSelBk||!_regIsAdminPreview()){wrap.style.display='none';return;}
+  wrap.style.display='flex';
+  const cur=getRetreatColorIdx(regSelBk);
+  const hasOverride=regSelBk?.packageCustomPrices?.__cfg__?.colorIdx!=null;
+  wrap.innerHTML=RETREAT_PALETTE.map((pc,i)=>
+    `<span onclick="regSetRetreatColor(${i})" title="${['Violet','Light blue','Soft pink','Turquoise','Off-white'][i]}" style="width:18px;height:18px;border-radius:50%;background:${pc.bg};border:2px solid ${pc.border};cursor:pointer;display:inline-block;box-shadow:${i===cur?'0 0 0 2px #111':'none'}"></span>`
+  ).join('')+(hasOverride?`<span onclick="regSetRetreatColor(null)" title="Back to automatic color" style="font-size:10px;color:var(--muted);cursor:pointer;text-decoration:underline;margin-left:2px">Auto</span>`:'');
+}
+function regSetRetreatColor(idx){
+  if(!regSelBk)return;
+  if(!regSelBk.packageCustomPrices)regSelBk.packageCustomPrices={};
+  if(!regSelBk.packageCustomPrices.__cfg__)regSelBk.packageCustomPrices.__cfg__={};
+  if(idx==null)delete regSelBk.packageCustomPrices.__cfg__.colorIdx;
+  else regSelBk.packageCustomPrices.__cfg__.colorIdx=idx;
+  saveAll();_regRenderColorPicker();
+  showToast(idx==null?'Color reset to automatic.':'Retreat color updated.');
+}
+
 function regRender(){
   if(!regSelBk){
     document.getElementById('regStatsBar').style.display='none';
     document.getElementById('regPanel').innerHTML=`<div class="reg-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><p>Select a retreat above to manage room assignments.</p></div>`;
+    _regRenderColorPicker();
     return;
   }
+  _regRenderColorPicker();
   document.body.classList.toggle('retreat-locked',!!(IS_TEACHER_MODE&&regSelBk?.allLocked));
   const _teacherLocked=IS_TEACHER_MODE&&!!regSelBk?.allLocked;
   // Real Rooms → "Room #s Hidden/Visible" toggle (packageCustomPrices.__cfg__.hideRoomNumbers,
@@ -4615,7 +4642,7 @@ function skedMiniCalRender(){
   const retreatMap={};
   const activeBookings=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.startDate&&b.endDate);
   activeBookings.forEach(bk=>{
-    const pal=RETREAT_PALETTE[getRetreatColorIdx(bk.id)];
+    const pal=RETREAT_PALETTE[getRetreatColorIdx(bk)];
     const name=(bk.leaderName||bk.retreatName||'Retreat').split(' ')[0];
     const start=new Date(bk.startDate+'T12:00:00');
     const end=new Date(bk.endDate+'T12:00:00');
@@ -4691,7 +4718,7 @@ function skedGetRetreatEvents(dateStr){
     const sr=bk.scheduleRequest;
     if(!sr)return;
     if(dateStr<bk.startDate||dateStr>bk.endDate)return;
-    const pal=RETREAT_PALETTE[getRetreatColorIdx(bk.id)];
+    const pal=RETREAT_PALETTE[getRetreatColorIdx(bk)];
     const title=bk.leaderName||bk.retreatName||'Retreat';
     // Merge adminOverride into effective schedule values (admin-assigned shala wins)
     const ov=sr.adminOverride||{};

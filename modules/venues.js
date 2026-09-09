@@ -1895,7 +1895,7 @@ function rcBuild(){
         const li=Math.round((cs-startMs)/DAY_MS),wi=Math.round((ce-cs)/DAY_MS);
         if(wi<=0)return;
         const st=STATUS[bk.status]||STATUS.requested;
-        const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk.id)];
+        const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk)];
         const regEntry=AppData.regs.find(r=>r.bookingId===bk.id&&entry.physical.includes(r.room));
         const guestNames=regEntry?(regEntry.guests||[]).filter(g=>g.name).map(g=>g.name):[];
         const hasGuest=guestNames.length>0;
@@ -1992,7 +1992,7 @@ function _rcRenderTodayLegend(){
   el.style.display='flex';
   const label=isTodayInView?'Happening now':'Active in this view';
   cells.innerHTML=`<span class="rtl-label">${label}</span>`+active.map(bk=>{
-    const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk.id)];
+    const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk)];
     const name=bk.leaderName||bk.retreatName||'—';
     return `<span class="rtl-pill" style="background:${pc.bg};border-color:${pc.border};color:${pc.text}" onclick="_rcJumpToToday('${bk.id}')" title="Jump to ${escHtml(name)} in the calendar">${escHtml(name)}</span>`;
   }).join('');
