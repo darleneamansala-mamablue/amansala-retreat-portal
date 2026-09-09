@@ -307,15 +307,14 @@ exports.handler = async (event) => {
           const rcFolio = folioByToken.get(roomChargesTokenOf.get(key));
           if (rcFolio) items.push({ folio_id: rcFolio.id, description: f.description, qty: 1, unit_price: f.amount, tax_rate: 0 });
           // Every WeTravel booking (BBC or RNR) includes two spa credits as part of
-          // the package price — logged as line items in the open Extras folio (per
-          // admin request) so staff can see/redeem them, each paired with an
-          // offsetting credit so they don't inflate Balance Due (they're already
-          // paid for via the WeTravel order, not something owed).
+          // the package price — logged as a single credit line each in the open
+          // Extras folio (negative unit_price, same convention the folio UI already
+          // uses for payments) so they read as value already given to the guest,
+          // not a charge they still owe on.
           const exFolio = folioByToken.get(extrasTokenOf.get(key));
           if (exFolio) {
             for (let n = 1; n <= 2; n++) {
-              items.push({ folio_id: exFolio.id, description: `Spa Credit ${n} (included – WeTravel)`, qty: 1, unit_price: 95, tax_rate: 13 });
-              items.push({ folio_id: exFolio.id, description: `Spa Credit ${n} — included in package`, qty: 1, unit_price: -95, tax_rate: 13 });
+              items.push({ folio_id: exFolio.id, description: `Spa Credit ${n} (included – WeTravel)`, qty: 1, unit_price: -95, tax_rate: 13 });
             }
           }
         });
