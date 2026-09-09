@@ -128,20 +128,43 @@ async function recordUnmappedPackage(key, pkgName, tripUuid, orderId) {
   }
 }
 
-// ─── Handle a payment-plan installment on an already-synced booking ────────
-// booking.created already recorded the deposit (registrations.amount_paid,
-// an open Room Charges folio charging the full price with only the deposit
-// logged as a payment). When a later installment lands, this brings that
-// registration/folio up to date instead of leaving it stuck showing the
-// original deposit forever: bumps amount_paid to the new total, logs the
-// *difference* as a new "Payment — We Travel" folio line (so it doesn't
-// double-count the deposit already logged), and — only once total_due_amount
-// hits zero — closes the Room Charges folio and confirms the booking.
+// ─── Handle any later event on an already-synced booking ───────────────────
+// Covers both: (1) the trip's name/dates changing in We Travel — re-derives
+// the We Travel BBC/RNR label and the current start/end dates the exact same
+// way booking.created does (trip API lookup, falling back to whatever the
+// webhook payload itself carries), so the Room Calendar bar always reflects
+// the real trip; and (2) a payment-plan installment — booking.created already
+// recorded the deposit (registrations.amount_paid, an open Room Charges folio
+// charging the full price with only the deposit logged as a payment), so this
+// brings that up to date instead of leaving it stuck showing the original
+// deposit forever: bumps amount_paid to the new total, logs the *difference*
+// as a new "Payment — We Travel" folio line (so it doesn't double-count the
+// deposit already logged), and — only once total_due_amount hits zero —
+// closes the Room Charges folio and confirms the booking.
 // Naturally idempotent against Svix retries: re-processing the same event
-// recomputes the same delta as 0 once amount_paid already matches.
-async function handleWeTravelPaymentUpdate(key, tripUuid, orderId, d, eventType, svixId) {
+// recomputes the same delta as 0 once amount_paid already matches, and the
+// name/dates PATCH is a no-op once they already match.
+async function handleWeTravelBookingUpdate(key, tripUuid, orderId, d, eventType, svixId) {
   try {
     const bkId = `wt_${tripUuid}`;
+
+    try {
+      const tok = await wtToken();
+      const tripResult = await wtGetTrip(tok, tripUuid).catch(() => null);
+      const trip = tripResult || {
+        title: d.trip_title || null,
+        start_date: d.departure_date || null,
+        end_date: d.trip_end_date || null,
+      };
+      const patch = {};
+      if (trip.title) { const name = normalizeWeTravelTitle(trip.title); patch.leader_name = name; patch.retreat_name = name; }
+      if (trip.start_date) patch.start_date = trip.start_date;
+      if (trip.end_date) patch.end_date = trip.end_date;
+      if (Object.keys(patch).length) await supa(key, `bookings?id=eq.${bkId}`, 'PATCH', patch);
+    } catch (e) {
+      console.warn('[wetravel-webhook] could not refresh booking name/dates:', e.message);
+    }
+
     const totalDueAmount = d.total_due_amount != null ? d.total_due_amount / 100 : null;
     const totalPaidAmount = d.total_paid_amount != null ? d.total_paid_amount / 100 : null;
     const isFullyPaid = totalDueAmount != null ? totalDueAmount <= 0 : null;
@@ -177,7 +200,7 @@ async function handleWeTravelPaymentUpdate(key, tripUuid, orderId, d, eventType,
       guestName: (d.buyer && (d.buyer.full_name || [d.buyer.first_name, d.buyer.last_name].filter(Boolean).join(' '))) || '',
       amount: totalPaidAmount != null ? totalPaidAmount : (d.amount ?? d.paid_amount ?? 0) / 100,
     });
-    console.log(`[wetravel-webhook] applied payment update for ${bkId} from event type ${eventType}`);
+    console.log(`[wetravel-webhook] refreshed booking ${bkId} from event type ${eventType}`);
   } catch (e) {
     console.warn('[wetravel-webhook] payment update failed:', e.message);
   }
@@ -255,14 +278,16 @@ exports.handler = async (event) => {
 
   if (eventType !== 'booking.created') {
     // WeTravel accounts on a payment plan fire further events as installments
-    // come in — the exact event name isn't confirmed yet (only booking.created
-    // has been seen live), so rather than silently drop anything that looks
-    // payment-related, treat it as an update to an already-synced booking.
-    // Safe to broaden/tighten this match once a real installment event is logged
-    // (the full raw payload is always logged above for that).
-    const isPaymentish = supaKey && tripUuid && (/payment/i.test(eventType) || eventType === 'booking.updated');
-    if (isPaymentish) {
-      await handleWeTravelPaymentUpdate(supaKey, tripUuid, orderId, d, eventType, svixId);
+    // come in (and possibly for other changes too), and the exact event name
+    // isn't confirmed yet (only booking.created has been seen live). Rather than
+    // depend on getting that name right, treat ANY event that references a trip
+    // we've already synced as "refresh this booking" — re-derive the We Travel
+    // BBC/RNR name and the trip's current dates (same logic as booking.created)
+    // and reapply payment/folio totals. A trip we've never seen is skipped since
+    // there's no existing registrations/rooms to update.
+    const existingBk = (supaKey && tripUuid) ? await supa(supaKey, `bookings?select=id&id=eq.wt_${tripUuid}`, 'GET').catch(() => []) : [];
+    if (existingBk.length) {
+      await handleWeTravelBookingUpdate(supaKey, tripUuid, orderId, d, eventType, svixId);
     } else {
       console.log('[wetravel-webhook] ignoring event type:', eventType);
     }
