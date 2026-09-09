@@ -3245,6 +3245,33 @@ function enterTeacherModeDirectly(bkId){
 // right after) hands the new tab a real admin-preview session without ever
 // touching localStorage (which IS shared across tabs and would otherwise
 // leak into "always reopen as teacher X" on this admin's next reload).
+// Mirrors netlify/functions/shortlink.js exactly, so the link this opens (and
+// whatever an admin copies to send a teacher) always matches what that
+// function will actually resolve — no separate list to keep in sync.
+const SHORTLINK_MONTHS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+function _slSlugify(name){return(name||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
+function _slDateSuffix(startDate){if(!startDate)return'';const[y,m]=startDate.split('-');return SHORTLINK_MONTHS[parseInt(m,10)-1]+y.slice(2);}
+function _slIdSuffix(id){return(id||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(-4);}
+function computeShortSlug(bkId){
+  const groups={};
+  AppData.bookings.filter(b=>b.status!=='cancelled').forEach(b=>{
+    const base=_slSlugify(b.leaderName||b.retreatName||'');
+    (groups[base]=groups[base]||[]).push(b);
+  });
+  for(const base in groups){
+    const items=groups[base];
+    if(items.length===1){if(items[0].id===bkId)return base;continue;}
+    const seenHere=new Set(),final={};
+    items.forEach(b=>{
+      let s=`${base}-${_slDateSuffix(b.startDate)}`;
+      if(seenHere.has(s)||final[s])s=`${s}-${_slIdSuffix(b.id)}`;
+      seenHere.add(s);final[s]=b;
+    });
+    const hit=Object.entries(final).find(([,b])=>b.id===bkId);
+    if(hit)return hit[0];
+  }
+  return null;
+}
 function openTeacherPortal(bkId){
   if(!bkId)return;
   sessionStorage.setItem('ama_admin_viewing','1');
@@ -3254,7 +3281,9 @@ function openTeacherPortal(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);
   if(bk?.allLocked)sessionStorage.setItem('ama_preview_locked_bk',bkId);
   else sessionStorage.removeItem('ama_preview_locked_bk');
-  window.open(`${location.origin}/booking-hub.html?mode=teacher&bk=${bkId}`,'_blank');
+  const slug=computeShortSlug(bkId);
+  const url=slug?`${location.origin}/${slug}`:`${location.origin}/booking-hub.html?mode=teacher&bk=${bkId}`;
+  window.open(url,'_blank');
   sessionStorage.removeItem('ama_admin_viewing');
   sessionStorage.removeItem('ama_teacher_mode');
   sessionStorage.removeItem('ama_preview_locked_bk');
