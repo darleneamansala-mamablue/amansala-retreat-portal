@@ -10,14 +10,16 @@ const _BD_PAY_METHODS=['Cash','Zelle','Venmo','Paypal','Bank Transfer','Clip','C
 
 function _bdShortId(id){return String(id||'').replace(/-/g,'').slice(-6).toUpperCase();}
 
-// Clicking the retreat name goes to the ADMIN's own Registration tab (full room-list
-// management for staff), not the teacher-facing preview — same navigation venues.js
-// already uses elsewhere (e.g. venGoToReg()).
+// Clicking the retreat name opens the ADMIN's own Registration tab (full room-list
+// management for staff), not the teacher-facing preview, in a NEW tab so this booking
+// detail stays open behind it. ama_admin_return_bk is the same flag exitTeacherModeFully()
+// uses to land back on a specific retreat's Registration tab — window.open() copies
+// this tab's sessionStorage (staff login included) into the new one, and that new
+// tab's own initStaffLogin() picks the flag up and calls regSelectRetreat() itself.
 function _bdGoToRegistration(bkId){
   if(!bkId)return;
-  closeModal('bookingDetailModal');
-  switchTab('teacherreg',document.getElementById('teacherregTabBtn'));
-  setTimeout(()=>regSelectRetreat(bkId),80);
+  sessionStorage.setItem('ama_admin_return_bk',bkId);
+  window.open(location.origin+'/booking-hub.html','_blank');
 }
 
 async function openBookingDetailForReg(regId,guestName){
