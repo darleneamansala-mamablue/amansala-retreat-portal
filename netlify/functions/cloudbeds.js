@@ -75,6 +75,24 @@ exports.handler = async (event) => {
       case "cancelReservation":
         return ok(h, await cancelReservation(tok, body.reservationId));
 
+      case "updateReservationDates": {
+        // Change an existing, still-active reservation's checkin/checkout — e.g. a
+        // retreat's whole date range shifting or shortening. Unlike restoreReservation
+        // (which re-submits whatever dates Cloudbeds already has, only to un-cancel),
+        // this takes the NEW dates from the caller.
+        const { reservationId: udrId, checkinDate: udrIn, checkoutDate: udrOut } = body;
+        if (!udrId || (!udrIn && !udrOut)) return ok(h, { error: "reservationId and at least one of checkinDate/checkoutDate required" }, 400);
+        const CB_V1u = "https://hotels.cloudbeds.com/api/v1.1";
+        const udrForm = new URLSearchParams({ propertyID: process.env.CLOUDBEDS_PROPERTY_ID, reservationID: udrId, status: "confirmed" });
+        if (udrIn)  udrForm.append("checkinDate",  udrIn);
+        if (udrOut) udrForm.append("checkoutDate", udrOut);
+        const udrRes = await httpJSON("PUT", `${CB_V1u}/putReservation`, udrForm.toString(), {
+          Authorization: `Bearer ${tok}`, "X-PROPERTY-ID": process.env.CLOUDBEDS_PROPERTY_ID, "Content-Type": "application/x-www-form-urlencoded"
+        });
+        console.log("[CB updateReservationDates]", udrId, udrIn, udrOut, JSON.stringify(udrRes).slice(0, 200));
+        return ok(h, { success: !!(udrRes.success), raw: udrRes });
+      }
+
       case "restoreReservation": {
         const { reservationId: rstId } = body;
         if (!rstId) return ok(h, { error: "reservationId required" }, 400);
