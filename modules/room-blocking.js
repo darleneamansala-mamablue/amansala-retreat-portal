@@ -67,11 +67,13 @@ function roomAutoSortKey(room,slRooms){
 }
 
 let _blockModalOrigRooms=[];// snapshot of blockedRooms when modal opened — used by blockSave to diff correctly
+let _blockModalOrigUpdatedAt=null;// blockedRoomsUpdatedAt at modal-open time — used by blockSave to detect another tab/session saving in the meantime
 async function openBlockModal(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);
   if(!bk)return;
   blockEditBkId=bkId;
   _blockModalOrigRooms=[...(bk.blockedRooms||[])];// snapshot BEFORE any Recover CB IDs could modify bk
+  _blockModalOrigUpdatedAt=bk.blockedRoomsUpdatedAt||null;
   document.getElementById('blockModalSub').textContent=
     `${bk.leaderName||bk.retreatName} · ${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}${bk.pax?' · '+bk.pax+' estimated guests':''}`;
   openModal('blockModal');
@@ -349,9 +351,26 @@ function clearBlockRoomGuests(displayRoom){
   saveAll();
   openBlockModal(blockEditBkId);
 }
-function blockSave(){
+async function blockSave(){
   const bk=AppData.bookings.find(b=>b.id===blockEditBkId);
   if(!bk)return;
+
+  // Staleness guard: if this tab's copy of the app was loaded before someone else saved a
+  // room-block change on THIS booking (another tab/session, or another admin), this tab's
+  // checkbox grid was built from an outdated room list — saving would silently blow away
+  // whatever they just set. Real incident: an admin had this modal open in a tab loaded
+  // before a room-list fix went out; saving overwrote another retreat's block down to just
+  // the 2 rooms this stale tab still knew about, deleting everyone else's registrations and
+  // cancelling their Cloudbeds reservations. Check the server's current timestamp first.
+  try{
+    const{data:freshRow}=await db.from('bookings').select('blocked_rooms_updated_at').eq('id',bk.id).maybeSingle();
+    const freshUpdatedAt=freshRow?freshRow.blocked_rooms_updated_at:null;
+    if(freshUpdatedAt&&freshUpdatedAt!==_blockModalOrigUpdatedAt){
+      alert(`⚠ Este bloque de cuartos fue modificado por otra persona (u otra pestaña) mientras tenías esta pantalla abierta.\n\nPara evitar borrar sus cambios por accidente, este guardado se canceló.\n\nCierra esta ventana y vuelve a abrir "Block Rooms" para ver los datos más recientes antes de editar de nuevo.`);
+      return;
+    }
+  }catch(e){console.warn('[blockSave] staleness check failed — proceeding anyway',e);}
+
   let selected=Array.from(document.querySelectorAll('#blockModalBody .block-room-item input:checked'))
     .flatMap(cb=>{
       const item=cb.closest('.block-room-item');
