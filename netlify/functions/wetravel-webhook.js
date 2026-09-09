@@ -161,12 +161,22 @@ exports.handler = async (event) => {
 
   try {
     const tok = await wtToken();
-    const [trip, order, pkgMap] = await Promise.all([
-      wtGetTrip(tok, tripUuid),
+    // The trip lookup can fail (e.g. Svix's own "send example" test event uses a
+    // fake trip_uuid that 404s) — fall back to the trip_title/dates the webhook
+    // payload itself already carries rather than aborting the whole event.
+    const [tripResult, order, pkgMap] = await Promise.all([
+      wtGetTrip(tok, tripUuid).catch(e => { console.warn('[wetravel-webhook] trip lookup failed, using webhook payload fields instead:', e.message); return null; }),
       wtFindOrder(tok, tripUuid, orderId),
       getPackageMap(supaKey),
     ]);
     if (!order) throw new Error(`order ${orderId} not found in trip ${tripUuid}`);
+    const trip = tripResult || {
+      title: d.trip_title || null,
+      start_date: d.departure_date || null,
+      end_date: d.trip_end_date || null,
+      url: null,
+    };
+    if (!trip.start_date || !trip.end_date) throw new Error('no trip dates available (trip lookup failed and webhook payload had none either)');
 
     const bkId = `wt_${tripUuid}`;
     const existing = await supa(supaKey, `bookings?select=id,blocked_rooms&id=eq.${bkId}`, 'GET');
@@ -184,11 +194,21 @@ exports.handler = async (event) => {
       notes: `Synced from WeTravel — ${trip.url || ''}`.trim(),
     }]);
 
-    const buyerName = order.buyer?.full_name || [order.buyer?.first_name, order.buyer?.last_name].filter(Boolean).join(' ') || 'WeTravel Guest';
-    const buyerEmail = order.buyer?.email || '';
+    // The webhook payload's own `participants` list (present on booking.created,
+    // absent from the orders-list API response) has each traveler's real name —
+    // order.buyer alone is just the person who paid, not necessarily everyone in
+    // the room. Filter to active (non-cancelled) participants; fall back to the
+    // buyer alone if the payload didn't include any (e.g. older webhook version).
+    const activeParticipants = (d.participants || []).filter(p => !p.cancelled);
+    const guestList = (activeParticipants.length ? activeParticipants : [order.buyer || {}]).map(p => ({
+      name: p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ') || 'WeTravel Guest',
+      email: p.email || '',
+    }));
+
     const packages = order.packages || [];
     const newRegs = [];
     const usedThisBooking = [];
+    let guestCursor = 0;
 
     for (const pkg of packages) {
       const roomTypeId = pkgMap[pkg.name];
@@ -196,12 +216,19 @@ exports.handler = async (event) => {
       const room = await pickFreeRoom(supaKey, roomTypeId, trip.start_date, trip.end_date, [...blockedRooms, ...usedThisBooking]);
       if (!room) { console.warn(`[wetravel-webhook] no free room of type ${roomTypeId} for ${trip.start_date}-${trip.end_date}`); continue; }
       usedThisBooking.push(room);
+      // Single-package orders (the common case) get every active participant in
+      // that one room; multi-package orders split participants across rooms by
+      // however many this package covers (min 1) — best effort without a
+      // confirmed participant<->package link in the payload.
+      const take = packages.length === 1 ? guestList.length - guestCursor : Math.max(1, pkg.quantity || 1);
+      const roomGuests = guestList.slice(guestCursor, guestCursor + take);
+      guestCursor += take;
       newRegs.push({
         id: `wt_order_${order.id}_${pkg.id || pkg.trip_option_id || room}`,
         booking_id: bkId,
         room,
         room_type_id: roomTypeId,
-        guests: [{ name: buyerName, email: buyerEmail, notes: `WeTravel order #${order.id} — package: ${pkg.name}` }],
+        guests: (roomGuests.length ? roomGuests : [{ name: 'WeTravel Guest', email: '' }]).map(g => ({ ...g, notes: `WeTravel order #${order.id} — package: ${pkg.name}` })),
         amount_paid: (order.paid_amount || 0) / 100,
       });
     }
