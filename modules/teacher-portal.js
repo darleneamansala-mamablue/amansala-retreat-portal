@@ -173,7 +173,7 @@ function _regRenderColorPicker(){
   const cur=getRetreatColorIdx(regSelBk);
   const hasOverride=regSelBk?.packageCustomPrices?.__cfg__?.colorIdx!=null;
   wrap.innerHTML=RETREAT_PALETTE.map((pc,i)=>
-    `<span onclick="regSetRetreatColor(${i})" title="${['Violet','Light blue','Soft pink','Turquoise','Off-white'][i]}" style="width:18px;height:18px;border-radius:50%;background:${pc.bg};border:2px solid ${pc.border};cursor:pointer;display:inline-block;box-shadow:${i===cur?'0 0 0 2px #111':'none'}"></span>`
+    `<span onclick="regSetRetreatColor(${i})" title="${['Violet','Light blue','Soft pink','Turquoise','Off-white','Amber','Orange','Green','Red','Indigo'][i]||'Color '+(i+1)}" style="width:18px;height:18px;border-radius:50%;background:${pc.bg};border:2px solid ${pc.border};cursor:pointer;display:inline-block;box-shadow:${i===cur?'0 0 0 2px #111':'none'}"></span>`
   ).join('')+(hasOverride?`<span onclick="regSetRetreatColor(null)" title="Back to automatic color" style="font-size:10px;color:var(--muted);cursor:pointer;text-decoration:underline;margin-left:2px">Auto</span>`:'');
 }
 function regSetRetreatColor(idx){

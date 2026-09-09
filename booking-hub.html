@@ -4557,6 +4557,11 @@ const RETREAT_PALETTE=[
   {bg:'#fce7f3',border:'#db2777',text:'#831843'},  // soft pink
   {bg:'#ccfbf1',border:'#0d9488',text:'#134e4a'},  // turquoise
   {bg:'#fafaf9',border:'#78716c',text:'#292524'},  // off-white
+  {bg:'#fef3c7',border:'#d97706',text:'#78350f'},  // amber
+  {bg:'#ffedd5',border:'#ea580c',text:'#7c2d12'},  // orange
+  {bg:'#dcfce7',border:'#16a34a',text:'#14532d'},  // green
+  {bg:'#fee2e2',border:'#dc2626',text:'#7f1d1d'},  // red
+  {bg:'#e0e7ff',border:'#4f46e5',text:'#312e81'},  // indigo
 ];
 // Accepts a booking object (preferred — checks for an admin-set color override
 // first) or a bare id string (back-compat — always hashes, no override possible).
@@ -4565,7 +4570,7 @@ function getRetreatColorIdx(bkOrId){
   const override=bk?.packageCustomPrices?.__cfg__?.colorIdx;
   if(override!=null&&override>=0&&override<RETREAT_PALETTE.length)return override;
   const bkId=bk?bk.id:bkOrId;
-  let h=0;for(let i=0;i<(bkId||'').length;i++)h=(h*31+bkId.charCodeAt(i))%5;
+  let h=0;for(let i=0;i<(bkId||'').length;i++)h=(h*31+bkId.charCodeAt(i))%RETREAT_PALETTE.length;
   return h;
 }
 // Room-only "Reservation Type" (rm-type select) drives its own fixed color per
