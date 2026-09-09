@@ -560,7 +560,12 @@ function regRender(){
         tr.addEventListener('dragleave',()=>tr.classList.remove('drag-over'));
         tr.addEventListener('drop',e=>{e.preventDefault();tr.classList.remove('drag-over');regMoveGuest(e.dataTransfer.getData('text/plain'),room,rt.id);});
         if(!_teacherLocked){
-          tr.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',reg.id);setTimeout(()=>tr.classList.add('dragging'),0);});
+          // Encode which guest row was dragged, not just the registration — a room shared
+          // by 2+ named guests (e.g. a couple) is ONE registration with both names inside
+          // it, but the UI renders one row per guest. Without the guest index, dragging
+          // either row moved the WHOLE registration (both guests) instead of just the one
+          // row the admin dragged. regMoveGuest() splits on '::' to tell the two apart.
+          tr.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',reg.id+'::'+g._guestIdx);setTimeout(()=>tr.classList.add('dragging'),0);});
           tr.addEventListener('dragend',()=>tr.classList.remove('dragging'));
         }
 
@@ -714,11 +719,20 @@ function regSaveRateOverride(regId,val){
 function regToggleReturning(regId,guestIdx){const r=AppData.regs.find(x=>x.id===regId);if(r&&r.guests&&r.guests[guestIdx]){r.guests[guestIdx].returning=!r.guests[guestIdx].returning;if(!r.guests[guestIdx].returning)r.guests[guestIdx].yearsAttending=null;r.updatedAt=new Date().toISOString();saveAll();regRender();buildDashboard();}}
 function regSaveYears(regId,guestIdx,val){const r=AppData.regs.find(x=>x.id===regId);if(r&&r.guests&&r.guests[guestIdx]){r.guests[guestIdx].yearsAttending=parseInt(val)||null;r.updatedAt=new Date().toISOString();saveAll();buildDashboard();}}
 
-function regMoveGuest(regId,targetRoom,targetRtId){
+function regMoveGuest(dragPayload,targetRoom,targetRtId){
   if(IS_TEACHER_MODE&&regSelBk?.allLocked){showToast('El retiro está bloqueado por el admin.');return;}
+  // dragPayload is either a bare reg id (bed rows / single-guest rooms — move the whole
+  // registration, as before) or "regId::guestIdx" (one row of a room shared by 2+ named
+  // guests — move only that guest, see regSplitGuestToRoom).
+  const [regId,guestIdxRaw]=String(dragPayload||'').split('::');
+  const guestIdx=guestIdxRaw!==undefined?parseInt(guestIdxRaw,10):null;
   const reg=AppData.regs.find(r=>r.id===regId);
+  if(!reg)return;
+  if(guestIdx!=null&&!isNaN(guestIdx)&&(reg.guests||[]).filter(g=>g.name).length>1){
+    return regSplitGuestToRoom(reg,guestIdx,targetRoom,targetRtId);
+  }
   const physicalTarget=resolvePhysicalRoomForGuest(reg.bookingId,targetRoom,targetRtId);
-  if(!reg||reg.room===physicalTarget)return;
+  if(reg.room===physicalTarget)return;
   if(reg.locked){showToast('This room is locked — unlock it first.');return;}
   const existing=getRegForRoom(reg.bookingId,physicalTarget);
   if(existing&&existing.locked){showToast(`Room ${targetRoom} is locked — unlock it first.`);return;}
@@ -812,6 +826,87 @@ function regMoveGuest(regId,targetRoom,targetRtId){
       else{showToast('Movido localmente — revisa Cloudbeds si el nombre no cambió.');console.warn('[CB move]',results);}
     }).catch(e=>{
       console.warn('[CB move]',e);
+      showToast('Movido localmente — error al sincronizar con Cloudbeds.');
+    });
+  }
+}
+
+// Move exactly ONE named guest out of a registration shared by 2+ guests into another
+// room, leaving the rest of that registration (and its other guest(s)) in place. Splits
+// off into an existing registration at the target room (if it has space) or creates a
+// new one there.
+function regSplitGuestToRoom(reg,guestIdx,targetRoom,targetRtId){
+  if(IS_TEACHER_MODE&&regSelBk?.allLocked){showToast('El retiro está bloqueado por el admin.');return;}
+  if(reg.locked){showToast('This room is locked — unlock it first.');return;}
+  const movingGuest=reg.guests?.[guestIdx];
+  if(!movingGuest||!movingGuest.name)return;
+  const physicalTarget=resolvePhysicalRoomForGuest(reg.bookingId,targetRoom,targetRtId);
+  if(physicalTarget===reg.room)return;
+  const targetRt=AppData.roomTypes.find(t=>t.id===targetRtId);
+  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
+  let destReg=getRegForRoom(reg.bookingId,physicalTarget);
+  if(destReg&&destReg.locked){showToast(`Room ${targetRoom} is locked — unlock it first.`);return;}
+  const destNamed=destReg?(destReg.guests||[]).filter(g=>g.name):[];
+  if(destReg&&destNamed.length>=(targetRt?.maxOcc||1)){showToast(`Room ${targetRoom} is already full.`);return;}
+  if(!confirm(`Move ${movingGuest.name} to room ${targetRoom}${destNamed.length?` (with ${destNamed.map(g=>g.name).join(' & ')})`:''}?\n\nThe rest of room ${reg.room} stays put.`))return;
+
+  const fromRoom=reg.room;
+  const _moveTs=new Date().toISOString();
+  const remaining=(reg.guests||[]).filter((g,i)=>i!==guestIdx&&g.name);
+  reg.guests=remaining.length?remaining:[{name:'',email:'',phone:'',notes:''}];
+  reg.customPrice=null;reg.updatedAt=_moveTs;
+  let createdNew=false;
+  if(destReg){
+    destReg.guests=[...(destReg.guests||[]).filter(g=>g.name),{...movingGuest}];
+    destReg.customPrice=null;destReg.updatedAt=_moveTs;
+  }else{
+    destReg={id:uid(),bookingId:reg.bookingId,room:physicalTarget,roomTypeId:targetRtId,guests:[{...movingGuest}],customPrice:null,amountPaid:0,updatedAt:_moveTs};
+    AppData.regs.push(destReg);
+    createdNew=true;
+  }
+  saveAll();regRender();
+  logActivity('Room moved',`${bk?.leaderName||bk?.retreatName} — ${movingGuest.name}: Room ${fromRoom} → ${physicalTarget}`,reg.bookingId);
+  showToast(`Moved ${movingGuest.name} to room ${targetRoom} — syncing with Cloudbeds…`);
+
+  // Cloudbeds sync: both the source room (now with one fewer guest) and the destination
+  // room (now with one more) need their guest name/adult count updated.
+  if(bk){
+    const cbResIds=bk.cbReservationIds||{};
+    const cbAdjIds=bk.cbAdjustmentIds||{};
+    const _cbName=async(cbResId,room,guestName,adults,adjId)=>{
+      if(!cbResId)return null;
+      const r=await fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({reservationId:cbResId,roomName:room,guestFirstName:guestName||'',groupName:bk.groupName||bk.retreatName||bk.leaderName||'',leaderName:bk.leaderName||'',adults,startDate:bk.startDate,endDate:bk.endDate,adjustmentId:adjId||null})
+      });
+      return r.json();
+    };
+    const sourceNames =(reg.guests||[]).filter(g=>g.name).map(g=>g.name).join(' & ');
+    const sourceAdults=Math.max(1,(reg.guests||[]).filter(g=>g.name).length);
+    const destNames =(destReg.guests||[]).filter(g=>g.name).map(g=>g.name).join(' & ');
+    const destAdults=Math.max(1,(destReg.guests||[]).filter(g=>g.name).length);
+    const tasks=[];
+    if(cbResIds[fromRoom])tasks.push({room:fromRoom,p:_cbName(cbResIds[fromRoom],fromRoom,sourceNames,sourceAdults,cbAdjIds[fromRoom]||null)});
+    if(cbResIds[physicalTarget])tasks.push({room:physicalTarget,p:_cbName(cbResIds[physicalTarget],physicalTarget,destNames,destAdults,cbAdjIds[physicalTarget]||null)});
+    else if(!createdNew)console.warn('[CB split] no cbResId for destination room:',physicalTarget);
+
+    Promise.all(tasks.map(t=>t.p)).then(results=>{
+      if(!bk.cbAdjustmentIds)bk.cbAdjustmentIds={};
+      results.forEach((res,i)=>{
+        if(!res)return;
+        const room=tasks[i].room;
+        if(res.adultsUpdate){if(res.adjustmentId)bk.cbAdjustmentIds[room]=res.adjustmentId;else delete bk.cbAdjustmentIds[room];}
+        if(res.reservationId&&res.reservationId!==cbResIds[room]){
+          bk.cbReservationIds[room]=res.reservationId;
+          if(res.guestId){if(!bk.cbGuestIds)bk.cbGuestIds={};bk.cbGuestIds[room]=res.guestId;}
+        }
+      });
+      saveAll();
+      const ok=results.every(r=>!r||r.updated!==false);
+      if(ok)showToast(`Cloudbeds: nombre actualizado en cuarto ${targetRoom}`);
+      else{showToast('Movido localmente — revisa Cloudbeds si el nombre no cambió.');console.warn('[CB split]',results);}
+    }).catch(e=>{
+      console.warn('[CB split]',e);
       showToast('Movido localmente — error al sincronizar con Cloudbeds.');
     });
   }
