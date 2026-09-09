@@ -1827,7 +1827,16 @@ function rcBuild(){
   const c2=document.createElement('div');c2.className='g-corner';c2.style.width='160px';dr.appendChild(c2);
   const dc=document.createElement('div');dc.className='g-day-cells';
   days.forEach(d=>{const ds=fmtISO(d),dow=d.getDay();const el=document.createElement('div');el.className='g-dcell'+(ds===todayStr?' today-h':'')+(dow===0||dow===6?' weekend':'');el.innerHTML=`<span class="dd">${d.getDate()}</span><span class="dn">${DSHORT[dow]}</span>`;dc.appendChild(el);});
-  dr.appendChild(dc);hdr.appendChild(dr);body.appendChild(hdr);
+  dr.appendChild(dc);hdr.appendChild(dr);
+
+  // "Happening now" strip — third header row, right under the date numbers, so it
+  // scrolls/stays sticky together with them instead of living outside the grid.
+  const lr=document.createElement('div');lr.className='g-hrow';lr.id='rcTodayLegend';lr.style.cssText='display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px 6px 0;background:#fff;border-bottom:1px solid var(--border);';
+  const c3=document.createElement('div');c3.className='g-corner';c3.style.cssText='width:160px;min-width:160px;flex-shrink:0;';lr.appendChild(c3);
+  const legendCells=document.createElement('div');legendCells.id='rcTodayLegendCells';legendCells.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap;';lr.appendChild(legendCells);
+  hdr.appendChild(lr);
+
+  body.appendChild(hdr);
 
   const W=rcShowDays*36,startMs=rcStart.getTime();
   let totalRooms=0;
@@ -1971,17 +1980,18 @@ function rcBuild(){
 // CURRENTLY SCROLLED TO (updates as you navigate) — same colors as their bars in
 // the grid below, so the two stay visually consistent.
 function _rcRenderTodayLegend(){
-  const el=document.getElementById('rcTodayLegend');if(!el)return;
+  const el=document.getElementById('rcTodayLegend');const cells=document.getElementById('rcTodayLegendCells');
+  if(!el||!cells)return;
   const winStartStr=fmtISO(rcStart);
   const winEndStr=fmtISO(addDays(rcStart,rcShowDays));
   const todayStr=fmtISO(new Date());
   const isTodayInView=todayStr>=winStartStr&&todayStr<winEndStr;
   const active=AppData.bookings.filter(bk=>bk.status!=='cancelled'&&bk.startDate&&bk.endDate&&bk.startDate<winEndStr&&bk.endDate>winStartStr);
-  if(!active.length){el.style.display='none';el.innerHTML='';return;}
+  if(!active.length){el.style.display='none';cells.innerHTML='';return;}
   active.sort((a,b)=>(a.leaderName||a.retreatName||'').localeCompare(b.leaderName||b.retreatName||''));
   el.style.display='flex';
   const label=isTodayInView?'Happening now':'Active in this view';
-  el.innerHTML=`<span class="rtl-label">${label}</span>`+active.map(bk=>{
+  cells.innerHTML=`<span class="rtl-label">${label}</span>`+active.map(bk=>{
     const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk.id)];
     const name=bk.leaderName||bk.retreatName||'—';
     return `<span class="rtl-pill" style="background:${pc.bg};border-color:${pc.border};color:${pc.text}" onclick="_rcJumpToToday('${bk.id}')" title="Jump to ${escHtml(name)} in the calendar">${escHtml(name)}</span>`;
