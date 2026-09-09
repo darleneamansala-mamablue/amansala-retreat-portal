@@ -266,7 +266,7 @@ exports.handler = async (event) => {
       finalGuests.forEach(g => folioPlan.push({
         registrationId: regId,
         guestName: g.name,
-        description: `WeTravel — ${pkg.name} (order #${order.id})`,
+        description: `${pkg.name} (order #${order.id})`,
         amount: perGuestPaid,
       }));
     }
@@ -305,7 +305,10 @@ exports.handler = async (event) => {
         toCreate.forEach(f => {
           const key = `${f.registrationId}::${f.guestName}`;
           const rcFolio = folioByToken.get(roomChargesTokenOf.get(key));
-          if (rcFolio) items.push({ folio_id: rcFolio.id, description: f.description, qty: 1, unit_price: f.amount, tax_rate: 0 });
+          if (rcFolio) {
+            items.push({ folio_id: rcFolio.id, description: f.description, qty: 1, unit_price: f.amount, tax_rate: 0 });
+            items.push({ folio_id: rcFolio.id, description: 'Payment — We Travel', qty: 1, unit_price: -f.amount, tax_rate: 0 });
+          }
           // Every WeTravel booking (BBC or RNR) includes two spa credits as part of
           // the package price — logged as a single credit line each in the open
           // Extras folio (negative unit_price, same convention the folio UI already
