@@ -4929,7 +4929,14 @@ function loadAll(){
   });
   if(cleaned)localStorage.setItem('amansala_venue_bookings',JSON.stringify(AppData.bookings));
 }
+// Timestamp of the most recent local saveAll() — the 2-minute background poll (below)
+// checks this before blindly overwriting AppData.bookings/regs from Supabase, so a
+// just-made edit whose own upsert hasn't landed yet doesn't get read back as stale and
+// silently reverted. Real incident: dragging one room, then a second room shortly
+// after, could undo the first move if the poll happened to fire in between.
+let _lastLocalSaveAt=0;
 function saveAll(){
+  _lastLocalSaveAt=Date.now();
   localStorage.setItem('amansala_venue_bookings',JSON.stringify(AppData.bookings));
   localStorage.setItem('amansala_venue_rows',    JSON.stringify(AppData.venRows));
   localStorage.setItem('amansala_ven_rows_version', VEN_ROWS_VERSION);
@@ -5723,6 +5730,11 @@ function _applyRemoteSync(silent){
   // Teachers filling out their own schedule are a single-user session — a background
   // sync reloading/re-rendering mid-form risks discarding unsaved picks. Skip entirely.
   if(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE)return;
+  // Every local saveAll() also writes to app_store, which fires THIS SAME realtime
+  // listener back at us almost immediately — skip if we just saved, same reasoning as
+  // the periodic poll below (that save's own bookings/regs upsert may not have landed
+  // in Supabase yet).
+  if(typeof _lastLocalSaveAt!=='undefined'&&Date.now()-_lastLocalSaveAt<8000)return;
   loadFromSupabase().then(loaded=>{
     if(!loaded)return;
     try{
@@ -5796,6 +5808,10 @@ updateInquiryDot();
 if(location.protocol!=='file:'){
   setInterval(async()=>{
     try{
+      // Skip this cycle if we just saved locally — that save's own upsert may not have
+      // landed in Supabase yet, so reading now would fetch stale pre-save data and wipe
+      // out the edit in memory. Give it a few seconds to actually land first.
+      if(Date.now()-_lastLocalSaveAt<8000)return;
       // Snapshot state before load so we can detect what changed
       const prevBkIds=new Set(AppData.bookings.map(b=>b.id));
       const prevEvtIds=new Set((AppData.specialEvents||[]).map(e=>e.id));
