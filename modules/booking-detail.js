@@ -79,7 +79,7 @@ function _bdRender(){
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">📅 Booking</div>
         <table style="width:100%;font-size:13px">
           <tr><td style="color:var(--muted);padding:5px 0;width:90px">Period</td><td style="padding:5px 0">${fmtDate(bk.startDate)} — ${fmtDate(bk.endDate)} <span style="color:var(--muted)">(${nights} night${nights!==1?'s':''})</span></td></tr>
-          <tr><td style="color:var(--muted);padding:5px 0">Retreat</td><td style="padding:5px 0;color:#1d4ed8">${escHtml(bk.leaderName||bk.retreatName||'')}</td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0">Retreat</td><td style="padding:5px 0"><span onclick="openTeacherPortal('${bk.id}')" title="Open Teacher View for this retreat" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(bk.leaderName||bk.retreatName||'')}</span></td></tr>
           <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${escHtml(reg.room||'—')}</td></tr>
           <tr><td style="color:var(--muted);padding:5px 0">Rate</td><td style="padding:5px 0;color:#059669;font-weight:700">${fmt$(dailyRate)}/night</td></tr>
         </table>
