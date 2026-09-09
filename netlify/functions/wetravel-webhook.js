@@ -112,6 +112,22 @@ async function logWeTravelNotif(key, entry) {
   }
 }
 
+// A package with no room_type mapping is logged and skipped (see pickFreeRoom
+// callsite) so nothing invisible gets created — but that log line only lives in
+// Netlify's function logs. Mirroring it into app_store lets the We Travel admin
+// tab (modules/wetravel-admin.js) surface "these packages still need mapping"
+// without anyone having to go spelunking through logs.
+async function recordUnmappedPackage(key, pkgName, tripUuid, orderId) {
+  try {
+    const rows = await supa(key, `app_store?select=value&key=eq.weTravelUnmappedPackages`, 'GET');
+    const map = (rows && rows[0] && rows[0].value) || {};
+    map[pkgName] = { tripUuid, orderId, lastSeenAt: new Date().toISOString() };
+    await supa(key, 'app_store', 'POST', [{ key: 'weTravelUnmappedPackages', value: map, updated_at: new Date().toISOString() }]);
+  } catch (e) {
+    console.warn('[wetravel-webhook] could not record unmapped package:', e.message);
+  }
+}
+
 // ─── Trip title -> portal retreat name ──────────────────────────────────────
 // Admin wants the portal's retreat name/label to read as the program's short
 // code rather than WeTravel's own trip title (e.g. "Bikini Bootcamp - Dec 28 -
@@ -288,7 +304,11 @@ exports.handler = async (event) => {
 
     for (const pkg of packages) {
       const roomTypeId = pkgMap[pkg.name];
-      if (!roomTypeId) { console.warn(`[wetravel-webhook] no room_type mapping for WeTravel package "${pkg.name}" — skipping, needs admin mapping`); continue; }
+      if (!roomTypeId) {
+        console.warn(`[wetravel-webhook] no room_type mapping for WeTravel package "${pkg.name}" — skipping, needs admin mapping`);
+        await recordUnmappedPackage(supaKey, pkg.name, tripUuid, orderId);
+        continue;
+      }
       const room = await pickFreeRoom(supaKey, roomTypeId, trip.start_date, trip.end_date, [...blockedRooms, ...usedThisBooking]);
       if (!room) { console.warn(`[wetravel-webhook] no free room of type ${roomTypeId} for ${trip.start_date}-${trip.end_date}`); continue; }
       usedThisBooking.push(room);
