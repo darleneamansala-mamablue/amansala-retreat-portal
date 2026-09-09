@@ -10,9 +10,4 @@
   [headers.values]
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
 
-# Short teacher-view links — /nombre → booking-hub.html?mode=teacher&bk=<bookingId>
-# status = 200 rewrites (URL bar keeps showing the short link) instead of redirecting.
-[[redirects]]
-  from = "/carolefrey"
-  to = "/booking-hub.html?mode=teacher&bk=4f1c3f80-509e-4db8-9dc9-a7045e48070c"
-  status = 200
+# Short teacher-view links (one per event) now live in the _redirects file.
