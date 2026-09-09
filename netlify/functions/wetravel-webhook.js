@@ -128,6 +128,61 @@ async function recordUnmappedPackage(key, pkgName, tripUuid, orderId) {
   }
 }
 
+// ─── Handle a payment-plan installment on an already-synced booking ────────
+// booking.created already recorded the deposit (registrations.amount_paid,
+// an open Room Charges folio charging the full price with only the deposit
+// logged as a payment). When a later installment lands, this brings that
+// registration/folio up to date instead of leaving it stuck showing the
+// original deposit forever: bumps amount_paid to the new total, logs the
+// *difference* as a new "Payment — We Travel" folio line (so it doesn't
+// double-count the deposit already logged), and — only once total_due_amount
+// hits zero — closes the Room Charges folio and confirms the booking.
+// Naturally idempotent against Svix retries: re-processing the same event
+// recomputes the same delta as 0 once amount_paid already matches.
+async function handleWeTravelPaymentUpdate(key, tripUuid, orderId, d, eventType, svixId) {
+  try {
+    const bkId = `wt_${tripUuid}`;
+    const totalDueAmount = d.total_due_amount != null ? d.total_due_amount / 100 : null;
+    const totalPaidAmount = d.total_paid_amount != null ? d.total_paid_amount / 100 : null;
+    const isFullyPaid = totalDueAmount != null ? totalDueAmount <= 0 : null;
+
+    if (totalPaidAmount != null) {
+      const regs = await supa(key, `registrations?select=id,amount_paid,guests&booking_id=eq.${bkId}`, 'GET');
+      for (const reg of regs) {
+        const prevPaid = Number(reg.amount_paid) || 0;
+        const delta = totalPaidAmount - prevPaid;
+        if (Math.abs(delta) < 0.005) continue; // already up to date (e.g. a Svix retry)
+        await supa(key, `registrations?id=eq.${reg.id}`, 'PATCH', { amount_paid: totalPaidAmount });
+        const guestNames = [...new Set((reg.guests || []).map(g => g.name).filter(Boolean))];
+        if (!guestNames.length) continue;
+        const perGuestDelta = delta / guestNames.length;
+        for (const gName of guestNames) {
+          const folios = await supa(key, `folios?select=id,status&registration_id=eq.${reg.id}&guest_name=eq.${encodeURIComponent(gName)}&name=eq.${encodeURIComponent('Room Charges')}`, 'GET');
+          const folio = folios[0];
+          if (!folio) continue;
+          await supa(key, 'folio_items', 'POST', [{ folio_id: folio.id, description: 'Payment — We Travel', qty: 1, unit_price: -perGuestDelta, tax_rate: 0 }]);
+          if (isFullyPaid && folio.status !== 'closed') {
+            await supa(key, `folios?id=eq.${folio.id}`, 'PATCH', { status: 'closed' });
+          }
+        }
+      }
+      if (isFullyPaid) await supa(key, `bookings?id=eq.${bkId}`, 'PATCH', { status: 'confirmed' });
+    }
+
+    await logWeTravelNotif(key, {
+      id: svixId || `${eventType}_${orderId || tripUuid || Date.now()}`,
+      ts: new Date().toISOString(),
+      kind: isFullyPaid ? 'paid_in_full' : 'payment',
+      bookingId: bkId,
+      guestName: (d.buyer && (d.buyer.full_name || [d.buyer.first_name, d.buyer.last_name].filter(Boolean).join(' '))) || '',
+      amount: totalPaidAmount != null ? totalPaidAmount : (d.amount ?? d.paid_amount ?? 0) / 100,
+    });
+    console.log(`[wetravel-webhook] applied payment update for ${bkId} from event type ${eventType}`);
+  } catch (e) {
+    console.warn('[wetravel-webhook] payment update failed:', e.message);
+  }
+}
+
 // ─── Trip title -> portal retreat name ──────────────────────────────────────
 // Admin wants the portal's retreat name/label to read as the program's short
 // code rather than WeTravel's own trip title (e.g. "Bikini Bootcamp - Dec 28 -
@@ -200,23 +255,14 @@ exports.handler = async (event) => {
 
   if (eventType !== 'booking.created') {
     // WeTravel accounts on a payment plan fire further events as installments
-    // come in — the exact event name/payload for those isn't confirmed yet (only
-    // booking.created has been seen live), so rather than silently drop anything
-    // that looks payment-related, log a best-effort Dashboard notification for it.
-    // Safe to broaden/tighten this match once a real installment event is logged.
-    const isPaymentish = supaKey && (/payment/i.test(eventType) || eventType === 'booking.updated');
+    // come in — the exact event name isn't confirmed yet (only booking.created
+    // has been seen live), so rather than silently drop anything that looks
+    // payment-related, treat it as an update to an already-synced booking.
+    // Safe to broaden/tighten this match once a real installment event is logged
+    // (the full raw payload is always logged above for that).
+    const isPaymentish = supaKey && tripUuid && (/payment/i.test(eventType) || eventType === 'booking.updated');
     if (isPaymentish) {
-      const guestName = (d.buyer && (d.buyer.full_name || [d.buyer.first_name, d.buyer.last_name].filter(Boolean).join(' '))) || '';
-      const amount = (d.amount ?? d.paid_amount ?? d.total_paid_amount ?? 0) / 100;
-      await logWeTravelNotif(supaKey, {
-        id: svixId || `${eventType}_${orderId || tripUuid || Date.now()}`,
-        ts: new Date().toISOString(),
-        kind: 'payment',
-        bookingId: tripUuid ? `wt_${tripUuid}` : null,
-        guestName,
-        amount,
-      });
-      console.log(`[wetravel-webhook] logged Dashboard notification for event type ${eventType}`);
+      await handleWeTravelPaymentUpdate(supaKey, tripUuid, orderId, d, eventType, svixId);
     } else {
       console.log('[wetravel-webhook] ignoring event type:', eventType);
     }
