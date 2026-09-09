@@ -3259,7 +3259,10 @@ function computeShortSlug(bkId){
     (groups[base]=groups[base]||[]).push(b);
   });
   for(const base in groups){
-    const items=groups[base];
+    // Deterministic order (start_date, then id) — must match shortlink.js exactly,
+    // or the same booking could resolve to a different slug on each side.
+    const items=groups[base].slice().sort((a,b)=>
+      (a.startDate||'').localeCompare(b.startDate||'')||a.id.localeCompare(b.id));
     if(items.length===1){if(items[0].id===bkId)return base;continue;}
     const seenHere=new Set(),final={};
     items.forEach(b=>{

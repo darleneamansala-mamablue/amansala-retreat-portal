@@ -58,7 +58,12 @@ exports.handler = async (event) => {
 
   const final = {};
   Object.keys(groups).forEach(base => {
-    const items = groups[base];
+    // Deterministic order (start_date, then id) — Supabase doesn't guarantee row
+    // order without an explicit ORDER BY, and the client-side twin of this logic
+    // (computeShortSlug in teacher-portal.js) must land on the exact same slug
+    // for the exact same booking every time.
+    const items = groups[base].slice().sort((a, b) =>
+      (a.start_date || '').localeCompare(b.start_date || '') || a.id.localeCompare(b.id));
     if (items.length === 1) { final[base] = items[0]; return; }
     const seenHere = new Set();
     items.forEach(b => {
