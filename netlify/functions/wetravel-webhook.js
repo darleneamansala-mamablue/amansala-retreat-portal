@@ -94,6 +94,18 @@ function verifySvixSignature(headers, rawBody) {
   return { ok: match, reason: match ? null : 'signature mismatch' };
 }
 
+// ─── Trip title -> portal retreat name ──────────────────────────────────────
+// Admin wants the portal's retreat name/label to read as the program's short
+// code rather than WeTravel's own trip title (e.g. "Bikini Bootcamp - Dec 28 -
+// Jan 03" -> "We Travel BBC"), so it's recognizable at a glance in the Room
+// Calendar/Dashboard alongside Cloudbeds-sourced retreats.
+function normalizeWeTravelTitle(title) {
+  const t = title || '';
+  if (/bikini\s*boot\s*camp/i.test(t)) return 'We Travel BBC';
+  if (/restore\s*(?:and|&|n)?\s*renew/i.test(t)) return 'We Travel RNR';
+  return t ? `We Travel — ${t}` : 'We Travel';
+}
+
 // ─── Package name -> portal room_type_id mapping (admin-configured) ────────
 async function getPackageMap(key) {
   const rows = await supa(key, `app_store?select=value&key=eq.weTravelPackageMap`, 'GET');
@@ -183,15 +195,16 @@ exports.handler = async (event) => {
     let blockedRooms = (existing[0] && existing[0].blocked_rooms) || [];
 
     // Create/update the booking (idempotent — same deterministic id every time).
+    const portalName = normalizeWeTravelTitle(trip.title);
     await supa(supaKey, 'bookings', 'POST', [{
       id: bkId,
-      leader_name: trip.title || 'WeTravel',
-      retreat_name: trip.title || 'WeTravel',
+      leader_name: portalName,
+      retreat_name: portalName,
       start_date: trip.start_date,
       end_date: trip.end_date,
       status: existing[0] ? undefined : 'deposit_paid',
       source: 'wetravel',
-      notes: `Synced from WeTravel — ${trip.url || ''}`.trim(),
+      notes: `Synced from WeTravel — ${trip.title || ''} — ${trip.url || ''}`.trim(),
     }]);
 
     // The webhook payload's own `participants` list (present on booking.created,
@@ -208,6 +221,12 @@ exports.handler = async (event) => {
     const packages = order.packages || [];
     const newRegs = [];
     const usedThisBooking = [];
+    // Per-guest folio pair to create once the registration exists — mirrors the
+    // Extra Night pattern in booking-detail.js exactly: a *closed* "Room Charges"
+    // folio holding the amount already paid on WeTravel (so it shows PAID with
+    // $0 balance-due contribution, since _bdBalanceDue() only sums open folios),
+    // plus a separate empty *open* "Extras" folio for any incidentals added later.
+    const folioPlan = [];
     let guestCursor = 0;
 
     for (const pkg of packages) {
@@ -223,14 +242,24 @@ exports.handler = async (event) => {
       const take = packages.length === 1 ? guestList.length - guestCursor : Math.max(1, pkg.quantity || 1);
       const roomGuests = guestList.slice(guestCursor, guestCursor + take);
       guestCursor += take;
+      const regId = `wt_order_${order.id}_${pkg.id || pkg.trip_option_id || room}`;
+      const finalGuests = roomGuests.length ? roomGuests : [{ name: 'WeTravel Guest', email: '' }];
       newRegs.push({
-        id: `wt_order_${order.id}_${pkg.id || pkg.trip_option_id || room}`,
+        id: regId,
         booking_id: bkId,
         room,
         room_type_id: roomTypeId,
-        guests: (roomGuests.length ? roomGuests : [{ name: 'WeTravel Guest', email: '' }]).map(g => ({ ...g, notes: `WeTravel order #${order.id} — package: ${pkg.name}` })),
+        guests: finalGuests.map(g => ({ ...g, notes: `WeTravel order #${order.id} — package: ${pkg.name}` })),
         amount_paid: (order.paid_amount || 0) / 100,
       });
+
+      const perGuestPaid = (order.paid_amount || 0) / 100 / finalGuests.length;
+      finalGuests.forEach(g => folioPlan.push({
+        registrationId: regId,
+        guestName: g.name,
+        description: `WeTravel — ${pkg.name} (order #${order.id})`,
+        amount: perGuestPaid,
+      }));
     }
 
     if (usedThisBooking.length) {
@@ -239,8 +268,36 @@ exports.handler = async (event) => {
     }
     if (newRegs.length) await supa(supaKey, 'registrations', 'POST', newRegs);
 
-    console.log(`[wetravel-webhook] order ${order.id}: created ${newRegs.length} registration(s) on booking ${bkId}`);
-    return ok(200, { received: true, processed: true, bookingId: bkId, registrations: newRegs.length });
+    // Idempotency for Svix retries: only create folios for registration+guest
+    // combos that don't already have one (a redelivered event must not double
+    // up "Room Charges"/"Extras" rows).
+    let foliosCreated = 0;
+    if (folioPlan.length) {
+      const regIds = [...new Set(folioPlan.map(f => f.registrationId))];
+      const existingFolios = await supa(supaKey, `folios?select=registration_id,guest_name&registration_id=in.(${regIds.map(id => `"${id}"`).join(',')})`, 'GET');
+      const existingKeys = new Set((existingFolios || []).map(f => `${f.registration_id}::${f.guest_name}`));
+      const toCreate = folioPlan.filter(f => !existingKeys.has(`${f.registrationId}::${f.guestName}`));
+      if (toCreate.length) {
+        const folioRows = toCreate.flatMap(f => [
+          { registration_id: f.registrationId, guest_name: f.guestName, name: 'Room Charges', payment_token: crypto.randomUUID().replace(/-/g, ''), status: 'closed', _plan: f },
+          { registration_id: f.registrationId, guest_name: f.guestName, name: 'Extras', payment_token: crypto.randomUUID().replace(/-/g, ''), status: 'open' },
+        ]);
+        const createdFolios = await supa(supaKey, 'folios', 'POST', folioRows.map(({ _plan, ...row }) => row));
+        const roomChargeTokens = new Set(folioRows.filter(r => r.name === 'Room Charges').map(r => r.payment_token));
+        const planByToken = new Map(folioRows.filter(r => r.name === 'Room Charges').map(r => [r.payment_token, r._plan]));
+        const items = (createdFolios || [])
+          .filter(f => roomChargeTokens.has(f.payment_token))
+          .map(f => {
+            const plan = planByToken.get(f.payment_token);
+            return { folio_id: f.id, description: plan.description, qty: 1, unit_price: plan.amount, tax_rate: 0 };
+          });
+        if (items.length) await supa(supaKey, 'folio_items', 'POST', items);
+        foliosCreated = toCreate.length;
+      }
+    }
+
+    console.log(`[wetravel-webhook] order ${order.id}: created ${newRegs.length} registration(s), ${foliosCreated} folio pair(s) on booking ${bkId}`);
+    return ok(200, { received: true, processed: true, bookingId: bkId, registrations: newRegs.length, folios: foliosCreated });
   } catch (e) {
     console.error('[wetravel-webhook] processing failed:', e.message);
     // 200 anyway — a 4xx/5xx makes Svix retry the same event repeatedly; the full

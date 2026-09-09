@@ -115,6 +115,8 @@ function _bdRender(){
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">👤 Guest</div>
         <table style="width:100%;font-size:13px">
           <tr><td style="color:var(--muted);padding:5px 0;width:110px">Name</td><td style="padding:5px 0;font-weight:700">${escHtml(guest.name)}</td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0">Adults</td><td style="padding:5px 0">${gc}</td></tr>
+          ${guest.email?`<tr><td style="color:var(--muted);padding:5px 0">Email</td><td style="padding:5px 0">${escHtml(guest.email)}</td></tr>`:''}
         </table>
         <div style="margin-top:14px;padding:12px 14px;background:#fef2f2;border-radius:10px">
           <div style="font-size:11px;color:var(--muted);font-weight:600">Balance Due</div>
