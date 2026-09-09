@@ -131,6 +131,33 @@ async function regOnRetreat(){
   }catch(e){}
 }
 
+// ===== PER-RETREAT ROOM-TYPE REASSIGNMENT (admin only) =====
+// Lets an admin show a standalone room under a DIFFERENT category (e.g. CH9 under
+// Beachfront instead of Superior) for just the current retreat — the room's real
+// global type (Cloudbeds, every other retreat, pricing anywhere else in the app)
+// is never touched. Stored per-booking in packageCustomPrices.__cfg__ (same bag
+// already used for the hideRoomNumbers setting) rather than a new DB column.
+function _regIsAdminPreview(){return IS_TEACHER_MODE&&sessionStorage.getItem('ama_admin_viewing')==='1';}
+function _regTypeOverrideControl(room,rt){
+  if(!_regIsAdminPreview())return'';
+  if(BED_RT_IDS.has(rt.id)||VIRTUAL_GROUP_RT_IDS.has(rt.id))return'';
+  const opts=AppData.roomTypes.filter(t=>!BED_RT_IDS.has(t.id)&&!VIRTUAL_GROUP_RT_IDS.has(t.id))
+    .map(t=>`<option value="${t.id}"${t.id===rt.id?' selected':''}>${escHtml(t.name)}</option>`).join('');
+  return `<select class="r-type-override" title="Show this room under a different category for THIS retreat only — its real type elsewhere is unaffected" onclick="event.stopPropagation()" onchange="regSetRoomTypeOverride('${room}',this.value)" style="display:block;margin-top:4px;font-size:9px;padding:1px 2px;border:1px solid var(--border);border-radius:3px;background:#fff;max-width:96px">${opts}</select>`;
+}
+function regSetRoomTypeOverride(room,newRtId){
+  if(!regSelBk)return;
+  if(!regSelBk.packageCustomPrices)regSelBk.packageCustomPrices={};
+  if(!regSelBk.packageCustomPrices.__cfg__)regSelBk.packageCustomPrices.__cfg__={};
+  const overrides={...(regSelBk.packageCustomPrices.__cfg__.roomTypeOverrides||{})};
+  const trueRt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
+  if(trueRt&&trueRt.id===newRtId)delete overrides[room]; // back to its real type — no override needed
+  else overrides[room]=newRtId;
+  regSelBk.packageCustomPrices.__cfg__.roomTypeOverrides=overrides;
+  saveAll();regRender();
+  showToast('Reclassified for this retreat only.');
+}
+
 function regRender(){
   if(!regSelBk){
     document.getElementById('regStatsBar').style.display='none';
@@ -383,14 +410,25 @@ function regRender(){
 
   // Pre-compute global sequential indices across all room types
   const _allRtData=[];let _gSeqCtr=0;
+  // Apply this booking's per-retreat room-type reassignments (see regSetRoomTypeOverride)
+  // before grouping: a room overridden OUT of its real type is dropped from that type's
+  // section here, and added to its overridden type's section instead — so it shows
+  // (and prices) as that type for this retreat only, without touching AppData.roomTypes.
+  const _rtOverrides=regSelBk?.packageCustomPrices?.__cfg__?.roomTypeOverrides||{};
   AppData.roomTypes.forEach(rt=>{
     if(VIRTUAL_GROUP_RT_IDS.has(rt.id))return; // skip virtual parents (rt8/rt9) — beds shown via bd3/bd4
-    const ents=buildUiRoomEntries(rt).filter(e=>{
+    let effRt=rt;
+    if(Object.keys(_rtOverrides).length&&!BED_RT_IDS.has(rt.id)){
+      const _dropped=(rt.rooms||[]).filter(r=>_rtOverrides[r]&&_rtOverrides[r]!==rt.id);
+      const _added=Object.keys(_rtOverrides).filter(r=>_rtOverrides[r]===rt.id&&!(rt.rooms||[]).includes(r));
+      if(_dropped.length||_added.length)effRt={...rt,rooms:[...(rt.rooms||[]).filter(r=>!_dropped.includes(r)),..._added]};
+    }
+    const ents=buildUiRoomEntries(effRt).filter(e=>{
       if(!e.physical.some(p=>blockedSet.has(p)))return false;
       return true;
     });
     if(!ents.length)return;
-    _allRtData.push({rt,withSeq:ents.map(e=>({entry:e,gSeq:++_gSeqCtr}))});
+    _allRtData.push({rt:effRt,withSeq:ents.map(e=>({entry:e,gSeq:++_gSeqCtr}))});
   });
 
   _allRtData.forEach(({rt,withSeq})=>{
@@ -551,9 +589,10 @@ function regRender(){
         tr.addEventListener('drop',e=>{e.preventDefault();tr.classList.remove('drag-over');regMoveGuest(e.dataTransfer.getData('text/plain'),room,rt.id);});
         const sub=entry.merged?` <span style="font-size:10px;color:#8a7e74">(${entry.physical.join(' · ')})</span>`:'';
         const numLblV=_hideRoomNums?`Room`:`${room}`;
+        const _vTypeCtrl=entry.merged?'':_regTypeOverrideControl(room,rt);
         const _vNoteHtml=vReg?.notes?`<div style="font-size:9px;color:#b45309;font-style:italic;line-height:1.3">${(vReg.notes).replace(/</g,'&lt;')}</div>`:'';
         const _vBd2=calcBD(rt,1,nights,regSelBk.startDate,regSelBk);
-        tr.innerHTML=`<td class="r-num">${numLblV}</td><td class="r-add"><button class="add-btn" onclick="gOpenAdd('${room}','${rt.id}')" title="Add guest">+</button></td><td colspan="4" class="r-vacant">Vacant — click + to add guest${sub}</td><td class="r-price" style="text-align:right;color:#aaa;font-size:12px">${fmt$(_vBd2.total)}<span style="font-size:10px;margin-left:2px">/solo</span></td><td class="r-notes">${_vNoteHtml}</td><td class="r-action"></td>`;
+        tr.innerHTML=`<td class="r-num">${numLblV}${_vTypeCtrl}</td><td class="r-add"><button class="add-btn" onclick="gOpenAdd('${room}','${rt.id}')" title="Add guest">+</button></td><td colspan="4" class="r-vacant">Vacant — click + to add guest${sub}</td><td class="r-price" style="text-align:right;color:#aaa;font-size:12px">${fmt$(_vBd2.total)}<span style="font-size:10px;margin-left:2px">/solo</span></td><td class="r-notes">${_vNoteHtml}</td><td class="r-action"></td>`;
         tbody.appendChild(tr);
         return;
       }
@@ -581,6 +620,7 @@ function regRender(){
           numTd.className='r-num';numTd.rowSpan=guests.length;
           if(_hideRoomNums){numTd.innerHTML=`Room`;}
           else{numTd.innerHTML=`${room}`;}
+          if(!entry.merged)numTd.innerHTML+=_regTypeOverrideControl(room,rt);
           tr.appendChild(numTd);
           const addTd=document.createElement('td');
           addTd.className='r-add';addTd.rowSpan=guests.length;
