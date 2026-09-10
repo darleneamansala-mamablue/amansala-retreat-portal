@@ -1330,7 +1330,11 @@ function buildDashboard(){
   </div>`;
   let alerts=dbAccordionSection('overdueBalances','🔴','Overdue Balances','#7f1d1d','#fef2f2','#f87171',
     `${overdueBalances.length} retreat${overdueBalances.length!==1?'s':''} · ${fmt$(overdueBalancesTotal)}`,
-    overdueBalances.length?overdueBalances.map(x=>dbItemRow(x.bk,`<span style="font-weight:700;color:#7f1d1d">${fmt$(x.balance)}</span><span style="font-size:10.5px;font-weight:700;background:#fecaca;color:#7f1d1d;border-radius:5px;padding:1px 7px">${x.daysOverdue}d overdue</span>`,`openPaymentModal('${x.bk.id}')`)).join(''):'<div style="padding:12px 16px;color:var(--muted);font-size:12.5px;font-style:italic">Nothing overdue.</div>',
+    overdueBalances.length?overdueBalances.map(x=>{
+      const sentAt=x.bk.packageCustomPrices?.__cfg__?.finalBalanceSentAt;
+      const sentBadge=sentAt?`<span title="Final balance email sent ${fmtDate(sentAt)}" style="font-size:10.5px;font-weight:700;background:#dbeafe;color:#1d4ed8;border-radius:5px;padding:1px 7px">✉ Final Balance Sent</span>`:'';
+      return dbItemRow(x.bk,`${sentBadge}<span style="font-weight:700;color:#7f1d1d">${fmt$(x.balance)}</span><span style="font-size:10.5px;font-weight:700;background:#fecaca;color:#7f1d1d;border-radius:5px;padding:1px 7px">${x.daysOverdue}d overdue</span>`,`openPaymentModal('${x.bk.id}')`);
+    }).join(''):'<div style="padding:12px 16px;color:var(--muted);font-size:12.5px;font-style:italic">Nothing overdue.</div>',
     true)
   +dbAccordionSection('depositPending','💰','Deposit Pending','#991b1b','#fff5f5','#fca5a5',
     `${depositPending.length} retreat${depositPending.length!==1?'s':''} · ${fmt$(depositPendingTotal)}`,

@@ -4040,6 +4040,7 @@ function regBuildActionsMenu(bk){
     _regActionMenuItem('📝 Send Contract',"openContractModal(regSelBk.id)")+
     _regActionMenuItem('📧 Send to Teacher',"openTeacherEmailModal()")+
     _regActionMenuItem('💳 Send Deposit Info',"sendDepositEmail()")+
+    _regActionMenuItem('🧾 Send Final Balance',"sendFinalBalanceEmail()")+
     _regActionMenuItem(bk.roomListSentViaPortal?'📋 Resend Room List to Portal':'📋 Send Room List to Portal',"sendRoomListToPortal()")+
     _regActionMenuItem('☁️ Sync Names → CB',"cbSyncNamesForBooking(regSelBk&&regSelBk.id)")+
     `<div style="height:1px;background:#f1f5f9;margin:4px 0"></div>`+
