@@ -1161,10 +1161,17 @@ async function replaceReservation(tok, body) {
     try {
       const CB_V1 = "https://hotels.cloudbeds.com/api/v1.1";
 
-      // Fetch reservation to get primary guest's CB email and current guestId
+      // Fetch reservation to get primary guest's CB email and current guestId.
+      // A "success":false ("Invalid Reservation") response here means the stored
+      // reservationId is stale — Cloudbeds no longer recognizes it (e.g. it was
+      // cancelled by some earlier duplicate-cleanup and cbReservationIds was never
+      // refreshed) — not something a rename can fix; needs relinking to the real
+      // current reservation for that room instead.
       const resData = await cbGet(tok, "/getReservation", { reservationID: reservationId })
         .catch(e => { console.warn("[CB getReservation failed]", reservationId, e.message); return null; });
-      console.log("[CB getReservation raw]", reservationId, JSON.stringify(resData).slice(0, 600));
+      if (resData && resData.success === false) {
+        console.warn("[CB replaceRes] stale reservationId — Cloudbeds says:", resData.message, reservationId);
+      }
       const guestList = resData?.data?.guestList;
       let resolvedGuestId = guestId;
       let resolvedEmail   = null; // CB-stored email (auto-generated @groups.amansala.com)
@@ -1183,13 +1190,8 @@ async function replaceReservation(tok, body) {
           resolvedEmail = g.guestEmail || g.email || null;
         }
       }
-      // guestList didn't yield a guestId (e.g. a single-guest reservation shaped
-      // differently than the multi-guest case above) — dump what getReservation
-      // actually returned so this can be fixed for real instead of guessed at again.
       if (!resolvedGuestId) {
-        console.warn("[CB replaceRes] no guestId resolved — raw guestList:", JSON.stringify(guestList ?? null).slice(0, 500),
-          "| data keys:", resData?.data ? Object.keys(resData.data).join(",") : "(no data)",
-          "| raw data:", JSON.stringify(resData?.data ?? null).slice(0, 800));
+        console.warn("[CB replaceRes] no guestId resolved for", reservationId, "— guestList:", JSON.stringify(guestList ?? null).slice(0, 200));
       }
 
       // Real guest email from portal (may differ from CB auto-generated email)
@@ -1374,7 +1376,10 @@ async function replaceReservation(tok, body) {
         } catch(e) { console.warn("[CB updateDates error]", e.message); }
       }
 
-      return { reservationId, guestId: resolvedGuestId || guestId, roomName, updated: nameUpdated, adultsCount: adultCount };
+      return {
+        reservationId, guestId: resolvedGuestId || guestId, roomName, updated: nameUpdated, adultsCount: adultCount,
+        error: (resData && resData.success === false) ? `Stale reservationId — Cloudbeds: ${resData.message}` : undefined,
+      };
     } catch (e) {
       console.warn("[CB replaceReservation error]", e.message);
       return { reservationId, guestId, roomName, updated: false, error: e.message };
