@@ -256,13 +256,20 @@ function regRender(){
     const _bTipRate=reg.customTipRateOverride!=null?Number(reg.customTipRateOverride):_tipPer;
     const _isBd1ExtraB=rt.id==='bd1'&&reg.customRateOverride==null&&(gc>=2||_getSharedBeds(room).some(s=>_blockedSetEarly.has(s)&&(_regByRoom[s]?.guests||[]).filter(g=>g.name).length>=2));
     const rate=reg.customRateOverride!=null?reg.customRateOverride:(_isBd1ExtraB?(isLowSeason(_bECI,_bNights)?BD1_EXTRA_RATE_LOW:BD1_EXTRA_RATE_HIGH):getRoomRate(rt,gc,_bECI,_bNights));
-    const base=rate*gc*_bNights;
+    // Per-guest checkIn/checkOut overrides (extra nights, partial stays) must be summed
+    // per guest, not assumed uniform across the room — same sumGuestRoomCost/
+    // sumGuestTipNights calcBkBalance()/_calcRoomRevenue() and renderEstQuote() (Est.
+    // Quote panel) already use. This bar used to do a flat rate*gc*nights here instead,
+    // which quietly drifted from both of those whenever a guest had their own override —
+    // BAL DUE and Est. Balance Due must always agree.
+    const base=+sumGuestRoomCost(reg,regSelBk,rate,_bNights,gc).toFixed(2);
+    const _bTipNightsSum=sumGuestTipNights(reg,regSelBk,_bTipNights,gc);
     const pkgCost=reg.customPkgPrice!=null?reg.customPkgPrice:(_billAddOns.length?calcPkgCost(regSelBk,gc):0);
     // calcCustomAoCost already returns a tax-inclusive $ total (each item taxed at its
     // own rate, which can differ from _pkgTxR) — add it directly, don't run it through
     // _pkgTxR again.
     const cao=calcCustomAoCost(regSelBk,gc,reg);
-    const total=+(base+pkgCost+base*_rmTxR+pkgCost*_pkgTxR+_bTipRate*gc*_bTipNights+cao).toFixed(2);
+    const total=+(base+pkgCost+base*_rmTxR+pkgCost*_pkgTxR+_bTipRate*_bTipNightsSum+cao).toFixed(2);
     grandTotal+=total;
     // Pure display sub-total (packages + their tax + custom add-ons) — not a separate
     // calculation, just breaking out what's already folded into `total` above so the
