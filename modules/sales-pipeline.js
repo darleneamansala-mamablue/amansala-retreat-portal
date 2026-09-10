@@ -113,7 +113,11 @@ function pipeGateBlocksForward(bk,curStage,newStage){
 }
 function pipeCloseLostEligible(bk){return pipeGetStage(bk)==='booked'||pipeGetStage(bk)==='on_hold'||pipeGetStage(bk)==='closed_lost';}
 
-function pipeLeads(){return(AppData.bookings||[]).slice();}
+// Extra Night/Escape and We Travel bookings never go through a sales process
+// (a real payment already happened before the booking even exists in the
+// portal) — same exclusion as the Dashboard's arrivals widget.
+const PIPE_NON_LEAD_NAMES=new Set(['Extra Night','Escape']);
+function pipeLeads(){return(AppData.bookings||[]).filter(b=>!PIPE_NON_LEAD_NAMES.has(b.retreatName)&&b.source!=='wetravel');}
 function pipeFmtDate(ds){if(!ds)return'';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
 function pipeFmtDateShort(ds){if(!ds)return'';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});}
 

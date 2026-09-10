@@ -1060,8 +1060,10 @@ function buildDashboard(){
   // the venue calendar, but neither is a teacher retreat moving through the
   // sales pipeline — exclude them so they don't clutter the pipeline stages
   // and arrivals widget as if they were retreat "events".
+  // We Travel bookings are also excluded here — the payment already happened on
+  // WeTravel's side, so there's no sales pipeline to move through either.
   const NON_RETREAT_NAMES=new Set(['Extra Night','Escape']);
-  const active=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate>=todayStr&&!NON_RETREAT_NAMES.has(b.retreatName));
+  const active=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate>=todayStr&&!NON_RETREAT_NAMES.has(b.retreatName)&&b.source!=='wetravel');
 
   // Payment alerts — the Sales Pipeline (CRM) now owns early-lead tracking
   // (soft holds, contract follow-up, deposit reminders), so the Dashboard only
