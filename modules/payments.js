@@ -595,6 +595,10 @@ function deletePayment(bkId,payId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   if(!confirm('Remove this payment record?'))return;
   bk.payments=(bk.payments||[]).filter(p=>p.id!==payId);
+  // payments lives in its own SQL table — saveAll()'s upsert alone can't remove a row,
+  // it only adds/updates. Without this tombstone the deleted payment survives in
+  // Supabase and comes back on the next full reload/background sync.
+  deletedPaymentIds.add(payId);
   saveAll();renderPayBalance(bk);renderPayHistory(bk);buildDashboard();
   logActivity('Payment removed',`From ${bk.leaderName||bk.retreatName}`,bk.id);
   showToast('Payment removed.');

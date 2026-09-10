@@ -4335,8 +4335,11 @@ async function syncToSupabase(){
       }
 
       // payments is a separate table (booking_id FK) — flatten every booking's embedded
-      // payments array back out into rows. Payments are only ever added, never removed
-      // through the UI, so a plain upsert (no delete pass) is safe here.
+      // payments array back out into rows. deletePayment() (modules/payments.js) DOES
+      // let staff remove a payment through the UI — a plain upsert alone can't express
+      // that (it only adds/updates rows), so a payment removed locally would silently
+      // survive in Supabase and reappear on the next full reload. deletedPaymentIds
+      // mirrors deletedBookingIds/deletedRegIds below to actually delete those rows.
       const payRows=[];
       AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
       // These calls are all independent (different tables / disjoint id sets), so run them
@@ -4348,6 +4351,7 @@ async function syncToSupabase(){
         regRows.length?db.from('registrations').upsert(regRows):null,
         deletedRegIds.size?db.from('registrations').delete().in('id',[...deletedRegIds]):null,
         payRows.length?db.from('payments').upsert(payRows):null,
+        deletedPaymentIds.size?db.from('payments').delete().in('id',[...deletedPaymentIds]):null,
       ]);
     }catch(e){
       console.warn('SQL bookings/registrations sync failed:',e);
@@ -4362,6 +4366,7 @@ async function syncToSupabase(){
       await db.from('app_store').upsert([
         {key:'deletedBookingIds', value:[...deletedBookingIds],  updated_at:new Date().toISOString()},
         {key:'deletedRegIds',     value:[...deletedRegIds],      updated_at:new Date().toISOString()},
+        {key:'deletedPaymentIds', value:[...deletedPaymentIds],  updated_at:new Date().toISOString()},
         {key:'venRows',           value:AppData.venRows,                 updated_at:new Date().toISOString()},
         {key:'programBlocks',     value:AppData.programBlocks,           updated_at:new Date().toISOString()},
         {key:'specialEvents',     value:AppData.specialEvents,           updated_at:new Date().toISOString()},
@@ -4451,6 +4456,10 @@ async function loadFromSupabase(){
     if(Array.isArray(store.deletedRegIds)){
       store.deletedRegIds.forEach(id=>deletedRegIds.add(id));
     }
+    if(Array.isArray(store.deletedPaymentIds)){
+      store.deletedPaymentIds.forEach(id=>deletedPaymentIds.add(id));
+      localStorage.setItem('amansala_deleted_payment_ids',JSON.stringify([...deletedPaymentIds]));
+    }
     // Bookings + registrations: read straight from the normalized SQL tables — this is
     // the same live data retreat-portal.html already reads, and it's kept current by
     // active daily use, unlike the legacy app_store blob below. SQL wins outright.
@@ -4458,7 +4467,7 @@ async function loadFromSupabase(){
       const [sqlBookings,sqlRegs,sqlPayments]=await Promise.all([_fetchAllRows('bookings'),_fetchAllRows('registrations'),_fetchAllRows('payments')]);
       AppData.bookings=sqlBookings.map(sqlBookingToApp).filter(b=>!deletedBookingIds.has(b.id));
       const _paysByBk=new Map();
-      sqlPayments.map(sqlPaymentToApp).forEach(p=>{const arr=_paysByBk.get(p.bookingId)||[];arr.push(p);_paysByBk.set(p.bookingId,arr);});
+      sqlPayments.map(sqlPaymentToApp).filter(p=>!deletedPaymentIds.has(p.id)).forEach(p=>{const arr=_paysByBk.get(p.bookingId)||[];arr.push(p);_paysByBk.set(p.bookingId,arr);});
       AppData.bookings.forEach(bk=>{bk.payments=_paysByBk.get(bk.id)||[];});
       AppData.regs=sqlRegs.map(sqlRegToApp).filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId));
       if(typeof regSelBk!=='undefined'&&regSelBk){
@@ -4776,6 +4785,7 @@ const TEACHER_DISCOUNT_TIERS=[
 const AppData = { bookings:[], venRows:[], roomTypes:[], regs:[], teacherMessages:[], programBlocks:[], specialEvents:[] };
 let deletedBookingIds=new Set();
 let deletedRegIds=new Set();
+let deletedPaymentIds=new Set();
 // Activity Notifications data cache — populated by loadFromSupabase(), read
 // synchronously by computeActivityNotifs() (retreat-builder.js). notifDismissed/
 // notifSeenAt live in the shared `settings` table (same one staging's
@@ -4801,6 +4811,7 @@ function loadAll(){
   // Load deleted IDs first so bookings can be filtered immediately — before Supabase loads
   deletedBookingIds=new Set(JSON.parse(localStorage.getItem('amansala_deleted_booking_ids')||'[]'));
   deletedRegIds    =new Set(JSON.parse(localStorage.getItem('amansala_deleted_reg_ids')||'[]'));
+  deletedPaymentIds=new Set(JSON.parse(localStorage.getItem('amansala_deleted_payment_ids')||'[]'));
   AppData.bookings =JSON.parse(localStorage.getItem('amansala_venue_bookings')||'[]').filter(b=>!deletedBookingIds.has(b.id));
   const vrVer=localStorage.getItem('amansala_ven_rows_version');
   AppData.venRows=(vrVer===VEN_ROWS_VERSION)
