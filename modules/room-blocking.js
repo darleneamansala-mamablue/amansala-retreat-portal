@@ -407,6 +407,17 @@ async function blockSave(){
       return physical.length?physical:[item?.dataset.room].filter(Boolean);
     });
 
+  // A room that was ALREADY part of this retreat's own block (before this modal opened)
+  // never needs to be "claimed" — it's already this retreat's room. Real incident: a
+  // Cloudbeds reservation for one of Carter Foxworth's own guests had never been linked
+  // back to the portal (cbReservationIds missing that room), so the external-conflict
+  // check below saw it as "someone else's" reservation, silently dropped it from
+  // `selected`, and — because the removal logic further down treats anything dropped
+  // from `selected` as the user having unchecked it on purpose — deleted that guest's
+  // real registration. Excluding this retreat's own already-blocked rooms up front stops
+  // both the false "already blocked" alert and the data loss it was causing.
+  const prevRoomsSet=new Set(_blockModalOrigRooms.length?_blockModalOrigRooms:(bk.blockedRooms||[]));
+
   // Validation: a room already blocked by an overlapping retreat or external Cloudbeds
   // reservation is dropped from THIS save rather than aborting the whole thing — an
   // all-or-nothing reject here used to silently lose every other room the user picked
@@ -418,6 +429,7 @@ async function blockSave(){
     if(other.id===bk.id)return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(room=>{
+      if(prevRoomsSet.has(room))return;
       if(selected.includes(room)){conflicts.push(`Room ${room} → ${other.leaderName||other.retreatName}`);conflictingRooms.add(room);}
     });
   });
@@ -427,6 +439,7 @@ async function blockSave(){
     if(_bsPortalIds.has(String(r.reservationID)))return;
     if(!datesOverlap(bk.startDate,bk.endDate,r.startDate,r.endDate))return;
     (r.rooms||[]).forEach(room=>{
+      if(prevRoomsSet.has(room))return;
       const match=selected.find(s=>s.toLowerCase()===room.toLowerCase());
       if(match){conflicts.push(`Room ${room} → ${r.guestName} (${r.sourceName||'Cloudbeds'})`);conflictingRooms.add(match);}
     });
@@ -452,7 +465,14 @@ async function blockSave(){
     }
     // Delete the reg for this room so old guest names don't reappear if room is re-added
     const removedReg=AppData.regs.find(reg=>reg.bookingId===bk.id&&reg.room===r);
-    if(removedReg){deletedRegIds.add(removedReg.id);AppData.regs=AppData.regs.filter(reg=>reg.id!==removedReg.id);}
+    if(removedReg){
+      // Individually logged (not just the summary room_block line below) so a room
+      // being unblocked and quietly taking a guest's registration with it is always
+      // visible in the Activity Log — this incident had no trace at all beforehand.
+      const removedNames=(removedReg.guests||[]).map(g=>g.name).filter(Boolean).join(', ')||'(no name)';
+      logActivity('guest_delete',`Room ${r} unblocked → removed ${removedNames}`,bk.id);
+      deletedRegIds.add(removedReg.id);AppData.regs=AppData.regs.filter(reg=>reg.id!==removedReg.id);
+    }
   });
 
   bk.blockedRooms=selected;
