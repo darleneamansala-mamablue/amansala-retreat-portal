@@ -506,7 +506,8 @@ async function cbSyncNamesForBooking(bkId){
   if(!bk){showToast('Retiro no encontrado.');return;}
   const cbIds=bk.cbReservationIds||{};
   if(!Object.keys(cbIds).length){showToast('Este retiro no tiene reservaciones en Cloudbeds.');return;}
-  let synced=0,skipped=0;
+  let synced=0,skipped=0,failed=0;
+  const failedRooms=[];
   showToast('Sincronizando nombres con Cloudbeds…');
   for(const roomName of Object.keys(cbIds)){
     const existingId=cbIds[roomName];if(!existingId)continue;
@@ -529,12 +530,26 @@ async function cbSyncNamesForBooking(bkId){
         bk.cbReservationIds[roomName]=d.reservationId;
         if(d.guestId){if(!bk.cbGuestIds)bk.cbGuestIds={};bk.cbGuestIds[roomName]=d.guestId;}
         console.log('[CB sync names] reservation replaced for',roomName,existingId,'→',d.reservationId);
+        synced++;
+      }else if(d.updated){
+        synced++;
+      }else{
+        // replaceReservation() ran but reports the name change was actually rejected by
+        // Cloudbeds (d.updated===false) — this used to be counted as a success anyway,
+        // since only "did we get a new reservationId back" was checked. Real incident:
+        // Marcia's retreat showed "names synced" with no error, but Cloudbeds never
+        // updated. Now only a genuine success (replaced OR updated===true) counts.
+        failed++;failedRooms.push(`${roomName} (${guestNames.join(' & ')})${d.error?': '+d.error:''}`);
+        console.warn('[CB sync names] update rejected for',roomName,d);
       }
-      synced++;
-    }catch(e){console.warn('[CB sync names]',roomName,e);}
+    }catch(e){failed++;failedRooms.push(`${roomName}: ${e.message}`);console.warn('[CB sync names]',roomName,e);}
   }
   saveAll();
-  showToast(`Nombres sincronizados: ${synced} cuarto${synced!==1?'s':''}${skipped?' ('+skipped+' sin huésped)':''}.`);
+  if(failed){
+    showToast(`⚠ ${synced} cuarto${synced!==1?'s':''} sincronizado${synced!==1?'s':''}, ${failed} falló${failed!==1?'aron':''} — revisa: ${failedRooms.slice(0,3).join('; ')}${failedRooms.length>3?'…':''}`);
+  }else{
+    showToast(`Nombres sincronizados: ${synced} cuarto${synced!==1?'s':''}${skipped?' ('+skipped+' sin huésped)':''}.`);
+  }
 }
 
 // Reverse direction of cbSyncNamesForBooking — pulls guest names FROM Cloudbeds
