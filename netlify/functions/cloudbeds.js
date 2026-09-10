@@ -1185,8 +1185,9 @@ async function replaceReservation(tok, body) {
       // differently than the multi-guest case above) — dump what getReservation
       // actually returned so this can be fixed for real instead of guessed at again.
       if (!resolvedGuestId) {
-        console.warn("[CB replaceRes] no guestId resolved — raw guestList:", JSON.stringify(guestList).slice(0, 500),
-          "| data keys:", resData?.data ? Object.keys(resData.data).join(",") : "(no data)");
+        console.warn("[CB replaceRes] no guestId resolved — raw guestList:", JSON.stringify(guestList ?? null).slice(0, 500),
+          "| data keys:", resData?.data ? Object.keys(resData.data).join(",") : "(no data)",
+          "| raw data:", JSON.stringify(resData?.data ?? null).slice(0, 800));
       }
 
       // Real guest email from portal (may differ from CB auto-generated email)
