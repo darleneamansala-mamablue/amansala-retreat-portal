@@ -1174,6 +1174,19 @@ async function replaceReservation(tok, body) {
           if (g.guestID || firstKey) resolvedGuestId = g.guestID || firstKey;
           resolvedEmail = g.guestEmail || null;
         }
+      } else if (Array.isArray(guestList) && guestList.length) {
+        const g = guestList[0];
+        if (g) {
+          resolvedGuestId = g.guestID || g.id || resolvedGuestId;
+          resolvedEmail = g.guestEmail || g.email || null;
+        }
+      }
+      // guestList didn't yield a guestId (e.g. a single-guest reservation shaped
+      // differently than the multi-guest case above) — dump what getReservation
+      // actually returned so this can be fixed for real instead of guessed at again.
+      if (!resolvedGuestId) {
+        console.warn("[CB replaceRes] no guestId resolved — raw guestList:", JSON.stringify(guestList).slice(0, 500),
+          "| data keys:", resData?.data ? Object.keys(resData.data).join(",") : "(no data)");
       }
 
       // Real guest email from portal (may differ from CB auto-generated email)
