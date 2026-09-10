@@ -1149,7 +1149,7 @@ async function cancelReservation(tok, reservationId) {
 async function replaceReservation(tok, body) {
   const { reservationId, guestId, roomName, startDate, endDate,
           guestFirstName, guestEmail, guestPhone, groupName, leaderName, adults, dailyRate,
-          noAdultsReduction } = body;
+          noAdultsReduction, skipRecreateFallback } = body;
 
   const retreatName = (groupName || leaderName || "Amansala").trim();
   // Keep combined name as-is ("Name1 & Name2") — do NOT split
@@ -1220,9 +1220,16 @@ async function replaceReservation(tok, body) {
         }
       }
 
-      // putGuest fallback: cancel+recreate guarantees correct name since createReservation always sets guestFullName
-      // Use passed-in startDate (always present) so fallback works even when getReservation returned null
-      if (!nameUpdated && (startDate || resData?.data?.startDate)) {
+      // putGuest fallback: cancel+recreate guarantees correct name since createReservation always sets guestFullName.
+      // Use passed-in startDate (always present) so fallback works even when getReservation returned null.
+      // skipRecreateFallback opts out of this entirely — cancelling a reservation Cloudbeds
+      // won't let us simply rename is risky when the room turns out to already have a
+      // second, unlinked reservation (a real incident: recreate failed because the room
+      // was "already occupied" by that other reservation, leaving the guest's slot with
+      // no active Cloudbeds hold until it was manually relinked). Callers that only want a
+      // best-effort rename — never a cancel — should set this and treat updated:false as
+      // "needs manual review" instead.
+      if (!skipRecreateFallback && !nameUpdated && (startDate || resData?.data?.startDate)) {
         console.warn("[CB namefix] putGuest failed — falling back to cancel+recreate for", firstName);
         const allotmentCode = resData?.data?.allotmentBlockCode || null;
         await cancelReservation(tok, reservationId).catch(e => console.warn("[CB namefix cancel]", e.message));

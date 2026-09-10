@@ -515,16 +515,18 @@ async function cbSyncNamesForBooking(bkId){
     const guestNames=(reg?.guests||[]).filter(g=>g.name).map(g=>g.name.trim());
     if(!guestNames.length){skipped++;continue;}
     try{
-      // updateReservationGuest can fall back server-side to cancel+recreate when a
-      // direct name update is rejected by Cloudbeds (replaceReservation's putGuest
-      // fallback) — that returns a BRAND NEW reservationId. Discarding the response
-      // (as this used to) leaves cbReservationIds pointing at the now-cancelled old
-      // one; the next sync/push can no longer find it, treats the room as unsynced,
-      // and creates yet another reservation — a real duplication bug reported live.
+      // skipRecreateFallback: a plain rename only — never cancel+recreate the reservation
+      // here. Real incident: a room's linked reservation turned out to be a stale
+      // duplicate, Cloudbeds rejected the rename, the server-side cancel+recreate fallback
+      // cancelled the stale one but couldn't recreate it (the room already had a second,
+      // unlinked reservation), and the guest briefly had no active Cloudbeds hold until
+      // manually relinked. Safer for a bulk "sync names" pass to just report the room as
+      // failed (d.updated===false, handled below) and leave the actual reservation alone —
+      // a genuine rename can still be retried by hand once whatever's blocking it is fixed.
       const r=await fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({reservationId:existingId,roomName,startDate:bk.startDate,endDate:bk.endDate,
           guestFirstName:guestNames.join(' & '),groupName:bk.retreatName||bk.row||'',
-          leaderName:bk.leaderName||'',adults:guestNames.length,dailyRate:0})});
+          leaderName:bk.leaderName||'',adults:guestNames.length,dailyRate:0,skipRecreateFallback:true})});
       const d=await r.json();
       if(d.reservationId&&d.reservationId!==existingId){
         bk.cbReservationIds[roomName]=d.reservationId;
