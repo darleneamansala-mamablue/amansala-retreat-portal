@@ -1162,7 +1162,8 @@ async function replaceReservation(tok, body) {
       const CB_V1 = "https://hotels.cloudbeds.com/api/v1.1";
 
       // Fetch reservation to get primary guest's CB email and current guestId
-      const resData = await cbGet(tok, "/getReservation", { reservationID: reservationId }).catch(() => null);
+      const resData = await cbGet(tok, "/getReservation", { reservationID: reservationId })
+        .catch(e => { console.warn("[CB getReservation failed]", reservationId, e.message); return null; });
       const guestList = resData?.data?.guestList;
       let resolvedGuestId = guestId;
       let resolvedEmail   = null; // CB-stored email (auto-generated @groups.amansala.com)
