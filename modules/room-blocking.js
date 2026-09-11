@@ -135,12 +135,15 @@ function _renderBlockRoomsGrid(bkId){
   const _domChecked=_existingGrid?Array.from(_existingGrid.querySelectorAll('input[type=checkbox]:checked')).map(cb=>JSON.parse(cb.closest('.block-room-item')?.dataset.physical||'[]')).flat():null;
 
   // rooms blocked by other overlapping retreats
+  // Each conflict entry carries the other booking's id (when it's an internal retreat,
+  // not an external Cloudbeds reservation) so the grid can flag "N rooms booked, still
+  // no guest names" per retreat, not just an anonymous BOOKED badge.
   const conflictMap=new Map();
   AppData.bookings.forEach(other=>{
     if(other.id===bkId)return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(room=>{
-      if(!conflictMap.has(room))conflictMap.set(room,other.leaderName||other.retreatName);
+      if(!conflictMap.has(room))conflictMap.set(room,{name:other.leaderName||other.retreatName,bookingId:other.id});
     });
   });
   // Also add external Cloudbeds reservations (walk-ins, OTAs, etc.)
@@ -150,7 +153,7 @@ function _renderBlockRoomsGrid(bkId){
     if(_portalIds.has(String(r.reservationID)))return;
     if(!datesOverlap(bk.startDate,bk.endDate,r.startDate,r.endDate))return;
     (r.rooms||[]).forEach(room=>{
-      if(!conflictMap.has(room))conflictMap.set(room,`${r.guestName} (${r.sourceName||'Cloudbeds'})`);
+      if(!conflictMap.has(room))conflictMap.set(room,{name:`${r.guestName} (${r.sourceName||'Cloudbeds'})`,bookingId:null});
       if(!conflictMap.has(room.toLowerCase()))conflictMap.set(room.toLowerCase(),conflictMap.get(room));
     });
   });
@@ -209,13 +212,31 @@ function _renderBlockRoomsGrid(bkId){
       ph.textContent=prop;
       body.appendChild(ph);
     }
+    // Per-conflicting-retreat rollup for THIS room type: how many of its rooms here
+    // still have zero named guests — surfaces "Hannah French has 7 Beachfront King
+    // rooms booked and nobody's registered yet" instead of an anonymous BOOKED badge.
+    const otherBkStats=new Map(); // bookingId -> {name, rooms:Set, hasGuest}
+    rt.rooms.forEach(physRoom=>{
+      const c=conflictMap.get(physRoom);
+      if(!c||!c.bookingId)return;
+      let s=otherBkStats.get(c.bookingId);
+      if(!s){s={name:c.name,rooms:new Set(),hasGuest:false};otherBkStats.set(c.bookingId,s);}
+      s.rooms.add(physRoom);
+      const reg=getRegForRoom(c.bookingId,physRoom);
+      if((reg?.guests||[]).some(g=>g.name))s.hasGuest=true;
+    });
+    const noGuestAlerts=[...otherBkStats.values()].filter(s=>!s.hasGuest);
+    const alertHtml=noGuestAlerts.length?`<div class="block-rt-alert">${noGuestAlerts.map(s=>
+      `⚠ <b>${s.name}</b> has ${s.rooms.size} ${rt.name} room${s.rooms.size>1?'s':''} booked and no guest names logged in yet`
+    ).join('<br>')}</div>`:'';
+
     const sec=document.createElement('div');sec.className='block-rt-section';
     sec.innerHTML=`<div class="block-rt-hdr">
       <div class="block-rt-dot" style="background:${rt.color}"></div>
       <span class="block-rt-name">${rt.name}</span>
       <span class="block-rt-count">(${(BED_RT_IDS.has(rt.id)?rt.rooms:buildUiRoomEntries(rt)).length} rooms)</span>
       <a class="block-sel-all" href="#" onclick="blockSelectAll('${rt.id}',event)">Select All</a>
-    </div><div class="block-rooms-grid" id="blk-grid-${rt.id}"></div>`;
+    </div>${alertHtml}<div class="block-rooms-grid" id="blk-grid-${rt.id}"></div>`;
     body.appendChild(sec);
 
     const grid=document.getElementById('blk-grid-'+rt.id);
@@ -243,7 +264,9 @@ function _renderBlockRoomsGrid(bkId){
     let lastGroup=null;
     uiEntries.forEach(entry=>{
       const room=entry.display;
-      const conflict=entry.physical.map(p=>conflictMap.get(p)).find(Boolean);
+      const conflictEntry=entry.physical.map(p=>conflictMap.get(p)).find(Boolean);
+      const conflict=conflictEntry?.name||'';
+      const conflictNoGuestYet=!!(conflictEntry?.bookingId&&otherBkStats.get(conflictEntry.bookingId)&&!otherBkStats.get(conflictEntry.bookingId).hasGuest);
       const isOther=entry.physical.some(p=>conflictMap.has(p));
       const isSuggested=entry.physical.some(p=>suggestedRooms.has(p));
       const isChecked=entry.physical.some(p=>myBlocked.has(p))||(noRoomsYet&&isSuggested);
@@ -285,7 +308,7 @@ function _renderBlockRoomsGrid(bkId){
       item.innerHTML=`<input type="checkbox"${isChecked?' checked':''}${isOther&&!isChecked?' disabled':''} onchange="blockToggle(this)">`
         +`<span class="br-lbl">${lbl}</span>`
         +(hasGuests?`<span style="display:inline-flex;align-items:center;gap:2px;font-size:9px;font-weight:800;color:#0e9494;letter-spacing:.2px;margin-left:2px" title="${guestNames.join(', ')}"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${guestNames.length}</span><span onclick="clearBlockRoomGuests('${room.replace(/\\/g,'\\\\').replace(/'/g,'\\\'')}')" title="Remove ghost guest registrations" style="cursor:pointer;color:#9ca3af;font-size:11px;font-weight:900;margin-left:1px;line-height:1;padding:0 1px" onmouseenter="this.style.color='#dc2626'" onmouseleave="this.style.color='#9ca3af'">×</span>`:'')
-        +(isOther?`<span style="font-size:9px;font-weight:800;color:#dc2626;letter-spacing:.3px;margin-left:2px" title="Booked by: ${conflict}">BOOKED</span>`:'')
+        +(isOther?`<span style="font-size:9px;font-weight:800;color:#dc2626;letter-spacing:.3px;margin-left:2px${conflictNoGuestYet?';background:#fee2e2;padding:1px 4px;border-radius:3px':''}" title="Booked by: ${conflict}">BOOKED · ${conflict}</span>`:'')
         +(isSuggested&&!isOther?`<span style="font-size:9px;font-weight:800;color:#b91c1c;letter-spacing:.3px;margin-left:2px">↔</span>`:'');
       grid.appendChild(item);
     });
