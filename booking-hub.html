@@ -839,6 +839,15 @@
 </head>
 <body>
 
+<!-- Shown when a background version-check detects this tab is running code from before
+     the latest deploy (see startVersionCheck() near the realtime sync setup) — tells the
+     person to refresh instead of them silently working on stale code with no way to know. -->
+<div id="staleVersionBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:#92400e;color:#fff;padding:9px 16px;text-align:center;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.2)">
+  ⚠ A newer version of this page is available — refresh when you have a moment to avoid working on out-of-date data.
+  <button onclick="location.reload()" style="margin-left:12px;background:#fff;color:#92400e;border:none;border-radius:6px;padding:4px 14px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer">Refresh Now</button>
+  <button onclick="document.getElementById('staleVersionBanner').style.display='none'" style="margin-left:6px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:4px 12px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer">Dismiss</button>
+</div>
+
 <!-- Netlify Forms detection (hidden) -->
 <form name="special-event-inquiry" data-netlify="true" hidden>
   <input name="event_type"><input name="name"><input name="email">
@@ -5870,6 +5879,37 @@ function _applyRemoteSync(silent){
   }catch(e){console.warn('Realtime sync unavailable:',e);}
   // Fallback: silent refresh every 5 minutes in case WebSocket connection drops
   setInterval(()=>_applyRemoteSync(true), 5*60*1000);
+})();
+
+// A tab left open across a deploy never re-fetches its own JS files on its own — no HTTP
+// cache header can fix that, since nothing tells an already-loaded tab to go check again.
+// Poll this page's own ETag/Last-Modified periodically; if it no longer matches what THIS
+// tab loaded, a newer version has shipped — show a dismissible banner (not a forced
+// reload, which risks discarding whatever the person is mid-editing) telling them to
+// refresh when convenient. teacher-mode sessions are exactly the ones most likely to sit
+// open for hours (their background data sync is intentionally skipped — see
+// _applyRemoteSync), so this runs for everyone, not just admin.
+(function startVersionCheck(){
+  if(location.protocol==='file:')return;
+  const _pageUrl=location.pathname+location.search;
+  let _baselineTag=null;
+  async function _fetchTag(){
+    try{
+      const res=await fetch(_pageUrl,{method:'HEAD',cache:'no-store'});
+      return res.headers.get('etag')||res.headers.get('last-modified');
+    }catch(e){return null;}
+  }
+  (async()=>{
+    _baselineTag=await _fetchTag();
+    setInterval(async()=>{
+      if(!_baselineTag)return;
+      const tag=await _fetchTag();
+      if(tag&&tag!==_baselineTag){
+        const banner=document.getElementById('staleVersionBanner');
+        if(banner)banner.style.display='block';
+      }
+    },3*60*1000);
+  })();
 })();
 
 try{if(typeof syncAddOnsFromSupabase==='function')syncAddOnsFromSupabase();}catch(e){console.warn('[addOns init]',e);}
