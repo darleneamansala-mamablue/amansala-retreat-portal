@@ -1901,13 +1901,20 @@ function tsSetOffsiteChoice(choice){
 }
 
 function tsRenderOffsiteChoice(){
-  ['onsite','gitano','undecided'].forEach(c=>{
+  // Pre-existing retreats may have offsiteChoice:'onsite' from before this had sub-options
+  // for how the onsite dinner gets paid — that old value meant exactly what onsiteRoom
+  // means now (the $40/person package add-on), so treat it as an alias rather than
+  // showing nothing selected for a schedule that was already submitted.
+  const _effChoice=_ts.offsiteChoice==='onsite'?'onsiteRoom':_ts.offsiteChoice;
+  const UNSEL_LBL={onsiteRoom:'Add to Package',onsiteEach:'Select',onsiteGroup:'Select',gitano:'Add Gitano',undecided:''};
+  const SEL_LBL={onsiteRoom:'✓ Added'};
+  ['onsiteRoom','onsiteEach','onsiteGroup','gitano','undecided'].forEach(c=>{
     const opt=document.getElementById('tsOffsiteOpt_'+c);
     const btn=document.getElementById('tsOffsiteBtn_'+c);
-    const sel=_ts.offsiteChoice===c;
+    const sel=_effChoice===c;
     if(opt)opt.classList.toggle('selected',sel);
     if(btn)btn.classList.toggle('selected',sel);
-    if(btn)btn.textContent=sel?(c==='onsite'?'✓ Added':'✓ Selected'):(c==='onsite'?'Add to Package':c==='gitano'?'Add Gitano':'');
+    if(btn)btn.textContent=sel?(SEL_LBL[c]||'✓ Selected'):(UNSEL_LBL[c]||'');
   });
 }
 
@@ -2389,7 +2396,7 @@ function tsSubmitSchedule(){
   // no valid offsite-dinner night to offer — don't require the impossible.
   if(getNights(bk)>1){
     if(!_ts.offsiteNight){tsFlagRequired('tsOffsiteNight','Please select which night your group will dine offsite — this is required.');return;}
-    if(!_ts.offsiteChoice){tsFlagRequired('tsOffsiteChoiceWrap','Please select your offsite dinner preference (Onsite, Gitano, or Undecided).');return;}
+    if(!_ts.offsiteChoice){tsFlagRequired('tsOffsiteChoiceWrap','Please select your offsite dinner preference (an Onsite option, Gitano, or Undecided).');return;}
   }
   // Fold the day-by-day overrides into bk.scheduleTimeOverrides — the same
   // array admin's own per-day edit modal reads/writes — replacing whatever

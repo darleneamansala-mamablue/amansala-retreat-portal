@@ -1729,14 +1729,34 @@
         <div id="tsOffsiteChoiceWrap">
           <div class="ts-section-lbl" style="margin-bottom:12px">Your Preference</div>
           <div style="display:flex;flex-direction:column;gap:10px">
-            <!-- Onsite -->
-            <div id="tsOffsiteOpt_onsite" class="ts-offsite-opt" onclick="tsSetOffsiteChoice('onsite')">
+            <!-- Onsite — charged to room (package add-on) -->
+            <div id="tsOffsiteOpt_onsiteRoom" class="ts-offsite-opt" onclick="tsSetOffsiteChoice('onsiteRoom')">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
                 <div>
-                  <div style="font-size:13.5px;font-weight:700;color:var(--dark)">Stay &amp; Dine Onsite</div>
-                  <div style="font-size:12.5px;color:var(--muted);margin-top:2px">Full dinner onsite — <b style="color:var(--dark)">$40 USD per person</b></div>
+                  <div style="font-size:13.5px;font-weight:700;color:var(--dark)">Stay &amp; Dine Onsite — Charge to My Room</div>
+                  <div style="font-size:12.5px;color:var(--muted);margin-top:2px">Full dinner onsite — <b style="color:var(--dark)">$40 USD per person</b>, added to the retreat's package</div>
                 </div>
-                <button class="ts-offsite-btn" id="tsOffsiteBtn_onsite">Add to Package</button>
+                <button class="ts-offsite-btn" id="tsOffsiteBtn_onsiteRoom">Add to Package</button>
+              </div>
+            </div>
+            <!-- Onsite — each guest pays individually -->
+            <div id="tsOffsiteOpt_onsiteEach" class="ts-offsite-opt" onclick="tsSetOffsiteChoice('onsiteEach')">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <div>
+                  <div style="font-size:13.5px;font-weight:700;color:var(--dark)">Stay &amp; Dine Onsite — Each Guest Pays</div>
+                  <div style="font-size:12.5px;color:var(--muted);margin-top:2px">We'll eat onsite; each person settles their own dinner directly, nothing added to the package</div>
+                </div>
+                <button class="ts-offsite-btn" id="tsOffsiteBtn_onsiteEach">Select</button>
+              </div>
+            </div>
+            <!-- Onsite — teacher pays once for the group -->
+            <div id="tsOffsiteOpt_onsiteGroup" class="ts-offsite-opt" onclick="tsSetOffsiteChoice('onsiteGroup')">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <div>
+                  <div style="font-size:13.5px;font-weight:700;color:var(--dark)">Stay &amp; Dine Onsite — I'll Pay for Everyone</div>
+                  <div style="font-size:12.5px;color:var(--muted);margin-top:2px">We'll eat onsite; I'll settle the bill for the whole group myself once onsite, nothing added to the package</div>
+                </div>
+                <button class="ts-offsite-btn" id="tsOffsiteBtn_onsiteGroup">Select</button>
               </div>
             </div>
             <!-- Gitano -->
@@ -5818,7 +5838,7 @@ function switchTab(id,btn){
 <script src="modules/admin-items.js"></script>
 <script src="modules/commissions.js"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20260911a"></script>
+<script src="modules/teacher-portal.js?v=20260911b"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
 // ===== TEACHER REGISTRATION — moved to modules/teacher-portal.js =====
