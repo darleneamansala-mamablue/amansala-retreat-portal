@@ -24,7 +24,8 @@ function toggleEstQuote(){
   document.getElementById('estQuoteBtn').style.borderColor=estQuoteOpen?'#fcd34d':'';
 }
 
-function renderEstQuote(){
+function renderEstQuote(lblId,bodyId){
+  lblId=lblId||'estQuoteLbl';bodyId=bodyId||'estQuoteBody';
   if(!regSelBk)return;
   const nights=getNights(regSelBk);
   const blockedSet=new Set(regSelBk.blockedRooms||[]);
@@ -102,7 +103,7 @@ function renderEstQuote(){
 
   const totalTax=+(totalRoomTax+totalPkgTax).toFixed(2);
   const grandEst=+(totalRoomBase+totalPkg+totalTax+totalTip+totalCao).toFixed(2);
-  document.getElementById('estQuoteLbl').textContent=`${estPax} est. guests · ${nights} nights · ${blockedSet.size} rooms · ${roomRows.length} registered`;
+  document.getElementById(lblId).textContent=`${estPax} est. guests · ${nights} nights · ${blockedSet.size} rooms · ${roomRows.length} registered`;
 
   // Left card: per-room itemized breakdown
   let roomHtml=`<div class="eq-card" style="display:flex;flex-direction:column;max-height:520px"><div class="eq-card-title">Room Breakdown</div><div style="overflow-y:auto;flex:1;padding-right:2px">`;
@@ -162,7 +163,7 @@ function renderEstQuote(){
     <div class="eq-total" style="font-size:15px;border-top:1px dashed #fcd34d;padding-top:6px"><span>Est. Balance Due</span><span style="color:${estBalance>0?'#dc2626':'#16a34a'}">${fmt$(estBalance)}</span></div>`:''}
   </div></div>`;
 
-  document.getElementById('estQuoteBody').innerHTML=roomHtml+addHtml;
+  document.getElementById(bodyId).innerHTML=roomHtml+addHtml;
 }
 
 function setEqDiscountAmt(val){

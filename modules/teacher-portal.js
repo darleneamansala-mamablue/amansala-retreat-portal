@@ -3667,11 +3667,12 @@ function renderTeacherUpgrades(bk){
 }
 
 function teacherShowView(view){
-  const isDash=view==='dash',isContract=view==='contract',isSched=view==='schedule',isRooms=view==='rooms',isTransport=view==='transport',isFinancial=view==='financial',isFaq=view==='faq',isActs=view==='activities';
+  const isDash=view==='dash',isContract=view==='contract',isSched=view==='schedule',isRooms=view==='rooms',isPriceList=view==='pricelist',isTransport=view==='transport',isFinancial=view==='financial',isFaq=view==='faq',isActs=view==='activities';
   document.getElementById('teacherDashboard').style.display=isDash?'flex':'none';
   document.getElementById('teacherContractView').style.display=isContract?'flex':'none';
   document.getElementById('teacherScheduleView').style.display=isSched?'flex':'none';
   document.getElementById('roomListView').style.display=isRooms?'flex':'none';
+  document.getElementById('teacherPriceListView').style.display=isPriceList?'flex':'none';
   document.getElementById('teacherTransportView').style.display=isTransport?'flex':'none';
   document.getElementById('teacherFinancialView').style.display=isFinancial?'flex':'none';
   document.getElementById('teacherFaqView').style.display=isFaq?'flex':'none';
@@ -3680,10 +3681,12 @@ function teacherShowView(view){
   document.getElementById('tnBtnContract').classList.toggle('active',isContract);
   document.getElementById('tnBtnSchedule').classList.toggle('active',isSched);
   document.getElementById('tnBtnRooms').classList.toggle('active',isRooms);
+  document.getElementById('tnBtnPriceList').classList.toggle('active',isPriceList);
   document.getElementById('tnBtnTransport').classList.toggle('active',isTransport);
   document.getElementById('tnBtnFinancial').classList.toggle('active',isFinancial);
   document.getElementById('tnBtnFaq').classList.toggle('active',isFaq);
   document.getElementById('tnBtnActivities').classList.toggle('active',isActs);
+  if(isPriceList)renderTeacherPriceList();
   if(isFaq)faqRender();
   if(isActs){const savedId=(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id'));if(savedId)renderTeacherActivities(savedId);}
   if(isTransport){const savedId=(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id'));if(savedId)renderTeacherTransport(savedId);}

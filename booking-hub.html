@@ -1220,6 +1220,7 @@
     <button class="tn-btn" id="tnBtnContract" onclick="teacherShowView('contract')">&#9632; My Contract</button>
     <button class="tn-btn" id="tnBtnSchedule" onclick="teacherShowView('schedule')">&#9632; My Schedule</button>
     <button class="tn-btn" id="tnBtnRooms" onclick="teacherShowView('rooms')">&#9632; My Room List</button>
+    <button class="tn-btn" id="tnBtnPriceList" onclick="teacherShowView('pricelist')">&#9632; Price List</button>
     <button class="tn-btn" id="tnBtnTransport" onclick="teacherShowView('transport')">&#9632; My Transport</button>
     <button class="tn-btn" id="tnBtnFinancial" onclick="teacherShowView('financial')">&#9632; My Finances</button>
     <button class="tn-btn" id="tnBtnActivities" onclick="teacherShowView('activities')">&#9632; My Activities</button>
@@ -2001,6 +2002,17 @@
     </div>
   </div>
   </div><!-- /roomListView -->
+
+  <!-- Teacher Price List View -->
+  <div id="teacherPriceListView" style="display:none;flex-direction:column;background:#f5f1eb">
+    <div style="padding:28px 36px;max-width:900px;margin:0 auto;width:100%;box-sizing:border-box">
+      <div style="margin-bottom:22px">
+        <h2 style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:#2d2520;margin:0">Price List</h2>
+        <p style="font-size:12.5px;color:#8a7e74;margin:4px 0 0" id="teacherPriceListLbl">Room rates for your retreat, with tax, tip &amp; add-on packages included</p>
+      </div>
+      <div id="teacherPriceListBody" style="overflow-x:auto"></div>
+    </div>
+  </div>
 
   <!-- Teacher Financial View -->
   <div id="teacherFinancialView" style="display:none;flex-direction:column;background:#f5f1eb">
@@ -5729,6 +5741,7 @@ function switchTab(id,btn){
 // ===== FLAGS MODAL — moved to modules/teacher-portal.js (loaded above) =====
 </script>
 <script src="modules/pricing.js?v=20260908d"></script>
+<script src="modules/teacher-pricelist.js"></script>
 <script>
 // ===== ESTIMATED QUOTE — moved to modules/pricing.js =====
 // ===== PRICE TOOLTIP — moved to modules/pricing.js (loaded above) =====
