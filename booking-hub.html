@@ -4414,24 +4414,67 @@ async function syncToSupabase(){
   // with the SQL sync above (different tables, nothing depends on the other).
   const _blobSync=(async()=>{
     try{
+      // deletedBookingIds/deletedRegIds/deletedPaymentIds are excluded from the staleness
+      // guard below — loadFromSupabase() already merges them additively (union, never
+      // replaces), so a stale tab can only ever grow these sets, not shrink them back.
+      // The content blobs (venRows/programBlocks/specialEvents/staffAccounts/
+      // teacher_messages) get the same guard as bookings/registrations/room_types: a
+      // stale tab's full-object overwrite shouldn't win over a more recent edit from
+      // elsewhere. Content keys are rare enough to edit concurrently that a plain fetch
+      // of their current updated_at right before upserting is cheap and worth doing.
+      const _contentKeys=['venRows','programBlocks','specialEvents','staffAccounts','teacher_messages'];
+      const {data:freshRows}=await db.from('app_store').select('key,updated_at').in('key',_contentKeys);
+      const freshMap=new Map((freshRows||[]).map(r=>[r.key,r.updated_at]));
+      const _candidates=[
+        {key:'venRows',          value:AppData.venRows},
+        {key:'programBlocks',    value:AppData.programBlocks},
+        {key:'specialEvents',    value:AppData.specialEvents},
+        {key:'staffAccounts',    value:staffAccounts},
+        {key:'teacher_messages', value:AppData.teacherMessages},
+      ];
+      const _staleKeys=[];
+      const contentRows=_candidates.filter(c=>{
+        const remoteUpdatedAt=freshMap.get(c.key);
+        if(remoteUpdatedAt===undefined)return true; // never synced yet
+        const known=_appStoreUpdatedAt[c.key];
+        if(known&&new Date(known)<new Date(remoteUpdatedAt)){_staleKeys.push(c.key);return false;}
+        return true;
+      }).map(c=>({key:c.key,value:c.value,updated_at:new Date().toISOString()}));
+      if(_staleKeys.length)console.warn('[sync guard] skipped overwriting stale app_store key(s):',_staleKeys);
+
       await db.from('app_store').upsert([
         {key:'deletedBookingIds', value:[...deletedBookingIds],  updated_at:new Date().toISOString()},
         {key:'deletedRegIds',     value:[...deletedRegIds],      updated_at:new Date().toISOString()},
         {key:'deletedPaymentIds', value:[...deletedPaymentIds],  updated_at:new Date().toISOString()},
-        {key:'venRows',           value:AppData.venRows,                 updated_at:new Date().toISOString()},
-        {key:'programBlocks',     value:AppData.programBlocks,           updated_at:new Date().toISOString()},
-        {key:'specialEvents',     value:AppData.specialEvents,           updated_at:new Date().toISOString()},
-        {key:'staffAccounts',     value:staffAccounts,           updated_at:new Date().toISOString()},
-        {key:'teacher_messages',  value:AppData.teacherMessages,         updated_at:new Date().toISOString()},
+        ...contentRows,
       ]);
+      const _now=new Date().toISOString();
+      contentRows.forEach(c=>{_appStoreUpdatedAt[c.key]=_now;});
     }catch(e){console.warn('Supabase sync failed:',e);}
   })();
   await Promise.all([_bkRegSync,_blobSync]);
 }
 async function syncRoomTypesToSupabase(){
   try{
-    const rows=AppData.roomTypes.map(appRoomTypeToSqlRow);
-    if(rows.length)await db.from('room_types').upsert(rows);
+    // Same staleness guard as bookings/registrations (see syncToSupabase) — room_types
+    // is small and rarely edited by more than one person, but it's still a full-array
+    // upsert of whatever this tab has in memory, so the same stale-tab-wins risk applies.
+    const remoteRows=await _fetchAllRows('room_types',1000,'id,updated_at');
+    const remoteMap=new Map(remoteRows.map(r=>[r.id,r.updated_at]));
+    const okTypes=AppData.roomTypes.filter(rt=>{
+      const remoteUpdatedAt=remoteMap.get(rt.id);
+      if(remoteUpdatedAt===undefined)return true; // new type, nothing to compare against
+      if(rt.updatedAt&&new Date(rt.updatedAt)<new Date(remoteUpdatedAt))return false;
+      return true;
+    });
+    const skipped=AppData.roomTypes.length-okTypes.length;
+    if(skipped)console.warn('[sync guard] skipped overwriting',skipped,'room type(s) with an older local copy');
+    const rows=okTypes.map(appRoomTypeToSqlRow);
+    if(rows.length){
+      await db.from('room_types').upsert(rows);
+      const _now=new Date().toISOString();
+      okTypes.forEach(rt=>{rt.updatedAt=_now;});
+    }
   }catch(e){console.warn('Room type sync failed:',e);}
 }
 
@@ -4483,10 +4526,10 @@ async function _fetchAllRows(table,pageSize,selectCols){
 
 async function loadFromSupabase(){
   try{
-    const {data,error}=await db.from('app_store').select('key,value');
+    const {data,error}=await db.from('app_store').select('key,value,updated_at');
     if(error||!data||!data.length)return false;
     const store={};
-    data.forEach(r=>store[r.key]=r.value);
+    data.forEach(r=>{store[r.key]=r.value;_appStoreUpdatedAt[r.key]=r.updated_at;});
     // Clear signal: if Supabase has a clear_signal newer than what this device last acknowledged,
     // wipe local bookings/regs so stale data on any device can't keep coming back.
     if(store.clear_signal){
@@ -5043,6 +5086,11 @@ function loadAll(){
 // silently reverted. Real incident: dragging one room, then a second room shortly
 // after, could undo the first move if the poll happened to fire in between.
 let _lastLocalSaveAt=0;
+// Per-key updated_at this tab last saw for each app_store blob (venRows, programBlocks,
+// specialEvents, staffAccounts, teacher_messages) — populated in loadFromSupabase(),
+// used by syncToSupabase()'s _blobSync to skip overwriting a key someone else has changed
+// more recently than this tab knows about (same guard as bookings/registrations/room_types).
+let _appStoreUpdatedAt={};
 function saveAll(){
   _lastLocalSaveAt=Date.now();
   localStorage.setItem('amansala_venue_bookings',JSON.stringify(AppData.bookings));
