@@ -4309,25 +4309,46 @@ async function syncToSupabase(){
       // production) — a plain .select() would silently truncate remoteRegMap and
       // make every registration past row 1000 look "missing from Supabase", which
       // is exactly the false-positive this guard exists to prevent. Page through it.
-      const [{data:remoteBks},remoteRegs]=await Promise.all([
-        db.from('bookings').select('id'),
+      const [remoteBksRows,remoteRegs]=await Promise.all([
+        _fetchAllRows('bookings',1000,'id,updated_at'),
         _fetchAllRows('registrations',1000,'id,updated_at'),
       ]);
-      const remoteBkIds=new Set((remoteBks||[]).map(r=>r.id));
+      const remoteBkMap=new Map(remoteBksRows.map(r=>[r.id,r.updated_at]));
       const remoteRegMap=new Map((remoteRegs||[]).map(r=>[r.id,r.updated_at]));
 
+      // Same staleness guard registrations already had (see _staleOverwriteRegs below) —
+      // bookings never had one, which is exactly how a stale tab's full-array saveAll()
+      // could silently overwrite someone else's newer blockedRooms/tipPerNight/taxRate/etc:
+      // a save always re-uploaded every in-memory booking with no check that this tab's
+      // copy of THAT booking was still current. Skip (don't overwrite) any booking whose
+      // remote updated_at is newer than what this tab last saw for it.
       const _bkCandidates=AppData.bookings.filter(b=>!deletedBookingIds.has(b.id));
-      const _staleZombieBks=[];
-      const bkRows=_bkCandidates.filter(b=>{
-        if(remoteBkIds.has(b.id))return true; // known row — normal update
-        if(_isRecentLocalId(b.id))return true; // genuinely new, never synced yet
-        _staleZombieBks.push(b.id);return false; // old id, gone from Supabase — don't resurrect
-      }).map(appBookingToSqlRow);
+      const _staleZombieBks=[],_staleOverwriteBks=[];
+      // Kept as objects (not yet mapped to SQL rows) so their local .updatedAt can be
+      // bumped below once the upsert actually succeeds — bookings have no per-field-edit
+      // "bump my own updatedAt" convention like registrations do (reg.updatedAt=new
+      // Date() at every edit site), so without this a booking's own SECOND save in the
+      // same tab session would immediately look "stale" against the updated_at our own
+      // first save just caused the server to set, and get silently skipped.
+      const _bkOkCandidates=_bkCandidates.filter(b=>{
+        const remoteUpdatedAt=remoteBkMap.get(b.id);
+        if(remoteUpdatedAt===undefined){
+          if(_isRecentLocalId(b.id))return true; // genuinely new, never synced yet
+          _staleZombieBks.push(b.id);return false; // old id, gone from Supabase — don't resurrect
+        }
+        if(b.updatedAt&&new Date(b.updatedAt)<new Date(remoteUpdatedAt)){_staleOverwriteBks.push(b.id);return false;}
+        return true;
+      });
+      const bkRows=_bkOkCandidates.map(appBookingToSqlRow);
       if(_staleZombieBks.length)console.warn('[sync guard] skipped resurrecting',_staleZombieBks.length,'stale local booking(s) missing from Supabase:',_staleZombieBks);
+      if(_staleOverwriteBks.length){
+        console.warn('[sync guard] skipped overwriting',_staleOverwriteBks.length,'booking(s) with an older local copy:',_staleOverwriteBks);
+        if(typeof showToast==='function')showToast('⚠ Un cambio no se guardó — esta pestaña tiene datos desactualizados. Recarga la página (Cmd+Shift+R) antes de seguir editando.');
+      }
 
       const _regCandidates=AppData.regs.filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId));
       const _staleZombieRegs=[],_staleOverwriteRegs=[];
-      const regRows=_regCandidates.filter(r=>{
+      const _regOkCandidates=_regCandidates.filter(r=>{
         const remoteUpdatedAt=remoteRegMap.get(r.id);
         if(remoteUpdatedAt===undefined){
           if(_isRecentLocalId(r.id))return true;
@@ -4335,7 +4356,8 @@ async function syncToSupabase(){
         }
         if(!r.updatedAt||new Date(r.updatedAt)<new Date(remoteUpdatedAt)){_staleOverwriteRegs.push(r.id);return false;}
         return true;
-      }).map(appRegToSqlRow);
+      });
+      const regRows=_regOkCandidates.map(appRegToSqlRow);
       if(_staleZombieRegs.length)console.warn('[sync guard] skipped resurrecting',_staleZombieRegs.length,'stale local registration(s) missing from Supabase:',_staleZombieRegs);
       if(_staleOverwriteRegs.length){
         console.warn('[sync guard] skipped overwriting',_staleOverwriteRegs.length,'registration(s) with an older local copy:',_staleOverwriteRegs);
@@ -4366,6 +4388,13 @@ async function syncToSupabase(){
         payRows.length?db.from('payments').upsert(payRows):null,
         deletedPaymentIds.size?db.from('payments').delete().in('id',[...deletedPaymentIds]):null,
       ]);
+      // The upsert succeeded — this tab's copy of every booking it just wrote is now the
+      // latest version, so record that locally (approximating the server trigger's own
+      // updated_at with "now") instead of leaving updatedAt frozen at load time. Otherwise
+      // the very next save in this same tab would fail the staleness check above against
+      // the updated_at our own write just caused.
+      if(bkRows.length){const _now=new Date().toISOString();_bkOkCandidates.forEach(b=>{b.updatedAt=_now;});}
+      if(regRows.length){const _now=new Date().toISOString();_regOkCandidates.forEach(r=>{r.updatedAt=_now;});}
     }catch(e){
       console.warn('SQL bookings/registrations sync failed:',e);
       if(typeof showToast==='function')showToast('⚠ No se pudo guardar en el servidor — revisa tu conexión y vuelve a intentar. ('+(e?.message||'error desconocido')+')');
