@@ -1332,7 +1332,11 @@ function buildDashboard(){
     `${overdueBalances.length} retreat${overdueBalances.length!==1?'s':''} · ${fmt$(overdueBalancesTotal)}`,
     overdueBalances.length?overdueBalances.map(x=>{
       const sentAt=x.bk.packageCustomPrices?.__cfg__?.finalBalanceSentAt;
-      const sentBadge=sentAt?`<span title="Final balance email sent ${fmtDate(sentAt)}" style="font-size:10.5px;font-weight:700;background:#dbeafe;color:#1d4ed8;border-radius:5px;padding:1px 7px">✉ Final Balance Sent</span>`:'';
+      // finalBalanceSentAt is a full ISO timestamp (new Date().toISOString()), not the
+      // plain YYYY-MM-DD string fmtDate()/pd() expect — pd() appended "T00:00:00" onto
+      // an already-full timestamp and produced "Invalid Date". Parse it directly instead.
+      const sentDateLabel=sentAt?new Date(sentAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+      const sentBadge=sentAt?`<span title="Final balance email sent ${sentDateLabel}" style="font-size:10.5px;font-weight:700;background:#dbeafe;color:#1d4ed8;border-radius:5px;padding:1px 7px">✉ Final Balance Sent</span>`:'';
       return dbItemRow(x.bk,`${sentBadge}<span style="font-weight:700;color:#7f1d1d">${fmt$(x.balance)}</span><span style="font-size:10.5px;font-weight:700;background:#fecaca;color:#7f1d1d;border-radius:5px;padding:1px 7px">${x.daysOverdue}d overdue</span>`,`openPaymentModal('${x.bk.id}')`);
     }).join(''):'<div style="padding:12px 16px;color:var(--muted);font-size:12.5px;font-style:italic">Nothing overdue.</div>',
     true)
