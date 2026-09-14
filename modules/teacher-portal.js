@@ -4775,6 +4775,12 @@ function skedGetRetreatEvents(dateStr){
     const isArrivalDay=dateStr===bk.startDate;
     const isDepartureDay=dateStr===bk.endDate;
     const musicNote=(Array.isArray(sr.music)?sr.music:[sr.music]).includes('system')?' 🎵':'';
+    // Admin "Skip this day" (set via the calendar's Edit Class modal) must be honored
+    // on arrival/departure fallback classes too — previously only the middle-days
+    // branch checked this, so skipping the arrival/departure morning class from the
+    // modal silently did nothing and the class kept reappearing.
+    const skips=bk.scheduleSkips||[];
+    const mornSkippedThisDay=skips.some(s=>s.date===dateStr&&s.period==='morn');
     // Arrival day — show arrival evening class if set, otherwise fall back to opening morning class
     if(isArrivalDay){
       const ocLeader=openingCircleLeaders[bk.id]||'Ryan';
@@ -4791,7 +4797,7 @@ function skedGetRetreatEvents(dateStr){
       } else {
         evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:'grande',date:dateStr,startTime:'20:30',endTime:'20:45',title,subtitle:'Orientation with Amansala — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
-      if(effMornStart&&effMornShala){
+      if(effMornStart&&effMornShala&&!mornSkippedThisDay){
         // No arrival class — show opening morning class (respects a one-off override for this date)
         const arrOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
         const arrStart=arrOv?arrOv.start:effMornStart;
@@ -4809,7 +4815,7 @@ function skedGetRetreatEvents(dateStr){
           const depEnd=skedMinToTime(skedTimeToMin(sr.departureSlot)+depDurVal);
           evs.push({id:'ret_'+bk.id+'_dep',resourceId:depShala,date:dateStr,startTime:sr.departureSlot,endTime:depEnd,title,subtitle:tsEffClassLabel(sr,'departure','Departure Morning Class'),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
-      } else if(effMornStart&&effMornShala){
+      } else if(effMornStart&&effMornShala&&!mornSkippedThisDay){
         const depOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
         const depStart=depOv?depOv.start:effMornStart;
         const depDur=depOv?.dur||effMornDur;
@@ -4824,8 +4830,7 @@ function skedGetRetreatEvents(dateStr){
         const srLoc=TS_SUNRISE_LOCATIONS[sr.sunriseLocation]||sr.sunriseLocation||'';
         evs.push({id:'ret_'+bk.id+'_sunrise_'+dateStr,resourceId:'sunrise',date:dateStr,startTime:sr.sunriseStart,endTime:srEnd,title,subtitle:'Sunrise Activity'+(srLoc?' — '+srLoc:'')+' (no music)',color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
-      const skips=bk.scheduleSkips||[];
-      const mornSkipped=skips.some(s=>s.date===dateStr&&s.period==='morn');
+      const mornSkipped=mornSkippedThisDay;
       const aftSkipped=skips.some(s=>s.date===dateStr&&s.period==='aft');
       // Per-day time overrides — some teachers start/finish at different times on
       // different days rather than the same time every day.
