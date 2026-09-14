@@ -510,8 +510,15 @@ async function blockSave(){
     }
   });
 
+  // bk.updatedAt (not just blockedRoomsUpdatedAt) MUST be bumped here — syncToSupabase's
+  // staleness guard compares THIS field against the server's updated_at to decide whether
+  // this tab's copy of the booking is safe to upload. Without it, a room-block edit could
+  // look "older" than the server's current row the very next sync and get silently
+  // skipped (console.warn only, no visible error) — Darlene's report 2026-09-14: added a
+  // room, it "disappeared again," and Carter saw a different room list than she did.
   bk.blockedRooms=selected;
   bk.blockedRoomsUpdatedAt=new Date().toISOString();
+  bk.updatedAt=bk.blockedRoomsUpdatedAt;
   if(regSelBk&&regSelBk.id===bk.id)regSelBk=bk;
   saveAll();
   closeModal('blockModal');
