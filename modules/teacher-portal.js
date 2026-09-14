@@ -1800,8 +1800,10 @@ function tsInitWorkshopDays(){
 
 const WS_TIME_SLOTS=(()=>{
   const slots=[];
-  const startM=9*60+45; // 9:45 AM
-  const endM=21*60+45;  // 9:45 PM
+  // Anchored to :00/:30 (not :45) so a 30-min step actually lands on the hour —
+  // starting at :45 meant every option was stuck on :15/:45 and the hour was unreachable.
+  const startM=9*60+30; // 9:30 AM
+  const endM=21*60+30;  // 9:30 PM
   for(let m=startM;m<=endM;m+=30){
     const hh=String(Math.floor(m/60)).padStart(2,'0');
     const mm=String(m%60).padStart(2,'0');
@@ -3019,7 +3021,11 @@ function svAddActivity(bkId){
   }
   const isGitano=aoId==='ao13';
   const defaultTime=isGitano?'19:30':time;
-  bk.retreatActivities.push({aoId,date,time:defaultTime,prepaid:isGitano});
+  // Default Prepaid from the booking's actual paid package — not just Gitano — so an
+  // activity the guest already paid for doesn't land as "Optional" on the printed
+  // schedule just because whoever scheduled it forgot to check the Prepaid box.
+  const isPrepaid=isGitano||(bk.packages||[]).includes(aoId);
+  bk.retreatActivities.push({aoId,date,time:defaultTime,prepaid:isPrepaid});
   if(isGitano){
     if(!bk.packages)bk.packages=[];
     if(!bk.packages.includes('ao13'))bk.packages.push('ao13');
