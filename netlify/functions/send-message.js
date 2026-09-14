@@ -50,6 +50,30 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ id: data?.[0]?.id, status: 'pending_twilio' }) };
   }
 
+  // WhatsApp only allows a free-form reply within 24h of the guest's last
+  // inbound message — outside that window, Meta requires an approved
+  // template (not yet set up). Check first so the UI gets a clear reason
+  // instead of Twilio's opaque error 63016.
+  if (channel === 'whatsapp' && !payload.templateSid) {
+    const lastInboundRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/messages?select=sent_at&phone=eq.${encodeURIComponent(to)}&direction=eq.in&order=sent_at.desc&limit=1`,
+      { headers: hdrs },
+    );
+    const lastInbound = lastInboundRes.ok ? await lastInboundRes.json() : [];
+    const lastInboundAt = lastInbound[0]?.sent_at ? new Date(lastInbound[0].sent_at) : null;
+    const hoursSince = lastInboundAt ? (Date.now() - lastInboundAt.getTime()) / 3600000 : Infinity;
+
+    if (hoursSince >= 24) {
+      return {
+        statusCode: 422,
+        body: JSON.stringify({
+          error: 'OUTSIDE_24H_WINDOW',
+          message: 'Este huésped no ha escrito en las últimas 24h — WhatsApp requiere una plantilla aprobada para reabrir la conversación.',
+        }),
+      };
+    }
+  }
+
   // Send via Twilio
   const twilioTo   = channel === 'whatsapp' ? `whatsapp:${to}` : to;
   const twilioFrom = channel === 'whatsapp' ? WA_FROM : SMS_FROM;
@@ -60,12 +84,26 @@ exports.handler = async (event) => {
     {
       method:  'POST',
       headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    new URLSearchParams({ From: twilioFrom, To: twilioTo, Body: body }).toString(),
+      body:    new URLSearchParams({
+        From: twilioFrom,
+        To: twilioTo,
+        Body: body,
+        StatusCallback: 'https://amansalaportal.com/.netlify/functions/twilio-status-callback',
+      }).toString(),
     }
   );
 
   const tw = await twRes.json();
   if (!twRes.ok) {
+    if (tw.code === 63016 || tw.code === 63015) {
+      return {
+        statusCode: 422,
+        body: JSON.stringify({
+          error: 'OUTSIDE_24H_WINDOW',
+          message: 'Este huésped no ha escrito en las últimas 24h — WhatsApp requiere una plantilla aprobada para reabrir la conversación.',
+        }),
+      };
+    }
     return { statusCode: 500, body: JSON.stringify({ error: tw.message || 'Twilio error' }) };
   }
 

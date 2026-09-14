@@ -86,7 +86,7 @@ async function _gcSendMessage(phone,body,conv){
     const res=await fetch('/.netlify/functions/send-message',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({to:phone,body:body.trim(),channel,guestName:conv?.guestName||null,bookingId:conv?.bookingId||null,room:conv?.room||null})});
     const data=await res.json();
-    if(!res.ok)throw new Error(data.error||'Error al enviar');
+    if(!res.ok)throw new Error(data.message||data.error||'Error al enviar');
     const idx=_gcMessages.findIndex(m=>m.id===optimistic.id);
     if(idx!==-1)_gcMessages.splice(idx,1);
   }catch(err){
