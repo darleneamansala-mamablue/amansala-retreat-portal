@@ -2,7 +2,8 @@
 
 // GET /.netlify/functions/xetux-reservation-lookup?guestName=...
 // Called by Xetux POS to look up a guest's active (checked-in) reservation
-// and linked open folio before posting a charge.
+// and linked open folio before posting a charge. If no open folio exists
+// yet, one is created so Xetux always gets a usable folio id.
 // Auth: Authorization: Bearer <XETUX_API_TOKEN> (fixed token, no rotation).
 // Spec agreed with Xetux 2026-09-14 — always returns HTTP 200; a missing
 // reservation is signaled via success:false, not a 404.
@@ -36,6 +37,45 @@ async function supaGet(key, path) {
   if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data) ? data : [];
+}
+
+async function supaPost(key, path, body) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return Array.isArray(data) ? data[0] : data;
+}
+
+// Returns the open folio id for a registration/booking_request, creating one
+// (empty, $0 balance) if none exists yet — so Xetux always has a folio to
+// charge against instead of getting folio:null.
+async function findOrCreateFolio(key, { registrationId, bookingRequestId, guestName }) {
+  const linkField = registrationId ? 'registration_id' : 'booking_request_id';
+  const linkId = registrationId || bookingRequestId;
+
+  const existing = await supaGet(
+    key,
+    `folios?select=id&${linkField}=eq.${encodeURIComponent(linkId)}&status=eq.open&order=created_at.asc&limit=1`,
+  );
+  if (existing[0] && existing[0].id) return existing[0].id;
+
+  const created = await supaPost(key, 'folios', {
+    [linkField]: linkId,
+    guest_name: guestName,
+    name: guestName,
+    payment_token: crypto.randomUUID().replace(/-/g, ''),
+    status: 'open',
+  });
+  return created && created.id ? created.id : null;
 }
 
 exports.handler = async (event) => {
@@ -72,14 +112,11 @@ exports.handler = async (event) => {
     const guest = reg.guests.find(g => g.name && nameMatch(g.name, guestName));
     if (!guest) continue;
 
-    const folios = await supaGet(
-      supaKey,
-      `folios?select=id&registration_id=eq.${encodeURIComponent(reg.id)}&status=eq.open&order=created_at.asc&limit=1`,
-    );
+    const folioId = await findOrCreateFolio(supaKey, { registrationId: reg.id, guestName: guest.name });
 
     results.push({
       reservationID: String(reg.id),
-      folio: folios[0] && folios[0].id ? String(folios[0].id) : null,
+      folio: folioId ? String(folioId) : null,
       guestName: guest.name,
       roomNumber: reg.room,
       checkInDate: toDateTime(reg.bookings && reg.bookings.start_date),
@@ -102,14 +139,11 @@ exports.handler = async (event) => {
     const fullName = [req.first_name, req.last_name].filter(Boolean).join(' ').trim();
     if (!fullName || !nameMatch(fullName, guestName)) continue;
 
-    const folios = await supaGet(
-      supaKey,
-      `folios?select=id&booking_request_id=eq.${encodeURIComponent(req.id)}&status=eq.open&order=created_at.asc&limit=1`,
-    );
+    const folioId = await findOrCreateFolio(supaKey, { bookingRequestId: req.id, guestName: fullName });
 
     results.push({
       reservationID: String(req.id),
-      folio: folios[0] && folios[0].id ? String(folios[0].id) : null,
+      folio: folioId ? String(folioId) : null,
       guestName: fullName,
       roomNumber: req.room,
       checkInDate: toDateTime(req.check_in),
