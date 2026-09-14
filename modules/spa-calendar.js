@@ -272,7 +272,23 @@ function spaApptUpdatePriceDisplay(svc) {
   if (svc.groupPricing) { el.textContent = `Rate: from $${groupPriceFor(svc, svc.groupPricing.minGuests || 1)} (group pricing)`; return; }
   el.textContent = svc.price != null ? `Rate: $${svc.price}` : 'Rate: not set — add a price in Services';
 }
-function spaApptOnTherapistChange() {}
+function spaApptOnTherapistChange() { spaApptCheckAvailability(); }
+// Soft, non-blocking notice (admin can still save through it) — matches
+// the app's "staff always retain override" convention (e.g. no auto-assign
+// of rooms). Uses the real scIsAvailable() from modules/staff-confirm-
+// portal.js since this runs inside booking-hub.html where that's loaded.
+function spaApptCheckAvailability() {
+  const warnEl = document.getElementById('spaApptAvailWarn');
+  if (!warnEl) return;
+  const therId = document.getElementById('spaApptTherapist')?.value;
+  const date = document.getElementById('spaApptDate')?.value;
+  const ther = SpaData.therapists.find(t => t.id === therId);
+  if (!ther || !date || typeof scIsAvailable !== 'function') { warnEl.style.display = 'none'; return; }
+  const name = `${ther.firstName} ${ther.lastName || ''}`.trim();
+  if (scIsAvailable(name, date)) { warnEl.style.display = 'none'; return; }
+  warnEl.textContent = `⚠ ${ther.firstName} marked themselves unavailable on ${date} in the Staff Confirmations portal — you can still book them if they've agreed to make an exception.`;
+  warnEl.style.display = 'block';
+}
 
 function spaApptShowForm(id, prefill) {
   prefill = prefill || {};
@@ -304,6 +320,7 @@ function spaApptShowForm(id, prefill) {
 
   document.getElementById('spaApptDeleteWrap').style.display = a ? 'block' : 'none';
   spaApptRenderHistory(a);
+  spaApptCheckAvailability();
   openModal('spaApptModal');
 }
 
@@ -345,6 +362,32 @@ function spaApptRenderHistory(a) {
   body.innerHTML = `<div style="background:#faf7f2;border-radius:8px;padding:10px 12px;margin-bottom:6px">
     <div style="font-weight:700;margin-bottom:4px">Original Booking</div>${origLines}
   </div>${changeLines || '<div style="color:#9ca3af;font-style:italic">No changes recorded since creation.</div>'}`;
+}
+
+// Lets the therapist who HAD the appointment know their time just freed
+// up — reuses the same /.netlify/functions/send-email function as the
+// guest confirmation/cancellation emails (sbSendConfirmEmail etc. in
+// spa-booking.html).
+async function spaNotifyTherapistCancelled(appt, therapistId) {
+  if (!therapistId) return;
+  const ther = SpaData.therapists.find(t => t.id === therapistId);
+  if (!ther?.email) return;
+  const svc = SpaData.services.find(s => s.id === appt.serviceId);
+  const html = `<div style="font-family:'Jost',sans-serif;padding:20px;background:#faf7f2">
+    <div style="background:#fff;border-radius:12px;padding:24px;max-width:480px;margin:0 auto">
+      <div style="font-size:16px;font-weight:700;color:#2d2520;margin-bottom:10px">Appointment Cancelled</div>
+      <p style="font-size:14px;color:#374151;margin:0 0 14px">Hi ${ther.firstName}, a client's appointment on your schedule was just cancelled:</p>
+      <div style="font-size:13.5px;color:#5a5048;line-height:1.8">
+        <div><b>Client:</b> ${appt.clientName || '—'}</div>
+        <div><b>Service:</b> ${svc ? svc.name : '—'}</div>
+        <div><b>Was scheduled:</b> ${appt.date} at ${spaCalFmtT(appt.start)}</div>
+      </div>
+      <p style="font-size:13px;color:#6b7280;margin-top:16px">That time is now open on your schedule.</p>
+    </div>
+  </div>`;
+  try {
+    await fetch('/.netlify/functions/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: ther.email, subject: 'Appointment Cancelled — Amansala Spa', html }) });
+  } catch (e) {}
 }
 
 function spaApptSave() {
@@ -390,6 +433,13 @@ function spaApptSave() {
     if (changes.length) {
       if (!appt.editHistory) appt.editHistory = [];
       appt.editHistory.push({ at: new Date().toISOString(), by: (typeof getCurrentSession === 'function' ? getCurrentSession()?.name : null) || 'Staff', changes });
+    }
+    // Client-cancellation notice — covers front desk cancelling on a
+    // client's behalf here (the guest self-cancel path in spa-booking.html
+    // sends its own). Uses the PRE-edit therapist, since admin may have
+    // also reassigned the therapist in this same save.
+    if (before.status !== 'CANCELLED' && appt.status === 'CANCELLED') {
+      spaNotifyTherapistCancelled(appt, before.therapistId);
     }
   } else {
     SpaAppointments.push({ id: spaNewId('ap'), createdAt: new Date().toISOString(), ...fields });

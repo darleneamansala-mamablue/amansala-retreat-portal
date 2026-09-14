@@ -197,6 +197,59 @@ function spaDailyReportHtml(todays) {
     ${tile('Profit of the Day', '$' + profit.toFixed(0), profit >= 0 ? '#059669' : '#dc2626', 'after costs &amp; therapist pay')}
   </div>`;
 }
+// ── BUSY SUMMARY — "how busy are we" across a date range: how many massages
+// are already booked, and how many currently-registered guests in that same
+// window don't have one booked yet (the upsell opportunity). Shared by the
+// admin Dashboard and every therapist's own ?mode=confirm dashboard —
+// Darlene's ask 2026-09-14. Guest matching is by name (same convention as
+// spaFindGuestRegForAppt/sbFindGuestReg elsewhere in this app — there's no
+// guest ID shared between spa appointments and registrations).
+function spaBusySummary(startDate, endDate) {
+  const massages = (SpaAppointments || []).filter(a => a.status !== 'CANCELLED' && a.date >= startDate && a.date <= endDate);
+  const massageGuestNames = new Set(massages.map(a => (a.clientName || '').trim().toLowerCase()).filter(Boolean));
+  const registeredGuestNames = new Set();
+  (AppData.bookings || []).forEach(bk => {
+    if (bk.status === 'cancelled') return;
+    if (!(bk.startDate <= endDate && bk.endDate > startDate)) return; // stay overlaps the window
+    (AppData.regs || []).filter(r => r.bookingId === bk.id).forEach(r => {
+      (r.guests || []).forEach(g => { if (g.name) registeredGuestNames.add(g.name.trim().toLowerCase()); });
+    });
+    // Room Only bookings have no `reg` — the leader IS the guest.
+    if (bk.bookingType === 'room_only' && bk.leaderName) registeredGuestNames.add(bk.leaderName.trim().toLowerCase());
+  });
+  const potentialCount = [...registeredGuestNames].filter(n => !massageGuestNames.has(n)).length;
+  return { massageCount: massages.length, registeredGuestCount: registeredGuestNames.size, potentialCount };
+}
+function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
+  const s = spaBusySummary(startVal, endVal);
+  return `<div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:14px 16px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74">How Busy Are We</span>
+      <input type="date" id="${startId}" value="${startVal}" onchange="${onChangeFn}(this.value,null)" style="padding:6px 9px;border:1.5px solid #e8dfd4;border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
+      <span style="color:#8a7e74;font-size:12px">to</span>
+      <input type="date" id="${endId}" value="${endVal}" onchange="${onChangeFn}(null,this.value)" style="padding:6px 9px;border:1.5px solid #e8dfd4;border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">
+      <div style="flex:1;min-width:150px;background:#f0fdfa;border-radius:9px;padding:10px 14px">
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#0f766e">Massages Booked</div>
+        <div style="font-size:22px;font-weight:800;color:#0f766e;margin-top:2px">${s.massageCount}</div>
+      </div>
+      <div style="flex:1;min-width:150px;background:#fef3c7;border-radius:9px;padding:10px 14px">
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#92400e">Guests With No Massage Yet</div>
+        <div style="font-size:22px;font-weight:800;color:#92400e;margin-top:2px">${s.potentialCount}</div>
+        <div style="font-size:10px;color:#9ca3af;margin-top:2px">of ${s.registeredGuestCount} registered guests staying in this window</div>
+      </div>
+    </div>
+  </div>`;
+}
+let spaBusyStart = spaCalFmtDateStr(new Date());
+let spaBusyEnd = spaCalFmtDateStr(new Date());
+function spaBusySetRange(newStart, newEnd) {
+  if (newStart) spaBusyStart = newStart;
+  if (newEnd) spaBusyEnd = newEnd;
+  if (spaBusyEnd < spaBusyStart) spaBusyEnd = spaBusyStart;
+  spaRenderDashboard();
+}
 function spaRenderDashboard() {
   const el = document.getElementById('spaContent');
   const dateStr = spaCalFmtDateStr(spaDashDate);
@@ -242,6 +295,7 @@ function spaRenderDashboard() {
       <button onclick="spaDashToday()" style="padding:7px 14px;border:1.5px solid #e8dfd4;background:#fff;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600">Today</button>
       ${todays.length ? `<span style="margin-left:auto;font-size:12.5px;color:#6b7280">${confirmedCount} of ${todays.length} confirmed</span>` : ''}
     </div>
+    ${spaBusyWidgetHtml('spaBusyStartInput','spaBusyEndInput',spaBusyStart,spaBusyEnd,'spaBusySetRange')}
     ${spaDailyReportHtml(todays)}
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
       ${todays.length ? `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px 130px;gap:10px;padding:10px 16px;background:#f8f5f0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74"><div>Time</div><div>Service</div><div>Client</div><div>Therapist</div><div style="text-align:right">Status</div><div></div></div>${todays.map(row).join('')}` : '<div style="padding:40px;text-align:center;color:#9ca3af;font-style:italic">No services booked for this day.</div>'}

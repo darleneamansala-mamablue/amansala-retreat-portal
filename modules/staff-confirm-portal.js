@@ -387,6 +387,11 @@ function scFmtDate(ds){const d=new Date(ds+'T12:00:00');return d.toLocaleDateStr
 function scItemCardHtml(item,forAdmin){
   const today=new Date().toISOString().slice(0,10);
   const isPast=item.date<today;
+  // Darlene's ask: surface anything unconfirmed inside a 3-day window so
+  // staff notice it before it's too late to sort out — a plain reminder,
+  // not a deadline that blocks confirming early or late.
+  const daysUntil=Math.round((new Date(item.date+'T12:00:00')-new Date(today+'T12:00:00'))/86400000);
+  const needsConfirmSoon=!item.confirmed&&!item.requestedChange&&!isPast&&daysUntil<=3;
   const label=item.domain==='bbc'?'Bikini Bootcamp':item.domain==='spa'?'Spa':('Tour — '+(item.role==='driver'?'Driver':'Guide'));
   const color=item.domain==='bbc'?'#0e9494':item.domain==='spa'?'#a855f7':'#d97706';
   const timeLabel=item.domain==='spa'&&item.time?spaCalFmtT(item.time):(item.time||'');
@@ -420,11 +425,11 @@ function scItemCardHtml(item,forAdmin){
       <button onclick="${onClick}${refresh}" style="background:#2d6a6a;color:#fff;border:none;padding:9px 18px;border-radius:9px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Confirm</button>
     </div>`;
   }
-  return`<div style="background:#fff;border:1.5px solid ${item.confirmed?'#86efac':item.requestedChange?'#fde68a':'#e8dfd4'};border-radius:12px;padding:16px 18px;margin-bottom:10px;opacity:${isPast&&!item.confirmed&&!item.requestedChange?'.55':'1'}">
+  return`<div style="background:#fff;border:1.5px solid ${item.confirmed?'#86efac':item.requestedChange?'#fde68a':needsConfirmSoon?'#fca5a5':'#e8dfd4'};border-radius:12px;padding:16px 18px;margin-bottom:10px;opacity:${isPast&&!item.confirmed&&!item.requestedChange?'.55':'1'}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
       <div>
         <div style="font-weight:800;color:${color};font-size:11px;letter-spacing:.4px;text-transform:uppercase">${label}${forAdmin?' · '+(item.instructorName||''):''}</div>
-        <div style="font-size:16px;font-weight:700;color:#2d2520;margin-top:3px">${item.activity}</div>
+        <div style="font-size:16px;font-weight:700;color:#2d2520;margin-top:3px">${item.activity}${needsConfirmSoon?`<span style="font-size:10px;font-weight:800;color:#dc2626;background:#fef2f2;border-radius:99px;padding:3px 9px;margin-left:8px;vertical-align:middle;white-space:nowrap">⏰ Confirm ${daysUntil<=0?'today':daysUntil===1?'by tomorrow':'within '+daysUntil+'d'}</span>`:''}</div>
         <div style="font-size:12.5px;color:#8a7e74;margin-top:3px">${scFmtDate(item.date)}${timeLabel?' · '+timeLabel:''}${sub}</div>
         ${item.requestedChange&&item.requestedChangeNote?`<div style="font-size:12px;color:#92400e;margin-top:6px;font-style:italic">"${item.requestedChangeNote}"</div>`:''}
       </div>
@@ -701,6 +706,17 @@ async function scTeamRemoveUnavailable(id,entryId){
   scTeamRefreshWhicheverView();
 }
 
+// Same "How Busy Are We" widget as the admin Spa dashboard (spaBusyWidgetHtml/
+// spaBusySummary in modules/spa.js) — every therapist can see it too, not
+// just admin. Own date-range state so it doesn't fight the admin dashboard's.
+let scBusyStart=typeof spaCalFmtDateStr==='function'?spaCalFmtDateStr(new Date()):new Date().toISOString().slice(0,10);
+let scBusyEnd=scBusyStart;
+function scBusySetRange(newStart,newEnd){
+  if(newStart)scBusyStart=newStart;
+  if(newEnd)scBusyEnd=newEnd;
+  if(scBusyEnd<scBusyStart)scBusyEnd=scBusyStart;
+  scRenderDashboard();
+}
 function scRenderDashboard(){
   const root=document.getElementById('staffConfirmDashboard');if(!root)return;
   const session=getStaffConfirmSession();if(!session)return;
@@ -721,6 +737,7 @@ function scRenderDashboard(){
         </div>
         <button onclick="staffConfirmLogout()" style="background:#fff;border:1.5px solid #e8dfd4;color:#6b5f54;padding:8px 14px;border-radius:9px;font-family:'Jost',sans-serif;font-size:12px;font-weight:600;cursor:pointer">Sign Out</button>
       </div>
+      ${typeof spaBusyWidgetHtml==='function'?spaBusyWidgetHtml('scBusyStartInput','scBusyEndInput',scBusyStart,scBusyEnd,'scBusySetRange'):''}
       ${all.length===0?`<div style="text-align:center;padding:60px 20px;color:#c8bfb5;font-style:italic">No hours assigned to you right now.</div>`:''}
       ${section('Bikini Bootcamp',bbc)}
       ${section('Spa',spa)}

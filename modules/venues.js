@@ -36,7 +36,11 @@ function venBuild(){
   AppData.venRows.forEach(rowName=>{
     const soy=new Date(venYear,0,1),eoy=new Date(venYear,11,31);
     // Pre-compute visible blocks + lane assignment
-    const visBks=AppData.bookings.filter(b=>b.row===rowName).map(bk=>{
+    // Room Only bookings belong on the physical Room Calendar (rcBuild), not
+    // this retreat-row Gantt — Darlene's call 2026-09-14: a Soft Hold on a
+    // specific room was showing up here as if it were a retreat, which isn't
+    // where staff expect Room Only bookings to live.
+    const visBks=AppData.bookings.filter(b=>b.row===rowName&&b.bookingType!=='room_only').map(bk=>{
       const sd=pd(bk.startDate),ed=pd(bk.endDate);
       if(sd.getFullYear()>venYear||ed.getFullYear()<venYear)return null;
       const cs=new Date(Math.max(sd,soy)),ce=new Date(Math.min(ed,eoy));
@@ -1989,7 +1993,9 @@ function _rcRenderTodayLegend(){
   const winStartStr=fmtISO(rcStart),winEndStr=fmtISO(new Date(winEndMs));
   const todayStr=fmtISO(new Date());
   const isTodayInView=todayStr>=winStartStr&&todayStr<winEndStr;
-  const active=AppData.bookings.filter(bk=>bk.status!=='cancelled'&&bk.startDate&&bk.endDate&&bk.startDate<winEndStr&&bk.endDate>winStartStr);
+  // Room Only bookings belong on the physical Room Calendar grid below, not
+  // this retreat-level summary strip — Darlene's call 2026-09-14.
+  const active=AppData.bookings.filter(bk=>bk.status!=='cancelled'&&bk.bookingType!=='room_only'&&bk.startDate&&bk.endDate&&bk.startDate<winEndStr&&bk.endDate>winStartStr);
   if(!active.length){el.style.display='none';cells.innerHTML='';cells.style.height='';return;}
   active.sort((a,b)=>a.startDate.localeCompare(b.startDate));
 
@@ -2022,7 +2028,16 @@ function _rcRenderTodayLegend(){
   }).join('');
 }
 
+// Bumped on every call so a slow/late-resolving fetch can tell it's been
+// superseded by a newer window (Prev/Next/Today navigated again before this
+// one finished) and bail instead of drawing its bars — positioned using ITS
+// OWN startMs — into whatever tracks happen to be on screen by the time it
+// resolves. Without this, navigating the calendar while a fetch is still in
+// flight left stale-window bars (correct date label, wrong pixel position)
+// scattered across the currently-visible months.
+let rcExtReqSeq=0;
 async function rcFetchExternalReservations(startMs){
+  const mySeq=++rcExtReqSeq;
   const startDate=fmtISO(new Date(startMs));
   const endDate=fmtISO(new Date(startMs+rcShowDays*DAY_MS));
   const portalResIds=new Set();
@@ -2032,6 +2047,7 @@ async function rcFetchExternalReservations(startMs){
     const resp=await fetch('/.netlify/functions/cloudbeds?action=getExternalReservations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startDate,endDate})});
     data=await resp.json();
   }catch(e){console.warn('[rcExternal] fetch error',e);return;}
+  if(mySeq!==rcExtReqSeq)return; // superseded by a newer window while this was in flight
   if(!data?.success){console.warn('[rcExternal]',data?.error);return;}
   externalReservations=data.reservations||[];
   console.log('[rcExternal] reservations received:',data.reservations?.length,'portal excluded:',portalResIds.size);

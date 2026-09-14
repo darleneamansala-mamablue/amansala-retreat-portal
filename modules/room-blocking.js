@@ -439,7 +439,15 @@ async function blockSave(){
   // from `selected` as the user having unchecked it on purpose — deleted that guest's
   // real registration. Excluding this retreat's own already-blocked rooms up front stops
   // both the false "already blocked" alert and the data loss it was causing.
-  const prevRoomsSet=new Set(_blockModalOrigRooms.length?_blockModalOrigRooms:(bk.blockedRooms||[]));
+  // Lowercased — real room-block data is inconsistently cased (e.g. Shannon
+  // Jamail's own retreat has both "4B-a" and "5b" in the same blockedRooms
+  // array), and Cloudbeds always reports room names uppercase ("5B"). A
+  // case-sensitive Set.has() here failed to recognize a room already
+  // belonged to THIS retreat, so it got flagged as a brand-new conflict
+  // against a Cloudbeds reservation for that same room — Darlene's report
+  // 2026-09-14: "Room 5B" flagged against Piper Nelson (Cloudbeds) despite
+  // 5b already being Shannon Jamail's own room, untouched in this save.
+  const prevRoomsSet=new Set((_blockModalOrigRooms.length?_blockModalOrigRooms:(bk.blockedRooms||[])).map(r=>r.toLowerCase()));
 
   // Validation: a room already blocked by an overlapping retreat or external Cloudbeds
   // reservation is dropped from THIS save rather than aborting the whole thing — an
@@ -452,8 +460,12 @@ async function blockSave(){
     if(other.id===bk.id)return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(room=>{
-      if(prevRoomsSet.has(room))return;
-      if(selected.includes(room)){conflicts.push(`Room ${room} → ${other.leaderName||other.retreatName}`);conflictingRooms.add(room);}
+      if(prevRoomsSet.has(room.toLowerCase()))return;
+      // Match against `selected`'s own casing (not `room`'s) so the later
+      // `selected.filter(r=>!conflictingRooms.has(r))` actually removes it —
+      // same casing mismatch risk as prevRoomsSet above.
+      const match=selected.find(s=>s.toLowerCase()===room.toLowerCase());
+      if(match){conflicts.push(`Room ${room} → ${other.leaderName||other.retreatName}`);conflictingRooms.add(match);}
     });
   });
   const _bsPortalIds=new Set();
@@ -462,7 +474,7 @@ async function blockSave(){
     if(_bsPortalIds.has(String(r.reservationID)))return;
     if(!datesOverlap(bk.startDate,bk.endDate,r.startDate,r.endDate))return;
     (r.rooms||[]).forEach(room=>{
-      if(prevRoomsSet.has(room))return;
+      if(prevRoomsSet.has(room.toLowerCase()))return;
       const match=selected.find(s=>s.toLowerCase()===room.toLowerCase());
       if(match){conflicts.push(`Room ${room} → ${r.guestName} (${r.sourceName||'Cloudbeds'})`);conflictingRooms.add(match);}
     });

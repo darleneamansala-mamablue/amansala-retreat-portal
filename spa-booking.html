@@ -94,6 +94,7 @@ let SpaData={services:[],rooms:[],therapists:[]};
 let SpaAppointments=[];
 let SBRegs=[];
 let SBBookings=[];
+let SBStaffAccounts=[];
 let SB={step:1,sessionType:null,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
         policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null,
         stayStart:null,stayEnd:null};
@@ -107,19 +108,23 @@ function fmtDateLong(ds){const d=new Date(ds+'T12:00:00');return d.toLocaleDateS
 
 async function init(){
   try{
-    const [{data:sd},{data:ad},{data:rd},{data:bd}]=await Promise.all([
+    const [{data:sd},{data:ad},{data:rd},{data:bd},{data:scd}]=await Promise.all([
       db.from('app_store').select('value').eq('key','spa_data').single(),
       db.from('app_store').select('value').eq('key','spa_appointments').single(),
       db.from('registrations').select('id,booking_id,room,guests,charges'),
       db.from('bookings').select('id,leader_name,booking_type,blocked_rooms,charges'),
+      db.from('app_store').select('value').eq('key','staffConfirmAccounts').maybeSingle(),
     ]);
     if(sd?.value) SpaData=sd.value;
     SpaAppointments=(ad?.value)||[];
     SBRegs=(rd||[]).map(r=>({id:r.id,bookingId:r.booking_id,room:r.room,guests:r.guests,charges:r.charges}));
     SBBookings=(bd||[]).map(b=>({id:b.id,leaderName:b.leader_name,bookingType:b.booking_type,blockedRooms:b.blocked_rooms,charges:b.charges}));
+    SBStaffAccounts=(scd?.value&&Array.isArray(scd.value))?scd.value:[];
   }catch(e){}
   const cancelId=new URLSearchParams(location.search).get('cancel');
   if(cancelId) return sbRenderCancelScreen(cancelId);
+  const confirmationId=new URLSearchParams(location.search).get('confirmation');
+  if(confirmationId) return sbRenderConfirmationScreen(confirmationId);
   renderStep();
 }
 
@@ -424,8 +429,49 @@ function sbCandidateTherapists(){
   else if(SB.prefType==='female'||SB.prefType==='male') list=list.filter(t=>t.gender===SB.prefType);
   return list;
 }
+// Matches a therapist to their Staff Confirmations login account (modules/
+// staff-confirm-portal.js) the same way scSpaItemsForName does there: by
+// full name, or by first name alone when no last name is on file.
+function sbTherapistAvailAccount(ther){
+  if(!ther)return null;
+  const full=((ther.firstName||'')+' '+(ther.lastName||'')).trim().toLowerCase();
+  const first=(ther.firstName||'').trim().toLowerCase();
+  return SBStaffAccounts.find(a=>{
+    const an=(a.name||'').trim().toLowerCase();
+    return an===full||an===first;
+  })||null;
+}
+// Mirrors scIsAvailable() in modules/staff-confirm-portal.js — this
+// standalone guest-facing page can't load that module (it depends on
+// booking-hub-only globals like bbcSchedules/actOpsData), so the same
+// day-of-week-rule + specific-date matching logic is duplicated here.
+// Keep both in sync if the availability data shape ever changes.
+function sbIsTherapistAvailable(ther,date,period){
+  const acct=sbTherapistAvailAccount(ther);
+  if(!acct)return true;
+  const dateBlocks=(acct.unavailableDates||[]).map(d=>typeof d==='string'?{date:d,period:'ALL'}:d);
+  if(dateBlocks.some(b=>b.date===date&&(b.period==='ALL'||!period||b.period===period)))return false;
+  const rules=acct.dayOfWeekRules||[];
+  const covering=rules.filter(r=>date>=r.start&&(!r.end||date<=r.end));
+  if(covering.length){
+    const dow=new Date(date+'T12:00:00').getDay();
+    const blockHit=covering.find(r=>r.mode==='block'&&r.days.includes(dow)&&(!r.period||r.period==='ALL'||!period||r.period===period));
+    if(blockHit)return false;
+    const onlyRules=covering.filter(r=>r.mode!=='block');
+    if(onlyRules.length){
+      const matchingDayRule=onlyRules.find(r=>r.days.includes(dow));
+      if(!matchingDayRule)return false;
+      if(matchingDayRule.period&&matchingDayRule.period!=='ALL'&&period&&matchingDayRule.period!==period)return false;
+    }
+  }
+  return true;
+}
 function sbSlotFree(therapistId,roomId,dateStr,startMin,duration){
   const endMin=startMin+duration;
+  if(therapistId){
+    const ther=SpaData.therapists.find(t=>t.id===therapistId);
+    if(ther&&!sbIsTherapistAvailable(ther,dateStr,startMin<720?'AM':'PM'))return false;
+  }
   return !SpaAppointments.some(a=>{
     if(a.date!==dateStr||a.status==='CANCELLED') return false;
     const sameTher=a.therapistId===therapistId;
@@ -584,6 +630,7 @@ function sbEmailRow(label,value){
 }
 async function sbSendConfirmEmail(appt,svc,therName,location_,folioPosted){
   try{
+    const confirmationUrl=`${location.origin}/spa-booking.html?confirmation=${appt.id}`;
     const cancelUrl=`${location.origin}/spa-booking.html?cancel=${appt.id}`;
     const body=`<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(SB.firstName)}, you're booked! Here are your appointment details:</p>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px">
@@ -598,6 +645,9 @@ async function sbSendConfirmEmail(appt,svc,therName,location_,folioPosted){
       <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px">Need to cancel? You can cancel free of charge up to 12 hours before your appointment using the button below.</p>
       <div style="text-align:center;margin-bottom:8px">
         <a href="${cancelUrl}" style="display:inline-block;background:#b45309;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.3px">Cancel My Appointment</a>
+      </div>
+      <div style="text-align:center">
+        <a href="${confirmationUrl}" style="display:inline-block;color:#2d6a6a;text-decoration:underline;font-size:13px;font-weight:600">View this confirmation anytime</a>
       </div>`;
     const html=sbEmailShell('Your Spa Appointment is Confirmed',body);
     await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:appt.email,subject:'Spa Appointment Confirmed — Amansala',html})});
@@ -616,6 +666,24 @@ async function sbSendCancelEmail(appt,svc){
   }catch(e){}
 }
 function SB_cancelFirstName(appt){return (appt.clientName||'').split(' ')[0]||'there';}
+// Lets the assigned therapist know their time just freed up — sent whenever
+// a client cancels (self-service here, or front desk cancelling on a
+// client's behalf in the admin calendar — see spaNotifyTherapistCancelled
+// in modules/spa-calendar.js for that path).
+async function sbSendTherapistCancelEmail(appt,svc,ther){
+  if(!ther?.email)return;
+  try{
+    const body=`<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(ther.firstName)}, a client just cancelled an appointment on your schedule:</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px">
+        ${sbEmailRow('Client',esc(appt.clientName||''))}
+        ${sbEmailRow('Service',esc(svc?.name||''))}
+        ${sbEmailRow('Was scheduled',fmtDateLong(appt.date)+' at '+fmtT(appt.start))}
+      </table>
+      <p style="font-size:13.5px;color:#6b7280;margin:20px 0 0">That time is now open on your schedule.</p>`;
+    const html=sbEmailShell('A Client Cancelled Their Appointment',body);
+    await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:ther.email,subject:'Appointment Cancelled — Amansala Spa',html})});
+  }catch(e){}
+}
 
 async function sbFinalConfirm(){
   const btn=document.getElementById('sbConfirmBtn');
@@ -743,17 +811,18 @@ async function sbFinalConfirm(){
     if(appt.email) await sbSendConfirmEmail(appt,svc,therName,meetAt,folioPosted);
     const el=document.getElementById('mainContent');
     document.getElementById('stepDots').style.display='none';
+    const viewConfirmationLink=`<div style="margin-top:18px"><a href="spa-booking.html?confirmation=${appt.id}" style="color:#2d6a6a;font-weight:600;font-size:13.5px;text-decoration:underline">View or print your confirmation</a></div>`;
     if(isHotel){
       el.innerHTML=`<div class="msg">
         <div class="msg-icon">🌴</div>
         <div class="msg-title">You're Booked!</div>
-        <div class="msg-sub">See you for your <b>${esc(svc.name)}</b> on ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>${folioPosted?'The charge has been added to your room folio.':'The charge will appear on your room folio. Our team will confirm your reservation.'} We've sent the details — including your meeting location and a cancellation link — to ${esc(appt.email)}.</div>
+        <div class="msg-sub">See you for your <b>${esc(svc.name)}</b> on ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>${folioPosted?'The charge has been added to your room folio.':'The charge will appear on your room folio. Our team will confirm your reservation.'} We've sent the details — including your meeting location and a cancellation link — to ${esc(appt.email)}.${viewConfirmationLink}</div>
       </div>`;
     }else{
       el.innerHTML=`<div class="msg">
         <div class="msg-icon">🌴</div>
         <div class="msg-title">Almost There!</div>
-        <div class="msg-sub">Your <b>${esc(svc.name)}</b> is reserved for ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>Our team will reach out to <b>${esc(SB.email)}</b> shortly to collect payment and confirm your appointment.</div>
+        <div class="msg-sub">Your <b>${esc(svc.name)}</b> is reserved for ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>Our team will reach out to <b>${esc(SB.email)}</b> shortly to collect payment and confirm your appointment.${viewConfirmationLink}</div>
       </div>`;
     }
   }catch(e){
@@ -762,10 +831,45 @@ async function sbFinalConfirm(){
   }
 }
 
+// ── GUEST-FACING CONFIRMATION PAGE (reached via ?confirmation=<apptId> —
+// linked from the confirmation email and the inline post-booking screen) —
+// a page the guest can revisit anytime to see their appointment details
+// again, without having to dig up the original email. Read-only summary
+// plus a way into the existing cancel flow, same 12-hour cutoff it enforces.
+function sbApptDateTime(appt){return new Date(appt.date+'T'+appt.start+':00');}
+function sbRenderConfirmationScreen(apptId){
+  document.getElementById('stepDots').style.display='none';
+  const el=document.getElementById('mainContent');
+  const appt=SpaAppointments.find(a=>a.id===apptId);
+  if(!appt){
+    el.innerHTML=`<div class="msg"><div class="msg-icon">🤔</div><div class="msg-title">Appointment Not Found</div><div class="msg-sub">We couldn't find that appointment. Please contact us directly if you need to make a change.</div></div>`;
+    return;
+  }
+  const svc=SpaData.services.find(s=>s.id===appt.serviceId);
+  const ther=SpaData.therapists.find(t=>t.id===appt.therapistId);
+  const room=SpaData.rooms.find(r=>r.id===appt.roomId);
+  const meetAt=room?(room.location?`${room.name} — ${room.location}`:room.name):'Our spa reception';
+  const therName=ther?`${ther.firstName} ${ther.lastName||''}`.trim():'To be assigned';
+  const isCancelled=appt.status==='CANCELLED';
+  const hoursLeft=(sbApptDateTime(appt)-new Date())/3600000;
+  const canCancelOnline=!isCancelled&&hoursLeft>=12;
+  el.innerHTML=`<div class="card">
+    <div class="section-title">${isCancelled?'Cancelled Appointment':'Your Appointment'}</div>
+    ${isCancelled?`<div class="section-sub" style="margin-bottom:14px">This appointment was cancelled${appt.cancelledAt?' on '+fmtDateLong(appt.cancelledAt.slice(0,10)):''}.</div>`:''}
+    <div class="summary-row"><span class="lbl">Service</span><span class="val">${esc(svc?.name||'')}</span></div>
+    <div class="summary-row"><span class="lbl">Date</span><span class="val">${fmtDateLong(appt.date)}</span></div>
+    <div class="summary-row"><span class="lbl">Time</span><span class="val">${fmtT(appt.start)}</span></div>
+    <div class="summary-row"><span class="lbl">Therapist</span><span class="val">${esc(therName)}</span></div>
+    <div class="summary-row"><span class="lbl">Meet at</span><span class="val">${esc(meetAt)}</span></div>
+    ${appt.roomNumber?`<div class="summary-row"><span class="lbl">Your room</span><span class="val">${esc(appt.roomNumber)}</span></div>`:''}
+    <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc?.groupPricing?appt.groupTotalPriceUSD:svc?.price} USD</span></div>
+    ${!isCancelled?`<div class="section-sub" style="margin-top:14px">${canCancelOnline?'You can cancel free of charge up to 12 hours before your appointment.':"It's less than 12 hours away, so it can't be cancelled online — please contact us directly if you need to."}</div>`:''}
+    ${canCancelOnline?`<button class="btn-primary" style="margin-top:16px;background:#b45309" onclick="location.href='spa-booking.html?cancel=${appt.id}'">Cancel My Appointment</button>`:''}
+  </div>`;
+}
 // ── GUEST-FACING CANCELLATION (reached via ?cancel=<apptId> link in the
 // confirmation email) — enforces the 12-hour cutoff, reverses the folio
 // charge if one was auto-posted, and emails a cancellation confirmation. ──
-function sbApptDateTime(appt){return new Date(appt.date+'T'+appt.start+':00');}
 function sbRenderCancelScreen(apptId){
   document.getElementById('stepDots').style.display='none';
   const el=document.getElementById('mainContent');
@@ -829,6 +933,10 @@ async function sbDoCancel(apptId){
     SpaAppointments=latest;
     const svc=SpaData.services.find(s=>s.id===appt.serviceId);
     if(appt.email) await sbSendCancelEmail(appt,svc);
+    if(appt.therapistId){
+      const ther=SpaData.therapists.find(t=>t.id===appt.therapistId);
+      if(ther) await sbSendTherapistCancelEmail(appt,svc,ther);
+    }
     const el=document.getElementById('mainContent');
     el.innerHTML=`<div class="msg"><div class="msg-icon">✓</div><div class="msg-title">Cancelled</div><div class="msg-sub">Your appointment has been cancelled${appt.folioStatus==='REVERSED'?' and the charge removed from your folio' :''}. We've sent you a confirmation email.</div></div>`;
   }catch(e){
