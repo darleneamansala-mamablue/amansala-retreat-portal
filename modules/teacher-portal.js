@@ -5620,7 +5620,16 @@ async function _fbConfirmSend(){
   if(!bk.packageCustomPrices)bk.packageCustomPrices={};
   bk.packageCustomPrices.__cfg__={...(bk.packageCustomPrices.__cfg__||{}),finalBalanceSentAt:new Date().toISOString()};
   saveAll();
-  try{await db.from('bookings').update({package_custom_prices:bk.packageCustomPrices}).eq('id',bk.id);}catch(e){}
+  // The email above already went out — a failure here only means the "Final
+  // Balance Sent" badge won't show, which silently looked like the email was
+  // never sent (confirmed bug 2026-09-15: Carter Foxworth's badge was missing
+  // even though the email had gone out). Surface it instead of swallowing it,
+  // so staff know to double-check/retry rather than assume nothing happened.
+  try{
+    await db.from('bookings').update({package_custom_prices:bk.packageCustomPrices}).eq('id',bk.id);
+  }catch(e){
+    showToast('⚠ Email sent, but could not save the "sent" status — the badge may not show. '+e.message);
+  }
   showToast('Final balance request sent to '+to+' ✓');
   logActivity('email_sent',`Final balance request → ${bk.leaderName} (${to}) — ${fmt$(balance)}`,bk.id);
   _fbPending=null;
