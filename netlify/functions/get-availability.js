@@ -46,7 +46,7 @@ exports.handler = async (event) => {
     }
 
     const [bkRes, rtRes, settingsRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/bookings?select=blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/room_types?${rtFilter}&select=${RT_FIELDS}`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: hdrs }),
     ]);
@@ -61,6 +61,22 @@ exports.handler = async (event) => {
     const blockedRooms = new Set(
       (bookings ?? []).flatMap(bk => bk.blocked_rooms ?? [])
     );
+    // Also cross-check real registrations, not just blocked_rooms — a room
+    // can have a named guest registered in it whose room was never added to
+    // its booking's blocked_rooms ("orphaned registration"; confirmed real
+    // incidents: Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
+    // This is the public guest-facing booking site, so this gap could have
+    // let a real guest book an already-occupied room online.
+    const overlappingIds = (bookings ?? []).map(bk => bk.id).filter(Boolean);
+    if (overlappingIds.length) {
+      const regRes = await fetch(`${SUPABASE_URL}/rest/v1/registrations?select=room,guests&booking_id=in.(${overlappingIds.join(',')})`, { headers: hdrs });
+      if (regRes.ok) {
+        const regs = await regRes.json();
+        (regs ?? []).forEach(r => {
+          if (r.room && (r.guests || []).some(g => g && g.name)) blockedRooms.add(r.room);
+        });
+      }
+    }
 
     const available = (roomTypes ?? []).map(rt => {
       const rooms = rt.rooms ?? [];

@@ -428,12 +428,17 @@ function trGetUpgrade(bkId,roomNum){
   const bk=AppData.bookings.find(b=>b.id===bkId);
   if(!bk)return null;
 
-  // Collect rooms unavailable during this booking's dates
+  // Collect rooms unavailable during this booking's dates. Also cross-checks
+  // real registrations, not just blockedRooms — a room can have a named
+  // guest registered in it whose room was never added to blockedRooms
+  // ("orphaned registration"; confirmed real incidents: Katherine
+  // McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
   const busyRooms=new Set();
   AppData.bookings.forEach(b=>{
     if(b.status==='cancelled'||b.id===bk.id)return; // own retreat's blocked rooms may still be available
     if(b.startDate<bk.endDate&&b.endDate>bk.startDate){
       (b.blockedRooms||[]).forEach(r=>busyRooms.add(r));
+      AppData.regs.filter(r=>r.bookingId===b.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>busyRooms.add(r.room));
     }
   });
   // Rooms assigned to OTHER guests in the same booking are also unavailable

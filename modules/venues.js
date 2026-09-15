@@ -461,8 +461,10 @@ function qrUpdatePreview(){
   const isChica=qrPending.row==='CHICA'||notes.toLowerCase().includes('chica');
   const takenRooms=new Set();
   AppData.bookings.forEach(other=>{
+    if(other.status==='cancelled')return;
     if(!datesOverlap(qrPending.start,qrPending.end,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(r=>takenRooms.add(r));
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   const preset=getBldPreset(pax);
   const selected=[];
@@ -488,11 +490,17 @@ function qrSave(){
   const {row,start,end,nights}=qrPending;
   const effectiveRow=notes.toLowerCase().includes('chica')?'CHICA':row;
   const isChica=effectiveRow==='CHICA';
-  // Build taken rooms (exclude this new booking — it doesn't exist yet)
+  // Build taken rooms (exclude this new booking — it doesn't exist yet).
+  // Also cross-checks real registrations, not just blockedRooms — a room can
+  // have a named guest registered in it whose room was never added to
+  // blockedRooms ("orphaned registration"; confirmed real incidents:
+  // Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
   const takenRooms=new Set();
   AppData.bookings.forEach(other=>{
+    if(other.status==='cancelled')return;
     if(!datesOverlap(start,end,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(r=>takenRooms.add(r));
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   const preset=getBldPreset(pax);
   const selected=[],skipped=[];
@@ -910,11 +918,19 @@ function rsBackToSearch(){
 }
 // Same overlap/blocked-rooms logic as netlify/functions/get-availability.js, computed
 // client-side against AppData since the admin panel already has it all in memory.
+// Also cross-checks actual registrations, not just each booking's blockedRooms
+// — a room can have a real, named guest registered in it whose room code was
+// never added to blockedRooms (an "orphaned registration"; confirmed real
+// incidents: Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b for
+// Nov 1-6, 2026). Without this, a room like that showed up as "available"
+// here even though it's genuinely occupied for the requested dates.
 function rsComputeAvailability(checkIn,checkOut){
   const blocked=new Set();
   AppData.bookings.forEach(bk=>{
     if(bk.status==='cancelled')return;
-    if(bk.startDate<checkOut&&bk.endDate>checkIn)(bk.blockedRooms||[]).forEach(r=>blocked.add(r));
+    if(!(bk.startDate<checkOut&&bk.endDate>checkIn))return;
+    (bk.blockedRooms||[]).forEach(r=>blocked.add(r));
+    AppData.regs.filter(r=>r.bookingId===bk.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>blocked.add(r.room));
   });
   return AppData.roomTypes.map(rt=>{
     const rooms=rt.rooms||[];
@@ -1003,6 +1019,13 @@ function showAvailPreview(id){
   const takenRooms=new Set();
   overlapping.forEach(b=>(b.blockedRooms||[]).forEach(r=>takenRooms.add(r)));
   (bk.blockedRooms||[]).forEach(r=>takenRooms.add(r));
+  // Also cross-check real registrations, not just blockedRooms — a room can
+  // have a named guest registered in it whose room was never added to its
+  // booking's blockedRooms (an "orphaned registration"; confirmed real
+  // incidents: Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
+  [...overlapping,bk].forEach(b=>{
+    AppData.regs.filter(r=>r.bookingId===b.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
+  });
 
   // Per-type availability (skip bed-level duplicates so physical rooms aren't counted twice)
   const avail=AppData.roomTypes.filter(rt=>!DUPLICATE_ROOM_ENTRY_IDS.has(rt.id)).map(rt=>{
@@ -1471,12 +1494,15 @@ function crUpdatePreview(){
   const prev=document.getElementById('crPreview');
   if(!srcId){prev.textContent='Select a retreat above to preview what will be copied.';return;}
   const src=AppData.bookings.find(b=>b.id===srcId);if(!src){return;}
-  // Find taken rooms from OTHER overlapping bookings (not self, not source)
+  // Find taken rooms from OTHER overlapping bookings (not self, not source).
+  // Also cross-checks real registrations, not just blockedRooms — see the
+  // note in crSave() below.
   const takenRooms=new Set();
   AppData.bookings.forEach(other=>{
-    if(other.id===bk.id||other.id===srcId)return;
+    if(other.id===bk.id||other.id===srcId||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(r=>takenRooms.add(r));
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   const available=(src.blockedRooms||[]).filter(r=>!takenRooms.has(r));
   const blocked=(src.blockedRooms||[]).filter(r=>takenRooms.has(r));
@@ -1490,11 +1516,16 @@ function crSave(){
   const srcId=document.getElementById('crSourceSel').value;
   if(!srcId){alert('Select a retreat to copy from.');return;}
   const src=AppData.bookings.find(b=>b.id===srcId);if(!src)return;
+  // Also cross-checks real registrations, not just blockedRooms — a room can
+  // have a named guest registered in it whose room was never added to
+  // blockedRooms ("orphaned registration"; confirmed real incidents:
+  // Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
   const takenRooms=new Set();
   AppData.bookings.forEach(other=>{
-    if(other.id===bk.id||other.id===srcId)return;
+    if(other.id===bk.id||other.id===srcId||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(r=>takenRooms.add(r));
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   const available=(src.blockedRooms||[]).filter(r=>!takenRooms.has(r));
   const skipped=(src.blockedRooms||[]).filter(r=>takenRooms.has(r));
@@ -1510,11 +1541,16 @@ function crSave(){
 // Shared room-block computation — no UI side effects. Returns {selected, beds, flags, slRooms, preset, casaShanti}
 function computeAutoRoomBlock(bk){
   const pax=parseInt(bk.pax)||15;
+  // Also cross-checks real registrations, not just blockedRooms — a room can
+  // have a named guest registered in it whose room was never added to
+  // blockedRooms ("orphaned registration"; confirmed real incidents:
+  // Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
   const takenRooms=new Set();
   AppData.bookings.forEach(other=>{
-    if(other.id===bk.id)return;
+    if(other.id===bk.id||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(r=>takenRooms.add(r));
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   const rowAllowed=getRowAllowedRooms(bk.row);
   const slRooms=getStraightLineRooms(bk);

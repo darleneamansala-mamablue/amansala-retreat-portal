@@ -474,12 +474,17 @@ function bldStep2Build(){
   document.getElementById('s2-datesLbl').textContent=`${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}`;
   document.getElementById('s2-paxLbl').textContent=bldPaxN;
 
-  // Conflict map
+  // Conflict map. Also cross-checks real registrations, not just
+  // blockedRooms — a room can have a named guest registered in it whose room
+  // was never added to blockedRooms ("orphaned registration"; confirmed real
+  // incidents: Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
   const conflictMap=new Map();
   AppData.bookings.forEach(other=>{
-    if(other.id===bk.id)return;
+    if(other.id===bk.id||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
-    (other.blockedRooms||[]).forEach(room=>{if(!conflictMap.has(room))conflictMap.set(room,other.leaderName||other.retreatName);});
+    const label=other.leaderName||other.retreatName;
+    (other.blockedRooms||[]).forEach(room=>{if(!conflictMap.has(room))conflictMap.set(room,label);});
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{if(!conflictMap.has(r.room))conflictMap.set(r.room,label);});
   });
 
   const myBlocked=new Set(bk.blockedRooms||[]);
@@ -561,12 +566,16 @@ function bldConfirmBlock(){
   const bk=AppData.bookings.find(b=>b.id===bldCurBkId);if(!bk)return;
   const selected=Array.from(document.querySelectorAll('#s2-roomGrid .block-room-item input:checked'))
     .map(cb=>cb.closest('.block-room-item').dataset.room);
-  // Conflict check
+  // Conflict check — also cross-checks real registrations, not just
+  // blockedRooms, so this final save-time gate can't wrongly confirm a room
+  // that's genuinely occupied via an orphaned registration.
   const conflictMap=new Map();
   AppData.bookings.forEach(other=>{
-    if(other.id===bk.id)return;
+    if(other.id===bk.id||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
-    (other.blockedRooms||[]).forEach(r=>{if(!conflictMap.has(r))conflictMap.set(r,other.leaderName||other.retreatName);});
+    const label=other.leaderName||other.retreatName;
+    (other.blockedRooms||[]).forEach(r=>{if(!conflictMap.has(r))conflictMap.set(r,label);});
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{if(!conflictMap.has(r.room))conflictMap.set(r.room,label);});
   });
   const conflicts=selected.filter(r=>conflictMap.has(r));
   if(conflicts.length){alert('Cannot confirm — rooms already blocked:\n'+conflicts.map(r=>`Room ${r} → ${conflictMap.get(r)}`).join('\n'));return;}
@@ -691,7 +700,11 @@ function _freeRoomsCountForNotif(rtId,startDate,endDate){
   const rt=AppData.roomTypes.find(r=>r.id===rtId);if(!rt)return 0;
   const overlaps=(s1,e1,s2,e2)=>s1<e2&&e1>s2;
   const blocked=new Set();
-  AppData.bookings.forEach(b=>{if(b.status!=='cancelled'&&overlaps(b.startDate,b.endDate,startDate,endDate))(b.blockedRooms||[]).forEach(r=>blocked.add(r));});
+  AppData.bookings.forEach(b=>{
+    if(b.status==='cancelled'||!overlaps(b.startDate,b.endDate,startDate,endDate))return;
+    (b.blockedRooms||[]).forEach(r=>blocked.add(r));
+    AppData.regs.filter(r=>r.bookingId===b.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>blocked.add(r.room));
+  });
   return (rt.rooms||[]).filter(r=>!blocked.has(r)).length;
 }
 function _calcRoomTagsForNotif(bk){

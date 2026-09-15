@@ -140,10 +140,18 @@ function _renderBlockRoomsGrid(bkId){
   // no guest names" per retreat, not just an anonymous BOOKED badge.
   const conflictMap=new Map();
   AppData.bookings.forEach(other=>{
-    if(other.id===bkId)return;
+    if(other.id===bkId||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
+    const entry={name:other.leaderName||other.retreatName,bookingId:other.id};
     (other.blockedRooms||[]).forEach(room=>{
-      if(!conflictMap.has(room))conflictMap.set(room,{name:other.leaderName||other.retreatName,bookingId:other.id});
+      if(!conflictMap.has(room))conflictMap.set(room,entry);
+    });
+    // Also cross-check real registrations, not just blockedRooms — a room can
+    // have a named guest registered in it whose room was never added to
+    // blockedRooms ("orphaned registration"; confirmed real incidents:
+    // Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{
+      if(!conflictMap.has(r.room))conflictMap.set(r.room,entry);
     });
   });
   // Also add external Cloudbeds reservations (walk-ins, OTAs, etc.)
