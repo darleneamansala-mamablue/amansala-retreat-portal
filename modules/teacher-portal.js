@@ -3690,8 +3690,8 @@ function renderPlanningGuide(){
   const sections=[
     {title:'Your Room List',content:`<ul>
       <li>Place each guest in the room type they reserved.</li>
-      <li><b>10 paying guests</b> = one complimentary room in the most basic category. 20 guests = two teacher rooms complimentary.</li>
-      <li>Fewer than 10 guests = <b>$20 USD credit per guest per day</b> toward your own room & board.</li>
+      <li><b>15 paying guests</b> = one complimentary room in the most basic category (10 paying guests during low season, starting June 1st). 20 guests = two teacher rooms complimentary.</li>
+      <li>Fewer than 15 guests (10 during low season) = <b>$20 USD credit per guest per day</b> toward your own room & board.</li>
       <li>Add guests by clicking the <b>+</b> sign — enter name, phone & email.</li>
       <li>Adjustments are allowed until the <b>6-week deadline</b>.</li>
       <li>Rooms must be filled to capacity. If a shared room guest has no roommate, they pay the private rate difference.</li>
