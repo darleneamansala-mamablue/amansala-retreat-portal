@@ -4782,8 +4782,8 @@ const RM_TYPE_COLORS={
 };
 const RM_TYPE_COLOR_DEFAULT={bg:'#fdf4ff',border:'#a855f7',text:'#6b21a8'}; // Direct/OTA/unrecognized — the old fixed purple
 function rmTypeColor(bk){ return RM_TYPE_COLORS[bk.retreatName]||RM_TYPE_COLOR_DEFAULT; }
-const DEF_VEN_ROWS=['RETREAT 1','RETREAT 2','RETREAT 3','CHICA','CASA SHANTI','CASA MASTER','CASITA 4','SPECIAL EVENTS'];
-const VEN_ROWS_VERSION='8';
+const DEF_VEN_ROWS=['RETREAT 1','RETREAT 2','RETREAT 3','RETREAT 4','RETREAT 5','CHICA RETREAT','SPECIAL EVENTS'];
+const VEN_ROWS_VERSION='9';
 const DEF_ROOM_TYPES=[
   // === AMANSALA — names and rooms match Cloudbeds exactly ===
   {id:'rt1',name:'Beachfront King',          property:'AMANSALA',   color:'#0891b2',maxOcc:2,price1:575,price2:360,price1_low:485,price2_low:290,desc:'Our best room category — spacious with a beautiful ocean view, plenty of closet space, and a lovely terrace. Perfect for couples or anyone seeking a more deluxe experience.',rooms:['3','20','21','22','23','24','25','29','2B','30','33','3B','CH1','CH2','CH4']},
@@ -4973,6 +4973,12 @@ function loadAll(){
   // Migrate CASA GRANDE → CASA MASTER, remove RETREAT 4
   AppData.venRows=AppData.venRows.map(r=>r==='CASA GRANDE'?'CASA MASTER':r).filter(r=>r!=='RETREAT 4');
   AppData.bookings.forEach(bk=>{if(bk.row==='CASA GRANDE')bk.row='CASA MASTER';});
+  // Migrate CHICA → CHICA RETREAT (5 numbered retreat rows + Chica Retreat;
+  // Casa Shanti/Casa Master/Casita 4 rows removed — confirmed 2026-09-15 no
+  // live booking used any of those three, so no bk.row migration needed for
+  // them, only the rename below).
+  AppData.venRows=AppData.venRows.map(r=>r==='CHICA'?'CHICA RETREAT':r);
+  AppData.bookings.forEach(bk=>{if(bk.row==='CHICA')bk.row='CHICA RETREAT';});
   // Auto-advance: any booking with payments recorded should be at least deposit_paid
   AppData.bookings.forEach(bk=>{
     if((bk.payments||[]).length>0&&['requested','contract_sent','contract_signed'].includes(bk.status)){

@@ -7,6 +7,22 @@
 // (matches Staging's own selectBooking() — not on every regRender(), just when the
 // retreat changes) — feeds the "★ Teacher Pays Transport" banner below.
 let regTransportRows=[];
+// Room List note presets — quick-click property/room preferences for staff
+// coordinating room assignments (e.g. which properties a retreat can mix
+// across). Stored in packageCustomPrices.__cfg__.roomNotes (no schema
+// change needed, same JSONB field taxRate/hideRoomNumbers already live in).
+// Admin-only — teachers don't set these.
+const ROOM_NOTE_PRESETS=['Ok to mix between Chica and Grande','Requested Chica','Grande Only','Ok to have Casita 4','Ok to have Casa Shanti'];
+function regToggleRoomNote(note){
+  if(!regSelBk)return;
+  if(!regSelBk.packageCustomPrices)regSelBk.packageCustomPrices={};
+  if(!regSelBk.packageCustomPrices.__cfg__)regSelBk.packageCustomPrices.__cfg__={};
+  const cfg=regSelBk.packageCustomPrices.__cfg__;
+  const cur=cfg.roomNotes||[];
+  cfg.roomNotes=cur.includes(note)?cur.filter(n=>n!==note):[...cur,note];
+  saveAll();regRender();
+  db.from('bookings').update({package_custom_prices:regSelBk.packageCustomPrices}).eq('id',regSelBk.id).then(()=>{}).catch(()=>{});
+}
 const _TR_RATES={cancun:[195,100,80,65,55,45],tulum:[145,80,65,55,45,40]};
 function _calcTransportTotal(rows,direction){
   let total=0,isCharged=false;
@@ -473,6 +489,18 @@ function regRender(){
   const panel=document.getElementById('regPanel');
   panel.innerHTML='';
 
+  if(!IS_TEACHER_MODE){
+    const _selectedNotes=new Set(regSelBk.packageCustomPrices?.__cfg__?.roomNotes||[]);
+    const notesCard=document.createElement('div');
+    notesCard.style.cssText='margin-bottom:14px;padding:12px 14px;background:#f8f5f0;border:1.5px solid var(--border);border-radius:10px';
+    notesCard.innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Room List Notes</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${ROOM_NOTE_PRESETS.map(n=>{
+        const on=_selectedNotes.has(n);
+        return `<button onclick="regToggleRoomNote('${n.replace(/'/g,"\\'")}')" style="padding:5px 12px;border-radius:99px;font-size:12px;font-family:'Jost',sans-serif;cursor:pointer;border:1.5px solid ${on?'var(--teal)':'var(--border)'};background:${on?'var(--teal)':'#fff'};color:${on?'#fff':'var(--dark)'};font-weight:${on?'700':'500'}">${on?'✓ ':''}${escHtml(n)}</button>`;
+      }).join('')}</div>`;
+    panel.appendChild(notesCard);
+  }
+
   // DISABLED 2026-09-06: auto-injects a new "Garden Basic" registration + blocks a room every
   // time this view loads, for any retreat whose real teacher registration isn't flagged
   // is_teacher_room=true (true for most retreats created via the current app, which doesn't
@@ -485,11 +513,13 @@ function regRender(){
   // If a virtual-group parent room (rt8/rt9) is in blockedRooms, also add its sub-rooms so bd3/bd4 entries pass the filter
   AppData.roomTypes.forEach(vrt=>{if(!VIRTUAL_GROUP_RT_IDS.has(vrt.id))return;(vrt.rooms||[]).forEach(r=>{if(blockedSet.has(r))_getSharedBeds(r).forEach(s=>blockedSet.add(s));});});
   if(blockedSet.size===0){
-    panel.innerHTML=`<div class="reg-empty" style="padding:60px 20px">
+    // insertAdjacentHTML (not innerHTML=) — this must APPEND after the Room
+    // List Notes card above, not wipe it out.
+    panel.insertAdjacentHTML('beforeend',`<div class="reg-empty" style="padding:60px 20px">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:44px;height:44px;opacity:.3;margin:0 auto 12px;display:block"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
       <p style="font-size:14px;color:var(--muted)">No rooms blocked yet.</p>
       <p style="font-size:12.5px;color:#bbb;margin-top:6px">Click <b style="color:var(--teal)">Block Rooms</b> above to assign rooms to this retreat.</p>
-    </div>`;
+    </div>`);
     return;
   }
 
