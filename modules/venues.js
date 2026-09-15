@@ -97,8 +97,15 @@ function venBuild(){
       const transportHtml=transRoster&&transRoster.roster.length>0?`<span class="bk-transport" title="Transportation: ${transRoster.submittedCount}/${transRoster.roster.length} submitted — ${trCompletionLabel(transRoster.submittedCount,transRoster.roster.length)}" style="font-size:10.5px;font-weight:700;background:rgba(0,0,0,.12);border-radius:4px;padding:1px 5px;margin-left:4px;color:${trCompletionColor(transRoster.submittedCount,transRoster.roster.length)}">🚐 ${transRoster.submittedCount}/${transRoster.roster.length}</span>`:'';
       const flagHtml=hasFlags?`<span class="bk-flag" title="${autoFlags.length+manualFlags.length} flag(s)" onclick="event.stopPropagation();openFlagsModal('${bk.id}')">🚩</span>`:'';
       const roomOnlyBadge=isRoomOnly?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#a855f7;color:#fff;border-radius:3px;padding:1px 5px;margin-left:6px">🏨 Room Only</span>`:'';
+      // Deposit Paid already has its own dedicated color in the legend (green)
+      // — showing the word too was redundant (Darlene's call 2026-09-15).
+      // Every other status keeps its text label since their colors alone
+      // aren't as unambiguous (e.g. dashed red = Cancelled vs solid red =
+      // Contract Signed).
       const stBadge=isInquiry
         ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#e5e7eb;color:#6b7280;border-radius:3px;padding:1px 5px;margin-left:6px">Inquiry</span>`
+        :bk.status==='deposit_paid'
+        ?roomOnlyBadge
         :`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;opacity:.75;margin-left:5px">${st.label}</span>${roomOnlyBadge}`;
       const finBadge=bk.finalPaymentRequested?`<span title="Final payment requested" style="font-size:9.5px;background:rgba(0,0,0,.15);border-radius:3px;padding:1px 5px;margin-left:3px;font-weight:700">$</span>`:'';
       const bkTd=!bk.teacherDiscountDisabled?calcTeacherDiscount(bk,AppData.regs.filter(r=>r.bookingId===bk.id)):null;
