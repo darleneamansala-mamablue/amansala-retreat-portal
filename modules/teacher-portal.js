@@ -4313,12 +4313,18 @@ function teacherPortalLink(bkId){
   return slug?`${location.origin}/${slug}`:`${location.origin}/booking-hub.html?mode=teacher&bk=${bkId}`;
 }
 
+// "Teacher Access" used to only copy the link silently (a toast easy to
+// miss, no visible change on screen) — clicking it expecting to land in the
+// teacher's portal did nothing (real report 2026-09-15). Now it also opens
+// it, same as the separate "Preview as Teacher" menu item, while still
+// copying the link first so it's ready to share too.
 function showTeacherCode(){
   if(!regSelBk)return;
   const link=teacherPortalLink(regSelBk.id);
   navigator.clipboard.writeText(link).catch(()=>{});
-  showToast('Portal link copied!');
+  showToast('Portal link copied — opening her portal…');
   document.getElementById('regTeacherCodeWrap').style.display='none';
+  openTeacherPortal(regSelBk.id);
 }
 
 function copyTeacherLink(){
