@@ -925,18 +925,29 @@ function rsBackToSearch(){
 // Nov 1-6, 2026). Without this, a room like that showed up as "available"
 // here even though it's genuinely occupied for the requested dates.
 function rsComputeAvailability(checkIn,checkOut){
-  const blocked=new Set();
+  // room → {label, bkId} of whichever retreat is blocking it, so a blocked
+  // room can still be shown (in red) with who has it — lets staff assess
+  // whether that retreat could give it up, instead of just hiding it.
+  const blockedBy=new Map();
   AppData.bookings.forEach(bk=>{
     if(bk.status==='cancelled')return;
     if(!(bk.startDate<checkOut&&bk.endDate>checkIn))return;
-    (bk.blockedRooms||[]).forEach(r=>blocked.add(r));
-    AppData.regs.filter(r=>r.bookingId===bk.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>blocked.add(r.room));
+    const info={label:bk.leaderName||bk.retreatName||'Blocked',bkId:bk.id};
+    (bk.blockedRooms||[]).forEach(r=>{if(!blockedBy.has(r))blockedBy.set(r,info);});
+    AppData.regs.filter(r=>r.bookingId===bk.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{if(!blockedBy.has(r.room))blockedBy.set(r.room,info);});
   });
   return AppData.roomTypes.map(rt=>{
     const rooms=rt.rooms||[];
-    const availableRooms=rooms.filter(r=>!blocked.has(r));
-    return{rt,availableRooms,totalRooms:rooms.length};
-  }).filter(x=>x.totalRooms>0&&x.availableRooms.length>0);
+    const roomStatus=rooms.map(r=>{const b=blockedBy.get(r);return{room:r,available:!b,blockedByLabel:b?b.label:null,blockedByBkId:b?b.bkId:null};});
+    const availableRooms=roomStatus.filter(x=>x.available).map(x=>x.room);
+    return{rt,roomStatus,availableRooms,totalRooms:rooms.length};
+  }).filter(x=>x.totalRooms>0);
+}
+function rsInspectBlocked(bkId){
+  if(!bkId)return;
+  closeModal('roomSearchModal');
+  switchTab('teacherreg',document.querySelector('.tab-btn[onclick*="teacherreg"]'));
+  setTimeout(()=>regSelectRetreat(bkId),80);
 }
 function rsSearch(){
   const start=document.getElementById('rs-start').value,end=document.getElementById('rs-end').value;
@@ -951,7 +962,7 @@ function rsSearch(){
   const resEl=document.getElementById('rsResults');
   if(!results.length){resEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No rooms available for these dates.</div>`;}
   else{
-    resEl.innerHTML=results.map(({rt,availableRooms,totalRooms})=>{
+    resEl.innerHTML=results.map(({rt,roomStatus,availableRooms,totalRooms})=>{
       const soloRate=low?(rt.roomOnlyPrice1_low??rt.roomOnlyPrice1):rt.roomOnlyPrice1;
       const shareRate=low?(rt.roomOnlyPrice2_low??soloRate):(rt.roomOnlyPrice2??soloRate);
       const priceLine=soloRate!=null?`Room Only · Solo ${fmt$(soloRate)}${shareRate&&shareRate!==soloRate?` / Sharing ${fmt$(shareRate)}`:''}/night`:'No Room Only rate configured';
@@ -967,7 +978,10 @@ function rsSearch(){
           </div>
         </div>
         <div id="rs-rooms-${rt.id}" style="display:flex;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap;gap:6px">
-          ${availableRooms.map(r=>`<button class="btn-nav" style="padding:6px 12px;border:1.5px solid #6ee7b7;background:#f0fdf4;color:#15803d;font-weight:700" onclick="rsPickRoom('${r}','${rt.id}')">${r}</button>`).join('')}
+          ${roomStatus.map(({room,available,blockedByLabel,blockedByBkId})=>available
+            ?`<button class="btn-nav" style="padding:6px 12px;border:1.5px solid #6ee7b7;background:#f0fdf4;color:#15803d;font-weight:700" onclick="rsPickRoom('${room}','${rt.id}')">${room}</button>`
+            :`<button class="btn-nav" title="Blocked by ${escHtml(blockedByLabel)} — click to view their room list" style="padding:6px 12px;border:1.5px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-weight:700" onclick="rsInspectBlocked('${blockedByBkId}')">${room}</button>`
+          ).join('')}
         </div>
       </div>`;
     }).join('');
