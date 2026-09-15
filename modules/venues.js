@@ -933,10 +933,10 @@ function rsSearch(){
           </div>
           <div style="text-align:right;white-space:nowrap">
             <div style="font-weight:700;font-size:13px;color:#059669">${availableRooms.length} of ${totalRooms} available</div>
-            <div style="font-size:10.5px;color:var(--teal);font-weight:600">Select room ▾</div>
+            <div style="font-size:10.5px;color:var(--teal);font-weight:600">Hide/show ▾</div>
           </div>
         </div>
-        <div id="rs-rooms-${rt.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap;gap:6px">
+        <div id="rs-rooms-${rt.id}" style="display:flex;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap;gap:6px">
           ${availableRooms.map(r=>`<button class="btn-nav" style="padding:6px 12px" onclick="rsPickRoom('${r}','${rt.id}')">${r}</button>`).join('')}
         </div>
       </div>`;
