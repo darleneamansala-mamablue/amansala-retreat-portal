@@ -2024,8 +2024,18 @@ function _rcRenderTodayLegend(){
     const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk)];
     const name=bk.leaderName||bk.retreatName||'—';
     const regCount=registeredCount(bk.id);
-    return `<span class="rtl-pill" onclick="_bdGoToRegistration('${bk.id}')" title="Open ${escHtml(name)}'s Registration tab — ${regCount} guest${regCount!==1?'s':''} registered" style="position:absolute;display:flex;align-items:center;left:${li*36+1}px;width:${wi*36-2}px;top:${lane*LANE_H+1}px;height:${LANE_H-3}px;background:${pc.bg};border-color:${pc.border};color:${pc.text};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;justify-content:flex-start;box-sizing:border-box;">${escHtml(name)}<span style="margin-left:5px;font-size:9.5px;font-weight:800;opacity:.7;flex-shrink:0">${regCount}</span></span>`;
+    return `<span class="rtl-pill" data-bk-id="${bk.id}" onclick="_bdGoToRegistration('${bk.id}')" style="position:absolute;display:flex;align-items:center;left:${li*36+1}px;width:${wi*36-2}px;top:${lane*LANE_H+1}px;height:${LANE_H-3}px;background:${pc.bg};border-color:${pc.border};color:${pc.text};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;justify-content:flex-start;box-sizing:border-box;">${escHtml(name)}<span style="margin-left:5px;font-size:9.5px;font-weight:800;opacity:.7;flex-shrink:0">${regCount}</span></span>`;
   }).join('');
+  // Same rich showTip popup (Total/Paid/Owing, Registered, sold-out flags,
+  // notes) the grid bars below already use — this strip only had a plain
+  // title= tooltip before.
+  cells.querySelectorAll('.rtl-pill').forEach(pill=>{
+    const bk=AppData.bookings.find(b=>b.id===pill.dataset.bkId);
+    if(!bk)return;
+    pill.addEventListener('mouseenter',e=>showTip(e,bk));
+    pill.addEventListener('mousemove',moveTip);
+    pill.addEventListener('mouseleave',hideTip);
+  });
 }
 
 // Bumped on every call so a slow/late-resolving fetch can tell it's been
