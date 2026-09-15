@@ -25,18 +25,21 @@ const SUNRISE_LOCATIONS = { chica_beach:'Chica Beach', grande_beach:'Grande Beac
 const ACTS_DUR = { ao3:180, ao4:120, ao5:90, ao9:90, ao10:60 };
 
 function pd(dateStr){ return new Date(dateStr+'T00:00:00'); }
-function fmtT(t){ if(!t) return ''; const [h,m]=t.split(':').map(Number); const ap=h>=12?'PM':'AM'; return `${h%12||12}:${String(m).padStart(2,'0')} ${ap}`; }
+// No AM/PM here on purpose (Darlene's call 2026-09-15) — matches the print
+// schedule and saves space on both.
+function fmtT(t){ if(!t) return ''; const [h,m]=t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')}`; }
 function addMin(t,mins){ if(!t) return ''; const [h,m]=t.split(':').map(Number); const tot=h*60+m+mins; const hh=Math.floor(tot/60)%24; return `${String(hh).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`; }
 function shalaName(id){ return id ? (SHALA_NAMES[id]||id) : ''; }
+function titleCase(s){ return String(s||'').replace(/\w\S*/g, w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()); }
 function effClassLabel(sr,period,fallback){
   const ov=(sr&&sr.adminOverride)||{};
   const label=(ov[period+'Label']||(sr&&sr[period+'Label'])||'').trim();
   const co=(ov[period+'CoTeacher']||(sr&&sr[period+'CoTeacher'])||'').trim();
-  return (label||fallback)+(co?' — with '+co:'');
+  return (label?titleCase(label):fallback)+(co?' — with '+co:'');
 }
 function effClassLabelDay(sr,bk,dateStr,ovPeriod,labelKey,fallback){
   const dayOv=(bk.schedule_time_overrides||[]).find(o=>o.date===dateStr&&o.period===ovPeriod);
-  if(dayOv&&dayOv.label) return dayOv.label+(dayOv.coTeacher?' — with '+dayOv.coTeacher:'');
+  if(dayOv&&dayOv.label) return titleCase(dayOv.label)+(dayOv.coTeacher?' — with '+dayOv.coTeacher:'');
   return effClassLabel(sr,labelKey,fallback);
 }
 function usualMorning(bk,sr){

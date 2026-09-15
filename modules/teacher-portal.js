@@ -1296,11 +1296,17 @@ let _tsPrepaidMode='choice'; // 'choice' | 'manual' — for the pre-paid activit
 // used everywhere a class label renders: the teacher's own itinerary, the
 // printed schedule, the admin schedule viewer/list, and the master calendar.
 // adminOverride wins over the teacher's own value, same precedence as time.
+// Teachers type the Class Type field freehand ("yogalates", "booty camp",
+// "kick fit") — title-cased here, at the one shared spot every class label
+// renders through, so it reads properly everywhere (on-screen schedule,
+// printed/PDF schedule, shared read-only link, admin views) without having
+// to fix it in each place separately.
+function _tsTitleCase(s){return String(s||'').replace(/\w\S*/g,w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase());}
 function tsEffClassLabel(sr,period,fallback){
   const ov=sr?.adminOverride||{};
   const label=(ov[period+'Label']||sr?.[period+'Label']||'').trim();
   const co=(ov[period+'CoTeacher']||sr?.[period+'CoTeacher']||'').trim();
-  return (label||fallback)+(co?' — with '+co:'');
+  return (label?_tsTitleCase(label):fallback)+(co?' — with '+co:'');
 }
 // Day-specific version — checks that one date's scheduleTimeOverrides entry
 // (morn/aft only; arrival & departure are inherently single-day already)
@@ -1321,7 +1327,7 @@ function tsArrivalSnackTime(bk){
 
 function tsEffClassLabelDay(sr,bk,dateStr,ovPeriod,labelKey,fallback){
   const dayOv=(bk?.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period===ovPeriod);
-  if(dayOv?.label)return dayOv.label+(dayOv.coTeacher?' — with '+dayOv.coTeacher:'');
+  if(dayOv?.label)return _tsTitleCase(dayOv.label)+(dayOv.coTeacher?' — with '+dayOv.coTeacher:'');
   return tsEffClassLabel(sr,labelKey,fallback);
 }
 
@@ -2526,7 +2532,7 @@ function tsRenderCalSection(bk){
   const snm=id=>id?(SHALAS.find(s=>s.id===id)?.name||id):'';
   const mShala=snm(sr.morningShala1);
   const aShala=snm(sr.afternoonShala1);
-  const fmtT=t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';return`${h%12||12}:${String(m).padStart(2,'0')} ${ap}`;};
+  const fmtT=t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);return`${h%12||12}:${String(m).padStart(2,'0')}`;};
   const addMin=(t,mins)=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const tot=h*60+m+mins;const hh=Math.floor(tot/60)%24;return`${String(hh).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
   const nights=Math.max(1,Math.round((pd(bk.endDate)-pd(bk.startDate))/DAY_MS));
   // Activity lookup including extras not in ADD_ONS
@@ -4355,7 +4361,7 @@ function scheduleToggleShareMenu(){
   }
 }
 function _scheduleFilename(bk){return(bk.leaderName||bk.retreatName||'retreat').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'')+'-schedule.pdf';}
-function _schedulePdfOpts(filename){return{margin:10,filename,image:{type:'jpeg',quality:.95},html2canvas:{scale:2},jsPDF:{unit:'mm',format:'letter',orientation:'portrait'}};}
+function _schedulePdfOpts(filename){return{margin:10,filename,image:{type:'jpeg',quality:.95},html2canvas:{scale:2},jsPDF:{unit:'mm',format:'legal',orientation:'portrait'}};}
 async function scheduleDownloadPdf(){
   scheduleToggleShareMenu();
   const bk=AppData.bookings.find(b=>b.id===_schedBkId);const el=document.getElementById('schedPrintArea');
@@ -4417,7 +4423,7 @@ function openPrintSchedule(bkId){
   const mShala=sr?shalaName(sr.morningShala1):'';
   const aShala=sr?shalaName(sr.afternoonShala1):'';
   // Format time
-  const fmtT=t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';return`${h%12||12}:${String(m).padStart(2,'0')} ${ap}`;};
+  const fmtT=t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);return`${h%12||12}:${String(m).padStart(2,'0')}`;};
   const addMin=(t,mins)=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const tot=h*60+m+mins;const hh=Math.floor(tot/60)%24;return`${String(hh).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
   // Build days — a retreat with N nights has N+1 calendar days (arrival day,
   // then each night, then the departure/checkout day), so this must loop
@@ -4538,9 +4544,9 @@ function renderSchedulePrint(bk,days){
       </div>
       <div style="height:1px;background:#e0d8cc;margin-bottom:10px"></div>
       ${day.rows.map((r,ri)=>`
-        <div style="display:flex;align-items:baseline;padding:5px 0;border-bottom:1px solid #f2ede8" data-ri="${ri}">
-          <span style="min-width:130px;flex-shrink:0;padding-right:14px">
-            <input class="sched-item-editable" value="${r.time}" placeholder="Time" onchange="schedEdit(${di},${ri},'time',this.value)" style="width:120px;font-size:14px;color:#6b7280;font-weight:600;font-family:'Jost',sans-serif">
+        <div style="display:flex;align-items:flex-start;padding:5px 0;border-bottom:1px solid #f2ede8" data-ri="${ri}">
+          <span style="min-width:100px;max-width:130px;flex-shrink:0;padding-right:14px">
+            <div class="sched-item-editable" contenteditable="true" onblur="schedEdit(${di},${ri},'time',this.textContent.trim())" style="font-size:12px;line-height:1.35;color:#6b7280;font-weight:600;font-family:'Jost',sans-serif;white-space:normal;overflow-wrap:break-word">${escHtml(r.time)}</div>
           </span>
           <span style="flex:1">
             <input class="sched-item-editable" value="${r.desc}" placeholder="Activity" onchange="schedEdit(${di},${ri},'desc',this.value)" style="width:100%;font-size:14px;color:#1a2332;font-family:'Cormorant Garamond',Georgia,serif">

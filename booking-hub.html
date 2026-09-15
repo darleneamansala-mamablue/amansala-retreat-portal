@@ -750,6 +750,11 @@
     .ts-admin-note{background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:14px 16px;font-size:13px;color:#92400e;line-height:1.6;margin-top:12px;}
     .ts-note-bar{margin-top:14px;font-size:12.5px;color:var(--muted);font-style:italic;padding:10px 14px;background:#f8fbfb;border-radius:8px;border-left:3px solid var(--teal);line-height:1.55;}
     @media print{
+      /* Retreat schedules always print on legal paper (Darlene's call
+         2026-09-15) — more vertical room per page than letter, so the
+         two-column day grid has less chance of a day's rows spilling
+         awkwardly into the next page. */
+      @page{size:legal;margin:0.5in;}
       body>*:not(#printScheduleModal){display:none!important;}
       /* The on-screen modal is position:fixed + overflow:auto (a scrollable
          box pinned to the viewport) so it can be reviewed on screen — but
