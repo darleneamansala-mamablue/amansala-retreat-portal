@@ -6765,22 +6765,27 @@ if(location.protocol!=='file:'){
   </div>
 </div>
 
-<!-- ── Retreat Assistant (Teacher View only, shown via body.teacher-mode #ama-chat-btn CSS rule) ── -->
+<!-- ── Retreat Assistant (Teacher View only, shown via body.teacher-mode #ama-chat-btn CSS rule) ──
+     Moved from bottom-right to middle-right (real report 2026-09-15: it sat
+     directly on top of the Save Schedule Request button — even icon-sized,
+     any bottom-right corner overlaps whatever a form's own primary button
+     puts there). Middle-right stays clear of both header/footer content and
+     any bottom-anchored button. -->
 <div id="ama-help-tip" onclick="_chatToggle();this.style.opacity='0'" style="
-  position:fixed;bottom:82px;right:24px;z-index:1001;
+  position:fixed;top:calc(50% - 74px);right:88px;z-index:1001;
   background:#fff;border:2px solid #3d8a8a;border-radius:12px;
   padding:11px 16px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;color:#1a2332;
   box-shadow:0 4px 20px rgba(61,138,138,.25);cursor:pointer;white-space:nowrap;
   opacity:0;transform:translateY(8px);transition:opacity .4s ease,transform .4s ease;
   pointer-events:auto;
 ">
-  💬 If you need help, click here
-  <div style="position:absolute;bottom:-10px;right:28px;width:0;height:0;
-    border-left:9px solid transparent;border-right:9px solid transparent;
-    border-top:10px solid #3d8a8a"></div>
-  <div style="position:absolute;bottom:-7px;right:30px;width:0;height:0;
-    border-left:7px solid transparent;border-right:7px solid transparent;
-    border-top:8px solid #fff"></div>
+  💬 I'm your Retreat Assistant
+  <div style="position:absolute;top:16px;right:-10px;width:0;height:0;
+    border-top:9px solid transparent;border-bottom:9px solid transparent;
+    border-left:10px solid #3d8a8a"></div>
+  <div style="position:absolute;top:16px;right:-7px;width:0;height:0;
+    border-top:7px solid transparent;border-bottom:7px solid transparent;
+    border-left:8px solid #fff"></div>
 </div>
 
 <!-- Icon-only, not the old wide "Retreat Assistant" pill — that took up
@@ -6789,7 +6794,7 @@ if(location.protocol!=='file:'){
      circular button matches how every other floating chat widget behaves
      and leaves the corner mostly clear. -->
 <button id="ama-chat-btn" onclick="_chatToggle()" title="Retreat Assistant" style="
-  display:none;position:fixed;bottom:24px;right:24px;z-index:1000;
+  display:none;position:fixed;top:50%;right:24px;transform:translateY(-50%);z-index:1000;
   width:52px;height:52px;padding:0;
   background:#3d8a8a;color:#fff;border:none;border-radius:50%;
   cursor:pointer;box-shadow:0 4px 16px rgba(61,138,138,.4);transition:all .2s;
@@ -6801,8 +6806,8 @@ if(location.protocol!=='file:'){
 </button>
 
 <div id="ama-chat-panel" style="
-  display:none;flex-direction:column;position:fixed;bottom:80px;right:24px;z-index:1000;
-  width:360px;max-width:calc(100vw - 32px);height:480px;max-height:calc(100vh - 120px);
+  display:none;flex-direction:column;position:fixed;top:50%;right:84px;transform:translateY(-50%);z-index:1000;
+  width:360px;max-width:calc(100vw - 32px);height:480px;max-height:calc(100vh - 32px);
   background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.18);
   border:1px solid #e5e7eb;overflow:hidden;
 ">
