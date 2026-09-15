@@ -1045,6 +1045,14 @@ function showAvailPreview(id){
   document.getElementById('availPreviewFit').style.background=fitBg;
   document.getElementById('availPreviewOpenBtn').onclick=()=>{document.getElementById('availPreviewModal').style.display='none';openVenEdit(id);};
   document.getElementById('availPreviewBlockBtn').onclick=()=>{document.getElementById('availPreviewModal').style.display='none';openBlockModal(id);};
+  // Admin's own Registration tab (regSelBk-based — Actions menu, room grid,
+  // payments) — NOT openTeacherPortal(), which is the guest/teacher-facing
+  // preview. Same navigation openBookingFromNotif() already uses.
+  document.getElementById('availPreviewAdminBtn').onclick=()=>{
+    document.getElementById('availPreviewModal').style.display='none';
+    switchTab('teacherreg',document.getElementById('teacherregTabBtn'));
+    setTimeout(()=>regSelectRetreat(id),80);
+  };
   document.getElementById('availPreviewCalBtn').onclick=()=>{
     document.getElementById('availPreviewModal').style.display='none';
     rcJumpToBooking(bk);
