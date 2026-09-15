@@ -289,10 +289,45 @@ function getBookingsForRoom(roomName){
       status: bk.status||'confirmed',
       regId: reg.id,
       bookingId: bk.id,
+      pax: bk.pax,
+      notes: bk.notes,
+      blockedRooms: bk.blockedRooms,
       guests: (reg.guests||[]).filter(g=>g.name).map(g=>g.name),
     });
   });
   return result;
+}
+
+// Same shape/behaviour as booking-hub.html's getRegForRoom — the best (most
+// named guests) registration row for this booking+room, or null if none.
+function getRegForRoom(bkId,room){
+  const matches=regs.filter(r=>r.bookingId===bkId&&r.room===room);
+  if(!matches.length)return null;
+  return matches.reduce((best,r)=>(r.guests||[]).filter(g=>g.name).length>(best.guests||[]).filter(g=>g.name).length?r:best);
+}
+function registeredCount(bkId){
+  return regs.filter(r=>r.bookingId===bkId&&!r.isTeacherRoom).reduce((s,r)=>s+new Set((r.guests||[]).filter(g=>g.name).map(g=>g.name.trim())).size,0);
+}
+// Sold-out flags for a booking's blocked room types — mirrors the
+// "filled" check in modules/teacher-portal.js's getAutoFlags (a room only
+// counts as filled once it has a named guest, not just a registration row).
+function soldOutFlags(bkId,blockedRoomsArr){
+  const flags=[];
+  const blockedSet=new Set(blockedRoomsArr||[]);
+  if(!blockedSet.size)return flags;
+  roomTypes.forEach(rt=>{
+    const blocked=rt.rooms.filter(r=>blockedSet.has(r));
+    if(!blocked.length)return;
+    const filled=blocked.filter(room=>{
+      const reg=getRegForRoom(bkId,room);
+      return reg&&(reg.guests||[]).some(g=>g.name);
+    });
+    if(filled.length===blocked.length)flags.push(`${rt.name} — all ${blocked.length} blocked room${blocked.length>1?'s are':' is'} filled (sold out)`);
+  });
+  return flags;
+}
+function escHtml(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 // ---- Build calendar ----
@@ -504,10 +539,17 @@ const tip=document.getElementById('tip');
 function showTip(e,bk){
   const st=STATUS[bk.status]||STATUS.confirmed;
   const guests=bk.guests&&bk.guests.length?`<div class="tip-dates">${bk.guests.join(', ')}</div>`:'';
+  const rc=registeredCount(bk.bookingId);
+  const regHtml=bk.pax?`<div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:4px">Registered: <b style="color:#fff">${rc}/${bk.pax}</b></div>`:'';
+  const flags=soldOutFlags(bk.bookingId,bk.blockedRooms);
+  const flagsHtml=flags.length?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px">`
+    +flags.slice(0,3).map(f=>`<div style="font-size:10px;color:#fca5a5">🚩 ${escHtml(f)}</div>`).join('')+'</div>':'';
+  const notesHtml=bk.notes?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px;font-size:10.5px;color:#fde68a">📝 ${escHtml(bk.notes)}</div>`:'';
   tip.innerHTML=`<div class="tip-name">${bk.leaderName}${bk.retreatName&&bk.retreatName!==bk.leaderName?` — ${bk.retreatName}`:''}</div>`
     +`<div class="tip-dates">${fmtDate(bk.startDate)} → ${fmtDate(bk.endDate)}</div>`
     +guests
-    +`<div style="font-size:11px;font-weight:600;color:${st.border};margin-top:4px">${st.label}</div>`;
+    +`<div style="font-size:11px;font-weight:600;color:${st.border};margin-top:4px">${st.label}</div>`
+    +regHtml+flagsHtml+notesHtml;
   tip.classList.add('show'); moveTip(e);
 }
 function moveTip(e){
