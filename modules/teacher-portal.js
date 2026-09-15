@@ -96,6 +96,29 @@ function regJumpToRoomCalendar(){
   switchTab('roomcal',document.querySelector('.tab-btn[onclick*="roomcal"]'));
 }
 
+// Same jump as regJumpToRoomCalendar (this app has one combined room list/
+// calendar grid, not two separate screens), but remembers the retreat so
+// "← Back to Retreat" can return here in-place without losing your spot —
+// regJumpToRoomCalendar deliberately left alone so its existing behavior
+// (no return button) doesn't change for anyone relying on it today.
+function regJumpToRoomList(){
+  if(!regSelBk)return;
+  sessionStorage.setItem('ama_room_list_return_bk',regSelBk.id);
+  rcJumpToBooking(regSelBk,4);
+  switchTab('roomcal',document.querySelector('.tab-btn[onclick*="roomcal"]'));
+  const btn=document.getElementById('rcReturnToRetreatBtn');
+  if(btn)btn.style.display='flex';
+}
+function rcReturnToRetreat(){
+  const bkId=sessionStorage.getItem('ama_room_list_return_bk');
+  sessionStorage.removeItem('ama_room_list_return_bk');
+  const btn=document.getElementById('rcReturnToRetreatBtn');
+  if(btn)btn.style.display='none';
+  if(!bkId)return;
+  switchTab('teacherreg',document.querySelector('.tab-btn[onclick*="teacherreg"]'));
+  setTimeout(()=>regSelectRetreat(bkId),80);
+}
+
 function _updateLockAllBtn(){
   const btn=document.getElementById('regLockAllBtn');
   if(!btn)return;
@@ -1581,6 +1604,16 @@ function tsInit(bkId){
       if(o.period==='morn')_ts.dailyMorning[o.date]={start:o.start,dur:o.dur,label:o.label||'',coTeacher:o.coTeacher||'',shala1:o.shala1||'',flags:o.flags||[]};
       else if(o.period==='aft')_ts.dailyAfternoon[o.date]={start:o.start,dur:o.dur,label:o.label||'',coTeacher:o.coTeacher||'',shala1:o.shala1||'',flags:o.flags||[]};
     });
+    // Seed "no class this day" from bk.scheduleSkips — the same array admin's
+    // own per-day edit modal (skedSkipFromModal) already reads/writes, so a
+    // day skipped from either side shows correctly on reopen.
+    (bk.scheduleSkips||[]).forEach(sk=>{
+      if(sk.date<=bk.startDate||sk.date>=bk.endDate)return;
+      const store=sk.period==='morn'?_ts.dailyMorning:sk.period==='aft'?_ts.dailyAfternoon:null;
+      if(!store)return;
+      if(!store[sk.date])store[sk.date]={};
+      store[sk.date].skip=true;
+    });
   }
   tsRenderPrepaidActivities(bk);
   tsRenderBrowseGrid();
@@ -1854,11 +1887,10 @@ function tsRenderWorkshopDays(){
         <div>
           <div class="ts-section-lbl" style="margin-bottom:6px">Duration</div>
           <select style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:var(--sand);outline:none" onchange="tsUpdateWorkshop(${i},'dur',parseInt(this.value))">
+            <option value="45"${w.dur===45?' selected':''}>45 min</option>
             <option value="60"${w.dur===60?' selected':''}>60 min</option>
+            <option value="75"${w.dur===75?' selected':''}>75 min</option>
             <option value="90"${w.dur===90?' selected':''}>90 min</option>
-            <option value="120"${w.dur===120?' selected':''}>2 hours</option>
-            <option value="150"${w.dur===150?' selected':''}>2.5 hours</option>
-            <option value="180"${w.dur===180?' selected':''}>3 hours</option>
           </select>
         </div>
       </div>
@@ -2033,16 +2065,21 @@ function tsBuildDailySchedule(){
       const[val,lbl]=f.split(':');const chk=dayFlags.includes(val);
       return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--dark)"><input type="checkbox" value="${val}"${chk?' checked':''} style="width:13px;height:13px;accent-color:var(--teal)" onchange="tsToggleDailyFlag('${period}','${dateStr}','${val}',this.checked)">${lbl}</label>`;
     }).join('');
+    const skipped=!!o.skip;
+    const dis=skipped?' disabled':'';
     return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
     <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
       <div style="min-width:130px;font-size:12.5px;font-weight:700;color:var(--dark)">${dayLbl}</div>
-      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Start</label><select onchange="tsSetDaily('${period}','${dateStr}','start',this.value)" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)">${(period==='morn'?TS_DAILY_MORNING_TIME_SLOTS:TS_DAILY_AFTERNOON_TIME_SLOTS).map(s=>`<option value="${s.val}"${startVal===s.val?' selected':''}>${s.label}</option>`).join('')}</select></div>
-      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Duration</label><select onchange="tsSetDaily('${period}','${dateStr}','dur',parseInt(this.value))" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)">${durOpts.map(m=>`<option value="${m}"${durVal===m?' selected':''}>${m} min</option>`).join('')}</select></div>
-      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Shala</label><select onchange="tsSetDaily('${period}','${dateStr}','shala1',this.value)" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand);max-width:150px">${shalaOpts}</select></div>
-      <div style="flex:1;min-width:150px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Class Type</label><input type="text" value="${o.label||''}" placeholder="e.g. Pilates" onchange="tsSetDaily('${period}','${dateStr}','label',this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)"></div>
-      <div style="flex:1;min-width:130px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Co-Teacher</label><input type="text" value="${o.coTeacher||''}" placeholder="optional" onchange="tsSetDaily('${period}','${dateStr}','coTeacher',this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)"></div>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:700;color:#b45309;white-space:nowrap"><input type="checkbox"${skipped?' checked':''} style="width:13px;height:13px;accent-color:#b45309" onchange="tsToggleDailySkip('${period}','${dateStr}',this.checked)">No class this day</label>
+      <div style="opacity:${skipped?'.4':'1'};display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;flex:1">
+      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Start</label><select${dis} onchange="tsSetDaily('${period}','${dateStr}','start',this.value)" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)">${(period==='morn'?TS_DAILY_MORNING_TIME_SLOTS:TS_DAILY_AFTERNOON_TIME_SLOTS).map(s=>`<option value="${s.val}"${startVal===s.val?' selected':''}>${s.label}</option>`).join('')}</select></div>
+      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Duration</label><select${dis} onchange="tsSetDaily('${period}','${dateStr}','dur',parseInt(this.value))" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)">${durOpts.map(m=>`<option value="${m}"${durVal===m?' selected':''}>${m} min</option>`).join('')}</select></div>
+      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Shala</label><select${dis} onchange="tsSetDaily('${period}','${dateStr}','shala1',this.value)" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand);max-width:150px">${shalaOpts}</select></div>
+      <div style="flex:1;min-width:150px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Class Type</label><input type="text"${dis} value="${o.label||''}" placeholder="e.g. Pilates" onchange="tsSetDaily('${period}','${dateStr}','label',this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)"></div>
+      <div style="flex:1;min-width:130px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Co-Teacher</label><input type="text"${dis} value="${o.coTeacher||''}" placeholder="optional" onchange="tsSetDaily('${period}','${dateStr}','coTeacher',this.value)" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px;background:var(--sand)"></div>
+      </div>
     </div>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px">${flagBoxes}</div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;opacity:${skipped?'.4':'1'}">${flagBoxes.replace(/<input type="checkbox"/g,`<input${dis} type="checkbox"`)}</div>
     </div>`;
   };
   let morningRows='',afternoonRows='';
@@ -2068,6 +2105,12 @@ function tsSetDaily(period,dateStr,field,val){
   const store=period==='morn'?(_ts.dailyMorning||(_ts.dailyMorning={})):(_ts.dailyAfternoon||(_ts.dailyAfternoon={}));
   if(!store[dateStr])store[dateStr]={};
   store[dateStr][field]=val;
+}
+function tsToggleDailySkip(period,dateStr,on){
+  const store=period==='morn'?(_ts.dailyMorning||(_ts.dailyMorning={})):(_ts.dailyAfternoon||(_ts.dailyAfternoon={}));
+  if(!store[dateStr])store[dateStr]={};
+  store[dateStr].skip=on;
+  tsBuildDailySchedule();
 }
 function tsToggleDailyFlag(period,dateStr,val,on){
   const store=period==='morn'?(_ts.dailyMorning||(_ts.dailyMorning={})):(_ts.dailyAfternoon||(_ts.dailyAfternoon={}));
@@ -2389,10 +2432,11 @@ function tsSubmitSchedule(){
   if(!_ts.bowlRental)_ts.bowlDays=[];
   if(!_ts.morningShala1){tsFlagRequired('tsMorningShalaGrid','Please select at least a 1st choice shala.');return;}
   // Morning start time is now set entirely day-by-day (no retreat-wide
-  // default) — every middle day needs its own start time before submitting.
+  // default) — every middle day needs its own start time before submitting,
+  // UNLESS the teacher explicitly marked that day "No class this day".
   {
-    const missingDay=svValidActivityDays(bk).find(d=>!_ts.dailyMorning?.[d.date]?.start);
-    if(missingDay){tsFlagRequired('tsDailyScheduleFields',`Please set a morning start time for ${missingDay.label}.`);return;}
+    const missingDay=svValidActivityDays(bk).find(d=>!_ts.dailyMorning?.[d.date]?.skip&&!_ts.dailyMorning?.[d.date]?.start);
+    if(missingDay){tsFlagRequired('tsDailyScheduleFields',`Please set a morning start time for ${missingDay.label}, or check "No class this day".`);return;}
   }
   if(_ts.hasSunrise&&(!_ts.sunriseDates||!_ts.sunriseDates.length)){showToast('Please check at least one day for your sunrise activity, or turn it off.');return;}
   if(_ts.hasSunrise&&!_ts.sunriseStart){tsFlagRequired('tsSunriseStart','Please select a start time for your sunrise activity.');return;}
@@ -2414,17 +2458,26 @@ function tsSubmitSchedule(){
   // start time anymore).
   const keepOvs=(bk.scheduleTimeOverrides||[]).filter(o=>o.date<bk.startDate||o.date>=bk.endDate||(o.period!=='morn'&&o.period!=='aft'));
   const newOvs=[];
+  // "No class this day" (o.skip) goes into bk.scheduleSkips instead of a time
+  // override — the same array/mechanism admin's own per-day modal
+  // (skedSkipFromModal) already uses, so print/dashboard schedule views pick
+  // it up with no changes needed on the reading side.
+  const keepSkips=(bk.scheduleSkips||[]).filter(s=>s.date<bk.startDate||s.date>=bk.endDate||(s.period!=='morn'&&s.period!=='aft'));
+  const newSkips=[];
   svValidActivityDays(bk).forEach(({date:dateStr})=>{
     const o=_ts.dailyMorning?.[dateStr];
+    if(o?.skip){newSkips.push({date:dateStr,period:'morn'});return;}
     if(!o||!o.start)return;
     newOvs.push({date:dateStr,period:'morn',start:o.start,dur:o.dur||60,label:o.label||'',coTeacher:o.coTeacher||'',shala1:o.shala1||'',flags:o.flags||[]});
   });
   if(_ts.hasAfternoon)svValidActivityDays(bk).forEach(({date:dateStr})=>{
     const o=_ts.dailyAfternoon?.[dateStr];
+    if(o?.skip){newSkips.push({date:dateStr,period:'aft'});return;}
     if(!o||!o.start)return;
     newOvs.push({date:dateStr,period:'aft',start:o.start,dur:o.dur||60,label:o.label||'',coTeacher:o.coTeacher||'',shala1:o.shala1||'',flags:o.flags||[]});
   });
   bk.scheduleTimeOverrides=[...keepOvs,...newOvs];
+  bk.scheduleSkips=[...keepSkips,...newSkips];
   const{dailyMorning,dailyAfternoon,...srWithoutDaily}=_ts;
   bk.scheduleRequest={...srWithoutDaily,submittedAt:new Date().toISOString(),adminStatus:'pending',adminNote:bk.scheduleRequest?.adminNote||''};
   saveAll();
@@ -2590,7 +2643,13 @@ function tsRenderCalSection(bk){
   const renderRow=r=>{
     const catCls=r.cat?'cat-'+r.cat:'';
     const tagHtml=r.actTag?`<span class="sched-act-tag ${r.prepaid?'prepaid':r.cat}">${r.actTag}</span>`:'';
-    const shalaHtml=r.shala?`<span class="sched-shala">📍 SHALA: ${r.shala.toUpperCase()}</span>`:(r.cat&&r.cat!=='meal'?`<span class="sched-shala" style="background:#fef3c7;color:#92400e">⚠ SHALA TO BE CONFIRMED</span>`:'');
+    // Only genuine yoga classes ever need a shala — tours are always off-site,
+    // and ceremonies/entertainment/ice bath etc. either have a fixed location
+    // (ACT_SHALA above) or happen somewhere that isn't a shala at all. Warning
+    // on every non-meal row (the old r.cat!=='meal' check) wrongly flagged
+    // things like Muyil Float Tour and Ice Bath & Breathwork as needing a
+    // shala confirmation they never will.
+    const shalaHtml=r.shala?`<span class="sched-shala">📍 SHALA: ${r.shala.toUpperCase()}</span>`:(r.cat==='yoga'?`<span class="sched-shala" style="background:#fef3c7;color:#92400e">⚠ SHALA TO BE CONFIRMED</span>`:'');
     return`<div class="sched-item-row ${catCls}"><span class="sched-time">${r.time}</span><span class="sched-desc">${r.desc}</span>${tagHtml}${shalaHtml}</div>`;
   };
 
@@ -3434,7 +3493,14 @@ function exitTeacherModeFully(){
   localStorage.removeItem('teacher_bk_id');
   localStorage.removeItem('ama_teacher_persist');
   if(returnBkId)sessionStorage.setItem('ama_admin_return_bk',returnBkId);
-  location.href=location.pathname;
+  // location.pathname alone isn't reliable here — openTeacherPortal() cosmetically
+  // rewrites the address bar to a short slug (e.g. /shannonjamail) via
+  // history.replaceState once the preview tab loads, and that slug is itself a
+  // real short-link route that redirects straight back into ?mode=teacher&bk=...
+  // Reloading location.pathname on a preview tab opened that way just replays the
+  // short link and traps the admin back in teacher mode. Navigate to the real
+  // admin file explicitly instead.
+  location.href=location.origin+'/booking-hub.html';
 }
 
 function initTeacherMode(){
@@ -4271,6 +4337,71 @@ document.addEventListener('DOMContentLoaded',function(){
   try{initStaffLogin();}catch(e){console.error('initStaffLogin failed',e);const ov=document.getElementById('staffLoginOverlay');if(ov)ov.style.display='flex';}
 });
 
+// ── SHARE SCHEDULE (PDF download/email + secure read-only link) ────────────
+// PDF is rendered client-side from the exact same #schedPrintArea markup
+// openPrintSchedule/renderSchedulePrint already build — a real static
+// snapshot (html2pdf.js, CDN-loaded in booking-hub.html), not just the
+// browser's print dialog, so "Download"/"Email" hand over an actual .pdf
+// file that stays fixed at generation time.
+function scheduleToggleShareMenu(){
+  const menu=document.getElementById('scheduleShareMenu');if(!menu)return;
+  const opening=menu.style.display==='none'||!menu.style.display;
+  menu.style.display=opening?'block':'none';
+  if(opening){
+    setTimeout(()=>{
+      const closeOnOutside=e=>{if(!menu.contains(e.target)){menu.style.display='none';document.removeEventListener('click',closeOnOutside);}};
+      document.addEventListener('click',closeOnOutside);
+    },0);
+  }
+}
+function _scheduleFilename(bk){return(bk.leaderName||bk.retreatName||'retreat').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'')+'-schedule.pdf';}
+function _schedulePdfOpts(filename){return{margin:10,filename,image:{type:'jpeg',quality:.95},html2canvas:{scale:2},jsPDF:{unit:'mm',format:'letter',orientation:'portrait'}};}
+async function scheduleDownloadPdf(){
+  scheduleToggleShareMenu();
+  const bk=AppData.bookings.find(b=>b.id===_schedBkId);const el=document.getElementById('schedPrintArea');
+  if(!bk||!el)return;
+  if(typeof html2pdf==='undefined'){showToast('PDF library failed to load — check your connection and try again.');return;}
+  showToast('Generating PDF…');
+  try{await html2pdf().set(_schedulePdfOpts(_scheduleFilename(bk))).from(el).save();}
+  catch(e){showToast('Could not generate PDF: '+e.message);}
+}
+async function scheduleEmailPdf(){
+  scheduleToggleShareMenu();
+  const bk=AppData.bookings.find(b=>b.id===_schedBkId);const el=document.getElementById('schedPrintArea');
+  if(!bk||!el)return;
+  if(!bk.leaderEmail){showToast('No email on file for this retreat leader.');return;}
+  if(typeof html2pdf==='undefined'){showToast('PDF library failed to load — check your connection and try again.');return;}
+  showToast('Generating PDF…');
+  try{
+    const blob=await html2pdf().set(_schedulePdfOpts(_scheduleFilename(bk))).from(el).outputPdf('blob');
+    const base64=await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onloadend=()=>resolve(String(reader.result).split(',')[1]);
+      reader.onerror=reject;
+      reader.readAsDataURL(blob);
+    });
+    const html=_emailHtmlWrap(`<p>Hi ${escHtml(bk.leaderName||'')},</p><p>Attached is your retreat schedule for <strong>${escHtml(bk.retreatName||bk.leaderName||'')}</strong>.</p>`);
+    const res=await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:bk.leaderEmail,subject:`Your Retreat Schedule — ${bk.retreatName||bk.leaderName||''}`,html,attachments:[{filename:_scheduleFilename(bk),content:base64,contentType:'application/pdf'}]})});
+    if(!res.ok)throw new Error('Send failed');
+    showToast('Schedule PDF emailed to '+bk.leaderEmail+' ✓');
+    logActivity('email_sent',`Schedule PDF emailed → ${bk.leaderName||''} (${bk.leaderEmail})`,bk.id);
+  }catch(e){showToast('Email failed: '+e.message);}
+}
+async function scheduleCopyLink(){
+  scheduleToggleShareMenu();
+  const bk=AppData.bookings.find(b=>b.id===_schedBkId);if(!bk)return;
+  if(!bk.packageCustomPrices)bk.packageCustomPrices={};
+  if(!bk.packageCustomPrices.__cfg__)bk.packageCustomPrices.__cfg__={};
+  if(!bk.packageCustomPrices.__cfg__.scheduleShareToken){
+    bk.packageCustomPrices.__cfg__.scheduleShareToken=resGenSecureToken();
+    saveAll();
+    try{await db.from('bookings').update({package_custom_prices:bk.packageCustomPrices}).eq('id',bk.id);}catch(e){}
+  }
+  const url=`${location.origin}/schedule-view.html?token=${bk.packageCustomPrices.__cfg__.scheduleShareToken}`;
+  try{await navigator.clipboard.writeText(url);showToast('Read-only schedule link copied ✓');}
+  catch(e){prompt('Copy this link:',url);}
+}
+
 // ── PRINT SCHEDULE ──────────────────────────────────────────────────────────
 let _schedBkId=null;
 
@@ -4295,7 +4426,12 @@ function openPrintSchedule(bkId){
   for(let i=0;i<=nights;i++){
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
     const dateStr=d.toISOString().slice(0,10);
-    const dayLabel=DAY_NAMES[d.getDay()]+' | '+MON_NAMES[d.getMonth()]+' '+(d.getDate())+(i===0?'st':i===1?'nd':i===2?'rd':'th');
+    // Ordinal suffix must follow the actual date-of-month (5th, 6th, 7th, ...),
+    // not the loop index — using i here made every retreat's first 3 printed
+    // days read "5st/6nd/7rd" regardless of what date they actually fell on.
+    const _dnum=d.getDate();
+    const _ordSuffix=(_dnum%10===1&&_dnum!==11)?'st':(_dnum%10===2&&_dnum!==12)?'nd':(_dnum%10===3&&_dnum!==13)?'rd':'th';
+    const dayLabel=DAY_NAMES[d.getDay()]+' | '+MON_NAMES[d.getMonth()]+' '+_dnum+_ordSuffix;
     const rows=[];
     if(i===0){
       rows.push({time:'3:00 PM',desc:'Check-in',shala:'',cls:'',sk:'15:00'});
@@ -4396,8 +4532,10 @@ function renderSchedulePrint(bk,days){
     const dayName=parts[0]||day.label;
     const dayDate=parts[1]||'';
     return`<div class="sched-day-block" data-day="${di}" style="margin-bottom:26px;break-inside:avoid">
-      <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#9ca3af;font-family:'Jost',sans-serif;margin-bottom:2px">${dayName}</div>
-      <div style="font-size:22px;font-weight:700;color:#1a2332;margin-bottom:7px;font-family:'Cormorant Garamond',Georgia,serif">${dayDate}</div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px;white-space:nowrap">
+        <span style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#9ca3af;font-family:'Jost',sans-serif">${dayName},</span>
+        <span style="font-size:20px;font-weight:700;color:#1a2332;font-family:'Cormorant Garamond',Georgia,serif">${dayDate}</span>
+      </div>
       <div style="height:1px;background:#e0d8cc;margin-bottom:10px"></div>
       ${day.rows.map((r,ri)=>`
         <div style="display:flex;align-items:baseline;padding:5px 0;border-bottom:1px solid #f2ede8" data-ri="${ri}">

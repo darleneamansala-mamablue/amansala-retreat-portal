@@ -13,6 +13,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
   <script src="cb-portal-sync.js"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -1186,6 +1187,9 @@
   <div class="panel-toolbar">
     <h2>Room Calendar</h2>
     <div class="toolbar-right">
+      <button id="rcReturnToRetreatBtn" class="btn btn-secondary btn-sm" onclick="rcReturnToRetreat()" style="display:none;gap:5px">
+        ← Back to Retreat
+      </button>
       <span id="rcRangeLbl" style="font-size:13px;font-weight:600;color:var(--dark);background:var(--sand);border:1px solid var(--border);border-radius:8px;padding:6px 12px;white-space:nowrap;"></span>
       <label style="font-size:11.5px;color:var(--muted)">Start:</label>
       <input type="date" class="date-inp" id="rcStartInput" onchange="rcOnStart()">
@@ -2005,6 +2009,9 @@
       </button>
       <button class="btn btn-secondary btn-sm" onclick="regJumpToRoomCalendar()" title="Open the Rooms calendar centered on this retreat's dates, ±4 days" style="display:flex;gap:5px">
         📅 Calendar
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="regJumpToRoomList()" title="Open the Room List centered on this retreat's dates, ±4 days" style="display:flex;gap:5px">
+        🛏 Room List
       </button>
     </div>
   </div>
@@ -6186,6 +6193,14 @@ if(location.protocol!=='file:'){
   <div class="sched-modal-chrome" style="display:flex;justify-content:flex-end;align-items:center;padding:12px 24px;background:var(--dark);gap:10px;position:sticky;top:0;z-index:1">
     <span style="font-family:'Jost',sans-serif;font-size:13px;color:rgba(255,255,255,.7);flex:1">Retreat Schedule — editable, click any line to edit</span>
     <button onclick="window.print()" style="padding:8px 20px;background:var(--teal);color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Print / Save PDF</button>
+    <div style="position:relative">
+      <button onclick="scheduleToggleShareMenu()" style="padding:8px 20px;background:#fff;color:var(--dark);border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">🔗 Share Schedule</button>
+      <div id="scheduleShareMenu" style="display:none;position:absolute;top:calc(100% + 6px);right:0;background:#fff;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);min-width:220px;overflow:hidden;z-index:10">
+        <button onclick="scheduleDownloadPdf()" style="display:block;width:100%;text-align:left;padding:11px 16px;background:none;border:none;font-family:'Jost',sans-serif;font-size:13px;color:var(--dark);cursor:pointer">⬇ Download PDF</button>
+        <button onclick="scheduleEmailPdf()" style="display:block;width:100%;text-align:left;padding:11px 16px;background:none;border:none;border-top:1px solid var(--border);font-family:'Jost',sans-serif;font-size:13px;color:var(--dark);cursor:pointer">✉ Email PDF</button>
+        <button onclick="scheduleCopyLink()" style="display:block;width:100%;text-align:left;padding:11px 16px;background:none;border:none;border-top:1px solid var(--border);font-family:'Jost',sans-serif;font-size:13px;color:var(--dark);cursor:pointer">📋 Copy Read-Only Link</button>
+      </div>
+    </div>
     <button onclick="addScheduleRow()" style="padding:8px 16px;background:#fff;color:var(--dark);border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;cursor:pointer">+ Add Row</button>
     <button onclick="document.getElementById('printScheduleModal').style.display='none'" style="padding:8px 14px;background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;cursor:pointer">Close</button>
   </div>

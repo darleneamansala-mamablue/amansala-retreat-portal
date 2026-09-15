@@ -1370,8 +1370,13 @@ function venAddMoreRooms(){
 function rcJumpToBooking(bk,pad){
   pad=pad!=null?pad:6;
   rcStart=addDays(pd(bk.startDate),-pad);
+  // Always land on the standard 30-day view (Darlene's call 2026-09-15) — this
+  // used to size the window to the retreat's own span + padding, which landed
+  // on an odd 15-18 day view instead of the default everyone expects. Still
+  // widen past 30 for a retreat that's genuinely longer than that, so its full
+  // stay stays visible, but never narrower than 30.
   const spanDays=Math.round((pd(bk.endDate)-pd(bk.startDate))/DAY_MS);
-  rcShowDays=spanDays+pad*2+1;
+  rcShowDays=Math.max(30,spanDays+pad*2+1);
 }
 
 function dbOpenRoomCal(bkId){
@@ -1917,8 +1922,13 @@ function rcBuild(){
         bl.className='bk'+(st.dash||!hasGuest?' dashed':'');
         bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:${bk.roomLocked?'default':'grab'};border-left:4px solid ${st.border};`;
         bl.draggable=!bk.roomLocked;
-        bl.innerHTML=`<span class="bk-lock" title="${bk.roomLocked?'Locked — click to allow moving':'Click to lock this room (prevent sliding)'}" onclick="event.stopPropagation();bkToggleLock('${bk.id}')" style="cursor:pointer;margin-right:4px;opacity:${bk.roomLocked?'1':'.35'}">${bk.roomLocked?'🔒':'🔓'}</span><span class="bk-n">${bk.leaderName||bk.retreatName}</span>`
-          +(hasGuest?`<span class="bk-s">${guestNames[0]}</span>`:`<span class="bk-s" style="opacity:.5;font-style:italic">blocked</span>`);
+        // Never show retreat/leader name and guest name together on a room row
+        // — the retreat is already identifiable via color + the Active in
+        // This View strip above. A room with a named guest shows only that
+        // guest's name; an unassigned-but-blocked room still shows the
+        // retreat name (there's no guest name to pair it with) plus "blocked".
+        bl.innerHTML=`<span class="bk-lock" title="${bk.roomLocked?'Locked — click to allow moving':'Click to lock this room (prevent sliding)'}" onclick="event.stopPropagation();bkToggleLock('${bk.id}')" style="cursor:pointer;margin-right:4px;opacity:${bk.roomLocked?'1':'.35'}">${bk.roomLocked?'🔒':'🔓'}</span>`
+          +(hasGuest?`<span class="bk-n">${guestNames[0]}</span>`:`<span class="bk-n">${bk.leaderName||bk.retreatName}</span><span class="bk-s" style="opacity:.5;font-style:italic">blocked</span>`);
         bl.addEventListener('dragstart',e=>{
           if(bk.roomLocked){e.preventDefault();return;}
           rcDragData={bkId:bk.id,fromRoom:room,rtId:rt.id};
@@ -2037,7 +2047,9 @@ function _rcRenderTodayLegend(){
   });
   const LANE_H=24;
   el.style.display='flex';
-  lbl.textContent=isTodayInView?'Happening now':'Active in this view';
+  lbl.innerHTML=`<span class="rc-collapse" id="rcTodayLegendChevron" style="margin-right:6px">${_rcLegendCollapsed()?'▶':'▼'}</span><span>${isTodayInView?'Happening now':'Active in this view'}</span>`;
+  lbl.style.cursor='pointer';
+  lbl.onclick=_rcToggleLegend;
   cells.style.height=(lanes.length*LANE_H)+'px';
   cells.innerHTML=active.map(bk=>{
     const bkS=Math.max(pd(bk.startDate).getTime(),winStartMs);
@@ -2060,6 +2072,24 @@ function _rcRenderTodayLegend(){
     pill.addEventListener('mousemove',moveTip);
     pill.addEventListener('mouseleave',hideTip);
   });
+  _rcApplyLegendCollapse();
+}
+// Collapsed by default (anything but an explicit '0' counts as collapsed) —
+// gives the calendar grid more room out of the box. Persisted so it survives
+// Prev/Next/Today navigation and page reloads, same amansala_* localStorage
+// convention as the calendar's own view-window persistence just above.
+function _rcLegendCollapsed(){return localStorage.getItem('amansala_legend_collapsed')!=='0';}
+function _rcApplyLegendCollapse(){
+  const cells=document.getElementById('rcTodayLegendCells');
+  const chevron=document.getElementById('rcTodayLegendChevron');
+  if(!cells)return;
+  const collapsed=_rcLegendCollapsed();
+  cells.style.display=collapsed?'none':'';
+  if(chevron)chevron.textContent=collapsed?'▶':'▼';
+}
+function _rcToggleLegend(){
+  localStorage.setItem('amansala_legend_collapsed',_rcLegendCollapsed()?'0':'1');
+  _rcApplyLegendCollapse();
 }
 
 // Bumped on every call so a slow/late-resolving fetch can tell it's been
@@ -2103,14 +2133,43 @@ async function rcFetchExternalReservations(startMs){
       if(!track){console.warn('[rcExternal] no track for room:',roomName,'available:',trackNames);return;}
       const bl=document.createElement('div');
       bl.className='bk';
-      bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:repeating-linear-gradient(45deg,#d0d0d0,#d0d0d0 4px,#eaeaea 4px,#eaeaea 8px);border-color:#aaa;color:#444;border-left:4px solid #888;cursor:default;pointer-events:auto;`;
-      bl.title=`${r.guestName} · ${r.sourceName||r.status} · ${r.startDate} – ${r.endDate}`;
+      bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:repeating-linear-gradient(45deg,#d0d0d0,#d0d0d0 4px,#eaeaea 4px,#eaeaea 8px);border-color:#aaa;color:#444;border-left:4px solid #888;cursor:pointer;pointer-events:auto;`;
+      bl.title=`${r.guestName} · ${r.sourceName||r.status} · ${r.startDate} – ${r.endDate} · click to add a charge`;
       bl.innerHTML=`<span class="bk-n" style="color:#444">${r.guestName}</span><span class="bk-s" style="color:#666;opacity:.9">${fmtShort(pd(r.startDate))} – ${fmtShort(pd(r.endDate))}</span>`;
+      bl.addEventListener('click',()=>importExternalReservation(r));
       track.appendChild(bl);
     });
   });
 }
 
+// A grey/hatched bar (see rcFetchExternalReservations above) is a reservation
+// that lives only in Cloudbeds — no booking/reg record here, which is why it
+// couldn't be clicked into a folio to add a charge. Importing it as a normal
+// 'room_only' booking (same shape rmSaveNewBooking creates for a walk-in)
+// gives it a real folio going forward. Tagging cbReservationIds here also
+// makes rcFetchExternalReservations's portalResIds check exclude it on the
+// next fetch, so it becomes a normal colored bar instead of reappearing grey.
+function importExternalReservation(r){
+  const room=(r.rooms||[])[0];
+  if(!room){showToast('Could not find a room for this reservation — check it in Cloudbeds.');return;}
+  if(!confirm(`Import ${r.guestName}'s Cloudbeds reservation (room ${room}) into the portal so you can add charges to it?`))return;
+  const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
+  const cbReservationIds={};(r.rooms||[]).forEach(rm=>cbReservationIds[rm]=r.reservationID);
+  const newId=uid();
+  AppData.bookings.push({
+    id:newId,bookingType:'room_only',leaderName:r.guestName,leaderEmail:r._email||'',
+    retreatName:'Direct/OTA (Cloudbeds)',startDate:r.startDate,endDate:r.endDate,
+    row:findAvailableRow(r.startDate,r.endDate,null),pax:1,status:'confirmed',
+    docLink:'',roomAssignments:[],roomTypeId:rt?rt.id:'',blockedRooms:r.rooms&&r.rooms.length?r.rooms:[room],
+    roomRateTotal:0,roomRateNights:Math.max(1,Math.round((pd(r.endDate)-pd(r.startDate))/DAY_MS)),
+    charges:[],payments:[],cbReservationIds,
+    notes:`Imported from Cloudbeds reservation #${r.reservationID}`,
+  });
+  saveAll();venBuild();rcBuild();
+  logActivity('Booking created',`Imported from Cloudbeds — ${r.guestName} · ${room}`,newId);
+  showToast('Imported ✓ — you can now add charges to this reservation.');
+  openBookingFolio(newId);
+}
 function bkToggleLock(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   bk.roomLocked=!bk.roomLocked;
