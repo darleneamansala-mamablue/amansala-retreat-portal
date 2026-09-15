@@ -968,10 +968,20 @@ function showAvailPreview(id){
   if(!bk)return;
   const s=bk.startDate,e=bk.endDate;
 
-  // Overlapping bookings (excluding this one and cancelled)
+  // Overlapping bookings (excluding this one and cancelled) — used for the
+  // "other retreats in this window" conflict list below, so this retreat
+  // itself never shows up as its own conflict.
   const overlapping=AppData.bookings.filter(b=>b.id!==id&&b.status!=='cancelled'&&b.startDate<e&&b.endDate>s);
+  // Room-availability COUNT must also treat this retreat's own already-
+  // blocked rooms as taken — they're real, already-assigned capacity, not
+  // open inventory. Excluding them (real incident: Katherine McClelland's
+  // retreat already had 3 of the 15 Beachfront Kings, and the popup counted
+  // them as "available" alongside the 1 genuinely free room, showing 4
+  // instead of 1) silently inflated every "X available" number by however
+  // many rooms this retreat already has of that type.
   const takenRooms=new Set();
   overlapping.forEach(b=>(b.blockedRooms||[]).forEach(r=>takenRooms.add(r)));
+  (bk.blockedRooms||[]).forEach(r=>takenRooms.add(r));
 
   // Per-type availability (skip bed-level duplicates so physical rooms aren't counted twice)
   const avail=AppData.roomTypes.filter(rt=>!DUPLICATE_ROOM_ENTRY_IDS.has(rt.id)).map(rt=>{
