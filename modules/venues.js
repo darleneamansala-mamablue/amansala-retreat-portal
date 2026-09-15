@@ -937,7 +937,7 @@ function rsSearch(){
           </div>
         </div>
         <div id="rs-rooms-${rt.id}" style="display:flex;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap;gap:6px">
-          ${availableRooms.map(r=>`<button class="btn-nav" style="padding:6px 12px" onclick="rsPickRoom('${r}','${rt.id}')">${r}</button>`).join('')}
+          ${availableRooms.map(r=>`<button class="btn-nav" style="padding:6px 12px;border:1.5px solid #6ee7b7;background:#f0fdf4;color:#15803d;font-weight:700" onclick="rsPickRoom('${r}','${rt.id}')">${r}</button>`).join('')}
         </div>
       </div>`;
     }).join('');
