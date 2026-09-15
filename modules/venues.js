@@ -1919,7 +1919,7 @@ function rcBuild(){
           setTimeout(()=>bl.classList.add('rc-dragging'),0);
         });
         bl.addEventListener('dragend',()=>{bl.classList.remove('rc-dragging');rcDragData=null;});
-        bl.addEventListener('mouseenter',e=>showTip(e,bk));bl.addEventListener('mousemove',moveTip);bl.addEventListener('mouseleave',hideTip);
+        bl.addEventListener('mouseenter',e=>showNoteTip(e,bk));bl.addEventListener('mousemove',moveTip);bl.addEventListener('mouseleave',hideTip);
         bl.addEventListener('click',e=>{
           e.stopPropagation();
           if(regEntry&&hasGuest){openBookingDetailForReg(regEntry.id,guestNames[0]);return;}
@@ -1985,6 +1985,15 @@ function rcBuild(){
 // Color-coded strip of whichever retreats overlap the date range the grid is
 // CURRENTLY SCROLLED TO (updates as you navigate) — same colors as their bars in
 // the grid below, so the two stay visually consistent.
+// Lightweight tooltip for the room-grid bars — name + the booking's note
+// only, none of showTip()'s balance/registered/flags detail (Jorge's call
+// 2026-09-15: that detail belongs in "Happening now" above, not per-room).
+function showNoteTip(e,bk){
+  if(!bk.notes){hideTip();return;}
+  tip.innerHTML=`<div class="tip-n">${bk.leaderName||bk.retreatName||''}</div><div style="margin-top:4px;font-size:10.5px;color:#fde68a">📝 ${escHtml(bk.notes)}</div>`;
+  tip.classList.add('show');moveTip(e);
+}
+
 function _rcRenderTodayLegend(){
   const el=document.getElementById('rcTodayLegend');const cells=document.getElementById('rcTodayLegendCells');
   const lbl=document.getElementById('rcTodayLegendLabel');
