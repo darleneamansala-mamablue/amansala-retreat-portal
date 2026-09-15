@@ -1381,7 +1381,7 @@ function tsRenderSetupDays(){
   list.innerHTML='';
   for(let i=0;i<nights;i++){
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-    const dateStr=d.toISOString().slice(0,10);
+    const dateStr=fmtISO(d);
     const label=DAYS[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate();
     const e=existing[dateStr]||{date:dateStr,am:false,pm:false};
     const hasAM=_ts.hasAfternoon;// only show PM option if they have afternoon class
@@ -1428,7 +1428,7 @@ function tsBowlRenderDays(){
   list.innerHTML='';
   for(let i=0;i<nights;i++){
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-    const dateStr=d.toISOString().slice(0,10);
+    const dateStr=fmtISO(d);
     const label=DAYS[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate();
     const e=existing[dateStr]||{date:dateStr,am:false,pm:false};
     const row=document.createElement('div');
@@ -1827,7 +1827,7 @@ function tsRenderSunriseDays(){
   list.innerHTML='';
   for(let i=1;i<nights;i++){ // skip arrival (0) and departure (nights) days -- no sunrise those days
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-    const dateStr=d.toISOString().slice(0,10);
+    const dateStr=fmtISO(d);
     const label=DAYS[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate();
     const checked=_ts.sunriseDates.includes(dateStr);
     const row=document.createElement('div');
@@ -1863,7 +1863,7 @@ function tsInitWorkshopDays(){
   _ts.workshops=[];
   for(let i=0;i<nights;i++){
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-    const dateStr=d.toISOString().slice(0,10);
+    const dateStr=fmtISO(d);
     const label=days[d.getDay()]+', '+months[d.getMonth()]+' '+d.getDate();
     const prev=existing[dateStr];
     _ts.workshops.push({date:dateStr,label,enabled:prev?.enabled||false,start:prev?.start||'11:30',dur:prev?.dur||90,notes:prev?.notes||'',shala1:prev?.shala1||'',shala2:prev?.shala2||''});
@@ -2576,7 +2576,7 @@ function tsRenderCalSection(bk){
   // Loop nights+1 days: day 0 = arrival, days 1..nights-1 = middle, day nights = departure (endDate)
   for(let i=0;i<=nights;i++){
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-    const dateStr=d.toISOString().slice(0,10);
+    const dateStr=fmtISO(d);
     const sfx=i===0?'st':i===1?'nd':i===2?'rd':'th';
     const lbl=DAY_NAMES[d.getDay()]+' · '+MON_NAMES[d.getMonth()]+' '+d.getDate()+sfx;
     const rows=[];
@@ -4467,7 +4467,7 @@ function openPrintSchedule(bkId){
   const days=[];
   for(let i=0;i<=nights;i++){
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-    const dateStr=d.toISOString().slice(0,10);
+    const dateStr=fmtISO(d);
     // Ordinal suffix must follow the actual date-of-month (5th, 6th, 7th, ...),
     // not the loop index — using i here made every retreat's first 3 printed
     // days read "5st/6nd/7rd" regardless of what date they actually fell on.
@@ -4737,7 +4737,7 @@ function buildRetreatSchedulesPanel(){
     const dayBlocks=[];
     for(let i=0;i<=nights;i++){
       const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-      const dateStr=d.toISOString().slice(0,10);
+      const dateStr=fmtISO(d);
       const dayLbl=DAY_NAMES[d.getDay()]+', '+MON_NAMES[d.getMonth()]+' '+d.getDate();
       const rows=[];
       const _rspMornOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');

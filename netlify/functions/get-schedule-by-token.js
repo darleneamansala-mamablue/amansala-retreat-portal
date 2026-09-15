@@ -25,6 +25,11 @@ const SUNRISE_LOCATIONS = { chica_beach:'Chica Beach', grande_beach:'Grande Beac
 const ACTS_DUR = { ao3:180, ao4:120, ao5:90, ao9:90, ao10:60 };
 
 function pd(dateStr){ return new Date(dateStr+'T00:00:00'); }
+// Local-getter-based, matching dayLabel's own d.getDate()/getDay() below — not
+// d.toISOString() (UTC), which silently disagreed with the label whenever this
+// ran somewhere the server's local zone isn't UTC (same class of bug just
+// fixed in tsInitWorkshopDays/openPrintSchedule client-side).
+function fmtISO(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 // No AM/PM here on purpose (Darlene's call 2026-09-15) — matches the print
 // schedule and saves space on both.
 function fmtT(t){ if(!t) return ''; const [h,m]=t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')}`; }
@@ -56,7 +61,7 @@ function buildScheduleDays(bk, addOnMap){
 
   for (let i = 0; i <= nights; i++) {
     const d = new Date(pd(bk.start_date).getTime() + i * DAY_MS);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = fmtISO(d);
     const dnum = d.getDate();
     const ord = (dnum%10===1&&dnum!==11)?'st':(dnum%10===2&&dnum!==12)?'nd':(dnum%10===3&&dnum!==13)?'rd':'th';
     const dayLabel = `${DAY_NAMES[d.getDay()]}, ${MON_NAMES[d.getMonth()]} ${dnum}${ord}`;
