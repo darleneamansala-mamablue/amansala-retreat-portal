@@ -666,6 +666,32 @@ async function sbSendCancelEmail(appt,svc){
   }catch(e){}
 }
 function SB_cancelFirstName(appt){return (appt.clientName||'').split(' ')[0]||'there';}
+// Notify the therapist(s) about a brand-new booking — this never existed
+// before (only the cancellation notice below did), which is exactly why a
+// therapist like Rubi got no email when a guest booked her: nothing ever
+// sent one. If the guest requested a specific therapist, only that person
+// is notified; otherwise every active, eligible-for-this-service therapist
+// gets notified so whoever's free can claim it (matches the "first to
+// claim it" unassigned-booking model already used elsewhere in this flow).
+async function sbSendTherapistNewBookingEmail(appt,svc){
+  try{
+    const targets=appt.therapistId
+      ?[SpaData.therapists.find(t=>t.id===appt.therapistId)].filter(Boolean)
+      :SpaData.therapists.filter(t=>t.active&&(t.services||[]).some(s=>s.serviceId===svc.id));
+    await Promise.all(targets.filter(t=>t.email).map(ther=>{
+      const body=`<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(ther.firstName)}, a new appointment ${appt.therapistId?'was just booked with you':'is available to claim'}:</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px">
+          ${sbEmailRow('Client',esc(appt.clientName||''))}
+          ${sbEmailRow('Service',esc(svc?.name||''))}
+          ${sbEmailRow('Date',fmtDateLong(appt.date))}
+          ${sbEmailRow('Time',fmtT(appt.start))}
+        </table>
+        <p style="font-size:13.5px;color:#6b7280;margin:20px 0 0">${appt.therapistId?'It\'s on your schedule.':'First to claim it in the admin calendar gets it.'}</p>`;
+      const html=sbEmailShell(appt.therapistId?'New Appointment Booked':'New Appointment Available',body);
+      return fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:ther.email,subject:(appt.therapistId?'New Appointment — ':'New Appointment Available — ')+'Amansala Spa',html})});
+    }));
+  }catch(e){}
+}
 // Lets the assigned therapist know their time just freed up — sent whenever
 // a client cancels (self-service here, or front desk cancelling on a
 // client's behalf in the admin calendar — see spaNotifyTherapistCancelled
@@ -809,6 +835,7 @@ async function sbFinalConfirm(){
     const meetAt=roomLoc?(roomLoc.location?`${roomLoc.name} — ${roomLoc.location}`:roomLoc.name):'Our spa reception';
     const therName=ther?`${ther.firstName} ${ther.lastName||''}`.trim():'Your therapist';
     if(appt.email) await sbSendConfirmEmail(appt,svc,therName,meetAt,folioPosted);
+    await sbSendTherapistNewBookingEmail(appt,svc);
     const el=document.getElementById('mainContent');
     document.getElementById('stepDots').style.display='none';
     const viewConfirmationLink=`<div style="margin-top:18px"><a href="spa-booking.html?confirmation=${appt.id}" style="color:#2d6a6a;font-weight:600;font-size:13.5px;text-decoration:underline">View or print your confirmation</a></div>`;

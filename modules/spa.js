@@ -104,8 +104,16 @@ async function spaSave() {
 }
 
 async function spaInit() {
-  if (!spaLoaded) await spaLoad();
-  if (typeof spaCalLoad === 'function' && !spaCalLoaded) await spaCalLoad();
+  // Always refetch on entering the Spa tab — not just on first load. The old
+  // "only if !spaLoaded/!spaCalLoaded" guard meant a guest booking made via
+  // spa-booking.html (or an edit from another staff member) after the admin's
+  // first visit this session would never show up — Dashboard, Calendar and
+  // Confirmations all read from these same cached globals, so a stale first
+  // load looked exactly like "the booking never made it into the system"
+  // (real report 2026-09-15: test bookings didn't appear anywhere in admin,
+  // even though they were confirmed present in Supabase).
+  await spaLoad();
+  if (typeof spaCalLoad === 'function') await spaCalLoad();
   spaRender();
 }
 
