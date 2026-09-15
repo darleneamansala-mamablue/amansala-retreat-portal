@@ -936,7 +936,14 @@ function rsComputeAvailability(checkIn,checkOut){
     (bk.blockedRooms||[]).forEach(r=>{if(!blockedBy.has(r))blockedBy.set(r,info);});
     AppData.regs.filter(r=>r.bookingId===bk.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{if(!blockedBy.has(r.room))blockedBy.set(r.room,info);});
   });
-  return AppData.roomTypes.map(rt=>{
+  // "Bed in a X" types (bd1-4) are just a per-bed view of the SAME physical
+  // rooms already listed under their real double/triple/quad type (e.g.
+  // "Bed in a Beachview Double" = "Beachview Double") — DUPLICATE_ROOM_ENTRY_IDS
+  // is the established exclusion set other availability views (showAvailPreview,
+  // Room Block Creator) already use for this exact reason. Book a Room was
+  // missing it, so the same rooms were listed twice under two different
+  // type names (real report 2026-09-15).
+  return AppData.roomTypes.filter(rt=>!DUPLICATE_ROOM_ENTRY_IDS.has(rt.id)).map(rt=>{
     const rooms=rt.rooms||[];
     const roomStatus=rooms.map(r=>{const b=blockedBy.get(r);return{room:r,available:!b,blockedByLabel:b?b.label:null,blockedByBkId:b?b.bkId:null};});
     const availableRooms=roomStatus.filter(x=>x.available).map(x=>x.room);
