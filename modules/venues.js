@@ -890,6 +890,20 @@ function rsOpen(){
   document.getElementById('rsStep2').style.display='none';
   openModal('roomSearchModal');
 }
+// Check-out never followed check-in — pick November for check-in and the
+// check-out field (still holding whatever stale value it had, e.g. from
+// today's default) stays in September, so its native date-picker opens on
+// the wrong month too (real report 2026-09-15). Only nudges check-out when
+// it's now invalid (on/before the new check-in) — a deliberately-set later
+// check-out is left alone.
+function rsCheckInChanged(){
+  const startEl=document.getElementById('rs-start');
+  const endEl=document.getElementById('rs-end');
+  if(!startEl.value)return;
+  if(!endEl.value||endEl.value<=startEl.value){
+    endEl.value=fmtISO(addDays(pd(startEl.value),1));
+  }
+}
 function rsBackToSearch(){
   document.getElementById('rsStep1').style.display='block';
   document.getElementById('rsStep2').style.display='none';
