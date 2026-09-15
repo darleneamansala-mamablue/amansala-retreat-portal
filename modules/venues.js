@@ -2006,8 +2006,12 @@ function _rcRenderTodayLegend(){
   const todayStr=fmtISO(new Date());
   const isTodayInView=todayStr>=winStartStr&&todayStr<winEndStr;
   // Room Only bookings belong on the physical Room Calendar grid below, not
-  // this retreat-level summary strip — Darlene's call 2026-09-14.
-  const active=AppData.bookings.filter(bk=>bk.status!=='cancelled'&&bk.bookingType!=='room_only'&&bk.startDate&&bk.endDate&&bk.startDate<winEndStr&&bk.endDate>winStartStr);
+  // this retreat-level summary strip — Darlene's call 2026-09-14. bookingType
+  // alone isn't reliable (only 1 of 126 bookings in prod actually has it set
+  // to 'room_only' — most individual bookings predate that field), so also
+  // treat pax<=1 as room-only: confirmed 2026-09-15 every pax=1 booking in
+  // prod is a single-guest booking, never a genuine solo-leader retreat.
+  const active=AppData.bookings.filter(bk=>bk.status!=='cancelled'&&bk.bookingType!=='room_only'&&(bk.pax||0)>1&&bk.startDate&&bk.endDate&&bk.startDate<winEndStr&&bk.endDate>winStartStr);
   if(!active.length){el.style.display='none';cells.innerHTML='';cells.style.height='';return;}
   active.sort((a,b)=>a.startDate.localeCompare(b.startDate));
 
