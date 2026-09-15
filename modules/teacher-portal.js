@@ -1091,7 +1091,10 @@ function getAutoFlags(bk){
   AppData.roomTypes.forEach(rt=>{
     const blocked=rt.rooms.filter(r=>blockedSet.has(r));
     if(!blocked.length)return;
-    const filled=blocked.filter(room=>getRegForRoom(bk.id,room));
+    const filled=blocked.filter(room=>{
+      const reg=getRegForRoom(bk.id,room);
+      return reg&&(reg.guests||[]).some(g=>g.name);
+    });
     if(filled.length===blocked.length)flags.push({type:'sold_out',severity:'orange',key:`sold_out_${rt.id}`,message:`${rt.name} — all ${blocked.length} blocked room${blocked.length>1?'s are':' is'} filled (sold out)`});
   });
 
