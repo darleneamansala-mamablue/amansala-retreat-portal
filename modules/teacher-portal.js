@@ -4988,38 +4988,46 @@ function skedGetRetreatEvents(dateStr){
     // Arrival day — show arrival evening class if set, otherwise fall back to opening morning class
     if(isArrivalDay){
       const ocLeader=openingCircleLeaders[bk.id]||'Ryan';
-      if(sr.hasArrivalClass&&sr.arrivalSlot){
+      const arrSkipped=skips.some(s=>s.date===dateStr&&s.period==='arr');
+      const hasRealArrivalClass=sr.hasArrivalClass&&sr.arrivalSlot;
+      if(hasRealArrivalClass){
         const arShala=sr.arrivalShala1||effMornShala;
         const ocTime=skedMinToTime(skedTimeToMin(sr.arrivalSlot)-15);
         const ocEnd=sr.arrivalSlot;
         evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:arShala||'grande',date:dateStr,startTime:ocTime,endTime:ocEnd,title,subtitle:'Orientation with Amansala — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
-        if(arShala){
+        if(arShala&&!arrSkipped){
           const arDur=sr.arrivalDur||60;
           const arEnd=skedMinToTime(skedTimeToMin(sr.arrivalSlot)+arDur);
-          evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:tsEffClassLabel(sr,'arrival','Arrival Evening Class'),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+          evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:tsEffClassLabel(sr,'arrival','Arrival Evening Class')+(sr.arrivalNotes?' 📝':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
       } else {
         evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:'grande',date:dateStr,startTime:'20:30',endTime:'20:45',title,subtitle:'Orientation with Amansala — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
-      if(effMornStart&&effMornShala&&!mornSkippedThisDay){
-        // No arrival class — show opening morning class (respects a one-off override for this date)
+      // Only fall back to the regular recurring morning "Opening Class" when
+      // there's no dedicated Arrival Evening Class — a retreat arriving that
+      // day has no guests present for a morning class, so this must never
+      // run alongside a real arrival class (that was the bug: this ran
+      // unconditionally, showing morning AND arrival-evening classes on the
+      // same arrival day — Darlene's report 2026-09-16).
+      if(effMornStart&&effMornShala&&!mornSkippedThisDay&&!hasRealArrivalClass){
         const arrOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
         const arrStart=arrOv?arrOv.start:effMornStart;
         const arrDur=arrOv?.dur||effMornDur;
         const mEnd=skedMinToTime(skedTimeToMin(arrStart)+arrDur);
-        evs.push({id:'ret_'+bk.id+'_morn_arr',resourceId:effMornShala,date:dateStr,startTime:arrStart,endTime:mEnd,title,subtitle:tsEffClassLabel(sr,'arrival','Opening Class')+(arrOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_morn_arr',resourceId:arrOv?.shala1||effMornShala,date:dateStr,startTime:arrStart,endTime:mEnd,title,subtitle:tsEffClassLabel(sr,'arrival','Opening Class')+(arrOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
     // Departure day — show departure morning class if set, otherwise fall back to regular morning class
     else if(isDepartureDay){
-      if(sr.hasDepartureClass&&sr.departureSlot){
+      const depSkipped=skips.some(s=>s.date===dateStr&&s.period==='dep');
+      if(sr.hasDepartureClass&&sr.departureSlot&&!depSkipped){
         const depShala=sr.departureShala1||effMornShala;
         if(depShala){
           const depDurVal=sr.departureDur||60;
           const depEnd=skedMinToTime(skedTimeToMin(sr.departureSlot)+depDurVal);
-          evs.push({id:'ret_'+bk.id+'_dep',resourceId:depShala,date:dateStr,startTime:sr.departureSlot,endTime:depEnd,title,subtitle:tsEffClassLabel(sr,'departure','Departure Morning Class'),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+          evs.push({id:'ret_'+bk.id+'_dep',resourceId:depShala,date:dateStr,startTime:sr.departureSlot,endTime:depEnd,title,subtitle:tsEffClassLabel(sr,'departure','Departure Morning Class')+(sr.departureNotes?' 📝':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
-      } else if(effMornStart&&effMornShala&&!mornSkippedThisDay){
+      } else if(effMornStart&&effMornShala&&!mornSkippedThisDay&&!(sr.hasDepartureClass&&sr.departureSlot)){
         const depOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
         const depStart=depOv?depOv.start:effMornStart;
         const depDur=depOv?.dur||effMornDur;
@@ -5341,8 +5349,8 @@ const SKED_CLASS_SUFFIX_INFO={
   morn_arr:{kind:'daily',   period:'morn'},
   morn_dep:{kind:'daily',   period:'morn'},
   aft:     {kind:'daily',   period:'aft'},
-  arr:     {kind:'oneoff',  field:'arrivalSlot',   durField:'arrivalDur',   label:'Arrival Evening Class',   rangeStart:'12:00',rangeEnd:'21:00'},
-  dep:     {kind:'oneoff',  field:'departureSlot', durField:'departureDur', label:'Departure Morning Class', rangeStart:'05:30',rangeEnd:'10:30'},
+  arr:     {kind:'oneoff',  field:'arrivalSlot',   durField:'arrivalDur',   label:'Arrival Evening Class',   rangeStart:'12:00',rangeEnd:'21:00',period:'arr',shalaField:'arrivalShala1',  notesField:'arrivalNotes'},
+  dep:     {kind:'oneoff',  field:'departureSlot', durField:'departureDur', label:'Departure Morning Class', rangeStart:'05:30',rangeEnd:'10:30',period:'dep',shalaField:'departureShala1',notesField:'departureNotes'},
 };
 
 function skedClickEvent(evId,bkId,isRetreat,dateStr){
@@ -5380,7 +5388,10 @@ function openSkedEditClassModal(bkId,suffix,dateStr){
   const skipBtn=document.getElementById('skedEditClassSkipBtn');
   const sel=document.getElementById('skedEditClassTime');
   const durSel=document.getElementById('skedEditClassDur');
+  const shalaSel=document.getElementById('skedEditClassShala');
+  const notesEl=document.getElementById('skedEditClassNotes');
   const sr=bk.scheduleRequest||{};
+  shalaSel.innerHTML='<option value="">— None —</option>'+SHALAS.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 
   if(info.kind==='oneoff'){
     document.getElementById('skedEditClassTitle').textContent=tsEffClassLabel(sr,suffix==='arr'?'arrival':'departure',info.label);
@@ -5389,9 +5400,20 @@ function openSkedEditClassModal(bkId,suffix,dateStr){
     sel.innerHTML=opts.map(t=>`<option value="${t}">${tsFmt(t)}</option>`).join('');
     sel.value=sr[info.field]||opts[0];
     durSel.value=String(sr[info.durField]||60);
+    shalaSel.value=sr[info.shalaField]||'';
+    notesEl.value=sr[info.notesField]||'';
     scopeWrap.style.display='none';
     resetBtn.style.display='none';
-    skipBtn.style.display='none';
+    // Oneoff classes (Arrival Evening/Departure Morning) only ever exist on
+    // their one specific day, so "skip" here just means "delete this class"
+    // — no whole-retreat scope to offer, and unlike daily classes it doesn't
+    // come back on its own (Darlene's ask 2026-09-16: needed a way to remove
+    // one when it was showing up alongside the Orientation block, looking
+    // like the same class twice).
+    const already=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period===info.period);
+    skipBtn.style.display='inline-flex';
+    skipBtn.textContent=already?'Restore this class':'Delete this class';
+    skipBtn.setAttribute('data-skipped',already?'1':'0');
   } else {
     const period=info.period;
     const isMorn=period==='morn';
@@ -5411,8 +5433,11 @@ function openSkedEditClassModal(bkId,suffix,dateStr){
     const ov=sr.adminOverride||{};
     const usualStart=isMorn?(ov.morningStart||tsUsualMorning(bk).start):(ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart);
     const usualDur=isMorn?(ov.morningDur||tsUsualMorning(bk).dur):(ov.afternoonDur||sr.afternoonDur);
+    const usualShala=isMorn?(ov.morningShala1||sr.morningShala1):(ov.afternoonShala1||sr.afternoonShala1||sr.morningShala1);
     sel.value=existingOv?existingOv.start:(usualStart||opts[0]);
     durSel.value=String(existingOv?.dur||usualDur||60);
+    shalaSel.value=existingOv?.shala1||usualShala||'';
+    notesEl.value=existingOv?.notes||'';
     scopeWrap.style.display='';
     resetBtn.style.display=existingOv?'inline-flex':'none';
     skipBtn.style.display='inline-flex';
@@ -5432,13 +5457,17 @@ function skedSaveClassEdit(){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!info)return;
   const newTime=document.getElementById('skedEditClassTime').value;
   const newDur=parseInt(document.getElementById('skedEditClassDur').value)||60;
+  const newShala=document.getElementById('skedEditClassShala').value||'';
+  const newNotes=document.getElementById('skedEditClassNotes').value.trim();
 
   if(info.kind==='oneoff'){
     if(!bk.scheduleRequest)bk.scheduleRequest={};
     bk.scheduleRequest[info.field]=newTime;
     bk.scheduleRequest[info.durField]=newDur;
+    bk.scheduleRequest[info.shalaField]=newShala;
+    bk.scheduleRequest[info.notesField]=newNotes;
     saveAll();skedBuild();closeModal('skedEditClassModal');
-    showToast('Time updated.');
+    showToast('Class updated.');
     return;
   }
 
@@ -5447,21 +5476,21 @@ function skedSaveClassEdit(){
   if(scope==='week'){
     if(!bk.scheduleRequest)bk.scheduleRequest={};
     if(!bk.scheduleRequest.adminOverride)bk.scheduleRequest.adminOverride={};
-    if(period==='morn'){bk.scheduleRequest.adminOverride.morningStart=newTime;bk.scheduleRequest.adminOverride.morningDur=newDur;}
-    else{bk.scheduleRequest.adminOverride.afternoonStart=newTime;bk.scheduleRequest.adminOverride.afternoonDur=newDur;}
+    if(period==='morn'){bk.scheduleRequest.adminOverride.morningStart=newTime;bk.scheduleRequest.adminOverride.morningDur=newDur;bk.scheduleRequest.adminOverride.morningShala1=newShala;}
+    else{bk.scheduleRequest.adminOverride.afternoonStart=newTime;bk.scheduleRequest.adminOverride.afternoonDur=newDur;bk.scheduleRequest.adminOverride.afternoonShala1=newShala;}
     bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===period));
     saveAll();skedBuild();closeModal('skedEditClassModal');
     showToast('Schedule updated for the whole retreat.');
     return;
   }
-  // Preserve any class type/co-teacher/shala/characteristics the teacher
-  // already set for this exact day — this modal only edits time/duration,
-  // so it must not silently wipe out the rest of that day's override.
+  // Preserve any class type/co-teacher/characteristics the teacher already
+  // set for this exact day — this modal only edits time/duration/shala/
+  // notes, so it must not silently wipe out the rest of that day's override.
   const existingOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period===period)||{};
   bk.scheduleTimeOverrides=(bk.scheduleTimeOverrides||[]).filter(o=>!(o.date===dateStr&&o.period===period));
-  bk.scheduleTimeOverrides.push({...existingOv,date:dateStr,period,start:newTime,dur:newDur});
+  bk.scheduleTimeOverrides.push({...existingOv,date:dateStr,period,start:newTime,dur:newDur,shala1:newShala,notes:newNotes});
   saveAll();skedBuild();closeModal('skedEditClassModal');
-  showToast('Time updated for '+dateStr+'.');
+  showToast('Class updated for '+dateStr+'.');
 }
 
 function skedResetOverrideFromModal(){

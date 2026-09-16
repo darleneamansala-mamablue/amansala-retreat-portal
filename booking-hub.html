@@ -5892,7 +5892,7 @@ function switchTab(id,btn){
 <script src="modules/admin-items.js"></script>
 <script src="modules/commissions.js"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20260915e"></script>
+<script src="modules/teacher-portal.js?v=20260916a"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
 // ===== TEACHER REGISTRATION — moved to modules/teacher-portal.js =====
@@ -6195,6 +6195,14 @@ if(location.protocol!=='file:'){
             <option value="150">2.5 hours</option>
           </select>
         </div>
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Shala</label>
+        <select id="skedEditClassShala" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13.5px;background:var(--sand)"></select>
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Notes</label>
+        <textarea id="skedEditClassNotes" rows="2" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'Jost',sans-serif;font-size:13.5px;background:var(--sand);resize:vertical;box-sizing:border-box"></textarea>
       </div>
       <div id="skedEditClassScopeWrap">
         <label style="font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:8px">Apply this change to</label>
