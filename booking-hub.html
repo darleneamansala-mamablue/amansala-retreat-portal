@@ -5286,8 +5286,13 @@ function roomOnlySeasonPct(dateStr){
   return 0;
 }
 function roomOnlyRateForDate(rt,dateStr){
-  if(!rt||rt.roomOnlyBaseRate==null)return null;
-  return Math.round(rt.roomOnlyBaseRate*(1+roomOnlySeasonPct(dateStr)/100)*100)/100;
+  // No dedicated Room Only base rate has ever been configured per room type
+  // (no admin screen for it exists yet) — fall back to the room's existing
+  // single-occupancy retreat rate so every room type has a working rate now.
+  if(!rt)return null;
+  const base=rt.roomOnlyBaseRate??rt.price1;
+  if(base==null)return null;
+  return Math.round(base*(1+roomOnlySeasonPct(dateStr)/100)*100)/100;
 }
 // BBC / Restore & Renew: the seasonal RETREAT room rate (price1/price2 — already
 // existed before this) plus a fixed package add-on. Darlene gave $180 (classes/
@@ -5870,7 +5875,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260916a"></script>
+<script src="modules/venues.js?v=20260916b"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js"></script>
 <script>

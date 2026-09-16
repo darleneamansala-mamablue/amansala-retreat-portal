@@ -31,6 +31,29 @@ function venBuild(){
   daysArr.forEach(d=>{const el=document.createElement('div');el.className='g-dcell'+(d.td?' today-h':'')+(d.wk?' weekend':'');el.innerHTML=`<span class="dd">${d.d}</span><span class="dn">${DSHORT[d.dow]}</span>`;dc.appendChild(el);});
   dr.appendChild(dc);hdr.appendChild(dr);body.appendChild(hdr);
 
+  // Auto-resolve existing row conflicts: two retreats should never double up
+  // in the same numbered Retreat section while another sits empty (Darlene's
+  // call 2026-09-16). Only rebalances across the plain "RETREAT N" rows —
+  // never touches Chica Retreat/Special Events/custom rows, which represent
+  // a different physical property/context, not an interchangeable slot.
+  (function resolveVenRowConflicts(){
+    const numberedRows=AppData.venRows.filter(r=>/^RETREAT\s+\d+$/i.test(r));
+    if(numberedRows.length<2)return;
+    const active=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.bookingType!=='room_only'&&numberedRows.includes(b.row))
+      .sort((a,b)=>a.startDate.localeCompare(b.startDate));
+    const occupied={};let changed=false;
+    active.forEach(bk=>{
+      const conflicts=r=>(occupied[r]||[]).some(o=>datesOverlap(bk.startDate,bk.endDate,o.startDate,o.endDate));
+      let targetRow=bk.row;
+      if(conflicts(targetRow)){
+        const free=numberedRows.find(r=>!conflicts(r));
+        if(free&&free!==bk.row){targetRow=free;bk.row=free;changed=true;}
+      }
+      (occupied[targetRow]=occupied[targetRow]||[]).push({startDate:bk.startDate,endDate:bk.endDate});
+    });
+    if(changed)saveAll();
+  })();
+
   // Rows
   const LANE_H=48;
   AppData.venRows.forEach(rowName=>{
