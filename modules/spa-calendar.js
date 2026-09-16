@@ -65,19 +65,20 @@ function spaCalFmtT(t) { const [h, m] = t.split(':').map(Number); const ap = h >
 // ── TOOLBAR ──────────────────────────────────────────────────────────────
 function spaCalRenderToolbar() {
   const wrap = document.getElementById('spaAddBtnWrap');
-  const dateLabel = spaCalDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const dateLocale = (typeof IS_SPA_STAFF_MODE !== 'undefined' && IS_SPA_STAFF_MODE && typeof spaStaffLang !== 'undefined' && spaStaffLang === 'es') ? 'es-MX' : 'en-US';
+  const dateLabel = spaCalDate.toLocaleDateString(dateLocale, { weekday: 'short', month: 'short', day: 'numeric' });
   wrap.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <div style="display:flex;gap:4px;background:#f5f1eb;border-radius:8px;padding:3px">
-        <button onclick="spaCalSetMode('therapist')" id="spaCalModeTher" style="padding:6px 12px;font-size:12px;font-weight:600;border:none;border-radius:6px;cursor:pointer;font-family:'Jost',sans-serif">By Therapist</button>
-        <button onclick="spaCalSetMode('room')" id="spaCalModeRoom" style="padding:6px 12px;font-size:12px;font-weight:600;border:none;border-radius:6px;cursor:pointer;font-family:'Jost',sans-serif">By Room</button>
+        <button onclick="spaCalSetMode('therapist')" id="spaCalModeTher" data-i18n="btn_by_therapist" style="padding:6px 12px;font-size:12px;font-weight:600;border:none;border-radius:6px;cursor:pointer;font-family:'Jost',sans-serif">By Therapist</button>
+        <button onclick="spaCalSetMode('room')" id="spaCalModeRoom" data-i18n="btn_by_room" style="padding:6px 12px;font-size:12px;font-weight:600;border:none;border-radius:6px;cursor:pointer;font-family:'Jost',sans-serif">By Room</button>
       </div>
       <button onclick="spaCalNav(-1)" style="width:28px;height:28px;border:1px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;font-size:16px">&#8249;</button>
       <span style="font-size:13px;font-weight:600;min-width:140px;text-align:center;font-family:'Jost',sans-serif">${dateLabel}</span>
       <button onclick="spaCalNav(1)" style="width:28px;height:28px;border:1px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;font-size:16px">&#8250;</button>
-      <button onclick="spaCalToday()" style="padding:6px 12px;font-size:12px;font-weight:600;border:1.5px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">Today</button>
+      <button onclick="spaCalToday()" data-i18n="btn_today" style="padding:6px 12px;font-size:12px;font-weight:600;border:1.5px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">Today</button>
       <button onclick="spaApptShowForm(null)" style="display:flex;align-items:center;gap:6px;padding:9px 16px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer;margin-left:6px">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Appointment
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span data-i18n="btn_new_appt">New Appointment</span>
       </button>
     </div>
     ${spaCalMode === 'therapist' ? `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px">
@@ -90,6 +91,7 @@ function spaCalRenderToolbar() {
   btnT.style.color = spaCalMode === 'therapist' ? '#fff' : 'var(--dark)';
   btnR.style.background = spaCalMode === 'room' ? 'var(--teal,#2d6a6a)' : 'transparent';
   btnR.style.color = spaCalMode === 'room' ? '#fff' : 'var(--dark)';
+  if (typeof IS_SPA_STAFF_MODE !== 'undefined' && IS_SPA_STAFF_MODE && typeof spaStaffApplyI18n === 'function') spaStaffApplyI18n();
 }
 function spaCalSetMode(m) { spaCalMode = m; spaCalRenderToolbar(); spaCalRender(); }
 function spaCalNav(dir) { spaCalDate = new Date(spaCalDate.getTime() + dir * DAY_MS); spaCalRenderToolbar(); spaCalRender(); }
@@ -294,6 +296,7 @@ function spaApptShowForm(id, prefill) {
   prefill = prefill || {};
   const a = id ? SpaAppointments.find(x => x.id === id) : null;
   document.getElementById('spaApptModalTitle').textContent = a ? 'Edit Appointment' : 'New Appointment';
+  document.getElementById('spaApptModalTitle').dataset.i18n = a ? 'modal_title_edit' : 'modal_title_new';
   document.getElementById('spaApptConflictWarn').style.display = 'none';
   document.getElementById('spaApptId').value = id || '';
   document.getElementById('spaApptClientName').value = a?.clientName || '';
@@ -324,6 +327,7 @@ function spaApptShowForm(id, prefill) {
   spaApptRenderHistory(a);
   spaApptCheckAvailability();
   openModal('spaApptModal');
+  if (typeof IS_SPA_STAFF_MODE !== 'undefined' && IS_SPA_STAFF_MODE && typeof spaStaffApplyI18n === 'function') spaStaffApplyI18n();
 }
 
 // Lets staff see the original booking details alongside anything changed

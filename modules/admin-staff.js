@@ -159,6 +159,7 @@ function initStaffLogin(){
   if(IS_TEACHER_MODE){initTeacherMode();return;}
   if(typeof IS_DRIVER_MODE!=='undefined'&&IS_DRIVER_MODE){initDriverMode();return;}
   if(typeof IS_STAFF_CONFIRM_MODE!=='undefined'&&IS_STAFF_CONFIRM_MODE){initStaffConfirmMode();return;}
+  if(typeof IS_SPA_STAFF_MODE!=='undefined'&&IS_SPA_STAFF_MODE){initSpaStaffMode();return;}
   loadStaff();
   refreshStaffFromSql(); // background — Manage Staff list & login stay current, not just the local cache
   let session=getCurrentSession();
