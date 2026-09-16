@@ -2193,31 +2193,61 @@ function tsCheckConflict(shalaId,period,bkId){
       const s=tsT2M(_ts.afternoonSlot||'16:30');
       return{s,e:s+(_ts.afternoonDur||60)};
     }
+    if(period==='arrival'){
+      const s=tsT2M(_ts.arrivalSlot||'16:00');
+      return{s,e:s+(_ts.arrivalDur||60)};
+    }
+    if(period==='departure'){
+      const s=tsT2M(_ts.departureSlot||'08:00');
+      return{s,e:s+(_ts.departureDur||60)};
+    }
     if(_ts.morningStart){const s=tsT2M(_ts.morningStart);return{s,e:s+(_ts.morningDur||60)};}
     if(_ts.window){const w=TS_WINDOWS.find(w=>w.id===_ts.window);if(w)return{s:tsT2M(w.start),e:tsT2M(w.end)};}
     return null;
   }
-  // Build another retreat's time range for this period
-  function getOtherRange(sr){
+  // Build another retreat's time range for this period. Arrival/departure
+  // classes only ever happen on that retreat's OWN start/end date — a
+  // retreat whose overall stay merely overlaps ours isn't necessarily
+  // arriving or departing on the same calendar day, so those must also
+  // match dates, not just have a class type set (this and the missing
+  // arrival/departure branches below were the bug behind Darlene's report
+  // 2026-09-16: Beachfront showing "booked" on an arrival evening when
+  // nothing was actually booked there that day — it was comparing against
+  // an unrelated retreat's AFTERNOON shala instead).
+  function getOtherRange(sr,other){
     if(period==='morning'){if(!sr.morningStart)return null;const s=tsT2M(sr.morningStart);return{s,e:s+(sr.morningDur||60)};}
     if(period==='afternoon'){const _as=sr.afternoonSlot||sr.afternoonStart;if(!_as)return null;const s=tsT2M(_as);return{s,e:s+(sr.afternoonDur||60)};}
+    if(period==='arrival'){if(!sr.hasArrivalClass||!sr.arrivalSlot||other.startDate!==bk.startDate)return null;const s=tsT2M(sr.arrivalSlot);return{s,e:s+(sr.arrivalDur||60)};}
+    if(period==='departure'){if(!sr.hasDepartureClass||!sr.departureSlot||other.endDate!==bk.endDate)return null;const s=tsT2M(sr.departureSlot);return{s,e:s+(sr.departureDur||60)};}
     return null;
   }
-  function overlapsTime(sr){
-    const my=getMyRange(),other=getOtherRange(sr);
-    if(!my||!other)return true; // conservative
-    return my.s<other.e+15&&my.e>other.s; // 15-min buffer after confirmed booking ends
+  function overlapsTime(sr,other){
+    const my=getMyRange(),otherR=getOtherRange(sr,other);
+    if(!my||!otherR)return true; // conservative
+    return my.s<otherR.e+15&&my.e>otherR.s; // 15-min buffer after confirmed booking ends
   }
   function fmtRange(r){if(!r)return'';return tsFmt(tsM2T(r.s))+' – '+tsFmt(tsM2T(r.e));}
-  function uses1st(sr){return period==='morning'?sr.morningShala1===shalaId:sr.afternoonShala1===shalaId;}
-  function uses2nd(sr){return period==='morning'?sr.morningShala2===shalaId:sr.afternoonShala2===shalaId;}
+  function uses1st(sr){
+    if(period==='morning')return sr.morningShala1===shalaId;
+    if(period==='afternoon')return sr.afternoonShala1===shalaId;
+    if(period==='arrival')return sr.arrivalShala1===shalaId;
+    if(period==='departure')return sr.departureShala1===shalaId;
+    return false;
+  }
+  function uses2nd(sr){
+    if(period==='morning')return sr.morningShala2===shalaId;
+    if(period==='afternoon')return sr.afternoonShala2===shalaId;
+    if(period==='arrival')return sr.arrivalShala2===shalaId;
+    if(period==='departure')return sr.departureShala2===shalaId;
+    return false;
+  }
 
   // Check all confirmed 1st-choice bookings for this shala
   const confirmed1=overlapping.filter(b=>b.scheduleRequest.adminStatus==='confirmed'&&uses1st(b.scheduleRequest));
   if(confirmed1.length){
-    const otherRange=getOtherRange(confirmed1[0].scheduleRequest);
+    const otherRange=getOtherRange(confirmed1[0].scheduleRequest,confirmed1[0]);
     const rangeLabel=fmtRange(otherRange);
-    if(overlapsTime(confirmed1[0].scheduleRequest)){
+    if(overlapsTime(confirmed1[0].scheduleRequest,confirmed1[0])){
       return{level:'blocked',message:`Booked by another group${rangeLabel?' at '+rangeLabel:''}`,bookedLabel:rangeLabel};
     } else {
       // Different time — still selectable but show the booked hours as info
@@ -2225,10 +2255,10 @@ function tsCheckConflict(shalaId,period,bkId){
     }
   }
   // Confirmed 2nd-choice with overlapping time
-  const confirmed2=overlapping.filter(b=>b.scheduleRequest.adminStatus==='confirmed'&&uses2nd(b.scheduleRequest)&&overlapsTime(b.scheduleRequest));
+  const confirmed2=overlapping.filter(b=>b.scheduleRequest.adminStatus==='confirmed'&&uses2nd(b.scheduleRequest)&&overlapsTime(b.scheduleRequest,b));
   if(confirmed2.length)return{level:'second',message:'Another group\'s 2nd choice at this time — likely still available, Amansala will confirm'};
   // Pending 1st-choice with overlapping time
-  const pending=overlapping.filter(b=>b.scheduleRequest.adminStatus!=='confirmed'&&uses1st(b.scheduleRequest)&&overlapsTime(b.scheduleRequest));
+  const pending=overlapping.filter(b=>b.scheduleRequest.adminStatus!=='confirmed'&&uses1st(b.scheduleRequest)&&overlapsTime(b.scheduleRequest,b));
   if(pending.length)return{level:'warn',message:'Requested by another group at this time — pending Amansala approval'};
   return null;
 }
