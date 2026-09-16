@@ -411,6 +411,17 @@ function spaApptSave() {
     paymentStatus: document.getElementById('spaApptPaymentStatus').value,
     notes: document.getElementById('spaApptNotes').value.trim(),
   };
+  // Reservation Status = Confirmed already means the booking is settled —
+  // don't also make staff separately click the hourglass icon to mark it
+  // therapist-confirmed (Darlene's call 2026-09-16: two "confirmed" states
+  // for the same appointment was confusing). Only auto-set it the first
+  // time; it can still be manually unconfirmed afterward if needed.
+  const existingApptForConfirm = id ? SpaAppointments.find(x => x.id === id) : null;
+  if (fields.status === 'CONFIRMED' && !(existingApptForConfirm && existingApptForConfirm.confirmed)) {
+    fields.confirmed = true;
+    fields.confirmedAt = new Date().toISOString();
+    fields.confirmedBy = (typeof getCurrentSession === 'function' ? getCurrentSession()?.name : null) || 'Staff';
+  }
   const conflict = fields.status !== 'CANCELLED' ? spaCalCheckConflict(fields, id || null) : null;
   if (conflict) {
     const warn = document.getElementById('spaApptConflictWarn');
