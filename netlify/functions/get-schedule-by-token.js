@@ -135,7 +135,7 @@ function buildScheduleDays(bk, addOnMap){
       }
       const isOffsite = sr.offsiteNight && Math.abs(d.getTime() - (pd(bk.start_date).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS)) < DAY_MS/2;
       const hasGitano = (bk.retreat_activities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
-      if (!hasGitano) rows.push({ time:'7:30 PM', desc: isOffsite?'Dinner | Off-site':'Dinner', sk:'19:30' });
+      if (!hasGitano) rows.push({ time:'7:30 PM', desc: isOffsite?(sr.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner | Off-site'):'Dinner', sk:'19:30' });
     }
 
     // Tours/ceremonies/prepaid activities were landing at the end of the day

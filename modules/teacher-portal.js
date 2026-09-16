@@ -1979,9 +1979,9 @@ function tsRenderOffsiteChoice(){
   // means now (the $40/person package add-on), so treat it as an alias rather than
   // showing nothing selected for a schedule that was already submitted.
   const _effChoice=_ts.offsiteChoice==='onsite'?'onsiteRoom':_ts.offsiteChoice;
-  const UNSEL_LBL={onsiteRoom:'Add to Package',onsiteEach:'Select',onsiteGroup:'Select',gitano:'Add Gitano',undecided:''};
+  const UNSEL_LBL={onsitePrepaid:'Select',onsiteRoom:'Add to Package',onsiteEach:'Select',onsiteGroup:'Select',gitano:'Add Gitano',undecided:''};
   const SEL_LBL={onsiteRoom:'✓ Added'};
-  ['onsiteRoom','onsiteEach','onsiteGroup','gitano','undecided'].forEach(c=>{
+  ['onsitePrepaid','onsiteRoom','onsiteEach','onsiteGroup','gitano','undecided'].forEach(c=>{
     const opt=document.getElementById('tsOffsiteOpt_'+c);
     const btn=document.getElementById('tsOffsiteBtn_'+c);
     const sel=_effChoice===c;
@@ -2634,7 +2634,10 @@ function tsRenderCalSection(bk){
       if(sr.hasAfternoon&&dayAfSlot)rows.push({time:fmtT(dayAfSlot)+' – '+fmtT(addMin(dayAfSlot,dayAfDur)),desc:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Afternoon Class'),shala:dayAfShala,cat:'yoga',sk:dayAfSlot});
       const isOffsite=sr.offsiteNight&&(()=>{const ofNight=pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS;return Math.abs(d.getTime()-ofNight)<DAY_MS/2;})();
       const hasGitanoToday=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
-      if(!hasGitanoToday)rows.push({time:'7:30 PM',desc:isOffsite?'Dinner (Off-site)':'Dinner',shala:'',cat:'meal',sk:'19:30'});
+      // "Already Prepaid" onsite is a definite, already-included dinner — show
+      // "Dinner Onsite" plainly, not "Dinner (Off-site)" (that label only fits
+      // when the group is actually going offsite, e.g. Gitano).
+      if(!hasGitanoToday)rows.push({time:'7:30 PM',desc:isOffsite?(sr.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner (Off-site)'):'Dinner',shala:'',cat:'meal',sk:'19:30'});
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT the arrival
     // day — hard backstop here regardless of how a stale/mis-dated entry got
@@ -4541,7 +4544,7 @@ function openPrintSchedule(bkId){
         return Math.abs(d.getTime()-ofNight)<DAY_MS/2;
       })();
       const hasGitanoPrint=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
-      if(!hasGitanoPrint)rows.push({time:'7:30 PM',desc:isOffsite?'Dinner | Off-site':'Dinner',shala:'',cls:'',sk:'19:30'});
+      if(!hasGitanoPrint)rows.push({time:'7:30 PM',desc:isOffsite?(sr?.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner | Off-site'):'Dinner',shala:'',cls:'',sk:'19:30'});
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT arrival.
     const printActMap={};ADD_ONS.forEach(a=>printActMap[a.id]=a);printActMap['ao12']={id:'ao12',name:'Group Salsa Class',price:0};
