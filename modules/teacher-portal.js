@@ -2580,6 +2580,51 @@ function tsSubmitSchedule(){
   if(confEl){confEl.style.display='flex';}else{showToast('Schedule request saved! Amansala will confirm your times and shalas.');}
 }
 
+// Prepaid-activity pill on the Confirmed schedule view — click to request a
+// different day/time even after Amansala has confirmed the schedule
+// (Darlene's call 2026-09-16). Shows the currently-scheduled day/time when
+// one exists, or "not yet set" when Amansala hasn't placed it yet.
+function tsConfirmedPrepaidPill(bk,ao){
+  const act=(bk.retreatActivities||[]).find(a=>a.aoId===ao.id);
+  const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dLabel=act?.date?(d=>MON[d.getMonth()]+' '+d.getDate())(new Date(act.date+'T12:00:00')):'';
+  const tLabel=act?.time?tsFmt(act.time):'';
+  const whenLabel=dLabel?(dLabel+(tLabel?' · '+tLabel:'')):'not yet set';
+  return `<button type="button" onclick="tsToggleActivityRequest('${ao.id}')" style="background:#dcfce7;color:#15803d;border:1px solid #6ee7b7;padding:5px 14px;border-radius:99px;font-size:12.5px;font-weight:600;font-family:'Jost',sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:5px" title="Click to request a different day/time">${ao.name}<span style="opacity:.75;font-weight:500;font-style:italic">(${whenLabel})</span>✏</button>`;
+}
+let _tsActivityRequestOpenId=null;
+function tsToggleActivityRequest(aoId){
+  const wrap=document.getElementById('tsPrepaidRequestWrap');if(!wrap)return;
+  const bk=AppData.bookings.find(b=>b.id===_tsBkId);if(!bk)return;
+  if(_tsActivityRequestOpenId===aoId){_tsActivityRequestOpenId=null;wrap.innerHTML='';return;}
+  _tsActivityRequestOpenId=aoId;
+  const ao=ADD_ONS.find(a=>a.id===aoId);
+  const act=(bk.retreatActivities||[]).find(a=>a.aoId===aoId);
+  const minDate=fmtISO(new Date(pd(bk.startDate).getTime()+DAY_MS));
+  wrap.innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;background:#fff;border:1.5px solid #6ee7b7;border-radius:9px;margin-bottom:8px">
+    <div style="flex:1;min-width:160px;font-weight:600;font-size:13px;color:#065f46">Request a time — ${ao?ao.name:aoId}</div>
+    <input type="date" id="tsActReqDate_${aoId}" value="${act?.date||''}" min="${minDate}" max="${bk.endDate}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
+    <input type="time" id="tsActReqTime_${aoId}" value="${act?.time||''}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
+    <button class="btn btn-primary" style="padding:7px 16px;font-size:12.5px" onclick="tsSaveConfirmedActivityRequest('${aoId}')">Send Request</button>
+    <button class="btn btn-secondary" style="padding:7px 16px;font-size:12.5px" onclick="tsToggleActivityRequest('${aoId}')">Cancel</button>
+  </div>`;
+}
+function tsSaveConfirmedActivityRequest(aoId){
+  const bk=AppData.bookings.find(b=>b.id===_tsBkId);if(!bk)return;
+  const dateEl=document.getElementById('tsActReqDate_'+aoId),timeEl=document.getElementById('tsActReqTime_'+aoId);
+  if(!dateEl?.value){showToast('Please pick a date first.');return;}
+  if(dateEl.value===bk.startDate){showToast('Activities can\'t be scheduled on the arrival day — please pick a later date.');return;}
+  if(!bk.retreatActivities)bk.retreatActivities=[];
+  const existing=bk.retreatActivities.find(a=>a.aoId===aoId);
+  const prepaid=existing?existing.prepaid:(bk.packages||[]).includes(aoId);
+  bk.retreatActivities=bk.retreatActivities.filter(a=>a.aoId!==aoId);
+  bk.retreatActivities.push({aoId,date:dateEl.value,time:timeEl?.value||'11:45',prepaid,requestedTime:true});
+  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  saveAll();
+  showToast('Request sent — Amansala will confirm.');
+  _tsActivityRequestOpenId=null;
+  tsRenderCalSection(bk);
+}
 function tsRenderCalSection(bk){
   const sec=document.getElementById('tsCalSection');
   const content=document.getElementById('tsCalContent');
@@ -2711,13 +2756,16 @@ function tsRenderCalSection(bk){
   if(mShala2)shala2Parts.push('Morning 2nd choice: <b>'+mShala2+'</b>');
   if(aShala2)shala2Parts.push('Afternoon 2nd choice: <b>'+aShala2+'</b>');
   const shala2Note=shala2Parts.length?`<div style="margin-top:20px;padding:10px 14px;background:#f0f9f9;border:1px solid #b2d8d8;border-radius:8px;font-size:12px;color:#4b7070;line-height:1.7"><span style="font-weight:700">Shala 2nd Choice:</span> ${shala2Parts.join(' &nbsp;·&nbsp; ')} — we will assign this shala if your first preference is unavailable.</div>`:'';
-  // Prepaid package banner
+  // Prepaid package banner — each pill is clickable so a teacher can request
+  // a different time even after their schedule is Confirmed (Darlene's call
+  // 2026-09-16), not just during initial submission.
   const prepaidIds=[...new Set([...(bk.packages||[]),...(bk.retreatActivities||[]).filter(a=>a.prepaid).map(a=>a.aoId)])];
   const prepaidItems=ADD_ONS.filter(a=>prepaidIds.includes(a.id));
   const prepaidHtml=prepaidItems.length?`<div style="background:#f0fdf4;border:1.5px solid #6ee7b7;border-radius:12px;padding:14px 18px;margin-bottom:24px">
     <div style="font-size:11.5px;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">✦ Prepaid Package</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">${prepaidItems.map(ao=>`<span style="background:#dcfce7;color:#15803d;border:1px solid #6ee7b7;padding:5px 14px;border-radius:99px;font-size:12.5px;font-weight:600;font-family:'Jost',sans-serif">${ao.name}</span>`).join('')}</div>
-    <div style="font-size:11.5px;color:#4b7070;font-style:italic">These activities are included in your retreat — Amansala will coordinate the exact timing on your schedule below.</div>
+    <div id="tsPrepaidPillsWrap" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">${prepaidItems.map(ao=>tsConfirmedPrepaidPill(bk,ao)).join('')}</div>
+    <div id="tsPrepaidRequestWrap"></div>
+    <div style="font-size:11.5px;color:#4b7070;font-style:italic">These activities are included in your retreat — click one above to request a different day/time, or Amansala will coordinate the exact timing on your schedule below.</div>
   </div>`:'';
 
 
