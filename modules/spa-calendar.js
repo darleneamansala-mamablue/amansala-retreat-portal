@@ -303,6 +303,7 @@ function spaApptShowForm(id, prefill) {
   document.getElementById('spaApptStatus').value = a?.status || 'CONFIRMED';
   document.getElementById('spaApptPaymentStatus').value = a?.paymentStatus && ['PENDING', 'PAID', 'CONFIRMED'].includes(a.paymentStatus) ? a.paymentStatus : 'PENDING';
   document.getElementById('spaApptDate').value = a?.date || spaCalFmtDateStr(spaCalDate);
+  spaApptOnGuestTypeChange();
 
   const svcSel = document.getElementById('spaApptService');
   svcSel.innerHTML = '<option value="">— Select —</option>' + SpaData.services.filter(s => s.active).map(s => `<option value="${s.id}" ${a?.serviceId === s.id ? 'selected' : ''}>${s.name}</option>`).join('');
@@ -391,8 +392,18 @@ async function spaNotifyTherapistCancelled(appt, therapistId) {
   } catch (e) {}
 }
 
+// Hotel Guest appointments bill straight to the guest's room and get paid
+// when they settle their folio at checkout — a separate Payment Status
+// toggle on the appointment itself was a redundant, easy-to-forget step
+// (Darlene's call 2026-09-16). Only Offsite guests (no room to charge) need
+// it, e.g. to track an online Stripe payment.
+function spaApptOnGuestTypeChange() {
+  const isHotel = document.getElementById('spaApptGuestType').value === 'hotel';
+  document.getElementById('spaApptPaymentStatusWrap').style.display = isHotel ? 'none' : '';
+  document.getElementById('spaApptRoomBillNote').style.display = isHotel ? '' : 'none';
+}
 function spaApptSave() {
-  const id = document.getElementById('spaApptId').value;
+  let id = document.getElementById('spaApptId').value;
   const clientName = document.getElementById('spaApptClientName').value.trim();
   if (!clientName) { alert('Please enter a client name.'); return; }
   const serviceId = document.getElementById('spaApptService').value;
@@ -402,13 +413,14 @@ function spaApptSave() {
   if (duration % 15 !== 0) { alert('Duration must be in 15-minute increments.'); return; }
   const start = document.getElementById('spaApptStart').value;
   if (spaCalHHMMToMin(start) % 15 !== 0) { alert('Start time must be on a 15-minute boundary.'); return; }
+  const guestType = document.getElementById('spaApptGuestType').value;
   const fields = {
-    clientName, guestType: document.getElementById('spaApptGuestType').value,
+    clientName, guestType,
     guestRoom: document.getElementById('spaApptGuestRoom').value.trim() || null,
     serviceId, therapistId, roomId: document.getElementById('spaApptRoom').value || null,
     date: document.getElementById('spaApptDate').value, start, duration,
     status: document.getElementById('spaApptStatus').value,
-    paymentStatus: document.getElementById('spaApptPaymentStatus').value,
+    paymentStatus: guestType === 'hotel' ? 'NOT_REQUIRED' : document.getElementById('spaApptPaymentStatus').value,
     notes: document.getElementById('spaApptNotes').value.trim(),
   };
   // Reservation Status = Confirmed already means the booking is settled —
@@ -455,11 +467,17 @@ function spaApptSave() {
       spaNotifyTherapistCancelled(appt, before.therapistId);
     }
   } else {
-    SpaAppointments.push({ id: spaNewId('ap'), createdAt: new Date().toISOString(), ...fields });
+    id = spaNewId('ap');
+    SpaAppointments.push({ id, createdAt: new Date().toISOString(), ...fields });
   }
   spaCalSave();
   closeModal('spaApptModal');
   spaCalRender();
+  // Hotel Guest + Confirmed = bill it to their room right now, no separate
+  // "Charge to Room" click needed (Darlene's call 2026-09-16).
+  if (fields.guestType === 'hotel' && fields.status === 'CONFIRMED' && typeof spaChargeApptToRoom === 'function') {
+    spaChargeApptToRoom(id, { silent: true });
+  }
 }
 
 function spaApptDelete() {

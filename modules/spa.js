@@ -453,20 +453,25 @@ function spaFindGuestByRoom(roomNum) {
   if (bk) return { bk };
   return null;
 }
-async function spaChargeApptToRoom(apptId) {
+// opts.silent skips the confirm() prompt and the "already charged"/"no
+// match" toasts — used when auto-charging right after a Hotel Guest
+// appointment is saved (the save itself is the staff's affirmative action;
+// see spaApptSave in spa-calendar.js), so it doesn't nag with a second popup.
+async function spaChargeApptToRoom(apptId, opts) {
+  opts = opts || {};
   const a = (SpaAppointments || []).find(x => x.id === apptId); if (!a) return;
-  if (a.folioStatus === 'POSTED') { showToast('Already charged to this room.'); return; }
+  if (a.folioStatus === 'POSTED') { if (!opts.silent) showToast('Already charged to this room.'); return; }
   const byRoom = a.guestRoom ? spaFindGuestByRoom(a.guestRoom) : null;
   const match = byRoom?.reg ? byRoom : (byRoom ? null : spaFindGuestRegForAppt(a));
   const bkMatch = byRoom?.bk ? byRoom : (!match && !byRoom ? spaFindGuestBookingForAppt(a) : null);
-  if (!match && !bkMatch) { showToast(a.guestRoom ? `No guest found in room ${a.guestRoom}.` : 'No matching registered guest found.'); return; }
+  if (!match && !bkMatch) { if (!opts.silent) showToast(a.guestRoom ? `No guest found in room ${a.guestRoom}.` : 'No matching registered guest found.'); return; }
   const svc = SpaData.services.find(s => s.id === a.serviceId);
   const name = svc?.name || 'Spa Service';
   const price = svc?.groupPricing ? (a.groupTotalPriceUSD ?? svc.price) : svc?.price;
-  if (price == null) { showToast('This service has no price set — add one in Services first.'); return; }
+  if (price == null) { if (!opts.silent) showToast('This service has no price set — add one in Services first.'); return; }
   const category = /massage/i.test(name) ? 'Massage' : 'Spa';
   const guestLabel = match ? match.guest.name : bkMatch.bk.leaderName;
-  if (!confirm(`Charge ${guestLabel}'s room folio ${fmt$(price)} for "${name}"?`)) return;
+  if (!opts.silent && !confirm(`Charge ${guestLabel}'s room folio ${fmt$(price)} for "${name}"?`)) return;
   const chargeId = uid();
   if (match) {
     if (!match.reg.charges) match.reg.charges = [];
@@ -482,7 +487,7 @@ async function spaChargeApptToRoom(apptId) {
   a.folioChargeId = chargeId;
   if (typeof spaCalSave === 'function') await spaCalSave();
   logActivity('Charge added', `${fmt$(price)} — ${name} — ${guestLabel} (from Spa)`, match ? match.reg.bookingId : bkMatch.bk.id);
-  showToast(`Charged ${fmt$(price)} to ${guestLabel}'s folio ✓`);
+  showToast(`${opts.silent ? 'Auto-charged' : 'Charged'} ${fmt$(price)} to ${guestLabel}'s ${opts.silent ? 'room' : 'folio'} ✓`);
   spaRenderDashboard();
 }
 
