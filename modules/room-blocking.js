@@ -157,9 +157,19 @@ function _renderBlockRoomsGrid(bkId){
   // Also add external Cloudbeds reservations (walk-ins, OTAs, etc.)
   const _portalIds=new Set();
   AppData.bookings.forEach(bk2=>Object.values(bk2.cbReservationIds||{}).forEach(id=>{if(id)_portalIds.add(String(id));}));
+  const _leaderNorm=(bk.leaderName||'').toLowerCase().trim();
   externalReservations.forEach(r=>{
     if(_portalIds.has(String(r.reservationID)))return;
     if(!datesOverlap(bk.startDate,bk.endDate,r.startDate,r.endDate))return;
+    // A Cloudbeds reservation booked directly (not through the portal, so it
+    // has no cbReservationIds link) under this same retreat leader's name is
+    // this retreat's OWN room, not a real conflict — without this check a
+    // room already reserved for this exact guest in Cloudbeds could never be
+    // added to their blockedRooms here (real incident 2026-09-16: Melissa
+    // Masella's Room 3, reserved as "Melissa Masella Group" in Cloudbeds,
+    // silently got dropped every time it was added).
+    const extGuestNorm=(r.guestName||'').toLowerCase().trim();
+    if(_leaderNorm&&extGuestNorm&&(extGuestNorm.includes(_leaderNorm)||_leaderNorm.includes(extGuestNorm)))return;
     (r.rooms||[]).forEach(room=>{
       if(!conflictMap.has(room))conflictMap.set(room,{name:`${r.guestName} (${r.sourceName||'Cloudbeds'})`,bookingId:null});
       if(!conflictMap.has(room.toLowerCase()))conflictMap.set(room.toLowerCase(),conflictMap.get(room));
@@ -478,9 +488,16 @@ async function blockSave(){
   });
   const _bsPortalIds=new Set();
   AppData.bookings.forEach(bk2=>Object.values(bk2.cbReservationIds||{}).forEach(id=>{if(id)_bsPortalIds.add(String(id));}));
+  // Same same-guest exclusion as _renderBlockRoomsGrid — a Cloudbeds
+  // reservation booked directly under this retreat leader's own name is
+  // this retreat's own room, not a real conflict (Melissa Masella/Room 3,
+  // 2026-09-16).
+  const _bsLeaderNorm=(bk.leaderName||'').toLowerCase().trim();
   externalReservations.forEach(r=>{
     if(_bsPortalIds.has(String(r.reservationID)))return;
     if(!datesOverlap(bk.startDate,bk.endDate,r.startDate,r.endDate))return;
+    const extGuestNorm=(r.guestName||'').toLowerCase().trim();
+    if(_bsLeaderNorm&&extGuestNorm&&(extGuestNorm.includes(_bsLeaderNorm)||_bsLeaderNorm.includes(extGuestNorm)))return;
     (r.rooms||[]).forEach(room=>{
       if(prevRoomsSet.has(room.toLowerCase()))return;
       const match=selected.find(s=>s.toLowerCase()===room.toLowerCase());
