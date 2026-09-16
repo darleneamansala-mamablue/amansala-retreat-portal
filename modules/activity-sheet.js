@@ -676,14 +676,25 @@ function actSheetRenderSummary() {
         </div>
       </div>
       ${(()=>{
-        if(e.ao.id!=='ao5'||!e.date)return'';
+        if(!e.date)return'';
+        // Pairs of add-ons that shouldn't land on the same day for the same
+        // retreat — started as just Temazcal/Offsite Dinner, generalized to
+        // also cover Ice Bath & Mayan Clay Ceremony (Darlene's report
+        // 2026-09-16: both got scheduled at the exact same time on Shannon
+        // Jamail's retreat). Add more pairs here as they come up.
+        const SAME_DAY_CONFLICT_PAIRS=[{a:'ao5',b:'ao13',label:'Temazcal & Offsite Dinner conflict'},{a:'ao9',b:'ao10',label:'Mayan Clay & Ice Bath conflict'}];
+        const pair=SAME_DAY_CONFLICT_PAIRS.find(p=>p.a===e.ao.id||p.b===e.ao.id);
+        if(!pair)return'';
+        const otherId=pair.a===e.ao.id?pair.b:pair.a;
+        const otherAo=(ADD_ONS||[]).find(a=>a.id===otherId);
+        const otherName=otherAo?otherAo.name:otherId;
         const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         const fmtAlt=ds=>{const d=new Date(ds+'T12:00:00');return MON[d.getMonth()]+' '+d.getDate();};
         const conflictBkNames=[];const altDates=new Set();
         e.groups.forEach(g=>{
           const bk=AppData.bookings.find(b=>b.id===g.bkId);if(!bk)return;
-          const hasGitano=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===e.date);
-          if(!hasGitano)return;
+          const hasOther=(bk.retreatActivities||[]).some(a=>a.aoId===otherId&&a.date===e.date);
+          if(!hasOther)return;
           conflictBkNames.push(g.bkName);
           const nights=Math.round((new Date(bk.endDate)-new Date(bk.startDate))/86400000);
           for(let i=1;i<nights;i++){const ds=new Date(new Date(bk.startDate).getTime()+i*86400000).toISOString().slice(0,10);if(ds!==e.date)altDates.add(ds);}
@@ -693,8 +704,8 @@ function actSheetRenderSummary() {
         return`<div style="padding:10px 20px;background:#fff7ed;border-bottom:1.5px solid #f97316;display:flex;align-items:flex-start;gap:10px">
           <span style="font-size:15px;flex-shrink:0">⚠️</span>
           <div style="font-size:12.5px;color:#7c2d12;line-height:1.55">
-            <b>Temazcal &amp; Offsite Dinner conflict</b> — ${conflictBkNames.join(', ')} has the Gitano dinner on the same night.
-            We do not schedule both on the same day.${alts?` Suggest moving the offsite dinner to: <b>${alts}</b>.`:''}
+            <b>${pair.label}</b> — ${conflictBkNames.join(', ')} has ${otherName} on the same day.
+            We do not schedule both on the same day.${alts?` Suggest moving it to: <b>${alts}</b>.`:''}
           </div>
         </div>`;
       })()}
