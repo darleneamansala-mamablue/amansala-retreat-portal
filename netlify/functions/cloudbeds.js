@@ -171,6 +171,42 @@ exports.handler = async (event) => {
           adults: 1,
         }));
 
+      // Live per-room, per-date rate for the Room Only reservation modal —
+      // matches by physical room NAME (Cloudbeds has no cb_room_type_id
+      // mapping saved on our room_types, so we go through the same
+      // roomName → roomTypeID lookup getRooms() already builds for syncing
+      // reservations). Cloudbeds returns EVERY rate plan for the room — Yoga
+      // rate, OTA rates, and $1 internal placeholder plans for Bikini
+      // Bootcamp/Restore & Renew (priced elsewhere in this app) — so this
+      // only considers the public "Escape / ..." walk-in plans (confirmed
+      // 2026-09-16 against the live Cloudbeds booking widget) and picks the
+      // lowest of those, falling back to the plain base rate (no ratePlanID)
+      // if no Escape plan exists for this room. Applied as a flat nightly
+      // rate for check-in night only (Darlene's call 2026-09-16).
+      case "getRoomOnlyRate": {
+        const roomName = qs.room;
+        const rStart = qs.start;
+        if (!roomName || !rStart) return ok(h, { error: "room and start are required" }, 400);
+        if (!_roomTypeLookup || !Object.keys(_roomTypeLookup).length) await getRooms(tok);
+        const roomTypeID = _roomTypeLookup[roomName];
+        if (!roomTypeID) return ok(h, { rate: null, reason: "Room not found in Cloudbeds" });
+        const rEnd = new Date(rStart + "T12:00:00");
+        rEnd.setDate(rEnd.getDate() + 1);
+        const plansRes = await cbGet(tok, "/getRatePlans", {
+          startDate: rStart, endDate: rEnd.toISOString().slice(0, 10), adults: 1,
+        });
+        const entries = (plansRes?.data || []).filter(e => e.roomTypeID === roomTypeID && e.roomRate);
+        const escapeEntries = entries.filter(e => /escape/i.test(e.ratePlanNamePublic || e.ratePlanNamePrivate || ""));
+        const pool = escapeEntries.length ? escapeEntries : entries.filter(e => !e.ratePlanID);
+        if (!pool.length) return ok(h, { rate: null, reason: "No public rate plan for this room/date" });
+        const lowest = pool.reduce((a, b) => (Number(b.roomRate) < Number(a.roomRate) ? b : a));
+        return ok(h, {
+          rate: Math.round(Number(lowest.roomRate) * 100) / 100,
+          ratePlanName: lowest.ratePlanNamePublic || lowest.ratePlanNamePrivate || "",
+          roomTypeID,
+        });
+      }
+
       case "gethotels":
         return ok(h, await cbGet(tok, "/getHotels"));
 

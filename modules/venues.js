@@ -693,15 +693,34 @@ async function rmAutoRate(){
     }else if(hintEl)hintEl.textContent=`${rt.name} — no rate configured for this room type`;
     return;
   }
-  // Room Only (Walk-in/Direct/Booking.com/Expedia/Air BnB/OTA) — real seasonal rate
-  // sheet from Darlene (2026-09-02), one base rate per room type computed by date via
-  // roomOnlySeasonPct(). She said sharing isn't really offered as a separate rate, so
-  // solo/sharing currently compute the same number for this category.
-  const rate=roomOnlyRateForDate(rt,start||fmtISO(new Date()));
+  // Room Only (Walk-in/Direct/Booking.com/Expedia/Air BnB/OTA) — pull the live
+  // Cloudbeds rate for this specific room + date first (Darlene's call
+  // 2026-09-16: the old internal seasonal estimate didn't match what Cloudbeds
+  // actually charges). Falls back to that estimate only if Cloudbeds has no
+  // rate plan for this room/date or the request fails.
+  const startDate=start||fmtISO(new Date());
+  let cbRate=null,cbLabel=null;
+  if(_rmRoom){
+    try{
+      const resp=await fetch(`/.netlify/functions/cloudbeds?action=getRoomOnlyRate&room=${encodeURIComponent(_rmRoom)}&start=${startDate}`);
+      const j=await resp.json();
+      if(j&&j.rate!=null){cbRate=j.rate;cbLabel=j.ratePlanName;}
+    }catch(e){console.warn('[CB room-only rate] fetch failed:',e);}
+  }
+  if(cbRate!=null){
+    rateEl.value=cbRate;
+    if(hintEl)hintEl.textContent=`${rt.name} · Room Only · Cloudbeds live rate${cbLabel?' ('+cbLabel+')':''} · ${fmt$(cbRate)}/night`;
+    return;
+  }
+  // Real seasonal rate sheet from Darlene (2026-09-02), one base rate per room
+  // type computed by date via roomOnlySeasonPct(). She said sharing isn't
+  // really offered as a separate rate, so solo/sharing compute the same
+  // number for this category.
+  const rate=roomOnlyRateForDate(rt,startDate);
   if(rate!=null){
     rateEl.value=rate;
-    const pct=roomOnlySeasonPct(start||fmtISO(new Date()));
-    if(hintEl)hintEl.textContent=`${rt.name} · Room Only · ${pct===0?'Base rate':(pct>0?'+'+pct+'%':pct+'%')} · ${fmt$(rate)}/night`;
+    const pct=roomOnlySeasonPct(startDate);
+    if(hintEl)hintEl.textContent=`${rt.name} · Room Only · ${pct===0?'Base rate':(pct>0?'+'+pct+'%':pct+'%')} · ${fmt$(rate)}/night (estimate — Cloudbeds rate unavailable)`;
   }else if(hintEl)hintEl.textContent=`${rt.name} — no Room Only rate configured yet`;
 }
 function rmUpdateNights(){
