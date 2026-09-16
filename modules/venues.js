@@ -2036,7 +2036,13 @@ function rcBuild(){
         const st=STATUS[bk.status]||STATUS.requested;
         const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk)];
         const regEntry=AppData.regs.find(r=>r.bookingId===bk.id&&entry.physical.includes(r.room));
-        const guestNames=regEntry?(regEntry.guests||[]).filter(g=>g.name).map(g=>g.name):[];
+        // Room Only bookings have no separate guest registration — the leader
+        // IS the guest. Once it's past a Soft Hold (Darlene's rule 2026-09-16:
+        // confirmed, not on hold), treat it as a real reservation instead of
+        // showing "blocked" — spa charge-to-room already matches on leaderName
+        // regardless of status, so this just fixes the visual/lock state.
+        const isRealRoomOnly=bk.bookingType==='room_only'&&bk.status!=='requested'&&bk.leaderName;
+        const guestNames=regEntry?(regEntry.guests||[]).filter(g=>g.name).map(g=>g.name):(isRealRoomOnly?[bk.leaderName]:[]);
         const hasGuest=guestNames.length>0;
         const bl=document.createElement('div');
         bl.className='bk'+(st.dash||!hasGuest?' dashed':'');

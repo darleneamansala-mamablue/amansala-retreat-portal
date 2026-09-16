@@ -2339,7 +2339,7 @@
         </div>
         <div id="rm-rate-hint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
       </div></div>
-      <div class="frow"><div class="fg"><label>Guests</label><input type="number" id="rm-adults" min="1" max="20" value="1" onchange="rmAutoRate()"></div><div class="fg"><label>Status</label><select id="rm-status"><option value="requested">Soft Hold</option><option value="contract_sent">Contract Sent</option><option value="contract_signed">Contract Signed</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Confirmed</option></select></div></div>
+      <div class="frow"><div class="fg"><label>Guests</label><input type="number" id="rm-adults" min="1" max="20" value="1" onchange="rmAutoRate()"></div><div class="fg"><label>Status</label><select id="rm-status"><option value="requested">Soft Hold</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Confirmed</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Meals Included</label><select id="rm-mealplan"><option value="breakfast">Breakfast Only</option><option value="none">None</option><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Notes</label><textarea id="rm-notes" placeholder="Internal notes..."></textarea></div></div>
       <div id="rm-err" style="display:none;color:#dc2626;font-size:12px;margin-top:4px"></div>
@@ -4793,7 +4793,7 @@ const RM_TYPE_COLORS={
 };
 const RM_TYPE_COLOR_DEFAULT={bg:'#fdf4ff',border:'#a855f7',text:'#6b21a8'}; // Direct/OTA/unrecognized — the old fixed purple
 function rmTypeColor(bk){ return RM_TYPE_COLORS[bk.retreatName]||RM_TYPE_COLOR_DEFAULT; }
-const DEF_VEN_ROWS=['RETREAT 1','RETREAT 2','RETREAT 3','RETREAT 4','RETREAT 5','CHICA RETREAT','SPECIAL EVENTS'];
+const DEF_VEN_ROWS=['RETREAT 1','RETREAT 2','RETREAT 3','RETREAT 4','RETREAT 5','RETREAT 6','CHICA RETREAT','SPECIAL EVENTS'];
 const VEN_ROWS_VERSION='9';
 const DEF_ROOM_TYPES=[
   // === AMANSALA — names and rooms match Cloudbeds exactly ===
@@ -5875,7 +5875,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260916b"></script>
+<script src="modules/venues.js?v=20260916c"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js"></script>
 <script>
