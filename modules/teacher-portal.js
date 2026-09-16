@@ -2658,15 +2658,22 @@ function tsRenderCalSection(bk){
       const dayMornDur=_mornOv?(_mornOv.dur||_effMornDur):_effMornDur;
       const dayAfSlot=_aftOv?_aftOv.start:_effAfSlot;
       const dayAfDur=_aftOv?(_aftOv.dur||_effAfDur):_effAfDur;
+      // Must respect "No class this day" (bk.scheduleSkips) for middle days
+      // too — this branch never checked it at all, so a skipped morning/
+      // afternoon class still showed up here with no shala assigned,
+      // rendering as "⚠ SHALA TO BE CONFIRMED" for a class that doesn't
+      // exist that day (Darlene's report 2026-09-16, Nov 13/14).
+      const _dayMornSkipped=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='morn');
+      const _dayAftSkipped=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='aft');
       const dayMornShala=snm(_mornOv?.shala1||sr.morningShala1);
-      rows.push({time:fmtT(dayMornStart)+' – '+fmtT(addMin(dayMornStart,dayMornDur)),desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'),shala:dayMornShala,cat:'yoga',sk:dayMornStart||'08:00'});
-      const _bMStart=dayMornStart||'';const _bMDur=dayMornDur;const _brunchT=_bMStart?addMin(_bMStart,_bMDur+15):'09:45';
+      if(!_dayMornSkipped)rows.push({time:fmtT(dayMornStart)+' – '+fmtT(addMin(dayMornStart,dayMornDur)),desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'),shala:dayMornShala,cat:'yoga',sk:dayMornStart||'08:00'});
+      const _bMStart=_dayMornSkipped?'':(dayMornStart||'');const _bMDur=dayMornDur;const _brunchT=_bMStart?addMin(_bMStart,_bMDur+15):'09:45';
       rows.push({time:fmtT(_brunchT),desc:_brunchT<'09:45'?'Breakfast':'Brunch',shala:'',cat:'meal',sk:_brunchT});
       rows.push({time:'3:00 PM',desc:'Snack',shala:'',cat:'meal',sk:'15:00'});
       const ws=(sr.workshops||[]).find(w=>w.enabled&&w.date===dateStr);
       if(ws)rows.push({time:fmtT(ws.start)+' – '+fmtT(addMin(ws.start,ws.dur||90)),desc:'Mid-Afternoon Class'+(ws.notes?' — '+ws.notes:''),shala:snm(ws.shala1),cat:'yoga',sk:ws.start||'16:00'});
       const dayAfShala=snm(_aftOv?.shala1||sr.afternoonShala1);
-      if(sr.hasAfternoon&&dayAfSlot)rows.push({time:fmtT(dayAfSlot)+' – '+fmtT(addMin(dayAfSlot,dayAfDur)),desc:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Afternoon Class'),shala:dayAfShala,cat:'yoga',sk:dayAfSlot});
+      if(sr.hasAfternoon&&dayAfSlot&&!_dayAftSkipped)rows.push({time:fmtT(dayAfSlot)+' – '+fmtT(addMin(dayAfSlot,dayAfDur)),desc:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Afternoon Class'),shala:dayAfShala,cat:'yoga',sk:dayAfSlot});
       const isOffsite=sr.offsiteNight&&(()=>{const ofNight=pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS;return Math.abs(d.getTime()-ofNight)<DAY_MS/2;})();
       const hasGitanoToday=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
       // "Already Prepaid" onsite is a definite, already-included dinner — show
