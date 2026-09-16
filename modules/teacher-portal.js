@@ -4567,7 +4567,13 @@ function openPrintSchedule(bkId){
       const _pDayMornStart=_pMornOv?_pMornOv.start:_pUsualMorn.start;
       const _pDayMornDur=_pMornOv?(_pMornOv.dur||_pUsualMorn.dur||60):(_pUsualMorn.dur||60);
       const _pDayMornShala=shalaName(_pMornOv?.shala1||sr?.morningShala1);
-      if(_pDayMornStart){
+      // Same "No class this day" check as the departure-day branch above and
+      // the teacher's own schedule view — middle days never had it here
+      // either, so a skipped morning class still printed with a shala
+      // (Darlene's report 2026-09-16).
+      const _pMornSkipped=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='morn');
+      const _pAftSkipped=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='aft');
+      if(_pDayMornStart&&!_pMornSkipped){
         const end=fmtT(addMin(_pDayMornStart,_pDayMornDur));
         rows.push({time:fmtT(_pDayMornStart)+' – '+end,desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'),shala:_pDayMornShala,cls:'shala',sk:_pDayMornStart});
       }
@@ -4584,7 +4590,7 @@ function openPrintSchedule(bkId){
       const _pDayAfSlot=_pAftOv?_pAftOv.start:(sr?.afternoonSlot||sr?.afternoonStart);
       const _pDayAfDur=_pAftOv?(_pAftOv.dur||sr?.afternoonDur||60):(sr?.afternoonDur||60);
       const _pDayAfShala=shalaName(_pAftOv?.shala1||sr?.afternoonShala1);
-      if(sr?.hasAfternoon&&_pDayAfSlot){
+      if(sr?.hasAfternoon&&_pDayAfSlot&&!_pAftSkipped){
         const aEnd=fmtT(addMin(_pDayAfSlot,_pDayAfDur));
         rows.push({time:fmtT(_pDayAfSlot)+' – '+aEnd,desc:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Afternoon Class'),shala:_pDayAfShala,cls:'shala',sk:_pDayAfSlot||'16:30'});
       }
