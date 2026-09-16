@@ -77,15 +77,21 @@ function buildScheduleDays(bk, addOnMap){
       rows.push({ time:'7:30 PM', desc:'Dinner', sk:'19:30' });
     } else if (i === nights) {
       rows.push({ time:'7:00 AM', desc:'Fruit, Coffee & Tea — Closing Comments', sk:'07:00' });
-      if (sr.hasDepartureClass && sr.departureSlot) {
-        const depShala = shalaName(sr.departureShala1||sr.morningShala1);
-        const end = fmtT(addMin(sr.departureSlot, sr.departureDur||60));
-        rows.push({ time:`${fmtT(sr.departureSlot)} – ${end}`, desc: effClassLabel(sr,'departure','Departure Morning Class'), shala: depShala, sk: sr.departureSlot });
-      } else {
-        const usual = usualMorning(bk,sr);
-        if (usual.start) {
-          const end = fmtT(addMin(usual.start, usual.dur||60));
-          rows.push({ time:`${fmtT(usual.start)} – ${end}`, desc: effClassLabel(sr,'morning','Morning Class'), shala: mShala, sk: usual.start });
+      // Must respect an admin's "Skip this day" toggle on the departure date
+      // too (period 'morn') — this branch never checked schedule_skips at
+      // all, so a skip set here was silently ignored on the shared link.
+      const depSkipped = skips.some(s=>s.date===dateStr&&s.period==='morn');
+      if (!depSkipped) {
+        if (sr.hasDepartureClass && sr.departureSlot) {
+          const depShala = shalaName(sr.departureShala1||sr.morningShala1);
+          const end = fmtT(addMin(sr.departureSlot, sr.departureDur||60));
+          rows.push({ time:`${fmtT(sr.departureSlot)} – ${end}`, desc: effClassLabel(sr,'departure','Departure Morning Class'), shala: depShala, sk: sr.departureSlot });
+        } else {
+          const usual = usualMorning(bk,sr);
+          if (usual.start) {
+            const end = fmtT(addMin(usual.start, usual.dur||60));
+            rows.push({ time:`${fmtT(usual.start)} – ${end}`, desc: effClassLabel(sr,'morning','Morning Class'), shala: mShala, sk: usual.start });
+          }
         }
       }
       rows.push({ time:'9:30 AM', desc:'Full Breakfast', sk:'09:30' });
@@ -108,7 +114,7 @@ function buildScheduleDays(bk, addOnMap){
         const dayMornShala = shalaName((mornOv&&mornOv.shala1)||sr.morningShala1);
         if (dayMornStart) {
           const end = fmtT(addMin(dayMornStart, dayMornDur));
-          rows.push({ time:`${fmtT(dayMornStart)} – ${end}`, desc: effClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class')+(mornOv?' (time changed)':''), shala: dayMornShala, sk: dayMornStart });
+          rows.push({ time:`${fmtT(dayMornStart)} – ${end}`, desc: effClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'), shala: dayMornShala, sk: dayMornStart });
         }
       }
       const ov = sr.adminOverride || {};
@@ -130,7 +136,7 @@ function buildScheduleDays(bk, addOnMap){
         const dayAfShala = shalaName((aftOv&&aftOv.shala1)||sr.afternoonShala1);
         if (sr.hasAfternoon && dayAfSlot) {
           const end = fmtT(addMin(dayAfSlot, dayAfDur));
-          rows.push({ time:`${fmtT(dayAfSlot)} – ${end}`, desc: effClassLabelDay(sr,bk,dateStr,'aft','afternoon','Afternoon Class')+(aftOv?' (time changed)':''), shala: dayAfShala, sk: dayAfSlot||'16:30' });
+          rows.push({ time:`${fmtT(dayAfSlot)} – ${end}`, desc: effClassLabelDay(sr,bk,dateStr,'aft','afternoon','Afternoon Class'), shala: dayAfShala, sk: dayAfSlot||'16:30' });
         }
       }
       const isOffsite = sr.offsiteNight && Math.abs(d.getTime() - (pd(bk.start_date).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS)) < DAY_MS/2;

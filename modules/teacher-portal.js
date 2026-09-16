@@ -2594,12 +2594,17 @@ function tsRenderCalSection(bk){
     } else if(i===nights){
       // Departure day (endDate)
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea',shala:'',cat:'meal',sk:'07:00'});
-      if(sr.hasDepartureClass&&sr.departureSlot){
-        const depShala=snm(sr.departureShala1||sr.morningShala1);
-        rows.push({time:fmtT(sr.departureSlot)+' – '+fmtT(addMin(sr.departureSlot,sr.departureDur||60)),desc:tsEffClassLabel(sr,'departure','Departure Morning Class'),shala:depShala,cat:'yoga',sk:sr.departureSlot});
-      } else {
-        const _usualMorn=tsUsualMorning(bk);
-        rows.push({time:fmtT(_usualMorn.start)+' – '+fmtT(addMin(_usualMorn.start,_usualMorn.dur)),desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cat:'yoga',sk:_usualMorn.start||'08:00'});
+      // Must respect an admin's "Skip this day" toggle on the departure date
+      // too (period 'morn') — this branch never checked bk.scheduleSkips at
+      // all, so a skip set here was silently ignored on this view.
+      if(!(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='morn')){
+        if(sr.hasDepartureClass&&sr.departureSlot){
+          const depShala=snm(sr.departureShala1||sr.morningShala1);
+          rows.push({time:fmtT(sr.departureSlot)+' – '+fmtT(addMin(sr.departureSlot,sr.departureDur||60)),desc:tsEffClassLabel(sr,'departure','Departure Morning Class'),shala:depShala,cat:'yoga',sk:sr.departureSlot});
+        } else {
+          const _usualMorn=tsUsualMorning(bk);
+          rows.push({time:fmtT(_usualMorn.start)+' – '+fmtT(addMin(_usualMorn.start,_usualMorn.dur)),desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cat:'yoga',sk:_usualMorn.start||'08:00'});
+        }
       }
       rows.push({time:'9:30 AM',desc:'Brunch &amp; Departures',shala:'',cat:'meal',sk:'09:30'});
     } else {
@@ -4489,15 +4494,22 @@ function openPrintSchedule(bkId){
       rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cls:'',sk:'19:30'});
     } else if(i===nights){
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea — Closing Comments',shala:'',cls:'',sk:'07:00'});
-      if(sr?.hasDepartureClass&&sr?.departureSlot){
-        const depShala=shalaName(sr.departureShala1||sr.morningShala1);
-        const end=fmtT(addMin(sr.departureSlot,sr.departureDur||60));
-        rows.push({time:fmtT(sr.departureSlot)+' – '+end,desc:tsEffClassLabel(sr,'departure','Departure Morning Class'),shala:depShala,cls:'shala',sk:sr.departureSlot});
-      } else {
-        const _usualDep=tsUsualMorning(bk);
-        if(_usualDep.start){
-          const end=fmtT(addMin(_usualDep.start,_usualDep.dur||60));
-          rows.push({time:fmtT(_usualDep.start)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cls:'shala',sk:_usualDep.start});
+      // Departure-day morning class must respect an admin's "Skip this day"
+      // toggle too (period 'morn' on the departure date) — this branch never
+      // checked bk.scheduleSkips at all, so a skip set here was silently
+      // ignored on the printed/shared schedule (real report 2026-09-15).
+      const _depSkipped=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='morn');
+      if(!_depSkipped){
+        if(sr?.hasDepartureClass&&sr?.departureSlot){
+          const depShala=shalaName(sr.departureShala1||sr.morningShala1);
+          const end=fmtT(addMin(sr.departureSlot,sr.departureDur||60));
+          rows.push({time:fmtT(sr.departureSlot)+' – '+end,desc:tsEffClassLabel(sr,'departure','Departure Morning Class'),shala:depShala,cls:'shala',sk:sr.departureSlot});
+        } else {
+          const _usualDep=tsUsualMorning(bk);
+          if(_usualDep.start){
+            const end=fmtT(addMin(_usualDep.start,_usualDep.dur||60));
+            rows.push({time:fmtT(_usualDep.start)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),shala:mShala,cls:'shala',sk:_usualDep.start});
+          }
         }
       }
       rows.push({time:'9:30 AM',desc:'Full Breakfast',shala:'',cls:'',sk:'09:30'});
@@ -4520,7 +4532,7 @@ function openPrintSchedule(bkId){
       const _pDayMornShala=shalaName(_pMornOv?.shala1||sr?.morningShala1);
       if(_pDayMornStart){
         const end=fmtT(addMin(_pDayMornStart,_pDayMornDur));
-        rows.push({time:fmtT(_pDayMornStart)+' – '+end,desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class')+(_pMornOv?' (time changed)':''),shala:_pDayMornShala,cls:'shala',sk:_pDayMornStart});
+        rows.push({time:fmtT(_pDayMornStart)+' – '+end,desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'),shala:_pDayMornShala,cls:'shala',sk:_pDayMornStart});
       }
       const _pOv=sr?.adminOverride||{};const _pMStart=_pOv.morningStart||_pUsualMorn.start||'';const _pMDur=parseInt(_pOv.morningDur||_pUsualMorn.dur||90);const _pBrunchT=_pMStart?addMin(_pMStart,_pMDur+15):'09:45';
       rows.push({time:fmtT(_pBrunchT),desc:_pBrunchT<'09:45'?'Breakfast':'Brunch',shala:'',cls:'',sk:_pBrunchT});
@@ -4537,7 +4549,7 @@ function openPrintSchedule(bkId){
       const _pDayAfShala=shalaName(_pAftOv?.shala1||sr?.afternoonShala1);
       if(sr?.hasAfternoon&&_pDayAfSlot){
         const aEnd=fmtT(addMin(_pDayAfSlot,_pDayAfDur));
-        rows.push({time:fmtT(_pDayAfSlot)+' – '+aEnd,desc:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Afternoon Class')+(_pAftOv?' (time changed)':''),shala:_pDayAfShala,cls:'shala',sk:_pDayAfSlot||'16:30'});
+        rows.push({time:fmtT(_pDayAfSlot)+' – '+aEnd,desc:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Afternoon Class'),shala:_pDayAfShala,cls:'shala',sk:_pDayAfSlot||'16:30'});
       }
       const isOffsite=sr?.offsiteNight&&(()=>{
         const ofNight=pd(bk.startDate).getTime()+(parseInt(sr.offsiteNight)-1)*DAY_MS;
@@ -5036,13 +5048,13 @@ function skedGetRetreatEvents(dateStr){
       const dayMornShala=mornOv?.shala1||effMornShala;
       if(dayMornStart&&dayMornShala&&!mornSkipped){
         const mEnd=skedMinToTime(skedTimeToMin(dayMornStart)+dayMornDur);
-        evs.push({id:'ret_'+bk.id+'_morn',resourceId:dayMornShala,date:dateStr,startTime:dayMornStart,endTime:mEnd,title,subtitle:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class')+(mornOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_morn',resourceId:dayMornShala,date:dateStr,startTime:dayMornStart,endTime:mEnd,title,subtitle:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
       const hasAf=sr.hasAfternoon||(ov.afternoonStart&&(ov.afternoonShala1||sr.afternoonShala1||sr.morningShala1));
       const dayAfShala=aftOv?.shala1||effAfShala;
       if(hasAf&&dayAfSlot&&dayAfShala&&!aftSkipped){
         const aEnd=skedMinToTime(skedTimeToMin(dayAfSlot)+dayAfDur);
-        evs.push({id:'ret_'+bk.id+'_aft',resourceId:dayAfShala,date:dateStr,startTime:dayAfSlot,endTime:aEnd,title,subtitle:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Evening Class')+(aftOv?' (time changed)':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_aft',resourceId:dayAfShala,date:dateStr,startTime:dayAfSlot,endTime:aEnd,title,subtitle:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Evening Class'),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
     // Workshops — only shala1
