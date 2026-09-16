@@ -74,7 +74,12 @@ function venBuild(){
     const track=document.createElement('div');track.className='g-track';track.style.cssText=`width:${total*36}px;min-width:${total*36}px`;
     track.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('text/bk-id')){e.preventDefault();track.style.background='rgba(45,106,106,.06)';}});
     track.addEventListener('dragleave',()=>{track.style.background='';});
-    track.addEventListener('drop',e=>{track.style.background='';const bkId=e.dataTransfer.getData('text/bk-id');if(!bkId)return;e.preventDefault();const tb=AppData.bookings.find(b=>b.id===bkId);if(tb&&tb.row!==rowName){tb.row=rowName;saveAll();venBuild();showToast(`Moved to ${rowName}`);}});
+    track.addEventListener('drop',e=>{track.style.background='';const bkId=e.dataTransfer.getData('text/bk-id');if(!bkId)return;e.preventDefault();const tb=AppData.bookings.find(b=>b.id===bkId);if(tb&&tb.row!==rowName){
+      const conflict=AppData.bookings.some(b=>b.id!==tb.id&&b.row===rowName&&datesOverlap(tb.startDate,tb.endDate,b.startDate,b.endDate));
+      const targetRow=conflict?findAvailableRow(tb.startDate,tb.endDate,tb.id):rowName;
+      tb.row=targetRow;saveAll();venBuild();
+      showToast(conflict?`Dates conflict in ${rowName} — moved to ${targetRow} instead.`:`Moved to ${targetRow}`);
+    }});
     daysArr.forEach((d,i)=>{if(d.d===1){const gl=document.createElement('div');gl.className='g-gl ms';gl.style.left=i*36+'px';track.appendChild(gl);}if(d.td){const tl=document.createElement('div');tl.className='g-gl today-l';tl.style.left=(i*36+18)+'px';track.appendChild(tl);}});
     visBks.forEach(({bk,li,wi})=>{
       const lane=bkLane.get(bk.id)||0;
@@ -1290,7 +1295,11 @@ function venSave(){const lead=document.getElementById('vm-leader').value.trim(),
     if(hasSched){delete bk.scheduleRequest;delete bk.retreatActivities;}
     logActivity('Dates changed — cascade reset',`${fmtDate(prevStart)} – ${fmtDate(prevEnd)} → ${fmtDate(start)} – ${fmtDate(end)}${hasContract?' · contract deleted':''}${hasSched?' · schedule deleted':''}`,venEditId);
   }
-  Object.assign(bk,{leaderName:lead,retreatName:ret,leaderEmail,leaderPhone,startDate:start,endDate:end,row,pax,status:newStatus,notes,docLink,mealPlan});const savedBkId=venEditId;const savedName=lead||ret;saveAll();closeModal('venModal');venBuild();buildDashboard();logActivity('Booking updated',`${savedName} · ${fmtDate(start)} – ${fmtDate(end)}`,savedBkId);if(prevStatus!==newStatus&&!datesChanged){logActivity('Status changed',`${statusLabel(prevStatus)} → ${statusLabel(newStatus)}`,savedBkId);if(newStatus==='contract_sent'&&prevStatus==='requested')sendTeacherEmail(bk,'dates_accepted');}if(!datesChanged&&prevPax!=pax&&pax>0)logActivity('Pax updated',`${prevPax||'?'} → ${pax} guests`,savedBkId);}else{
+  // Auto-find available row if the chosen row now has a date conflict with another retreat
+  let assignedRow=row;
+  const rowConflict=AppData.bookings.some(b=>b.id!==venEditId&&b.row===row&&datesOverlap(start,end,b.startDate,b.endDate));
+  if(rowConflict){assignedRow=findAvailableRow(start,end,venEditId);if(assignedRow!==row)showToast(`Dates conflict in ${row} — moved to ${assignedRow} instead.`);}
+  Object.assign(bk,{leaderName:lead,retreatName:ret,leaderEmail,leaderPhone,startDate:start,endDate:end,row:assignedRow,pax,status:newStatus,notes,docLink,mealPlan});const savedBkId=venEditId;const savedName=lead||ret;saveAll();closeModal('venModal');venBuild();buildDashboard();logActivity('Booking updated',`${savedName} · ${fmtDate(start)} – ${fmtDate(end)}`,savedBkId);if(prevStatus!==newStatus&&!datesChanged){logActivity('Status changed',`${statusLabel(prevStatus)} → ${statusLabel(newStatus)}`,savedBkId);if(newStatus==='contract_sent'&&prevStatus==='requested')sendTeacherEmail(bk,'dates_accepted');}if(!datesChanged&&prevPax!=pax&&pax>0)logActivity('Pax updated',`${prevPax||'?'} → ${pax} guests`,savedBkId);}else{
   // Auto-find available row if chosen row has a date conflict
   let assignedRow=row;
   const rowConflict=AppData.bookings.some(b=>b.row===row&&datesOverlap(start,end,b.startDate,b.endDate));
