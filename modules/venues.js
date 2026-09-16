@@ -983,13 +983,21 @@ function rsComputeAvailability(checkIn,checkOut){
     (bk.blockedRooms||[]).forEach(r=>{if(!blockedBy.has(r))blockedBy.set(r,info);});
     AppData.regs.filter(r=>r.bookingId===bk.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{if(!blockedBy.has(r.room))blockedBy.set(r.room,info);});
   });
-  // "Bed in a X" types (bd1-4) are just a per-bed view of the SAME physical
-  // rooms already listed under their real double/triple/quad type (e.g.
-  // "Bed in a Beachview Double" = "Beachview Double") — DUPLICATE_ROOM_ENTRY_IDS
-  // is the established exclusion set other availability views (showAvailPreview,
-  // Room Block Creator) already use for this exact reason. Book a Room was
-  // missing it, so the same rooms were listed twice under two different
-  // type names (real report 2026-09-15).
+  // A room sold as either one whole double/triple/quad OR individual beds
+  // ("13" vs "13a"/"13b") is the SAME physical space. Excluding bd1-4 room
+  // TYPES from the results (below) stopped them being listed as a separate,
+  // duplicate card (real report 2026-09-15), but a bed-level booking on
+  // "13a" never blocked "13" itself, and vice versa — so the parent room
+  // (or the other bed) still showed as available while actually half/fully
+  // occupied (real report 2026-09-16: Double/Beachview rooms showing
+  // available while 100% booked). Propagate every block to its parent room
+  // and/or sibling beds before computing per-type availability.
+  [...blockedBy.keys()].forEach(room=>{
+    const info=blockedBy.get(room);
+    const sp=splitDoubleHalf(room);
+    if(sp&&sp.base&&!blockedBy.has(sp.base))blockedBy.set(sp.base,info);
+    (typeof _getSharedBeds==='function'?_getSharedBeds(room)||[]:[]).forEach(sib=>{if(!blockedBy.has(sib))blockedBy.set(sib,info);});
+  });
   return AppData.roomTypes.filter(rt=>!DUPLICATE_ROOM_ENTRY_IDS.has(rt.id)).map(rt=>{
     const rooms=rt.rooms||[];
     const roomStatus=rooms.map(r=>{const b=blockedBy.get(r);return{room:r,available:!b,blockedByLabel:b?b.label:null,blockedByBkId:b?b.bkId:null};});
@@ -1093,6 +1101,15 @@ function showAvailPreview(id){
   // incidents: Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
   [...overlapping,bk].forEach(b=>{
     AppData.regs.filter(r=>r.bookingId===b.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
+  });
+  // Same parent/bed propagation as rsComputeAvailability — a bed-level taken
+  // room ("13a") must also count its parent ("13") as taken, and vice versa,
+  // or this count still over-reports availability for Double/Beachview/
+  // Triple/Quad room types (real report 2026-09-16).
+  [...takenRooms].forEach(room=>{
+    const sp=splitDoubleHalf(room);
+    if(sp&&sp.base)takenRooms.add(sp.base);
+    (typeof _getSharedBeds==='function'?_getSharedBeds(room)||[]:[]).forEach(sib=>takenRooms.add(sib));
   });
 
   // Per-type availability (skip bed-level duplicates so physical rooms aren't counted twice)
