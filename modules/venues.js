@@ -335,14 +335,21 @@ function dfBuild(){
   const month=parseInt(document.getElementById('dfMonth').value);
   const year=parseInt(document.getElementById('dfYear').value);
   const rowFilter=document.getElementById('dfRow').value;
+  const chicaPref=document.getElementById('dfChicaPref')?.value||'';
   const durations=Array.from(document.querySelectorAll('#tab-datefinder .df-dur-checks input:checked')).map(cb=>parseInt(cb.value));
+  const dayFilters=Array.from(document.querySelectorAll('#tab-datefinder .df-day-checks input:checked')).map(cb=>parseInt(cb.value));
   if(!durations.length){document.getElementById('dfResults').innerHTML='<div class="df-no-gaps">Select at least one duration above.</div>';return;}
 
   // Search window: 3 months centered on selected month (give context either side)
   const winStart=new Date(year,month,1);
   const winEnd=new Date(year,month+1,0); // last day of selected month
 
-  const rows=rowFilter?[rowFilter]:AppData.venRows;
+  let rows=rowFilter?[rowFilter]:AppData.venRows;
+  // Chica preference: "want" narrows to just Chica Retreat, "avoid" excludes
+  // it, "OK to mix" (empty) leaves every row as-is — Darlene's ask
+  // 2026-09-16.
+  if(chicaPref==='want')rows=rows.filter(r=>r==='CHICA RETREAT');
+  else if(chicaPref==='avoid')rows=rows.filter(r=>r!=='CHICA RETREAT');
   const container=document.getElementById('dfResults');
   container.innerHTML='';
 
@@ -385,18 +392,30 @@ function dfBuild(){
       const maxDur=Math.max(...durations);
       if(gapDays<Math.min(...durations))return;
 
+      const gapKey=gap.start+'_'+gap.end;
       durations.forEach(nights=>{
         if(gapDays<nights)return;
-        // Straight-line start (start of gap = end of prev retreat)
-        const slStart=gap.start;
-        const slEnd=fmtISO(addDays(pd(slStart),nights));
-        // Does this slot overlap the selected month?
-        const slStartD=pd(slStart),slEndD=pd(slEnd);
+        // With no day-of-week preference, only the straight-line start (gap
+        // start = end of prev retreat) is offered, same as before. With a
+        // preference set, scan every start date in the gap that lands on a
+        // wanted weekday (e.g. Thursday, for a Thu–Sun weekend retreat) —
+        // Darlene's ask 2026-09-16.
         const mStart=new Date(year,month,1),mEnd=new Date(year,month+1,1);
-        if(slStartD>=mEnd||slEndD<=mStart)return;
-        const isStraightLinePrev=!!gap.prevBk;
-        const isStraightLineNext=gap.nextBk&&slEnd===gap.nextBk.startDate;
-        rowSlots.push({nights,start:slStart,end:slEnd,gapDays,prevBk:gap.prevBk,nextBk:gap.nextBk,isStraightLinePrev,isStraightLineNext});
+        let cur=pd(gap.start);
+        const gapEndD=pd(gap.end);
+        while(true){
+          const candEndD=addDays(cur,nights);
+          if(candEndD>gapEndD)break;
+          const candStart=fmtISO(cur),candEnd=fmtISO(candEndD);
+          const isGapStart=candStart===gap.start;
+          const wanted=dayFilters.length?dayFilters.includes(cur.getDay()):isGapStart;
+          if(wanted&&!(cur>=mEnd||candEndD<=mStart)){
+            const isStraightLinePrev=isGapStart&&!!gap.prevBk;
+            const isStraightLineNext=gap.nextBk&&candEnd===gap.nextBk.startDate;
+            rowSlots.push({nights,start:candStart,end:candEnd,gapDays,gapKey,prevBk:gap.prevBk,nextBk:gap.nextBk,isStraightLinePrev,isStraightLineNext});
+          }
+          cur=addDays(cur,1);
+        }
       });
     });
 
@@ -406,10 +425,13 @@ function dfBuild(){
     const card=document.createElement('div');card.className='df-row-card';
     card.innerHTML=`<div class="df-row-hdr">${row}</div>`;
 
-    // Group slots by gap (unique start of gap)
+    // Group slots by the ORIGINAL gap they came from (not by each slot's own
+    // start date) — a day-of-week preference can produce several candidate
+    // start dates from the same gap, and they should all appear together
+    // under one "X nights open" header, not one header each.
     const gapGroups=new Map();
     rowSlots.forEach(s=>{
-      const key=s.start+'|'+s.gapDays;
+      const key=s.gapKey;
       if(!gapGroups.has(key))gapGroups.set(key,{gapDays:s.gapDays,prevBk:s.prevBk,nextBk:s.nextBk,slots:[]});
       gapGroups.get(key).slots.push(s);
     });

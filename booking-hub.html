@@ -244,7 +244,7 @@
     .df-lbl{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;}
     .df-sel{padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;color:var(--text);outline:none;background:#fff;cursor:pointer;}
     .df-sel:focus{border-color:var(--teal);}
-    .df-dur-checks{display:flex;gap:10px;flex-wrap:wrap;}
+    .df-dur-checks,.df-day-checks{display:flex;gap:10px;flex-wrap:wrap;}
     .df-chk{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--text);cursor:pointer;white-space:nowrap;}
     .df-row-card{background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:16px;overflow:hidden;}
     .df-row-hdr{background:var(--sand);padding:12px 18px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border);}
@@ -2932,6 +2932,26 @@
         <select class="df-sel" id="dfRow">
           <option value="">All rows</option>
         </select>
+      </div>
+      <div class="df-ctrl-group">
+        <label class="df-lbl">Chica</label>
+        <select class="df-sel" id="dfChicaPref">
+          <option value="">OK to mix</option>
+          <option value="want">Wants Chica</option>
+          <option value="avoid">Does not want Chica</option>
+        </select>
+      </div>
+      <div class="df-ctrl-group">
+        <label class="df-lbl">Preferred start day <span style="font-weight:400;text-transform:none;letter-spacing:0">(none = straight-line only)</span></label>
+        <div class="df-day-checks">
+          <label class="df-chk"><input type="checkbox" value="0"> Sun</label>
+          <label class="df-chk"><input type="checkbox" value="1"> Mon</label>
+          <label class="df-chk"><input type="checkbox" value="2"> Tue</label>
+          <label class="df-chk"><input type="checkbox" value="3"> Wed</label>
+          <label class="df-chk"><input type="checkbox" value="4"> Thu</label>
+          <label class="df-chk"><input type="checkbox" value="5"> Fri</label>
+          <label class="df-chk"><input type="checkbox" value="6"> Sat</label>
+        </div>
       </div>
       <button class="btn btn-primary" onclick="dfBuild()" style="margin-left:8px">Find Openings</button>
     </div>
