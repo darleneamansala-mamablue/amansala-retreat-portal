@@ -298,6 +298,7 @@ function spaApptShowForm(id, prefill) {
   document.getElementById('spaApptId').value = id || '';
   document.getElementById('spaApptClientName').value = a?.clientName || '';
   document.getElementById('spaApptGuestType').value = a?.guestType || 'hotel';
+  document.getElementById('spaApptGuestRoom').value = a?.guestRoom || '';
   document.getElementById('spaApptNotes').value = a?.notes || '';
   document.getElementById('spaApptStatus').value = a?.status || 'CONFIRMED';
   document.getElementById('spaApptPaymentStatus').value = a?.paymentStatus && ['PENDING', 'PAID', 'CONFIRMED'].includes(a.paymentStatus) ? a.paymentStatus : 'PENDING';
@@ -403,6 +404,7 @@ function spaApptSave() {
   if (spaCalHHMMToMin(start) % 15 !== 0) { alert('Start time must be on a 15-minute boundary.'); return; }
   const fields = {
     clientName, guestType: document.getElementById('spaApptGuestType').value,
+    guestRoom: document.getElementById('spaApptGuestRoom').value.trim() || null,
     serviceId, therapistId, roomId: document.getElementById('spaApptRoom').value || null,
     date: document.getElementById('spaApptDate').value, start, duration,
     status: document.getElementById('spaApptStatus').value,
@@ -419,13 +421,13 @@ function spaApptSave() {
   if (id) {
     const appt = SpaAppointments.find(x => x.id === id);
     if (!appt.originalDetails) {
-      const HIST_FIELDS = ['clientName', 'serviceId', 'therapistId', 'roomId', 'date', 'start', 'duration', 'status', 'paymentStatus'];
+      const HIST_FIELDS = ['clientName', 'guestRoom', 'serviceId', 'therapistId', 'roomId', 'date', 'start', 'duration', 'status', 'paymentStatus'];
       appt.originalDetails = {};
       HIST_FIELDS.forEach(f => { appt.originalDetails[f] = appt[f]; });
     }
     const before = { ...appt };
     Object.assign(appt, fields);
-    const HIST_FIELDS = ['clientName', 'serviceId', 'therapistId', 'roomId', 'date', 'start', 'duration', 'status', 'paymentStatus'];
+    const HIST_FIELDS = ['clientName', 'guestRoom', 'serviceId', 'therapistId', 'roomId', 'date', 'start', 'duration', 'status', 'paymentStatus'];
     const changes = HIST_FIELDS.filter(f => (before[f] || '') !== (appt[f] || '')).map(f => {
       const meta = spaApptFieldLabels(f);
       return { field: f, label: meta.label, from: meta.fmt(before[f]), to: meta.fmt(appt[f]) };

@@ -86,6 +86,16 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const db=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 const SB_START_H=10, SB_END_H=19;
+// The property is in Tulum, Mexico (America/Cancun) — a guest or staff
+// member browsing from a different timezone must still see "today"/"now" as
+// Tulum's, not their device's, or past time slots keep showing as bookable
+// (Darlene's call 2026-09-16).
+function sbTulumNow(){
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Cancun',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date());
+  const get=t=>parts.find(p=>p.type===t)?.value;
+  let hour=parseInt(get('hour'),10);if(hour===24)hour=0;
+  return {dateStr:`${get('year')}-${get('month')}-${get('day')}`,minutes:hour*60+parseInt(get('minute'),10)};
+}
 const CAT_ORDER=['massage','spirit','fitness','yoga','pilates','dance'];
 const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates',dance:'Dance'};
 const CAT_ICON={massage:'🪷',spirit:'🦋',fitness:'💪',yoga:'🧘',pilates:'🤸',dance:'💃'};
@@ -507,7 +517,7 @@ function sbAllFreeAssignments(candidates,dateStr,startMin,duration){
 }
 function sbNextDays(n){
   const out=[];
-  const today=new Date();today.setHours(0,0,0,0);
+  const today=new Date(sbTulumNow().dateStr+'T00:00:00');
   for(let i=0;i<n;i++){const d=new Date(today.getTime()+i*86400000);out.push(d);}
   return out;
 }
@@ -516,7 +526,7 @@ function sbNextDays(n){
 // can still book ahead, but only for dates within their real stay window,
 // not today just because today happens to fall in the next-14-days list.
 function sbBookableDays(){
-  const today=new Date();today.setHours(0,0,0,0);
+  const today=new Date(sbTulumNow().dateStr+'T00:00:00');
   let start=today, end=new Date(today.getTime()+13*86400000);
   if(SB.stayStart){const ss=new Date(SB.stayStart+'T00:00:00');if(ss>start)start=ss;}
   if(SB.stayEnd){const se=new Date(SB.stayEnd+'T00:00:00');if(se<end)end=se;}
@@ -531,7 +541,7 @@ function renderStep6_DateTime(el){
   const days=sbBookableDays();
   if(!days.length){
     const fmtD=ds=>new Date(ds+'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric'});
-    const hasntArrived=SB.stayStart&&new Date(SB.stayStart+'T00:00:00')>new Date(new Date().setHours(0,0,0,0));
+    const hasntArrived=SB.stayStart&&new Date(SB.stayStart+'T00:00:00')>new Date(sbTulumNow().dateStr+'T00:00:00');
     el.innerHTML=`
       <button class="btn-back" onclick="setStep(5)">&#8249; Back</button>
       <div class="card">
@@ -565,8 +575,10 @@ function sbPickDate(ds){SB.date=ds;renderStep6_DateTime(document.getElementById(
 function sbRenderSlots(candidates,svc){
   const wrap=document.getElementById('sbSlots');
   if(!candidates.length){wrap.innerHTML=`<div class="no-slots">No therapists available for this service yet. Please try a different preference or contact us directly.</div>`;return;}
+  const tn=sbTulumNow();
   const rows=[];
   for(let m=SB_START_H*60;m<=SB_END_H*60-svc.duration;m+=30){
+    if(SB.date===tn.dateStr&&m<=tn.minutes)continue; // already started/passed in Tulum time
     const assigns=sbAllFreeAssignments(candidates,SB.date,m,svc.duration);
     if(assigns.length) rows.push({start:m,assigns});
   }
@@ -863,7 +875,11 @@ async function sbFinalConfirm(){
 // a page the guest can revisit anytime to see their appointment details
 // again, without having to dig up the original email. Read-only summary
 // plus a way into the existing cancel flow, same 12-hour cutoff it enforces.
-function sbApptDateTime(appt){return new Date(appt.date+'T'+appt.start+':00');}
+// appt.date/appt.start are Tulum wall-clock values — anchor them to Tulum's
+// fixed UTC-5 offset (Quintana Roo has had no DST since Feb 2015) so the
+// hours-left-to-cancel math is correct no matter what timezone the guest's
+// or staff's own browser is in.
+function sbApptDateTime(appt){return new Date(appt.date+'T'+appt.start+':00-05:00');}
 function sbRenderConfirmationScreen(apptId){
   document.getElementById('stepDots').style.display='none';
   const el=document.getElementById('mainContent');

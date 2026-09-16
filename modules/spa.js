@@ -438,12 +438,28 @@ function spaFindGuestBookingForAppt(a) {
   }
   return null;
 }
+// If staff typed an explicit hotel room number on the appointment (Darlene's
+// call 2026-09-16 — name-only matching is error-prone), match by room first —
+// it's a firmer link than a name spelled slightly differently.
+function spaFindGuestByRoom(roomNum) {
+  const room = (roomNum || '').trim();
+  if (!room) return null;
+  const reg = (AppData.regs || []).find(r => r.room === room && (r.guests || []).some(g => g.name));
+  if (reg) {
+    const guestIdx = (reg.guests || []).findIndex(g => g.name);
+    return { reg, guest: reg.guests[guestIdx], guestIdx };
+  }
+  const bk = (AppData.bookings || []).find(b => b.bookingType === 'room_only' && b.status !== 'cancelled' && (b.blockedRooms || []).includes(room));
+  if (bk) return { bk };
+  return null;
+}
 async function spaChargeApptToRoom(apptId) {
   const a = (SpaAppointments || []).find(x => x.id === apptId); if (!a) return;
   if (a.folioStatus === 'POSTED') { showToast('Already charged to this room.'); return; }
-  const match = spaFindGuestRegForAppt(a);
-  const bkMatch = !match ? spaFindGuestBookingForAppt(a) : null;
-  if (!match && !bkMatch) { showToast('No matching registered guest found.'); return; }
+  const byRoom = a.guestRoom ? spaFindGuestByRoom(a.guestRoom) : null;
+  const match = byRoom?.reg ? byRoom : (byRoom ? null : spaFindGuestRegForAppt(a));
+  const bkMatch = byRoom?.bk ? byRoom : (!match && !byRoom ? spaFindGuestBookingForAppt(a) : null);
+  if (!match && !bkMatch) { showToast(a.guestRoom ? `No guest found in room ${a.guestRoom}.` : 'No matching registered guest found.'); return; }
   const svc = SpaData.services.find(s => s.id === a.serviceId);
   const name = svc?.name || 'Spa Service';
   const price = svc?.groupPricing ? (a.groupTotalPriceUSD ?? svc.price) : svc?.price;
