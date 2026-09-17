@@ -847,6 +847,21 @@ function gSave(){
     AppData.regs.push({id:uid(),bookingId:regSelBk.id,room:gEditRoom,roomTypeId:gEditRtId,guests,customPrice,customPkgPrice,customRateOverride,customNightsOverride,customTipNightsOverride,customTipRateOverride,amountPaid,notes,isTeacherRoom:gIsTeacherRoom||undefined,updatedAt:_regTs});
   }
   gExtraGuestMode=false;saveAll();closeModal('guestModal');regRender();showToast(gEditRegId?'Updated.':'Guest added.');
+  // If every named guest in this room is now cancelled, the room is genuinely
+  // vacated — cancel its Cloudbeds reservation too (but leave the retreat/room
+  // itself alone so the cancellation fee keeps showing here). Only fires on
+  // the transition into "fully cancelled" so re-saving doesn't re-cancel.
+  // Guest-name-count sync to CB below reads regSelBk.cbReservationIds[gEditRoom]
+  // AFTER this, so it correctly no-ops once cancelCloudbedReservationForRoom
+  // clears that id.
+  const _namedGuestsNow=guests.filter(g=>g.name);
+  const _namedGuestsBefore=(_existingReg?.guests||[]).filter(g=>g.name);
+  const _allCancelledNow=_namedGuestsNow.length>0&&_namedGuestsNow.every(g=>g.cancelled);
+  const _wasAllCancelledBefore=_namedGuestsBefore.length>0&&_namedGuestsBefore.every(g=>g.cancelled);
+  if(_allCancelledNow&&!_wasAllCancelledBefore&&regSelBk&&(regSelBk.cbReservationIds||{})[gEditRoom]){
+    cancelCloudbedReservationForRoom(regSelBk,gEditRoom).then(()=>saveAll());
+    showToast('Guest(s) cancelled — Cloudbeds reservation for this room cancelled too.');
+  }
   // Update Cloudbeds reservation guest name and adult count
   const _cbResId=regSelBk&&regSelBk.cbReservationIds&&regSelBk.cbReservationIds[gEditRoom];
   if(_cbResId&&guests[0]&&guests[0].name){
