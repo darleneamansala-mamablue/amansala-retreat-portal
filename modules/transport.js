@@ -889,10 +889,26 @@ async function tr2LoadData() {
     }
   }
 
-  // Synthetic OT entries — registered guests with no transport form submission,
-  // so upgrades can still be offered to guests using their own transport.
+  // Synthetic "Missing transport" entries — registered guests with no transport form
+  // submission, so upgrades can still be offered to guests using their own transport.
+  // (marked ot:true purely for the internal "no transfer to arrange" logic elsewhere —
+  // the badge below shows "Missing", not "OT", since nobody actually told us they're
+  // arranging their own ride; see isSynthetic in tr2AirportBadge-equivalent below.)
   const transportedKeys   = new Set(tr2AllEntries.map(e => `${e.retreatId}|${tr2NormName(e.guest)}`));
   const transportedEmails = new Set(tr2AllEntries.filter(e => e.email?.trim()).map(e => `${e.retreatId}|${e.email.toLowerCase().trim()}`));
+  // Same unique-first-name-in-this-booking fallback the Room-column lookup above uses —
+  // an abbreviated room-list name ("Billy S") never exact-matches the guest's own
+  // fuller submitted name ("Billy Stalcup"), so without this check that real submission
+  // (already shown elsewhere in this table) ALSO spawned a bogus "Missing transport"
+  // duplicate for the same person (Jorge's report 2026-09-17: Billy S/Michelle M/Crystal W
+  // showing twice — once with their real flight info, once as a fake "Own Transport" row).
+  const transportedFirstNames = new Map(); // `${bkId}|${firstname}` -> Set of rowIds already counted
+  tr2AllEntries.forEach(e => {
+    const fn = tr2NormName(e.guest).split(' ')[0];
+    if (!fn) return;
+    const key = `${e.retreatId}|${fn}`;
+    if (!transportedFirstNames.has(key)) transportedFirstNames.set(key, true);
+  });
   tr2ActiveBooks.forEach(bk => {
     const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
     AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => {
@@ -901,6 +917,8 @@ async function tr2LoadData() {
         if (!g.name) return;
         if (transportedKeys.has(`${bk.id}|${tr2NormName(g.name)}`)) return;
         if (g.email?.trim() && transportedEmails.has(`${bk.id}|${g.email.toLowerCase().trim()}`)) return;
+        const gFn = g.name.trim().split(/\s+/)[0].toLowerCase();
+        if (gFn.length >= 3 && firstNameIdx[`${bk.id}|${gFn}`]?.count === 1 && transportedFirstNames.has(`${bk.id}|${gFn}`)) return;
         tr2AllEntries.push({
           rowId: `synth-${reg.id}-${tr2NormName(g.name)}`, type: 'arrival', date: bk.startDate, time: '',
           guest: g.name, email: g.email || '', flight: '', airport: '', ot: true, share: false, notes: '',
@@ -1049,9 +1067,19 @@ function tr2BuildView() {
     }
   }
 
-  if (otEntries.length) {
-    html += `<tr><td colspan="9" style="padding:8px 12px;background:#fef2f2;font-size:11px;font-weight:700;color:#dc2626;border-top:2px solid #e5e7eb">Own Transport (${otEntries.length})</td></tr>`;
-    otEntries.forEach(e => { html += tr2RenderRow(e, null); });
+  // Real OT (guest told us they're arranging their own transport) and synthetic
+  // "Missing" (registered but never submitted anything) are both ot:true internally,
+  // but they mean opposite things for staff — split them into their own headed
+  // sections instead of lumping "missing" guests under an "Own Transport" heading.
+  const realOtEntries = otEntries.filter(e => !e.isSynthetic);
+  const missingEntries = otEntries.filter(e => e.isSynthetic);
+  if (realOtEntries.length) {
+    html += `<tr><td colspan="9" style="padding:8px 12px;background:#fef2f2;font-size:11px;font-weight:700;color:#dc2626;border-top:2px solid #e5e7eb">Own Transport (${realOtEntries.length})</td></tr>`;
+    realOtEntries.forEach(e => { html += tr2RenderRow(e, null); });
+  }
+  if (missingEntries.length) {
+    html += `<tr><td colspan="9" style="padding:8px 12px;background:#fef9c3;font-size:11px;font-weight:700;color:#92400e;border-top:2px solid #e5e7eb">Missing Transport (${missingEntries.length})</td></tr>`;
+    missingEntries.forEach(e => { html += tr2RenderRow(e, null); });
   }
 
   html += `</tbody></table></div>`;
@@ -1087,7 +1115,14 @@ function tr2RenderRow(e, color, groupPax) {
   const typeBadge = isArr
     ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#dbeafe;color:#1d4ed8">🛬 Arrival</span>`
     : `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fce7f3;color:#9d174d">🛫 Departure</span>`;
-  const airportBadge = e.ot
+  // A synthetic row (isSynthetic) means nobody actually submitted a form — it's not
+  // that the guest told us they're arranging their own transport (real OT), it's that
+  // we have no data from them at all. Those are two different situations and staff
+  // need to tell them apart (Jorge's report 2026-09-17): OT means "confirmed, don't
+  // arrange a transfer"; Missing means "still needs to be chased down".
+  const airportBadge = e.isSynthetic
+    ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fef9c3;color:#92400e">Missing</span>`
+    : e.ot
     ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fef2f2;color:#dc2626">OT</span>`
     : e.airport === 'cancun'
       ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#eff6ff;color:#2563eb">CUN</span>`
