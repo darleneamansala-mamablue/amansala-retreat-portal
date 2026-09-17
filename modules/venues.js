@@ -2167,7 +2167,7 @@ function rcBuild(){
         const li=Math.round((cs-startMs)/DAY_MS),wi=Math.round((ce-cs)/DAY_MS);
         if(wi<=0)return;
         const st=STATUS[bk.status]||STATUS.requested;
-        const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk)];
+        const pc=bkPaletteColor(bk);
         const regEntry=AppData.regs.find(r=>r.bookingId===bk.id&&entry.physical.includes(r.room));
         // Room Only bookings have no separate guest registration — the leader
         // IS the guest. Once it's past a Soft Hold (Darlene's rule 2026-09-16:
@@ -2179,15 +2179,22 @@ function rcBuild(){
         const hasGuest=guestNames.length>0;
         const bl=document.createElement('div');
         bl.className='bk'+(st.dash||!hasGuest?' dashed':'');
-        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:${bk.roomLocked?'default':'grab'};border-left:4px solid ${st.border};`;
+        // Room Only (direct/OTA/Cloudbeds-import) bookings get a dashed
+        // outline around the whole box on top of their own color family — a
+        // color alone can look close enough to a retreat's hash color to
+        // cause confusion; the outline makes "not a retreat" unmistakable at
+        // a glance (Darlene's ask 2026-09-17).
+        const roomOnlyOutline=bk.bookingType==='room_only'?`outline:2px dashed ${pc.border};outline-offset:-2px;`:'';
+        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:${bk.roomLocked?'default':'grab'};border-left:4px solid ${st.border};${roomOnlyOutline}`;
         bl.draggable=!bk.roomLocked;
         // Never show retreat/leader name and guest name together on a room row
         // — the retreat is already identifiable via color + the Active in
         // This View strip above. A room with a named guest shows only that
         // guest's name; an unassigned-but-blocked room still shows the
         // retreat name (there's no guest name to pair it with) plus "blocked".
+        const roomOnlyIcon=bk.bookingType==='room_only'?'🏨 ':'';
         bl.innerHTML=`<span class="bk-lock" title="${bk.roomLocked?'Locked — click to allow moving':'Click to lock this room (prevent sliding)'}" onclick="event.stopPropagation();bkToggleLock('${bk.id}')" style="cursor:pointer;margin-right:4px;opacity:${bk.roomLocked?'1':'.35'}">${bk.roomLocked?'🔒':'🔓'}</span>`
-          +(hasGuest?`<span class="bk-n">${guestNames[0]}</span>`:`<span class="bk-n">${bk.leaderName||bk.retreatName}</span><span class="bk-s" style="opacity:.5;font-style:italic">blocked</span>`);
+          +(hasGuest?`<span class="bk-n">${roomOnlyIcon}${guestNames[0]}</span>`:`<span class="bk-n">${roomOnlyIcon}${bk.leaderName||bk.retreatName}</span><span class="bk-s" style="opacity:.5;font-style:italic">blocked</span>`);
         bl.addEventListener('dragstart',e=>{
           if(bk.roomLocked){e.preventDefault();return;}
           rcDragData={bkId:bk.id,fromRoom:room,rtId:rt.id};
@@ -2316,10 +2323,12 @@ function _rcRenderTodayLegend(){
     const li=Math.round((bkS-winStartMs)/DAY_MS);
     const wi=Math.max(1,Math.round((bkE-bkS)/DAY_MS));
     const lane=bkLane.get(bk.id)||0;
-    const pc=bk.bookingType==='room_only'?rmTypeColor(bk):RETREAT_PALETTE[getRetreatColorIdx(bk)];
+    const pc=bkPaletteColor(bk);
     const name=bk.leaderName||bk.retreatName||'—';
     const regCount=registeredCount(bk.id);
-    return `<span class="rtl-pill" data-bk-id="${bk.id}" onclick="_bdGoToRegistration('${bk.id}')" style="position:absolute;display:flex;align-items:center;left:${li*36+1}px;width:${wi*36-2}px;top:${lane*LANE_H+1}px;height:${LANE_H-3}px;background:${pc.bg};border-color:${pc.border};color:${pc.text};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;justify-content:flex-start;box-sizing:border-box;">${escHtml(name)}<span style="margin-left:5px;font-size:9.5px;font-weight:800;opacity:.7;flex-shrink:0">${regCount}</span></span>`;
+    const roomOnlyOutline=bk.bookingType==='room_only'?`outline:1.5px dashed ${pc.border};outline-offset:-2px;`:'';
+    const roomOnlyIcon=bk.bookingType==='room_only'?'🏨 ':'';
+    return `<span class="rtl-pill" data-bk-id="${bk.id}" onclick="_bdGoToRegistration('${bk.id}')" style="position:absolute;display:flex;align-items:center;left:${li*36+1}px;width:${wi*36-2}px;top:${lane*LANE_H+1}px;height:${LANE_H-3}px;background:${pc.bg};border-color:${pc.border};color:${pc.text};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;justify-content:flex-start;box-sizing:border-box;${roomOnlyOutline}">${roomOnlyIcon}${escHtml(name)}<span style="margin-left:5px;font-size:9.5px;font-weight:800;opacity:.7;flex-shrink:0">${regCount}</span></span>`;
   }).join('');
   // Same rich showTip popup (Total/Paid/Owing, Registered, sold-out flags,
   // notes) the grid bars below already use — this strip only had a plain

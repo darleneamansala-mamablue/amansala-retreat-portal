@@ -4831,6 +4831,19 @@ const RM_TYPE_COLORS={
 };
 const RM_TYPE_COLOR_DEFAULT={bg:'#fdf4ff',border:'#a855f7',text:'#6b21a8'}; // Direct/OTA/unrecognized — the old fixed purple
 function rmTypeColor(bk){ return RM_TYPE_COLORS[bk.retreatName]||RM_TYPE_COLOR_DEFAULT; }
+// WeTravel trips (bk.source==='wetravel') otherwise fell into the same
+// per-booking-id hash color as any manually-created retreat in RETREAT_PALETTE
+// — no way to tell at a glance who they were. Fixed gold color instead, same
+// idea as RM_TYPE_COLORS giving each OTA its own color (Darlene's ask 2026-09-17).
+const WETRAVEL_COLOR={bg:'#fefce8',border:'#eab308',text:'#713f12'};
+// Single place every calendar/legend view picks a booking's color from —
+// room-only bookings keep their per-OTA-type color, WeTravel trips get their
+// own fixed color, everything else keeps the per-booking-id palette hash.
+function bkPaletteColor(bk){
+  if(bk.bookingType==='room_only')return rmTypeColor(bk);
+  if(bk.source==='wetravel')return WETRAVEL_COLOR;
+  return RETREAT_PALETTE[getRetreatColorIdx(bk)];
+}
 const DEF_VEN_ROWS=['RETREAT 1','RETREAT 2','RETREAT 3','RETREAT 4','RETREAT 5','RETREAT 6','CHICA RETREAT','SPECIAL EVENTS'];
 const VEN_ROWS_VERSION='9';
 const DEF_ROOM_TYPES=[
@@ -5913,7 +5926,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260917c"></script>
+<script src="modules/venues.js?v=20260917d"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js"></script>
 <script>
