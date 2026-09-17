@@ -363,6 +363,14 @@ async function dfBuild(){
   const extRes=await fetchExternalReservationsForRange(_dfScanStart,_dfScanEnd);
   container.innerHTML='';
 
+  // Resort-wide (every row, not just the one being scanned) — a preferred
+  // start day is only a real option if guests are actually leaving that day
+  // somewhere; an arbitrary Thursday with no departures isn't a workable
+  // changeover date (Darlene's call 2026-09-17).
+  const allCheckoutDates=new Set();
+  AppData.bookings.forEach(b=>{if(b.status!=='cancelled'&&b.endDate)allCheckoutDates.add(b.endDate);});
+  (extRes||[]).forEach(r=>{if(r.endDate)allCheckoutDates.add(r.endDate);});
+
   let anyResult=false;
   rows.forEach(row=>{
     const rowBks=AppData.bookings
@@ -418,7 +426,10 @@ async function dfBuild(){
           if(candEndD>gapEndD)break;
           const candStart=fmtISO(cur),candEnd=fmtISO(candEndD);
           const isGapStart=candStart===gap.start;
-          const wanted=dayFilters.length?dayFilters.includes(cur.getDay()):isGapStart;
+          // A preferred-weekday candidate must ALSO land on a date someone
+          // is actually checking out somewhere — otherwise it's not a real
+          // changeover date, just an arbitrary weekday inside the gap.
+          const wanted=dayFilters.length?(dayFilters.includes(cur.getDay())&&(isGapStart||allCheckoutDates.has(candStart))):isGapStart;
           if(wanted&&!(cur>=mEnd||candEndD<=mStart)){
             // Once a slot is placed, jump straight to its end before looking
             // for the next candidate — otherwise a short gap with several
@@ -465,7 +476,12 @@ async function dfBuild(){
 
       const slotsDiv=document.createElement('div');slotsDiv.className='df-slots';
       slots.forEach(s=>{
-        const isSL=s.isStraightLinePrev||s.isStraightLineNext;
+        // A slot only earns the "Straight-line" badge if it lines up on
+        // EVERY side that actually has a neighbor to line up with — starting
+        // flush against the previous retreat's checkout while still leaving
+        // nights open before the next retreat is not a straight-line, it's a
+        // partial carve-out of the gap (Darlene's report 2026-09-17).
+        const isSL=(!s.prevBk||s.isStraightLinePrev)&&(!s.nextBk||s.isStraightLineNext);
         // Count retreats on other rows running concurrently with this slot
         const concurrent=AppData.bookings.filter(b=>
           b.status!=='cancelled'&&b.row!==row&&
