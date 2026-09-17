@@ -642,7 +642,13 @@ function gOpenAdd(room,rtId){
   // reg for this exact room (real incident: Carter retreat, Queen Downstairs A).
   // Mirrors gSave()'s own "taken" check exactly (same !isTeacherRoom filter) so a
   // teacher-room placeholder sharing this room doesn't wrongly redirect a normal Add.
-  if(regSelBk&&AppData.regs.some(r=>r.bookingId===regSelBk.id&&r.room===room&&!r.isTeacherRoom))return gOpenEdit(room,rtId);
+  // roomCodesEqual, not === — an existing reg saved with different casing (e.g. an
+  // older "Gv13a" vs this click's canonical "GV13a") used to slip past this exact-case
+  // check, so a fresh registration got created instead of reusing the empty one —
+  // one of several ways the same room ended up with two reg rows for the same booking
+  // (confirmed sweep 2026-09-17: 31 booking/room pairs system-wide with a duplicate reg,
+  // most a real named guest plus a leftover empty one — e.g. Marcia Hoffheins' "14B -b").
+  if(regSelBk&&AppData.regs.some(r=>r.bookingId===regSelBk.id&&roomCodesEqual(r.room,room)&&!r.isTeacherRoom))return gOpenEdit(room,rtId);
   gEditRegId=null;
   gEditRoom=regSelBk?resolvePhysicalRoomForGuest(regSelBk.id,room,rtId):room;
   gEditRtId=rtId;
@@ -860,7 +866,7 @@ function gSave(){
   else{
     // Check room not already assigned in this booking
     if(!gEditRegId){
-      const taken=AppData.regs.find(r=>r.bookingId===regSelBk.id&&r.room===gEditRoom&&!r.isTeacherRoom);
+      const taken=AppData.regs.find(r=>r.bookingId===regSelBk.id&&roomCodesEqual(r.room,gEditRoom)&&!r.isTeacherRoom);
       if(taken){
         const g=(taken.guests||[]).find(x=>x.name);
         alert(`Room ${gEditRoom} is already assigned to ${g?.name||'another guest'}. Please choose a different room.`);

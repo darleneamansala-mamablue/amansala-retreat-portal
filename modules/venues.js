@@ -2345,7 +2345,15 @@ function rcBuild(){
       // few pairs that are actually two different physical rooms (e.g. "2B" the private
       // King room vs "2b" the unrelated shared bed) — see its definition.
       AppData.bookings.filter(bk=>bk.status!=='cancelled'&&entry.physical.some(p=>roomListIncludes(bk.blockedRooms,p))).forEach(bk=>{
-        const regEntry=AppData.regs.find(r=>r.bookingId===bk.id&&entry.physical.includes(r.room));
+        // getRegForRoom, not a raw .find() — a room can end up with more than one
+        // registration row for the same booking (an empty leftover plus the real,
+        // named one), and .find() just grabbed whichever came first in AppData.regs,
+        // sometimes the empty one — showing the room as nameless with no date
+        // override even though a real guest+extension was saved (Jorge's report
+        // 2026-09-17: Marcia Hoffheins' "14B -b", Bella Hoffheins' name+dates hidden
+        // behind an empty duplicate reg). getRegForRoom always prefers whichever
+        // duplicate actually has named guests.
+        const regEntry=getRegForRoom(bk.id,entry.physical[0]);
         // This room's own checkIn/checkOut override — an "extension" edited on
         // the registration in Teachers/Registration (gm-checkin/gm-checkout,
         // or a per-guest g-checkin/g-checkout inside it) — widens the bar
