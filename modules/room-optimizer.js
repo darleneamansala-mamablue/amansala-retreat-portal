@@ -263,6 +263,60 @@ function ozBuildSuggestion(best,group){
   };
 }
 
+// ── EXTRA-NIGHT ALIGNMENT ────────────────────────────────────────────────
+// A guest often has their real stay as a portal booking PLUS a separate
+// extra night (early arrival or extended stay) booked directly in Cloudbeds
+// as its own reservation — which sometimes lands in a different physical
+// room than their real booking purely because that's whatever was open when
+// it was entered. That's not a category/property optimization — it's "put
+// this guest in the room they're already in for the rest of their stay" —
+// so it's detected and executed separately from the room-to-room reshuffle
+// above (Darlene's ask, 2026-09-17). The destination is always the guest's
+// own existing room, never a pool of candidate rooms, so the Grande/Chica
+// and room-category rules don't apply the way they do to the reshuffler —
+// there's no category CHOICE being made here.
+function ozFindExtraNightAlignments(extReservations,portalResIds,rangeStart,rangeEnd){
+  const suggestions=[];
+  (extReservations||[]).forEach(r=>{
+    if(portalResIds.has(String(r.reservationID)))return; // already linked/imported — the normal move search already covers it
+    if(!(r.startDate<rangeEnd&&r.endDate>rangeStart))return;
+    const match=typeof rcKnownGuestMatch==='function'?rcKnownGuestMatch(r.guestName):null;
+    if(!match||!match.bk||match.bk.status==='cancelled')return;
+    const bk=match.bk;
+    const mainRoom=match.room||(bk.blockedRooms||[])[0];
+    const extRoom=(r.rooms||[])[0];
+    if(!mainRoom||!extRoom||mainRoom===extRoom)return; // already the same room — nothing to align
+    const isAfter=bk.endDate===r.startDate;   // extra night immediately follows the stay
+    const isBefore=r.endDate===bk.startDate;  // extra night immediately precedes the stay (early arrival)
+    if(!isAfter&&!isBefore)return; // not actually adjacent to their own booking — not this feature's job
+    if(ozRoomIsMaintenance(mainRoom))return;
+    const mainRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(mainRoom));
+    const extRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(extRoom));
+    if(mainRt&&OZ_EXCLUDED_RT_IDS.has(mainRt.id))return; // out of scope for V1 (bed/virtual-group rooms)
+    if(extRt&&OZ_EXCLUDED_RT_IDS.has(extRt.id))return;
+    // mainRoom must actually be free for the extra night's own dates
+    const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(mainRoom)&&datesOverlap(r.startDate,r.endDate,other.startDate,other.endDate));
+    if(conflict)return;
+    const portalOwned=(id)=>portalResIds.has(String(id));
+    const extConflict=(extReservations||[]).find(o=>o!==r&&(o.rooms||[]).includes(mainRoom)&&!portalOwned(o.reservationID)&&datesOverlap(r.startDate,r.endDate,o.startDate,o.endDate));
+    if(extConflict)return;
+    suggestions.push({
+      id:uid(),kind:'extraNight',reservationID:r.reservationID,bkId:bk.id,
+      fromRoom:extRoom,toRoom:mainRoom,guestLabel:r.guestName,
+      rtId:mainRt?.id||null,rtName:mainRt?.name||'',category:roomCategory(mainRoom),
+      startDate:r.startDate,endDate:r.endDate,
+      why:[
+        `Same guest as ${bk.leaderName||bk.retreatName}'s booking`,
+        isAfter?'Extra night immediately follows their stay':'Extra night immediately precedes their stay (early arrival)',
+        'Currently in a different room — moving keeps them from switching rooms mid-stay',
+        `Creates a same-day checkout → check-in straightline in Room ${mainRoom}`,
+      ],
+      status:'pending',error:null,
+    });
+  });
+  return suggestions;
+}
+
 // One-night gaps left in the FINAL (post-optimizer) arrangement are flagged
 // as extension opportunities, not forced moves — the optimizer may
 // legitimately decide leaving one alone is better than the alternative.
@@ -297,6 +351,7 @@ async function ozAnalyze(rangeStart,rangeEnd){
     suggestions=suggestions.concat(ozSearchGroupMoves(group,working,rangeStart,rangeEnd));
   });
   const oneNightGaps=ozFindOneNightGaps(working,rangeStart,rangeEnd);
+  suggestions=suggestions.concat(ozFindExtraNightAlignments(extReservations,ozPortalResIdSet(),rangeStart,rangeEnd));
 
   const analyzedCount=new Set();
   AppData.bookings.forEach(b=>{
@@ -414,6 +469,52 @@ async function ozExecuteMove(sug){
   }
   return sug;
 }
+// Moves a raw, unlinked Cloudbeds reservation (an extra night — see
+// ozFindExtraNightAlignments) into the guest's own room. There is no
+// portal booking that owns this reservation, so unlike ozExecuteMove there
+// is no blockedRooms/cbReservationIds bookkeeping to update — only the
+// Cloudbeds room assignment itself moves. It stays a raw reservation
+// afterward, now correctly rendered in the guest's room (still linkable/
+// importable via the existing Room Calendar click handlers, unchanged).
+async function ozExecuteExtraNightMove(sug){
+  sug.status='validating';
+  const fresh=await fetchExternalReservationsForRange(sug.startDate,sug.endDate);
+  const stillThere=fresh.find(r=>String(r.reservationID)===String(sug.reservationID));
+  if(!stillThere){sug.status='failed';sug.error='This Cloudbeds reservation no longer exists or its dates changed.';return sug;}
+  if(!(stillThere.rooms||[]).includes(sug.fromRoom)){sug.status='failed';sug.error='This reservation is no longer in the expected room.';return sug;}
+  if(ozRoomIsMaintenance(sug.toRoom)){sug.status='failed';sug.error='Destination room was marked under maintenance since this was calculated.';return sug;}
+  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(sug.toRoom)&&datesOverlap(sug.startDate,sug.endDate,other.startDate,other.endDate));
+  if(conflict){sug.status='failed';sug.error=`Room ${sug.toRoom} was booked by ${conflict.leaderName||conflict.retreatName} since this was calculated.`;return sug;}
+  const portalResIds=ozPortalResIdSet();
+  const extConflict=fresh.find(r=>String(r.reservationID)!==String(sug.reservationID)&&(r.rooms||[]).includes(sug.toRoom)&&!portalResIds.has(String(r.reservationID))&&datesOverlap(sug.startDate,sug.endDate,r.startDate,r.endDate));
+  if(extConflict){sug.status='failed';sug.error=`Room ${sug.toRoom} now has a different Cloudbeds reservation since this was calculated.`;return sug;}
+
+  sug.status='sending';
+  try{
+    const cbCfg=JSON.parse(localStorage.getItem('ama_cb_config')||'{}');
+    const mapping=(cbCfg.mapping||[]).find(m=>m.portalRoom===sug.toRoom);
+    let newCbRoomId=mapping?.cbId||cbRoomLookup?.[sug.toRoom]||null;
+    if(!newCbRoomId){
+      const norm=s=>s.toLowerCase().replace(/\s*-\s*/g,'-');
+      const key=Object.keys(cbRoomLookup||{}).find(k=>norm(k)===norm(sug.toRoom));
+      if(key)newCbRoomId=cbRoomLookup[key];
+    }
+    const moveResp=await fetch(`${CLOUDBEDS_PROXY}?action=moveReservationRoom`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({reservationId:sug.reservationID,newCbRoomId,newRoomName:sug.toRoom,startDate:sug.startDate,endDate:sug.endDate})}).then(r=>r.json());
+    if(!moveResp?.success){sug.status='failed';sug.error='Cloudbeds could not confirm this room reassignment.';return sug;}
+    sug.status='confirmed';sug.cbSynced=true;
+    const bk=AppData.bookings.find(b=>b.id===sug.bkId);
+    if(bk)ozAudit(sug,bk,'Cloudbeds synced (extra-night alignment)');
+  }catch(e){
+    console.warn('[optimizer] extra-night move failed',e);
+    sug.status='failed';sug.error='Could not reach Cloudbeds — try again.';
+  }
+  return sug;
+}
+// Single entry point the UI calls — routes to the right executor by kind.
+async function ozExecuteSuggestion(sug){
+  return sug.kind==='extraNight'?ozExecuteExtraNightMove(sug):ozExecuteMove(sug);
+}
 function ozApplyPortalMove(bk,fromRoom,toRoom){
   bk.blockedRooms=(bk.blockedRooms||[]).map(r=>r===fromRoom?toRoom:r);
   const reg=getRegForRoom(bk.id,fromRoom);
@@ -437,8 +538,9 @@ function ozApplyPortalMove(bk,fromRoom,toRoom){
 let _ozRecentMoves=[];
 function ozAudit(sug,bk,cbNote){
   const record={
-    ts:new Date().toISOString(),bkId:bk.id,guestLabel:sug.guestLabel,
+    ts:new Date().toISOString(),bkId:bk.id,guestLabel:sug.guestLabel,kind:sug.kind||'move',
     fromRoom:sug.fromRoom,toRoom:sug.toRoom,rtName:sug.rtName,category:ozCategoryLabel(sug.category),
+    reservationID:sug.reservationID||null,startDate:sug.startDate,endDate:sug.endDate,
     initiator:(typeof currentUserName!=='undefined'&&currentUserName)||'Staff',reason:sug.why.join('; '),cbNote,
   };
   _ozRecentMoves.unshift(record);
@@ -452,6 +554,15 @@ function ozAudit(sug,bk,cbNote){
 // original room is no longer free.
 async function ozUndoMove(recordIdx){
   const rec=_ozRecentMoves[recordIdx];if(!rec)return{ok:false,reason:'Move record not found.'};
+  if(rec.kind==='extraNight'){
+    // ozExecuteExtraNightMove's own revalidation (reservation-still-exists,
+    // room/maintenance/conflict checks against fresh Cloudbeds data for
+    // this exact narrow date range) covers whether reversing is safe.
+    const reverseSug={id:uid(),kind:'extraNight',reservationID:rec.reservationID,bkId:rec.bkId,fromRoom:rec.toRoom,toRoom:rec.fromRoom,guestLabel:rec.guestLabel,startDate:rec.startDate,endDate:rec.endDate,why:['Manual undo of a previous optimizer move'],status:'pending'};
+    const result=await ozExecuteExtraNightMove(reverseSug);
+    if(result.status==='confirmed'){_ozRecentMoves.splice(recordIdx,1);return{ok:true};}
+    return{ok:false,reason:result.error||'Could not reverse this move.'};
+  }
   const bk=AppData.bookings.find(b=>b.id===rec.bkId);if(!bk)return{ok:false,reason:'Reservation no longer exists.'};
   if(!(bk.blockedRooms||[]).includes(rec.toRoom))return{ok:false,reason:'Reservation is no longer in the room this move put it in — cannot safely auto-reverse.'};
   const conflict=AppData.bookings.find(other=>other.id!==bk.id&&other.status!=='cancelled'&&(other.blockedRooms||[]).includes(rec.fromRoom)&&datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate));
@@ -491,6 +602,7 @@ function ozRenderSummary(analysis){
   const straightlines=suggestions.filter(s=>s.why.some(w=>w.includes('same-day')));
   const sellable=suggestions.filter(s=>s.why.some(w=>w.includes('sellable opening')));
   const eliminated1night=suggestions.filter(s=>s.why.some(w=>w.includes('Eliminates a 1-night')));
+  const extraNightAligns=suggestions.filter(s=>s.kind==='extraNight');
   const cbWarning=cbKnownRooms?'':'<div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:12px">⚠ Could not verify the room list against Cloudbeds right now — recommendations below use the portal\'s own room configuration only.</div>';
   document.getElementById('ozPreviewBody').innerHTML=`
     ${cbWarning}
@@ -501,6 +613,7 @@ function ozRenderSummary(analysis){
       <div><b>${eliminated1night.length}</b> one-night gap${eliminated1night.length!==1?'s':''} eliminated</div>
       <div><b>${straightlines.length}</b> exact checkout/check-in straightline${straightlines.length!==1?'s':''} created</div>
       <div><b>${sellable.length}</b> sellable opening${sellable.length!==1?'s':''} (4–7 nights) created</div>
+      ${extraNightAligns.length?`<div><b>${extraNightAligns.length}</b> extra-night reservation${extraNightAligns.length!==1?'s':''} that can move into the guest's own room</div>`:''}
       <div style="${overbooking.length?'color:#dc2626;font-weight:700':''}">${overbooking.length?'🚨':''} <b>${overbooking.length}</b> potential overbooking${overbooking.length!==1?'s':''} detected</div>
       <div><b>${lockedCount}</b> locked reservation${lockedCount!==1?'s':''} untouched</div>
       ${oneNightGaps.length?`<div style="color:#b45309">⚠ <b>${oneNightGaps.length}</b> remaining 1-night gap${oneNightGaps.length!==1?'s':''} — see Review for extension options</div>`:''}
@@ -572,7 +685,7 @@ function ozSkipOne(i){
 async function ozApproveOne(i){
   const s=_ozLastAnalysis.suggestions[i];if(!s||s.status!=='pending')return;
   document.getElementById(`ozMoveStatus_${s.id}`).textContent=ozStatusLabel('validating');
-  await ozExecuteMove(s);
+  await ozExecuteSuggestion(s);
   ozRenderReview();
   if(s.status==='confirmed'){venBuild();rcBuild();}
 }
@@ -586,7 +699,7 @@ async function ozApproveAllSafe(){
   // show live (Phase 2 decision).
   for(const s of pending){
     document.getElementById(`ozMoveStatus_${s.id}`)?.replaceChildren(document.createTextNode(ozStatusLabel('validating')));
-    await ozExecuteMove(s);
+    await ozExecuteSuggestion(s);
     ozRenderReview();
     if(s.status==='confirmed')ok++;else if(s.status==='failed')failed++;
   }
