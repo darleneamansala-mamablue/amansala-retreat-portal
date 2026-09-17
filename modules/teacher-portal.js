@@ -1151,7 +1151,7 @@ function getAutoFlags(bk){
     if(!blocked.length)return;
     const filled=blocked.filter(room=>{
       const reg=getRegForRoom(bk.id,room);
-      return reg&&(reg.guests||[]).some(g=>g.name);
+      return reg&&(reg.guests||[]).some(g=>g.name&&!g.cancelled);
     });
     if(filled.length===blocked.length)flags.push({type:'sold_out',severity:'orange',key:`sold_out_${rt.id}`,message:`${rt.name} — all ${blocked.length} blocked room${blocked.length>1?'s are':' is'} filled (sold out)`});
   });
