@@ -2368,19 +2368,30 @@ async function rcFetchExternalReservations(startMs){
 // (cbReservationIds missing that room) can still be recognized as belonging
 // to a real retreat instead of looking like a brand-new, unrelated walk-in.
 function rcKnownGuestMatch(guestName){
-  const norm=(guestName||'').toLowerCase().trim();
+  // Strip parenthetical nicknames ("Kathryn (Katie) Stevenson" -> "Kathryn
+  // Stevenson") before comparing, or a name Cloudbeds annotated that way
+  // never matches the portal's plain version of it (real gap found
+  // 2026-09-16 while chasing this down).
+  const clean=s=>(s||'').replace(/\([^)]*\)/g,' ').replace(/\s+/g,' ').toLowerCase().trim();
+  const norm=clean(guestName);
   if(!norm)return null;
   for(const bk of AppData.bookings){
-    if(bk.status==='cancelled'||!bk.leaderName)continue;
-    const ln=bk.leaderName.toLowerCase().trim();
-    if(ln&&(norm.includes(ln)||ln.includes(norm)))return{bk};
+    if(bk.status==='cancelled')continue;
+    // Check the retreat name too, not just the leader's personal name — a
+    // Cloudbeds reservation is sometimes tagged with the retreat's name
+    // ("... De La Sol Retreat") rather than who's actually on it.
+    for(const candidate of [bk.leaderName,bk.retreatName]){
+      if(!candidate)continue;
+      const ln=clean(candidate);
+      if(ln&&(norm.includes(ln)||ln.includes(norm)))return{bk};
+    }
   }
   for(const reg of AppData.regs){
     const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
     if(!bk||bk.status==='cancelled')continue;
     for(const g of(reg.guests||[])){
       if(!g.name)continue;
-      const gn=g.name.toLowerCase().trim();
+      const gn=clean(g.name);
       if(gn&&(norm.includes(gn)||gn.includes(norm)))return{bk,room:reg.room};
     }
   }
