@@ -2456,6 +2456,17 @@ function rclRenderResults(){
 }
 function _rclApplyLink(m){
   const bk=m.bk;
+  // A room can have TWO separate back-to-back Cloudbeds reservations (e.g.
+  // an extra night tacked onto the end of a stay) — cbReservationIds only
+  // stores one ID per room, so blindly overwriting an existing different ID
+  // silently orphans whichever reservation was linked before (real incident
+  // 2026-09-16: Susan McClelland's extra night overwrote the link to her
+  // main 5-night stay in the same room). Skip instead of clobbering; these
+  // need a manual decision, not an automatic one.
+  if(bk.cbReservationIds&&bk.cbReservationIds[m.room]&&bk.cbReservationIds[m.room]!==m.r.reservationID){
+    showToast(`Skipped ${m.room} — it's already linked to a different Cloudbeds reservation (likely a separate night). Ask Claude to help merge these.`);
+    return;
+  }
   if(!bk.blockedRooms)bk.blockedRooms=[];
   if(!bk.blockedRooms.includes(m.room))bk.blockedRooms.push(m.room);
   if(!bk.cbReservationIds)bk.cbReservationIds={};
@@ -2489,6 +2500,16 @@ function rclLinkAll(){
 function linkExternalReservationToBooking(r,bkId,roomName){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   const label=bk.leaderName||bk.retreatName||'this retreat';
+  // Same protection as the bulk Link Checker — a room can have two separate
+  // back-to-back Cloudbeds reservations (e.g. an extra night), and
+  // cbReservationIds only stores one ID per room, so overwriting an
+  // existing DIFFERENT id here would silently orphan whichever reservation
+  // was linked before (real incident 2026-09-16, Susan McClelland's extra
+  // night vs. her main stay in room 33).
+  if(bk.cbReservationIds&&bk.cbReservationIds[roomName]&&bk.cbReservationIds[roomName]!==r.reservationID){
+    showToast(`${roomName} is already linked to a different Cloudbeds reservation for ${label} — likely a separate night. This needs a manual merge, not a simple link.`);
+    return;
+  }
   if(!confirm(`Link ${r.guestName}'s Cloudbeds reservation (room ${roomName}) to ${label}'s booking?`))return;
   if(!bk.blockedRooms)bk.blockedRooms=[];
   if(!bk.blockedRooms.includes(roomName))bk.blockedRooms.push(roomName);
@@ -2510,6 +2531,13 @@ function linkExternalReservationToBooking(r,bkId,roomName){
 function importExternalReservation(r){
   const room=(r.rooms||[])[0];
   if(!room){showToast('Could not find a room for this reservation — check it in Cloudbeds.');return;}
+  // Guard against creating a duplicate/conflicting booking for a room
+  // another active portal booking already has for overlapping dates — this
+  // is exactly how the Shannon Jamail Group duplicate happened (real
+  // incident 2026-09-16): a match should have linked it to her existing
+  // retreat instead of importing it as a disconnected new booking.
+  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(room)&&datesOverlap(r.startDate,r.endDate,other.startDate,other.endDate));
+  if(conflict){showToast(`Room ${room} is already part of ${conflict.leaderName||conflict.retreatName}'s booking for overlapping dates — this looks like it should be linked to that retreat instead. Try "Check Cloudbeds Links".`);return;}
   if(!confirm(`Import ${r.guestName}'s Cloudbeds reservation (room ${room}) into the portal so you can add charges to it?`))return;
   const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
   const cbReservationIds={};(r.rooms||[]).forEach(rm=>cbReservationIds[rm]=r.reservationID);
