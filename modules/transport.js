@@ -930,7 +930,15 @@ async function tr2LoadData() {
       (reg.guests || []).forEach(g => {
         if (!g.name) return;
         if (transportedKeys.has(`${bk.id}|${tr2NormName(g.name)}`)) return;
-        if (g.email?.trim() && transportedEmails.has(`${bk.id}|${g.email.toLowerCase().trim()}`)) return;
+        // Only trust "this email already submitted" when the email actually identifies
+        // ONE roster guest — several family members can share one household email in
+        // the room list (emailRoomIdx.count>1), and without this guard, ANY of them
+        // having submitted made the OTHERS look like they'd submitted too, so they
+        // never got a "Missing Transport" row at all (Jorge's report 2026-09-17:
+        // Katherine McClelland, sharing katiesolyoga@gmail.com with Susan & Edward who
+        // did submit, never showed up as missing even though she never submitted).
+        const gEm = (g.email || '').toLowerCase().trim();
+        if (gEm && emailRoomIdx[`${bk.id}|${gEm}`]?.count === 1 && transportedEmails.has(`${bk.id}|${gEm}`)) return;
         const gFn = g.name.trim().split(/\s+/)[0].toLowerCase();
         if (gFn.length >= 3 && firstNameIdx[`${bk.id}|${gFn}`]?.count === 1 && transportedFirstNames.has(`${bk.id}|${gFn}`)) return;
         tr2AllEntries.push({
