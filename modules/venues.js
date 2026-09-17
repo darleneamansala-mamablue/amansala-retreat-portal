@@ -2352,10 +2352,21 @@ function rcBuild(){
         // span, so an extended stay never showed as extended here.
         let _effStart=regEntry?.checkIn||bk.startDate;
         let _effEnd=regEntry?.checkOut||bk.endDate;
-        (regEntry?.guests||[]).forEach(g=>{
-          if(g.checkIn&&g.checkIn<_effStart)_effStart=g.checkIn;
-          if(g.checkOut&&g.checkOut>_effEnd)_effEnd=g.checkOut;
-        });
+        // gm-checkin/gm-checkout on the registration are only a *default* for
+        // guests without their own override (see the "(default for the whole
+        // room)" label on that modal) — a guest's own checkIn/checkOut always
+        // wins over that default, whether it's later OR earlier. Widening-only
+        // (the previous version of this) left a room showing an extra night
+        // whenever the room-level default was a stale value wider than every
+        // actual guest's own dates (Jorge's report 2026-09-17: Damian/Lillian's
+        // room defaulted to Oct 23 checkout but both guests were set to Oct 21).
+        const _dateGuests=(regEntry?.guests||[]).filter(g=>g.name&&!g.cancelled);
+        if(_dateGuests.length){
+          const _starts=_dateGuests.map(g=>g.checkIn||_effStart);
+          const _ends=_dateGuests.map(g=>g.checkOut||_effEnd);
+          _effStart=_starts.reduce((a,b)=>a<b?a:b);
+          _effEnd=_ends.reduce((a,b)=>a>b?a:b);
+        }
         const bkS=pd(_effStart).getTime(),bkE=pd(_effEnd).getTime();
         const winE=startMs+rcShowDays*DAY_MS;
         if(bkS>=winE||bkE<=startMs)return;
