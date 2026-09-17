@@ -2337,11 +2337,14 @@ function rcBuild(){
       days.forEach((d,i)=>{if(d.getDate()===1){const gl=document.createElement('div');gl.className='g-gl ms';gl.style.left=i*36+'px';track.appendChild(gl);}if(fmtISO(d)===todayStr){const tl=document.createElement('div');tl.className='g-gl today-l';tl.style.left=(i*36+18)+'px';track.appendChild(tl);}});
 
       // Show any booking that has blocked this room (registered guest or just blocked).
-      // Case-insensitive — room codes are inconsistently cased in real data (Cloudbeds
-      // reports rooms uppercase, e.g. "2B", vs this app's usually-lowercase "2b"), and an
-      // exact-case match here silently hid a real, currently-checked-in booking from this
-      // grid (same root cause just fixed in the Block Rooms modal's conflict check).
-      AppData.bookings.filter(bk=>bk.status!=='cancelled'&&entry.physical.some(p=>(bk.blockedRooms||[]).some(r=>r.toLowerCase()===p.toLowerCase()))).forEach(bk=>{
+      // Case-insensitive (via roomListIncludes) — room codes are inconsistently cased in
+      // real data (Cloudbeds reports rooms uppercase, e.g. "2B", vs this app's usually-
+      // lowercase "2b"), and an exact-case match here silently hid a real, currently-
+      // checked-in booking from this grid (same root cause just fixed in the Block Rooms
+      // modal's conflict check). roomListIncludes itself knows to NOT fold case for the
+      // few pairs that are actually two different physical rooms (e.g. "2B" the private
+      // King room vs "2b" the unrelated shared bed) — see its definition.
+      AppData.bookings.filter(bk=>bk.status!=='cancelled'&&entry.physical.some(p=>roomListIncludes(bk.blockedRooms,p))).forEach(bk=>{
         const regEntry=AppData.regs.find(r=>r.bookingId===bk.id&&entry.physical.includes(r.room));
         // This room's own checkIn/checkOut override — an "extension" edited on
         // the registration in Teachers/Registration (gm-checkin/gm-checkout,
@@ -2626,7 +2629,9 @@ function rcRenderExternalReservations(reservations,startMs){
     // 2026-09-16 — Penelope/Karin, guests within Shannon Jamail's retreat).
     const match=rcKnownGuestMatch(r.guestName);
     (r.rooms||[]).forEach(roomName=>{
-      const track=allTracks.find(t=>t.getAttribute('data-room').toLowerCase()===roomName.toLowerCase());
+      // Exact match first, case-insensitive fallback via roomCodesEqual (which knows
+      // "2B"/"2b" etc. are actually two different rooms and won't fold those together).
+      const track=allTracks.find(t=>t.getAttribute('data-room')===roomName)||allTracks.find(t=>roomCodesEqual(t.getAttribute('data-room'),roomName));
       if(!track){console.warn('[rcExternal] no track for room:',roomName,'available:',trackNames);return;}
       const bl=document.createElement('div');
       bl.className='bk';

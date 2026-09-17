@@ -4983,7 +4983,39 @@ function splitDoubleHalf(room){
 // silently misses a real match. Confirmed root cause behind several
 // incidents 2026-09-17 (Block Rooms conflict check, the Rooms grid). Use
 // these everywhere a room code is compared, instead of a raw ===/.includes().
-function roomCodesEqual(a,b){return String(a||'').toLowerCase()===String(b||'').toLowerCase();}
+//
+// BUT a handful of code pairs that differ only by case are actually two
+// DIFFERENT physical rooms, not the same room typed inconsistently — e.g.
+// "2B" is a private Beachfront King room (rt1) while "2b" is a shared bed
+// inside the unrelated "Beachview Double" room "2" (bd1). Folding those
+// together mis-attributed one room's booking onto the other's grid row
+// (Jorge's report 2026-09-17: Tootsie Olan's real King-room move onto "2B"
+// leaked onto the unrelated "2b" bed row because blockedRooms also held a
+// separate, correct "2b" entry). _roomCodeCollisionSet() finds every such
+// pair — a lowercase key with 2+ distinct exact-case rooms defined anywhere
+// in AppData.roomTypes — and roomCodesEqual only folds case when the pair
+// ISN'T one of those known collisions.
+let _roomCollisionCache={ref:null,set:null};
+function _roomCodeCollisionSet(){
+  if(_roomCollisionCache.ref===AppData.roomTypes)return _roomCollisionCache.set;
+  const byLower=new Map();
+  (AppData.roomTypes||[]).forEach(rt=>(rt.rooms||[]).forEach(r=>{
+    const lc=String(r||'').toLowerCase();
+    if(!byLower.has(lc))byLower.set(lc,new Set());
+    byLower.get(lc).add(r);
+  }));
+  const collisions=new Set();
+  byLower.forEach((exactSet,lc)=>{if(exactSet.size>1)collisions.add(lc);});
+  _roomCollisionCache={ref:AppData.roomTypes,set:collisions};
+  return collisions;
+}
+function roomCodesEqual(a,b){
+  const sa=String(a||''),sb=String(b||'');
+  if(sa===sb)return true;
+  const la=sa.toLowerCase(),lb=sb.toLowerCase();
+  if(la!==lb)return false;
+  return !_roomCodeCollisionSet().has(la);
+}
 function roomListIncludes(list,room){return(list||[]).some(r=>roomCodesEqual(r,room));}
 // The same physical room is sold two ways — whole (rt6/rt7) or as separate
 // shared beds (bd1/bd2) — but blocking one side never conflicted with the
@@ -6037,7 +6069,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260917o"></script>
+<script src="modules/venues.js?v=20260917p"></script>
 <script src="modules/room-optimizer.js?v=20260917d"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js?v=20260917a"></script>
@@ -6067,7 +6099,7 @@ function switchTab(id,btn){
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20260917d"></script>
+<script src="modules/room-blocking.js?v=20260917e"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====
