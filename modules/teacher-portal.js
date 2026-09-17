@@ -4129,7 +4129,7 @@ function _trBuildTransportTable(guests,type,result){
   });
   const _todayStr=new Date().toISOString().slice(0,10);
   const _tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10);
-  const _colCount=8; // Guest, Room, Date, Time, Airport, Flight, + exactly one of Pickup/Share, + Est. Cost (matches the original group-separator row's colspan)
+  const _colCount=9; // Guest, Room, Date, Time, Airport, Flight, Notes, + exactly one of Pickup/Share, + Est. Cost (matches the original group-separator row's colspan)
 
   let lastGi,lastDate='__unset__';
   const rows=indexed.map(({g,i,date})=>{
@@ -4161,6 +4161,13 @@ function _trBuildTransportTable(guests,type,result){
     else if(tr)flightCell=tr.flightNumber
       ?`<span style="font-weight:600;color:#2d2520">${escHtml(tr.flightNumber)}</span>`
       :`<span style="font-size:10px;font-weight:700;background:#fef9c3;color:#92400e;border-radius:5px;padding:2px 7px;white-space:nowrap">Missing Flight Info</span>`;
+
+    // The guest's own submitted notes (allergy info, "happy to share a ride", etc.) were
+    // being collected but never shown here — a teacher had no way to see them without
+    // asking Amansala to check the raw submission (Jorge's report 2026-09-17).
+    const notesCell=tr?.notes
+      ?`<span title="${escHtml(tr.notes)}" style="font-size:11.5px;color:#5a5048;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:220px">${escHtml(tr.notes)}</span>`
+      :dash;
 
     let priceCell=dash;
     if(ot)priceCell=`<span style="font-size:11px;color:#8a7e74">Own</span>`;
@@ -4206,6 +4213,7 @@ function _trBuildTransportTable(guests,type,result){
       <td style="padding:10px 12px;font-size:12px">${timeCell}</td>
       <td style="padding:10px 12px;font-size:12px">${apCell}</td>
       <td style="padding:10px 12px;font-size:12px">${flightCell}</td>
+      <td style="padding:10px 12px;font-size:12px">${notesCell}</td>
       ${pickupCell}
       <td style="padding:10px 12px;font-size:12px">${priceCell}</td>
       ${shareCell}
@@ -4220,6 +4228,7 @@ function _trBuildTransportTable(guests,type,result){
       <th style="${thS}">Time</th>
       <th style="${thS}">Airport</th>
       <th style="${thS}">Flight</th>
+      <th style="${thS}">Notes</th>
       ${!isArr?`<th style="${thS}">Pickup</th>`:''}
       <th style="${thS}">Est. Cost</th>
       ${isArr?`<th style="${thS}">Share</th>`:''}
