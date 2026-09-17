@@ -1056,7 +1056,22 @@ function rmChargeDelete(chargeId){
 }
 function rmDeleteBooking(){
   if(!_rmEditId||!confirm('Delete this reservation?'))return;
-  AppData.bookings=AppData.bookings.filter(b=>b.id!==_rmEditId);
+  // Was only removing the booking from THIS tab's in-memory array — nothing
+  // told Supabase it was deleted (no deletedBookingIds entry, no explicit
+  // delete), so the row was still sitting there on the server and came right
+  // back on the next load/sync, from this tab or any other. Same complete
+  // delete this app already uses for a full retreat (venDeleteConfirmed):
+  // cancel its Cloudbeds reservation, mark it in deletedBookingIds so it
+  // never gets re-uploaded or reloaded, and drop its own registrations too.
+  const id=_rmEditId;
+  const bk=AppData.bookings.find(b=>b.id===id);
+  cancelCloudbedReservations(bk).catch(e=>console.warn('[CB cancel]',e));
+  deletedBookingIds.add(id);
+  AppData.bookings=AppData.bookings.filter(b=>b.id!==id);
+  AppData.regs=AppData.regs.filter(r=>r.bookingId!==id);
+  const remainingTransport=loadTransport().filter(s=>s.bookingId!==id);
+  saveTransport(remainingTransport);
+  try{db.from('transport').delete().eq('booking_id',id).then(()=>{});}catch(e){}
   saveAll();rmClose();venBuild();rcBuild();
   showToast('Reservation deleted.');
 }
@@ -2327,7 +2342,21 @@ function rcBuild(){
       // exact-case match here silently hid a real, currently-checked-in booking from this
       // grid (same root cause just fixed in the Block Rooms modal's conflict check).
       AppData.bookings.filter(bk=>bk.status!=='cancelled'&&entry.physical.some(p=>(bk.blockedRooms||[]).some(r=>r.toLowerCase()===p.toLowerCase()))).forEach(bk=>{
-        const bkS=pd(bk.startDate).getTime(),bkE=pd(bk.endDate).getTime();
+        const regEntry=AppData.regs.find(r=>r.bookingId===bk.id&&entry.physical.includes(r.room));
+        // This room's own checkIn/checkOut override — an "extension" edited on
+        // the registration in Teachers/Registration (gm-checkin/gm-checkout,
+        // or a per-guest g-checkin/g-checkout inside it) — widens the bar
+        // beyond the retreat's blanket dates. The pricing engine already
+        // honors this override (calcBD/sumGuestRoomCost); this grid was
+        // ignoring it entirely and always drawing at the retreat's default
+        // span, so an extended stay never showed as extended here.
+        let _effStart=regEntry?.checkIn||bk.startDate;
+        let _effEnd=regEntry?.checkOut||bk.endDate;
+        (regEntry?.guests||[]).forEach(g=>{
+          if(g.checkIn&&g.checkIn<_effStart)_effStart=g.checkIn;
+          if(g.checkOut&&g.checkOut>_effEnd)_effEnd=g.checkOut;
+        });
+        const bkS=pd(_effStart).getTime(),bkE=pd(_effEnd).getTime();
         const winE=startMs+rcShowDays*DAY_MS;
         if(bkS>=winE||bkE<=startMs)return;
         const cs=Math.max(bkS,startMs),ce=Math.min(bkE,winE);
@@ -2335,7 +2364,6 @@ function rcBuild(){
         if(wi<=0)return;
         const st=STATUS[bk.status]||STATUS.requested;
         const pc=bkPaletteColor(bk);
-        const regEntry=AppData.regs.find(r=>r.bookingId===bk.id&&entry.physical.includes(r.room));
         // Room Only bookings have no separate guest registration — the leader
         // IS the guest. Once it's past a Soft Hold (Darlene's rule 2026-09-16:
         // confirmed, not on hold), treat it as a real reservation instead of
