@@ -5937,7 +5937,10 @@ function statusLabel(s){return{requested:'Soft Hold',contract_sent:'Contract Sen
 // the same _regByRoom/_billRegByRoom fix used for Bill Total/Guests Registered,
 // so the detailed room list doesn't show "Vacant" for a room that's actually taken.
 function getRegForRoom(bkId,room){
-  const matches=AppData.regs.filter(r=>r.bookingId===bkId&&r.room===room);
+  // roomCodesEqual, not === — same collision-aware fold as everywhere else a room
+  // code is compared (won't confuse e.g. "2B" with "2b", but will still match a
+  // genuine casing typo like "Gv13a" against the canonical "GV13a").
+  const matches=AppData.regs.filter(r=>r.bookingId===bkId&&roomCodesEqual(r.room,room));
   if(!matches.length)return null;
   return matches.reduce((best,r)=>(r.guests||[]).filter(g=>g.name).length>(best.guests||[]).filter(g=>g.name).length?r:best);
 }
@@ -6069,7 +6072,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260917p"></script>
+<script src="modules/venues.js?v=20260917q"></script>
 <script src="modules/room-optimizer.js?v=20260917d"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js?v=20260917a"></script>
@@ -6099,7 +6102,7 @@ function switchTab(id,btn){
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20260917e"></script>
+<script src="modules/room-blocking.js?v=20260917f"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====
