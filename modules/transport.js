@@ -228,8 +228,13 @@ function trTransportFullName(s){return trNormName(((s.firstName||'')+' '+(s.last
 /** Room-list roster is source of truth for who should submit transport. */
 function getTransportRoster(bkId){
   const allSubs=loadTransport().filter(s=>s.bookingId===bkId&&s.status!=='cancelled');
+  // Includes the teacher's own room (isTeacherRoom) — she needs transport too,
+  // and excluding her here meant her own submission never showed anywhere: not
+  // under her name (filtered out of the roster) and not even attributed to her
+  // by mistake once the email-collision fix stopped that (Jorge's report
+  // 2026-09-17: "sigo sin ver Marcia en My Transportation, no se debe de excluir").
   const roster=[];
-  AppData.regs.filter(r=>r.bookingId===bkId&&!r.isTeacherRoom).forEach(r=>{
+  AppData.regs.filter(r=>r.bookingId===bkId).forEach(r=>{
     (r.guests||[]).filter(g=>g.name).forEach(g=>{
       roster.push({name:g.name,email:(g.email||r.email||'').trim(),room:r.room||''});
     });
