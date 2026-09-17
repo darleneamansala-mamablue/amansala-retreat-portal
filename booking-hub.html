@@ -4977,6 +4977,27 @@ function splitDoubleHalf(room){
   if(m)return{base:m[1],half:m[2],physical:room};
   return null;
 }
+// The same physical room is sold two ways — whole (rt6/rt7) or as separate
+// shared beds (bd1/bd2) — but blocking one side never conflicted with the
+// other, so the same physical room could be (and was: real incident, room 4,
+// 2026-09-17) double-booked whole for one retreat while its beds were
+// already blocked separately for another. Given either a whole-room code or
+// a bed code, returns the other side(s) representing that same space.
+// bd3/bd4 (Triple/Quad) are excluded — those beds are always used standalone,
+// the whole-room parent is never itself blockable, so there's nothing to link.
+function getRoomCounterparts(room){
+  const split=splitDoubleHalf(room);
+  if(split)return[split.base];
+  const counterparts=[];
+  AppData.roomTypes.forEach(rt=>{
+    if(rt.id!=='bd1'&&rt.id!=='bd2')return;
+    (rt.rooms||[]).forEach(r=>{
+      const s=splitDoubleHalf(r);
+      if(s&&s.base===room)counterparts.push(r);
+    });
+  });
+  return counterparts;
+}
 function buildUiRoomEntries(rt){
   if(!rt||!isDoubleRoomType(rt))return(rt.rooms||[]).map(r=>({display:r,physical:[r],merged:false}));
   const groups=new Map(),standalone=[];
@@ -6038,7 +6059,7 @@ function switchTab(id,btn){
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20260917b"></script>
+<script src="modules/room-blocking.js?v=20260917c"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====
