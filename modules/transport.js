@@ -832,7 +832,15 @@ async function tr2LoadData() {
       const fn = (d.firstName || '').toLowerCase().trim();
       const ln = (d.lastName || '').toLowerCase().trim();
       const bk = row.booking_id || (d.bookingId || '');
-      const key = em ? `email|${bk}|${em}` : `name|${fn}_${ln}|${normDate(d.arrivalDate)}|${normDate(d.departureDate)}`;
+      // Name is part of the key even when there's an email — two DIFFERENT real
+      // people sharing one household/family email (a couple booking together,
+      // e.g. Susan & Edward McClelland both using katiesolyoga@gmail.com) used to
+      // collide on email alone and silently collapse into a single row, dropping
+      // one person's whole submission (Jorge's report 2026-09-17: Susan McClelland
+      // missing from Transportation even though she'd submitted). Email-only
+      // matching was meant to catch the SAME person resubmitting the form twice,
+      // which this still does — that case has the same name too.
+      const key = em ? `email|${bk}|${em}|${fn}_${ln}` : `name|${fn}_${ln}|${normDate(d.arrivalDate)}|${normDate(d.departureDate)}`;
       const cur = map.get(key);
       map.set(key, cur ? pickBetter(cur, row) : row);
     }
