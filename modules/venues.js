@@ -2386,6 +2386,90 @@ function rcKnownGuestMatch(guestName){
   }
   return null;
 }
+// ── CLOUDBEDS LINK CHECKER — bulk version of the single-room-click linking
+// above. Scans every non-cancelled booking's full date span (not just
+// whatever's currently scrolled into view on the Room Calendar) for
+// Cloudbeds reservations that match a known guest but were never linked,
+// and lets staff review/link them all in one pass instead of stumbling on
+// each one individually as a grey block (Darlene's ask 2026-09-16 — this
+// mis-linking was causing problems in several places, not just display).
+let _rclMatches=[];
+async function rclOpen(){
+  openModal('rclModal');
+  const statusEl=document.getElementById('rclStatus'),resultsEl=document.getElementById('rclResults'),linkAllBtn=document.getElementById('rclLinkAllBtn');
+  statusEl.textContent='Scanning…';resultsEl.innerHTML='';linkAllBtn.style.display='none';
+  _rclMatches=[];
+
+  const activeBks=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.startDate&&b.endDate);
+  if(!activeBks.length){statusEl.textContent='No active bookings to check.';return;}
+  const minStart=activeBks.reduce((m,b)=>b.startDate<m?b.startDate:m,activeBks[0].startDate);
+  const maxEnd=activeBks.reduce((m,b)=>b.endDate>m?b.endDate:m,activeBks[0].endDate);
+  const startDate=fmtISO(addDays(pd(minStart),-1));
+  const endDate=maxEnd;
+
+  const portalResIds=new Set();
+  AppData.bookings.forEach(bk=>Object.values(bk.cbReservationIds||{}).forEach(id=>{if(id)portalResIds.add(String(id));}));
+
+  let data;
+  try{
+    const resp=await fetch('/.netlify/functions/cloudbeds?action=getExternalReservations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startDate,endDate})});
+    data=await resp.json();
+  }catch(e){statusEl.textContent='Could not reach Cloudbeds — try again.';return;}
+  if(!data?.success){statusEl.textContent='Cloudbeds error: '+(data?.error||'unknown');return;}
+
+  const seen=new Set();
+  (data.reservations||[]).forEach(r=>{
+    if(portalResIds.has(String(r.reservationID))||seen.has(r.reservationID))return;
+    const match=rcKnownGuestMatch(r.guestName);
+    if(!match)return;
+    seen.add(r.reservationID);
+    (r.rooms||[]).forEach(room=>_rclMatches.push({r,bk:match.bk,room}));
+  });
+
+  if(!_rclMatches.length){statusEl.textContent='✓ No mis-linked reservations found — everything checks out.';return;}
+  statusEl.textContent=`Found ${_rclMatches.length} room${_rclMatches.length!==1?'s':''} to link:`;
+  linkAllBtn.style.display='inline-flex';
+  rclRenderResults();
+}
+function rclRenderResults(){
+  const el=document.getElementById('rclResults'),statusEl=document.getElementById('rclStatus'),linkAllBtn=document.getElementById('rclLinkAllBtn');
+  if(!_rclMatches.length){el.innerHTML='';linkAllBtn.style.display='none';statusEl.textContent='✓ All linked.';return;}
+  el.innerHTML=_rclMatches.map((m,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid var(--border);border-radius:9px;margin-bottom:8px">
+      <div style="font-size:13px">
+        <b>${escHtml(m.r.guestName)}</b> · Room ${escHtml(m.room)}
+        <div style="font-size:11.5px;color:var(--muted);margin-top:2px">${escHtml(m.bk.leaderName||m.bk.retreatName||'')} · ${fmtDate(m.r.startDate)} – ${fmtDate(m.r.endDate)}</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="rclLinkOne(${i})">Link</button>
+    </div>`).join('');
+}
+function _rclApplyLink(m){
+  const bk=m.bk;
+  if(!bk.blockedRooms)bk.blockedRooms=[];
+  if(!bk.blockedRooms.includes(m.room))bk.blockedRooms.push(m.room);
+  if(!bk.cbReservationIds)bk.cbReservationIds={};
+  bk.cbReservationIds[m.room]=m.r.reservationID;
+  bk.blockedRoomsUpdatedAt=new Date().toISOString();
+  logActivity('Cloudbeds reservation linked',`${m.r.guestName} · ${m.room} → ${bk.leaderName||bk.retreatName}`,bk.id);
+}
+function rclLinkOne(i){
+  const m=_rclMatches[i];if(!m)return;
+  _rclApplyLink(m);
+  _rclMatches.splice(i,1);
+  saveAll();venBuild();rcBuild();
+  rclRenderResults();
+  showToast('Linked ✓');
+}
+function rclLinkAll(){
+  if(!_rclMatches.length)return;
+  if(!confirm(`Link all ${_rclMatches.length} matched rooms to their retreats?`))return;
+  _rclMatches.forEach(_rclApplyLink);
+  const n=_rclMatches.length;
+  _rclMatches=[];
+  saveAll();venBuild();rcBuild();
+  rclRenderResults();
+  showToast(`Linked ${n} room${n!==1?'s':''} ✓`);
+}
 // Links a matched Cloudbeds reservation's room into the existing retreat's
 // booking (blockedRooms + cbReservationIds) instead of creating a separate,
 // disconnected booking — Darlene's ask 2026-09-16: a guest's room booked
