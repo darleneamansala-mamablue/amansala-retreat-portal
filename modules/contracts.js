@@ -530,7 +530,7 @@ function autoAssignTeacherRoom(bk){
   AppData.regs.push({id:uid(),bookingId:bk.id,room:chosenRoom,roomTypeId:'rt5',isTeacherRoom:true,
     guests:[{name:bk.leaderName||'Retreat Leader',returning:false,yearsAttending:null,notes:'Teacher room (auto-assigned)'}],
     customPrice:price,amountPaid:0,notes:isComped?'Teacher room — Garden Basic (comped, 10+ paying guests)':'Teacher room — Garden Basic (auto-assigned)'});
-  if(!(bk.blockedRooms||[]).includes(chosenRoom)){if(!bk.blockedRooms)bk.blockedRooms=[];bk.blockedRooms.push(chosenRoom);bk.blockedRoomsUpdatedAt=new Date().toISOString();}
+  if(!roomListIncludes(bk.blockedRooms,chosenRoom)){if(!bk.blockedRooms)bk.blockedRooms=[];bk.blockedRooms.push(chosenRoom);bk.blockedRoomsUpdatedAt=new Date().toISOString();}
   logActivity('Teacher room auto-assigned',`${bk.leaderName||bk.retreatName} — ${chosenRoom} (Garden Basic) · ${isComped?'comped':'$'+price}`,bk.id);
 }
 
@@ -546,7 +546,7 @@ function upgradeTeacherRoom(bkId,newRoom){
   teacherReg.customPrice=getRoomRate(gkType,1,bk.startDate,nights)*nights;
   teacherReg.notes='Teacher room — upgraded to Garden King';
   if(!bk.blockedRooms)bk.blockedRooms=[];
-  if(!bk.blockedRooms.includes(newRoom))bk.blockedRooms.push(newRoom);
+  if(!roomListIncludes(bk.blockedRooms,newRoom))bk.blockedRooms.push(newRoom);
   bk.blockedRoomsUpdatedAt=new Date().toISOString();
   saveAll();buildDashboard();regRender();
   logActivity('Teacher room upgraded',`${bk.leaderName||bk.retreatName} — ${oldRoom} → ${newRoom} (Garden King)`,bkId);

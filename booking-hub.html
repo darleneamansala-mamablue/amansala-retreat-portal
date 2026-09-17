@@ -14,7 +14,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
-  <script src="cb-portal-sync.js?v=20260917a"></script>
+  <script src="cb-portal-sync.js?v=20260917b"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
     :root{
@@ -4977,6 +4977,14 @@ function splitDoubleHalf(room){
   if(m)return{base:m[1],half:m[2],physical:room};
   return null;
 }
+// Room codes are inconsistently cased in real data — Cloudbeds always
+// reports rooms uppercase ("2B"), this app's own codes are usually lowercase
+// ("2b") — and a plain === or Array.includes() comparison between the two
+// silently misses a real match. Confirmed root cause behind several
+// incidents 2026-09-17 (Block Rooms conflict check, the Rooms grid). Use
+// these everywhere a room code is compared, instead of a raw ===/.includes().
+function roomCodesEqual(a,b){return String(a||'').toLowerCase()===String(b||'').toLowerCase();}
+function roomListIncludes(list,room){return(list||[]).some(r=>roomCodesEqual(r,room));}
 // The same physical room is sold two ways — whole (rt6/rt7) or as separate
 // shared beds (bd1/bd2) — but blocking one side never conflicted with the
 // other, so the same physical room could be (and was: real incident, room 4,
@@ -6029,8 +6037,8 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260917l"></script>
-<script src="modules/room-optimizer.js?v=20260917c"></script>
+<script src="modules/venues.js?v=20260917m"></script>
+<script src="modules/room-optimizer.js?v=20260917d"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js"></script>
 <script>
@@ -6069,7 +6077,7 @@ function switchTab(id,btn){
 // ===== RETREAT BUILDER — moved to modules/retreat-builder.js =====
 // ===== DASHBOARD — moved to modules/retreat-builder.js (loaded above) =====
 </script>
-<script src="modules/contracts.js"></script>
+<script src="modules/contracts.js?v=20260917a"></script>
 <script>
 // ===== CONTRACT TEMPLATE — moved to modules/contracts.js =====
 // ===== CONTRACT GENERATOR — moved to modules/contracts.js (loaded above) =====

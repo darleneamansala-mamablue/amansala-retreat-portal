@@ -1078,7 +1078,7 @@ function rmSaveNewBooking(){
   const nights=Math.round((pd(end)-pd(start))/DAY_MS);
   const roomRateTotal=rate*nights;
   // Conflict check (exclude the booking currently being edited, if any)
-  const conflict=AppData.bookings.some(b=>b.id!==_rmEditId&&b.status!=='cancelled'&&(b.blockedRooms||[]).includes(room)&&datesOverlap(start,end,b.startDate,b.endDate));
+  const conflict=AppData.bookings.some(b=>b.id!==_rmEditId&&b.status!=='cancelled'&&roomListIncludes(b.blockedRooms,room)&&datesOverlap(start,end,b.startDate,b.endDate));
   if(conflict){errEl.textContent=`Room ${room} is already booked for part of these dates.`;errEl.style.display='block';return;}
   if(_rmEditId){
     const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
@@ -1312,7 +1312,7 @@ function rcTrackClick(event,room,rtId,trackEl){
   const days=rcShowDays;
   if(dayIdx<0||dayIdx>=days)return;
   const clickedDate=fmtISO(addDays(rcStart,dayIdx));
-  const busy=AppData.bookings.some(bk=>bk.status!=='cancelled'&&(bk.blockedRooms||[]).includes(room)&&clickedDate>=bk.startDate&&clickedDate<bk.endDate);
+  const busy=AppData.bookings.some(bk=>bk.status!=='cancelled'&&roomListIncludes(bk.blockedRooms,room)&&clickedDate>=bk.startDate&&clickedDate<bk.endDate);
   if(busy)return;
   rmOpenNewBooking(room,rtId,clickedDate);
 }
@@ -2414,7 +2414,7 @@ function rcBuild(){
     const bedOccDays=new Map(); // iso -> Map(bed -> bkId)
     AppData.bookings.filter(bk=>bk.status!=='cancelled').forEach(bk=>{
       beds.forEach(bed=>{
-        if(!(bk.blockedRooms||[]).includes(bed))return;
+        if(!roomListIncludes(bk.blockedRooms,bed))return;
         const bkS=pd(bk.startDate).getTime(),bkE=pd(bk.endDate).getTime();
         days.forEach(d=>{const t=d.getTime();if(t>=bkS&&t<bkE){const iso=fmtISO(d);if(!bedOccDays.has(iso))bedOccDays.set(iso,new Map());bedOccDays.get(iso).set(bed,bk.id);}});
       });
@@ -2774,7 +2774,7 @@ function _rclApplyLink(m){
     return;
   }
   if(!bk.blockedRooms)bk.blockedRooms=[];
-  if(!bk.blockedRooms.includes(m.room))bk.blockedRooms.push(m.room);
+  if(!roomListIncludes(bk.blockedRooms,m.room))bk.blockedRooms.push(m.room);
   if(!bk.cbReservationIds)bk.cbReservationIds={};
   bk.cbReservationIds[m.room]=m.r.reservationID;
   bk.blockedRoomsUpdatedAt=new Date().toISOString();
@@ -2827,7 +2827,7 @@ function linkExternalReservationToBooking(r,bkId,roomName){
   }
   if(!confirm(`Link ${r.guestName}'s Cloudbeds reservation (room ${roomName}) to ${label}'s booking?`))return;
   if(!bk.blockedRooms)bk.blockedRooms=[];
-  if(!bk.blockedRooms.includes(roomName))bk.blockedRooms.push(roomName);
+  if(!roomListIncludes(bk.blockedRooms,roomName))bk.blockedRooms.push(roomName);
   if(!bk.cbReservationIds)bk.cbReservationIds={};
   bk.cbReservationIds[roomName]=r.reservationID;
   bk.blockedRoomsUpdatedAt=new Date().toISOString();
@@ -2851,7 +2851,7 @@ function importExternalReservation(r){
   // is exactly how the Shannon Jamail Group duplicate happened (real
   // incident 2026-09-16): a match should have linked it to her existing
   // retreat instead of importing it as a disconnected new booking.
-  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(room)&&datesOverlap(r.startDate,r.endDate,other.startDate,other.endDate));
+  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&roomListIncludes(other.blockedRooms,room)&&datesOverlap(r.startDate,r.endDate,other.startDate,other.endDate));
   // This is a suggestion, not a hard rule — usually the right call IS to
   // link it to that retreat instead, but sometimes the retreat's own
   // blockedRooms entry is the stale/wrong one (e.g. a leftover placeholder)
@@ -2893,7 +2893,7 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
   // Check toRoom not already blocked by another retreat on overlapping dates
   const conflict=AppData.bookings.find(other=>
     other.id!==bkId&&other.status!=='cancelled'&&
-    (other.blockedRooms||[]).includes(toRoom)&&
+    roomListIncludes(other.blockedRooms,toRoom)&&
     datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate)
   );
   if(conflict){showToast(`Room ${toRoom} is already blocked by ${conflict.leaderName||conflict.retreatName}.`);return;}
@@ -2964,7 +2964,7 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
 // just correctly repositioned (still clickable to link/import, unchanged).
 async function rcMoveExternalReservation(reservationID,fromRoom,toRoom,guestName,startDate,endDate){
   if(fromRoom===toRoom)return;
-  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(toRoom)&&datesOverlap(startDate,endDate,other.startDate,other.endDate));
+  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&roomListIncludes(other.blockedRooms,toRoom)&&datesOverlap(startDate,endDate,other.startDate,other.endDate));
   if(conflict){showToast(`Room ${toRoom} is already part of ${conflict.leaderName||conflict.retreatName}'s booking for these dates.`);return;}
   showToast(`Moving ${guestName} to ${toRoom}…`);
   try{

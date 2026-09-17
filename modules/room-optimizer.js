@@ -98,7 +98,7 @@ function ozPortalResIdSet(){
 // `locked` field (Registration tab room grid) — if either is set, the
 // optimizer must not move it.
 function ozPortalIntervalsForRoom(room){
-  return AppData.bookings.filter(b=>b.status!=='cancelled'&&(b.blockedRooms||[]).includes(room)).map(bk=>{
+  return AppData.bookings.filter(b=>b.status!=='cancelled'&&roomListIncludes(b.blockedRooms,room)).map(bk=>{
     const reg=getRegForRoom(bk.id,room);
     return{
       room,start:bk.startDate,end:bk.endDate,bkId:bk.id,external:false,
@@ -295,7 +295,7 @@ function ozFindExtraNightAlignments(extReservations,portalResIds,rangeStart,rang
     if(mainRt&&OZ_EXCLUDED_RT_IDS.has(mainRt.id))return; // out of scope for V1 (bed/virtual-group rooms)
     if(extRt&&OZ_EXCLUDED_RT_IDS.has(extRt.id))return;
     // mainRoom must actually be free for the extra night's own dates
-    const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(mainRoom)&&datesOverlap(r.startDate,r.endDate,other.startDate,other.endDate));
+    const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&roomListIncludes(other.blockedRooms,mainRoom)&&datesOverlap(r.startDate,r.endDate,other.startDate,other.endDate));
     if(conflict)return;
     const portalOwned=(id)=>portalResIds.has(String(id));
     const extConflict=(extReservations||[]).find(o=>o!==r&&(o.rooms||[]).includes(mainRoom)&&!portalOwned(o.reservationID)&&datesOverlap(r.startDate,r.endDate,o.startDate,o.endDate));
@@ -399,11 +399,11 @@ async function ozRevalidateMove(sug){
   const bk=AppData.bookings.find(b=>b.id===sug.bkId);
   if(!bk||bk.status==='cancelled')return'Reservation no longer exists.';
   if(bk.startDate!==sug.startDate||bk.endDate!==sug.endDate)return'Reservation dates changed since this was calculated.';
-  if(!(bk.blockedRooms||[]).includes(sug.fromRoom))return'Reservation is no longer in the expected room.';
+  if(!roomListIncludes(bk.blockedRooms,sug.fromRoom))return'Reservation is no longer in the expected room.';
   const reg=getRegForRoom(bk.id,sug.fromRoom);
   if(bk.roomLocked||reg?.locked)return'Reservation was locked since this was calculated.';
   if(ozRoomIsMaintenance(sug.toRoom))return'Destination room was marked under maintenance since this was calculated.';
-  const conflict=AppData.bookings.find(other=>other.id!==bk.id&&other.status!=='cancelled'&&(other.blockedRooms||[]).includes(sug.toRoom)&&datesOverlap(sug.startDate,sug.endDate,other.startDate,other.endDate));
+  const conflict=AppData.bookings.find(other=>other.id!==bk.id&&other.status!=='cancelled'&&roomListIncludes(other.blockedRooms,sug.toRoom)&&datesOverlap(sug.startDate,sug.endDate,other.startDate,other.endDate));
   if(conflict)return`Room ${sug.toRoom} was booked by ${conflict.leaderName||conflict.retreatName} since this was calculated.`;
   // Fresh Cloudbeds check — someone may have booked the destination directly in Cloudbeds since analysis ran.
   const fresh=await fetchExternalReservationsForRange(sug.startDate,sug.endDate);
@@ -483,7 +483,7 @@ async function ozExecuteExtraNightMove(sug){
   if(!stillThere){sug.status='failed';sug.error='This Cloudbeds reservation no longer exists or its dates changed.';return sug;}
   if(!(stillThere.rooms||[]).includes(sug.fromRoom)){sug.status='failed';sug.error='This reservation is no longer in the expected room.';return sug;}
   if(ozRoomIsMaintenance(sug.toRoom)){sug.status='failed';sug.error='Destination room was marked under maintenance since this was calculated.';return sug;}
-  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(sug.toRoom)&&datesOverlap(sug.startDate,sug.endDate,other.startDate,other.endDate));
+  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&roomListIncludes(other.blockedRooms,sug.toRoom)&&datesOverlap(sug.startDate,sug.endDate,other.startDate,other.endDate));
   if(conflict){sug.status='failed';sug.error=`Room ${sug.toRoom} was booked by ${conflict.leaderName||conflict.retreatName} since this was calculated.`;return sug;}
   const portalResIds=ozPortalResIdSet();
   const extConflict=fresh.find(r=>String(r.reservationID)!==String(sug.reservationID)&&(r.rooms||[]).includes(sug.toRoom)&&!portalResIds.has(String(r.reservationID))&&datesOverlap(sug.startDate,sug.endDate,r.startDate,r.endDate));
@@ -564,8 +564,8 @@ async function ozUndoMove(recordIdx){
     return{ok:false,reason:result.error||'Could not reverse this move.'};
   }
   const bk=AppData.bookings.find(b=>b.id===rec.bkId);if(!bk)return{ok:false,reason:'Reservation no longer exists.'};
-  if(!(bk.blockedRooms||[]).includes(rec.toRoom))return{ok:false,reason:'Reservation is no longer in the room this move put it in — cannot safely auto-reverse.'};
-  const conflict=AppData.bookings.find(other=>other.id!==bk.id&&other.status!=='cancelled'&&(other.blockedRooms||[]).includes(rec.fromRoom)&&datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate));
+  if(!roomListIncludes(bk.blockedRooms,rec.toRoom))return{ok:false,reason:'Reservation is no longer in the room this move put it in — cannot safely auto-reverse.'};
+  const conflict=AppData.bookings.find(other=>other.id!==bk.id&&other.status!=='cancelled'&&roomListIncludes(other.blockedRooms,rec.fromRoom)&&datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate));
   if(conflict)return{ok:false,reason:`Room ${rec.fromRoom} is no longer available — booked by ${conflict.leaderName||conflict.retreatName}.`};
   const reverseSug={id:uid(),bkId:bk.id,fromRoom:rec.toRoom,toRoom:rec.fromRoom,guestLabel:rec.guestLabel,rtId:null,rtName:rec.rtName,category:null,startDate:bk.startDate,endDate:bk.endDate,why:['Manual undo of a previous optimizer move'],status:'pending'};
   const result=await ozExecuteMove(reverseSug);
