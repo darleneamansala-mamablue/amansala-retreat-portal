@@ -456,6 +456,16 @@ function dfBuild(){
         const concurLabel=concurN===0
           ?'<span style="font-size:10px;color:#94a3b8">No other retreats</span>'
           :`<span style="font-size:10px;color:#f59e0b;font-weight:700" title="${concurrent.map(b=>b.leaderName||b.retreatName).join(', ')}">⚑ ${concurN} retreat${concurN>1?'s':''} also booked</span>`;
+        // Physical room availability for this exact date range — Darlene's
+        // ask 2026-09-16: a gap in the venue row schedule doesn't mean much
+        // without knowing whether there's actually enough room inventory
+        // free to put guests in for those dates. Reuses rsComputeAvailability
+        // (same fixed bed/parent-room logic as Book a Room).
+        const roomAvail=rsComputeAvailability(s.start,s.end);
+        const totalRoomsAvail=roomAvail.reduce((sum,r)=>sum+r.availableRooms.length,0);
+        const roomBreakdown=roomAvail.filter(r=>r.availableRooms.length>0)
+          .map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:3px 0;font-size:11.5px"><span>${r.rt.name}</span><span style="font-weight:700;color:#059669">${r.availableRooms.length} of ${r.totalRooms}</span></div>`)
+          .join('')||'<div style="font-size:11.5px;color:#9ca3af;font-style:italic">No rooms available for these dates.</div>';
         const slotEl=document.createElement('div');
         slotEl.className='df-slot '+(isSL?'sl':'nsl');
         slotEl.style.flexDirection='column';slotEl.style.alignItems='flex-start';slotEl.style.gap='3px';
@@ -464,7 +474,9 @@ function dfBuild(){
           +`<span>${fmtDate(s.start)} – ${fmtDate(s.end)}</span>`
           +(isSL?`<span style="font-size:10px;opacity:.75">↔ Straight-line</span>`:'')+'</div>'
           +`<div style="display:flex;align-items:center;gap:10px;padding-left:2px">${concurLabel}`
-          +`<button class="df-reserve-btn" onclick="dfOpenReserve('${rowEsc}','${s.start}','${s.end}',${s.nights})">Reserve</button></div>`;
+          +`<button class="df-reserve-btn" onclick="dfOpenReserve('${rowEsc}','${s.start}','${s.end}',${s.nights})">Reserve</button></div>`
+          +`<button type="button" onclick="const p=this.nextElementSibling;p.style.display=p.style.display==='block'?'none':'block';" style="font-size:10.5px;font-weight:700;color:${totalRoomsAvail?'#059669':'#dc2626'};background:none;border:none;cursor:pointer;padding:2px 0 0;text-decoration:underline">${totalRoomsAvail} room${totalRoomsAvail!==1?'s':''} available ▾</button>`
+          +`<div style="display:none;margin-top:2px;padding:8px 10px;background:#fff;border:1px solid var(--border);border-radius:8px;width:100%;max-width:320px;box-sizing:border-box">${roomBreakdown}</div>`;
         slotEl.title=`${s.nights}-night retreat: ${fmtDate(s.start)} – ${fmtDate(s.end)}${concurN?'\nAlso booked: '+concurrent.map(b=>b.leaderName||b.retreatName).join(', '):''}`;
         slotsDiv.appendChild(slotEl);
       });
