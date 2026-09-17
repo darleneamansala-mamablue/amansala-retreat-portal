@@ -2377,26 +2377,22 @@ function _rcToggleLegend(){
 // flight left stale-window bars (correct date label, wrong pixel position)
 // scattered across the currently-visible months.
 let rcExtReqSeq=0;
-async function rcFetchExternalReservations(startMs){
-  const mySeq=++rcExtReqSeq;
-  const startDate=fmtISO(new Date(startMs));
-  const endDate=fmtISO(new Date(startMs+rcShowDays*DAY_MS));
+// Cloudbeds has no server-side cache for this and routinely takes 15-25s to
+// respond — with rcBuild() clearing every box before this resolved, every
+// click/move that triggered a rebuild made every grey (external/unlinked)
+// reservation visibly vanish for that whole window, then reappear once the
+// slow fetch finally came back (real reports 2026-09-17: Piper, Karin,
+// Shannon's extra night, Molly Morgan all "going missing" this way —
+// they're guests only identifiable via one of these grey boxes). Rendering
+// from the last-known `externalReservations` immediately, before kicking
+// off a fresh fetch to replace it, means something is always on screen.
+function rcRenderExternalReservations(reservations,startMs){
   const portalResIds=new Set();
   AppData.bookings.forEach(bk=>Object.values(bk.cbReservationIds||{}).forEach(id=>{if(id)portalResIds.add(String(id));}));
-  let data;
-  try{
-    const resp=await fetch('/.netlify/functions/cloudbeds?action=getExternalReservations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startDate,endDate})});
-    data=await resp.json();
-  }catch(e){console.warn('[rcExternal] fetch error',e);return;}
-  if(mySeq!==rcExtReqSeq)return; // superseded by a newer window while this was in flight
-  if(!data?.success){console.warn('[rcExternal]',data?.error);return;}
-  externalReservations=data.reservations||[];
-  console.log('[rcExternal] reservations received:',data.reservations?.length,'portal excluded:',portalResIds.size);
-  if(data.reservations?.length)console.log('[rcExternal] first res sample:',JSON.stringify(data.reservations[0]));
   const allTracks=[...document.querySelectorAll('[data-room]')];
   const trackNames=allTracks.map(t=>t.getAttribute('data-room'));
-  console.log('[rcExternal] calendar tracks:',trackNames);
-  (data.reservations||[]).forEach(r=>{
+  allTracks.forEach(t=>t.querySelectorAll('.bk[data-ext="1"]').forEach(el=>el.remove()));
+  (reservations||[]).forEach(r=>{
     if(portalResIds.has(String(r.reservationID)))return;
     const rS=pd(r.startDate).getTime(),rE=pd(r.endDate).getTime();
     const winE=startMs+rcShowDays*DAY_MS;
@@ -2410,12 +2406,12 @@ async function rcFetchExternalReservations(startMs){
     // as a disconnected grey "import as new booking" block (Darlene's ask
     // 2026-09-16 — Penelope/Karin, guests within Shannon Jamail's retreat).
     const match=rcKnownGuestMatch(r.guestName);
-    console.log('[rcExternal] placing',r.reservationID,r.guestName,'rooms:',r.rooms,match?'(matched '+(match.bk.leaderName||match.bk.retreatName)+')':'(no match)');
     (r.rooms||[]).forEach(roomName=>{
       const track=allTracks.find(t=>t.getAttribute('data-room').toLowerCase()===roomName.toLowerCase());
       if(!track){console.warn('[rcExternal] no track for room:',roomName,'available:',trackNames);return;}
       const bl=document.createElement('div');
       bl.className='bk';
+      bl.setAttribute('data-ext','1');
       // Small cancel button on every raw-Cloudbeds box (matched or not) so an
       // erroneous/duplicate reservation (e.g. Connie Smith's CH4 extra-night
       // booking, 2026-09-17) can be cancelled straight from the calendar
@@ -2442,6 +2438,23 @@ async function rcFetchExternalReservations(startMs){
       track.appendChild(bl);
     });
   });
+}
+async function rcFetchExternalReservations(startMs){
+  const mySeq=++rcExtReqSeq;
+  // Show whatever we already have instantly instead of leaving every grey
+  // box blank while Cloudbeds is slow to respond.
+  if(externalReservations?.length)rcRenderExternalReservations(externalReservations,startMs);
+  const startDate=fmtISO(new Date(startMs));
+  const endDate=fmtISO(new Date(startMs+rcShowDays*DAY_MS));
+  let data;
+  try{
+    const resp=await fetch('/.netlify/functions/cloudbeds?action=getExternalReservations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startDate,endDate})});
+    data=await resp.json();
+  }catch(e){console.warn('[rcExternal] fetch error',e);return;}
+  if(mySeq!==rcExtReqSeq)return; // superseded by a newer window while this was in flight
+  if(!data?.success){console.warn('[rcExternal]',data?.error);return;}
+  externalReservations=data.reservations||[];
+  rcRenderExternalReservations(externalReservations,startMs);
 }
 // Cancels a raw Cloudbeds-only reservation straight from the Room Calendar —
 // e.g. an erroneous or duplicate extra-night booking that should never have
