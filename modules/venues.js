@@ -140,8 +140,11 @@ function venBuild(){
       const discBadge=bkTd&&bkTd.tiers.some(t=>t.earned)?`<span title="Teacher discount earned — $${bkTd.totalCredit.toLocaleString()} credit" style="font-size:9px;font-weight:700;background:#16a34a;color:#fff;border-radius:3px;padding:1px 5px;margin-left:3px">★ DISC</span>`:'';
       bl.innerHTML=`<span class="bk-n">${bk.leaderName||bk.retreatName}</span>${stBadge}<span class="bk-s">${bk.retreatName&&bk.leaderName?bk.retreatName:''}</span>${countHtml}${transportHtml}${finBadge}${discBadge}<span style="flex:1"></span>${flagHtml}`;
       if(bk.pax&&fillPct>0){const bar=document.createElement('div');bar.style.cssText=`position:absolute;bottom:0;left:0;height:3px;width:${fillPct}%;background:${st.border};opacity:.6;border-radius:0 0 4px 4px;`;bl.appendChild(bar);}
-      bl.draggable=!bk.roomLocked;
-      bl.addEventListener('dragstart',e=>{if(bk.roomLocked){e.preventDefault();return;}e.dataTransfer.setData('text/bk-id',bk.id);bl.style.opacity='.4';_bkDragActive=true;});
+      // roomLocked only protects a reservation from the automated
+      // Straightline optimizer, never from a staff member manually
+      // dragging it (Darlene's call 2026-09-17) — same as the Room Calendar.
+      bl.draggable=true;
+      bl.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/bk-id',bk.id);bl.style.opacity='.4';_bkDragActive=true;});
       bl.addEventListener('dragend',()=>{bl.style.opacity='1';setTimeout(()=>_bkDragActive=false,120);});
       bl.addEventListener('click',()=>{if(!_bkDragActive)showAvailPreview(bk.id);});
       bl.addEventListener('mouseenter',e=>showTip(e,bk,regCount));bl.addEventListener('mousemove',moveTip);bl.addEventListener('mouseleave',hideTip);
@@ -2194,18 +2197,22 @@ function rcBuild(){
         // cause confusion; the outline makes "not a retreat" unmistakable at
         // a glance (Darlene's ask 2026-09-17).
         const roomOnlyOutline=bk.bookingType==='room_only'?`outline:2px dashed ${pc.border};outline-offset:-2px;`:'';
-        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:${bk.roomLocked?'default':'grab'};border-left:4px solid ${st.border};${roomOnlyOutline}`;
-        bl.draggable=!bk.roomLocked;
+        // The lock protects a reservation from the AUTOMATED optimizer
+        // (room-optimizer.js honors bk.roomLocked as an absolute no-touch
+        // rule) — it was never meant to stop a staff member from personally
+        // choosing to drag it, so manual dragging here ignores it (Darlene's
+        // call 2026-09-17: "if we move it here we should be able to move it").
+        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:grab;border-left:4px solid ${st.border};${roomOnlyOutline}`;
+        bl.draggable=true;
         // Never show retreat/leader name and guest name together on a room row
         // — the retreat is already identifiable via color + the Active in
         // This View strip above. A room with a named guest shows only that
         // guest's name; an unassigned-but-blocked room still shows the
         // retreat name (there's no guest name to pair it with) plus "blocked".
         const roomOnlyIcon=bk.bookingType==='room_only'?'🏨 ':'';
-        bl.innerHTML=`<span class="bk-lock" title="${bk.roomLocked?'Locked — click to allow moving':'Click to lock this room (prevent sliding)'}" onclick="event.stopPropagation();bkToggleLock('${bk.id}')" style="cursor:pointer;margin-right:4px;opacity:${bk.roomLocked?'1':'.35'}">${bk.roomLocked?'🔒':'🔓'}</span>`
+        bl.innerHTML=`<span class="bk-lock" title="${bk.roomLocked?'Locked — the Straightline optimizer will never move this (click to unlock). You can still drag it yourself.':'Click to lock — protects this from the Straightline optimizer, not from you dragging it'}" onclick="event.stopPropagation();bkToggleLock('${bk.id}')" style="cursor:pointer;margin-right:4px;opacity:${bk.roomLocked?'1':'.35'}">${bk.roomLocked?'🔒':'🔓'}</span>`
           +(hasGuest?`<span class="bk-n">${roomOnlyIcon}${guestNames[0]}</span>`:`<span class="bk-n">${roomOnlyIcon}${bk.leaderName||bk.retreatName}</span><span class="bk-s" style="opacity:.5;font-style:italic">blocked</span>`);
         bl.addEventListener('dragstart',e=>{
-          if(bk.roomLocked){e.preventDefault();return;}
           rcDragData={bkId:bk.id,fromRoom:room,rtId:rt.id};
           e.dataTransfer.effectAllowed='move';
           e.dataTransfer.setData('text/plain',JSON.stringify(rcDragData));
@@ -2682,11 +2689,13 @@ function bkToggleLock(bkId){
   bk.roomLocked=!bk.roomLocked;
   saveAll();venBuild();rcBuild();
   logActivity(bk.roomLocked?'Room locked':'Room unlocked',`${bk.leaderName||bk.retreatName||''} · ${(bk.blockedRooms||[])[0]||''}`,bkId);
-  showToast(bk.roomLocked?'Room locked — it will not move 🔒':'Room unlocked — can be moved again');
+  showToast(bk.roomLocked?'Room locked — the Straightline optimizer will not move this 🔒 (you still can, manually)':'Room unlocked');
 }
 function rcMoveRoom(bkId,fromRoom,toRoom){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
-  if(bk.roomLocked){showToast('This room is locked — unlock it first to move it.');return;}
+  // roomLocked only protects a reservation from the automated Straightline
+  // optimizer — it never blocks a staff member manually moving it here
+  // (Darlene's call 2026-09-17).
   // Check toRoom not already blocked by another retreat on overlapping dates
   const conflict=AppData.bookings.find(other=>
     other.id!==bkId&&other.status!=='cancelled'&&
