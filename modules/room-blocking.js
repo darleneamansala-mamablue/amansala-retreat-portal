@@ -145,6 +145,10 @@ function _renderBlockRoomsGrid(bkId){
     const entry={name:other.leaderName||other.retreatName,bookingId:other.id};
     (other.blockedRooms||[]).forEach(room=>{
       if(!conflictMap.has(room))conflictMap.set(room,entry);
+      // Same physical room sold the other way (whole vs. bed) — flag it too,
+      // or the same space can be double-booked (real incident: room 4 blocked
+      // whole for one retreat while 4a/4b were already blocked for another).
+      getRoomCounterparts(room).forEach(cp=>{if(!conflictMap.has(cp))conflictMap.set(cp,entry);});
     });
     // Also cross-check real registrations, not just blockedRooms — a room can
     // have a named guest registered in it whose room was never added to
@@ -152,6 +156,7 @@ function _renderBlockRoomsGrid(bkId){
     // Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
     AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{
       if(!conflictMap.has(r.room))conflictMap.set(r.room,entry);
+      getRoomCounterparts(r.room).forEach(cp=>{if(!conflictMap.has(cp))conflictMap.set(cp,entry);});
     });
   });
   // Also add external Cloudbeds reservations (walk-ins, OTAs, etc.)
