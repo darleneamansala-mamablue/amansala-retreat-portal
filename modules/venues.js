@@ -1079,11 +1079,20 @@ function rsInspectBlocked(bkId){
 // linked/imported it into the portal yet. Availability must never depend on
 // that matching step (Darlene's call 2026-09-17).
 async function fetchExternalReservationsForRange(startDate,endDate){
+  // getExternalReservations has no server-side cache and re-paginates the
+  // full Cloudbeds reservation list on every call — routinely 15-25s for
+  // this property. Without a client-side cap, a Netlify function that stalls
+  // (rather than erroring) leaves fetch() waiting forever with zero feedback
+  // — matches a real report of the Straightline Rooms preview looking
+  // permanently "stuck on analyzing" (2026-09-17).
+  const ctrl=typeof AbortController!=='undefined'?new AbortController():null;
+  const timer=ctrl?setTimeout(()=>ctrl.abort(),45000):null;
   try{
-    const resp=await fetch('/.netlify/functions/cloudbeds?action=getExternalReservations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startDate,endDate})});
+    const resp=await fetch('/.netlify/functions/cloudbeds?action=getExternalReservations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startDate,endDate}),signal:ctrl?.signal});
     const data=await resp.json();
     return data?.success?(data.reservations||[]):[];
-  }catch(e){console.warn('[availability] Cloudbeds fetch failed',e);return[];}
+  }catch(e){console.warn('[availability] Cloudbeds fetch failed or timed out',e);return[];}
+  finally{if(timer)clearTimeout(timer);}
 }
 async function rsSearch(){
   const start=document.getElementById('rs-start').value,end=document.getElementById('rs-end').value;

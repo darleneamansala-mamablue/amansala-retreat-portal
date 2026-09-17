@@ -134,6 +134,16 @@ function ozInteriorGaps(intervals){
 function ozScoreRoomIntervals(intervals,rangeStart,rangeEnd){
   return ozInteriorGaps(intervals).filter(g=>g.start<rangeEnd&&g.end>rangeStart).reduce((sum,g)=>sum+ozGapScore(g.nights),0);
 }
+// A reservation that already has a same-day (0-night) turnover against a
+// neighbor on at least one side is already achieving the best possible
+// outcome on that side — moving it to a DIFFERENT room that also offers a
+// straightline is pure churn with no real gain, and real risk (an extra
+// Cloudbeds sync for no benefit). Skip it as a move candidate entirely
+// rather than let the scoring/movePenalty math decide case by case
+// (Darlene's rule, 2026-09-17).
+function ozAlreadyStraightlined(intervals,iv){
+  return ozInteriorGaps(intervals).some(g=>(g.before===iv||g.after===iv)&&g.nights===0);
+}
 
 // ── OVERBOOKING DETECTION — independent of the move optimizer; moving
 // reservations between rooms WITHIN a group never changes total demand vs
@@ -199,6 +209,7 @@ function ozSearchGroupMoves(group,working,rangeStart,rangeEnd,restrictBkIds){
         if(iv.external||iv.locked)return;
         if(restrictBkIds&&!restrictBkIds.has(iv.bkId))return;
         if(!(iv.start<rangeEnd&&iv.end>rangeStart))return; // reservation not in the analyzed window
+        if(ozAlreadyStraightlined(working.get(fromRoom)||[],iv))return; // already a same-day turnover — leave it alone
         group.rooms.forEach(toRoom=>{
           if(toRoom===fromRoom||ozRoomIsMaintenance(toRoom))return;
           const toIntervals=working.get(toRoom)||[];
@@ -467,7 +478,7 @@ function ozCurrentRange(){
 // ── ✨ STRAIGHTLINE ROOMS ────────────────────────────────────────────────
 async function ozOpenStraightline(){
   openModal('ozPreviewModal');
-  document.getElementById('ozPreviewBody').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">Analyzing the current calendar range…</div>';
+  document.getElementById('ozPreviewBody').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">Checking Cloudbeds and analyzing the current calendar range…<br><span style="font-size:11.5px">This can take up to 30-40 seconds — Cloudbeds itself is slow to query, this isn\'t frozen.</span></div>';
   document.getElementById('ozPreviewFoot').style.display='none';
   const{start,end}=ozCurrentRange();
   let analysis;
