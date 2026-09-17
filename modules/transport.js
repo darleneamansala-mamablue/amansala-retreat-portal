@@ -254,7 +254,34 @@ function getTransportRoster(bkId){
     const idx=allSubs.findIndex((s,i)=>!usedIdx.has(i)&&trGuestMatchesSub(guest,s));
     if(idx>=0){matchedSubs.push(allSubs[idx]);usedIdx.add(idx);guestSub.set(guest,allSubs[idx]);}
   });
-  const missing=roster.filter(guest=>!matchedSubs.some(s=>trGuestMatchesSub(guest,s)));
+  // Second pass: a room-list name that's abbreviated ("Billy S", "MIchelle M") never
+  // exact/email-matches the guest's own fuller self-submitted name ("Billy Stalcup") —
+  // trGuestMatchesSub only takes the bare-first-name fallback when the roster name has
+  // NO last name at all, so an abbreviated initial still fails it. But if that first
+  // name belongs to only ONE roster guest in this booking, it's unambiguous — the same
+  // "unique first name in this booking" fallback the admin Transportation tab already
+  // uses (tr2BuildView's firstNameIdx), which is why that tab showed these guests
+  // correctly while My Transportation showed them as "not submitted" for the exact same
+  // data (Jorge's report 2026-09-17: Marcia Hoffheins' retreat).
+  const firstNameCounts=new Map();
+  roster.forEach(g=>{
+    const fn=g.name.trim().split(/\s+/)[0].toLowerCase();
+    if(fn.length<3)return;
+    firstNameCounts.set(fn,(firstNameCounts.get(fn)||0)+1);
+  });
+  roster.forEach(guest=>{
+    if(guestSub.has(guest))return;
+    const fn=guest.name.trim().split(/\s+/)[0].toLowerCase();
+    if(fn.length<3||firstNameCounts.get(fn)!==1)return;
+    const idx=allSubs.findIndex((s,i)=>!usedIdx.has(i)&&(s.firstName||'').trim().toLowerCase()===fn);
+    if(idx>=0){matchedSubs.push(allSubs[idx]);usedIdx.add(idx);guestSub.set(guest,allSubs[idx]);}
+  });
+  // Driven off guestSub (the actual per-guest assignment) rather than re-running
+  // trGuestMatchesSub against the whole matchedSubs array — the old version could
+  // under-count "missing" when two roster guests both technically satisfied
+  // trGuestMatchesSub against the same single sub, even though only one of them
+  // actually got it in guestSub.
+  const missing=roster.filter(guest=>!guestSub.has(guest));
   return{
     roster,
     allSubs,
