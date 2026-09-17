@@ -2338,7 +2338,14 @@ function rcBuild(){
         // showing "blocked" — spa charge-to-room already matches on leaderName
         // regardless of status, so this just fixes the visual/lock state.
         const isRealRoomOnly=bk.bookingType==='room_only'&&bk.status!=='requested'&&bk.leaderName;
-        const guestNames=regEntry?(regEntry.guests||[]).filter(g=>g.name).map(g=>g.name):(isRealRoomOnly?[bk.leaderName]:[]);
+        // A room where every named guest has been cancelled is vacated for
+        // Rooms purposes — skip its bar entirely (frees the slot up visually)
+        // even though the retreat's own blockedRooms/billing occupancy count
+        // is untouched (Jorge's call 2026-09-17: Teachers still shows the
+        // cancelled guest + fee; only Rooms should look empty).
+        const _namedInRoom=(regEntry?.guests||[]).filter(g=>g.name);
+        if(_namedInRoom.length&&_namedInRoom.every(g=>g.cancelled))return;
+        const guestNames=regEntry?_namedInRoom.filter(g=>!g.cancelled).map(g=>g.name):(isRealRoomOnly?[bk.leaderName]:[]);
         const hasGuest=guestNames.length>0;
         const bl=document.createElement('div');
         bl.className='bk'+(st.dash||!hasGuest?' dashed':'');

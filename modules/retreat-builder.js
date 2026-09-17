@@ -839,6 +839,17 @@ function openBookingFromNotif(bkId){
   switchTab('teacherreg',document.getElementById('teacherregTabBtn'));
   setTimeout(()=>regSelectRetreat(bkId),80);
 }
+// We Travel bookings are individually-booked guests, not a retreat with its
+// own Actions/Registration workflow — open the same reservation/folio modal
+// the We Travel Reservations table's guest links already use instead of
+// dropping into Teachers (which looked like some unrelated "event").
+function openWeTravelNotif(bkId,guestName){
+  if(!bkId)return;
+  const regs=getRegsForBk(bkId);
+  const reg=guestName?regs.find(r=>(r.guests||[]).some(g=>g.name===guestName)):regs[0];
+  if(reg){openBookingDetailForReg(reg.id,guestName||(reg.guests||[]).find(g=>g.name)?.name);return;}
+  openBookingFolio(bkId);
+}
 function _actvNotifSectionOpen(id){return localStorage.getItem('ama_notif_sec_'+id)==='1';}
 function _toggleActvNotifSection(id){localStorage.setItem('ama_notif_sec_'+id,_actvNotifSectionOpen(id)?'0':'1');buildDashboard();}
 function _actvNotifRowHtml(n){
@@ -898,7 +909,7 @@ function _actvNotifRowHtml(n){
     const amt=n.amount>0?` — <strong>${fmt$(n.amount)}</strong>`:'';
     return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
       <span style="font-size:14px;flex-shrink:0">🧳</span>
-      <span style="cursor:pointer" onclick="openBookingFromNotif('${n.bookingId}')"><strong>${label}</strong>${n.guestName?' — '+escHtml(n.guestName):''}${amt}</span>
+      <span style="cursor:pointer" onclick="openWeTravelNotif('${n.bookingId}','${escHtml(n.guestName||'').replace(/'/g,"\\'")}')"><strong>${label}</strong>${n.guestName?' — '+escHtml(n.guestName):''}${amt}</span>
       ${newBadge}${n.ts?`<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>`:''}
       ${dismissBtn}</div>`;
   }
