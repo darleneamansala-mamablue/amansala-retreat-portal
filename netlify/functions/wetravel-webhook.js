@@ -383,6 +383,19 @@ exports.handler = async (event) => {
     // unassigned instead of calling pickFreeRoom.
     const skipRoomAssignment = d.skip_room_assignment === true;
 
+    // Every subsequent webhook event for the SAME order (an installment
+    // payment, a participant edit, etc.) re-runs this whole handler — without
+    // this lookup, pickFreeRoom got called again each time and silently
+    // reassigned a (possibly different) room, discarding any manual room
+    // correction made in the portal since the last event, or diverging from
+    // whatever room Cloudbeds actually had for that guest (real incident:
+    // Renee Perron's We Travel RNR booking assigned CH2 by pickFreeRoom while
+    // her real Cloudbeds reservation was in room 25 — 2026-09-17). Once a
+    // registration exists with a room, later events keep that same room.
+    const existingRegRows = await supa(supaKey, `registrations?select=id,room&booking_id=eq.${bkId}`, 'GET').catch(() => []);
+    const existingRoomByRegId = {};
+    (existingRegRows || []).forEach(r => { if (r.room) existingRoomByRegId[r.id] = r.room; });
+
     for (const pkg of packages) {
       const roomTypeId = pkgMap[pkg.name];
       if (!roomTypeId) {
@@ -390,8 +403,10 @@ exports.handler = async (event) => {
         await recordUnmappedPackage(supaKey, pkg.name, tripUuid, orderId);
         continue;
       }
-      let room = null;
-      if (!skipRoomAssignment) {
+      const pkgKey = pkg.id || pkg.trip_option_id || null;
+      const existingRoom = pkgKey ? existingRoomByRegId[`wt_order_${order.id}_${pkgKey}`] : null;
+      let room = existingRoom || null;
+      if (!room && !skipRoomAssignment) {
         room = await pickFreeRoom(supaKey, roomTypeId, trip.start_date, trip.end_date, [...blockedRooms, ...usedThisBooking]);
         if (!room) { console.warn(`[wetravel-webhook] no free room of type ${roomTypeId} for ${trip.start_date}-${trip.end_date}`); continue; }
       }
@@ -403,7 +418,7 @@ exports.handler = async (event) => {
       const take = packages.length === 1 ? guestList.length - guestCursor : Math.max(1, pkg.quantity || 1);
       const roomGuests = guestList.slice(guestCursor, guestCursor + take);
       guestCursor += take;
-      const regId = `wt_order_${order.id}_${pkg.id || pkg.trip_option_id || room}`;
+      const regId = `wt_order_${order.id}_${pkgKey || room}`;
       const finalGuests = roomGuests.length ? roomGuests : [{ name: 'WeTravel Guest', email: '' }];
       // Room Total should reconcile with the full package price, not just what's
       // paid so far — a deposit-only order otherwise shows a tiny Room Total that
