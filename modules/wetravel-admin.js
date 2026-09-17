@@ -119,13 +119,13 @@ function _wtStatusBadge(bk){
 
 function _wtRenderReservations(){
   const el=document.getElementById('wtReservationsBoard');
-  const bks=AppData.bookings.filter(b=>b.source==='wetravel').sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
+  const bks=AppData.bookings.filter(b=>b.source==='wetravel').sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
   if(!bks.length){el.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);font-size:12.5px">Sin reservas de We Travel todavía.</div>';return;}
   el.innerHTML=`<table style="width:100%;border-collapse:collapse">
     <thead><tr style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#f8fafc">
       <th style="text-align:left;padding:8px 14px">Retiro</th><th style="text-align:left;padding:8px 14px">Fechas</th>
       <th style="text-align:left;padding:8px 14px">Huéspedes</th><th style="text-align:left;padding:8px 14px">Cuartos</th>
-      <th style="text-align:right;padding:8px 14px">Pagado</th><th style="text-align:left;padding:8px 14px">Estado</th>
+      <th style="text-align:right;padding:8px 14px">Pagado</th><th style="text-align:right;padding:8px 14px">Pending Balance</th><th style="text-align:left;padding:8px 14px">Estado</th>
     </tr></thead>
     <tbody>
       ${bks.map(bk=>{
@@ -139,6 +139,7 @@ function _wtRenderReservations(){
         ));
         const rooms=regs.map(r=>r.room).filter(Boolean);
         const paid=regs.reduce((s,r)=>s+(r.amountPaid||0),0);
+        const {balance}=calcBkBalance(bk);
         const st=_wtStatusBadge(bk);
         return `<tr style="border-top:1px solid var(--border)">
           <td style="padding:8px 14px;font-size:12.5px;font-weight:700">${escHtml(bk.leaderName||bk.retreatName||'')}</td>
@@ -146,6 +147,7 @@ function _wtRenderReservations(){
           <td style="padding:8px 14px;font-size:12px">${guestLinks.join(', ')||'—'}</td>
           <td style="padding:8px 14px;font-size:12px">${escHtml(rooms.join(', ')||'—')}</td>
           <td style="padding:8px 14px;font-size:12.5px;text-align:right;font-weight:700;color:#059669">${fmt$(paid)}</td>
+          <td style="padding:8px 14px;font-size:12.5px;text-align:right;font-weight:700;color:${balance>0?'#dc2626':'#059669'}">${balance>0?fmt$(balance):'Paid in Full'}</td>
           <td style="padding:8px 14px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${st.bg};color:${st.fg}">${st.label}</span></td>
         </tr>`;
       }).join('')}
