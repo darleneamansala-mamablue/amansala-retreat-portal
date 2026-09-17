@@ -832,7 +832,15 @@ async function tr2LoadData() {
       const fn = (d.firstName || '').toLowerCase().trim();
       const ln = (d.lastName || '').toLowerCase().trim();
       const bk = row.booking_id || (d.bookingId || '');
-      const key = em ? `email|${bk}|${em}` : `name|${fn}_${ln}|${normDate(d.arrivalDate)}|${normDate(d.departureDate)}`;
+      // Name is part of the key even when there's an email — two DIFFERENT real
+      // people sharing one household/family email (a couple booking together,
+      // e.g. Susan & Edward McClelland both using katiesolyoga@gmail.com) used to
+      // collide on email alone and silently collapse into a single row, dropping
+      // one person's whole submission (Jorge's report 2026-09-17: Susan McClelland
+      // missing from Transportation even though she'd submitted). Email-only
+      // matching was meant to catch the SAME person resubmitting the form twice,
+      // which this still does — that case has the same name too.
+      const key = em ? `email|${bk}|${em}|${fn}_${ln}` : `name|${fn}_${ln}|${normDate(d.arrivalDate)}|${normDate(d.departureDate)}`;
       const cur = map.get(key);
       map.set(key, cur ? pickBetter(cur, row) : row);
     }
@@ -902,9 +910,15 @@ async function tr2LoadData() {
   // (already shown elsewhere in this table) ALSO spawned a bogus "Missing transport"
   // duplicate for the same person (Jorge's report 2026-09-17: Billy S/Michelle M/Crystal W
   // showing twice — once with their real flight info, once as a fake "Own Transport" row).
-  const transportedFirstNames = new Map(); // `${bkId}|${firstname}` -> Set of rowIds already counted
+  const transportedFirstNames = new Map(); // `${bkId}|${firstname}` -> true
   tr2AllEntries.forEach(e => {
-    const fn = tr2NormName(e.guest).split(' ')[0];
+    // Plain first token, NOT tr2NormName(e.guest) — that sorts words alphabetically
+    // (for order-insensitive matching elsewhere), so "Michelle Maggiore" became
+    // "maggiore michelle" and its first word was her LAST name, never matching the
+    // room-list guest's actual first name ("michelle") — the exact bug this whole
+    // check exists to avoid (Jorge's report 2026-09-17: Michelle M still duplicated
+    // after Billy S/Crystal W were fixed).
+    const fn = (e.guest || '').trim().split(/\s+/)[0]?.toLowerCase();
     if (!fn) return;
     const key = `${e.retreatId}|${fn}`;
     if (!transportedFirstNames.has(key)) transportedFirstNames.set(key, true);
