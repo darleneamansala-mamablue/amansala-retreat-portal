@@ -331,7 +331,7 @@ function dfInit(){
   dfBuild();
 }
 
-function dfBuild(){
+async function dfBuild(){
   const month=parseInt(document.getElementById('dfMonth').value);
   const year=parseInt(document.getElementById('dfYear').value);
   const rowFilter=document.getElementById('dfRow').value;
@@ -351,6 +351,13 @@ function dfBuild(){
   if(chicaPref==='want')rows=rows.filter(r=>r==='CHICA RETREAT');
   else if(chicaPref==='avoid')rows=rows.filter(r=>r!=='CHICA RETREAT');
   const container=document.getElementById('dfResults');
+  container.innerHTML='<div class="df-no-gaps">Checking Cloudbeds…</div>';
+  // Fetched once for the whole 3-month scan window (not per-slot) — every
+  // room-availability count below must reflect raw Cloudbeds occupancy too,
+  // not just portal data (Darlene's call 2026-09-17: a missed room here is
+  // the difference between sold out and not).
+  const _dfScanStart=fmtISO(new Date(year,month-1,1)),_dfScanEnd=fmtISO(new Date(year,month+2,0));
+  const extRes=await fetchExternalReservationsForRange(_dfScanStart,_dfScanEnd);
   container.innerHTML='';
 
   let anyResult=false;
@@ -470,7 +477,7 @@ function dfBuild(){
         // without knowing whether there's actually enough room inventory
         // free to put guests in for those dates. Reuses rsComputeAvailability
         // (same fixed bed/parent-room logic as Book a Room).
-        const roomAvail=rsComputeAvailability(s.start,s.end);
+        const roomAvail=rsComputeAvailability(s.start,s.end,extRes);
         const totalRoomsAvail=roomAvail.reduce((sum,r)=>sum+r.availableRooms.length,0);
         const roomBreakdown=roomAvail.filter(r=>r.availableRooms.length>0)
           .map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:3px 0;font-size:11.5px"><span>${r.rt.name}</span><span style="font-weight:700;color:#059669">${r.availableRooms.length} of ${r.totalRooms}</span></div>`)
@@ -1014,7 +1021,7 @@ function rsBackToSearch(){
 // incidents: Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b for
 // Nov 1-6, 2026). Without this, a room like that showed up as "available"
 // here even though it's genuinely occupied for the requested dates.
-function rsComputeAvailability(checkIn,checkOut){
+function rsComputeAvailability(checkIn,checkOut,extReservations){
   // room → {label, bkId} of whichever retreat is blocking it, so a blocked
   // room can still be shown (in red) with who has it — lets staff assess
   // whether that retreat could give it up, instead of just hiding it.
@@ -1025,6 +1032,18 @@ function rsComputeAvailability(checkIn,checkOut){
     const info={label:bk.leaderName||bk.retreatName||'Blocked',bkId:bk.id};
     (bk.blockedRooms||[]).forEach(r=>{if(!blockedBy.has(r))blockedBy.set(r,info);});
     AppData.regs.filter(r=>r.bookingId===bk.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{if(!blockedBy.has(r.room))blockedBy.set(r.room,info);});
+  });
+  // A room booked DIRECTLY in Cloudbeds is genuinely occupied whether or
+  // not anyone has clicked to "link" or "import" it into the portal yet —
+  // availability must never depend on that matching/linking step, which is
+  // inherently fuzzy (name matching). This is the actual sold-out-vs-not
+  // question, so it checks raw Cloudbeds occupancy directly, independent of
+  // any portal booking record (Darlene's call 2026-09-17 — a missed room
+  // here is the difference between showing sold out or not).
+  (extReservations||[]).forEach(r=>{
+    if(!(r.startDate<checkOut&&r.endDate>checkIn))return;
+    const info={label:r.guestName||'Cloudbeds reservation',bkId:null};
+    (r.rooms||[]).forEach(room=>{if(!blockedBy.has(room))blockedBy.set(room,info);});
   });
   // A room sold as either one whole double/triple/quad OR individual beds
   // ("13" vs "13a"/"13b") is the SAME physical space. Excluding bd1-4 room
@@ -1054,14 +1073,30 @@ function rsInspectBlocked(bkId){
   switchTab('teacherreg',document.querySelector('.tab-btn[onclick*="teacherreg"]'));
   setTimeout(()=>regSelectRetreat(bkId),80);
 }
-function rsSearch(){
+// Shared by every availability check (Book a Room, Date Finder, the booking
+// availability preview) — fetches raw Cloudbeds occupancy for a date range
+// so a room booked directly in Cloudbeds counts as taken even if nobody has
+// linked/imported it into the portal yet. Availability must never depend on
+// that matching step (Darlene's call 2026-09-17).
+async function fetchExternalReservationsForRange(startDate,endDate){
+  try{
+    const resp=await fetch('/.netlify/functions/cloudbeds?action=getExternalReservations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startDate,endDate})});
+    const data=await resp.json();
+    return data?.success?(data.reservations||[]):[];
+  }catch(e){console.warn('[availability] Cloudbeds fetch failed',e);return[];}
+}
+async function rsSearch(){
   const start=document.getElementById('rs-start').value,end=document.getElementById('rs-end').value;
   const pax=parseInt(document.getElementById('rs-pax').value)||1;
   const errEl=document.getElementById('rs-err');errEl.style.display='none';
   if(!start||!end||end<=start){errEl.textContent='Please choose valid check-in/check-out dates.';errEl.style.display='block';return;}
   _rsCheckIn=start;_rsCheckOut=end;_rsPax=pax;
   const nights=Math.round((pd(end)-pd(start))/DAY_MS);
-  const results=rsComputeAvailability(start,end).sort((a,b)=>b.availableRooms.length-a.availableRooms.length);
+  document.getElementById('rsStep1').style.display='none';
+  document.getElementById('rsStep2').style.display='block';
+  document.getElementById('rsResults').innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Checking Cloudbeds…</div>';
+  const extRes=await fetchExternalReservationsForRange(start,end);
+  const results=rsComputeAvailability(start,end,extRes).sort((a,b)=>b.availableRooms.length-a.availableRooms.length);
   document.getElementById('rs-summary').textContent=`${fmtDate(start)} – ${fmtDate(end)} · ${nights} night${nights!==1?'s':''} · ${pax} guest${pax!==1?'s':''}`;
   const low=venRoIsLow(start);
   const resEl=document.getElementById('rsResults');
@@ -1085,14 +1120,14 @@ function rsSearch(){
         <div id="rs-rooms-${rt.id}" style="display:flex;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap;gap:6px">
           ${roomStatus.map(({room,available,blockedByLabel,blockedByBkId})=>available
             ?`<button class="btn-nav" style="padding:6px 12px;border:1.5px solid #6ee7b7;background:#f0fdf4;color:#15803d;font-weight:700" onclick="rsPickRoom('${room}','${rt.id}')">${room}</button>`
-            :`<button class="btn-nav" title="Blocked by ${escHtml(blockedByLabel)} — click to view their room list" style="padding:6px 12px;border:1.5px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-weight:700" onclick="rsInspectBlocked('${blockedByBkId}')">${room}</button>`
+            :(blockedByBkId
+              ?`<button class="btn-nav" title="Blocked by ${escHtml(blockedByLabel)} — click to view their room list" style="padding:6px 12px;border:1.5px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-weight:700" onclick="rsInspectBlocked('${blockedByBkId}')">${room}</button>`
+              :`<button class="btn-nav" title="Booked directly in Cloudbeds by ${escHtml(blockedByLabel)} — not yet in the portal" style="padding:6px 12px;border:1.5px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-weight:700;cursor:default" disabled>${room}</button>`)
           ).join('')}
         </div>
       </div>`;
     }).join('');
   }
-  document.getElementById('rsStep1').style.display='none';
-  document.getElementById('rsStep2').style.display='block';
 }
 function rsToggleType(rtId){
   const el=document.getElementById('rs-rooms-'+rtId);if(!el)return;
@@ -1119,10 +1154,23 @@ function rcTrackClick(event,room,rtId,trackEl){
   if(busy)return;
   rmOpenNewBooking(room,rtId,clickedDate);
 }
-function showAvailPreview(id){
+async function showAvailPreview(id){
   const bk=AppData.bookings.find(b=>b.id===id);
   if(!bk)return;
   const s=bk.startDate,e=bk.endDate;
+
+  // Show the modal right away with a loading state, then fill it in once
+  // Cloudbeds occupancy comes back — same "must reflect raw Cloudbeds
+  // occupancy, not just linked portal data" requirement as rsComputeAvailability
+  // (Darlene's call 2026-09-17: a missed room here is a sold-out room shown
+  // as available).
+  document.getElementById('availPreviewTitle').textContent=(bk.leaderName||bk.retreatName||'Unnamed Retreat');
+  document.getElementById('availPreviewDates').textContent=`${fmtDate(s)} – ${fmtDate(e)}${bk.pax?' · '+bk.pax+' guests':''}`;
+  document.getElementById('availPreviewRooms').innerHTML='<div style="padding:10px;text-align:center;color:#9ca3af;font-size:12px">Checking Cloudbeds…</div>';
+  document.getElementById('availPreviewConflicts').innerHTML='';
+  document.getElementById('availPreviewFit').innerHTML='';
+  document.getElementById('availPreviewModal').style.display='flex';
+  const extRes=await fetchExternalReservationsForRange(s,e);
 
   // Overlapping bookings (excluding this one and cancelled) — used for the
   // "other retreats in this window" conflict list below, so this retreat
@@ -1144,6 +1192,12 @@ function showAvailPreview(id){
   // incidents: Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
   [...overlapping,bk].forEach(b=>{
     AppData.regs.filter(r=>r.bookingId===b.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
+  });
+  // Rooms booked directly in Cloudbeds count as taken too, whether or not
+  // they've been linked/imported into the portal yet.
+  (extRes||[]).forEach(r=>{
+    if(!(r.startDate<e&&r.endDate>s))return;
+    (r.rooms||[]).forEach(room=>takenRooms.add(room));
   });
   // Same parent/bed propagation as rsComputeAvailability — a bed-level taken
   // room ("13a") must also count its parent ("13") as taken, and vice versa,
@@ -2507,7 +2561,16 @@ function linkExternalReservationToBooking(r,bkId,roomName){
   // was linked before (real incident 2026-09-16, Susan McClelland's extra
   // night vs. her main stay in room 33).
   if(bk.cbReservationIds&&bk.cbReservationIds[roomName]&&bk.cbReservationIds[roomName]!==r.reservationID){
-    showToast(`${roomName} is already linked to a different Cloudbeds reservation for ${label} — likely a separate night. This needs a manual merge, not a simple link.`);
+    // Almost always an extra/extended night booked as its own separate
+    // Cloudbeds reservation for the same room (real incidents: Susan
+    // McClelland room 33, Connie Smith CH4 2026-09-17) — cbReservationIds
+    // can only hold one ID per room, so this can never be "linked" onto
+    // ${label}'s booking without overwriting the other reservation. It CAN
+    // safely become its own standalone portal booking instead, as long as
+    // it doesn't actually overlap ${label}'s dates for this room.
+    if(confirm(`${roomName} already has a different Cloudbeds reservation linked to ${label} for overlapping-name dates.\n\nThis looks like a separate extra-night stay for ${r.guestName}, not part of ${label}'s booking. Import it as its own booking instead?`)){
+      importExternalReservation(r);
+    }
     return;
   }
   if(!confirm(`Link ${r.guestName}'s Cloudbeds reservation (room ${roomName}) to ${label}'s booking?`))return;
