@@ -2332,28 +2332,86 @@ async function rcFetchExternalReservations(startMs){
     const cs=Math.max(rS,startMs),ce=Math.min(rE,winE);
     const li=Math.round((cs-startMs)/DAY_MS),wi=Math.round((ce-cs)/DAY_MS);
     if(wi<=0)return;
-    console.log('[rcExternal] placing',r.reservationID,r.guestName,'rooms:',r.rooms);
+    // A Cloudbeds reservation for a guest ALREADY registered in a real
+    // portal retreat (just never linked via cbReservationIds) should render
+    // as part of that retreat and be clickable to actually join it, not show
+    // as a disconnected grey "import as new booking" block (Darlene's ask
+    // 2026-09-16 — Penelope/Karin, guests within Shannon Jamail's retreat).
+    const match=rcKnownGuestMatch(r.guestName);
+    console.log('[rcExternal] placing',r.reservationID,r.guestName,'rooms:',r.rooms,match?'(matched '+(match.bk.leaderName||match.bk.retreatName)+')':'(no match)');
     (r.rooms||[]).forEach(roomName=>{
       const track=allTracks.find(t=>t.getAttribute('data-room').toLowerCase()===roomName.toLowerCase());
       if(!track){console.warn('[rcExternal] no track for room:',roomName,'available:',trackNames);return;}
       const bl=document.createElement('div');
       bl.className='bk';
-      bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:repeating-linear-gradient(45deg,#d0d0d0,#d0d0d0 4px,#eaeaea 4px,#eaeaea 8px);border-color:#aaa;color:#444;border-left:4px solid #888;cursor:pointer;pointer-events:auto;`;
-      bl.title=`${r.guestName} · ${r.sourceName||r.status} · ${r.startDate} – ${r.endDate} · click to add a charge`;
-      bl.innerHTML=`<span class="bk-n" style="color:#444">${r.guestName}</span><span class="bk-s" style="color:#666;opacity:.9">${fmtShort(pd(r.startDate))} – ${fmtShort(pd(r.endDate))}</span>`;
-      bl.addEventListener('click',()=>importExternalReservation(r));
+      if(match){
+        const pal=RETREAT_PALETTE[getRetreatColorIdx(match.bk)];
+        const label=match.bk.leaderName||match.bk.retreatName||'';
+        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pal.bg};border-color:${pal.border};color:${pal.text};border-left:4px solid ${pal.border};cursor:pointer;pointer-events:auto;`;
+        bl.title=`${r.guestName} · matches ${label} · click to link this room to their booking`;
+        bl.innerHTML=`<span class="bk-n">${r.guestName}</span><span class="bk-s" style="opacity:.75">${label}</span>`;
+        bl.addEventListener('click',()=>linkExternalReservationToBooking(r,match.bk.id,roomName));
+      } else {
+        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:repeating-linear-gradient(45deg,#d0d0d0,#d0d0d0 4px,#eaeaea 4px,#eaeaea 8px);border-color:#aaa;color:#444;border-left:4px solid #888;cursor:pointer;pointer-events:auto;`;
+        bl.title=`${r.guestName} · ${r.sourceName||r.status} · ${r.startDate} – ${r.endDate} · click to add a charge`;
+        bl.innerHTML=`<span class="bk-n" style="color:#444">${r.guestName}</span><span class="bk-s" style="color:#666;opacity:.9">${fmtShort(pd(r.startDate))} – ${fmtShort(pd(r.endDate))}</span>`;
+        bl.addEventListener('click',()=>importExternalReservation(r));
+      }
       track.appendChild(bl);
     });
   });
 }
 
+// Matches a Cloudbeds guest name against every leader name and registered
+// guest name already in the portal (for a non-cancelled booking), so a
+// reservation Cloudbeds knows about but the portal hasn't linked yet
+// (cbReservationIds missing that room) can still be recognized as belonging
+// to a real retreat instead of looking like a brand-new, unrelated walk-in.
+function rcKnownGuestMatch(guestName){
+  const norm=(guestName||'').toLowerCase().trim();
+  if(!norm)return null;
+  for(const bk of AppData.bookings){
+    if(bk.status==='cancelled'||!bk.leaderName)continue;
+    const ln=bk.leaderName.toLowerCase().trim();
+    if(ln&&(norm.includes(ln)||ln.includes(norm)))return{bk};
+  }
+  for(const reg of AppData.regs){
+    const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
+    if(!bk||bk.status==='cancelled')continue;
+    for(const g of(reg.guests||[])){
+      if(!g.name)continue;
+      const gn=g.name.toLowerCase().trim();
+      if(gn&&(norm.includes(gn)||gn.includes(norm)))return{bk,room:reg.room};
+    }
+  }
+  return null;
+}
+// Links a matched Cloudbeds reservation's room into the existing retreat's
+// booking (blockedRooms + cbReservationIds) instead of creating a separate,
+// disconnected booking — Darlene's ask 2026-09-16: a guest's room booked
+// directly in Cloudbeds should become part of their real retreat here,
+// bookable and editable, not sit as an anonymous grey block.
+function linkExternalReservationToBooking(r,bkId,roomName){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const label=bk.leaderName||bk.retreatName||'this retreat';
+  if(!confirm(`Link ${r.guestName}'s Cloudbeds reservation (room ${roomName}) to ${label}'s booking?`))return;
+  if(!bk.blockedRooms)bk.blockedRooms=[];
+  if(!bk.blockedRooms.includes(roomName))bk.blockedRooms.push(roomName);
+  if(!bk.cbReservationIds)bk.cbReservationIds={};
+  bk.cbReservationIds[roomName]=r.reservationID;
+  bk.blockedRoomsUpdatedAt=new Date().toISOString();
+  saveAll();venBuild();rcBuild();
+  logActivity('Cloudbeds reservation linked',`${r.guestName} · ${roomName} → ${label}`,bkId);
+  showToast(`Linked ✓ — ${roomName} is now part of ${label}'s booking.`);
+}
 // A grey/hatched bar (see rcFetchExternalReservations above) is a reservation
-// that lives only in Cloudbeds — no booking/reg record here, which is why it
-// couldn't be clicked into a folio to add a charge. Importing it as a normal
-// 'room_only' booking (same shape rmSaveNewBooking creates for a walk-in)
-// gives it a real folio going forward. Tagging cbReservationIds here also
-// makes rcFetchExternalReservations's portalResIds check exclude it on the
-// next fetch, so it becomes a normal colored bar instead of reappearing grey.
+// that lives only in Cloudbeds — no matching guest found anywhere in the
+// portal, so it's genuinely unrelated to any existing retreat. Importing it
+// as a normal 'room_only' booking (same shape rmSaveNewBooking creates for a
+// walk-in) gives it a real folio going forward. Tagging cbReservationIds
+// here also makes rcFetchExternalReservations's portalResIds check exclude
+// it on the next fetch, so it becomes a normal colored bar instead of
+// reappearing grey.
 function importExternalReservation(r){
   const room=(r.rooms||[])[0];
   if(!room){showToast('Could not find a room for this reservation — check it in Cloudbeds.');return;}
