@@ -229,6 +229,14 @@ async function beToggleRoomType(rtId, enabled) {
   const rt = AppData.roomTypes.find(r => r.id === rtId); if (!rt) return;
   rt.be_enabled = enabled;
   saveAll();
+  // saveAll() only syncs bookings/registrations/app_store — room_types has its
+  // own sync function that nothing here was calling, so every Book/Extra
+  // toggle (and the Edit modal's photo/price/description save) looked like it
+  // worked (toast + visual flip) but never actually reached Supabase. Anyone
+  // reloading — or opening the portal on another device — saw it revert.
+  // Confirmed real incident 2026-09-17: Jorge found every room type back to
+  // disabled despite having turned them on before.
+  syncRoomTypesToSupabase().catch(e=>console.warn('[be] room type sync failed',e));
   showToast(enabled ? 'Room turned on for booking ✓' : 'Room turned off');
   beRenderSettings();
 }
@@ -236,6 +244,7 @@ async function beToggleExtraNights(rtId, enabled) {
   const rt = AppData.roomTypes.find(r => r.id === rtId); if (!rt) return;
   rt.be_extra_nights = enabled;
   saveAll();
+  syncRoomTypesToSupabase().catch(e=>console.warn('[be] room type sync failed',e));
   showToast(enabled ? 'Visible on Extra Nights ✓' : 'Removed from Extra Nights');
   beRenderSettings();
 }
@@ -332,6 +341,7 @@ function beSaveRoomEdit() {
   rt.be_price_single = isNaN(rawSingle) ? null : rawSingle;
   rt.be_price_double = isNaN(rawDouble) ? null : rawDouble;
   saveAll();
+  syncRoomTypesToSupabase().catch(e=>console.warn('[be] room type sync failed',e));
   showToast('Room updated ✓');
   closeModal('beRoomModal');
   beEditRtId = null;
