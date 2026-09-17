@@ -143,20 +143,30 @@ function _renderBlockRoomsGrid(bkId){
     if(other.id===bkId||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     const entry={name:other.leaderName||other.retreatName,bookingId:other.id};
+    // Keys always lowercased — real room-block data is inconsistently cased
+    // (Cloudbeds reports rooms uppercase, e.g. "2B", while this app's own
+    // codes are usually lowercase "2b") and a case-sensitive Map here missed
+    // the match entirely: Samantha Gibson's "2B" never flagged as conflicting
+    // against Heather Sherry's "2b", so the grid showed it as available,
+    // checking+saving it then got silently dropped by blockSave()'s own
+    // (already case-insensitive) conflict check — confirmed real incident
+    // 2026-09-17.
     (other.blockedRooms||[]).forEach(room=>{
-      if(!conflictMap.has(room))conflictMap.set(room,entry);
+      const lk=room.toLowerCase();
+      if(!conflictMap.has(lk))conflictMap.set(lk,entry);
       // Same physical room sold the other way (whole vs. bed) — flag it too,
       // or the same space can be double-booked (real incident: room 4 blocked
       // whole for one retreat while 4a/4b were already blocked for another).
-      getRoomCounterparts(room).forEach(cp=>{if(!conflictMap.has(cp))conflictMap.set(cp,entry);});
+      getRoomCounterparts(room).forEach(cp=>{const lcp=cp.toLowerCase();if(!conflictMap.has(lcp))conflictMap.set(lcp,entry);});
     });
     // Also cross-check real registrations, not just blockedRooms — a room can
     // have a named guest registered in it whose room was never added to
     // blockedRooms ("orphaned registration"; confirmed real incidents:
     // Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
     AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{
-      if(!conflictMap.has(r.room))conflictMap.set(r.room,entry);
-      getRoomCounterparts(r.room).forEach(cp=>{if(!conflictMap.has(cp))conflictMap.set(cp,entry);});
+      const lk=r.room.toLowerCase();
+      if(!conflictMap.has(lk))conflictMap.set(lk,entry);
+      getRoomCounterparts(r.room).forEach(cp=>{const lcp=cp.toLowerCase();if(!conflictMap.has(lcp))conflictMap.set(lcp,entry);});
     });
   });
   // Also add external Cloudbeds reservations (walk-ins, OTAs, etc.)
@@ -176,8 +186,8 @@ function _renderBlockRoomsGrid(bkId){
     const extGuestNorm=(r.guestName||'').toLowerCase().trim();
     if(_leaderNorm&&extGuestNorm&&(extGuestNorm.includes(_leaderNorm)||_leaderNorm.includes(extGuestNorm)))return;
     (r.rooms||[]).forEach(room=>{
-      if(!conflictMap.has(room))conflictMap.set(room,{name:`${r.guestName} (${r.sourceName||'Cloudbeds'})`,bookingId:null});
-      if(!conflictMap.has(room.toLowerCase()))conflictMap.set(room.toLowerCase(),conflictMap.get(room));
+      const lk=room.toLowerCase();
+      if(!conflictMap.has(lk))conflictMap.set(lk,{name:`${r.guestName} (${r.sourceName||'Cloudbeds'})`,bookingId:null});
     });
   });
 
@@ -204,7 +214,7 @@ function _renderBlockRoomsGrid(bkId){
   const rowAllowed=getRowAllowedRooms(bk.row);
   const slRooms=getStraightLineRooms(bk);
   const suggestedRooms=new Set(
-    [...slRooms].filter(r=>!conflictMap.has(r)&&(!rowAllowed||rowAllowed.has(r))&&!myBlocked.has(r))
+    [...slRooms].filter(r=>!conflictMap.has(r.toLowerCase())&&(!rowAllowed||rowAllowed.has(r))&&!myBlocked.has(r))
   );
 
   const body=document.getElementById('blockModalBody');
@@ -240,7 +250,7 @@ function _renderBlockRoomsGrid(bkId){
     // rooms booked and nobody's registered yet" instead of an anonymous BOOKED badge.
     const otherBkStats=new Map(); // bookingId -> {name, rooms:Set, hasGuest}
     rt.rooms.forEach(physRoom=>{
-      const c=conflictMap.get(physRoom);
+      const c=conflictMap.get(physRoom.toLowerCase());
       if(!c||!c.bookingId)return;
       let s=otherBkStats.get(c.bookingId);
       if(!s){s={name:c.name,rooms:new Set(),hasGuest:false};otherBkStats.set(c.bookingId,s);}
@@ -287,10 +297,10 @@ function _renderBlockRoomsGrid(bkId){
     let lastGroup=null;
     uiEntries.forEach(entry=>{
       const room=entry.display;
-      const conflictEntry=entry.physical.map(p=>conflictMap.get(p)).find(Boolean);
+      const conflictEntry=entry.physical.map(p=>conflictMap.get(p.toLowerCase())).find(Boolean);
       const conflict=conflictEntry?.name||'';
       const conflictNoGuestYet=!!(conflictEntry?.bookingId&&otherBkStats.get(conflictEntry.bookingId)&&!otherBkStats.get(conflictEntry.bookingId).hasGuest);
-      const isOther=entry.physical.some(p=>conflictMap.has(p));
+      const isOther=entry.physical.some(p=>conflictMap.has(p.toLowerCase()));
       const isSuggested=entry.physical.some(p=>suggestedRooms.has(p));
       const isChecked=entry.physical.some(p=>myBlocked.has(p))||(noRoomsYet&&isSuggested);
       const guestNames=[];
