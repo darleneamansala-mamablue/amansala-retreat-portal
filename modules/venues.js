@@ -2665,7 +2665,14 @@ function importExternalReservation(r){
   // incident 2026-09-16): a match should have linked it to her existing
   // retreat instead of importing it as a disconnected new booking.
   const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(room)&&datesOverlap(r.startDate,r.endDate,other.startDate,other.endDate));
-  if(conflict){showToast(`Room ${room} is already part of ${conflict.leaderName||conflict.retreatName}'s booking for overlapping dates — this looks like it should be linked to that retreat instead. Try "Check Cloudbeds Links".`);return;}
+  // This is a suggestion, not a hard rule — usually the right call IS to
+  // link it to that retreat instead, but sometimes the retreat's own
+  // blockedRooms entry is the stale/wrong one (e.g. a leftover placeholder)
+  // and this reservation is the real one. Staff can see the reason and
+  // choose to import anyway rather than being stuck with no path forward
+  // (Darlene's ask 2026-09-17 — every block needs a stated reason AND a way
+  // to override it).
+  if(conflict&&!confirm(`Room ${room} is already part of ${conflict.leaderName||conflict.retreatName}'s booking for overlapping dates — this usually means it should be linked to that retreat instead (try "Check Cloudbeds Links").\n\nImport it as its own separate booking anyway?`))return;
   if(!confirm(`Import ${r.guestName}'s Cloudbeds reservation (room ${room}) into the portal so you can add charges to it?`))return;
   const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
   const cbReservationIds={};(r.rooms||[]).forEach(rm=>cbReservationIds[rm]=r.reservationID);
