@@ -225,19 +225,6 @@ function trFmtTulum(iso){
 }
 function trNormName(s){return(s||'').toLowerCase().replace(/\s+/g,' ').trim();}
 function trTransportFullName(s){return trNormName(((s.firstName||'')+' '+(s.lastName||'')).trim());}
-function trGuestMatchesSub(guest,sub){
-  const email=(guest.email||'').toLowerCase().trim();
-  const subEmail=(sub.email||'').toLowerCase().trim();
-  if(email&&subEmail&&email===subEmail)return true;
-  const gName=trNormName(guest.name);
-  const subName=trTransportFullName(sub);
-  if(!gName||!subName)return false;
-  if(gName===subName)return true;
-  const gFirst=gName.split(' ')[0];
-  const subFirst=trNormName(sub.firstName);
-  if(gFirst&&subFirst&&gFirst===subFirst&&(!gName.includes(' ')||!sub.lastName))return true;
-  return false;
-}
 /** Room-list roster is source of truth for who should submit transport. */
 function getTransportRoster(bkId){
   const allSubs=loadTransport().filter(s=>s.bookingId===bkId&&s.status!=='cancelled');
@@ -247,22 +234,39 @@ function getTransportRoster(bkId){
       roster.push({name:g.name,email:(g.email||r.email||'').trim(),room:r.room||''});
     });
   });
-  const matchedSubs=[];
   const usedIdx=new Set();
   const guestSub=new Map(); // guest (roster entry) → matched sub, for a 1:1 per-guest view
+  const matchGuest=(guest,predicate)=>{
+    if(guestSub.has(guest))return;
+    const idx=allSubs.findIndex((s,i)=>!usedIdx.has(i)&&predicate(s));
+    if(idx>=0){usedIdx.add(idx);guestSub.set(guest,allSubs[idx]);}
+  };
+
+  // Tier 1: email match — but ONLY when this email actually identifies a single
+  // roster guest. Several room-list entries fall back to the retreat leader's own
+  // email as a generic placeholder when the real guest never gave one — trusting
+  // a shared placeholder as an identity match let one guest's real submission get
+  // stolen by a completely different guest who happened to share it (Jorge's
+  // report 2026-09-17: Marcia Hoffheins' own submission was showing up attached to
+  // "Carla Carla" because both used marciahoffheins@gmail.com in the room list).
+  const emailCounts=new Map();
+  roster.forEach(g=>{const em=(g.email||'').toLowerCase().trim();if(em)emailCounts.set(em,(emailCounts.get(em)||0)+1);});
   roster.forEach(guest=>{
-    const idx=allSubs.findIndex((s,i)=>!usedIdx.has(i)&&trGuestMatchesSub(guest,s));
-    if(idx>=0){matchedSubs.push(allSubs[idx]);usedIdx.add(idx);guestSub.set(guest,allSubs[idx]);}
+    const em=(guest.email||'').toLowerCase().trim();
+    if(!em||emailCounts.get(em)!==1)return;
+    matchGuest(guest,s=>(s.email||'').toLowerCase().trim()===em);
   });
-  // Second pass: a room-list name that's abbreviated ("Billy S", "MIchelle M") never
-  // exact/email-matches the guest's own fuller self-submitted name ("Billy Stalcup") —
-  // trGuestMatchesSub only takes the bare-first-name fallback when the roster name has
-  // NO last name at all, so an abbreviated initial still fails it. But if that first
-  // name belongs to only ONE roster guest in this booking, it's unambiguous — the same
-  // "unique first name in this booking" fallback the admin Transportation tab already
-  // uses (tr2BuildView's firstNameIdx), which is why that tab showed these guests
-  // correctly while My Transportation showed them as "not submitted" for the exact same
-  // data (Jorge's report 2026-09-17: Marcia Hoffheins' retreat).
+
+  // Tier 2: exact full name.
+  roster.forEach(guest=>matchGuest(guest,s=>trNormName(guest.name)===trTransportFullName(s)));
+
+  // Tier 3: a room-list name that's abbreviated ("Billy S", "MIchelle M") never
+  // exact-matches the guest's own fuller self-submitted name ("Billy Stalcup") —
+  // but if that first name belongs to only ONE roster guest in this booking, it's
+  // unambiguous — the same "unique first name in this booking" fallback the admin
+  // Transportation tab already uses (tr2BuildView's firstNameIdx), which is why
+  // that tab showed these guests correctly while My Transportation showed them as
+  // "not submitted" for the exact same data.
   const firstNameCounts=new Map();
   roster.forEach(g=>{
     const fn=g.name.trim().split(/\s+/)[0].toLowerCase();
@@ -270,22 +274,16 @@ function getTransportRoster(bkId){
     firstNameCounts.set(fn,(firstNameCounts.get(fn)||0)+1);
   });
   roster.forEach(guest=>{
-    if(guestSub.has(guest))return;
     const fn=guest.name.trim().split(/\s+/)[0].toLowerCase();
     if(fn.length<3||firstNameCounts.get(fn)!==1)return;
-    const idx=allSubs.findIndex((s,i)=>!usedIdx.has(i)&&(s.firstName||'').trim().toLowerCase()===fn);
-    if(idx>=0){matchedSubs.push(allSubs[idx]);usedIdx.add(idx);guestSub.set(guest,allSubs[idx]);}
+    matchGuest(guest,s=>(s.firstName||'').trim().toLowerCase()===fn);
   });
-  // Driven off guestSub (the actual per-guest assignment) rather than re-running
-  // trGuestMatchesSub against the whole matchedSubs array — the old version could
-  // under-count "missing" when two roster guests both technically satisfied
-  // trGuestMatchesSub against the same single sub, even though only one of them
-  // actually got it in guestSub.
+
   const missing=roster.filter(guest=>!guestSub.has(guest));
   return{
     roster,
     allSubs,
-    matchedSubs,
+    matchedSubs:[...guestSub.values()],
     missing,
     submittedCount:roster.length-missing.length,
     orphanSubs:allSubs.filter((_,i)=>!usedIdx.has(i)),
@@ -400,7 +398,7 @@ function trTimeToMins(t){if(!t)return 0;const[h,m]=(t||'').split(':');return par
 // not automatic) — same folio-charge shape/pattern as the Spa "Charge to
 // Room" button (spaChargeApptToRoom in modules/spa.js), reusing the
 // roster/email-or-name guest matching already used to check who has
-// submitted transport info (trGuestMatchesSub/getTransportRoster above).
+// submitted transport info (getTransportRoster above).
 
 function trGetPrice(airport,size){
   const c=airport==='cancun';
@@ -851,13 +849,18 @@ async function tr2LoadData() {
     const bkId = row.booking_id;
     const bk = bkMap[bkId];
     const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
-    const room = roomLookup[`${bkId}|${name.toLowerCase()}`] ?? (() => {
+    // A manual correction from the edit modal (d.roomOverride) always wins — the
+    // auto-match (exact name, then unique first name, then unique email) is a best
+    // guess and has no way to fix itself when it's wrong, unlike the room list itself
+    // which staff can just edit directly (Jorge's report 2026-09-17: the Transportation
+    // tab's Room column had no way to adjust it, unlike My Transportation).
+    const room = (d.roomOverride || '').trim() || (roomLookup[`${bkId}|${name.toLowerCase()}`] ?? (() => {
       const fn = (d.firstName || '').trim().toLowerCase();
       if (fn.length >= 3) { const fi = firstNameIdx[`${bkId}|${fn}`]; if (fi && fi.count === 1) return fi.room; }
       const em = (d.email || '').toLowerCase().trim();
       if (em && bkId) { const ei = emailRoomIdx[`${bkId}|${em}`]; if (ei && ei.count === 1) return ei.room; }
       return '';
-    })();
+    })());
     const retreatLabel = bk ? [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ') : 'Sin retiro asignado';
 
     if (d.arrivalDate && d.arrivalTime) {
@@ -1441,8 +1444,8 @@ function tr2EditEntry(rowId) {
   const isSynth = rowId.startsWith('synth-');
   const row = tr2RawRows[rowId];
   if (!row && !isSynth) return;
-  const entry = isSynth ? tr2AllEntries.find(e => e.rowId === rowId) : null;
-  const nameParts = entry ? entry.guest.trim().split(/\s+/) : [];
+  const entry = tr2AllEntries.find(e => e.rowId === rowId) || null;
+  const nameParts = isSynth && entry ? entry.guest.trim().split(/\s+/) : [];
   const d = row?.data || { firstName: nameParts[0]||'', lastName: nameParts.slice(1).join(' ')||'', email: entry?.email||'', arrivalOT:true, departureOT:true };
 
   const sel = (id, opts, val) => `<select id="${id}" style="${TR2_INPUT_S}">${opts.map(o => `<option value="${o.v}"${o.v===val?' selected':''}>${o.l}</option>`).join('')}</select>`;
@@ -1463,6 +1466,11 @@ function tr2EditEntry(rowId) {
         <div><label style="${TR2_LBL_S}">Nombre</label>${inp('tr2-e-fn','text',d.firstName)}</div>
         <div><label style="${TR2_LBL_S}">Apellido</label>${inp('tr2-e-ln','text',d.lastName)}</div>
         <div style="grid-column:1/-1"><label style="${TR2_LBL_S}">Email</label>${inp('tr2-e-email','email',d.email)}</div>
+        <div style="grid-column:1/-1">
+          <label style="${TR2_LBL_S}">Cuarto</label>
+          ${inp('tr2-e-room','text',d.roomOverride||entry?.room||'','ej. 14a')}
+          <div style="font-size:10.5px;color:#9ca3af;margin-top:2px">Se detecta automático por nombre — ajusta aquí solo si quedó mal asignado.</div>
+        </div>
       </div>
       <div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Llegada</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -1504,6 +1512,7 @@ async function tr2SaveEdit(rowId) {
   const updatedData = {
     ...oldData,
     firstName: g('tr2-e-fn')?.value.trim() || '', lastName: g('tr2-e-ln')?.value.trim() || '', email: g('tr2-e-email')?.value.trim() || '',
+    roomOverride: g('tr2-e-room')?.value.trim() || null,
     arrivalDate: g('tr2-e-arr-date')?.value || '', arrivalTime: g('tr2-e-arr-time')?.value || '', arrivalAirport: g('tr2-e-arr-airport')?.value || 'cancun',
     flightNumber: g('tr2-e-flight')?.value.trim() || '', arrivalOT: g('tr2-e-arr-ot')?.checked || false,
     departureDate: g('tr2-e-dep-date')?.value || '', departureTime: g('tr2-e-dep-time')?.value || '', departureAirport: g('tr2-e-dep-airport')?.value || 'cancun',
