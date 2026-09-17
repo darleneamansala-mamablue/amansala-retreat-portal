@@ -2321,8 +2321,12 @@ function rcBuild(){
 
       days.forEach((d,i)=>{if(d.getDate()===1){const gl=document.createElement('div');gl.className='g-gl ms';gl.style.left=i*36+'px';track.appendChild(gl);}if(fmtISO(d)===todayStr){const tl=document.createElement('div');tl.className='g-gl today-l';tl.style.left=(i*36+18)+'px';track.appendChild(tl);}});
 
-      // Show any booking that has blocked this room (registered guest or just blocked)
-      AppData.bookings.filter(bk=>bk.status!=='cancelled'&&entry.physical.some(p=>(bk.blockedRooms||[]).includes(p))).forEach(bk=>{
+      // Show any booking that has blocked this room (registered guest or just blocked).
+      // Case-insensitive — room codes are inconsistently cased in real data (Cloudbeds
+      // reports rooms uppercase, e.g. "2B", vs this app's usually-lowercase "2b"), and an
+      // exact-case match here silently hid a real, currently-checked-in booking from this
+      // grid (same root cause just fixed in the Block Rooms modal's conflict check).
+      AppData.bookings.filter(bk=>bk.status!=='cancelled'&&entry.physical.some(p=>(bk.blockedRooms||[]).some(r=>r.toLowerCase()===p.toLowerCase()))).forEach(bk=>{
         const bkS=pd(bk.startDate).getTime(),bkE=pd(bk.endDate).getTime();
         const winE=startMs+rcShowDays*DAY_MS;
         if(bkS>=winE||bkE<=startMs)return;
