@@ -478,7 +478,7 @@ async function recoverCbReservationIds(){
     Object.entries(d.cbIds||{}).forEach(([room,id])=>{
       if(bk.cbReservationIds[room]!==id){bk.cbReservationIds[room]=id;added++;}
       // Also restore blockedRooms if Cloudbeds has rooms the portal lost
-      if(!(bk.blockedRooms||[]).includes(room)){
+      if(!roomListIncludes(bk.blockedRooms,room)){
         if(!bk.blockedRooms)bk.blockedRooms=[];
         bk.blockedRooms.push(room);
         roomsAdded++;
@@ -494,7 +494,7 @@ async function recoverCbReservationIds(){
       Object.entries(d.cbIds||{}).forEach(([room,id])=>{
         if(!live.cbReservationIds)live.cbReservationIds={};
         live.cbReservationIds[room]=id;
-        if(!(live.blockedRooms||[]).includes(room)){
+        if(!roomListIncludes(live.blockedRooms,room)){
           if(!live.blockedRooms)live.blockedRooms=[];
           live.blockedRooms.push(room);
         }
