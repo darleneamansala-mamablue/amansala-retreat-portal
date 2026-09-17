@@ -630,17 +630,34 @@ async function dfBuildFlexible(){
     return;
   }
 
-  // Global priority, not chronological: perfect straight-line first, then
-  // partial, then lowest total gap; only THEN by date, so the top of the
-  // list is always "what we want to sell."
-  const rank={perfect:0,partial:1,none:2};
-  allSlots.sort((a,b)=>rank[a.sl.status]-rank[b.sl.status]||a.sl.totalGap-b.sl.totalGap||a.start.localeCompare(b.start));
-
-  allSlots.forEach(s=>{
-    const roomAvail=dfRoomAvailFiltered(s.start,s.end,chicaPref,extRes);
-    const totalAvail=roomAvail.reduce((sum,r)=>sum+r.availableRooms.length,0);
-    const analysis={works:true,row:s.row,prevBk:s.prevBk,nextBk:s.nextBk,sl:s.sl,roomAvail,totalAvail};
-    container.appendChild(dfRenderResultCard({start:s.start,end:s.end,nights:s.nights,analysis,isBest:s.sl.status==='perfect'}));
+  // Global priority, not chronological — but grouped under clear section
+  // headers rather than one mixed list, so "perfect" vs "leaves a gap" is
+  // never ambiguous at a glance (Darlene's call 2026-09-17: "they are not
+  // all straightlining" — the fix isn't to hide the non-perfect ones, since
+  // the spec explicitly wants them shown, it's to stop mixing them together).
+  const tiers=[
+    {status:'perfect',label:'⭐ PERFECT STRAIGHT-LINE',sub:'Same-day checkout → check-in on every adjacent side'},
+    {status:'partial',label:'✓ PARTIAL STRAIGHT-LINE',sub:'Aligns on one side, leaves nights open on the other'},
+    {status:'none',label:'⚠ AVAILABLE WITH GAP',sub:'Works, but does not align with either neighboring retreat'},
+  ];
+  allSlots.sort((a,b)=>a.sl.totalGap-b.sl.totalGap||a.start.localeCompare(b.start));
+  tiers.forEach(tier=>{
+    const slots=allSlots.filter(s=>s.sl.status===tier.status);
+    if(!slots.length)return;
+    const hdr=document.createElement('div');
+    hdr.style.cssText='margin:20px 0 4px;font-weight:700;font-size:13px;color:var(--dark)';
+    hdr.textContent=`${tier.label} (${slots.length})`;
+    container.appendChild(hdr);
+    const sub=document.createElement('div');
+    sub.style.cssText='font-size:11.5px;color:var(--muted);margin-bottom:10px';
+    sub.textContent=tier.sub;
+    container.appendChild(sub);
+    slots.forEach(s=>{
+      const roomAvail=dfRoomAvailFiltered(s.start,s.end,chicaPref,extRes);
+      const totalAvail=roomAvail.reduce((sum,r)=>sum+r.availableRooms.length,0);
+      const analysis={works:true,row:s.row,prevBk:s.prevBk,nextBk:s.nextBk,sl:s.sl,roomAvail,totalAvail};
+      container.appendChild(dfRenderResultCard({start:s.start,end:s.end,nights:s.nights,analysis,isBest:false}));
+    });
   });
 }
 
@@ -2297,7 +2314,8 @@ function rcBuild(){
       track.addEventListener('drop',e=>{
         e.preventDefault();track.classList.remove('rc-drag-over');
         if(!rcDragData||rcDragData.rtId!==rt.id)return;
-        rcMoveRoom(rcDragData.bkId,rcDragData.fromRoom,room);
+        if(rcDragData.external)rcMoveExternalReservation(rcDragData.reservationID,rcDragData.fromRoom,room,rcDragData.guestName,rcDragData.startDate,rcDragData.endDate);
+        else rcMoveRoom(rcDragData.bkId,rcDragData.fromRoom,room);
       });
       track.style.cursor='pointer';
 
@@ -2382,12 +2400,12 @@ function rcBuild(){
   bedToPhysical.forEach((beds,displayName)=>{
     const physTrack=document.querySelector(`[data-room="${CSS.escape(displayName)}"]`);
     if(!physTrack)return;
-    const bedOccDays=new Map();
+    const bedOccDays=new Map(); // iso -> Map(bed -> bkId)
     AppData.bookings.filter(bk=>bk.status!=='cancelled').forEach(bk=>{
       beds.forEach(bed=>{
         if(!(bk.blockedRooms||[]).includes(bed))return;
         const bkS=pd(bk.startDate).getTime(),bkE=pd(bk.endDate).getTime();
-        days.forEach(d=>{const t=d.getTime();if(t>=bkS&&t<bkE){const iso=fmtISO(d);if(!bedOccDays.has(iso))bedOccDays.set(iso,new Set());bedOccDays.get(iso).add(bed);}});
+        days.forEach(d=>{const t=d.getTime();if(t>=bkS&&t<bkE){const iso=fmtISO(d);if(!bedOccDays.has(iso))bedOccDays.set(iso,new Map());bedOccDays.get(iso).set(bed,bk.id);}});
       });
     });
     let rs=-1;
@@ -2398,7 +2416,18 @@ function rcBuild(){
       bl.title=`Habitación completa (${beds.join(' + ')} ocupadas)`;
       physTrack.appendChild(bl);rs=-1;
     };
-    days.forEach((d,i)=>{const iso=fmtISO(d);const occ=bedOccDays.get(iso);const full=occ&&occ.size>=beds.length;if(full&&rs<0)rs=i;else if(!full)flush(i);});
+    days.forEach((d,i)=>{
+      const iso=fmtISO(d);
+      const occ=bedOccDays.get(iso);
+      // Only flag "full" when the two bed halves belong to DIFFERENT
+      // bookings (a genuine split/roommate double) — a single retreat's own
+      // whole-room hold already shows its own named box at this room, so
+      // this overlay was just a redundant, unlabeled duplicate of it on top
+      // (Darlene's report 2026-09-17: reading as "blocked" with no
+      // explanation over rooms another retreat already legitimately has).
+      const full=occ&&occ.size>=beds.length&&new Set(occ.values()).size>1;
+      if(full&&rs<0)rs=i;else if(!full)flush(i);
+    });
     flush(days.length);
   });
 
@@ -2552,6 +2581,20 @@ function rcRenderExternalReservations(reservations,startMs){
       const bl=document.createElement('div');
       bl.className='bk';
       bl.setAttribute('data-ext','1');
+      // Draggable straight to a different room, same as a portal booking —
+      // a raw Cloudbeds reservation (typically a guest's extra night booked
+      // separately from their real retreat) needing to move doesn't require
+      // linking/importing it first (Darlene's ask 2026-09-17: "I need to be
+      // able to move these"). Moves the reservation directly in Cloudbeds;
+      // no portal booking record exists for it to update.
+      bl.draggable=true;
+      const extRt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(roomName));
+      bl.addEventListener('dragstart',e=>{
+        rcDragData={external:true,reservationID:r.reservationID,fromRoom:roomName,rtId:extRt?.id||null,guestName:r.guestName,startDate:r.startDate,endDate:r.endDate};
+        e.dataTransfer.effectAllowed='move';
+        setTimeout(()=>bl.classList.add('rc-dragging'),0);
+      });
+      bl.addEventListener('dragend',()=>{bl.classList.remove('rc-dragging');rcDragData=null;});
       // Small cancel button on every raw-Cloudbeds box (matched or not) so an
       // erroneous/duplicate reservation (e.g. Connie Smith's CH4 extra-night
       // booking, 2026-09-17) can be cancelled straight from the calendar
@@ -2903,6 +2946,32 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
     }).catch(e=>console.warn('[CB rcMove]',e));
   }
   saveAll();rcBuild();showToast(`Moved ${fromRoom} → ${toRoom}`);
+}
+// Drag-and-drop move for a raw, unlinked Cloudbeds reservation (see
+// rcRenderExternalReservations) — moves it directly in Cloudbeds. There is
+// no portal booking record to update; it stays a raw reservation afterward,
+// just correctly repositioned (still clickable to link/import, unchanged).
+async function rcMoveExternalReservation(reservationID,fromRoom,toRoom,guestName,startDate,endDate){
+  if(fromRoom===toRoom)return;
+  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(toRoom)&&datesOverlap(startDate,endDate,other.startDate,other.endDate));
+  if(conflict){showToast(`Room ${toRoom} is already part of ${conflict.leaderName||conflict.retreatName}'s booking for these dates.`);return;}
+  showToast(`Moving ${guestName} to ${toRoom}…`);
+  try{
+    const cbCfg=JSON.parse(localStorage.getItem('ama_cb_config')||'{}');
+    const mapping=(cbCfg.mapping||[]).find(m=>m.portalRoom===toRoom);
+    let newCbRoomId=mapping?.cbId||cbRoomLookup?.[toRoom]||null;
+    if(!newCbRoomId){
+      const norm=s=>s.toLowerCase().replace(/\s*-\s*/g,'-');
+      const key=Object.keys(cbRoomLookup||{}).find(k=>norm(k)===norm(toRoom));
+      if(key)newCbRoomId=cbRoomLookup[key];
+    }
+    const resp=await fetch(`${CLOUDBEDS_PROXY}?action=moveReservationRoom`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({reservationId:reservationID,newCbRoomId,newRoomName:toRoom,startDate,endDate})}).then(r=>r.json());
+    if(!resp?.success){showToast(`⚠ Cloudbeds could not confirm moving ${guestName} to ${toRoom} — try again.`);return;}
+    showToast(`Moved ✓ — ${guestName} is now in room ${toRoom}.`);
+    logActivity('Room moved (Cloudbeds-only reservation)',`${guestName}: Room ${fromRoom} → ${toRoom}`,null);
+    rcBuild();
+  }catch(e){console.warn('[rcMoveExternal]',e);showToast('Could not reach Cloudbeds — try again.');}
 }
 
 function rcShift(n){rcStart=addDays(rcStart,n);rcBuild();}
