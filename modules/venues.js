@@ -327,14 +327,238 @@ function dfInit(){
   // Populate month selector to current/upcoming
   const mSel=document.getElementById('dfMonth');
   mSel.value=String(new Date().getMonth());
-  // Populate row filter
-  const rSel=document.getElementById('dfRow');
-  rSel.innerHTML='<option value="">All rows</option>';
-  AppData.venRows.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;rSel.appendChild(o);});
+  // Populate row filters (both modes share the same row list)
+  ['dfRow','dfRowSpecific'].forEach(id=>{
+    const rSel=document.getElementById(id);if(!rSel)return;
+    rSel.innerHTML='<option value="">All rows</option>';
+    AppData.venRows.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;rSel.appendChild(o);});
+  });
+  const specificStartEl=document.getElementById('dfSpecificStart');
+  if(specificStartEl&&!specificStartEl.value)specificStartEl.value=fmtISO(new Date());
   dfBuild();
 }
+function dfOnModeChange(){
+  const mode=document.querySelector('input[name="dfMode"]:checked')?.value||'flexible';
+  document.getElementById('dfSpecificControls').style.display=mode==='specific'?'flex':'none';
+  document.getElementById('dfFlexibleControls').style.display=mode==='flexible'?'flex':'none';
+  document.getElementById('dfResults').innerHTML='';
+}
 
-async function dfBuild(){
+// ══════════════════════════════════════════════════════════════════════════
+// SHARED ROW/STRAIGHT-LINE ANALYSIS — used by both Date Finder modes.
+// A retreat "works" on a row if that row has no conflicting retreat for the
+// exact window AND there's at least one physical room (matching the Chica
+// preference) available for the ENTIRE stay, not just the arrival night.
+// ══════════════════════════════════════════════════════════════════════════
+function dfEligibleRows(chicaPref,rowFilter){
+  let rows=rowFilter?[rowFilter]:AppData.venRows.filter(r=>r!=='SPECIAL EVENTS');
+  if(chicaPref==='want')rows=rows.filter(r=>r==='CHICA RETREAT');
+  else if(chicaPref==='avoid')rows=rows.filter(r=>r!=='CHICA RETREAT');
+  return rows;
+}
+function dfRowWindowInfo(row,start,end){
+  const rowBks=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.row===row&&b.startDate&&b.endDate).sort((a,b)=>a.startDate.localeCompare(b.startDate));
+  const conflict=rowBks.find(b=>datesOverlap(start,end,b.startDate,b.endDate));
+  if(conflict)return{free:false,conflict};
+  const prevBk=rowBks.filter(b=>b.endDate<=start).sort((a,b)=>b.endDate.localeCompare(a.endDate))[0]||null;
+  const nextBk=rowBks.filter(b=>b.startDate>=end).sort((a,b)=>a.startDate.localeCompare(b.startDate))[0]||null;
+  return{free:true,prevBk,nextBk,
+    gapBefore:prevBk?Math.round((pd(start)-pd(prevBk.endDate))/DAY_MS):0,
+    gapAfter:nextBk?Math.round((pd(nextBk.startDate)-pd(end))/DAY_MS):0};
+}
+// Same-day checkout/check-in (gap=0) is a straight-line; a side with no
+// neighbor at all has nothing to fail against, so it never blocks "perfect".
+function dfStraightlineStatus(info){
+  const beforeOk=!info.prevBk||info.gapBefore===0;
+  const afterOk=!info.nextBk||info.gapAfter===0;
+  return{
+    status:(beforeOk&&afterOk)?'perfect':(beforeOk!==afterOk)?'partial':'none',
+    gapBefore:info.gapBefore||0,gapAfter:info.gapAfter||0,totalGap:(info.gapBefore||0)+(info.gapAfter||0),
+  };
+}
+function dfChicaFilterRooms(rooms,chicaPref){
+  return rooms.filter(r=>chicaPref==='want'?roomCategory(r)===1:chicaPref==='avoid'?roomCategory(r)!==1:true);
+}
+function dfRoomAvailFiltered(start,end,chicaPref,extRes){
+  return rsComputeAvailability(start,end,extRes).map(x=>{
+    const rooms=dfChicaFilterRooms(x.rt.rooms,chicaPref);
+    return{...x,totalRooms:rooms.length,availableRooms:x.availableRooms.filter(r=>rooms.includes(r))};
+  }).filter(x=>x.totalRooms>0);
+}
+function dfFindLimitingNight(start,end,chicaPref,extRes){
+  let cur=pd(start);const endD=pd(end);
+  while(cur<endD){
+    const dayStr=fmtISO(cur);
+    const total=dfRoomAvailFiltered(dayStr,fmtISO(addDays(cur,1)),chicaPref,extRes).reduce((s,r)=>s+r.availableRooms.length,0);
+    if(total===0)return dayStr;
+    cur=addDays(cur,1);
+  }
+  return start;
+}
+// Full analysis of ONE candidate [start,end) window.
+function dfAnalyzeWindow(start,end,chicaPref,rowFilter,extRes){
+  const rows=dfEligibleRows(chicaPref,rowFilter);
+  const rowInfos=rows.map(row=>({row,info:dfRowWindowInfo(row,start,end)}));
+  const freeRows=rowInfos.filter(r=>r.info.free);
+  const roomAvail=dfRoomAvailFiltered(start,end,chicaPref,extRes);
+  const totalAvail=roomAvail.reduce((s,r)=>s+r.availableRooms.length,0);
+
+  if(!freeRows.length){
+    const seen=new Set();
+    const conflicts=rowInfos.map(r=>r.info.conflict).filter(c=>c&&!seen.has(c.id)&&seen.add(c.id));
+    const reason=conflicts.length===1
+      ?`These dates overlap ${conflicts[0].leaderName||conflicts[0].retreatName}'s retreat (${fmtDate(conflicts[0].startDate)} – ${fmtDate(conflicts[0].endDate)}), and no other eligible row is free for this window.`
+      :`Every eligible row already has a retreat booked over these dates (${conflicts.map(c=>c.leaderName||c.retreatName).join(', ')}).`;
+    return{works:false,reason};
+  }
+  if(!totalAvail){
+    const limiting=dfFindLimitingNight(start,end,chicaPref,extRes);
+    const chicaNote=chicaPref==='avoid'?' (excluding Chica)':chicaPref==='want'?' (Chica only)':'';
+    return{works:false,reason:`Room inventory is fully booked on ${fmtDate(limiting)}${chicaNote} for these dates.`};
+  }
+  const rank={perfect:0,partial:1,none:2};
+  const scored=freeRows.map(r=>({...r,sl:dfStraightlineStatus(r.info)}));
+  scored.sort((a,b)=>rank[a.sl.status]-rank[b.sl.status]||a.sl.totalGap-b.sl.totalGap);
+  const best=scored[0];
+  return{works:true,row:best.row,prevBk:best.info.prevBk,nextBk:best.info.nextBk,sl:best.sl,roomAvail,totalAvail};
+}
+// Scans outward from the requested start date (same nights/Chica/row filter)
+// for dates that actually work, ranked by straight-line quality then
+// closeness to what was originally requested.
+function dfFindAlternatives(requestedStart,nights,chicaPref,rowFilter,extRes,maxRadius){
+  maxRadius=maxRadius||45;
+  const results=[];
+  for(let offset=1;offset<=maxRadius;offset++){
+    for(const dir of[-1,1]){
+      const candStart=fmtISO(addDays(pd(requestedStart),offset*dir));
+      const candEnd=fmtISO(addDays(pd(candStart),nights));
+      const analysis=dfAnalyzeWindow(candStart,candEnd,chicaPref,rowFilter,extRes);
+      if(analysis.works)results.push({start:candStart,end:candEnd,offset,analysis});
+    }
+  }
+  const rank={perfect:0,partial:1,none:2};
+  results.sort((a,b)=>
+    rank[a.analysis.sl.status]-rank[b.analysis.sl.status]
+    ||a.analysis.sl.totalGap-b.analysis.sl.totalGap
+    ||a.offset-b.offset
+    ||b.analysis.totalAvail-a.analysis.totalAvail
+  );
+  return results.slice(0,2);
+}
+function dfBadge(text,bg,color,border){
+  return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:${bg};color:${color};border:1px solid ${border};white-space:nowrap">${text}</span>`;
+}
+function dfStatusBadges(works,sl){
+  if(!works)return dfBadge('✕ DATES DO NOT WORK','#fef2f2','#991b1b','#fca5a5');
+  const worksBadge=dfBadge('✓ DATES WORK','#f0fdf4','#166534','#86efac');
+  const slBadge=sl.status==='perfect'?dfBadge('⭐ PERFECT STRAIGHT-LINE','#f0fdf4','#166534','#86efac')
+    :sl.status==='partial'?dfBadge('✓ PARTIAL STRAIGHT-LINE','#f0fdfa','#0f766e','#5eead4')
+    :dfBadge('⚠ AVAILABLE WITH GAP','#fffbeb','#92400e','#fde68a');
+  return worksBadge+slBadge;
+}
+function dfRenderResultCard(opts){
+  const{start,end,nights,analysis,isBest}=opts;
+  const card=document.createElement('div');
+  card.className='df-slot '+(analysis.works&&analysis.sl.status==='perfect'?'sl':'nsl');
+  card.style.cssText='flex-direction:column;align-items:flex-start;gap:7px;padding:14px 16px;max-width:440px;box-sizing:border-box;margin-bottom:12px;';
+  let html=isBest?'<div style="font-size:11px;font-weight:800;color:#166534;letter-spacing:.5px">⭐ BEST FIT</div>':'';
+  html+=`<div style="font-size:15px;font-weight:700">${fmtDate(start)} – ${fmtDate(end)} <span style="font-weight:400;color:var(--muted);font-size:12px">(${nights} night${nights!==1?'s':''})</span></div>`;
+  html+=`<div style="display:flex;gap:6px;flex-wrap:wrap">${dfStatusBadges(analysis.works,analysis.sl)}</div>`;
+  if(!analysis.works){
+    html+=`<div style="font-size:12px;color:#7f1d1d;background:#fef2f2;border-radius:6px;padding:7px 10px;width:100%;box-sizing:border-box">${escHtml(analysis.reason)}</div>`;
+  } else {
+    if(analysis.sl.status!=='perfect'){
+      html+=`<div style="font-size:11.5px;color:var(--muted)">Gap before: <b>${analysis.sl.gapBefore}</b> &nbsp;·&nbsp; Gap after: <b>${analysis.sl.gapAfter}</b> &nbsp;·&nbsp; Total gap nights: <b>${analysis.sl.totalGap}</b></div>`;
+    }
+    if(analysis.prevBk||analysis.nextBk){
+      const parts=[];
+      if(analysis.prevBk)parts.push(`← ${escHtml(analysis.prevBk.leaderName||analysis.prevBk.retreatName)} ends ${fmtDate(analysis.prevBk.endDate)}`);
+      if(analysis.nextBk)parts.push(`${escHtml(analysis.nextBk.leaderName||analysis.nextBk.retreatName)} starts ${fmtDate(analysis.nextBk.startDate)} →`);
+      html+=`<div style="font-size:10.5px;color:#94a3b8">${parts.join(' &nbsp;·&nbsp; ')}${analysis.row?' &nbsp;·&nbsp; '+escHtml(analysis.row):''}</div>`;
+    }
+    const roomBreakdown=analysis.roomAvail.filter(r=>r.availableRooms.length>0)
+      .map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:3px 0;font-size:11.5px"><span>${r.rt.name}</span><span style="font-weight:700;color:#059669">${r.availableRooms.length} of ${r.totalRooms}</span></div>`)
+      .join('')||'<div style="font-size:11.5px;color:#9ca3af;font-style:italic">No rooms available.</div>';
+    const concurrent=AppData.bookings.filter(b=>b.status!=='cancelled'&&datesOverlap(start,end,b.startDate,b.endDate)&&b.row!==analysis.row);
+    html+=`<button type="button" onclick="const p=this.nextElementSibling;p.style.display=p.style.display==='block'?'none':'block';" style="font-size:10.5px;font-weight:700;color:#059669;background:none;border:none;cursor:pointer;padding:2px 0 0;text-decoration:underline">${analysis.totalAvail} room${analysis.totalAvail!==1?'s':''} available ▾</button>`;
+    html+=`<div style="display:none;padding:8px 10px;background:#fff;border:1px solid var(--border);border-radius:8px;width:100%;box-sizing:border-box">${roomBreakdown}</div>`;
+    if(concurrent.length){
+      html+=`<button type="button" onclick="const p=this.nextElementSibling;p.style.display=p.style.display==='block'?'none':'block';" style="font-size:10.5px;font-weight:700;color:#f59e0b;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">⚑ ${concurrent.length} other retreat${concurrent.length!==1?'s':''} booked ▾</button>`;
+      html+=`<div style="display:none;font-size:11px;color:var(--muted)">${concurrent.map(b=>escHtml(b.leaderName||b.retreatName)).join(', ')}</div>`;
+    }
+    const rowEsc=(analysis.row||'').replace(/'/g,"\\'");
+    html+=`<button class="df-reserve-btn" onclick="dfOpenReserve('${rowEsc}','${start}','${end}',${nights})">Reserve</button>`;
+  }
+  card.innerHTML=html;
+  return card;
+}
+
+function dfBuild(){
+  const mode=document.querySelector('input[name="dfMode"]:checked')?.value||'flexible';
+  return mode==='specific'?dfBuildSpecific():dfBuildFlexible();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MODE 1 — SPECIFIC START DATE. "Can I come Feb 27 for 5 nights?" Answers
+// availability and straight-line quality for that EXACT window, then (if it
+// doesn't work, or works but doesn't straight-line perfectly) automatically
+// suggests nearby dates that do — Darlene's ask 2026-09-17.
+// ══════════════════════════════════════════════════════════════════════════
+async function dfBuildSpecific(){
+  const start=document.getElementById('dfSpecificStart').value;
+  const nights=parseInt(document.getElementById('dfSpecificNights').value);
+  const rowFilter=document.getElementById('dfRowSpecific').value;
+  const chicaPref=document.getElementById('dfChicaPrefSpecific')?.value||'';
+  const container=document.getElementById('dfResults');
+  if(!start){container.innerHTML='<div class="df-no-gaps">Choose a start date.</div>';return;}
+  const end=fmtISO(addDays(pd(start),nights));
+  container.innerHTML='<div class="df-no-gaps">Checking Cloudbeds…<br><span style="font-size:11.5px">This can take up to 30-40 seconds.</span></div>';
+  const scanStart=fmtISO(addDays(pd(start),-60)),scanEnd=fmtISO(addDays(pd(start),60));
+  const extRes=await fetchExternalReservationsForRange(scanStart,scanEnd);
+  container.innerHTML='';
+
+  const analysis=dfAnalyzeWindow(start,end,chicaPref,rowFilter,extRes);
+  const reqHdr=document.createElement('div');
+  reqHdr.style.cssText='font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px;margin-bottom:8px';
+  reqHdr.textContent='REQUESTED DATES';
+  container.appendChild(reqHdr);
+  container.appendChild(dfRenderResultCard({start,end,nights,analysis,isBest:false}));
+
+  if(!analysis.works||analysis.sl.status!=='perfect'){
+    const alts=dfFindAlternatives(start,nights,chicaPref,rowFilter,extRes);
+    if(alts.length){
+      const best=alts[0];
+      const hdr=document.createElement('div');
+      hdr.style.cssText='margin:24px 0 8px;font-weight:700;font-size:13px;color:var(--dark)';
+      hdr.textContent=analysis.works?'BETTER STRAIGHT-LINE OPTION':'NEAREST DATES THAT WORK';
+      container.appendChild(hdr);
+      const msg=document.createElement('div');
+      msg.style.cssText='font-size:12.5px;color:var(--muted);margin-bottom:12px;line-height:1.5;max-width:520px';
+      msg.textContent=analysis.works
+        ?`Your requested dates ${fmtDate(start)} – ${fmtDate(end)} work, but create ${analysis.sl.totalGap} unused gap night${analysis.sl.totalGap!==1?'s':''}. Moving to ${fmtDate(best.start)} – ${fmtDate(best.end)} ${best.analysis.sl.status==='perfect'?'creates a perfect straight-line with 0 gap nights':'is a better fit with '+best.analysis.sl.totalGap+' gap night'+(best.analysis.sl.totalGap!==1?'s':'')}.`
+        :`Your requested dates ${fmtDate(start)} – ${fmtDate(end)} cannot be accommodated — ${analysis.reason} The closest ${nights}-night option that works is ${fmtDate(best.start)} – ${fmtDate(best.end)}.`;
+      container.appendChild(msg);
+      const altsWrap=document.createElement('div');altsWrap.style.cssText='display:flex;flex-wrap:wrap;gap:14px';
+      alts.forEach((alt,i)=>altsWrap.appendChild(dfRenderResultCard({start:alt.start,end:alt.end,nights,analysis:alt.analysis,isBest:i===0})));
+      container.appendChild(altsWrap);
+    } else if(!analysis.works){
+      const none=document.createElement('div');
+      none.style.cssText='margin-top:16px;font-size:12.5px;color:var(--muted)';
+      none.textContent=`No ${nights}-night option was found within 45 days of ${fmtDate(start)} either. Try a different duration or Chica preference.`;
+      container.appendChild(none);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MODE 2 — FLEXIBLE DATES. Scans the whole selected month across every
+// eligible row/duration/preferred-day combination, then ranks ALL results
+// globally by operational value (perfect straight-line first, then partial,
+// then lowest gap) instead of just listing them chronologically per row —
+// "show sales staff the dates we WANT to sell first" (Darlene's ask
+// 2026-09-17).
+// ══════════════════════════════════════════════════════════════════════════
+async function dfBuildFlexible(){
   const month=parseInt(document.getElementById('dfMonth').value);
   const year=parseInt(document.getElementById('dfYear').value);
   const rowFilter=document.getElementById('dfRow').value;
@@ -343,82 +567,39 @@ async function dfBuild(){
   const dayFilters=Array.from(document.querySelectorAll('#tab-datefinder .df-day-checks input:checked')).map(cb=>parseInt(cb.value));
   if(!durations.length){document.getElementById('dfResults').innerHTML='<div class="df-no-gaps">Select at least one duration above.</div>';return;}
 
-  // Search window: 3 months centered on selected month (give context either side)
-  const winStart=new Date(year,month,1);
-  const winEnd=new Date(year,month+1,0); // last day of selected month
-
-  let rows=rowFilter?[rowFilter]:AppData.venRows;
-  // Chica preference: "want" narrows to just Chica Retreat, "avoid" excludes
-  // it, "OK to mix" (empty) leaves every row as-is — Darlene's ask
-  // 2026-09-16.
-  if(chicaPref==='want')rows=rows.filter(r=>r==='CHICA RETREAT');
-  else if(chicaPref==='avoid')rows=rows.filter(r=>r!=='CHICA RETREAT');
   const container=document.getElementById('dfResults');
-  container.innerHTML='<div class="df-no-gaps">Checking Cloudbeds…</div>';
-  // Fetched once for the whole 3-month scan window (not per-slot) — every
-  // room-availability count below must reflect raw Cloudbeds occupancy too,
-  // not just portal data (Darlene's call 2026-09-17: a missed room here is
-  // the difference between sold out and not).
+  container.innerHTML='<div class="df-no-gaps">Checking Cloudbeds…<br><span style="font-size:11.5px">This can take up to 30-40 seconds.</span></div>';
   const _dfScanStart=fmtISO(new Date(year,month-1,1)),_dfScanEnd=fmtISO(new Date(year,month+2,0));
   const extRes=await fetchExternalReservationsForRange(_dfScanStart,_dfScanEnd);
   container.innerHTML='';
 
-  // Resort-wide (every row, not just the one being scanned) — a preferred
-  // start day is only a real option if guests are actually leaving that day
-  // somewhere; an arbitrary Thursday with no departures isn't a workable
-  // changeover date (Darlene's call 2026-09-17).
+  const rows=dfEligibleRows(chicaPref,rowFilter);
   const allCheckoutDates=new Set();
   AppData.bookings.forEach(b=>{if(b.status!=='cancelled'&&b.endDate)allCheckoutDates.add(b.endDate);});
   (extRes||[]).forEach(r=>{if(r.endDate)allCheckoutDates.add(r.endDate);});
 
-  let anyResult=false;
+  const mStart=new Date(year,month,1),mEnd=new Date(year,month+1,1);
+  const scanStart=new Date(year,month-1,1),scanEnd=new Date(year,month+2,0);
+  const allSlots=[];
+
   rows.forEach(row=>{
-    const rowBks=AppData.bookings
-      .filter(b=>b.status!=='cancelled'&&b.row===row&&b.startDate&&b.endDate)
-      .sort((a,b)=>a.startDate.localeCompare(b.startDate));
-
-    // Build gap list: look at a wide window (prev month → 2 months after) to catch edge gaps
-    const scanStart=new Date(year,month-1,1);
-    const scanEnd=new Date(year,month+2,0);
-
-    // Collect all gap windows not covered by any booking in this row
+    const rowBks=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.row===row&&b.startDate&&b.endDate).sort((a,b)=>a.startDate.localeCompare(b.startDate));
     const gaps=[];
     let cursor=fmtISO(scanStart);
     rowBks.forEach(bk=>{
-      if(bk.startDate>cursor){
-        gaps.push({start:cursor,end:bk.startDate,prevBk:null,nextBk:bk});
-      }
-      if(bk.endDate>cursor) cursor=bk.endDate;
+      if(bk.startDate>cursor)gaps.push({start:cursor,end:bk.startDate,prevBk:null,nextBk:bk});
+      if(bk.endDate>cursor)cursor=bk.endDate;
     });
-    // Gap after last booking
     const scanEndStr=fmtISO(scanEnd);
-    if(cursor<scanEndStr) gaps.push({start:cursor,end:scanEndStr,prevBk:rowBks[rowBks.length-1]||null,nextBk:null});
-
-    // Assign prevBk properly for each gap
+    if(cursor<scanEndStr)gaps.push({start:cursor,end:scanEndStr,prevBk:rowBks[rowBks.length-1]||null,nextBk:null});
     let lastBk=null;
-    const gapsWithPrev=[];
-    rowBks.forEach(bk=>{
-      const g=gaps.find(g=>g.end===bk.startDate);
-      if(g)g.prevBk=lastBk;
-      lastBk=bk;
-    });
+    rowBks.forEach(bk=>{const g=gaps.find(g=>g.end===bk.startDate);if(g)g.prevBk=lastBk;lastBk=bk;});
 
-    // For each gap, find slots that overlap the selected month and fit requested durations
-    const rowSlots=[];
     gaps.forEach(gap=>{
       const gapDays=Math.round((pd(gap.end)-pd(gap.start))/DAY_MS);
-      const maxDur=Math.max(...durations);
       if(gapDays<Math.min(...durations))return;
-
-      const gapKey=gap.start+'_'+gap.end;
       durations.forEach(nights=>{
         if(gapDays<nights)return;
-        // With no day-of-week preference, only the straight-line start (gap
-        // start = end of prev retreat) is offered, same as before. With a
-        // preference set, scan every start date in the gap that lands on a
-        // wanted weekday (e.g. Thursday, for a Thu–Sun weekend retreat) —
-        // Darlene's ask 2026-09-16.
-        const mStart=new Date(year,month,1),mEnd=new Date(year,month+1,1);
         let cur=pd(gap.start);
         const gapEndD=pd(gap.end);
         while(true){
@@ -431,16 +612,10 @@ async function dfBuild(){
           // changeover date, just an arbitrary weekday inside the gap.
           const wanted=dayFilters.length?(dayFilters.includes(cur.getDay())&&(isGapStart||allCheckoutDates.has(candStart))):isGapStart;
           if(wanted&&!(cur>=mEnd||candEndD<=mStart)){
-            // Once a slot is placed, jump straight to its end before looking
-            // for the next candidate — otherwise a short gap with several
-            // preferred weekdays checked produces multiple OVERLAPPING
-            // windows that all compete for the same nights (booking one
-            // invalidates the others), which just reads as duplicate/wrong
-            // results instead of real distinct options (Darlene's report
-            // 2026-09-16).
-            const isStraightLinePrev=isGapStart&&!!gap.prevBk;
-            const isStraightLineNext=gap.nextBk&&candEnd===gap.nextBk.startDate;
-            rowSlots.push({nights,start:candStart,end:candEnd,gapDays,gapKey,prevBk:gap.prevBk,nextBk:gap.nextBk,isStraightLinePrev,isStraightLineNext});
+            const gapBefore=gap.prevBk?Math.round((pd(candStart)-pd(gap.prevBk.endDate))/DAY_MS):0;
+            const gapAfter=gap.nextBk?Math.round((pd(gap.nextBk.startDate)-pd(candEnd))/DAY_MS):0;
+            const sl=dfStraightlineStatus({prevBk:gap.prevBk,nextBk:gap.nextBk,gapBefore,gapAfter});
+            allSlots.push({row,nights,start:candStart,end:candEnd,prevBk:gap.prevBk,nextBk:gap.nextBk,sl});
             cur=candEndD;
             continue;
           }
@@ -448,83 +623,25 @@ async function dfBuild(){
         }
       });
     });
-
-    if(!rowSlots.length)return;
-    anyResult=true;
-
-    const card=document.createElement('div');card.className='df-row-card';
-    card.innerHTML=`<div class="df-row-hdr">${row}</div>`;
-
-    // Group slots by the ORIGINAL gap they came from (not by each slot's own
-    // start date) — a day-of-week preference can produce several candidate
-    // start dates from the same gap, and they should all appear together
-    // under one "X nights open" header, not one header each.
-    const gapGroups=new Map();
-    rowSlots.forEach(s=>{
-      const key=s.gapKey;
-      if(!gapGroups.has(key))gapGroups.set(key,{gapDays:s.gapDays,prevBk:s.prevBk,nextBk:s.nextBk,slots:[]});
-      gapGroups.get(key).slots.push(s);
-    });
-
-    gapGroups.forEach(({gapDays,prevBk,nextBk,slots})=>{
-      const gapDiv=document.createElement('div');gapDiv.className='df-gap';
-      const adjParts=[];
-      if(prevBk)adjParts.push(`← ${prevBk.leaderName||prevBk.retreatName} ends ${fmtDate(prevBk.endDate)}`);
-      if(nextBk)adjParts.push(`${nextBk.leaderName||nextBk.retreatName} starts ${fmtDate(nextBk.startDate)} →`);
-      const adjTxt=adjParts.length?`<span class="df-gap-adj">${adjParts.join(' &nbsp;·&nbsp; ')}</span>`:'<span class="df-gap-adj">No adjacent retreats</span>';
-      gapDiv.innerHTML=`<div class="df-gap-meta"><b>${gapDays} nights open</b> ${adjTxt}</div>`;
-
-      const slotsDiv=document.createElement('div');slotsDiv.className='df-slots';
-      slots.forEach(s=>{
-        // A slot only earns the "Straight-line" badge if it lines up on
-        // EVERY side that actually has a neighbor to line up with — starting
-        // flush against the previous retreat's checkout while still leaving
-        // nights open before the next retreat is not a straight-line, it's a
-        // partial carve-out of the gap (Darlene's report 2026-09-17).
-        const isSL=(!s.prevBk||s.isStraightLinePrev)&&(!s.nextBk||s.isStraightLineNext);
-        // Count retreats on other rows running concurrently with this slot
-        const concurrent=AppData.bookings.filter(b=>
-          b.status!=='cancelled'&&b.row!==row&&
-          datesOverlap(s.start,s.end,b.startDate,b.endDate)
-        );
-        const concurN=concurrent.length;
-        const concurLabel=concurN===0
-          ?'<span style="font-size:10px;color:#94a3b8">No other retreats</span>'
-          :`<span style="font-size:10px;color:#f59e0b;font-weight:700" title="${concurrent.map(b=>b.leaderName||b.retreatName).join(', ')}">⚑ ${concurN} retreat${concurN>1?'s':''} also booked</span>`;
-        // Physical room availability for this exact date range — Darlene's
-        // ask 2026-09-16: a gap in the venue row schedule doesn't mean much
-        // without knowing whether there's actually enough room inventory
-        // free to put guests in for those dates. Reuses rsComputeAvailability
-        // (same fixed bed/parent-room logic as Book a Room).
-        const roomAvail=rsComputeAvailability(s.start,s.end,extRes);
-        const totalRoomsAvail=roomAvail.reduce((sum,r)=>sum+r.availableRooms.length,0);
-        const roomBreakdown=roomAvail.filter(r=>r.availableRooms.length>0)
-          .map(r=>`<div style="display:flex;justify-content:space-between;gap:14px;padding:3px 0;font-size:11.5px"><span>${r.rt.name}</span><span style="font-weight:700;color:#059669">${r.availableRooms.length} of ${r.totalRooms}</span></div>`)
-          .join('')||'<div style="font-size:11.5px;color:#9ca3af;font-style:italic">No rooms available for these dates.</div>';
-        const slotEl=document.createElement('div');
-        slotEl.className='df-slot '+(isSL?'sl':'nsl');
-        slotEl.style.flexDirection='column';slotEl.style.alignItems='flex-start';slotEl.style.gap='3px';
-        const rowEsc=row.replace(/'/g,"\\'");
-        slotEl.innerHTML=`<div style="display:flex;align-items:center;gap:6px"><span class="df-slot-nights">${s.nights}N</span>`
-          +`<span>${fmtDate(s.start)} – ${fmtDate(s.end)}</span>`
-          +(isSL?`<span style="font-size:10px;opacity:.75">↔ Straight-line</span>`:'')+'</div>'
-          +`<div style="display:flex;align-items:center;gap:10px;padding-left:2px">${concurLabel}`
-          +`<button class="df-reserve-btn" onclick="dfOpenReserve('${rowEsc}','${s.start}','${s.end}',${s.nights})">Reserve</button></div>`
-          +`<button type="button" onclick="const p=this.nextElementSibling;p.style.display=p.style.display==='block'?'none':'block';" style="font-size:10.5px;font-weight:700;color:${totalRoomsAvail?'#059669':'#dc2626'};background:none;border:none;cursor:pointer;padding:2px 0 0;text-decoration:underline">${totalRoomsAvail} room${totalRoomsAvail!==1?'s':''} available ▾</button>`
-          +`<div style="display:none;margin-top:2px;padding:8px 10px;background:#fff;border:1px solid var(--border);border-radius:8px;width:100%;max-width:320px;box-sizing:border-box">${roomBreakdown}</div>`;
-        slotEl.title=`${s.nights}-night retreat: ${fmtDate(s.start)} – ${fmtDate(s.end)}${concurN?'\nAlso booked: '+concurrent.map(b=>b.leaderName||b.retreatName).join(', '):''}`;
-        slotsDiv.appendChild(slotEl);
-      });
-      gapDiv.appendChild(slotsDiv);
-      card.appendChild(gapDiv);
-    });
-
-    container.appendChild(card);
   });
 
-  if(!anyResult){
+  if(!allSlots.length){
     container.innerHTML=`<div class="df-no-gaps">No openings found in ${MONTHS[month]} ${year} for the selected durations and rows.</div>`;
+    return;
   }
+
+  // Global priority, not chronological: perfect straight-line first, then
+  // partial, then lowest total gap; only THEN by date, so the top of the
+  // list is always "what we want to sell."
+  const rank={perfect:0,partial:1,none:2};
+  allSlots.sort((a,b)=>rank[a.sl.status]-rank[b.sl.status]||a.sl.totalGap-b.sl.totalGap||a.start.localeCompare(b.start));
+
+  allSlots.forEach(s=>{
+    const roomAvail=dfRoomAvailFiltered(s.start,s.end,chicaPref,extRes);
+    const totalAvail=roomAvail.reduce((sum,r)=>sum+r.availableRooms.length,0);
+    const analysis={works:true,row:s.row,prevBk:s.prevBk,nextBk:s.nextBk,sl:s.sl,roomAvail,totalAvail};
+    container.appendChild(dfRenderResultCard({start:s.start,end:s.end,nights:s.nights,analysis,isBest:s.sl.status==='perfect'}));
+  });
 }
 
 

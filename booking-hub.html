@@ -2943,7 +2943,44 @@
 <!-- ============================= TAB 5: DATE FINDER ============================= -->
 <div class="tab-panel" id="tab-datefinder">
   <div class="df-toolbar">
-    <div class="df-controls">
+    <div class="df-controls" style="width:100%">
+      <div class="df-ctrl-group">
+        <label class="df-lbl">Search by</label>
+        <div style="display:flex;gap:14px;align-items:center;height:34px">
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="radio" name="dfMode" value="specific" onchange="dfOnModeChange()"> Specific Start Date</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="radio" name="dfMode" value="flexible" checked onchange="dfOnModeChange()"> Flexible Dates</label>
+        </div>
+      </div>
+    </div>
+    <div class="df-controls" id="dfSpecificControls" style="display:none">
+      <div class="df-ctrl-group">
+        <label class="df-lbl">Start date</label>
+        <input type="date" class="date-inp" id="dfSpecificStart">
+      </div>
+      <div class="df-ctrl-group">
+        <label class="df-lbl">Nights</label>
+        <select class="df-sel" id="dfSpecificNights">
+          <option value="4">4</option><option value="5" selected>5</option><option value="6">6</option>
+          <option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>
+        </select>
+      </div>
+      <div class="df-ctrl-group">
+        <label class="df-lbl">Rows</label>
+        <select class="df-sel" id="dfRowSpecific">
+          <option value="">All rows</option>
+        </select>
+      </div>
+      <div class="df-ctrl-group">
+        <label class="df-lbl">Chica</label>
+        <select class="df-sel" id="dfChicaPrefSpecific">
+          <option value="">OK to mix</option>
+          <option value="want">Wants Chica</option>
+          <option value="avoid">Does not want Chica</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="dfBuild()" style="margin-left:8px">Check These Dates</button>
+    </div>
+    <div class="df-controls" id="dfFlexibleControls">
       <div class="df-ctrl-group">
         <label class="df-lbl">Month</label>
         <select class="df-sel" id="dfMonth">
@@ -5955,7 +5992,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260917i"></script>
+<script src="modules/venues.js?v=20260917j"></script>
 <script src="modules/room-optimizer.js?v=20260917c"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js"></script>
