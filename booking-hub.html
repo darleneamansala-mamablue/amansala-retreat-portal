@@ -1210,6 +1210,8 @@
       <button class="btn-nav" onclick="rcShift(rcShowDays)">Next &rsaquo;</button>
       <button class="btn btn-primary btn-sm" onclick="rsOpen()" style="white-space:nowrap">+ Book a Room</button>
       <button class="btn btn-secondary btn-sm" onclick="rclOpen()" style="white-space:nowrap">🔗 Check Cloudbeds Links</button>
+      <button class="btn btn-secondary btn-sm" onclick="ozOpenStraightline()" style="white-space:nowrap;border-color:#7c3aed;color:#6d28d9">✨ Straightline Rooms</button>
+      <span id="ozOverbookBadge" onclick="ozOpenOverbookModal()" style="display:none;white-space:nowrap;cursor:pointer;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;font-weight:700;font-size:12px;border-radius:8px;padding:6px 12px;"></span>
       <div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center">
         <button class="btn-nav" onclick="rcGoToMonth(0)"  style="padding:5px 7px;font-size:11.5px">Jan</button>
         <button class="btn-nav" onclick="rcGoToMonth(1)"  style="padding:5px 7px;font-size:11.5px">Feb</button>
@@ -2386,6 +2388,33 @@
       <div id="rclResults"></div>
     </div>
     <div class="modal-foot"><div class="l"><button class="btn btn-primary btn-sm" id="rclLinkAllBtn" style="display:none" onclick="rclLinkAll()">Link All</button></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('rclModal')">Close</button></div></div>
+  </div>
+</div>
+
+<!-- ===== ROOM OPTIMIZER: STRAIGHTLINE PREVIEW ===== -->
+<div class="modal-overlay" id="ozPreviewModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-hdr"><div><h2>Room Optimization</h2><div class="modal-sub">Analyzes the currently selected calendar range — nothing is moved until you approve it</div></div><button class="modal-x" onclick="closeModal('ozPreviewModal')">&times;</button></div>
+    <div class="modal-body" id="ozPreviewBody"></div>
+    <div class="modal-foot" id="ozPreviewFoot"></div>
+  </div>
+</div>
+
+<!-- ===== ROOM OPTIMIZER: REVIEW SUGGESTED MOVES ===== -->
+<div class="modal-overlay" id="ozReviewModal">
+  <div class="modal wide">
+    <div class="modal-hdr"><div><h2>Review Suggested Moves</h2><div class="modal-sub">Approve or skip each move — skipped moves are never sent to Cloudbeds</div></div><button class="modal-x" onclick="closeModal('ozReviewModal')">&times;</button></div>
+    <div class="modal-body" id="ozReviewBody"></div>
+    <div class="modal-foot" id="ozReviewFoot"></div>
+  </div>
+</div>
+
+<!-- ===== ROOM OPTIMIZER: OVERBOOKING ===== -->
+<div class="modal-overlay" id="ozOverbookModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-hdr"><div><h2>🚨 Overbooking</h2><div class="modal-sub">Nights where more rooms are booked than exist in that property/category</div></div><button class="modal-x" onclick="closeModal('ozOverbookModal')">&times;</button></div>
+    <div class="modal-body" id="ozOverbookBody"></div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('ozOverbookModal')">Close</button></div></div>
   </div>
 </div>
 
@@ -5903,7 +5932,7 @@ function switchTab(id,btn){
   if(id==='pipeline')  pipeRender();
   if(id==='booking-engine') beInit();
   if(id==='venues')    venBuild();
-  if(id==='roomcal')   rcBuild();
+  if(id==='roomcal'){rcBuild();if(typeof ozRefreshOverbookBadge==='function')ozRefreshOverbookBadge();}
   if(id==='teacherreg'){regInitSel();regRender();}
   if(id==='builder')   bldInitTab();
   if(id==='datefinder') dfInit();
@@ -5927,6 +5956,7 @@ function switchTab(id,btn){
 
 </script>
 <script src="modules/venues.js?v=20260917d"></script>
+<script src="modules/room-optimizer.js?v=20260917a"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js"></script>
 <script>
