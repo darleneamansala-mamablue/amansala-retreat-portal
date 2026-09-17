@@ -359,6 +359,24 @@ async function cancelCloudbedReservations(bk,{wait=false}={}){
   if(wait)await Promise.all(calls);
 }
 
+// Cancels just ONE room's Cloudbeds reservation — used when every named guest
+// in that room has been marked cancelled (the room is genuinely vacated) but
+// the retreat itself keeps going. Clears the stored CB ids for that room so a
+// later guest added to the same physical room gets pushed as a fresh
+// reservation instead of trying to reuse/update the cancelled one.
+async function cancelCloudbedReservationForRoom(bk,room,{wait=false}={}){
+  if(!bk||!room)return;
+  const resId=(bk.cbReservationIds||{})[room];
+  if(!resId)return;
+  const call=fetch(`${CLOUDBEDS_PROXY}?action=cancelReservation`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reservationId:resId})})
+    .catch(e=>console.warn('[CB cancel room]',e));
+  if(wait)await call;
+  if(bk.cbReservationIds)delete bk.cbReservationIds[room];
+  if(bk.cbGuestIds)delete bk.cbGuestIds[room];
+  if(bk.cbAdjustmentIds)delete bk.cbAdjustmentIds[room];
+  if(bk.cbNoteIds)delete bk.cbNoteIds[room];
+}
+
 function syncNotesToCloudbeds(reg){
   if(!reg)return;
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
