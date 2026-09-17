@@ -638,6 +638,9 @@ function gOpenAdd(room,rtId){
     const cr=document.getElementById('g'+i+'-custom-rate');if(cr)cr.value='';
     const xr=document.getElementById('g'+i+'-extra-rate');if(xr)xr.value='';
     const dr=document.getElementById('g'+i+'-dates-row');if(dr)dr.style.display=IS_TEACHER_MODE?'none':'block';
+    const cxCb=document.getElementById('g'+i+'-cancelled');if(cxCb)cxCb.checked=false;
+    const cxFee=document.getElementById('g'+i+'-cancel-fee');if(cxFee)cxFee.value='';
+    const cxWrap=document.getElementById('g'+i+'-cancel-fee-wrap');if(cxWrap)cxWrap.style.display='none';
   }
   document.getElementById('gm-override').value='';document.getElementById('gm-paid').value='0';document.getElementById('gm-notes').value='';
   const _pkgPriceEl=document.getElementById('gm-pkg-price');if(_pkgPriceEl)_pkgPriceEl.value='';
@@ -672,6 +675,9 @@ function gOpenEdit(room,rtId){
     const cr=document.getElementById('g'+i+'-custom-rate');if(cr)cr.value=g.customRateOverride!=null?g.customRateOverride:'';
     const xr=document.getElementById('g'+i+'-extra-rate');if(xr)xr.value=g.extraNightRate!=null?g.extraNightRate:'';
     const dr=document.getElementById('g'+i+'-dates-row');if(dr)dr.style.display=IS_TEACHER_MODE?'none':'block';
+    const cxCb=document.getElementById('g'+i+'-cancelled');if(cxCb)cxCb.checked=!!g.cancelled;
+    const cxFee=document.getElementById('g'+i+'-cancel-fee');if(cxFee)cxFee.value=g.cancellationFee!=null?g.cancellationFee:'';
+    const cxWrap=document.getElementById('g'+i+'-cancel-fee-wrap');if(cxWrap)cxWrap.style.display=g.cancelled?'block':'none';
   }
   document.getElementById('gm-override').value=reg.customPrice!=null?reg.customPrice:'';
   document.getElementById('gm-paid').value=reg.amountPaid||'0';
@@ -739,7 +745,10 @@ function gDraftRegOverrides(){
     const crParsed=(crVal!=null&&crVal!=='')?parseFloat(crVal):NaN;
     const xrVal=document.getElementById('g'+i+'-extra-rate')?.value;
     const xrParsed=(xrVal!=null&&xrVal!=='')?parseFloat(xrVal):NaN;
-    guests.push({name:n,checkIn:ci,checkOut:co,customRateOverride:!isNaN(crParsed)?crParsed:undefined,extraNightRate:!isNaN(xrParsed)?xrParsed:undefined});
+    const cancelled=!!document.getElementById('g'+i+'-cancelled')?.checked;
+    const feeVal=document.getElementById('g'+i+'-cancel-fee')?.value;
+    const feeParsed=(feeVal!=null&&feeVal!=='')?parseFloat(feeVal):NaN;
+    guests.push({name:n,checkIn:ci,checkOut:co,customRateOverride:!isNaN(crParsed)?crParsed:undefined,extraNightRate:!isNaN(xrParsed)?xrParsed:undefined,cancelled:cancelled||undefined,cancellationFee:cancelled&&!isNaN(feeParsed)?feeParsed:undefined});
   }
   return{
     customRateOverride:!isNaN(rateOv)?rateOv:null,
@@ -782,6 +791,11 @@ function gUpdatePrice(){
   document.getElementById('pbc-total').textContent=fmt$(final);
   const balEl=document.getElementById('gm-balance');balEl.value=fmt$(bal);balEl.style.color=bal>0?'#dc2626':'#059669';
 }
+function gToggleGuestCancelled(i){
+  const wrap=document.getElementById('g'+i+'-cancel-fee-wrap');if(!wrap)return;
+  const checked=document.getElementById('g'+i+'-cancelled')?.checked;
+  wrap.style.display=checked?'block':'none';
+}
 function gSave(){
   const name=document.getElementById('g0-name').value.trim();if(!name){alert('Enter guest name.');return;}
   const ov=document.getElementById('gm-override').value;
@@ -805,6 +819,7 @@ function gSave(){
   const customTipRateOverride=!isNaN(_tipRateOvSaved)?_tipRateOvSaved:null;
   const checkIn=(document.getElementById('gm-checkin')?.value||'').trim()||null;
   const checkOut=(document.getElementById('gm-checkout')?.value||'').trim()||null;
+  const _existingReg=gEditRegId?AppData.regs.find(r=>r.id===gEditRegId):null;
   const guests=[];for(let i=0;i<4;i++){const n=(document.getElementById('g'+i+'-name')?.value||'').trim();if(n||i===0){
     const _gCi=(document.getElementById('g'+i+'-checkin')?.value||'').trim()||null;
     const _gCo=(document.getElementById('g'+i+'-checkout')?.value||'').trim()||null;
@@ -812,7 +827,10 @@ function gSave(){
     const _gCrParsed=(_gCrVal!=null&&_gCrVal!=='')?parseFloat(_gCrVal):NaN;
     const _gXrVal=document.getElementById('g'+i+'-extra-rate')?.value;
     const _gXrParsed=(_gXrVal!=null&&_gXrVal!=='')?parseFloat(_gXrVal):NaN;
-    guests.push({name:n,email:(document.getElementById('g'+i+'-email')?.value||'').trim(),phone:(document.getElementById('g'+i+'-phone')?.value||'').trim(),notes:(document.getElementById('g'+i+'-note')?.value||'').trim(),checkIn:_gCi||undefined,checkOut:_gCo||undefined,customRateOverride:!isNaN(_gCrParsed)?_gCrParsed:undefined,extraNightRate:!isNaN(_gXrParsed)?_gXrParsed:undefined});
+    const _gCancelled=!!document.getElementById('g'+i+'-cancelled')?.checked;
+    const _gFeeVal=document.getElementById('g'+i+'-cancel-fee')?.value;
+    const _gFeeParsed=(_gFeeVal!=null&&_gFeeVal!=='')?parseFloat(_gFeeVal):NaN;
+    guests.push({name:n,email:(document.getElementById('g'+i+'-email')?.value||'').trim(),phone:(document.getElementById('g'+i+'-phone')?.value||'').trim(),notes:(document.getElementById('g'+i+'-note')?.value||'').trim(),checkIn:_gCi||undefined,checkOut:_gCo||undefined,customRateOverride:!isNaN(_gCrParsed)?_gCrParsed:undefined,extraNightRate:!isNaN(_gXrParsed)?_gXrParsed:undefined,cancelled:_gCancelled||undefined,cancellationFee:_gCancelled&&!isNaN(_gFeeParsed)?_gFeeParsed:undefined,cancelledAt:_gCancelled?(_existingReg?.guests?.find(og=>og.name===n)?.cancelledAt||new Date().toISOString()):undefined});
   }}
   const _regTs=new Date().toISOString();
   if(gEditRegId){const reg=AppData.regs.find(r=>r.id===gEditRegId);Object.assign(reg,{guests,customPrice,customPkgPrice,customRateOverride,customNightsOverride,customTipNightsOverride,customTipRateOverride,amountPaid,notes,isTeacherRoom:gIsTeacherRoom||undefined,checkIn:checkIn||undefined,checkOut:checkOut||undefined,updatedAt:_regTs});}

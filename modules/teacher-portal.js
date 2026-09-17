@@ -308,7 +308,8 @@ function regRender(){
     // own rate, which can differ from _pkgTxR) — add it directly, don't run it through
     // _pkgTxR again.
     const cao=calcCustomAoCost(regSelBk,gc,reg);
-    const total=+(base+pkgCost+base*_rmTxR+pkgCost*_pkgTxR+_bTipRate*_bTipNightsSum+cao).toFixed(2);
+    const _rawTotal=+(base+pkgCost+base*_rmTxR+pkgCost*_pkgTxR+_bTipRate*_bTipNightsSum+cao).toFixed(2);
+    const total=applyCancellationAdjustment(reg,_rawTotal);
     grandTotal+=total;
     // Pure display sub-total (packages + their tax + custom add-ons) — not a separate
     // calculation, just breaking out what's already folded into `total` above so the
@@ -752,7 +753,9 @@ function regRender(){
         nameTd.className='r-guest';
         const _teacherStar=reg.isTeacherRoom?`<span style="color:#b45309;font-size:13px;margin-right:4px" title="Teacher Room">★</span>`:'';
         const _teacherStyle=reg.isTeacherRoom?'color:#92400e;font-weight:700;':'';
-        nameTd.innerHTML=`<div class="r-gname" style="${_teacherStyle}cursor:pointer" title="Click to open ${escHtml(g.name)}'s folio" onclick="event.stopPropagation();openGuestFolio('${g._reg.id}',${g._guestIdx})">${_teacherStar}${g.name}${entry.merged&&entry.physical.length>1?` <span style="font-size:10px;color:#8a7e74">(${g._physical})</span>`:''}</div>`;
+        const _cancelledBadge=g.cancelled?` <span style="font-size:10px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:5px;padding:1px 6px;margin-left:4px">Cancelled</span>`:'';
+        const _cancelledNameStyle=g.cancelled?'text-decoration:line-through;color:#9ca3af;':'';
+        nameTd.innerHTML=`<div class="r-gname" style="${_teacherStyle}${_cancelledNameStyle}cursor:pointer" title="Click to open ${escHtml(g.name)}'s folio" onclick="event.stopPropagation();openGuestFolio('${g._reg.id}',${g._guestIdx})">${_teacherStar}${g.name}${entry.merged&&entry.physical.length>1?` <span style="font-size:10px;color:#8a7e74">(${g._physical})</span>`:''}${_cancelledBadge}</div>`;
         tr.appendChild(nameTd);
 
         const retTd=document.createElement('td');
@@ -779,7 +782,9 @@ function regRender(){
         const priceTd=document.createElement('td');
         priceTd.className='r-price';
         priceTd.style.cssText='text-align:right;vertical-align:top;padding:10px 12px;min-width:160px;width:160px;';
-        if(reg.customPrice!=null&&!reg.isTeacherRoom){
+        if(g.cancelled){
+          priceTd.innerHTML=`<div style="font-weight:700;font-size:13px;color:#dc2626">${fmt$(g.cancellationFee||0)}</div><div style="font-size:10.5px;color:#8a7e74;margin-top:2px">cancellation fee</div>`;
+        } else if(reg.customPrice!=null&&!reg.isTeacherRoom){
           const perCustom=+(reg.customPrice/gc).toFixed(2);
           priceTd.innerHTML=`<div style="font-weight:700;font-size:13px;color:var(--dark)">${fmt$(perCustom)}</div><div style="font-size:10.5px;color:#8a7e74;margin-top:2px">custom price${gc>1?' (per person)':''}</div>`;
         } else {
