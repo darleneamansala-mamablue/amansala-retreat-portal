@@ -410,9 +410,18 @@ function dfBuild(){
           const isGapStart=candStart===gap.start;
           const wanted=dayFilters.length?dayFilters.includes(cur.getDay()):isGapStart;
           if(wanted&&!(cur>=mEnd||candEndD<=mStart)){
+            // Once a slot is placed, jump straight to its end before looking
+            // for the next candidate — otherwise a short gap with several
+            // preferred weekdays checked produces multiple OVERLAPPING
+            // windows that all compete for the same nights (booking one
+            // invalidates the others), which just reads as duplicate/wrong
+            // results instead of real distinct options (Darlene's report
+            // 2026-09-16).
             const isStraightLinePrev=isGapStart&&!!gap.prevBk;
             const isStraightLineNext=gap.nextBk&&candEnd===gap.nextBk.startDate;
             rowSlots.push({nights,start:candStart,end:candEnd,gapDays,gapKey,prevBk:gap.prevBk,nextBk:gap.nextBk,isStraightLinePrev,isStraightLineNext});
+            cur=candEndD;
+            continue;
           }
           cur=addDays(cur,1);
         }
