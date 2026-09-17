@@ -117,40 +117,80 @@ function _wtStatusBadge(bk){
   return{label:'Deposit Paid',bg:'#fef3c7',fg:'#92400e'};
 }
 
+// Same-day arrivals collapse together under one header row showing the
+// combined revenue for that day ("cuánto estamos ganando"). Collapsed state
+// is session-local (not persisted) — reset on reload, same as most other
+// collapse toggles in this app.
+let _wtCollapsedDates=new Set();
+function _wtToggleDateGroup(date){
+  if(_wtCollapsedDates.has(date))_wtCollapsedDates.delete(date);else _wtCollapsedDates.add(date);
+  _wtRenderReservations();
+}
+function _wtBookingRow(bk,indent){
+  const regs=getRegsForBk(bk.id);
+  // Each guest opens their own Rooms/folio view (booking-detail.js) — the same
+  // accurate view booking-detail already gets right (Room Total, Source, real
+  // folios) — not the Teachers/Registration retreat-management screen, which
+  // doesn't apply to an individually-booked We Travel guest.
+  const guestLinks=regs.flatMap(r=>(r.guests||[]).filter(g=>g.name).map(g=>
+    `<span onclick="event.stopPropagation();openBookingDetailForReg('${r.id}','${escHtml(g.name).replace(/'/g,"\\'")}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(g.name)}</span>`
+  ));
+  const rooms=regs.map(r=>r.room).filter(Boolean);
+  const paid=regs.reduce((s,r)=>s+(r.amountPaid||0),0);
+  const {balance}=calcBkBalance(bk);
+  const st=_wtStatusBadge(bk);
+  return {paid,balance,html:`<tr style="border-top:1px solid var(--border)">
+    <td style="padding:8px 14px 8px ${indent?'34px':'14px'};font-size:12.5px;font-weight:700">${escHtml(bk.leaderName||bk.retreatName||'')}</td>
+    <td style="padding:8px 14px;font-size:12px;color:var(--muted);white-space:nowrap">${fmtDate(bk.startDate)} → ${fmtDate(bk.endDate)}</td>
+    <td style="padding:8px 14px;font-size:12px">${guestLinks.join(', ')||'—'}</td>
+    <td style="padding:8px 14px;font-size:12px">${escHtml(rooms.join(', ')||'—')}</td>
+    <td style="padding:8px 14px;font-size:12.5px;text-align:right;font-weight:700;color:#059669">${fmt$(paid)}</td>
+    <td style="padding:8px 14px;font-size:12.5px;text-align:right;font-weight:700;color:${balance>0?'#dc2626':'#059669'}">${balance>0?fmt$(balance):'Paid in Full'}</td>
+    <td style="padding:8px 14px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${st.bg};color:${st.fg}">${st.label}</span></td>
+  </tr>`};
+}
 function _wtRenderReservations(){
   const el=document.getElementById('wtReservationsBoard');
   const bks=AppData.bookings.filter(b=>b.source==='wetravel').sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
   if(!bks.length){el.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);font-size:12.5px">Sin reservas de We Travel todavía.</div>';return;}
+
+  const groups=[];
+  const groupByDate=new Map();
+  bks.forEach(bk=>{
+    const d=bk.startDate||'';
+    if(!groupByDate.has(d)){const g={date:d,bks:[]};groupByDate.set(d,g);groups.push(g);}
+    groupByDate.get(d).bks.push(bk);
+  });
+
+  const bodyHtml=groups.map(g=>{
+    // Solo arrivals on a date don't need a group wrapper — just the plain row,
+    // same as before this feature existed.
+    if(g.bks.length===1)return _wtBookingRow(g.bks[0],false).html;
+    const rows=g.bks.map(bk=>_wtBookingRow(bk,true));
+    const groupPaid=rows.reduce((s,r)=>s+r.paid,0);
+    const groupBalance=rows.reduce((s,r)=>s+r.balance,0);
+    const groupTotal=groupPaid+groupBalance;
+    const collapsed=_wtCollapsedDates.has(g.date);
+    const headerRow=`<tr style="background:#f8fafc;cursor:pointer" onclick="_wtToggleDateGroup('${g.date}')">
+      <td colspan="7" style="padding:9px 14px;border-top:2px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:12px;font-size:12px">
+          <span style="width:12px;color:var(--muted)">${collapsed?'▸':'▾'}</span>
+          <span style="font-weight:700;color:var(--dark)">${fmtDate(g.date)}</span>
+          <span style="color:var(--muted)">${g.bks.length} reservas</span>
+          <span style="margin-left:auto;color:var(--muted)">Pagado <b style="color:#059669">${fmt$(groupPaid)}</b> · Pendiente <b style="color:${groupBalance>0?'#dc2626':'#059669'}">${groupBalance>0?fmt$(groupBalance):'$0'}</b></span>
+          <span style="font-weight:800;color:var(--dark)">Total ${fmt$(groupTotal)}</span>
+        </div>
+      </td>
+    </tr>`;
+    return headerRow+(collapsed?'':rows.map(r=>r.html).join(''));
+  }).join('');
+
   el.innerHTML=`<table style="width:100%;border-collapse:collapse">
     <thead><tr style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:#f8fafc">
       <th style="text-align:left;padding:8px 14px">Retiro</th><th style="text-align:left;padding:8px 14px">Fechas</th>
       <th style="text-align:left;padding:8px 14px">Huéspedes</th><th style="text-align:left;padding:8px 14px">Cuartos</th>
       <th style="text-align:right;padding:8px 14px">Pagado</th><th style="text-align:right;padding:8px 14px">Pending Balance</th><th style="text-align:left;padding:8px 14px">Estado</th>
     </tr></thead>
-    <tbody>
-      ${bks.map(bk=>{
-        const regs=getRegsForBk(bk.id);
-        // Each guest opens their own Rooms/folio view (booking-detail.js) — the same
-        // accurate view booking-detail already gets right (Room Total, Source, real
-        // folios) — not the Teachers/Registration retreat-management screen, which
-        // doesn't apply to an individually-booked We Travel guest.
-        const guestLinks=regs.flatMap(r=>(r.guests||[]).filter(g=>g.name).map(g=>
-          `<span onclick="event.stopPropagation();openBookingDetailForReg('${r.id}','${escHtml(g.name).replace(/'/g,"\\'")}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(g.name)}</span>`
-        ));
-        const rooms=regs.map(r=>r.room).filter(Boolean);
-        const paid=regs.reduce((s,r)=>s+(r.amountPaid||0),0);
-        const {balance}=calcBkBalance(bk);
-        const st=_wtStatusBadge(bk);
-        return `<tr style="border-top:1px solid var(--border)">
-          <td style="padding:8px 14px;font-size:12.5px;font-weight:700">${escHtml(bk.leaderName||bk.retreatName||'')}</td>
-          <td style="padding:8px 14px;font-size:12px;color:var(--muted);white-space:nowrap">${fmtDate(bk.startDate)} → ${fmtDate(bk.endDate)}</td>
-          <td style="padding:8px 14px;font-size:12px">${guestLinks.join(', ')||'—'}</td>
-          <td style="padding:8px 14px;font-size:12px">${escHtml(rooms.join(', ')||'—')}</td>
-          <td style="padding:8px 14px;font-size:12.5px;text-align:right;font-weight:700;color:#059669">${fmt$(paid)}</td>
-          <td style="padding:8px 14px;font-size:12.5px;text-align:right;font-weight:700;color:${balance>0?'#dc2626':'#059669'}">${balance>0?fmt$(balance):'Paid in Full'}</td>
-          <td style="padding:8px 14px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${st.bg};color:${st.fg}">${st.label}</span></td>
-        </tr>`;
-      }).join('')}
-    </tbody>
+    <tbody>${bodyHtml}</tbody>
   </table>`;
 }
