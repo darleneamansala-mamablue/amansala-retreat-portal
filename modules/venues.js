@@ -2398,22 +2398,49 @@ async function rcFetchExternalReservations(startMs){
       if(!track){console.warn('[rcExternal] no track for room:',roomName,'available:',trackNames);return;}
       const bl=document.createElement('div');
       bl.className='bk';
+      // Small cancel button on every raw-Cloudbeds box (matched or not) so an
+      // erroneous/duplicate reservation (e.g. Connie Smith's CH4 extra-night
+      // booking, 2026-09-17) can be cancelled straight from the calendar
+      // instead of having to go into Cloudbeds itself.
+      const cancelBtn=document.createElement('span');
+      cancelBtn.textContent='✕';
+      cancelBtn.title='Cancel this reservation in Cloudbeds';
+      cancelBtn.style.cssText='position:absolute;top:1px;right:2px;font-size:10px;font-weight:700;line-height:1;padding:2px 3px;border-radius:3px;cursor:pointer;background:rgba(255,255,255,.55);z-index:2;';
+      cancelBtn.addEventListener('click',(ev)=>rcCancelExternalReservation(r,roomName,ev));
       if(match){
         const pal=RETREAT_PALETTE[getRetreatColorIdx(match.bk)];
         const label=match.bk.leaderName||match.bk.retreatName||'';
-        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pal.bg};border-color:${pal.border};color:${pal.text};border-left:4px solid ${pal.border};cursor:pointer;pointer-events:auto;`;
+        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pal.bg};border-color:${pal.border};color:${pal.text};border-left:4px solid ${pal.border};cursor:pointer;pointer-events:auto;position:relative;`;
         bl.title=`${r.guestName} · matches ${label} · click to link this room to their booking`;
         bl.innerHTML=`<span class="bk-n">${r.guestName}</span><span class="bk-s" style="opacity:.75">${label}</span>`;
         bl.addEventListener('click',()=>linkExternalReservationToBooking(r,match.bk.id,roomName));
       } else {
-        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:repeating-linear-gradient(45deg,#d0d0d0,#d0d0d0 4px,#eaeaea 4px,#eaeaea 8px);border-color:#aaa;color:#444;border-left:4px solid #888;cursor:pointer;pointer-events:auto;`;
+        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:repeating-linear-gradient(45deg,#d0d0d0,#d0d0d0 4px,#eaeaea 4px,#eaeaea 8px);border-color:#aaa;color:#444;border-left:4px solid #888;cursor:pointer;pointer-events:auto;position:relative;`;
         bl.title=`${r.guestName} · ${r.sourceName||r.status} · ${r.startDate} – ${r.endDate} · click to add a charge`;
         bl.innerHTML=`<span class="bk-n" style="color:#444">${r.guestName}</span><span class="bk-s" style="color:#666;opacity:.9">${fmtShort(pd(r.startDate))} – ${fmtShort(pd(r.endDate))}</span>`;
         bl.addEventListener('click',()=>importExternalReservation(r));
       }
+      bl.appendChild(cancelBtn);
       track.appendChild(bl);
     });
   });
+}
+// Cancels a raw Cloudbeds-only reservation straight from the Room Calendar —
+// e.g. an erroneous or duplicate extra-night booking that should never have
+// been made. This talks to Cloudbeds directly (there's no portal booking to
+// clean up — it was never linked/imported), so it's irreversible from here;
+// confirm() makes that explicit before it fires.
+function rcCancelExternalReservation(r,roomName,ev){
+  if(ev)ev.stopPropagation();
+  if(!confirm(`Cancel ${r.guestName}'s Cloudbeds reservation for room ${roomName} (${fmtDate(r.startDate)} – ${fmtDate(r.endDate)})?\n\nThis cancels it directly in Cloudbeds and cannot be undone from here.`))return;
+  fetch('/.netlify/functions/cloudbeds?action=cancelReservation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reservationId:r.reservationID})})
+    .then(res=>res.json())
+    .then(d=>{
+      if(!d?.success){showToast('Could not cancel in Cloudbeds — try again.');console.warn('[rcCancel]',d);return;}
+      showToast(`Cancelled ✓ — ${roomName} reservation removed from Cloudbeds.`);
+      rcBuild();
+    })
+    .catch(e=>{console.warn('[rcCancel]',e);showToast('Could not reach Cloudbeds — try again.');});
 }
 
 // Matches a Cloudbeds guest name against every leader name and registered
