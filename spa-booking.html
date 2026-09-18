@@ -521,6 +521,13 @@ function sbAllFreeAssignments(candidates,dateStr,startMin,duration){
   // Gaby, she lands with Eva in the rooms section"). Give each therapist
   // their own dedicated room first when it's free; only therapists with no
   // dedicated room (or whose room is taken) fall back to whatever's left.
+  // Rooms that belong to SOME therapist (not necessarily one of today's
+  // free candidates) — a therapist with no dedicated room of her own
+  // shouldn't casually land in a colleague's named room just because it
+  // happened to be free; that reads as a mix-up on the Room view (real
+  // report 2026-09-19: Laura's booking showed up in "Chica Rooftop -
+  // Julian"). Only borrow one as a last resort when nothing else is free.
+  const dedicatedRoomIds=new Set(SpaData.therapists.map(t=>t.defaultRoomId).filter(Boolean));
   const usedRoomIds=new Set();
   const out=[];
   free.forEach(t=>{
@@ -529,7 +536,8 @@ function sbAllFreeAssignments(candidates,dateStr,startMin,duration){
   });
   free.forEach(t=>{
     if(out.some(o=>o.therapist.id===t.id))return;
-    const room=freeRooms.find(r=>!usedRoomIds.has(r.id));
+    const room=freeRooms.find(r=>!usedRoomIds.has(r.id)&&!dedicatedRoomIds.has(r.id))
+      ||freeRooms.find(r=>!usedRoomIds.has(r.id));
     if(room){out.push({therapist:t,room});usedRoomIds.add(room.id);}
   });
   return out;

@@ -95,8 +95,34 @@ async function spaLoad() {
   spaLoaded = true;
 }
 
-async function spaSave() {
+async function spaSave(opts) {
   try {
+    // Refetch-then-merge instead of blindly overwriting the whole blob —
+    // real report 2026-09-18: Rubi edited a service's cost fields and the
+    // change never stuck. spaSave() previously upserted this tab's entire
+    // in-memory SpaData (services+rooms+therapists as one JSON blob), so
+    // any other tab/session saving anything — even moments apart, even from
+    // an unrelated edit — silently clobbered whichever save landed second
+    // with its own (now-stale) snapshot of everything else. Merging by id
+    // means this tab's own edits still win for whatever it touched, but a
+    // change made elsewhere to a DIFFERENT item in the meantime survives
+    // instead of being overwritten by this tab's stale copy of it.
+    const { data } = await db.from('app_store').select('value').eq('key', 'spa_data').maybeSingle();
+    const serverVal = (data && data.value) || {};
+    const mergeById = (serverList, clientList) => {
+      const byId = {};
+      (serverList || []).forEach(x => { byId[x.id] = x; });
+      (clientList || []).forEach(x => { byId[x.id] = x; });
+      return Object.values(byId);
+    };
+    SpaData.services = mergeById(serverVal.services, SpaData.services);
+    SpaData.therapists = mergeById(serverVal.therapists, SpaData.therapists);
+    // Rooms are the one collection that's ever actually removed from the
+    // array (spaDeleteRoom), not just flagged inactive — a plain id-union
+    // merge would resurrect a room deleted here if the server still has it.
+    // deletedRoomIds lets a delete win regardless of merge timing.
+    const deletedRoomIds = new Set((opts && opts.deletedRoomIds) || []);
+    SpaData.rooms = mergeById(serverVal.rooms, SpaData.rooms).filter(r => !deletedRoomIds.has(r.id));
     await db.from('app_store').upsert({ key: 'spa_data', value: SpaData, updated_at: new Date().toISOString() });
   } catch (e) {
     console.warn('[spa] save failed', e);
@@ -968,7 +994,7 @@ function spaDeleteRoom(id) {
   if (!confirm('Delete this room? This cannot be undone.')) return;
   SpaData.rooms = SpaData.rooms.filter(x => x.id !== id);
   SpaData.therapists.forEach(t => { if (t.defaultRoomId === id) t.defaultRoomId = null; });
-  spaSave();
+  spaSave({ deletedRoomIds: [id] });
   closeModal('spaRoomModal');
   spaRenderRooms();
 }
