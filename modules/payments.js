@@ -1133,7 +1133,7 @@ function renderBookingFolio(){
   const charges=(bk.charges||[]).slice().sort((a,b)=>(b.addedAt||'').localeCompare(a.addedAt||''));
   const total=charges.reduce((s,c)=>s+(c.amount||0),0);
   document.getElementById('gfTitle').textContent=bk.leaderName||bk.retreatName||'Guest';
-  document.getElementById('gfSub').innerHTML=`Room ${escHtml(room)}${rt?' · '+escHtml(rt.name):''} · ${escHtml(bk.retreatName||'')} <span onclick="gfEditDetails()" style="cursor:pointer;color:var(--teal,#2d6a6a);font-weight:600;text-decoration:underline;margin-left:6px">Edit Details</span> <span onclick="resOpenPreview('${bk.id}')" style="cursor:pointer;color:var(--teal,#2d6a6a);font-weight:600;text-decoration:underline;margin-left:6px">Preview &amp; Send to Guest</span>`;
+  document.getElementById('gfSub').innerHTML=`Room ${escHtml(room)}${rt?' · '+escHtml(rt.name):''} · ${escHtml(bk.retreatName||'')} <span onclick="gfEditDetails()" style="cursor:pointer;color:var(--teal,#2d6a6a);font-weight:600;text-decoration:underline;margin-left:6px">Edit Details</span> <span onclick="resOpenPreview('${bk.id}')" style="cursor:pointer;color:var(--teal,#2d6a6a);font-weight:600;text-decoration:underline;margin-left:6px">Preview &amp; Send to Guest</span> <span onclick="openRoomActivitiesEditor('${bk.id}')" style="cursor:pointer;color:var(--teal,#2d6a6a);font-weight:600;text-decoration:underline;margin-left:6px">Daily Activities</span>`;
   const fs=bk.folioSplit;
   const isSplit=fs?.mode==='separate';
   const addFormHtml=_gfAddOpen?`

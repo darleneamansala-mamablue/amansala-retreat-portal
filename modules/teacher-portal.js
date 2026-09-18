@@ -2862,6 +2862,18 @@ function tsActivityDateChange(idx,newDate){
   showToast('Day updated — Amansala will see your preference.');
 }
 
+// Room-Only guests (Bikini Bootcamp / Restore & Renew / WeTravel — see
+// modules/room-activities.js) never submit a teacher schedule request, so
+// openScheduleViewer's hard gate on scheduleRequest.submittedAt would
+// silently no-op for them. The retreatActivities mutators below are shared
+// with that editor, so they refresh through here instead of assuming it's
+// always the teacher schedule viewer.
+function svRefreshActivityView(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);
+  if(bk?.scheduleRequest?.submittedAt){openScheduleViewer(bkId);}
+  else if(typeof openRoomActivitiesEditor==='function'){openRoomActivitiesEditor(bkId);}
+}
+
 // Admin: view schedule request for a booking
 function openScheduleViewer(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);
@@ -3253,35 +3265,35 @@ function svAddActivity(bkId){
     }
   }
   bk.retreatActivitiesUpdatedAt=new Date().toISOString();
-  saveAll();openScheduleViewer(bkId);
+  saveAll();svRefreshActivityView(bkId);
 }
 function svRemoveActivity(bkId,idx){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
   bk.retreatActivities.splice(idx,1);
   bk.retreatActivitiesUpdatedAt=new Date().toISOString();
-  saveAll();openScheduleViewer(bkId);
+  saveAll();svRefreshActivityView(bkId);
 }
 function svChangeActivityDate(bkId,idx,newDate){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
   const act=bk.retreatActivities[idx];if(!act)return;
-  if(!newDate||newDate===bk.startDate||newDate===bk.endDate){showToast('Activities can\'t be scheduled on the arrival or departure day.');openScheduleViewer(bkId);return;}
+  if(!newDate||newDate===bk.startDate||newDate===bk.endDate){showToast('Activities can\'t be scheduled on the arrival or departure day.');svRefreshActivityView(bkId);return;}
   act.date=newDate;
   bk.retreatActivitiesUpdatedAt=new Date().toISOString();
-  saveAll();openScheduleViewer(bkId);
+  saveAll();svRefreshActivityView(bkId);
 }
 function svChangeActivityTime(bkId,idx,newTime){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
   const act=bk.retreatActivities[idx];if(!act)return;
   act.time=newTime;
   bk.retreatActivitiesUpdatedAt=new Date().toISOString();
-  saveAll();openScheduleViewer(bkId);
+  saveAll();svRefreshActivityView(bkId);
 }
 function svToggleActivityPrepaid(bkId,idx){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
   const act=bk.retreatActivities[idx];if(!act)return;
   act.prepaid=!act.prepaid;
   bk.retreatActivitiesUpdatedAt=new Date().toISOString();
-  saveAll();openScheduleViewer(bkId);
+  saveAll();svRefreshActivityView(bkId);
 }
 
 // Duration in minutes for each activity (used to calculate end time on schedule)
@@ -3437,7 +3449,7 @@ function svAutoAssignActivities(bkId){
   bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();
   showToast(`Activities assigned — ${added} tour${added!==1?'s/ceremonies':'/ceremony'} across retreat dates.`);
-  openScheduleViewer(bkId);
+  svRefreshActivityView(bkId);
 }
 
 function svSetTourMode(bkId,mode){
@@ -3457,7 +3469,7 @@ function svSyncPrepaidFlags(bkId){
   });
   if(changed)bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();
-  openScheduleViewer(bkId);
+  svRefreshActivityView(bkId);
   showToast(changed?`Prepaid flags updated — ${changed} activit${changed!==1?'ies':'y'} corrected.`:'All prepaid flags already match packages.');
 }
 

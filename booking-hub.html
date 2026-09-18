@@ -2458,6 +2458,15 @@
   </div>
 </div>
 
+<!-- ===== DAILY ACTIVITIES MODAL (Room-Only guests — BBC / Restore & Renew / WeTravel) ===== -->
+<div class="modal-overlay" id="roomActivitiesModal">
+  <div class="modal" style="width:560px;max-width:97vw">
+    <div class="modal-hdr"><h2 id="raModalTitle">Daily Activities</h2><button class="modal-x" onclick="closeModal('roomActivitiesModal')">&times;</button></div>
+    <div class="modal-body" id="raBody"></div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('roomActivitiesModal')">Close</button></div></div>
+  </div>
+</div>
+
 <!-- ===== BOOKING DETAIL / FOLIO MODAL (Rooms tab reservation click) ===== -->
 <div class="modal-overlay" id="bookingDetailModal">
   <div class="modal" style="width:1040px;max-width:96vw;padding:0">
@@ -6157,6 +6166,7 @@ function switchTab(id,btn){
 // ===== SIGNATURE PAD — moved to modules/contracts.js (loaded above) =====
 </script>
 <script src="modules/payments.js?v=20260917a"></script>
+<script src="modules/room-activities.js"></script>
 <script src="modules/booking-detail.js"></script>
 <script>
 // ===== PAYMENT RECORDING — moved to modules/payments.js =====
