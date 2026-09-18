@@ -448,7 +448,13 @@ function menuPopulateFromRetreats(silent=false){
       const s=(bk.startDate||'').slice(0,10), e=(bk.endDate||'').slice(0,10);
       if(dateStr<s||dateStr>e) return;
       const grp=bk.leaderName||bk.retreatName||'Group';
-      const px=String(bk.pax||'');
+      // Actual guests signed up so far (registeredCount), not the retreat's
+      // expected/contracted pax — kitchen needs real headcount, not the
+      // original estimate (Darlene's report 2026-09-18). Room-Only bookings
+      // (BBC/Restore & Renew/WeTravel) have no separate registration step —
+      // bk.pax IS their actual guest count — so only retreat groups route
+      // through registeredCount.
+      const px=String((bk.bookingType==='room_only'?bk.pax:registeredCount(bk.id))||'');
       const planMeals=MEAL_PLANS[bk.mealPlan]||MEAL_PLANS.standard;
       planMeals.forEach(meal=>{
         const t=menuMealTime(bk,meal,dateStr);
