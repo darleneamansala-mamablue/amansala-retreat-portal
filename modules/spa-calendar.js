@@ -130,9 +130,19 @@ function spaCalRender() {
 }
 
 function spaCalSectionHtml(title, cols, dateStr) {
+  // No overflow-x:auto wrapper here on purpose — per the CSS overflow spec,
+  // setting overflow-x without overflow-y forces overflow-y to 'auto' too,
+  // which makes this div its own (never-actually-scrolling) vertical scroll
+  // container. That breaks position:sticky inside it: the header sticks
+  // relative to THIS box instead of the real scrolling ancestor
+  // (#spaContentOuter), so it just scrolls away instead of staying pinned
+  // (real report 2026-09-18). Letting #spaContentOuter itself provide both
+  // scroll axes (it's already overflow:auto) fixes the header without this
+  // extra box; horizontal scroll behavior is unchanged since sections are
+  // normally the same width anyway.
   return `<div style="margin-bottom:22px">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#a89a86;margin-bottom:8px">${title}</div>
-    <div style="overflow-x:auto">${spaCalPanelHtml(cols, true, dateStr)}</div>
+    ${spaCalPanelHtml(cols, true, dateStr)}
   </div>`;
 }
 
@@ -141,7 +151,7 @@ function spaCalPanelHtml(cols, isTher, dateStr) {
   let html = `<div style="display:flex;min-width:${SPA_CAL_TIME_W + cols.length * SPA_CAL_COL_W}px;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e8dfd4">`;
 
   html += `<div style="width:${SPA_CAL_TIME_W}px;min-width:${SPA_CAL_TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:5;background:#fff;border-right:2px solid #e0d8cc">`;
-  html += `<div style="height:40px;border-bottom:1px solid #e8dfd4"></div><div style="position:relative;height:${gridH}px">`;
+  html += `<div style="height:40px;border-bottom:1px solid #e8dfd4;position:sticky;top:0;z-index:8;background:#fff"></div><div style="position:relative;height:${gridH}px">`;
   for (let h = SPA_CAL_START_H; h <= SPA_CAL_END_H; h++) {
     const top = (h - SPA_CAL_START_H) * SPA_CAL_PX_HR;
     const ap = h >= 12 ? 'PM' : 'AM';
@@ -152,7 +162,7 @@ function spaCalPanelHtml(cols, isTher, dateStr) {
   cols.forEach(col => {
     const dayAppts = SpaAppointments.filter(a => a.date === dateStr && a.status !== 'CANCELLED' && (isTher ? a.therapistId === col.id : a.roomId === col.id));
     html += `<div style="width:${SPA_CAL_COL_W}px;min-width:${SPA_CAL_COL_W}px;border-right:1px solid #e8e8e8">`;
-    html += `<div style="height:40px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:12px;font-weight:700;color:#374151;border-bottom:1px solid #e8dfd4;background:#f9f7f4;text-align:center;padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">
+    html += `<div style="height:40px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:12px;font-weight:700;color:#374151;border-bottom:1px solid #e8dfd4;background:#f9f7f4;text-align:center;padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;position:sticky;top:0;z-index:6">
       <span style="overflow:hidden;text-overflow:ellipsis">${isTher ? col.firstName + ' ' + (col.lastName || '') : col.name}</span>
       ${isTher ? `<span onclick="event.stopPropagation();spaCalMuteToggle('${col.id}')" title="Mute ${col.firstName}" style="cursor:pointer;opacity:.4;flex-shrink:0;font-size:12px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.4'">🔇</span>` : ''}
     </div>`;
@@ -274,7 +284,17 @@ function spaApptUpdatePriceDisplay(svc) {
   if (svc.groupPricing) { el.textContent = `Rate: from $${groupPriceFor(svc, svc.groupPricing.minGuests || 1)} (group pricing)`; return; }
   el.textContent = svc.price != null ? `Rate: $${svc.price}` : 'Rate: not set — add a price in Services';
 }
-function spaApptOnTherapistChange() { spaApptCheckAvailability(); }
+function spaApptOnTherapistChange() {
+  // Auto-fill the therapist's own dedicated room (Therapists tab
+  // defaultRoomId) when one is set and the room field hasn't been chosen
+  // yet — same fix as sbAllFreeAssignments in spa-booking.html, so a
+  // manually-created appointment doesn't end up in a colleague's room either.
+  const therId = document.getElementById('spaApptTherapist')?.value;
+  const roomSel = document.getElementById('spaApptRoom');
+  const ther = SpaData.therapists.find(t => t.id === therId);
+  if (ther?.defaultRoomId && roomSel && !roomSel.value) roomSel.value = ther.defaultRoomId;
+  spaApptCheckAvailability();
+}
 // Soft, non-blocking notice (admin can still save through it) — matches
 // the app's "staff always retain override" convention (e.g. no auto-assign
 // of rooms). Uses the real scIsAvailable() from modules/staff-confirm-

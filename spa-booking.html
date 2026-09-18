@@ -513,7 +513,26 @@ function sbAllFreeAssignments(candidates,dateStr,startMin,duration){
   if(!svc.roomRequired) return free.map(t=>({therapist:t,room:null}));
   const freeRooms=SpaData.rooms.filter(r=>!SpaAppointments.some(a=>a.date===dateStr&&a.roomId===r.id&&a.status!=='CANCELLED'&&startMin<hhmmToMin(a.start)+(a.duration||60)&&(startMin+duration)>hhmmToMin(a.start)));
   if(!freeRooms.length) return [];
-  return free.slice(0,freeRooms.length).map((t,i)=>({therapist:t,room:freeRooms[i]}));
+  // Many rooms are one specific therapist's own dedicated space (Therapists
+  // tab defaultRoomId — e.g. "Chica Rooftop - Gaby"), not an interchangeable
+  // pool. Pairing free therapists with free rooms by array position ignored
+  // that, so a therapist could land in a colleague's named room whenever the
+  // two lists happened to line up that way (real report 2026-09-18: "book
+  // Gaby, she lands with Eva in the rooms section"). Give each therapist
+  // their own dedicated room first when it's free; only therapists with no
+  // dedicated room (or whose room is taken) fall back to whatever's left.
+  const usedRoomIds=new Set();
+  const out=[];
+  free.forEach(t=>{
+    const home=t.defaultRoomId&&freeRooms.find(r=>r.id===t.defaultRoomId);
+    if(home){out.push({therapist:t,room:home});usedRoomIds.add(home.id);}
+  });
+  free.forEach(t=>{
+    if(out.some(o=>o.therapist.id===t.id))return;
+    const room=freeRooms.find(r=>!usedRoomIds.has(r.id));
+    if(room){out.push({therapist:t,room});usedRoomIds.add(room.id);}
+  });
+  return out;
 }
 function sbNextDays(n){
   const out=[];
