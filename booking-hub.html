@@ -2321,7 +2321,7 @@
         <span style="font-size:13px;font-weight:600;color:#1a4a4a">📅 View Room Calendar — see what's booked around these dates</span>
         <span style="font-size:13px;font-weight:700;color:#0e9494;white-space:nowrap">Open →</span>
       </div>
-      <div class="frow"><div class="fg"><label>Venue Row</label><select id="vm-row"></select></div><div class="fg"><label>Pax</label><input type="number" id="vm-pax" min="0" placeholder="0"></div><div class="fg"><label>Meal Plan</label><select id="vm-mealplan"><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option></select></div></div>
+      <div class="frow"><div class="fg"><label>Venue Row</label><select id="vm-row"></select></div><div class="fg"><label>Pax</label><input type="number" id="vm-pax" min="0" placeholder="0"></div><div class="fg"><label>Meal Plan</label><select id="vm-mealplan"><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option><option value="weTravel">WeTravel — LB · Breakfast · Brunch · Lunch · Snack · Dinner</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Status</label><select id="vm-status"><option value="requested">Soft Hold</option><option value="contract_sent">Contract Sent</option><option value="contract_signed">Contract Signed</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Room List Sent</option><option value="cancelled">Cancelled</option></select></div></div>
       <div id="vm-payment-widget" style="display:none;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:4px 0 8px"></div>
       <div id="vm-charges-widget" style="display:none;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:4px 0 8px"></div>
@@ -2361,7 +2361,7 @@
         <div id="rm-rate-hint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
       </div></div>
       <div class="frow"><div class="fg"><label>Guests</label><input type="number" id="rm-adults" min="1" max="20" value="1" onchange="rmAutoRate()"></div><div class="fg"><label>Status</label><select id="rm-status"><option value="requested">Soft Hold</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Confirmed</option></select></div></div>
-      <div class="frow full"><div class="fg"><label>Meals Included</label><select id="rm-mealplan"><option value="breakfast">Breakfast Only</option><option value="none">None</option><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option></select></div></div>
+      <div class="frow full"><div class="fg"><label>Meals Included</label><select id="rm-mealplan"><option value="breakfast">Breakfast Only</option><option value="none">None</option><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option><option value="weTravel">WeTravel — LB · Breakfast · Brunch · Lunch · Snack · Dinner</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Notes</label><textarea id="rm-notes" placeholder="Internal notes..."></textarea></div></div>
       <div id="rm-err" style="display:none;color:#dc2626;font-size:12px;margin-top:4px"></div>
       <div id="rm-pay-link-row" style="display:none;margin-top:10px;padding-top:12px;border-top:1px solid var(--border)">

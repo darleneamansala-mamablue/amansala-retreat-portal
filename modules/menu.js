@@ -60,11 +60,19 @@ const WEEKLY_MENU = {
 
 const MENU_MEAL_CFG = {
   lightBreakfast: {label:'Fruit, Coffee &amp; Tea', bg:'#f5deb3', color:'#7c5a1e'},
+  breakfast:      {label:'Breakfast',       bg:'#fde8d0', color:'#92400e'},
   brunch:         {label:'Brunch',          bg:'#fef3c7', color:'#78350f'},
   lunch:          {label:'Lunch',           bg:'#fed7aa', color:'#7c2d12'},
   snack:          {label:'Snack',           bg:'#d1fae5', color:'#065f46'},
   dinner:         {label:'Dinner',          bg:'#dbeafe', color:'#1e3a5f'}
 };
+// WeTravel guests aren't on a teacher's class schedule — they eat on a fixed
+// daily window instead (Darlene's spec 2026-09-18). Each entry is that
+// window's start time; menuMealTime uses these directly for a 'weTravel'
+// mealPlan booking.
+// Light Breakfast 6:30–8:00 · Breakfast 8:30–9:45 · Brunch 10:00–12:00 ·
+// Lunch 12:30–2:30 · Snack 3:00–5:00 · Dinner 5:30–9:00
+const WETRAVEL_MEAL_TIMES = {lightBreakfast:'06:30',breakfast:'08:30',brunch:'10:00',lunch:'12:30',snack:'15:00',dinner:'17:30'};
 
 function menuJumpToDate(val){
   if(!val)return;
@@ -152,7 +160,8 @@ function menuRenderWeek(){
   for(let i=0;i<7;i++){const d=new Date(weekStart);d.setDate(d.getDate()+i);days.push(d.toISOString().split('T')[0]);}
   // Only show Lunch row if at least one day this week has lunch scheduled
   const weekHasLunch=days.some(ds=>(menuSchedule[ds]?.lunch||[]).length>0);
-  const meals=['lightBreakfast','brunch',...(weekHasLunch?['lunch']:[]),'snack','dinner'];
+  const weekHasBreakfast=days.some(ds=>(menuSchedule[ds]?.breakfast||[]).length>0);
+  const meals=['lightBreakfast',...(weekHasBreakfast?['breakfast']:[]),'brunch',...(weekHasLunch?['lunch']:[]),'snack','dinner'];
   // Row-based layout: all 7 cells for each meal go in the SAME grid row,
   // so CSS grid forces identical height across columns — sections stay aligned.
   let html='<div style="min-width:980px"><div class="menu-week-grid">';
@@ -331,6 +340,9 @@ function menuSaveSchedule(){
 }
 
 function menuMealTime(bk,meal,dateStr){
+  // WeTravel guests: fixed daily meal windows, not a teacher's class schedule.
+  if(bk.mealPlan==='weTravel') return WETRAVEL_MEAL_TIMES[meal]||'';
+
   const sr=bk.scheduleRequest||{};
   const ov=sr.adminOverride||{};
   function addMin(t,m){if(!t)return '';const[h,mn]=t.split(':').map(Number);const tot=h*60+mn+m;return String(Math.floor(tot/60)%24).padStart(2,'0')+':'+String(tot%60).padStart(2,'0');}
@@ -406,7 +418,8 @@ function menuPopulateFromRetreats(silent=false){
 
   const MEAL_PLANS={
     standard:['lightBreakfast','brunch','snack','dinner'],
-    full:['lightBreakfast','lunch','dinner']
+    full:['lightBreakfast','lunch','dinner'],
+    weTravel:['lightBreakfast','breakfast','brunch','lunch','snack','dinner']
   };
   // Brunch ≤ 11:45; 12:15–14:30 → lunch
   const routeMeal=(meal,t)=>{
@@ -416,7 +429,7 @@ function menuPopulateFromRetreats(silent=false){
     }
     return meal;
   };
-  const allMeals=['lightBreakfast','brunch','lunch','snack','dinner'];
+  const allMeals=['lightBreakfast','breakfast','brunch','lunch','snack','dinner'];
 
   // Clear ALL existing rows for these retreat groups across this week first,
   // so re-running always refreshes with the current meal plan rules
@@ -490,8 +503,9 @@ function menuPrint(){
     d.setDate(d.getDate()+1);
   }
   const printHasLunch=days.some(ds=>(menuSchedule[ds]?.lunch||[]).length>0);
-  const meals=['lightBreakfast','brunch',...(printHasLunch?['lunch']:[]),'snack','dinner'];
-  const mealCfg={lightBreakfast:{label:'Fruit, Coffee &amp; Tea',bg:'#f5deb3',color:'#7c5a1e'},brunch:{label:'Brunch',bg:'#fef3c7',color:'#78350f'},lunch:{label:'Lunch',bg:'#fed7aa',color:'#7c2d12'},snack:{label:'Snack',bg:'#d1fae5',color:'#065f46'},dinner:{label:'Dinner',bg:'#dbeafe',color:'#1e3a5f'}};
+  const printHasBreakfast=days.some(ds=>(menuSchedule[ds]?.breakfast||[]).length>0);
+  const meals=['lightBreakfast',...(printHasBreakfast?['breakfast']:[]),'brunch',...(printHasLunch?['lunch']:[]),'snack','dinner'];
+  const mealCfg=MENU_MEAL_CFG;
   const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});};
   // Pre-compute max schedule rows per meal across all selected days
   const maxR={};
@@ -777,7 +791,8 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
   };
   const rangeLbl=fmtRangeLbl(fromVal,toVal);
   const printHasLunch=days.some(ds=>(menuSchedule[ds]?.lunch||[]).length>0);
-  const meals=['lightBreakfast','brunch',...(printHasLunch?['lunch']:[]),'snack','dinner'];
+  const printHasBreakfast=days.some(ds=>(menuSchedule[ds]?.breakfast||[]).length>0);
+  const meals=['lightBreakfast',...(printHasBreakfast?['breakfast']:[]),'brunch',...(printHasLunch?['lunch']:[]),'snack','dinner'];
 
   const itemLine=(s)=>{
     const clean=s.replace(' ★','').replace('★ ','');

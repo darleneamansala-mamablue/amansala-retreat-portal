@@ -341,6 +341,11 @@ exports.handler = async (event) => {
       end_date: trip.end_date,
       status: existing[0] ? undefined : (isFullyPaid ? 'confirmed' : 'deposit_paid'),
       source: 'wetravel',
+      // WeTravel guests aren't on a teacher's class schedule, so the Menu uses
+      // a fixed daily meal-window rule for them instead (see modules/menu.js
+      // WETRAVEL_MEAL_TIMES) — only set on first creation so a manual
+      // override in the booking editor survives future webhook syncs.
+      meal_plan: existing[0] ? undefined : 'weTravel',
       notes: `Synced from WeTravel — ${trip.title || ''} — ${trip.url || ''}`.trim(),
     }]);
 
