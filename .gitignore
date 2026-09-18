@@ -3,3 +3,6 @@
 .netlify/
 deploy.log
 .DS_Store
+
+# Local Supabase CLI cache
+supabase/.temp/

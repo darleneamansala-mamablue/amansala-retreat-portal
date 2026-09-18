@@ -1056,7 +1056,22 @@ function rmChargeDelete(chargeId){
 }
 function rmDeleteBooking(){
   if(!_rmEditId||!confirm('Delete this reservation?'))return;
-  AppData.bookings=AppData.bookings.filter(b=>b.id!==_rmEditId);
+  // Was only removing the booking from THIS tab's in-memory array — nothing
+  // told Supabase it was deleted (no deletedBookingIds entry, no explicit
+  // delete), so the row was still sitting there on the server and came right
+  // back on the next load/sync, from this tab or any other. Same complete
+  // delete this app already uses for a full retreat (venDeleteConfirmed):
+  // cancel its Cloudbeds reservation, mark it in deletedBookingIds so it
+  // never gets re-uploaded or reloaded, and drop its own registrations too.
+  const id=_rmEditId;
+  const bk=AppData.bookings.find(b=>b.id===id);
+  cancelCloudbedReservations(bk).catch(e=>console.warn('[CB cancel]',e));
+  deletedBookingIds.add(id);
+  AppData.bookings=AppData.bookings.filter(b=>b.id!==id);
+  AppData.regs=AppData.regs.filter(r=>r.bookingId!==id);
+  const remainingTransport=loadTransport().filter(s=>s.bookingId!==id);
+  saveTransport(remainingTransport);
+  try{db.from('transport').delete().eq('booking_id',id).then(()=>{});}catch(e){}
   saveAll();rmClose();venBuild();rcBuild();
   showToast('Reservation deleted.');
 }
@@ -1078,7 +1093,7 @@ function rmSaveNewBooking(){
   const nights=Math.round((pd(end)-pd(start))/DAY_MS);
   const roomRateTotal=rate*nights;
   // Conflict check (exclude the booking currently being edited, if any)
-  const conflict=AppData.bookings.some(b=>b.id!==_rmEditId&&b.status!=='cancelled'&&(b.blockedRooms||[]).includes(room)&&datesOverlap(start,end,b.startDate,b.endDate));
+  const conflict=AppData.bookings.some(b=>b.id!==_rmEditId&&b.status!=='cancelled'&&roomListIncludes(b.blockedRooms,room)&&datesOverlap(start,end,b.startDate,b.endDate));
   if(conflict){errEl.textContent=`Room ${room} is already booked for part of these dates.`;errEl.style.display='block';return;}
   if(_rmEditId){
     const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
@@ -1312,7 +1327,7 @@ function rcTrackClick(event,room,rtId,trackEl){
   const days=rcShowDays;
   if(dayIdx<0||dayIdx>=days)return;
   const clickedDate=fmtISO(addDays(rcStart,dayIdx));
-  const busy=AppData.bookings.some(bk=>bk.status!=='cancelled'&&(bk.blockedRooms||[]).includes(room)&&clickedDate>=bk.startDate&&clickedDate<bk.endDate);
+  const busy=AppData.bookings.some(bk=>bk.status!=='cancelled'&&roomListIncludes(bk.blockedRooms,room)&&clickedDate>=bk.startDate&&clickedDate<bk.endDate);
   if(busy)return;
   rmOpenNewBooking(room,rtId,clickedDate);
 }
@@ -2321,9 +2336,49 @@ function rcBuild(){
 
       days.forEach((d,i)=>{if(d.getDate()===1){const gl=document.createElement('div');gl.className='g-gl ms';gl.style.left=i*36+'px';track.appendChild(gl);}if(fmtISO(d)===todayStr){const tl=document.createElement('div');tl.className='g-gl today-l';tl.style.left=(i*36+18)+'px';track.appendChild(tl);}});
 
-      // Show any booking that has blocked this room (registered guest or just blocked)
-      AppData.bookings.filter(bk=>bk.status!=='cancelled'&&entry.physical.some(p=>(bk.blockedRooms||[]).includes(p))).forEach(bk=>{
-        const bkS=pd(bk.startDate).getTime(),bkE=pd(bk.endDate).getTime();
+      // Show any booking that has blocked this room (registered guest or just blocked).
+      // Case-insensitive (via roomListIncludes) — room codes are inconsistently cased in
+      // real data (Cloudbeds reports rooms uppercase, e.g. "2B", vs this app's usually-
+      // lowercase "2b"), and an exact-case match here silently hid a real, currently-
+      // checked-in booking from this grid (same root cause just fixed in the Block Rooms
+      // modal's conflict check). roomListIncludes itself knows to NOT fold case for the
+      // few pairs that are actually two different physical rooms (e.g. "2B" the private
+      // King room vs "2b" the unrelated shared bed) — see its definition.
+      AppData.bookings.filter(bk=>bk.status!=='cancelled'&&entry.physical.some(p=>roomListIncludes(bk.blockedRooms,p))).forEach(bk=>{
+        // getRegForRoom, not a raw .find() — a room can end up with more than one
+        // registration row for the same booking (an empty leftover plus the real,
+        // named one), and .find() just grabbed whichever came first in AppData.regs,
+        // sometimes the empty one — showing the room as nameless with no date
+        // override even though a real guest+extension was saved (Jorge's report
+        // 2026-09-17: Marcia Hoffheins' "14B -b", Bella Hoffheins' name+dates hidden
+        // behind an empty duplicate reg). getRegForRoom always prefers whichever
+        // duplicate actually has named guests.
+        const regEntry=getRegForRoom(bk.id,entry.physical[0]);
+        // This room's own checkIn/checkOut override — an "extension" edited on
+        // the registration in Teachers/Registration (gm-checkin/gm-checkout,
+        // or a per-guest g-checkin/g-checkout inside it) — widens the bar
+        // beyond the retreat's blanket dates. The pricing engine already
+        // honors this override (calcBD/sumGuestRoomCost); this grid was
+        // ignoring it entirely and always drawing at the retreat's default
+        // span, so an extended stay never showed as extended here.
+        let _effStart=regEntry?.checkIn||bk.startDate;
+        let _effEnd=regEntry?.checkOut||bk.endDate;
+        // gm-checkin/gm-checkout on the registration are only a *default* for
+        // guests without their own override (see the "(default for the whole
+        // room)" label on that modal) — a guest's own checkIn/checkOut always
+        // wins over that default, whether it's later OR earlier. Widening-only
+        // (the previous version of this) left a room showing an extra night
+        // whenever the room-level default was a stale value wider than every
+        // actual guest's own dates (Jorge's report 2026-09-17: Damian/Lillian's
+        // room defaulted to Oct 23 checkout but both guests were set to Oct 21).
+        const _dateGuests=(regEntry?.guests||[]).filter(g=>g.name&&!g.cancelled);
+        if(_dateGuests.length){
+          const _starts=_dateGuests.map(g=>g.checkIn||_effStart);
+          const _ends=_dateGuests.map(g=>g.checkOut||_effEnd);
+          _effStart=_starts.reduce((a,b)=>a<b?a:b);
+          _effEnd=_ends.reduce((a,b)=>a>b?a:b);
+        }
+        const bkS=pd(_effStart).getTime(),bkE=pd(_effEnd).getTime();
         const winE=startMs+rcShowDays*DAY_MS;
         if(bkS>=winE||bkE<=startMs)return;
         const cs=Math.max(bkS,startMs),ce=Math.min(bkE,winE);
@@ -2331,7 +2386,6 @@ function rcBuild(){
         if(wi<=0)return;
         const st=STATUS[bk.status]||STATUS.requested;
         const pc=bkPaletteColor(bk);
-        const regEntry=AppData.regs.find(r=>r.bookingId===bk.id&&entry.physical.includes(r.room));
         // Room Only bookings have no separate guest registration — the leader
         // IS the guest. Once it's past a Soft Hold (Darlene's rule 2026-09-16:
         // confirmed, not on hold), treat it as a real reservation instead of
@@ -2410,7 +2464,7 @@ function rcBuild(){
     const bedOccDays=new Map(); // iso -> Map(bed -> bkId)
     AppData.bookings.filter(bk=>bk.status!=='cancelled').forEach(bk=>{
       beds.forEach(bed=>{
-        if(!(bk.blockedRooms||[]).includes(bed))return;
+        if(!roomListIncludes(bk.blockedRooms,bed))return;
         const bkS=pd(bk.startDate).getTime(),bkE=pd(bk.endDate).getTime();
         days.forEach(d=>{const t=d.getTime();if(t>=bkS&&t<bkE){const iso=fmtISO(d);if(!bedOccDays.has(iso))bedOccDays.set(iso,new Map());bedOccDays.get(iso).set(bed,bk.id);}});
       });
@@ -2583,7 +2637,9 @@ function rcRenderExternalReservations(reservations,startMs){
     // 2026-09-16 — Penelope/Karin, guests within Shannon Jamail's retreat).
     const match=rcKnownGuestMatch(r.guestName);
     (r.rooms||[]).forEach(roomName=>{
-      const track=allTracks.find(t=>t.getAttribute('data-room').toLowerCase()===roomName.toLowerCase());
+      // Exact match first, case-insensitive fallback via roomCodesEqual (which knows
+      // "2B"/"2b" etc. are actually two different rooms and won't fold those together).
+      const track=allTracks.find(t=>t.getAttribute('data-room')===roomName)||allTracks.find(t=>roomCodesEqual(t.getAttribute('data-room'),roomName));
       if(!track){console.warn('[rcExternal] no track for room:',roomName,'available:',trackNames);return;}
       const bl=document.createElement('div');
       bl.className='bk';
@@ -2770,7 +2826,7 @@ function _rclApplyLink(m){
     return;
   }
   if(!bk.blockedRooms)bk.blockedRooms=[];
-  if(!bk.blockedRooms.includes(m.room))bk.blockedRooms.push(m.room);
+  if(!roomListIncludes(bk.blockedRooms,m.room))bk.blockedRooms.push(m.room);
   if(!bk.cbReservationIds)bk.cbReservationIds={};
   bk.cbReservationIds[m.room]=m.r.reservationID;
   bk.blockedRoomsUpdatedAt=new Date().toISOString();
@@ -2823,7 +2879,7 @@ function linkExternalReservationToBooking(r,bkId,roomName){
   }
   if(!confirm(`Link ${r.guestName}'s Cloudbeds reservation (room ${roomName}) to ${label}'s booking?`))return;
   if(!bk.blockedRooms)bk.blockedRooms=[];
-  if(!bk.blockedRooms.includes(roomName))bk.blockedRooms.push(roomName);
+  if(!roomListIncludes(bk.blockedRooms,roomName))bk.blockedRooms.push(roomName);
   if(!bk.cbReservationIds)bk.cbReservationIds={};
   bk.cbReservationIds[roomName]=r.reservationID;
   bk.blockedRoomsUpdatedAt=new Date().toISOString();
@@ -2847,7 +2903,7 @@ function importExternalReservation(r){
   // is exactly how the Shannon Jamail Group duplicate happened (real
   // incident 2026-09-16): a match should have linked it to her existing
   // retreat instead of importing it as a disconnected new booking.
-  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(room)&&datesOverlap(r.startDate,r.endDate,other.startDate,other.endDate));
+  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&roomListIncludes(other.blockedRooms,room)&&datesOverlap(r.startDate,r.endDate,other.startDate,other.endDate));
   // This is a suggestion, not a hard rule — usually the right call IS to
   // link it to that retreat instead, but sometimes the retreat's own
   // blockedRooms entry is the stale/wrong one (e.g. a leftover placeholder)
@@ -2889,7 +2945,7 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
   // Check toRoom not already blocked by another retreat on overlapping dates
   const conflict=AppData.bookings.find(other=>
     other.id!==bkId&&other.status!=='cancelled'&&
-    (other.blockedRooms||[]).includes(toRoom)&&
+    roomListIncludes(other.blockedRooms,toRoom)&&
     datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate)
   );
   if(conflict){showToast(`Room ${toRoom} is already blocked by ${conflict.leaderName||conflict.retreatName}.`);return;}
@@ -2960,7 +3016,7 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
 // just correctly repositioned (still clickable to link/import, unchanged).
 async function rcMoveExternalReservation(reservationID,fromRoom,toRoom,guestName,startDate,endDate){
   if(fromRoom===toRoom)return;
-  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&(other.blockedRooms||[]).includes(toRoom)&&datesOverlap(startDate,endDate,other.startDate,other.endDate));
+  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&roomListIncludes(other.blockedRooms,toRoom)&&datesOverlap(startDate,endDate,other.startDate,other.endDate));
   if(conflict){showToast(`Room ${toRoom} is already part of ${conflict.leaderName||conflict.retreatName}'s booking for these dates.`);return;}
   showToast(`Moving ${guestName} to ${toRoom}…`);
   try{

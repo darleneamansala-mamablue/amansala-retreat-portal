@@ -225,40 +225,70 @@ function trFmtTulum(iso){
 }
 function trNormName(s){return(s||'').toLowerCase().replace(/\s+/g,' ').trim();}
 function trTransportFullName(s){return trNormName(((s.firstName||'')+' '+(s.lastName||'')).trim());}
-function trGuestMatchesSub(guest,sub){
-  const email=(guest.email||'').toLowerCase().trim();
-  const subEmail=(sub.email||'').toLowerCase().trim();
-  if(email&&subEmail&&email===subEmail)return true;
-  const gName=trNormName(guest.name);
-  const subName=trTransportFullName(sub);
-  if(!gName||!subName)return false;
-  if(gName===subName)return true;
-  const gFirst=gName.split(' ')[0];
-  const subFirst=trNormName(sub.firstName);
-  if(gFirst&&subFirst&&gFirst===subFirst&&(!gName.includes(' ')||!sub.lastName))return true;
-  return false;
-}
 /** Room-list roster is source of truth for who should submit transport. */
 function getTransportRoster(bkId){
   const allSubs=loadTransport().filter(s=>s.bookingId===bkId&&s.status!=='cancelled');
+  // Includes the teacher's own room (isTeacherRoom) — she needs transport too,
+  // and excluding her here meant her own submission never showed anywhere: not
+  // under her name (filtered out of the roster) and not even attributed to her
+  // by mistake once the email-collision fix stopped that (Jorge's report
+  // 2026-09-17: "sigo sin ver Marcia en My Transportation, no se debe de excluir").
   const roster=[];
-  AppData.regs.filter(r=>r.bookingId===bkId&&!r.isTeacherRoom).forEach(r=>{
+  AppData.regs.filter(r=>r.bookingId===bkId).forEach(r=>{
     (r.guests||[]).filter(g=>g.name).forEach(g=>{
       roster.push({name:g.name,email:(g.email||r.email||'').trim(),room:r.room||''});
     });
   });
-  const matchedSubs=[];
   const usedIdx=new Set();
   const guestSub=new Map(); // guest (roster entry) → matched sub, for a 1:1 per-guest view
+  const matchGuest=(guest,predicate)=>{
+    if(guestSub.has(guest))return;
+    const idx=allSubs.findIndex((s,i)=>!usedIdx.has(i)&&predicate(s));
+    if(idx>=0){usedIdx.add(idx);guestSub.set(guest,allSubs[idx]);}
+  };
+
+  // Tier 1: email match — but ONLY when this email actually identifies a single
+  // roster guest. Several room-list entries fall back to the retreat leader's own
+  // email as a generic placeholder when the real guest never gave one — trusting
+  // a shared placeholder as an identity match let one guest's real submission get
+  // stolen by a completely different guest who happened to share it (Jorge's
+  // report 2026-09-17: Marcia Hoffheins' own submission was showing up attached to
+  // "Carla Carla" because both used marciahoffheins@gmail.com in the room list).
+  const emailCounts=new Map();
+  roster.forEach(g=>{const em=(g.email||'').toLowerCase().trim();if(em)emailCounts.set(em,(emailCounts.get(em)||0)+1);});
   roster.forEach(guest=>{
-    const idx=allSubs.findIndex((s,i)=>!usedIdx.has(i)&&trGuestMatchesSub(guest,s));
-    if(idx>=0){matchedSubs.push(allSubs[idx]);usedIdx.add(idx);guestSub.set(guest,allSubs[idx]);}
+    const em=(guest.email||'').toLowerCase().trim();
+    if(!em||emailCounts.get(em)!==1)return;
+    matchGuest(guest,s=>(s.email||'').toLowerCase().trim()===em);
   });
-  const missing=roster.filter(guest=>!matchedSubs.some(s=>trGuestMatchesSub(guest,s)));
+
+  // Tier 2: exact full name.
+  roster.forEach(guest=>matchGuest(guest,s=>trNormName(guest.name)===trTransportFullName(s)));
+
+  // Tier 3: a room-list name that's abbreviated ("Billy S", "MIchelle M") never
+  // exact-matches the guest's own fuller self-submitted name ("Billy Stalcup") —
+  // but if that first name belongs to only ONE roster guest in this booking, it's
+  // unambiguous — the same "unique first name in this booking" fallback the admin
+  // Transportation tab already uses (tr2BuildView's firstNameIdx), which is why
+  // that tab showed these guests correctly while My Transportation showed them as
+  // "not submitted" for the exact same data.
+  const firstNameCounts=new Map();
+  roster.forEach(g=>{
+    const fn=g.name.trim().split(/\s+/)[0].toLowerCase();
+    if(fn.length<3)return;
+    firstNameCounts.set(fn,(firstNameCounts.get(fn)||0)+1);
+  });
+  roster.forEach(guest=>{
+    const fn=guest.name.trim().split(/\s+/)[0].toLowerCase();
+    if(fn.length<3||firstNameCounts.get(fn)!==1)return;
+    matchGuest(guest,s=>(s.firstName||'').trim().toLowerCase()===fn);
+  });
+
+  const missing=roster.filter(guest=>!guestSub.has(guest));
   return{
     roster,
     allSubs,
-    matchedSubs,
+    matchedSubs:[...guestSub.values()],
     missing,
     submittedCount:roster.length-missing.length,
     orphanSubs:allSubs.filter((_,i)=>!usedIdx.has(i)),
@@ -373,7 +403,7 @@ function trTimeToMins(t){if(!t)return 0;const[h,m]=(t||'').split(':');return par
 // not automatic) — same folio-charge shape/pattern as the Spa "Charge to
 // Room" button (spaChargeApptToRoom in modules/spa.js), reusing the
 // roster/email-or-name guest matching already used to check who has
-// submitted transport info (trGuestMatchesSub/getTransportRoster above).
+// submitted transport info (getTransportRoster above).
 
 function trGetPrice(airport,size){
   const c=airport==='cancun';
@@ -802,7 +832,15 @@ async function tr2LoadData() {
       const fn = (d.firstName || '').toLowerCase().trim();
       const ln = (d.lastName || '').toLowerCase().trim();
       const bk = row.booking_id || (d.bookingId || '');
-      const key = em ? `email|${bk}|${em}` : `name|${fn}_${ln}|${normDate(d.arrivalDate)}|${normDate(d.departureDate)}`;
+      // Name is part of the key even when there's an email — two DIFFERENT real
+      // people sharing one household/family email (a couple booking together,
+      // e.g. Susan & Edward McClelland both using katiesolyoga@gmail.com) used to
+      // collide on email alone and silently collapse into a single row, dropping
+      // one person's whole submission (Jorge's report 2026-09-17: Susan McClelland
+      // missing from Transportation even though she'd submitted). Email-only
+      // matching was meant to catch the SAME person resubmitting the form twice,
+      // which this still does — that case has the same name too.
+      const key = em ? `email|${bk}|${em}|${fn}_${ln}` : `name|${fn}_${ln}|${normDate(d.arrivalDate)}|${normDate(d.departureDate)}`;
       const cur = map.get(key);
       map.set(key, cur ? pickBetter(cur, row) : row);
     }
@@ -824,13 +862,18 @@ async function tr2LoadData() {
     const bkId = row.booking_id;
     const bk = bkMap[bkId];
     const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
-    const room = roomLookup[`${bkId}|${name.toLowerCase()}`] ?? (() => {
+    // A manual correction from the edit modal (d.roomOverride) always wins — the
+    // auto-match (exact name, then unique first name, then unique email) is a best
+    // guess and has no way to fix itself when it's wrong, unlike the room list itself
+    // which staff can just edit directly (Jorge's report 2026-09-17: the Transportation
+    // tab's Room column had no way to adjust it, unlike My Transportation).
+    const room = (d.roomOverride || '').trim() || (roomLookup[`${bkId}|${name.toLowerCase()}`] ?? (() => {
       const fn = (d.firstName || '').trim().toLowerCase();
       if (fn.length >= 3) { const fi = firstNameIdx[`${bkId}|${fn}`]; if (fi && fi.count === 1) return fi.room; }
       const em = (d.email || '').toLowerCase().trim();
       if (em && bkId) { const ei = emailRoomIdx[`${bkId}|${em}`]; if (ei && ei.count === 1) return ei.room; }
       return '';
-    })();
+    })());
     const retreatLabel = bk ? [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ') : 'Sin retiro asignado';
 
     if (d.arrivalDate && d.arrivalTime) {
@@ -854,10 +897,32 @@ async function tr2LoadData() {
     }
   }
 
-  // Synthetic OT entries — registered guests with no transport form submission,
-  // so upgrades can still be offered to guests using their own transport.
+  // Synthetic "Missing transport" entries — registered guests with no transport form
+  // submission, so upgrades can still be offered to guests using their own transport.
+  // (marked ot:true purely for the internal "no transfer to arrange" logic elsewhere —
+  // the badge below shows "Missing", not "OT", since nobody actually told us they're
+  // arranging their own ride; see isSynthetic in tr2AirportBadge-equivalent below.)
   const transportedKeys   = new Set(tr2AllEntries.map(e => `${e.retreatId}|${tr2NormName(e.guest)}`));
   const transportedEmails = new Set(tr2AllEntries.filter(e => e.email?.trim()).map(e => `${e.retreatId}|${e.email.toLowerCase().trim()}`));
+  // Same unique-first-name-in-this-booking fallback the Room-column lookup above uses —
+  // an abbreviated room-list name ("Billy S") never exact-matches the guest's own
+  // fuller submitted name ("Billy Stalcup"), so without this check that real submission
+  // (already shown elsewhere in this table) ALSO spawned a bogus "Missing transport"
+  // duplicate for the same person (Jorge's report 2026-09-17: Billy S/Michelle M/Crystal W
+  // showing twice — once with their real flight info, once as a fake "Own Transport" row).
+  const transportedFirstNames = new Map(); // `${bkId}|${firstname}` -> true
+  tr2AllEntries.forEach(e => {
+    // Plain first token, NOT tr2NormName(e.guest) — that sorts words alphabetically
+    // (for order-insensitive matching elsewhere), so "Michelle Maggiore" became
+    // "maggiore michelle" and its first word was her LAST name, never matching the
+    // room-list guest's actual first name ("michelle") — the exact bug this whole
+    // check exists to avoid (Jorge's report 2026-09-17: Michelle M still duplicated
+    // after Billy S/Crystal W were fixed).
+    const fn = (e.guest || '').trim().split(/\s+/)[0]?.toLowerCase();
+    if (!fn) return;
+    const key = `${e.retreatId}|${fn}`;
+    if (!transportedFirstNames.has(key)) transportedFirstNames.set(key, true);
+  });
   tr2ActiveBooks.forEach(bk => {
     const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
     AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => {
@@ -865,7 +930,17 @@ async function tr2LoadData() {
       (reg.guests || []).forEach(g => {
         if (!g.name) return;
         if (transportedKeys.has(`${bk.id}|${tr2NormName(g.name)}`)) return;
-        if (g.email?.trim() && transportedEmails.has(`${bk.id}|${g.email.toLowerCase().trim()}`)) return;
+        // Only trust "this email already submitted" when the email actually identifies
+        // ONE roster guest — several family members can share one household email in
+        // the room list (emailRoomIdx.count>1), and without this guard, ANY of them
+        // having submitted made the OTHERS look like they'd submitted too, so they
+        // never got a "Missing Transport" row at all (Jorge's report 2026-09-17:
+        // Katherine McClelland, sharing katiesolyoga@gmail.com with Susan & Edward who
+        // did submit, never showed up as missing even though she never submitted).
+        const gEm = (g.email || '').toLowerCase().trim();
+        if (gEm && emailRoomIdx[`${bk.id}|${gEm}`]?.count === 1 && transportedEmails.has(`${bk.id}|${gEm}`)) return;
+        const gFn = g.name.trim().split(/\s+/)[0].toLowerCase();
+        if (gFn.length >= 3 && firstNameIdx[`${bk.id}|${gFn}`]?.count === 1 && transportedFirstNames.has(`${bk.id}|${gFn}`)) return;
         tr2AllEntries.push({
           rowId: `synth-${reg.id}-${tr2NormName(g.name)}`, type: 'arrival', date: bk.startDate, time: '',
           guest: g.name, email: g.email || '', flight: '', airport: '', ot: true, share: false, notes: '',
@@ -1014,9 +1089,19 @@ function tr2BuildView() {
     }
   }
 
-  if (otEntries.length) {
-    html += `<tr><td colspan="9" style="padding:8px 12px;background:#fef2f2;font-size:11px;font-weight:700;color:#dc2626;border-top:2px solid #e5e7eb">Own Transport (${otEntries.length})</td></tr>`;
-    otEntries.forEach(e => { html += tr2RenderRow(e, null); });
+  // Real OT (guest told us they're arranging their own transport) and synthetic
+  // "Missing" (registered but never submitted anything) are both ot:true internally,
+  // but they mean opposite things for staff — split them into their own headed
+  // sections instead of lumping "missing" guests under an "Own Transport" heading.
+  const realOtEntries = otEntries.filter(e => !e.isSynthetic);
+  const missingEntries = otEntries.filter(e => e.isSynthetic);
+  if (realOtEntries.length) {
+    html += `<tr><td colspan="9" style="padding:8px 12px;background:#fef2f2;font-size:11px;font-weight:700;color:#dc2626;border-top:2px solid #e5e7eb">Own Transport (${realOtEntries.length})</td></tr>`;
+    realOtEntries.forEach(e => { html += tr2RenderRow(e, null); });
+  }
+  if (missingEntries.length) {
+    html += `<tr><td colspan="9" style="padding:8px 12px;background:#fef9c3;font-size:11px;font-weight:700;color:#92400e;border-top:2px solid #e5e7eb">Missing Transport (${missingEntries.length})</td></tr>`;
+    missingEntries.forEach(e => { html += tr2RenderRow(e, null); });
   }
 
   html += `</tbody></table></div>`;
@@ -1052,13 +1137,24 @@ function tr2RenderRow(e, color, groupPax) {
   const typeBadge = isArr
     ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#dbeafe;color:#1d4ed8">🛬 Arrival</span>`
     : `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fce7f3;color:#9d174d">🛫 Departure</span>`;
-  const airportBadge = e.ot
+  // A synthetic row (isSynthetic) means nobody actually submitted a form — it's not
+  // that the guest told us they're arranging their own transport (real OT), it's that
+  // we have no data from them at all. Those are two different situations and staff
+  // need to tell them apart (Jorge's report 2026-09-17): OT means "confirmed, don't
+  // arrange a transfer"; Missing means "still needs to be chased down".
+  const airportBadge = e.isSynthetic
+    ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fef9c3;color:#92400e">Missing</span>`
+    : e.ot
     ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fef2f2;color:#dc2626">OT</span>`
     : e.airport === 'cancun'
       ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#eff6ff;color:#2563eb">CUN</span>`
       : e.airport === 'tulum'
         ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#f0fdf4;color:#16a34a">TQO</span>`
-        : `<span style="font-size:10px;color:#9ca3af">—</span>`;
+        // A real submission (not synthetic) that didn't check Own Transport AND has no
+        // airport picked is an incomplete form, not just "nothing to show" — flag it the
+        // same way as a no-submission guest instead of a blank dash (Jorge's ask
+        // 2026-09-18: unchecked OT + no airport should read "Missing Information").
+        : `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fef9c3;color:#92400e">Missing Information</span>`;
 
   const raw = tr2RawRows[e.rowId]?.data || {};
   const charged = isArr ? raw.folioCharged?.arrivalFolioItemId : raw.folioCharged?.departureFolioItemId;
@@ -1414,8 +1510,8 @@ function tr2EditEntry(rowId) {
   const isSynth = rowId.startsWith('synth-');
   const row = tr2RawRows[rowId];
   if (!row && !isSynth) return;
-  const entry = isSynth ? tr2AllEntries.find(e => e.rowId === rowId) : null;
-  const nameParts = entry ? entry.guest.trim().split(/\s+/) : [];
+  const entry = tr2AllEntries.find(e => e.rowId === rowId) || null;
+  const nameParts = isSynth && entry ? entry.guest.trim().split(/\s+/) : [];
   const d = row?.data || { firstName: nameParts[0]||'', lastName: nameParts.slice(1).join(' ')||'', email: entry?.email||'', arrivalOT:true, departureOT:true };
 
   const sel = (id, opts, val) => `<select id="${id}" style="${TR2_INPUT_S}">${opts.map(o => `<option value="${o.v}"${o.v===val?' selected':''}>${o.l}</option>`).join('')}</select>`;
@@ -1436,6 +1532,11 @@ function tr2EditEntry(rowId) {
         <div><label style="${TR2_LBL_S}">Nombre</label>${inp('tr2-e-fn','text',d.firstName)}</div>
         <div><label style="${TR2_LBL_S}">Apellido</label>${inp('tr2-e-ln','text',d.lastName)}</div>
         <div style="grid-column:1/-1"><label style="${TR2_LBL_S}">Email</label>${inp('tr2-e-email','email',d.email)}</div>
+        <div style="grid-column:1/-1">
+          <label style="${TR2_LBL_S}">Cuarto</label>
+          ${inp('tr2-e-room','text',d.roomOverride||entry?.room||'','ej. 14a')}
+          <div style="font-size:10.5px;color:#9ca3af;margin-top:2px">Se detecta automático por nombre — ajusta aquí solo si quedó mal asignado.</div>
+        </div>
       </div>
       <div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Llegada</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -1477,6 +1578,7 @@ async function tr2SaveEdit(rowId) {
   const updatedData = {
     ...oldData,
     firstName: g('tr2-e-fn')?.value.trim() || '', lastName: g('tr2-e-ln')?.value.trim() || '', email: g('tr2-e-email')?.value.trim() || '',
+    roomOverride: g('tr2-e-room')?.value.trim() || null,
     arrivalDate: g('tr2-e-arr-date')?.value || '', arrivalTime: g('tr2-e-arr-time')?.value || '', arrivalAirport: g('tr2-e-arr-airport')?.value || 'cancun',
     flightNumber: g('tr2-e-flight')?.value.trim() || '', arrivalOT: g('tr2-e-arr-ot')?.checked || false,
     departureDate: g('tr2-e-dep-date')?.value || '', departureTime: g('tr2-e-dep-time')?.value || '', departureAirport: g('tr2-e-dep-airport')?.value || 'cancun',
@@ -1504,8 +1606,15 @@ async function tr2SaveEdit(rowId) {
 
   if (isSynth) {
     const entry = tr2AllEntries.find(e => e.rowId === rowId);
+    // The `transport` table has no default for `id` — a plain insert() with none
+    // fails outright (23502 not-null violation), so saving from a "Missing
+    // Transport" row silently never created anything (Jorge's report 2026-09-18:
+    // "cuando le das editar no guarda la información"). Client-generated id,
+    // matching the tr_<timestamp> pattern already used elsewhere for this table.
+    const newId = `tr_${Date.now()}`;
+    updatedData.id = newId;
     try {
-      await db.from('transport').insert({ booking_id: entry?.retreatId || null, data: updatedData });
+      await db.from('transport').insert({ id: newId, booking_id: entry?.retreatId || null, data: updatedData });
       document.getElementById('tr2-edit-modal')?.remove();
       showToast('Transporte creado ✓');
       await tr2LoadData();

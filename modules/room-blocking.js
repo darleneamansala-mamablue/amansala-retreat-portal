@@ -143,15 +143,30 @@ function _renderBlockRoomsGrid(bkId){
     if(other.id===bkId||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     const entry={name:other.leaderName||other.retreatName,bookingId:other.id};
+    // Keys always lowercased — real room-block data is inconsistently cased
+    // (Cloudbeds reports rooms uppercase, e.g. "2B", while this app's own
+    // codes are usually lowercase "2b") and a case-sensitive Map here missed
+    // the match entirely: Samantha Gibson's "2B" never flagged as conflicting
+    // against Heather Sherry's "2b", so the grid showed it as available,
+    // checking+saving it then got silently dropped by blockSave()'s own
+    // (already case-insensitive) conflict check — confirmed real incident
+    // 2026-09-17.
     (other.blockedRooms||[]).forEach(room=>{
-      if(!conflictMap.has(room))conflictMap.set(room,entry);
+      const lk=room.toLowerCase();
+      if(!conflictMap.has(lk))conflictMap.set(lk,entry);
+      // Same physical room sold the other way (whole vs. bed) — flag it too,
+      // or the same space can be double-booked (real incident: room 4 blocked
+      // whole for one retreat while 4a/4b were already blocked for another).
+      getRoomCounterparts(room).forEach(cp=>{const lcp=cp.toLowerCase();if(!conflictMap.has(lcp))conflictMap.set(lcp,entry);});
     });
     // Also cross-check real registrations, not just blockedRooms — a room can
     // have a named guest registered in it whose room was never added to
     // blockedRooms ("orphaned registration"; confirmed real incidents:
     // Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
     AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{
-      if(!conflictMap.has(r.room))conflictMap.set(r.room,entry);
+      const lk=r.room.toLowerCase();
+      if(!conflictMap.has(lk))conflictMap.set(lk,entry);
+      getRoomCounterparts(r.room).forEach(cp=>{const lcp=cp.toLowerCase();if(!conflictMap.has(lcp))conflictMap.set(lcp,entry);});
     });
   });
   // Also add external Cloudbeds reservations (walk-ins, OTAs, etc.)
@@ -171,8 +186,8 @@ function _renderBlockRoomsGrid(bkId){
     const extGuestNorm=(r.guestName||'').toLowerCase().trim();
     if(_leaderNorm&&extGuestNorm&&(extGuestNorm.includes(_leaderNorm)||_leaderNorm.includes(extGuestNorm)))return;
     (r.rooms||[]).forEach(room=>{
-      if(!conflictMap.has(room))conflictMap.set(room,{name:`${r.guestName} (${r.sourceName||'Cloudbeds'})`,bookingId:null});
-      if(!conflictMap.has(room.toLowerCase()))conflictMap.set(room.toLowerCase(),conflictMap.get(room));
+      const lk=room.toLowerCase();
+      if(!conflictMap.has(lk))conflictMap.set(lk,{name:`${r.guestName} (${r.sourceName||'Cloudbeds'})`,bookingId:null});
     });
   });
 
@@ -199,7 +214,7 @@ function _renderBlockRoomsGrid(bkId){
   const rowAllowed=getRowAllowedRooms(bk.row);
   const slRooms=getStraightLineRooms(bk);
   const suggestedRooms=new Set(
-    [...slRooms].filter(r=>!conflictMap.has(r)&&(!rowAllowed||rowAllowed.has(r))&&!myBlocked.has(r))
+    [...slRooms].filter(r=>!conflictMap.has(r.toLowerCase())&&(!rowAllowed||rowAllowed.has(r))&&!myBlocked.has(r))
   );
 
   const body=document.getElementById('blockModalBody');
@@ -235,7 +250,7 @@ function _renderBlockRoomsGrid(bkId){
     // rooms booked and nobody's registered yet" instead of an anonymous BOOKED badge.
     const otherBkStats=new Map(); // bookingId -> {name, rooms:Set, hasGuest}
     rt.rooms.forEach(physRoom=>{
-      const c=conflictMap.get(physRoom);
+      const c=conflictMap.get(physRoom.toLowerCase());
       if(!c||!c.bookingId)return;
       let s=otherBkStats.get(c.bookingId);
       if(!s){s={name:c.name,rooms:new Set(),hasGuest:false};otherBkStats.set(c.bookingId,s);}
@@ -282,10 +297,10 @@ function _renderBlockRoomsGrid(bkId){
     let lastGroup=null;
     uiEntries.forEach(entry=>{
       const room=entry.display;
-      const conflictEntry=entry.physical.map(p=>conflictMap.get(p)).find(Boolean);
+      const conflictEntry=entry.physical.map(p=>conflictMap.get(p.toLowerCase())).find(Boolean);
       const conflict=conflictEntry?.name||'';
       const conflictNoGuestYet=!!(conflictEntry?.bookingId&&otherBkStats.get(conflictEntry.bookingId)&&!otherBkStats.get(conflictEntry.bookingId).hasGuest);
-      const isOther=entry.physical.some(p=>conflictMap.has(p));
+      const isOther=entry.physical.some(p=>conflictMap.has(p.toLowerCase()));
       const isSuggested=entry.physical.some(p=>suggestedRooms.has(p));
       const isChecked=entry.physical.some(p=>myBlocked.has(p))||(noRoomsYet&&isSuggested);
       const guestNames=[];
@@ -465,7 +480,15 @@ async function blockSave(){
   // against a Cloudbeds reservation for that same room — Darlene's report
   // 2026-09-14: "Room 5B" flagged against Piper Nelson (Cloudbeds) despite
   // 5b already being Shannon Jamail's own room, untouched in this save.
-  const prevRoomsSet=new Set((_blockModalOrigRooms.length?_blockModalOrigRooms:(bk.blockedRooms||[])).map(r=>r.toLowerCase()));
+  // Kept as the original array, not a lowercased Set — roomListIncludes below
+  // is collision-aware (a case-fold match is only trusted when that lowercase
+  // form isn't one of the rare pairs that are actually two different physical
+  // rooms, e.g. "2B" the private King room vs "2b" the unrelated shared bed;
+  // see roomCodesEqual). A plain lowercased Set couldn't make that distinction
+  // and could silently skip a REAL conflict on "2B" just because this same
+  // retreat separately, unrelatedly, already held "2b" (Jorge's report
+  // 2026-09-17: Tootsie Olan).
+  const prevRoomsList=_blockModalOrigRooms.length?_blockModalOrigRooms:(bk.blockedRooms||[]);
 
   // Validation: a room already blocked by an overlapping retreat or external Cloudbeds
   // reservation is dropped from THIS save rather than aborting the whole thing — an
@@ -478,11 +501,11 @@ async function blockSave(){
     if(other.id===bk.id)return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(room=>{
-      if(prevRoomsSet.has(room.toLowerCase()))return;
+      if(roomListIncludes(prevRoomsList,room))return;
       // Match against `selected`'s own casing (not `room`'s) so the later
       // `selected.filter(r=>!conflictingRooms.has(r))` actually removes it —
-      // same casing mismatch risk as prevRoomsSet above.
-      const match=selected.find(s=>s.toLowerCase()===room.toLowerCase());
+      // same casing mismatch risk as prevRoomsList above.
+      const match=selected.find(s=>roomCodesEqual(s,room));
       if(match){conflicts.push(`Room ${room} → ${other.leaderName||other.retreatName}`);conflictingRooms.add(match);}
     });
   });
@@ -499,8 +522,8 @@ async function blockSave(){
     const extGuestNorm=(r.guestName||'').toLowerCase().trim();
     if(_bsLeaderNorm&&extGuestNorm&&(extGuestNorm.includes(_bsLeaderNorm)||_bsLeaderNorm.includes(extGuestNorm)))return;
     (r.rooms||[]).forEach(room=>{
-      if(prevRoomsSet.has(room.toLowerCase()))return;
-      const match=selected.find(s=>s.toLowerCase()===room.toLowerCase());
+      if(roomListIncludes(prevRoomsList,room))return;
+      const match=selected.find(s=>roomCodesEqual(s,room));
       if(match){conflicts.push(`Room ${room} → ${r.guestName} (${r.sourceName||'Cloudbeds'})`);conflictingRooms.add(match);}
     });
   });
@@ -619,7 +642,13 @@ function gOpenAdd(room,rtId){
   // reg for this exact room (real incident: Carter retreat, Queen Downstairs A).
   // Mirrors gSave()'s own "taken" check exactly (same !isTeacherRoom filter) so a
   // teacher-room placeholder sharing this room doesn't wrongly redirect a normal Add.
-  if(regSelBk&&AppData.regs.some(r=>r.bookingId===regSelBk.id&&r.room===room&&!r.isTeacherRoom))return gOpenEdit(room,rtId);
+  // roomCodesEqual, not === — an existing reg saved with different casing (e.g. an
+  // older "Gv13a" vs this click's canonical "GV13a") used to slip past this exact-case
+  // check, so a fresh registration got created instead of reusing the empty one —
+  // one of several ways the same room ended up with two reg rows for the same booking
+  // (confirmed sweep 2026-09-17: 31 booking/room pairs system-wide with a duplicate reg,
+  // most a real named guest plus a leftover empty one — e.g. Marcia Hoffheins' "14B -b").
+  if(regSelBk&&AppData.regs.some(r=>r.bookingId===regSelBk.id&&roomCodesEqual(r.room,room)&&!r.isTeacherRoom))return gOpenEdit(room,rtId);
   gEditRegId=null;
   gEditRoom=regSelBk?resolvePhysicalRoomForGuest(regSelBk.id,room,rtId):room;
   gEditRtId=rtId;
@@ -837,7 +866,7 @@ function gSave(){
   else{
     // Check room not already assigned in this booking
     if(!gEditRegId){
-      const taken=AppData.regs.find(r=>r.bookingId===regSelBk.id&&r.room===gEditRoom&&!r.isTeacherRoom);
+      const taken=AppData.regs.find(r=>r.bookingId===regSelBk.id&&roomCodesEqual(r.room,gEditRoom)&&!r.isTeacherRoom);
       if(taken){
         const g=(taken.guests||[]).find(x=>x.name);
         alert(`Room ${gEditRoom} is already assigned to ${g?.name||'another guest'}. Please choose a different room.`);

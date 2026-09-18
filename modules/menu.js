@@ -357,8 +357,10 @@ function menuMealTime(bk,meal,dateStr){
     return mStart ? addMin(mStart,mDur+15)||'09:30' : '09:30';
   }
 
-  // Lunch: fixed 1:00 PM
-  if(meal==='lunch') return '13:00';
+  // Lunch: 1:00 PM by default, or the admin's per-retreat override if the
+  // teacher requested a different lunch hour (Contracts §5-style admin
+  // adjustments panel — see teacher-portal.js svAdjLunchStart).
+  if(meal==='lunch') return ov.lunchStart||sr.lunchStart||'13:00';
   // Snack: always 3:00 PM
   if(meal==='snack') return '15:00';
 

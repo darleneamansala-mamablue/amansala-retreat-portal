@@ -184,6 +184,7 @@ function tsSendAdminChanges(bkId){
     morningDur:parseInt(document.getElementById('svAdjMorningDur')?.value)||sr.morningDur,
     morningShala1:document.getElementById('svAdjMorningShala1')?.value||sr.morningShala1,
     morningShala2:document.getElementById('svAdjMorningShala2')?.value||sr.morningShala2,
+    lunchStart:document.getElementById('svAdjLunchStart')?.value||sr.adminOverride?.lunchStart||sr.lunchStart||'13:00',
   };
   if(sr.hasAfternoon){
     override.afternoonStart=document.getElementById('svAdjAfternoonStart')?.value||sr.afternoonStart;

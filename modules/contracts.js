@@ -32,7 +32,7 @@ const CONTRACT_TMPL_DEFAULTS={
   ],
   paymentTerms:'All prices in this contract are in U.S. Dollars (USD).\n\nA deposit of {depositAmount} USD is due upon signing this contract. An invoice will be issued after the contract is signed. If the deposit is not received within seven (7) days of signing, Casa de Agua reserves the right to release the dates.\n\nAll payments must be made via bank wire or bank transfer. Credit cards are not accepted.\n\nFull payment for the group is due 6 weeks prior to the retreat start date. Any last-minute registrations must be paid within 3 weeks of the start date.',
   cancellationPolicy:'Cancellation by the Retreat Leader\n\nMore than 16 weeks before the start date: deposit refunded less {cancellationFee} USD.\n\nWithin 16 weeks of the start date: deposit is non-refundable and non-transferable to other dates or personal use.\n\nCancellation by Participants\n\nMore than 3 weeks prior to the start date: two (2) nights will be charged according to the occupancy type booked.\n\n3 weeks or less prior to the start date: non-refundable and non-transferable.\n\nThe Retreat Leader must clearly communicate this cancellation policy to their registrants. Casa de Agua\'s cancellation policy is independent of the Retreat Leader\'s own participant cancellation policy.',
-  teacherPolicy:'With 15 paying guests (not including the Retreat Leader): one teacher receives room and board in a small private room (not beachfront) or a larger shared room. The comped room is for one person only — any additional person is charged at the group rate.\n\nIf the group does not reach 15 paying guests, the Retreat Leader\'s accommodations are charged at the group rate.\n\nWith 25 paying guests: two teachers receive either one shared large room with two beds, or two basic garden rooms. Upgrades are available by paying the difference.\n\nIf the minimum number of paying guests is not reached for a free room, Casa de Agua will offer a $20 USD per person, per day credit for each paying signup, applied toward the room. Example: 10 paying guests = $200 USD room credit.',
+  teacherPolicy:'With 10 paying guests (not including the Retreat Leader): one teacher receives room and board in a Garden King room. The comped room is for one person only — any additional person is charged at the group rate.\n\nIf the group does not reach 10 paying guests, the Retreat Leader\'s accommodations are charged at the group rate.\n\nWith 20 paying guests: two teachers each receive a Garden King room. Upgrades are available by paying the difference.\n\nIf the minimum number of paying guests is not reached for a free room, Casa de Agua will offer a $20 USD per person, per day credit for each paying signup, applied toward the room. Example: 10 paying guests = $200 USD room credit.',
   yogaPolicy:'Amansala has four yoga shalas: one for up to 15 people, two for up to 25 people, and two for up to 45 people.\n\nSpace requests are honored on a best-effort basis; shalas are assigned based on group size and availability and cannot be guaranteed. All scheduling requests must be submitted 6 weeks prior to arrival.',
   propertyPolicy:'Property and Room Assignment: Amansala consists of two neighboring properties, Amansala Grande and Amansala Chica, which operate together as one resort. Guest rooms may be assigned at either location based on availability and operational needs. Requests for a specific property or room location may be noted but cannot be guaranteed unless confirmed in writing by Amansala. Final room assignments are made at Amansala\'s discretion.\n\nAir Conditioning: Room AC operates from 9:00 PM – 9:00 AM due to generator usage. 24-hour AC may be added for {acFee} per person per night (typically only necessary June–October).\n\nRoom Allotment Adjustments: Requests to increase or decrease room allotments are subject to availability at the time of request. If rooms remain unused 45 days prior to arrival, Casa de Agua reserves the right to resell them. The Retreat Leader will not be responsible for unused rooms.\n\nFlight Details: Flight details must be submitted 30 days prior to arrival using the form provided.\n\nCheck-In / Check-Out: Check-in is at 3:00 PM. Check-out is at 12:00 PM (noon). Early check-in is subject to availability and may incur an additional fee.',
   liabilityPolicy:'Limitation of Liability — Force Majeure: Performance of this Agreement is subject to acts of God, natural disasters, hurricanes, war, government regulations, transportation interruptions, civil disorder, or other events making travel impossible or inadvisable. In such cases, a credit toward a future retreat will be issued, valid for 24 months from the date of issuance. No cash refunds shall be issued under force majeure circumstances.\n\nLiability & Responsibility Disclaimer: The Retreat Organizer (signatory) acknowledges and agrees that the Retreat Organizer is the sole organizer and promoter of the retreat and is fully responsible for their guests, including their safety, legal claims, and travel arrangements. Casa de Agua acts solely as the reservation and contracting party for this booking and is not the operator or provider of on-site accommodations, services, meals, classes, or activities. All on-site services and retreat operations are delivered exclusively by Agua y Paz, an independent Mexican operational company. Casa de Agua bears no responsibility for any acts, omissions, injuries, losses, or claims of any nature arising from on-site operations or any matter occurring within the country of retreat. All such responsibility rests solely with Agua y Paz.\n\nIndemnification: The Organizer agrees to indemnify, defend, and hold harmless Casa de Agua, its owners, employees, and affiliates, from any and all claims, injuries, damages, losses, or liabilities related to the retreat, including but not limited to accidents, cancellations, or disputes arising between the Organizer and their participants. This indemnification obligation shall survive the termination or expiration of this Agreement.\n\nOrganizer Communications to Participants: The Organizer agrees to communicate clearly to all retreat participants that Casa de Agua is not the operator of the retreat, and that any concerns or liabilities related to the retreat experience must be addressed with the Organizer or with Agua y Paz directly.\n\nGoverning Law: This Agreement shall be governed by and construed in accordance with the laws of the United Mexican States. Any disputes arising under or in connection with this Agreement shall be subject to the jurisdiction of the competent courts of Quintana Roo, Mexico.'
@@ -326,11 +326,11 @@ Casa de Agua's cancellation policy is independent of the Retreat Leader's own po
 
 5. TEACHER / LEADER COMPLIMENTARY POLICY
 ${dash}
-• With 15 paying guests: one teacher receives room and board in a small private room (not
-  beachfront) or a larger shared room. Comped room is for one person only.
-• If the group does not reach 15 paying guests, the Retreat Leader's accommodations are
+• With 10 paying guests: one teacher receives room and board in a Garden King room.
+  Comped room is for one person only.
+• If the group does not reach 10 paying guests, the Retreat Leader's accommodations are
   charged at the group rate.
-• With 25 paying guests: two teachers receive one shared large room or two basic garden rooms.
+• With 20 paying guests: two teachers each receive a Garden King room.
   Upgrades available by paying the difference.
 • If the minimum is not reached, Casa de Agua offers a $20 USD per person, per day credit
   for each paying signup applied toward the room. Example: 10 guests = $200 USD credit.
@@ -507,31 +507,34 @@ function sendRoomListToPortal(){
 }
 
 function autoAssignTeacherRoom(bk){
-  // Skip only if a teacher reg already has a real room assigned
-  const existing=AppData.regs.find(r=>r.bookingId===bk.id&&r.isTeacherRoom);
-  if(existing&&existing.room)return;
+  const paidCount=registeredCount(bk.id);
+  // 10+ paying guests comps one teacher Garden King room; 20+ comps a second one.
+  const allowedRooms=paidCount>=20?2:1;
+  const existingRegs=AppData.regs.filter(r=>r.bookingId===bk.id&&r.isTeacherRoom);
   // Remove any incomplete ghost teacher regs (no room assigned)
-  if(existing&&!existing.room){
-    const idx=AppData.regs.indexOf(existing);if(idx>-1)AppData.regs.splice(idx,1);
-  }
-  // Teacher room is always Garden Basic (rt5)
-  const rt=AppData.roomTypes.find(r=>r.id==='rt5');
-  if(!rt){showToast('No Garden Basic room type found — teacher room not assigned.');return;}
-  const assignedRooms=new Set(AppData.regs.filter(r=>r.bookingId===bk.id).map(r=>r.room));
-  const inBlocked=(bk.blockedRooms||[]).find(r=>rt.rooms.includes(r)&&!assignedRooms.has(r));
-  const chosenRoom=inBlocked||rt.rooms.find(r=>!assignedRooms.has(r));
-  if(!chosenRoom){showToast('No Garden Basic rooms available — assign teacher room manually.');return;}
+  existingRegs.filter(r=>!r.room).forEach(r=>{const idx=AppData.regs.indexOf(r);if(idx>-1)AppData.regs.splice(idx,1);});
+  const toAssign=allowedRooms-existingRegs.filter(r=>r.room).length;
+  if(toAssign<=0)return;
+  // Teacher room is always Garden King (rt4)
+  const rt=AppData.roomTypes.find(r=>r.id==='rt4');
+  if(!rt){showToast('No Garden King room type found — teacher room not assigned.');return;}
   const nights=getNights(bk);
-  // Garden Basic is comped for the teacher once the retreat has 10+ paying guests;
+  // Garden King is comped for the teacher once the retreat has 10+ paying guests;
   // below that, the teacher pays the normal room rate. Upgrading to a nicer room
   // (upgradeTeacherRoom, below) always charges the full rate for that room regardless.
-  const isComped=registeredCount(bk.id)>=10;
-  const price=isComped?0:getRoomRate(rt,1,bk.startDate,nights)*(nights||1);
-  AppData.regs.push({id:uid(),bookingId:bk.id,room:chosenRoom,roomTypeId:'rt5',isTeacherRoom:true,
-    guests:[{name:bk.leaderName||'Retreat Leader',returning:false,yearsAttending:null,notes:'Teacher room (auto-assigned)'}],
-    customPrice:price,amountPaid:0,notes:isComped?'Teacher room — Garden Basic (comped, 10+ paying guests)':'Teacher room — Garden Basic (auto-assigned)'});
-  if(!(bk.blockedRooms||[]).includes(chosenRoom)){if(!bk.blockedRooms)bk.blockedRooms=[];bk.blockedRooms.push(chosenRoom);bk.blockedRoomsUpdatedAt=new Date().toISOString();}
-  logActivity('Teacher room auto-assigned',`${bk.leaderName||bk.retreatName} — ${chosenRoom} (Garden Basic) · ${isComped?'comped':'$'+price}`,bk.id);
+  const isComped=paidCount>=10;
+  for(let i=0;i<toAssign;i++){
+    const assignedRooms=new Set(AppData.regs.filter(r=>r.bookingId===bk.id).map(r=>r.room));
+    const inBlocked=(bk.blockedRooms||[]).find(r=>rt.rooms.includes(r)&&!assignedRooms.has(r));
+    const chosenRoom=inBlocked||rt.rooms.find(r=>!assignedRooms.has(r));
+    if(!chosenRoom){showToast('No Garden King rooms available — assign teacher room manually.');return;}
+    const price=isComped?0:getRoomRate(rt,1,bk.startDate,nights)*(nights||1);
+    AppData.regs.push({id:uid(),bookingId:bk.id,room:chosenRoom,roomTypeId:'rt4',isTeacherRoom:true,
+      guests:[{name:bk.leaderName||'Retreat Leader',returning:false,yearsAttending:null,notes:'Teacher room (auto-assigned)'}],
+      customPrice:price,amountPaid:0,notes:isComped?'Teacher room — Garden King (comped, 10+ paying guests)':'Teacher room — Garden King (auto-assigned)'});
+    if(!roomListIncludes(bk.blockedRooms,chosenRoom)){if(!bk.blockedRooms)bk.blockedRooms=[];bk.blockedRooms.push(chosenRoom);bk.blockedRoomsUpdatedAt=new Date().toISOString();}
+    logActivity('Teacher room auto-assigned',`${bk.leaderName||bk.retreatName} — ${chosenRoom} (Garden King) · ${isComped?'comped':'$'+price}`,bk.id);
+  }
 }
 
 function upgradeTeacherRoom(bkId,newRoom){
@@ -546,7 +549,7 @@ function upgradeTeacherRoom(bkId,newRoom){
   teacherReg.customPrice=getRoomRate(gkType,1,bk.startDate,nights)*nights;
   teacherReg.notes='Teacher room — upgraded to Garden King';
   if(!bk.blockedRooms)bk.blockedRooms=[];
-  if(!bk.blockedRooms.includes(newRoom))bk.blockedRooms.push(newRoom);
+  if(!roomListIncludes(bk.blockedRooms,newRoom))bk.blockedRooms.push(newRoom);
   bk.blockedRoomsUpdatedAt=new Date().toISOString();
   saveAll();buildDashboard();regRender();
   logActivity('Teacher room upgraded',`${bk.leaderName||bk.retreatName} — ${oldRoom} → ${newRoom} (Garden King)`,bkId);

@@ -14,7 +14,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
-  <script src="cb-portal-sync.js?v=20260917a"></script>
+  <script src="cb-portal-sync.js?v=20260917b"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
     :root{
@@ -1724,6 +1724,21 @@
         </div>
       </div>
 
+      <!-- Lunch Time -->
+      <div class="ts-card">
+        <div class="ts-card-title">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Lunch Time
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 18px;line-height:1.65">Lunch defaults to <b style="color:var(--dark)">1:00 PM</b>. If your group needs a different time, set it here — Amansala will confirm it back to you.</p>
+        <div class="ts-fields">
+          <div class="ts-field">
+            <label>Lunch Time</label>
+            <input type="time" id="tsLunchStart" onchange="_ts.lunchStart=this.value">
+          </div>
+        </div>
+      </div>
+
       <!-- Offsite Dinner -->
       <div class="ts-card">
         <div class="ts-card-title">
@@ -1960,6 +1975,9 @@
     </a>
     <button class="btn btn-icon teacher-admin-only" onclick="openSettings()" title="Room type settings">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button class="btn btn-icon teacher-admin-only" onclick="openTourSettings()" title="Manage tour prices &amp; default times">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
     </button>
     </div>
   </div>
@@ -2575,6 +2593,25 @@
       </table>
     </div>
     <div class="modal-foot"><div class="l"><button class="btn btn-secondary" style="color:#b45309;border-color:#b45309" onclick="resetRoomLists()">↺ Reset Room Lists</button></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('settingsModal')">Cancel</button><button class="btn btn-primary" onclick="saveSettings()">Save Prices</button></div></div>
+  </div>
+</div>
+
+<!-- ===== MANAGE TOURS MODAL ===== -->
+<div class="modal-overlay" id="tourSettingsModal">
+  <div class="modal" style="width:560px;max-width:97vw">
+    <div class="modal-hdr"><h2>Manage Tours</h2><button class="modal-x" onclick="closeModal('tourSettingsModal')">&times;</button></div>
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Prices and the default time each tour/activity is scheduled at when added to a retreat. Editing a time here only changes the default — any already-scheduled activity keeps its own time unless you edit it directly.</p>
+      <table style="width:100%;border-collapse:collapse" id="tourSettingsTbl">
+        <thead><tr>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);text-align:left;border-bottom:2px solid var(--border)">Tour / Activity</th>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:2px solid var(--border)">Price</th>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:2px solid var(--border)">Default Time</th>
+        </tr></thead>
+        <tbody id="tourSettingsTbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="closeModal('tourSettingsModal')">Cancel</button><button class="btn btn-primary" onclick="saveTourSettings()">Save</button></div></div>
   </div>
 </div>
 
@@ -4977,6 +5014,67 @@ function splitDoubleHalf(room){
   if(m)return{base:m[1],half:m[2],physical:room};
   return null;
 }
+// Room codes are inconsistently cased in real data — Cloudbeds always
+// reports rooms uppercase ("2B"), this app's own codes are usually lowercase
+// ("2b") — and a plain === or Array.includes() comparison between the two
+// silently misses a real match. Confirmed root cause behind several
+// incidents 2026-09-17 (Block Rooms conflict check, the Rooms grid). Use
+// these everywhere a room code is compared, instead of a raw ===/.includes().
+//
+// BUT a handful of code pairs that differ only by case are actually two
+// DIFFERENT physical rooms, not the same room typed inconsistently — e.g.
+// "2B" is a private Beachfront King room (rt1) while "2b" is a shared bed
+// inside the unrelated "Beachview Double" room "2" (bd1). Folding those
+// together mis-attributed one room's booking onto the other's grid row
+// (Jorge's report 2026-09-17: Tootsie Olan's real King-room move onto "2B"
+// leaked onto the unrelated "2b" bed row because blockedRooms also held a
+// separate, correct "2b" entry). _roomCodeCollisionSet() finds every such
+// pair — a lowercase key with 2+ distinct exact-case rooms defined anywhere
+// in AppData.roomTypes — and roomCodesEqual only folds case when the pair
+// ISN'T one of those known collisions.
+let _roomCollisionCache={ref:null,set:null};
+function _roomCodeCollisionSet(){
+  if(_roomCollisionCache.ref===AppData.roomTypes)return _roomCollisionCache.set;
+  const byLower=new Map();
+  (AppData.roomTypes||[]).forEach(rt=>(rt.rooms||[]).forEach(r=>{
+    const lc=String(r||'').toLowerCase();
+    if(!byLower.has(lc))byLower.set(lc,new Set());
+    byLower.get(lc).add(r);
+  }));
+  const collisions=new Set();
+  byLower.forEach((exactSet,lc)=>{if(exactSet.size>1)collisions.add(lc);});
+  _roomCollisionCache={ref:AppData.roomTypes,set:collisions};
+  return collisions;
+}
+function roomCodesEqual(a,b){
+  const sa=String(a||''),sb=String(b||'');
+  if(sa===sb)return true;
+  const la=sa.toLowerCase(),lb=sb.toLowerCase();
+  if(la!==lb)return false;
+  return !_roomCodeCollisionSet().has(la);
+}
+function roomListIncludes(list,room){return(list||[]).some(r=>roomCodesEqual(r,room));}
+// The same physical room is sold two ways — whole (rt6/rt7) or as separate
+// shared beds (bd1/bd2) — but blocking one side never conflicted with the
+// other, so the same physical room could be (and was: real incident, room 4,
+// 2026-09-17) double-booked whole for one retreat while its beds were
+// already blocked separately for another. Given either a whole-room code or
+// a bed code, returns the other side(s) representing that same space.
+// bd3/bd4 (Triple/Quad) are excluded — those beds are always used standalone,
+// the whole-room parent is never itself blockable, so there's nothing to link.
+function getRoomCounterparts(room){
+  const split=splitDoubleHalf(room);
+  if(split)return[split.base];
+  const counterparts=[];
+  AppData.roomTypes.forEach(rt=>{
+    if(rt.id!=='bd1'&&rt.id!=='bd2')return;
+    (rt.rooms||[]).forEach(r=>{
+      const s=splitDoubleHalf(r);
+      if(s&&s.base===room)counterparts.push(r);
+    });
+  });
+  return counterparts;
+}
 function buildUiRoomEntries(rt){
   if(!rt||!isDoubleRoomType(rt))return(rt.rooms||[]).map(r=>({display:r,physical:[r],merged:false}));
   const groups=new Map(),standalone=[];
@@ -5876,7 +5974,10 @@ function statusLabel(s){return{requested:'Soft Hold',contract_sent:'Contract Sen
 // the same _regByRoom/_billRegByRoom fix used for Bill Total/Guests Registered,
 // so the detailed room list doesn't show "Vacant" for a room that's actually taken.
 function getRegForRoom(bkId,room){
-  const matches=AppData.regs.filter(r=>r.bookingId===bkId&&r.room===room);
+  // roomCodesEqual, not === — same collision-aware fold as everywhere else a room
+  // code is compared (won't confuse e.g. "2B" with "2b", but will still match a
+  // genuine casing typo like "Gv13a" against the canonical "GV13a").
+  const matches=AppData.regs.filter(r=>r.bookingId===bkId&&roomCodesEqual(r.room,room));
   if(!matches.length)return null;
   return matches.reduce((best,r)=>(r.guests||[]).filter(g=>g.name).length>(best.guests||[]).filter(g=>g.name).length?r:best);
 }
@@ -6008,10 +6109,10 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260917k"></script>
-<script src="modules/room-optimizer.js?v=20260917c"></script>
+<script src="modules/venues.js?v=20260917q"></script>
+<script src="modules/room-optimizer.js?v=20260917d"></script>
 <script src="modules/sales-pipeline.js"></script>
-<script src="modules/booking-engine-admin.js"></script>
+<script src="modules/booking-engine-admin.js?v=20260917a"></script>
 <script>
 // ===== VENUE GANTT — moved to modules/venues.js =====
 // ===== DATE FINDER — moved to modules/venues.js (loaded above) =====
@@ -6021,7 +6122,7 @@ function switchTab(id,btn){
 <script src="modules/admin-items.js"></script>
 <script src="modules/commissions.js"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20260917b"></script>
+<script src="modules/teacher-portal.js?v=20260917d"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
 // ===== TEACHER REGISTRATION — moved to modules/teacher-portal.js =====
@@ -6038,17 +6139,18 @@ function switchTab(id,btn){
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20260917b"></script>
+<script src="modules/room-blocking.js?v=20260917f"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====
 </script>
 <script src="modules/retreat-builder.js?v=20260917a"></script>
+<script src="modules/tour-settings.js"></script>
 <script>
 // ===== RETREAT BUILDER — moved to modules/retreat-builder.js =====
 // ===== DASHBOARD — moved to modules/retreat-builder.js (loaded above) =====
 </script>
-<script src="modules/contracts.js"></script>
+<script src="modules/contracts.js?v=20260917a"></script>
 <script>
 // ===== CONTRACT TEMPLATE — moved to modules/contracts.js =====
 // ===== CONTRACT GENERATOR — moved to modules/contracts.js (loaded above) =====
@@ -6072,7 +6174,7 @@ function switchTab(id,btn){
 // ===== FILL SAMPLE RETREATS — moved to modules/demo-seed.js (loaded above) =====
 // ===== TEACHER SCHEDULE — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/transport.js"></script>
+<script src="modules/transport.js?v=20260918b"></script>
 <script>
 // ===== TRANSPORTATION — moved to modules/transport.js =====
 </script>

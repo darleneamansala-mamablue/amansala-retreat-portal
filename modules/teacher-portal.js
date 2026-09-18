@@ -1322,7 +1322,7 @@ const TS_SPECIAL_TIME_SLOTS=(()=>{
   return slots;
 })();
 
-let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
+let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',lunchStart:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
 let _tsBkId=null;
 let _tsPrepaidMode='choice'; // 'choice' | 'manual' — for the pre-paid activities assignment card
 
@@ -1628,7 +1628,7 @@ function tsInit(bkId){
     _tsPrepaidMode='choice';
     _ts=bk.scheduleRequest
       ?{..._ts,...bk.scheduleRequest}
-      :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
+      :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',lunchStart:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
     // Migrate old field name: afternoonStart → afternoonSlot
     if(!_ts.afternoonSlot&&_ts.afternoonStart)_ts.afternoonSlot=_ts.afternoonStart;
     // Load any day-specific overrides (start/duration/type/co-teacher) that
@@ -1717,6 +1717,7 @@ function tsInit(bkId){
   const bowlQtyEl=document.getElementById('tsBowlQty');if(bowlQtyEl)bowlQtyEl.value=String(_ts.bowlQty||1);
   tsBowlUpdate();
   const req=document.getElementById('tsSpecialReq');if(req)req.value=_ts.specialReq||'';
+  const lunchEl=document.getElementById('tsLunchStart');if(lunchEl)lunchEl.value=_ts.lunchStart||'';
   const _musicVals=Array.isArray(_ts.music)?_ts.music:(_ts.music?[_ts.music]:[]);
   document.querySelectorAll('.tsMusic').forEach(el=>el.checked=_musicVals.includes(el.value));
   document.querySelectorAll('input[name="tsShalaFlex"]').forEach(el=>el.checked=(el.value===(_ts.shalaFlexibility||'')));
@@ -2670,7 +2671,8 @@ function tsRenderCalSection(bk){
         const arShala=snm(sr.arrivalShala1||sr.morningShala1);
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60)),desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:arShala,cat:'yoga',sk:sr.arrivalSlot});
       }
-      rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cat:'meal',sk:'19:30'});
+      const _arrDinnerT=(sr.hasArrivalClass&&sr.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30';
+      rows.push({time:fmtT(_arrDinnerT),desc:'Dinner',shala:'',cat:'meal',sk:_arrDinnerT});
     } else if(i===nights){
       // Departure day (endDate)
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea',shala:'',cat:'meal',sk:'07:00'});
@@ -2729,7 +2731,8 @@ function tsRenderCalSection(bk){
       // "Already Prepaid" onsite is a definite, already-included dinner — show
       // "Dinner Onsite" plainly, not "Dinner (Off-site)" (that label only fits
       // when the group is actually going offsite, e.g. Gitano).
-      if(!hasGitanoToday)rows.push({time:'7:30 PM',desc:isOffsite?(sr.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner (Off-site)'):'Dinner',shala:'',cat:'meal',sk:'19:30'});
+      const _dinnerT=(sr.hasAfternoon&&dayAfSlot&&!_dayAftSkipped)?addMin(dayAfSlot,dayAfDur+45):'19:30';
+      if(!hasGitanoToday)rows.push({time:fmtT(_dinnerT),desc:isOffsite?(sr.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner (Off-site)'):'Dinner',shala:'',cat:'meal',sk:_dinnerT});
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT the arrival
     // day — hard backstop here regardless of how a stale/mis-dated entry got
@@ -3023,6 +3026,17 @@ function openScheduleViewer(bkId){
           </div>
         </div>
       </div>`:''}
+
+      <!-- Lunch -->
+      <div style="margin-bottom:12px">
+        <div style="font-size:11.5px;font-weight:700;color:#1e4f4f;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Lunch</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:120px">
+            <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:3px">Start Time</label>
+            <input type="time" id="svAdjLunchStart" class="finp" value="${sr.adminOverride?.lunchStart||sr.lunchStart||'13:00'}" style="width:100%">
+          </div>
+        </div>
+      </div>
     </div>
 
     <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:block;margin-bottom:6px">Note to Teacher</label>
@@ -3194,12 +3208,17 @@ function svActivityEditorHtml(bk,bkId){
     <div style="padding:8px 10px;background:#f8f5f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Assigned Activities — edit day, time, or remove</div>
     ${rows||'<div style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px">None assigned yet.</div>'}
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px">
-      <select id="svAddAoId" style="flex:1;min-width:150px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff"><option value="">+ Add an activity…</option>${aoOptions}</select>
+      <select id="svAddAoId" onchange="svAoTimeAutofill()" style="flex:1;min-width:150px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff"><option value="">+ Add an activity…</option>${aoOptions}</select>
       <select id="svAddAoDate" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff">${dayOptions()}</select>
       <input type="time" id="svAddAoTime" value="11:45" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff">
       <button class="btn btn-primary" style="font-size:12px;white-space:nowrap" onclick="svAddActivity('${bkId}')">+ Add</button>
     </div>
   </div>`;
+}
+function svAoTimeAutofill(){
+  const aoId=document.getElementById('svAddAoId')?.value;
+  const timeEl=document.getElementById('svAddAoTime');
+  if(aoId&&timeEl&&typeof tourDefaultTime==='function')timeEl.value=tourDefaultTime(aoId);
 }
 function svAddActivity(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
@@ -3281,6 +3300,21 @@ const ACTS_DUR={
   ao14:90,  // Cooking Class — 1.5 hrs
 };
 const ACT_SHALA={ao4:'Grande',ao12:'Grande'};
+const TOUR_AO_IDS=['ao1','ao2','ao3','ao6','ao7'];
+const CEREMONY_AO_IDS=['ao4','ao5','ao9','ao10'];
+// If another retreat overlapping this date already has a tour/ceremony
+// scheduled that day, match it (same bus/guide/ceremony instead of running
+// two separately) — checked within the same category only, so a ceremony
+// day never gets swapped for someone else's tour or vice versa.
+function svConcurrentActivity(bk,date,idSet){
+  for(const other of AppData.bookings){
+    if(other.id===bk.id||other.status==='cancelled')continue;
+    if(!(other.startDate<=date&&other.endDate>=date))continue;
+    const match=(other.retreatActivities||[]).find(a=>a.date===date&&idSet.includes(a.aoId));
+    if(match)return match;
+  }
+  return null;
+}
 
 const SKED_AUTO_TEMPLATE={
   0:[ // Sunday
@@ -3373,9 +3407,15 @@ function svAutoAssignActivities(bkId){
     tmpls.forEach(tmpl=>{
       if(addedAoIds.has(tmpl.aoId))return;
       if(gitanoNight&&ds===gitanoNight&&(tmpl.time||'')>='18:00')return;
-      const prepaid=!!(prepaidMap[tmpl.aoId+':'+ds])||(bk.packages||[]).includes(tmpl.aoId);
-      bk.retreatActivities.push({aoId:tmpl.aoId,date:ds,time:tmpl.time,prepaid});
-      addedAoIds.add(tmpl.aoId);
+      let aoId=tmpl.aoId,time=tmpl.time;
+      const idSet=TOUR_AO_IDS.includes(aoId)?TOUR_AO_IDS:CEREMONY_AO_IDS.includes(aoId)?CEREMONY_AO_IDS:null;
+      if(idSet){
+        const match=svConcurrentActivity(bk,ds,idSet);
+        if(match&&!addedAoIds.has(match.aoId)){aoId=match.aoId;time=match.time||time;}
+      }
+      const prepaid=!!(prepaidMap[aoId+':'+ds])||(bk.packages||[]).includes(aoId);
+      bk.retreatActivities.push({aoId,date:ds,time,prepaid});
+      addedAoIds.add(aoId);
       added++;
     });
   }
@@ -4115,14 +4155,26 @@ function _trBuildTransportTable(guests,type,result){
   const thS=`padding:9px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#8a7e74;text-align:left;font-weight:700`;
   const dash=`<span style="color:#d1c9bd">—</span>`;
 
-  const indexed=guests.map((g,i)=>({g,i,gi:groupOf[i]??-1}));
-  indexed.sort((a,b)=>{if(a.gi!==b.gi)return(a.gi===-1?999:a.gi)-(b.gi===-1?999:b.gi);return 0;});
+  // Grouped and headed by date first — same "Today"/"Tomorrow"/formatted-date
+  // section rows the admin Transport tab (tr2BuildView) already uses — so a
+  // teacher scanning their own list can tell at a glance which day a batch of
+  // arrivals lands, instead of only the ride-share color coding. Guests with
+  // no date yet (haven't submitted) sort last, under their own header.
+  const indexed=guests.map((g,i)=>({g,i,gi:groupOf[i]??-1,date:isArr?g.tr?.arrivalDate:g.tr?.departureDate}));
+  indexed.sort((a,b)=>{
+    if(!!a.date!==!!b.date)return a.date?-1:1;
+    if(a.date&&b.date&&a.date!==b.date)return a.date.localeCompare(b.date);
+    if(a.gi!==b.gi)return(a.gi===-1?999:a.gi)-(b.gi===-1?999:b.gi);
+    return 0;
+  });
+  const _todayStr=new Date().toISOString().slice(0,10);
+  const _tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10);
+  const _colCount=9; // Guest, Room, Date, Time, Airport, Flight, Notes, + exactly one of Pickup/Share, + Est. Cost (matches the original group-separator row's colspan)
 
-  let lastGi;
-  const rows=indexed.map(({g,i})=>{
+  let lastGi,lastDate='__unset__';
+  const rows=indexed.map(({g,i,date})=>{
     const tr=g.tr;
     const ot=isArr?tr?.arrivalOT:tr?.departureOT;
-    const date=isArr?tr?.arrivalDate:tr?.departureDate;
     const time=isArr?tr?.arrivalTime:tr?.departureTime;
     const ap=isArr?tr?.arrivalAirport:tr?.departureAirport;
     const p=prices[i];
@@ -4150,6 +4202,13 @@ function _trBuildTransportTable(guests,type,result){
       ?`<span style="font-weight:600;color:#2d2520">${escHtml(tr.flightNumber)}</span>`
       :`<span style="font-size:10px;font-weight:700;background:#fef9c3;color:#92400e;border-radius:5px;padding:2px 7px;white-space:nowrap">Missing Flight Info</span>`;
 
+    // The guest's own submitted notes (allergy info, "happy to share a ride", etc.) were
+    // being collected but never shown here — a teacher had no way to see them without
+    // asking Amansala to check the raw submission (Jorge's report 2026-09-17).
+    const notesCell=tr?.notes
+      ?`<span title="${escHtml(tr.notes)}" style="font-size:11.5px;color:#5a5048;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:220px">${escHtml(tr.notes)}</span>`
+      :dash;
+
     let priceCell=dash;
     if(ot)priceCell=`<span style="font-size:11px;color:#8a7e74">Own</span>`;
     else if(p?.pp!=null){
@@ -4171,18 +4230,30 @@ function _trBuildTransportTable(guests,type,result){
       :'';
 
     const curGi=groupOf[i]??-1;
-    const sep=(lastGi!==undefined&&curGi!==lastGi)
-      ?`<tr><td colspan="8" style="padding:6px;background:#fff;border:none"></td></tr>`
+    let dateHeader='';
+    if(date!==lastDate){
+      if(date){
+        const label=date===_todayStr?'Today':date===_tomorrowStr?'Tomorrow':fmtDate(date);
+        const hdBg=date===_todayStr?'#ccfbf1':'#f5f0e8',hdClr=date===_todayStr?'#0f766e':'#5a5048';
+        dateHeader=`<tr><td colspan="${_colCount}" style="padding:8px 12px;background:${hdBg};font-size:11px;font-weight:700;color:${hdClr};border-top:2px solid #e8dfd4">${label}</td></tr>`;
+      } else {
+        dateHeader=`<tr><td colspan="${_colCount}" style="padding:8px 12px;background:#f5f0e8;font-size:11px;font-weight:700;color:#8a7e74;border-top:2px solid #e8dfd4">Not submitted yet</td></tr>`;
+      }
+    }
+    lastDate=date;
+    const sep=(!dateHeader&&lastGi!==undefined&&curGi!==lastGi)
+      ?`<tr><td colspan="${_colCount}" style="padding:6px;background:#fff;border:none"></td></tr>`
       :'';
     lastGi=curGi;
 
-    return sep+`<tr style="border-bottom:1px solid #f0ece4;background:${rowBg}">
+    return dateHeader+sep+`<tr style="border-bottom:1px solid #f0ece4;background:${rowBg}">
       <td style="padding:10px 12px;font-size:13px;font-weight:600;white-space:nowrap">${dot}${escHtml(g.name)}${driverBadge}</td>
       <td style="padding:10px 12px;font-size:12px;color:#8a7e74;white-space:nowrap">${g.room?escHtml(g.room):'—'}</td>
       <td style="padding:10px 12px;font-size:12px">${dateCell}</td>
       <td style="padding:10px 12px;font-size:12px">${timeCell}</td>
       <td style="padding:10px 12px;font-size:12px">${apCell}</td>
       <td style="padding:10px 12px;font-size:12px">${flightCell}</td>
+      <td style="padding:10px 12px;font-size:12px">${notesCell}</td>
       ${pickupCell}
       <td style="padding:10px 12px;font-size:12px">${priceCell}</td>
       ${shareCell}
@@ -4197,6 +4268,7 @@ function _trBuildTransportTable(guests,type,result){
       <th style="${thS}">Time</th>
       <th style="${thS}">Airport</th>
       <th style="${thS}">Flight</th>
+      <th style="${thS}">Notes</th>
       ${!isArr?`<th style="${thS}">Pickup</th>`:''}
       <th style="${thS}">Est. Cost</th>
       ${isArr?`<th style="${thS}">Share</th>`:''}
@@ -4581,7 +4653,8 @@ function openPrintSchedule(bkId){
         const end=fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60));
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:mShala,cls:'shala',sk:sr.arrivalSlot});
       }
-      rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cls:'',sk:'19:30'});
+      const _pArrDinnerT=(sr?.hasArrivalClass&&sr?.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30';
+      rows.push({time:fmtT(_pArrDinnerT),desc:'Dinner',shala:'',cls:'',sk:_pArrDinnerT});
     } else if(i===nights){
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea — Closing Comments',shala:'',cls:'',sk:'07:00'});
       // Departure-day morning class must respect an admin's "Skip this day"
@@ -4652,7 +4725,8 @@ function openPrintSchedule(bkId){
         return Math.abs(d.getTime()-ofNight)<DAY_MS/2;
       })();
       const hasGitanoPrint=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
-      if(!hasGitanoPrint)rows.push({time:'7:30 PM',desc:isOffsite?(sr?.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner | Off-site'):'Dinner',shala:'',cls:'',sk:'19:30'});
+      const _pDinnerT=(sr?.hasAfternoon&&_pDayAfSlot&&!_pAftSkipped)?addMin(_pDayAfSlot,_pDayAfDur+45):'19:30';
+      if(!hasGitanoPrint)rows.push({time:fmtT(_pDinnerT),desc:isOffsite?(sr?.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner | Off-site'):'Dinner',shala:'',cls:'',sk:_pDinnerT});
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT arrival.
     const printActMap={};ADD_ONS.forEach(a=>printActMap[a.id]=a);printActMap['ao12']={id:'ao12',name:'Group Salsa Class',price:0};

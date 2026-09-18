@@ -653,7 +653,11 @@ function actSheetRenderSummary() {
 
     const cardKey = e.ao.id+'_'+e.date+'_'+entryIdx;
     entryIdx++;
-    const bkIdsJson = JSON.stringify(e.groups.map(g=>g.bkId));
+    // HTML-escaped so the raw double quotes JSON.stringify produces don't
+    // terminate the double-quoted onclick="..." attribute early — that
+    // silently truncated this into broken JS, so clicking Save did nothing
+    // (real report 2026-09-18: tour date/time edits wouldn't save).
+    const bkIdsJson = JSON.stringify(e.groups.map(g=>g.bkId)).replace(/"/g,'&quot;');
     html += `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden">
       <div style="background:${bg};border-bottom:1px solid ${border}30;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
