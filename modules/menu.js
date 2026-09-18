@@ -362,9 +362,15 @@ function menuMealTime(bk,meal,dateStr){
       mStart=sr.departureSlot;
       mDur=parseInt(sr.departureDur||60);
     } else if(!isArrival && !mornSkipped){
-      // Regular day — admin override takes priority
-      mStart=ov.morningStart||sr.morningStart||'';
-      mDur=parseInt(ov.morningDur||sr.morningDur||90);
+      // Per-day override (the teacher's actual day-by-day schedule) takes
+      // priority over the admin's retreat-wide override, which takes
+      // priority over the teacher's original retreat-wide submission — same
+      // chain teacher-portal.js's itinerary views use. Missing this
+      // day-override lookup was why the Menu could show a stale time that
+      // no longer matched what was actually confirmed for that specific day.
+      const mornOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
+      mStart=mornOv?mornOv.start:(ov.morningStart||sr.morningStart||'');
+      mDur=parseInt(mornOv?(mornOv.dur||90):(ov.morningDur||sr.morningDur||90));
     }
     return mStart ? addMin(mStart,mDur+15)||'09:30' : '09:30';
   }
@@ -384,8 +390,10 @@ function menuMealTime(bk,meal,dateStr){
       return addMin(sr.arrivalSlot,afDur+45)||'19:30';
     }
     const aftSkipped=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='aft');
-    const afStart=ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart||'';
-    const afDur=parseInt(ov.afternoonDur||sr.afternoonDur||60);
+    // Per-day override takes priority (see brunch above for why).
+    const aftOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='aft');
+    const afStart=aftOv?aftOv.start:(ov.afternoonStart||sr.afternoonSlot||sr.afternoonStart||'');
+    const afDur=parseInt(aftOv?(aftOv.dur||60):(ov.afternoonDur||sr.afternoonDur||60));
     if(sr.hasAfternoon&&afStart&&!aftSkipped) return addMin(afStart,afDur+45)||'19:30';
     return '19:30';
   }
