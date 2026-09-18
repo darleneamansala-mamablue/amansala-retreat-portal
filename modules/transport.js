@@ -1606,8 +1606,15 @@ async function tr2SaveEdit(rowId) {
 
   if (isSynth) {
     const entry = tr2AllEntries.find(e => e.rowId === rowId);
+    // The `transport` table has no default for `id` — a plain insert() with none
+    // fails outright (23502 not-null violation), so saving from a "Missing
+    // Transport" row silently never created anything (Jorge's report 2026-09-18:
+    // "cuando le das editar no guarda la información"). Client-generated id,
+    // matching the tr_<timestamp> pattern already used elsewhere for this table.
+    const newId = `tr_${Date.now()}`;
+    updatedData.id = newId;
     try {
-      await db.from('transport').insert({ booking_id: entry?.retreatId || null, data: updatedData });
+      await db.from('transport').insert({ id: newId, booking_id: entry?.retreatId || null, data: updatedData });
       document.getElementById('tr2-edit-modal')?.remove();
       showToast('Transporte creado ✓');
       await tr2LoadData();
