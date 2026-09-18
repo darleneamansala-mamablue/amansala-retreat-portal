@@ -1150,7 +1150,11 @@ function tr2RenderRow(e, color, groupPax) {
       ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#eff6ff;color:#2563eb">CUN</span>`
       : e.airport === 'tulum'
         ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#f0fdf4;color:#16a34a">TQO</span>`
-        : `<span style="font-size:10px;color:#9ca3af">—</span>`;
+        // A real submission (not synthetic) that didn't check Own Transport AND has no
+        // airport picked is an incomplete form, not just "nothing to show" — flag it the
+        // same way as a no-submission guest instead of a blank dash (Jorge's ask
+        // 2026-09-18: unchecked OT + no airport should read "Missing Information").
+        : `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fef9c3;color:#92400e">Missing Information</span>`;
 
   const raw = tr2RawRows[e.rowId]?.data || {};
   const charged = isArr ? raw.folioCharged?.arrivalFolioItemId : raw.folioCharged?.departureFolioItemId;
