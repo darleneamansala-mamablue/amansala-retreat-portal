@@ -653,29 +653,34 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{m.addEventListener('clic
 
 // Tooltip
 const tip=document.getElementById('tip');
-function showTip(e,bk,regCount){
+function showTip(e,bk,regCount,hideFinancials){
   const st=STATUS[bk.status]||STATUS.confirmed;
   const rc=regCount!=null?regCount:registeredCount(bk.id);
   const flags=getAutoFlags(bk).concat((bk.flags||[]).filter(f=>!f.resolved));
-  // Financial totals
-  const nights=getNights(bk);
-  const bkRegs=AppData.regs.filter(r=>r.bookingId===bk.id);
-  let totalCharged=0,totalPaid=0;
-  bkRegs.forEach(reg=>{
-    const rt=AppData.roomTypes.find(t=>t.id===reg.roomTypeId);
-    const gc=(reg.guests||[]).filter(g=>g.name).length||1;
-    const price=reg.customPrice!=null?reg.customPrice:calcPrice(rt,gc,nights,bk.startDate,bk);
-    totalCharged+=price;totalPaid+=reg.amountPaid||0;
-  });
-  // Also include booking-level payments (recorded via Record Payment)
-  const bkPayments=(bk.payments||[]).reduce((s,p)=>s+p.amount,0);
-  totalPaid+=bkPayments;
-  const balance=totalCharged-totalPaid;
-  const finHtml=(totalCharged>0||totalPaid>0)?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;font-size:10.5px">
-    ${totalCharged>0?`<span style="color:rgba(255,255,255,.6)">Total</span><span style="color:#fff;font-weight:700">${fmt$(totalCharged)}</span>`:''}
-    <span style="color:rgba(255,255,255,.6)">Paid</span><span style="color:#6ee7b7;font-weight:700">${fmt$(totalPaid)}</span>
-    ${totalCharged>0?`<span style="color:rgba(255,255,255,.6)">Owing</span><span style="font-weight:700;color:${balance>0?'#fca5a5':'#6ee7b7'}">${fmt$(balance)}</span>`:''}
-  </div>`:'';
+  // Financial totals — skipped entirely for the "Happening Now" strip (Jorge's ask
+  // 2026-09-18: that quick-glance strip shouldn't show Total/Paid/Owing, unlike the
+  // main Venues Gantt bars which still should).
+  let finHtml='';
+  if(!hideFinancials){
+    const nights=getNights(bk);
+    const bkRegs=AppData.regs.filter(r=>r.bookingId===bk.id);
+    let totalCharged=0,totalPaid=0;
+    bkRegs.forEach(reg=>{
+      const rt=AppData.roomTypes.find(t=>t.id===reg.roomTypeId);
+      const gc=(reg.guests||[]).filter(g=>g.name).length||1;
+      const price=reg.customPrice!=null?reg.customPrice:calcPrice(rt,gc,nights,bk.startDate,bk);
+      totalCharged+=price;totalPaid+=reg.amountPaid||0;
+    });
+    // Also include booking-level payments (recorded via Record Payment)
+    const bkPayments=(bk.payments||[]).reduce((s,p)=>s+p.amount,0);
+    totalPaid+=bkPayments;
+    const balance=totalCharged-totalPaid;
+    finHtml=(totalCharged>0||totalPaid>0)?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;font-size:10.5px">
+      ${totalCharged>0?`<span style="color:rgba(255,255,255,.6)">Total</span><span style="color:#fff;font-weight:700">${fmt$(totalCharged)}</span>`:''}
+      <span style="color:rgba(255,255,255,.6)">Paid</span><span style="color:#6ee7b7;font-weight:700">${fmt$(totalPaid)}</span>
+      ${totalCharged>0?`<span style="color:rgba(255,255,255,.6)">Owing</span><span style="font-weight:700;color:${balance>0?'#fca5a5':'#6ee7b7'}">${fmt$(balance)}</span>`:''}
+    </div>`:'';
+  }
   let flagsHtml=flags.length?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px">`+flags.slice(0,3).map(f=>`<div style="font-size:10px;color:#fca5a5">🚩 ${f.message}</div>`).join('')+'</div>':'';
   const notesHtml=bk.notes?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px;font-size:10.5px;color:#fde68a">📝 ${escHtml(bk.notes)}</div>`:'';
   tip.innerHTML=`<div class="tip-n">${bk.leaderName||bk.retreatName}</div><div class="tip-d">${fmtDate(bk.startDate)} → ${fmtDate(bk.endDate)}</div><div style="font-size:10.5px;font-weight:600;color:${st.border};margin-top:3px">${st.label}</div>${bk.pax?`<div style="font-size:10.5px;color:rgba(255,255,255,.7);margin-top:3px">Registered: <b style="color:#fff">${rc}/${bk.pax}</b></div>`:''}${finHtml}${flagsHtml}${notesHtml}`;

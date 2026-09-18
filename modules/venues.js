@@ -2575,7 +2575,7 @@ function _rcRenderTodayLegend(){
   cells.querySelectorAll('.rtl-pill').forEach(pill=>{
     const bk=AppData.bookings.find(b=>b.id===pill.dataset.bkId);
     if(!bk)return;
-    pill.addEventListener('mouseenter',e=>showTip(e,bk));
+    pill.addEventListener('mouseenter',e=>showTip(e,bk,null,true));
     pill.addEventListener('mousemove',moveTip);
     pill.addEventListener('mouseleave',hideTip);
   });
