@@ -1544,11 +1544,10 @@ function tsRenderPrepaidActivities(bk){
       <div style="display:flex;flex-direction:column;gap:12px">
         ${unassigned.map(id=>{
           const ao=addOns.find(a=>a.id===id);
-          const tmpl=Object.values(SKED_AUTO_TEMPLATE).flat().find(t=>t.aoId===id);
           return`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;background:var(--sand);border-radius:9px">
             <div style="flex:1;min-width:160px;font-weight:600;font-size:13.5px">${ao?ao.name:id}</div>
             <input type="date" id="tsPrepaidDate_${id}" min="${fmtISO(new Date(pd(bk.startDate).getTime()+DAY_MS))}" max="${bk.endDate}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
-            <input type="time" id="tsPrepaidTime_${id}" value="${tmpl?.time||'11:45'}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
+            <input type="time" id="tsPrepaidTime_${id}" value="${tourDefaultTime(id)}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
             <button class="btn btn-secondary" style="padding:7px 16px;font-size:12.5px" onclick="tsSaveManualActivity('${id}')">Save</button>
           </div>`;
         }).join('')}
@@ -1585,7 +1584,7 @@ function tsAutoAssignPrepaid(){
     // Start at i=1 — arrival day never gets tours/ceremonies, only check-in/snack/arrival class.
     for(let i=1;i<nights;i++){
       const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-      const tmpl=(SKED_AUTO_TEMPLATE[d.getDay()]||[]).find(t=>t.aoId===id);
+      const tmpl=skedTemplateForDay(d.getDay()).find(t=>t.aoId===id);
       if(tmpl){bk.retreatActivities.push({aoId:id,date:fmtISO(d),time:tmpl.time,prepaid:true});added++;return;}
     }
     // No day-of-week template covers this add-on — fall back to the first full day
@@ -1732,7 +1731,7 @@ function tsInit(bkId){
     // Start at i=1 — arrival day never gets tours/ceremonies, only check-in/snack/arrival class.
     for(let i=1;i<nights;i++){
       const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-      const tmpls=SKED_AUTO_TEMPLATE[d.getDay()];
+      const tmpls=skedTemplateForDay(d.getDay());
       if(!tmpls)continue;
       const ds=fmtISO(d);
       tmpls.forEach(t=>bk.retreatActivities.push({aoId:t.aoId,date:ds,time:t.time,prepaid:!!(bk.packages||[]).includes(t.aoId)}));
@@ -2560,7 +2559,7 @@ function tsSubmitSchedule(){
     // Start at i=1 — arrival day never gets tours/ceremonies, only check-in/snack/arrival class.
     for(let i=1;i<nts;i++){
       const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-      const tmpls=SKED_AUTO_TEMPLATE[d.getDay()];
+      const tmpls=skedTemplateForDay(d.getDay());
       if(!tmpls)continue;
       const ds=fmtISO(d);
       tmpls.forEach(t=>bk.retreatActivities.push({aoId:t.aoId,date:ds,time:t.time,prepaid:!!(bk.packages||[]).includes(t.aoId)}));
@@ -3121,7 +3120,7 @@ function tsAdminStatus(bkId,status){
     // Start at i=1 — arrival day never gets tours/ceremonies, only check-in/snack/arrival class.
     for(let i=1;i<nights;i++){
       const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-      const tmpls=SKED_AUTO_TEMPLATE[d.getDay()];
+      const tmpls=skedTemplateForDay(d.getDay());
       if(!tmpls)continue;
       const ds=fmtISO(d);
       tmpls.forEach(t=>{
@@ -3144,7 +3143,7 @@ function tsAdminStatus(bkId,status){
       if(!pkgs.includes(aoId))return;
       const existing=bk.retreatActivities.find(a=>a.aoId===aoId);
       if(existing){existing.date=reqDate;}
-      else{const tmpl=Object.values(SKED_AUTO_TEMPLATE).flat().find(t=>t.aoId===aoId);bk.retreatActivities.push({aoId,date:reqDate,time:tmpl?.time||'',prepaid:true});}
+      else{bk.retreatActivities.push({aoId,date:reqDate,time:tourDefaultTime(aoId),prepaid:true});}
     });
     logActivity('Activities auto-assigned',`${bk.leaderName||bk.retreatName} — tours & ceremonies set`,bkId);
     bk.retreatActivitiesUpdatedAt=new Date().toISOString();
@@ -3328,41 +3327,9 @@ function svConcurrentActivity(bk,date,idSet){
   return null;
 }
 
-const SKED_AUTO_TEMPLATE={
-  0:[ // Sunday
-    {aoId:'ao7',  time:'11:45'}, // Mangrove Tour, 11:45 AM
-    {aoId:'ao10', time:'15:00'}, // Ice Bath & Breathwork, 3:00 PM
-    {aoId:'ao12', time:'20:30'}, // Salsa Night, post-dinner
-  ],
-  1:[ // Monday
-    {aoId:'ao1',  time:'11:45'}, // Tulum Ruins, 11:45 AM
-    {aoId:'ao4',  time:'19:15'}, // Cacao & Sound Healing, 7:15 PM
-  ],
-  2:[ // Tuesday
-    {aoId:'ao6',  time:'11:45'}, // Grande Cenote, 11:45 AM
-    {aoId:'ao14', time:'17:00'}, // Cooking Class, 5:00 PM
-    {aoId:'ao5',  time:'19:15'}, // Temazcal, 7:15 PM
-  ],
-  3:[ // Wednesday
-    {aoId:'ao3',  time:'11:45'}, // Atik Cenote, 11:45 AM
-    {aoId:'ao9',  time:'15:00'}, // Mayan Clay, 3:00 PM
-    {aoId:'ao12', time:'20:30'}, // Salsa Night, post-dinner
-  ],
-  4:[ // Thursday
-    {aoId:'ao2',  time:'10:30'}, // Muyil Float Tour, 10:30 AM
-    {aoId:'ao10', time:'15:00'}, // Ice Bath & Breathwork, 3:00 PM
-  ],
-  5:[ // Friday
-    {aoId:'ao3',  time:'11:45'}, // Atik Cenote, 11:45 AM
-    {aoId:'ao14', time:'17:00'}, // Cooking Class, 5:00 PM
-    {aoId:'ao4',  time:'19:15'}, // Cacao & Sound Healing, 7:15 PM
-  ],
-  6:[ // Saturday
-    {aoId:'ao6',  time:'11:45'}, // Grande Cenote, 11:45 AM
-    {aoId:'ao9',  time:'15:00'}, // Mayan Clay, 3:00 PM
-    {aoId:'ao5',  time:'19:15'}, // Temazcal, 7:15 PM
-  ],
-};
+// Weekday auto-assign rotation (which tour/ceremony assigns on which day)
+// moved to modules/tour-settings.js — TOUR_WEEKDAYS / skedTemplateForDay() —
+// so it's editable from the Manage Tours panel instead of hardcoded here.
 
 function parseRequestedDates(specialReq,bk){
   if(!specialReq||!bk.startDate)return{};
@@ -3413,7 +3380,7 @@ function svAutoAssignActivities(bkId){
   for(let i=1;i<nights;i++){
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
     const dow=d.getDay();
-    const tmpls=SKED_AUTO_TEMPLATE[dow];
+    const tmpls=skedTemplateForDay(dow);
     if(!tmpls)continue;
     const ds=fmtISO(d);
     tmpls.forEach(tmpl=>{
@@ -3444,7 +3411,7 @@ function svAutoAssignActivities(bkId){
     if(!pkgs.includes(aoId))return;
     const existing=bk.retreatActivities.find(a=>a.aoId===aoId);
     if(existing){existing.date=reqDate;}
-    else{const tmpl=Object.values(SKED_AUTO_TEMPLATE).flat().find(t=>t.aoId===aoId);bk.retreatActivities.push({aoId,date:reqDate,time:tmpl?.time||'',prepaid:true});added++;}
+    else{bk.retreatActivities.push({aoId,date:reqDate,time:tourDefaultTime(aoId),prepaid:true});added++;}
   });
   bk.retreatActivitiesUpdatedAt=new Date().toISOString();
   saveAll();
