@@ -639,7 +639,7 @@ function scAvailabilityHtml(account){
   </div>`;
 }
 async function scAddUnavailable(){
-  const val=document.getElementById('scUnavailInput').value;if(!val)return;
+  const val=document.getElementById('scUnavailInput').value;if(!val){alert('Pick a date first.');return;}
   const period=document.getElementById('scUnavailPeriod')?.value||'ALL';
   const session=getStaffConfirmSession();if(!session)return;
   const account=staffConfirmAccounts.find(a=>a.id===session.id);if(!account)return;
@@ -691,7 +691,7 @@ function scTeamRefreshWhicheverView(){
   if(document.getElementById('staffConfirmDashboard'))scRenderDashboard();
 }
 async function scTeamAddUnavailable(id){
-  const input=document.getElementById('scTeamUnavailInput_'+id);const val=input?input.value:'';if(!val)return;
+  const input=document.getElementById('scTeamUnavailInput_'+id);const val=input?input.value:'';if(!val){alert('Pick a date first.');return;}
   const period=document.getElementById('scTeamUnavailPeriod_'+id)?.value||'ALL';
   const account=staffConfirmAccounts.find(a=>a.id===id);if(!account)return;
   account.unavailableDates=account.unavailableDates||[];

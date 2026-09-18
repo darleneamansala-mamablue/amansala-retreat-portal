@@ -18,6 +18,7 @@ const ADD_ONS_DEFAULT=[
   {id:'ao12',name:'Group Salsa Class',               desc:'Included group salsa dance class',                          price:0},
   {id:'ao13',name:'Gitano Dinner',                   desc:'Offsite dinner at Gitano Tulum — $75 dinner + 15% gratuity + $15 transport per person (16% IVA applies)',price:101.25},
   {id:'ao14',name:'Cooking Class',                   desc:'Included hands-on cooking demonstration — complimentary for all guests',price:0},
+  {id:'ao16',name:'Tour Combo',                      desc:'Included Mangroves boat tour plus Mayan Clay Ceremony — complimentary for all guests',price:0},
 ];
 // Merge stored package customizations (edited prices + custom packages) over defaults
 function loadAddOns(){

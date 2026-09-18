@@ -1322,7 +1322,7 @@ const TS_SPECIAL_TIME_SLOTS=(()=>{
   return slots;
 })();
 
-let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
+let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',lunchStart:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
 let _tsBkId=null;
 let _tsPrepaidMode='choice'; // 'choice' | 'manual' — for the pre-paid activities assignment card
 
@@ -1628,7 +1628,7 @@ function tsInit(bkId){
     _tsPrepaidMode='choice';
     _ts=bk.scheduleRequest
       ?{..._ts,...bk.scheduleRequest}
-      :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
+      :{window:'',morningStart:'',morningDurRequest:'',morningSpecialReason:'',morningDur:60,morningNotes:'',morningFlags:[],morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonSlot:'16:30',afternoonDurRequest:'',afternoonDur:60,afternoonNotes:'',afternoonFlags:[],afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',hasWorkshop:false,workshops:[],offsiteNight:'',offsiteChoice:'',bowlRental:false,bowlQty:1,bowlDays:[],setupService:false,setupDays:[],music:[],specialReq:'',lunchStart:'',shalaFlexibility:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
     // Migrate old field name: afternoonStart → afternoonSlot
     if(!_ts.afternoonSlot&&_ts.afternoonStart)_ts.afternoonSlot=_ts.afternoonStart;
     // Load any day-specific overrides (start/duration/type/co-teacher) that
@@ -1717,6 +1717,7 @@ function tsInit(bkId){
   const bowlQtyEl=document.getElementById('tsBowlQty');if(bowlQtyEl)bowlQtyEl.value=String(_ts.bowlQty||1);
   tsBowlUpdate();
   const req=document.getElementById('tsSpecialReq');if(req)req.value=_ts.specialReq||'';
+  const lunchEl=document.getElementById('tsLunchStart');if(lunchEl)lunchEl.value=_ts.lunchStart||'';
   const _musicVals=Array.isArray(_ts.music)?_ts.music:(_ts.music?[_ts.music]:[]);
   document.querySelectorAll('.tsMusic').forEach(el=>el.checked=_musicVals.includes(el.value));
   document.querySelectorAll('input[name="tsShalaFlex"]').forEach(el=>el.checked=(el.value===(_ts.shalaFlexibility||'')));
@@ -2670,7 +2671,8 @@ function tsRenderCalSection(bk){
         const arShala=snm(sr.arrivalShala1||sr.morningShala1);
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60)),desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:arShala,cat:'yoga',sk:sr.arrivalSlot});
       }
-      rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cat:'meal',sk:'19:30'});
+      const _arrDinnerT=(sr.hasArrivalClass&&sr.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30';
+      rows.push({time:fmtT(_arrDinnerT),desc:'Dinner',shala:'',cat:'meal',sk:_arrDinnerT});
     } else if(i===nights){
       // Departure day (endDate)
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea',shala:'',cat:'meal',sk:'07:00'});
@@ -2729,7 +2731,8 @@ function tsRenderCalSection(bk){
       // "Already Prepaid" onsite is a definite, already-included dinner — show
       // "Dinner Onsite" plainly, not "Dinner (Off-site)" (that label only fits
       // when the group is actually going offsite, e.g. Gitano).
-      if(!hasGitanoToday)rows.push({time:'7:30 PM',desc:isOffsite?(sr.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner (Off-site)'):'Dinner',shala:'',cat:'meal',sk:'19:30'});
+      const _dinnerT=(sr.hasAfternoon&&dayAfSlot&&!_dayAftSkipped)?addMin(dayAfSlot,dayAfDur+45):'19:30';
+      if(!hasGitanoToday)rows.push({time:fmtT(_dinnerT),desc:isOffsite?(sr.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner (Off-site)'):'Dinner',shala:'',cat:'meal',sk:_dinnerT});
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT the arrival
     // day — hard backstop here regardless of how a stale/mis-dated entry got
@@ -3023,6 +3026,17 @@ function openScheduleViewer(bkId){
           </div>
         </div>
       </div>`:''}
+
+      <!-- Lunch -->
+      <div style="margin-bottom:12px">
+        <div style="font-size:11.5px;font-weight:700;color:#1e4f4f;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Lunch</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:120px">
+            <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:3px">Start Time</label>
+            <input type="time" id="svAdjLunchStart" class="finp" value="${sr.adminOverride?.lunchStart||sr.lunchStart||'13:00'}" style="width:100%">
+          </div>
+        </div>
+      </div>
     </div>
 
     <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:block;margin-bottom:6px">Note to Teacher</label>
@@ -3194,12 +3208,17 @@ function svActivityEditorHtml(bk,bkId){
     <div style="padding:8px 10px;background:#f8f5f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Assigned Activities — edit day, time, or remove</div>
     ${rows||'<div style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px">None assigned yet.</div>'}
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px">
-      <select id="svAddAoId" style="flex:1;min-width:150px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff"><option value="">+ Add an activity…</option>${aoOptions}</select>
+      <select id="svAddAoId" onchange="svAoTimeAutofill()" style="flex:1;min-width:150px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff"><option value="">+ Add an activity…</option>${aoOptions}</select>
       <select id="svAddAoDate" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff">${dayOptions()}</select>
       <input type="time" id="svAddAoTime" value="11:45" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:#fff">
       <button class="btn btn-primary" style="font-size:12px;white-space:nowrap" onclick="svAddActivity('${bkId}')">+ Add</button>
     </div>
   </div>`;
+}
+function svAoTimeAutofill(){
+  const aoId=document.getElementById('svAddAoId')?.value;
+  const timeEl=document.getElementById('svAddAoTime');
+  if(aoId&&timeEl&&typeof tourDefaultTime==='function')timeEl.value=tourDefaultTime(aoId);
 }
 function svAddActivity(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
@@ -3281,6 +3300,21 @@ const ACTS_DUR={
   ao14:90,  // Cooking Class — 1.5 hrs
 };
 const ACT_SHALA={ao4:'Grande',ao12:'Grande'};
+const TOUR_AO_IDS=['ao1','ao2','ao3','ao6','ao7'];
+const CEREMONY_AO_IDS=['ao4','ao5','ao9','ao10'];
+// If another retreat overlapping this date already has a tour/ceremony
+// scheduled that day, match it (same bus/guide/ceremony instead of running
+// two separately) — checked within the same category only, so a ceremony
+// day never gets swapped for someone else's tour or vice versa.
+function svConcurrentActivity(bk,date,idSet){
+  for(const other of AppData.bookings){
+    if(other.id===bk.id||other.status==='cancelled')continue;
+    if(!(other.startDate<=date&&other.endDate>=date))continue;
+    const match=(other.retreatActivities||[]).find(a=>a.date===date&&idSet.includes(a.aoId));
+    if(match)return match;
+  }
+  return null;
+}
 
 const SKED_AUTO_TEMPLATE={
   0:[ // Sunday
@@ -3373,9 +3407,15 @@ function svAutoAssignActivities(bkId){
     tmpls.forEach(tmpl=>{
       if(addedAoIds.has(tmpl.aoId))return;
       if(gitanoNight&&ds===gitanoNight&&(tmpl.time||'')>='18:00')return;
-      const prepaid=!!(prepaidMap[tmpl.aoId+':'+ds])||(bk.packages||[]).includes(tmpl.aoId);
-      bk.retreatActivities.push({aoId:tmpl.aoId,date:ds,time:tmpl.time,prepaid});
-      addedAoIds.add(tmpl.aoId);
+      let aoId=tmpl.aoId,time=tmpl.time;
+      const idSet=TOUR_AO_IDS.includes(aoId)?TOUR_AO_IDS:CEREMONY_AO_IDS.includes(aoId)?CEREMONY_AO_IDS:null;
+      if(idSet){
+        const match=svConcurrentActivity(bk,ds,idSet);
+        if(match&&!addedAoIds.has(match.aoId)){aoId=match.aoId;time=match.time||time;}
+      }
+      const prepaid=!!(prepaidMap[aoId+':'+ds])||(bk.packages||[]).includes(aoId);
+      bk.retreatActivities.push({aoId,date:ds,time,prepaid});
+      addedAoIds.add(aoId);
       added++;
     });
   }
@@ -4613,7 +4653,8 @@ function openPrintSchedule(bkId){
         const end=fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60));
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:mShala,cls:'shala',sk:sr.arrivalSlot});
       }
-      rows.push({time:'7:30 PM',desc:'Dinner',shala:'',cls:'',sk:'19:30'});
+      const _pArrDinnerT=(sr?.hasArrivalClass&&sr?.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30';
+      rows.push({time:fmtT(_pArrDinnerT),desc:'Dinner',shala:'',cls:'',sk:_pArrDinnerT});
     } else if(i===nights){
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea — Closing Comments',shala:'',cls:'',sk:'07:00'});
       // Departure-day morning class must respect an admin's "Skip this day"
@@ -4684,7 +4725,8 @@ function openPrintSchedule(bkId){
         return Math.abs(d.getTime()-ofNight)<DAY_MS/2;
       })();
       const hasGitanoPrint=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
-      if(!hasGitanoPrint)rows.push({time:'7:30 PM',desc:isOffsite?(sr?.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner | Off-site'):'Dinner',shala:'',cls:'',sk:'19:30'});
+      const _pDinnerT=(sr?.hasAfternoon&&_pDayAfSlot&&!_pAftSkipped)?addMin(_pDayAfSlot,_pDayAfDur+45):'19:30';
+      if(!hasGitanoPrint)rows.push({time:fmtT(_pDinnerT),desc:isOffsite?(sr?.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner | Off-site'):'Dinner',shala:'',cls:'',sk:_pDinnerT});
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT arrival.
     const printActMap={};ADD_ONS.forEach(a=>printActMap[a.id]=a);printActMap['ao12']={id:'ao12',name:'Group Salsa Class',price:0};
