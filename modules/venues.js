@@ -138,7 +138,12 @@ function venBuild(){
       const finBadge=bk.finalPaymentRequested?`<span title="Final payment requested" style="font-size:9.5px;background:rgba(0,0,0,.15);border-radius:3px;padding:1px 5px;margin-left:3px;font-weight:700">$</span>`:'';
       const bkTd=!bk.teacherDiscountDisabled?calcTeacherDiscount(bk,AppData.regs.filter(r=>r.bookingId===bk.id)):null;
       const discBadge=bkTd&&bkTd.tiers.some(t=>t.earned)?`<span title="Teacher discount earned — $${bkTd.totalCredit.toLocaleString()} credit" style="font-size:9px;font-weight:700;background:#16a34a;color:#fff;border-radius:3px;padding:1px 5px;margin-left:3px">★ DISC</span>`:'';
-      bl.innerHTML=`<span class="bk-n">${bk.leaderName||bk.retreatName}</span>${stBadge}<span class="bk-s">${bk.retreatName&&bk.leaderName?bk.retreatName:''}</span>${countHtml}${transportHtml}${finBadge}${discBadge}<span style="flex:1"></span>${flagHtml}`;
+      // Don't repeat the name as its own subtitle — many solo/room-only
+      // bookings never got a separate retreat name, so retreatName just
+      // defaults to the same value as leaderName (real report 2026-09-19:
+      // bars showing e.g. "Shirlee Williams Shirlee Williams").
+      const subName=(bk.retreatName&&bk.leaderName&&bk.retreatName!==bk.leaderName)?bk.retreatName:'';
+      bl.innerHTML=`<span class="bk-n">${bk.leaderName||bk.retreatName}</span>${stBadge}<span class="bk-s">${subName}</span>${countHtml}${transportHtml}${finBadge}${discBadge}<span style="flex:1"></span>${flagHtml}`;
       if(bk.pax&&fillPct>0){const bar=document.createElement('div');bar.style.cssText=`position:absolute;bottom:0;left:0;height:3px;width:${fillPct}%;background:${st.border};opacity:.6;border-radius:0 0 4px 4px;`;bl.appendChild(bar);}
       // roomLocked only protects a reservation from the automated
       // Straightline optimizer, never from a staff member manually
@@ -247,7 +252,7 @@ function venBuild(){
       <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;margin:6px 0;background:#fff;border:1px solid #fecaca;border-radius:8px;cursor:pointer" onclick="openVenEdit('${bk.id}')">
         <div style="flex:1">
           <div style="font-size:13px;font-weight:700;color:#374151">${bk.leaderName||bk.retreatName||'Untitled'}</div>
-          <div style="font-size:11.5px;color:var(--muted)">${bk.retreatName&&bk.leaderName?bk.retreatName+' · ':''}${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)} · ${bk.pax||0} pax</div>
+          <div style="font-size:11.5px;color:var(--muted)">${bk.retreatName&&bk.leaderName&&bk.retreatName!==bk.leaderName?bk.retreatName+' · ':''}${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)} · ${bk.pax||0} pax</div>
         </div>
         <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#991b1b;background:#fecaca;padding:2px 8px;border-radius:99px">Cancelled</span>
       </div>`).join('');}
