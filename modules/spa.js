@@ -303,11 +303,17 @@ function spaRenderDashboard() {
     const svc = SpaData.services.find(s => s.id === a.serviceId);
     const { match, bkMatch } = spaResolveGuestForAppt(a);
     const chargeGuestLabel = match ? match.guest.name : bkMatch?.bk.leaderName;
+    // A hotel guest with no chargeable match used to render nothing here at
+    // all — easy to miss on a busy dashboard, and the only trace was
+    // folioStatus sitting at PENDING with no visible signal. Real ask
+    // 2026-09-19: alert staff instead of letting it sit silently.
     const chargeBtn = a.folioStatus === 'POSTED'
       ? `<span style="font-size:10.5px;font-weight:700;color:#15803d;white-space:nowrap">✓ Charged to Room</span>`
       : (chargeGuestLabel
         ? `<button onclick="spaChargeApptToRoom('${a.id}')" title="Charge this service to ${escHtml(chargeGuestLabel)}'s room folio" style="font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;border:1.5px solid #0d9488;background:#f0fdfa;color:#0f766e;cursor:pointer;white-space:nowrap">🧾 Charge to Room</button>`
-        : '');
+        : (a.guestType === 'hotel'
+          ? `<span title="No registered guest matches this appointment's name or room — check the room number/name, then charge it manually." style="font-size:10.5px;font-weight:700;color:#b45309;white-space:nowrap">⚠ No Room Match</span>`
+          : ''));
     return `<div style="display:grid;grid-template-columns:90px 1fr 1fr 160px 140px 130px;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #f0ebe0;background:${confirmed ? '#fff' : '#fffbeb'}">
       <div style="font-weight:700;color:#2d2520;font-size:13px">${spaCalFmtT(a.start)}</div>
       <div style="font-size:13px;color:#2d2520">${menuEsc(svcName(a.serviceId))}</div>
@@ -402,7 +408,9 @@ function spaRenderConfirmations() {
       ? `<span style="font-size:10.5px;font-weight:700;color:#15803d;white-space:nowrap">✓ Charged</span>`
       : (chargeGuestLabel
         ? `<button onclick="spaChargeApptToRoom('${a.id}')" style="font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;border:1.5px solid #0d9488;background:#f0fdfa;color:#0f766e;cursor:pointer;white-space:nowrap">🧾 Charge</button>`
-        : '');
+        : (a.guestType === 'hotel'
+          ? `<span title="No registered guest matches this appointment's name or room — check the room number/name, then charge it manually." style="font-size:10.5px;font-weight:700;color:#b45309;white-space:nowrap">⚠ No Match</span>`
+          : ''));
     const dateLabel = new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     return `<div style="display:grid;grid-template-columns:120px 76px 1fr 1fr 150px 120px 96px;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #f0ebe0;background:${confirmed ? '#fff' : '#fffbeb'}">
       <div style="font-weight:700;color:#2d2520;font-size:12.5px">${dateLabel}</div>
