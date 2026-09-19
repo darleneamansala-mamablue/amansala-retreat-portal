@@ -464,6 +464,21 @@ function spaFindGuestBookingForAppt(a) {
   }
   return null;
 }
+// A room number lines up between two totally unrelated people far more
+// easily than two spellings of the same real name do — rooms get reused
+// constantly (checkout/checkin, test bookings reusing a placeholder room
+// number). Requires at least one shared word (first name, last name, etc.),
+// case-insensitive — a genuine typo/accent/missing-initial still passes,
+// two unrelated people essentially never share a word by chance.
+function spaNamesLooselyMatch(nameA, nameB) {
+  const norm = s => (s || '').toLowerCase().trim();
+  const a = norm(nameA), b = norm(nameB);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const aWords = a.split(/\s+/).filter(w => w.length > 1);
+  const bWords = b.split(/\s+/).filter(w => w.length > 1);
+  return aWords.some(w => bWords.includes(w));
+}
 // If staff typed an explicit hotel room number on the appointment (Darlene's
 // call 2026-09-16 — name-only matching is error-prone), match by room first —
 // it's a firmer link than a name spelled slightly differently.
@@ -487,10 +502,22 @@ async function spaChargeApptToRoom(apptId, opts) {
   opts = opts || {};
   const a = (SpaAppointments || []).find(x => x.id === apptId); if (!a) return;
   if (a.folioStatus === 'POSTED') { if (!opts.silent) showToast('Already charged to this room.'); return; }
-  const byRoom = a.guestRoom ? spaFindGuestByRoom(a.guestRoom) : null;
+  let byRoom = a.guestRoom ? spaFindGuestByRoom(a.guestRoom) : null;
+  // A room-only match (no name check at all) is only trustworthy when the
+  // name is at least a loose match — rooms get reused constantly (checkout/
+  // checkin, a test appointment reusing a placeholder room number), so
+  // trusting the room alone can charge a total stranger. Real report
+  // 2026-09-19: an appointment for "Rubi Test" silently charged real guest
+  // "Danielle Tanner" because both happened to reference room 20. Discard
+  // the room match and fall through to real name-based matching instead —
+  // same as if no room number had been on the appointment at all.
+  if (byRoom) {
+    const roomGuestName = byRoom.reg ? byRoom.guest.name : byRoom.bk.leaderName;
+    if (!spaNamesLooselyMatch(a.clientName, roomGuestName)) byRoom = null;
+  }
   const match = byRoom?.reg ? byRoom : (byRoom ? null : spaFindGuestRegForAppt(a));
   const bkMatch = byRoom?.bk ? byRoom : (!match && !byRoom ? spaFindGuestBookingForAppt(a) : null);
-  if (!match && !bkMatch) { if (!opts.silent) showToast(a.guestRoom ? `No guest found in room ${a.guestRoom}.` : 'No matching registered guest found.'); return; }
+  if (!match && !bkMatch) { if (!opts.silent) showToast(a.guestRoom ? `No guest in room ${a.guestRoom} matches "${a.clientName}" — check the room number or charge manually.` : 'No matching registered guest found.'); return; }
   const svc = SpaData.services.find(s => s.id === a.serviceId);
   const name = svc?.name || 'Spa Service';
   const price = svc?.groupPricing ? (a.groupTotalPriceUSD ?? svc.price) : svc?.price;
