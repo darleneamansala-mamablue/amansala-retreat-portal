@@ -301,8 +301,7 @@ function spaRenderDashboard() {
     const pref = a.therapistPreference?.type;
     const prefLabel = unassigned ? (pref === 'male' ? 'Any male therapist' : pref === 'female' ? 'Any female therapist' : 'Unassigned') : therName(a.therapistId);
     const svc = SpaData.services.find(s => s.id === a.serviceId);
-    const match = spaFindGuestRegForAppt(a);
-    const bkMatch = !match ? spaFindGuestBookingForAppt(a) : null;
+    const { match, bkMatch } = spaResolveGuestForAppt(a);
     const chargeGuestLabel = match ? match.guest.name : bkMatch?.bk.leaderName;
     const chargeBtn = a.folioStatus === 'POSTED'
       ? `<span style="font-size:10.5px;font-weight:700;color:#15803d;white-space:nowrap">✓ Charged to Room</span>`
@@ -397,8 +396,7 @@ function spaRenderConfirmations() {
     const unassigned = !a.therapistId;
     const pref = a.therapistPreference?.type;
     const prefLabel = unassigned ? (pref === 'male' ? 'Any male therapist' : pref === 'female' ? 'Any female therapist' : 'Unassigned') : therName(a.therapistId);
-    const match = spaFindGuestRegForAppt(a);
-    const bkMatch = !match ? spaFindGuestBookingForAppt(a) : null;
+    const { match, bkMatch } = spaResolveGuestForAppt(a);
     const chargeGuestLabel = match ? match.guest.name : bkMatch?.bk.leaderName;
     const chargeBtn = a.folioStatus === 'POSTED'
       ? `<span style="font-size:10.5px;font-weight:700;color:#15803d;white-space:nowrap">✓ Charged</span>`
@@ -494,6 +492,31 @@ function spaFindGuestByRoom(roomNum) {
   if (bk) return { bk };
   return null;
 }
+// Single source of truth for "who does this appointment's folio charge
+// belong to" — used both by spaChargeApptToRoom (the actual charge action)
+// and the Dashboard/Confirmations row renderers (which decide whether to
+// show a "Charge to Room" button at all). Those two used to duplicate this
+// with a weaker, name-only version that never checked the room, so a
+// guest-created hotel booking matchable only by room got no button to
+// click at all (real report 2026-09-19: "still not charging to the rooms"
+// even after the room-vs-guestRoom field fix below). Room-based matching
+// only counts when the name is at least a loose match — see
+// spaNamesLooselyMatch — since a room number lines up between two
+// unrelated people far more easily than two spellings of one real name do.
+function spaResolveGuestForAppt(a) {
+  // The public guest booking page (spa-booking.html) saves the room the
+  // guest typed as `roomNumber`; the admin's manual New/Edit Appointment
+  // form saves it as `guestRoom` (a separate field, entered independently).
+  const roomHint = a.guestRoom || a.roomNumber;
+  let byRoom = roomHint ? spaFindGuestByRoom(roomHint) : null;
+  if (byRoom) {
+    const roomGuestName = byRoom.reg ? byRoom.guest.name : byRoom.bk.leaderName;
+    if (!spaNamesLooselyMatch(a.clientName, roomGuestName)) byRoom = null;
+  }
+  const match = byRoom?.reg ? byRoom : (byRoom ? null : spaFindGuestRegForAppt(a));
+  const bkMatch = byRoom?.bk ? byRoom : (!match && !byRoom ? spaFindGuestBookingForAppt(a) : null);
+  return { match, bkMatch, roomHint };
+}
 // opts.silent skips the confirm() prompt and the "already charged"/"no
 // match" toasts — used when auto-charging right after a Hotel Guest
 // appointment is saved (the save itself is the staff's affirmative action;
@@ -502,22 +525,8 @@ async function spaChargeApptToRoom(apptId, opts) {
   opts = opts || {};
   const a = (SpaAppointments || []).find(x => x.id === apptId); if (!a) return;
   if (a.folioStatus === 'POSTED') { if (!opts.silent) showToast('Already charged to this room.'); return; }
-  let byRoom = a.guestRoom ? spaFindGuestByRoom(a.guestRoom) : null;
-  // A room-only match (no name check at all) is only trustworthy when the
-  // name is at least a loose match — rooms get reused constantly (checkout/
-  // checkin, a test appointment reusing a placeholder room number), so
-  // trusting the room alone can charge a total stranger. Real report
-  // 2026-09-19: an appointment for "Rubi Test" silently charged real guest
-  // "Danielle Tanner" because both happened to reference room 20. Discard
-  // the room match and fall through to real name-based matching instead —
-  // same as if no room number had been on the appointment at all.
-  if (byRoom) {
-    const roomGuestName = byRoom.reg ? byRoom.guest.name : byRoom.bk.leaderName;
-    if (!spaNamesLooselyMatch(a.clientName, roomGuestName)) byRoom = null;
-  }
-  const match = byRoom?.reg ? byRoom : (byRoom ? null : spaFindGuestRegForAppt(a));
-  const bkMatch = byRoom?.bk ? byRoom : (!match && !byRoom ? spaFindGuestBookingForAppt(a) : null);
-  if (!match && !bkMatch) { if (!opts.silent) showToast(a.guestRoom ? `No guest in room ${a.guestRoom} matches "${a.clientName}" — check the room number or charge manually.` : 'No matching registered guest found.'); return; }
+  const { match, bkMatch, roomHint } = spaResolveGuestForAppt(a);
+  if (!match && !bkMatch) { if (!opts.silent) showToast(roomHint ? `No guest in room ${roomHint} matches "${a.clientName}" — check the room number or charge manually.` : 'No matching registered guest found.'); return; }
   const svc = SpaData.services.find(s => s.id === a.serviceId);
   const name = svc?.name || 'Spa Service';
   const price = svc?.groupPricing ? (a.groupTotalPriceUSD ?? svc.price) : svc?.price;
