@@ -252,10 +252,45 @@ function spaBusySummary(startDate, endDate) {
     if (bk.bookingType === 'room_only' && bk.leaderName) registeredGuestNames.add(bk.leaderName.trim().toLowerCase());
   });
   const potentialCount = [...registeredGuestNames].filter(n => !massageGuestNames.has(n)).length;
-  return { massageCount: massages.length, registeredGuestCount: registeredGuestNames.size, potentialCount };
+  // Pre-Paid = included in a guest's package (WeTravel guests always get 2pp,
+  // some yoga retreats include massages too) — marked via the Pre-Paid
+  // checkbox on the appointment (spaApptSave in spa-calendar.js), never
+  // charged to the room. In-House = a hotel guest paying via room charge.
+  // Darlene's ask 2026-09-20: therapists want this breakdown, not just a
+  // combined total, so they can tell which guests already paid.
+  const prepaidCount = massages.filter(a => a.prepaid).length;
+  const inHouseCount = massages.filter(a => a.guestType === 'hotel' && !a.prepaid).length;
+  return { massageCount: massages.length, registeredGuestCount: registeredGuestNames.size, potentialCount, prepaidCount, inHouseCount };
+}
+// ── HOTEL OCCUPANCY — how full the hotel is during a date range, so
+// therapists can gauge demand alongside "How Busy Are We". Peak (busiest
+// single day in the range), not an average, since "when was the hotel
+// filled" is about the crunch point, not a smoothed-out number. Reuses the
+// same room/registration matching convention as room-calendar.html
+// (AppData.roomTypes[].rooms + AppData.regs[].room + AppData.bookings) —
+// read-only, never touches Room List/Reservations data. Darlene's ask
+// 2026-09-20.
+function spaHotelOccupancySummary(startDate, endDate) {
+  const roomTypes = AppData.roomTypes || [];
+  const totalRooms = roomTypes.reduce((sum, rt) => sum + (rt.rooms ? rt.rooms.length : 0), 0);
+  const roomRegs = (AppData.regs || []).filter(r => r.room);
+  let peakDate = startDate, peakCount = 0;
+  for (let d = new Date(startDate + 'T12:00:00'); spaCalFmtDateStr(d) <= endDate; d.setDate(d.getDate() + 1)) {
+    const ds = spaCalFmtDateStr(d);
+    const roomsToday = new Set();
+    roomRegs.forEach(reg => {
+      const bk = (AppData.bookings || []).find(b => b.id === reg.bookingId);
+      if (!bk || bk.status === 'cancelled') return;
+      if (bk.startDate <= ds && bk.endDate > ds) roomsToday.add(reg.room);
+    });
+    if (roomsToday.size >= peakCount) { peakCount = roomsToday.size; peakDate = ds; }
+  }
+  return { totalRooms, peakDate, peakCount, pct: totalRooms ? Math.round(peakCount / totalRooms * 100) : 0 };
 }
 function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
   const s = spaBusySummary(startVal, endVal);
+  const occ = spaHotelOccupancySummary(startVal, endVal);
+  const occFmtD = ds => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   return `<div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:14px 16px;margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74">How Busy Are We</span>
@@ -263,7 +298,12 @@ function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
       <span style="color:#8a7e74;font-size:12px">to</span>
       <input type="date" id="${endId}" value="${endVal}" onchange="${onChangeFn}(null,this.value)" style="padding:6px 9px;border:1.5px solid #e8dfd4;border-radius:7px;font-family:'Jost',sans-serif;font-size:12.5px">
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+      <div style="flex:1;min-width:150px;background:#f5f3ff;border-radius:9px;padding:10px 14px">
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6d28d9">Hotel Occupancy</div>
+        <div style="font-size:22px;font-weight:800;color:#6d28d9;margin-top:2px">${occ.peakCount} / ${occ.totalRooms} <span style="font-size:13px;font-weight:700">(${occ.pct}%)</span></div>
+        <div style="font-size:10px;color:#9ca3af;margin-top:2px">fullest on ${occFmtD(occ.peakDate)}</div>
+      </div>
       <div style="flex:1;min-width:150px;background:#f0fdfa;border-radius:9px;padding:10px 14px">
         <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#0f766e">Massages Booked</div>
         <div style="font-size:22px;font-weight:800;color:#0f766e;margin-top:2px">${s.massageCount}</div>
@@ -272,6 +312,17 @@ function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
         <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#92400e">Guests With No Massage Yet</div>
         <div style="font-size:22px;font-weight:800;color:#92400e;margin-top:2px">${s.potentialCount}</div>
         <div style="font-size:10px;color:#9ca3af;margin-top:2px">of ${s.registeredGuestCount} registered guests staying in this window</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">
+      <div style="flex:1;min-width:150px;background:#eff6ff;border-radius:9px;padding:10px 14px">
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#1d4ed8">In-House (Charged to Room)</div>
+        <div style="font-size:22px;font-weight:800;color:#1d4ed8;margin-top:2px">${s.inHouseCount}</div>
+      </div>
+      <div style="flex:1;min-width:150px;background:#f0fdf4;border-radius:9px;padding:10px 14px">
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#15803d">✦ Pre-Paid (Included in Package)</div>
+        <div style="font-size:22px;font-weight:800;color:#15803d;margin-top:2px">${s.prepaidCount}</div>
+        <div style="font-size:10px;color:#9ca3af;margin-top:2px">WeTravel guests · some yoga retreats</div>
       </div>
     </div>
   </div>`;
@@ -307,7 +358,9 @@ function spaRenderDashboard() {
     // all — easy to miss on a busy dashboard, and the only trace was
     // folioStatus sitting at PENDING with no visible signal. Real ask
     // 2026-09-19: alert staff instead of letting it sit silently.
-    const chargeBtn = a.folioStatus === 'POSTED'
+    const chargeBtn = a.prepaid
+      ? `<span title="Included in the guest's package — not charged to the room" style="font-size:10.5px;font-weight:700;color:#15803d;white-space:nowrap">✦ Pre-Paid</span>`
+      : a.folioStatus === 'POSTED'
       ? `<span style="font-size:10.5px;font-weight:700;color:#15803d;white-space:nowrap">✓ Charged to Room</span>`
       : (chargeGuestLabel
         ? `<button onclick="spaChargeApptToRoom('${a.id}')" title="Charge this service to ${escHtml(chargeGuestLabel)}'s room folio" style="font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;border:1.5px solid #0d9488;background:#f0fdfa;color:#0f766e;cursor:pointer;white-space:nowrap">🧾 Charge to Room</button>`
@@ -404,7 +457,9 @@ function spaRenderConfirmations() {
     const prefLabel = unassigned ? (pref === 'male' ? 'Any male therapist' : pref === 'female' ? 'Any female therapist' : 'Unassigned') : therName(a.therapistId);
     const { match, bkMatch } = spaResolveGuestForAppt(a);
     const chargeGuestLabel = match ? match.guest.name : bkMatch?.bk.leaderName;
-    const chargeBtn = a.folioStatus === 'POSTED'
+    const chargeBtn = a.prepaid
+      ? `<span title="Included in the guest's package — not charged to the room" style="font-size:10.5px;font-weight:700;color:#15803d;white-space:nowrap">✦ Pre-Paid</span>`
+      : a.folioStatus === 'POSTED'
       ? `<span style="font-size:10.5px;font-weight:700;color:#15803d;white-space:nowrap">✓ Charged</span>`
       : (chargeGuestLabel
         ? `<button onclick="spaChargeApptToRoom('${a.id}')" style="font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;border:1.5px solid #0d9488;background:#f0fdfa;color:#0f766e;cursor:pointer;white-space:nowrap">🧾 Charge</button>`
@@ -532,6 +587,7 @@ function spaResolveGuestForAppt(a) {
 async function spaChargeApptToRoom(apptId, opts) {
   opts = opts || {};
   const a = (SpaAppointments || []).find(x => x.id === apptId); if (!a) return;
+  if (a.prepaid) { if (!opts.silent) showToast('This is Pre-Paid — included in the guest\'s package, not charged to the room.'); return; }
   if (a.folioStatus === 'POSTED') { if (!opts.silent) showToast('Already charged to this room.'); return; }
   const { match, bkMatch, roomHint } = spaResolveGuestForAppt(a);
   if (!match && !bkMatch) { if (!opts.silent) showToast(roomHint ? `No guest in room ${roomHint} matches "${a.clientName}" — check the room number or charge manually.` : 'No matching registered guest found.'); return; }

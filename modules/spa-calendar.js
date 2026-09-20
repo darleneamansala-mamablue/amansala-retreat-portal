@@ -322,6 +322,8 @@ function spaApptShowForm(id, prefill) {
   document.getElementById('spaApptClientName').value = a?.clientName || '';
   document.getElementById('spaApptGuestType').value = a?.guestType || 'hotel';
   document.getElementById('spaApptGuestRoom').value = a?.guestRoom || '';
+  const prepaidEl = document.getElementById('spaApptPrepaid');
+  if (prepaidEl) prepaidEl.checked = !!a?.prepaid;
   document.getElementById('spaApptNotes').value = a?.notes || '';
   document.getElementById('spaApptStatus').value = a?.status || 'CONFIRMED';
   document.getElementById('spaApptPaymentStatus').value = a?.paymentStatus && ['PENDING', 'PAID', 'CONFIRMED'].includes(a.paymentStatus) ? a.paymentStatus : 'PENDING';
@@ -425,6 +427,9 @@ function spaApptOnGuestTypeChange() {
   const isHotel = document.getElementById('spaApptGuestType').value === 'hotel';
   document.getElementById('spaApptPaymentStatusWrap').style.display = isHotel ? 'none' : '';
   document.getElementById('spaApptRoomBillNote').style.display = isHotel ? '' : 'none';
+  const prepaidWrap = document.getElementById('spaApptPrepaidWrap');
+  if (prepaidWrap) prepaidWrap.style.display = isHotel ? '' : 'none';
+  if (!isHotel) document.getElementById('spaApptPrepaid').checked = false;
 }
 function spaApptSave() {
   let id = document.getElementById('spaApptId').value;
@@ -445,6 +450,11 @@ function spaApptSave() {
     date: document.getElementById('spaApptDate').value, start, duration,
     status: document.getElementById('spaApptStatus').value,
     paymentStatus: guestType === 'hotel' ? 'NOT_REQUIRED' : document.getElementById('spaApptPaymentStatus').value,
+    // Included in the guest's package (WeTravel — always 2pp, some yoga
+    // retreats too) — never charged to the room. Offsite guests pay
+    // directly, so this only applies to Hotel Guests. Darlene's ask
+    // 2026-09-20.
+    prepaid: guestType === 'hotel' && !!document.getElementById('spaApptPrepaid')?.checked,
     notes: document.getElementById('spaApptNotes').value.trim(),
   };
   // Reservation Status = Confirmed already means the booking is settled —
@@ -499,7 +509,7 @@ function spaApptSave() {
   spaCalRender();
   // Hotel Guest + Confirmed = bill it to their room right now, no separate
   // "Charge to Room" click needed (Darlene's call 2026-09-16).
-  if (fields.guestType === 'hotel' && fields.status === 'CONFIRMED' && typeof spaChargeApptToRoom === 'function') {
+  if (fields.guestType === 'hotel' && !fields.prepaid && fields.status === 'CONFIRMED' && typeof spaChargeApptToRoom === 'function') {
     spaChargeApptToRoom(id, { silent: true });
   }
 }

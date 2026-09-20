@@ -113,6 +113,7 @@ const SPA_STAFF_I18N={
   lbl_guest_room:{en:'Guest Room #',es:'N.º de Habitación'},
   lbl_guest_room_hint:{en:'(for billing — leave blank to match by name)',es:'(para cobro — dejar en blanco para buscar por nombre)'},
   room_bill_note:{en:"Billed to the guest's room automatically — paid when they settle at checkout.",es:'Se cobra automáticamente a la habitación del huésped — se paga al hacer el check-out.'},
+  lbl_prepaid:{en:"✦ Pre-Paid — included in the guest's package (WeTravel, some yoga retreats). Won't be charged to the room.",es:'✦ Prepagado — incluido en el paquete del huésped (WeTravel, algunos retiros de yoga). No se cobrará a la habitación.'},
   lbl_service:{en:'Service *',es:'Servicio *'},
   lbl_therapist:{en:'Therapist *',es:'Terapeuta *'},
   lbl_room:{en:'Room',es:'Sala'},
