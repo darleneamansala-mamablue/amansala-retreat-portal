@@ -486,7 +486,10 @@ function spaApptSave() {
     const therName = ther ? `${ther.firstName} ${ther.lastName || ''}`.trim() : '';
     const blockRule = scSpaHoursBlockedRule(therName, fields.date, start);
     if (blockRule) {
-      alert(`${ther.firstName} is only available ${blockRule.startTime}–${blockRule.endTime} on this day of the week — can't book them outside that window. Pick another time, or have them update their Available Hours in Staff Confirmations first.`);
+      const msg = blockRule.dayOff
+        ? `${ther.firstName} has this day off, per their Working Hours in Staff Confirmations — can't book them then.`
+        : `${ther.firstName} is only available ${blockRule.start}–${blockRule.end} on this day of the week — can't book them outside that window.`;
+      alert(`${msg} Pick another time, or have them update their Working Hours in Staff Confirmations first.`);
       return;
     }
   }
