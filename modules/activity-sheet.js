@@ -721,7 +721,10 @@ function actSheetRenderSummary() {
           return `<div style="margin-bottom:10px">
             <div style="font-size:10.5px;color:#6b7280;margin-bottom:5px">Other groups have this tour on:</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
-              ${suggs.map(s=>`<button onclick="document.getElementById('actEditDate_${cardKey}').value='${s.date}';document.getElementById('actEditTime_${cardKey}').value='${s.time}'" style="padding:4px 11px;font-size:12px;font-weight:600;background:#fff;color:var(--teal,#2d6a6a);border:1.5px solid #b2d8d8;border-radius:20px;cursor:pointer;font-family:'Jost',sans-serif">${s.label}</button>`).join('')}
+              ${suggs.map(s=>`<span style="display:inline-flex;align-items:center;border:1.5px solid #b2d8d8;border-radius:20px;overflow:hidden">
+                <button onclick="document.getElementById('actEditDate_${cardKey}').value='${s.date}';document.getElementById('actEditTime_${cardKey}').value='${s.time}'" style="padding:4px 11px;font-size:12px;font-weight:600;background:#fff;color:var(--teal,#2d6a6a);border:none;cursor:pointer;font-family:'Jost',sans-serif">${s.label}</button>
+                <button onclick="actSummaryDeleteDate('${e.ao.id}','${s.date}','${escHtml(e.ao.name).replace(/'/g,"\\'")}')" title="Remove this date entirely — unschedules it for whichever group(s) have it" style="padding:4px 9px;font-size:12px;font-weight:700;background:#fff;color:#dc2626;border:none;border-left:1.5px solid #b2d8d8;cursor:pointer;font-family:'Jost',sans-serif">&times;</button>
+              </span>`).join('')}
             </div>
           </div>`;
         })()}
@@ -1070,6 +1073,26 @@ function actSummarySetDate(aoId, bkIds, dateInputId, timeInputId) {
   });
   saveAll();
   showToast('Date saved for ' + updated + ' group' + (updated!==1?'s':'') + '.' + (skippedArrival?' Skipped '+skippedArrival+' — can\'t schedule on the arrival day.':''));
+  actSheetRenderSummary();
+}
+
+// Removes one "Other groups have this tour on" date entirely — unschedules
+// this tour on that exact date from every retreat booking that has it
+// there. Darlene's ask 2026-09-20: a stray/duplicate/no-longer-happening
+// date pill had no way to be cleared out of the quick-pick list, since that
+// list is generated live from real retreatActivities entries, not a
+// separate stored list of its own.
+function actSummaryDeleteDate(aoId, date, aoName) {
+  const affected = (AppData.bookings||[]).filter(bk => (bk.retreatActivities||[]).some(a => a.aoId===aoId && a.date===date));
+  if (!affected.length) { showToast('Nothing found on that date — it may have already been removed.'); actSheetRenderSummary(); return; }
+  const names = affected.map(bk => bk.retreatName||bk.leaderName||'Group').join(', ');
+  if (!confirm(`Remove ${aoName} on ${date} for: ${names}? This unschedules it for them — it does not just hide the suggestion.`)) return;
+  affected.forEach(bk => {
+    bk.retreatActivities = (bk.retreatActivities||[]).filter(a => !(a.aoId===aoId && a.date===date));
+    bk.retreatActivitiesUpdatedAt = new Date().toISOString();
+  });
+  saveAll();
+  showToast(`Removed for ${affected.length} group${affected.length!==1?'s':''}.`);
   actSheetRenderSummary();
 }
 
