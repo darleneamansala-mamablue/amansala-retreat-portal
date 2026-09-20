@@ -430,6 +430,25 @@ function spaApptOnGuestTypeChange() {
   const prepaidWrap = document.getElementById('spaApptPrepaidWrap');
   if (prepaidWrap) prepaidWrap.style.display = isHotel ? '' : 'none';
   if (!isHotel) document.getElementById('spaApptPrepaid').checked = false;
+  else spaApptCheckPrepaidFromPackage();
+}
+// Auto-detects Pre-Paid from the guest's own retreat package (Darlene's ask
+// 2026-09-20 — "pulled from her room list") instead of relying on staff to
+// remember the checkbox. Only ever auto-CHECKS it, never auto-unchecks —
+// staff can still untick it by hand (e.g. a 3rd massage beyond what the
+// package covers), and that choice is never silently overwritten.
+function spaApptCheckPrepaidFromPackage() {
+  if (document.getElementById('spaApptGuestType')?.value !== 'hotel') return;
+  const box = document.getElementById('spaApptPrepaid');
+  const hint = document.getElementById('spaApptPrepaidAutoHint');
+  if (!box || box.checked) { if (hint) hint.style.display = 'none'; return; }
+  const clientName = document.getElementById('spaApptClientName')?.value || '';
+  const guestRoom = document.getElementById('spaApptGuestRoom')?.value || '';
+  if (!clientName.trim() || typeof spaGuestPackageIncludesMassage !== 'function') return;
+  if (spaGuestPackageIncludesMassage(clientName, guestRoom)) {
+    box.checked = true;
+    if (hint) hint.style.display = '';
+  }
 }
 function spaApptSave() {
   let id = document.getElementById('spaApptId').value;

@@ -590,6 +590,20 @@ function spaResolveGuestForAppt(a) {
   const bkMatch = byRoom?.bk ? byRoom : (!match && !byRoom ? spaFindGuestBookingForAppt(a) : null);
   return { match, bkMatch, roomHint };
 }
+// 'ao8' is the fixed id for the "Massage (60 min)" add-on (see ADD_ONS_DEFAULT
+// in retreat-builder.js) — when it's in a guest's retreat booking `packages`
+// list, their massage is already paid for as part of the package (their
+// "room list" record), so front desk shouldn't have to remember to tick
+// Pre-Paid by hand. Darlene's ask 2026-09-20, after Marcia's package
+// (packages includes 'ao8') didn't show up as Pre-Paid because nobody had
+// manually checked the box. Only a yes/no signal — it can't tell WeTravel's
+// "2 per person" entitlement from a single yoga-retreat massage, so it just
+// flags "this guest's package includes a massage," not how many.
+function spaGuestPackageIncludesMassage(clientName, guestRoom) {
+  const { match, bkMatch } = spaResolveGuestForAppt({ clientName, guestRoom });
+  const bk = match ? (AppData.bookings || []).find(b => b.id === match.reg.bookingId) : bkMatch?.bk;
+  return !!(bk && Array.isArray(bk.packages) && bk.packages.includes('ao8'));
+}
 // opts.silent skips the confirm() prompt and the "already charged"/"no
 // match" toasts — used when auto-charging right after a Hotel Guest
 // appointment is saved (the save itself is the staff's affirmative action;
