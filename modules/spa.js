@@ -293,9 +293,42 @@ function spaOnsiteGuestSummary(startDate, endDate) {
   }
   return { avgCount: numDays ? Math.round(totalCount / numDays) : 0, numDays, byDay };
 }
+// ── PACKAGE MASSAGE NOT YET BOOKED — a forecast/reminder list, distinct
+// from Pre-Paid above (which only counts appointments that already exist).
+// This finds guests whose retreat package includes the Massage add-on
+// ('ao8' — see spaGuestPackageIncludesMassage) but who have no spa
+// appointment at all yet in the window, so staff can proactively follow up
+// (e.g. Marcia's retreat isn't for another month, so nothing's been booked,
+// but she's still entitled). Reuses the same guest-name matching convention
+// as spaBusySummary/spaOnsiteGuestSummary. Darlene's ask 2026-09-20.
+function spaPackageMassageNotBookedSummary(startDate, endDate) {
+  const massageGuestNames = new Set((SpaAppointments || [])
+    .filter(a => a.status !== 'CANCELLED' && a.date >= startDate && a.date <= endDate)
+    .map(a => (a.clientName || '').trim().toLowerCase()).filter(Boolean));
+  const entitled = new Map();
+  (AppData.bookings || []).forEach(bk => {
+    if (bk.status === 'cancelled') return;
+    if (!(bk.startDate <= endDate && bk.endDate > startDate)) return;
+    if (!Array.isArray(bk.packages) || !bk.packages.includes('ao8')) return;
+    (AppData.regs || []).filter(r => r.bookingId === bk.id).forEach(r => {
+      (r.guests || []).forEach(g => {
+        if (!g.name) return;
+        const key = g.name.trim().toLowerCase();
+        if (!massageGuestNames.has(key)) entitled.set(key, g.name.trim());
+      });
+    });
+    if (bk.bookingType === 'room_only' && bk.leaderName) {
+      const key = bk.leaderName.trim().toLowerCase();
+      if (!massageGuestNames.has(key)) entitled.set(key, bk.leaderName.trim());
+    }
+  });
+  const names = [...entitled.values()].sort();
+  return { count: names.length, names };
+}
 function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
   const s = spaBusySummary(startVal, endVal);
   const onsite = spaOnsiteGuestSummary(startVal, endVal);
+  const notBooked = spaPackageMassageNotBookedSummary(startVal, endVal);
   return `<div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:14px 16px;margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74">How Busy Are We</span>
@@ -334,6 +367,16 @@ function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
         <div style="font-size:22px;font-weight:800;color:#15803d;margin-top:2px">${s.prepaidCount}</div>
         <div style="font-size:10px;color:#9ca3af;margin-top:2px">WeTravel guests · some yoga retreats</div>
       </div>
+    </div>
+    <div style="background:#fdf4ff;border-radius:9px;padding:10px 14px;margin-top:10px">
+      <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#a21caf">Package Massage Not Yet Booked</div>
+      <div style="font-size:22px;font-weight:800;color:#a21caf;margin-top:2px">${notBooked.count}</div>
+      <div style="font-size:10px;color:#9ca3af;margin-top:2px">entitled by their retreat package, no appointment on the books yet</div>
+      ${notBooked.count ? `<details style="margin-top:6px"><summary style="font-size:10.5px;color:#a21caf;cursor:pointer;font-weight:600">Show names</summary>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">
+          ${notBooked.names.map(n => `<span style="font-size:11px;background:#fff;border:1px solid #f0d9fa;border-radius:20px;padding:3px 10px;color:#4a4038">${menuEsc(n)}</span>`).join('')}
+        </div>
+      </details>` : ''}
     </div>
   </div>`;
 }
