@@ -275,6 +275,7 @@ function spaBusySummary(startDate, endDate) {
 // 2026-09-20.
 function spaOnsiteGuestSummary(startDate, endDate) {
   let totalCount = 0, numDays = 0;
+  const byDay = [];
   for (let d = new Date(startDate + 'T12:00:00'); spaCalFmtDateStr(d) <= endDate; d.setDate(d.getDate() + 1)) {
     const ds = spaCalFmtDateStr(d);
     const namesToday = new Set();
@@ -288,8 +289,9 @@ function spaOnsiteGuestSummary(startDate, endDate) {
     });
     totalCount += namesToday.size;
     numDays++;
+    byDay.push({ date: ds, count: namesToday.size });
   }
-  return { avgCount: numDays ? Math.round(totalCount / numDays) : 0, numDays };
+  return { avgCount: numDays ? Math.round(totalCount / numDays) : 0, numDays, byDay };
 }
 function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
   const s = spaBusySummary(startVal, endVal);
@@ -306,6 +308,11 @@ function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
         <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6d28d9">Guests Onsite${onsite.numDays > 1 ? ' (avg)' : ''}</div>
         <div style="font-size:22px;font-weight:800;color:#6d28d9;margin-top:2px">${onsite.avgCount}</div>
         ${onsite.numDays > 1 ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px">averaged over ${onsite.numDays} days</div>` : ''}
+        ${onsite.numDays > 1 ? `<details style="margin-top:6px"><summary style="font-size:10.5px;color:#6d28d9;cursor:pointer;font-weight:600">Day by day</summary>
+          <div style="margin-top:6px;display:flex;flex-direction:column;gap:2px">
+            ${onsite.byDay.map(d => `<div style="display:flex;justify-content:space-between;font-size:11px;color:#4a4038"><span>${new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span><span style="font-weight:700">${d.count}</span></div>`).join('')}
+          </div>
+        </details>` : ''}
       </div>
       <div style="flex:1;min-width:150px;background:#f0fdfa;border-radius:9px;padding:10px 14px">
         <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#0f766e">Massages Booked</div>
