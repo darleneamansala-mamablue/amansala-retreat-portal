@@ -696,7 +696,16 @@ const MENU_DETAIL={
   'Salmon':{name:'Salmon',desc:'Fresh salmon fillet, simply seasoned and perfectly cooked to highlight its natural flavor.'},
   'Brownie':{name:'Brownie',desc:'A rich, fudgy chocolate brownie with deep cocoa flavor.'},
 };
-function menuItemDetail(s){return MENU_DETAIL[s]||{name:menuTrEn(s),desc:''};}
+// isKitchen=true returns the dish exactly as the kitchen wrote it into
+// WEEKLY_MENU (Spanish) with no description — MENU_DETAIL/MENU_EN below are
+// English translations + allergen descriptions built for the guest-facing
+// poster only. Every kitchen print call site was passing through here
+// unconditionally, so the kitchen's own print-out came out in English too
+// (real report 2026-09-20).
+function menuItemDetail(s,isKitchen){
+  if(isKitchen)return{name:s,desc:''};
+  return MENU_DETAIL[s]||{name:menuTrEn(s),desc:''};
+}
 
 function menuPrintDay(dateStr){
   const mi=menuDayIndex(dateStr);
@@ -810,7 +819,7 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
 
   const itemLine=(s)=>{
     const clean=s.replace(' ★','').replace('★ ','');
-    const {name,desc}=menuItemDetail(clean);
+    const {name,desc}=menuItemDetail(clean,isKitchen);
     return `<div class="rw-item">${escHtml(name)}</div>${desc?`<div class="rw-item-desc">${escHtml(desc)}</div>`:''}`;
   };
   const groupLine=(ds,meal)=>{
@@ -831,7 +840,7 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
           <div class="rw-meal-body">
             ${din.protein?itemLine(din.protein):''}
             ${(din.dishes||[]).map(itemLine).join('')}
-            ${din.dessert?`<div class="rw-dessert">Postre · ${escHtml(menuItemDetail(din.dessert).name)}</div>`:''}
+            ${din.dessert?`<div class="rw-dessert">Postre · ${escHtml(menuItemDetail(din.dessert,isKitchen).name)}</div>`:''}
             ${groupLine(ds,'dinner')}
           </div>
         </div>`;
@@ -919,7 +928,7 @@ function menuPrintDailyRange(fromVal,toVal,isKitchen){
   while(d<=end&&days.length<31){days.push(d.toISOString().split('T')[0]);d.setDate(d.getDate()+1);}
   const itemHtml=(s)=>{
     const clean=s.replace(' ★','').replace('★ ','');
-    const {name,desc}=menuItemDetail(clean);
+    const {name,desc}=menuItemDetail(clean,isKitchen);
     return `<div class="menu-poster-item">${escHtml(name)}</div>${desc?`<div class="menu-poster-item-desc">${escHtml(desc)}</div>`:''}`;
   };
   const groupHtml=(ds,meal)=>{
@@ -947,7 +956,7 @@ function menuPrintDailyRange(fromVal,toVal,isKitchen){
       <div class="menu-poster-items">
         ${mData.dinner.protein?itemHtml(mData.dinner.protein):''}
         ${(mData.dinner.dishes||[]).map(itemHtml).join('')}
-        ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${escHtml(menuItemDetail(mData.dinner.dessert).name)}</div>`:''}
+        ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${escHtml(menuItemDetail(mData.dinner.dessert,isKitchen).name)}</div>`:''}
       </div>
       ${groupHtml(ds,'dinner')}
     </div>`:'';
