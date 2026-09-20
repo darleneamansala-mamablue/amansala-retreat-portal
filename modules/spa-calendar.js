@@ -476,6 +476,20 @@ function spaApptSave() {
     prepaid: guestType === 'hotel' && !!document.getElementById('spaApptPrepaid')?.checked,
     notes: document.getElementById('spaApptNotes').value.trim(),
   };
+  // Hard block — a therapist's own Blocked Hours (Spa — Blocked Hours in
+  // their Staff Confirmations availability) actually prevents the booking,
+  // not just a warning. Darlene's ask 2026-09-20. Skip this check when
+  // status is CANCELLED — cancelling something already outside a blocked
+  // window shouldn't itself get blocked.
+  if (fields.status !== 'CANCELLED' && typeof scSpaHoursBlockedRule === 'function') {
+    const ther = SpaData.therapists.find(t => t.id === therapistId);
+    const therName = ther ? `${ther.firstName} ${ther.lastName || ''}`.trim() : '';
+    const blockRule = scSpaHoursBlockedRule(therName, fields.date, start);
+    if (blockRule) {
+      alert(`${ther.firstName} has blocked ${blockRule.startTime}–${blockRule.endTime} on this day of the week — can't book them then. Pick another time, or have them remove that blocked window in Staff Confirmations first.`);
+      return;
+    }
+  }
   // Reservation Status = Confirmed already means the booking is settled —
   // don't also make staff separately click the hourglass icon to mark it
   // therapist-confirmed (Darlene's call 2026-09-16: two "confirmed" states
