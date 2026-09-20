@@ -476,17 +476,17 @@ function spaApptSave() {
     prepaid: guestType === 'hotel' && !!document.getElementById('spaApptPrepaid')?.checked,
     notes: document.getElementById('spaApptNotes').value.trim(),
   };
-  // Hard block — a therapist's own Blocked Hours (Spa — Blocked Hours in
-  // their Staff Confirmations availability) actually prevents the booking,
-  // not just a warning. Darlene's ask 2026-09-20. Skip this check when
-  // status is CANCELLED — cancelling something already outside a blocked
-  // window shouldn't itself get blocked.
+  // Hard block — a therapist's own Available Hours (Spa — Available Hours
+  // in their Staff Confirmations availability) actually prevents the
+  // booking outside that window, not just a warning. Darlene's ask
+  // 2026-09-20. Skip this check when status is CANCELLED — cancelling
+  // something already outside their hours shouldn't itself get blocked.
   if (fields.status !== 'CANCELLED' && typeof scSpaHoursBlockedRule === 'function') {
     const ther = SpaData.therapists.find(t => t.id === therapistId);
     const therName = ther ? `${ther.firstName} ${ther.lastName || ''}`.trim() : '';
     const blockRule = scSpaHoursBlockedRule(therName, fields.date, start);
     if (blockRule) {
-      alert(`${ther.firstName} has blocked ${blockRule.startTime}–${blockRule.endTime} on this day of the week — can't book them then. Pick another time, or have them remove that blocked window in Staff Confirmations first.`);
+      alert(`${ther.firstName} is only available ${blockRule.startTime}–${blockRule.endTime} on this day of the week — can't book them outside that window. Pick another time, or have them update their Available Hours in Staff Confirmations first.`);
       return;
     }
   }
