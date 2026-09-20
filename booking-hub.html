@@ -2610,12 +2610,13 @@
   <div class="modal" style="width:760px;max-width:97vw">
     <div class="modal-hdr"><h2>Manage Tours</h2><button class="modal-x" onclick="closeModal('tourSettingsModal')">&times;</button></div>
     <div class="modal-body">
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Price, default time, and which day(s) of the week each tour/activity auto-assigns on when a retreat's schedule is confirmed. Editing a time here only changes the default — any already-scheduled activity keeps its own time unless you edit it directly. Click a day letter to toggle it on/off. Changes here don't take effect until you hit Save.</p>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Price, cost (guide/transport/entrance fees — used to show profit margin), default time, and which day(s) of the week each tour/activity auto-assigns on when a retreat's schedule is confirmed. Editing a time here only changes the default — any already-scheduled activity keeps its own time unless you edit it directly. Click a day letter to toggle it on/off. Changes here don't take effect until you hit Save.</p>
       <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;min-width:640px" id="tourSettingsTbl">
         <thead><tr>
           <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);text-align:left;border-bottom:2px solid var(--border)">Tour / Activity</th>
           <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:2px solid var(--border)">Price</th>
+          <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:2px solid var(--border)">Cost</th>
           <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:2px solid var(--border)">Default Time</th>
           <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:2px solid var(--border)">Days (Sun&#8211;Sat)</th>
           <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:2px solid var(--border)"></th>
@@ -2628,6 +2629,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
           <input type="text" id="tourSettingsNewName" placeholder="Name" style="flex:1;min-width:140px;padding:6px 9px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:13px">
           <input type="number" id="tourSettingsNewPrice" step="0.01" min="0" placeholder="Price" style="width:90px;padding:6px 9px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:13px">
+          <input type="number" id="tourSettingsNewCost" step="0.01" min="0" placeholder="Cost" style="width:90px;padding:6px 9px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:13px">
           <input type="time" id="tourSettingsNewTime" value="11:45" style="padding:6px 9px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:13px">
           <button class="btn btn-secondary" onclick="tourSettingsAddNew()">+ Add</button>
         </div>

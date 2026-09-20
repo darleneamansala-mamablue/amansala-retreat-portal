@@ -88,14 +88,28 @@ function tourSettingsRenderRows(){
       const on=days.includes(d);
       return `<button type="button" onclick="tourSettingsToggleDay(this,'${a.id}',${d})" data-id="${a.id}" data-day="${d}" data-on="${on?'1':'0'}" style="width:30px;height:26px;border-radius:6px;font-size:10.5px;font-weight:700;cursor:pointer;border:1.5px solid ${on?'var(--teal,#2d6a6a)':'var(--border)'};background:${on?'var(--teal,#2d6a6a)':'#fff'};color:${on?'#fff':'var(--dark)'}">${lbl[0]}</button>`;
     }).join('');
+    const price=a.price??0, cost=a.cost??0, profit=price-cost;
     return `<tr data-row-id="${a.id}">
     <td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">${escHtml(a.name)}</td>
-    <td style="padding:8px 12px;border-bottom:1px solid var(--border)"><input type="number" step="0.01" min="0" value="${a.price??0}" data-id="${a.id}" data-f="price" style="width:80px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:13px"></td>
+    <td style="padding:8px 12px;border-bottom:1px solid var(--border)"><input type="number" step="0.01" min="0" value="${price}" data-id="${a.id}" data-f="price" oninput="tourSettingsUpdateProfit('${a.id}')" style="width:80px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:13px"></td>
+    <td style="padding:8px 12px;border-bottom:1px solid var(--border)">
+      <input type="number" step="0.01" min="0" value="${cost}" data-id="${a.id}" data-f="cost" oninput="tourSettingsUpdateProfit('${a.id}')" style="width:80px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:13px">
+      <div id="tourSettingsProfit_${a.id}" style="font-size:10.5px;color:${profit>=0?'#059669':'#dc2626'};margin-top:3px">${fmt$(profit)} profit</div>
+    </td>
     <td style="padding:8px 12px;border-bottom:1px solid var(--border)"><input type="time" value="${tourDefaultTime(a.id)}" data-id="${a.id}" data-f="time" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:13px"></td>
     <td style="padding:8px 12px;border-bottom:1px solid var(--border)"><div style="display:flex;gap:3px">${dayBtns}</div></td>
     <td style="padding:8px 12px;border-bottom:1px solid var(--border)"><button type="button" onclick="tourSettingsDeleteRow('${a.id}','${escHtml(a.name).replace(/'/g,"\\'")}')" style="border:none;background:none;color:#dc2626;cursor:pointer;font-size:16px;line-height:1" title="Delete this tour">&times;</button></td>
   </tr>`;
   }).join('');
+}
+function tourSettingsUpdateProfit(aoId){
+  const priceInp=document.querySelector(`input[data-id="${aoId}"][data-f="price"]`);
+  const costInp=document.querySelector(`input[data-id="${aoId}"][data-f="cost"]`);
+  const el=document.getElementById('tourSettingsProfit_'+aoId);
+  if(!priceInp||!costInp||!el)return;
+  const profit=(parseFloat(priceInp.value)||0)-(parseFloat(costInp.value)||0);
+  el.textContent=fmt$(profit)+' profit';
+  el.style.color=profit>=0?'#059669':'#dc2626';
 }
 function tourSettingsToggleDay(btn,aoId,day){
   const on=btn.dataset.on==='1';
@@ -108,13 +122,15 @@ function tourSettingsAddNew(){
   const name=(document.getElementById('tourSettingsNewName')?.value||'').trim();
   if(!name){showToast('Enter a name for the new tour first.');return;}
   const price=parseFloat(document.getElementById('tourSettingsNewPrice')?.value)||0;
+  const cost=parseFloat(document.getElementById('tourSettingsNewCost')?.value)||0;
   const time=document.getElementById('tourSettingsNewTime')?.value||'11:45';
   const nextNum=Math.max(0,...ADD_ONS.map(a=>parseInt((a.id||'').replace('ao',''))||0))+1;
   const id='ao'+nextNum;
-  ADD_ONS.push({id,name,desc:'',price});
+  ADD_ONS.push({id,name,desc:'',price,cost});
   TOUR_DEFAULT_TIMES[id]=time;
   document.getElementById('tourSettingsNewName').value='';
   document.getElementById('tourSettingsNewPrice').value='';
+  document.getElementById('tourSettingsNewCost').value='';
   document.getElementById('tourSettingsNewTime').value='11:45';
   tourSettingsRenderRows();
   showToast(`"${name}" added — set its days below, then Save.`);
@@ -134,6 +150,9 @@ async function tourSettingsDeleteRow(aoId,name){
 function saveTourSettings(){
   document.querySelectorAll('#tourSettingsTbody input[data-f="price"]').forEach(inp=>{
     const a=ADD_ONS.find(x=>x.id===inp.dataset.id);if(a)a.price=parseFloat(inp.value)||0;
+  });
+  document.querySelectorAll('#tourSettingsTbody input[data-f="cost"]').forEach(inp=>{
+    const a=ADD_ONS.find(x=>x.id===inp.dataset.id);if(a)a.cost=parseFloat(inp.value)||0;
   });
   document.querySelectorAll('#tourSettingsTbody input[data-f="time"]').forEach(inp=>{
     if(inp.value)TOUR_DEFAULT_TIMES[inp.dataset.id]=inp.value;
