@@ -697,13 +697,21 @@ async function sbSendConfirmEmail(appt,svc,therName,location_,folioPosted){
     await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:appt.email,subject:'Spa Appointment Confirmed — Amansala',html})});
   }catch(e){}
 }
-async function sbSendCancelEmail(appt,svc){
+// Darlene's ask 2026-09-20: name the therapist and say plainly whether the
+// room folio charge was removed, not just "cancelled as requested" — the
+// guest shouldn't have to guess whether they're still being billed.
+async function sbSendCancelEmail(appt,svc,ther){
   try{
-    const body=`<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(SB_cancelFirstName(appt))}, your appointment has been cancelled as requested:</p>
+    const withTher=ther?` with ${esc(ther.firstName)}`:'';
+    const folioLine=appt.folioStatus==='REVERSED'
+      ?`<p style="font-size:13.5px;color:#374151;margin:0 0 20px">The charge has been removed from your room folio.</p>`
+      :'';
+    const body=`<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(SB_cancelFirstName(appt))}, your massage${withTher} at ${fmtT(appt.start)} on ${fmtDateLong(appt.date)} has been cancelled:</p>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px">
         ${sbEmailRow('Service',esc(svc?.name||''))}
         ${sbEmailRow('Was scheduled',fmtDateLong(appt.date)+' at '+fmtT(appt.start))}
       </table>
+      ${folioLine}
       <p style="font-size:13.5px;color:#6b7280;margin:20px 0 0">We hope to welcome you for a treatment another time.</p>`;
     const html=sbEmailShell('Spa Appointment Cancelled',body);
     await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:appt.email,subject:'Spa Appointment Cancelled — Amansala',html})});
@@ -1024,11 +1032,9 @@ async function sbDoCancel(apptId){
     await db.from('app_store').upsert({key:'spa_appointments',value:latest,updated_at:new Date().toISOString()});
     SpaAppointments=latest;
     const svc=SpaData.services.find(s=>s.id===appt.serviceId);
-    if(appt.email) await sbSendCancelEmail(appt,svc);
-    if(appt.therapistId){
-      const ther=SpaData.therapists.find(t=>t.id===appt.therapistId);
-      if(ther) await sbSendTherapistCancelEmail(appt,svc,ther);
-    }
+    const ther=appt.therapistId?SpaData.therapists.find(t=>t.id===appt.therapistId):null;
+    if(appt.email) await sbSendCancelEmail(appt,svc,ther);
+    if(ther) await sbSendTherapistCancelEmail(appt,svc,ther);
     const el=document.getElementById('mainContent');
     el.innerHTML=`<div class="msg"><div class="msg-icon">✓</div><div class="msg-title">Cancelled</div><div class="msg-sub">Your appointment has been cancelled${appt.folioStatus==='REVERSED'?' and the charge removed from your folio' :''}. We've sent you a confirmation email.</div></div>`;
   }catch(e){

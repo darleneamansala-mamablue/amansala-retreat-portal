@@ -362,11 +362,6 @@ function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
         <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#1d4ed8">In-House (Charged to Room)</div>
         <div style="font-size:22px;font-weight:800;color:#1d4ed8;margin-top:2px">${s.inHouseCount}</div>
       </div>
-      <div style="flex:1;min-width:150px;background:#f0fdf4;border-radius:9px;padding:10px 14px">
-        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#15803d">✦ Pre-Paid (Included in Package)</div>
-        <div style="font-size:22px;font-weight:800;color:#15803d;margin-top:2px">${s.prepaidCount}</div>
-        <div style="font-size:10px;color:#9ca3af;margin-top:2px">WeTravel guests · some yoga retreats</div>
-      </div>
     </div>
     <div style="background:#fdf4ff;border-radius:9px;padding:10px 14px;margin-top:10px">
       <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#a21caf">Package Massage Not Yet Booked</div>
@@ -380,8 +375,17 @@ function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
     </div>
   </div>`;
 }
-let spaBusyStart = spaCalFmtDateStr(new Date());
-let spaBusyEnd = spaCalFmtDateStr(new Date());
+// Inlined instead of calling spaCalFmtDateStr() — this runs at module-load
+// time, and modules/spa.js loads BEFORE modules/spa-calendar.js in
+// booking-hub.html, so that function doesn't exist yet at this point. That
+// ReferenceError used to throw here, which silently aborted the rest of
+// spa.js's top-level execution and left every `let` declared further down
+// (e.g. spaTherPhotoValue) permanently stuck "before initialization" —
+// breaking the Therapist edit form and anything else defined later in this
+// file. Real report 2026-09-20 ("nothing happens" clicking any therapist).
+const _spaTodayStr = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+let spaBusyStart = _spaTodayStr;
+let spaBusyEnd = _spaTodayStr;
 function spaBusySetRange(newStart, newEnd) {
   if (newStart) spaBusyStart = newStart;
   if (newEnd) spaBusyEnd = newEnd;
