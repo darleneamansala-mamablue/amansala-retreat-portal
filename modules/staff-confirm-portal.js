@@ -25,6 +25,18 @@ const DEF_STAFF_CONFIRM=[
   {id:'sc_rubi',name:'Rubi',username:'rubi',password:'Tulum123',active:true,isPayrollAdmin:true},
   {id:'sc_rosy',name:'Rosy',username:'rosy',password:'Tulum123',active:true},
   {id:'sc_kike',name:'Kike',username:'kike',password:'Tulum123',active:true},
+  // Main Spa therapists (Darlene's ask 2026-09-20) — name must match the
+  // therapist record in modules/spa.js's SpaData.therapists exactly (case-
+  // insensitive) for scSpaItemsForName to find their appointments. Gabby's
+  // therapist record is spelled "Gabby", not "Gaby".
+  {id:'sc_julian',name:'Julian',username:'julian',password:'Tulum123',active:true},
+  {id:'sc_laura',name:'Laura',username:'laura',password:'Tulum123',active:true},
+  {id:'sc_miguel',name:'Miguel',username:'miguel',password:'Tulum123',active:true},
+  {id:'sc_marialuisa',name:'Maria Luisa',username:'marialuisa',password:'Tulum123',active:true},
+  {id:'sc_gabby',name:'Gabby',username:'gabby',password:'Tulum123',active:true},
+  {id:'sc_eva',name:'Eva',username:'eva',password:'Tulum123',active:true},
+  {id:'sc_graciela',name:'Graciela',username:'graciela',password:'Tulum123',active:true},
+  {id:'sc_rosario',name:'Rosario',username:'rosario',password:'Tulum123',active:true},
 ];
 // BBC pay rates per confirmed session — Darlene's spec (2026-08-29). Anything
 // not listed here (tours, ceremonies, meals, Opening Circle, Departures) has
