@@ -549,11 +549,11 @@ async function spaChargeApptToRoom(apptId, opts) {
   const therapistName = ther ? `${ther.firstName} ${ther.lastName || ''}`.trim() : null;
   if (match) {
     if (!match.reg.charges) match.reg.charges = [];
-    match.reg.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: match.guest.name, therapistName, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
+    match.reg.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: match.guest.name, therapistName, therapistId: a.therapistId, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
     a.folioRegId = match.reg.id;
   } else {
     if (!bkMatch.bk.charges) bkMatch.bk.charges = [];
-    bkMatch.bk.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: bkMatch.bk.leaderName, therapistName, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
+    bkMatch.bk.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: bkMatch.bk.leaderName, therapistName, therapistId: a.therapistId, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
     a.folioBkId = bkMatch.bk.id;
   }
   saveAll();
@@ -595,6 +595,48 @@ function spaUnlockPayroll() {
   }
 }
 
+// Tips are guest-folio charges (category 'Tip', source 'spa'), not part of
+// SpaAppointments at all — they live wherever the folio itself lives
+// (AppData.regs for a retreat guest, AppData.bookings for Room-Only/BBC/
+// Restore & Renew/WeTravel guests). Walks both so no tip is missed
+// regardless of which kind of guest left it.
+function spaCollectTipCharges() {
+  const out = [];
+  (AppData.regs || []).forEach(reg => (reg.charges || []).forEach(c => { if (c.source === 'spa' && c.category === 'Tip') out.push(c); }));
+  (AppData.bookings || []).forEach(bk => (bk.charges || []).forEach(c => { if (c.source === 'spa' && c.category === 'Tip') out.push(c); }));
+  return out;
+}
+// Tips report — "run a report for tips assigned to certain people" (real ask
+// 2026-09-20). Grouped by therapistId when present (reliable — set on every
+// tip going forward); falls back to the recorded therapistName for any
+// older charge saved before that field existed, so nothing silently
+// disappears from the report just because it predates the fix.
+function spaRenderTipsReport() {
+  const tips = spaCollectTipCharges();
+  const byTher = {};
+  tips.forEach(c => {
+    const key = c.therapistId || 'name:' + (c.therapistName || 'Unknown');
+    if (!byTher[key]) byTher[key] = { name: c.therapistName || 'Unknown', total: 0, count: 0 };
+    byTher[key].total += c.amount || 0;
+    byTher[key].count++;
+  });
+  const rows = Object.values(byTher).sort((a, b) => b.total - a.total);
+  const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+  if (!rows.length) return '';
+  return `<div style="margin-top:26px;padding-top:20px;border-top:1.5px solid #e8dfd4">
+    <div style="font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:600;color:#2d2520;margin-bottom:12px">💵 Tips by Therapist</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px">
+      ${rows.map(r => `<div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;color:#2d2520">${escHtml(r.name)}</div>
+          <div style="font-size:15px;font-weight:700;color:#059669">$${r.total}</div>
+        </div>
+        <div style="font-size:11.5px;color:#9ca3af">${r.count} tip${r.count !== 1 ? 's' : ''}</div>
+      </div>`).join('')}
+    </div>
+    <div style="margin-top:14px;text-align:right;font-size:13px;font-weight:700;color:#1a2332">Total tips: $${grandTotal}</div>
+  </div>`;
+}
 // Real earnings from completed appointments only (not confirmed-but-not-yet-
 // performed) -- each appointment keeps the service+rate it actually used, so
 // this stays accurate even if prices/rates change later.
@@ -637,6 +679,7 @@ function spaRenderPayrollTable() {
     html += `</div>
     <div style="margin-top:18px;text-align:right;font-size:14px;font-weight:700;color:#1a2332">Total owed: $${grandTotal}</div>`;
   }
+  html += spaRenderTipsReport();
   el.innerHTML = html;
 }
 

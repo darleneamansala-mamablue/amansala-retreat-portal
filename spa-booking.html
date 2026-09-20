@@ -106,7 +106,7 @@ let SBRegs=[];
 let SBBookings=[];
 let SBStaffAccounts=[];
 let SB={step:1,sessionType:null,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
-        policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null,
+        policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null,tipAmount:0,
         stayStart:null,stayEnd:null};
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
@@ -641,7 +641,11 @@ function renderStep7_Confirm(el){
       ${svc.groupPricing?`<div class="summary-row"><span class="lbl">Guests</span><span class="val">${SB.guestCount}</span></div>`:''}
       <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc.groupPricing?SB.groupTotalPrice:svc.price} USD</span></div>
       <div class="summary-row"><span class="lbl">${SB.guestType==='hotel'?'Room':'Contact'}</span><span class="val">${SB.guestType==='hotel'?esc(SB.roomNumber):esc(SB.email)}</span></div>
-      <button class="btn-primary" style="margin-top:16px" id="sbConfirmBtn" onclick="sbFinalConfirm()">${SB.guestType==='hotel'?'Confirm Booking':'Reserve — Payment Required'}</button>
+      <div class="form-group" style="margin-top:16px">
+        <label class="form-label">Add a Tip for ${esc(ther.firstName)} (optional)</label>
+        <input class="form-input" type="number" min="0" step="1" id="sbTipInput" placeholder="e.g. 10" value="${SB.tipAmount||''}" oninput="SB.tipAmount=parseFloat(this.value)||0">
+      </div>
+      <button class="btn-primary" style="margin-top:8px" id="sbConfirmBtn" onclick="sbFinalConfirm()">${SB.guestType==='hotel'?'Confirm Booking':'Reserve — Payment Required'}</button>
     </div>`;
 }
 
@@ -680,6 +684,7 @@ async function sbSendConfirmEmail(appt,svc,therName,location_,folioPosted){
         ${sbEmailRow('Meet at',esc(location_))}
         ${appt.roomNumber?sbEmailRow('Your room',esc(appt.roomNumber)):''}
         ${folioPosted?sbEmailRow('Payment','Charged to your room folio'):''}
+        ${appt.tipAmount>0?sbEmailRow('Tip',`$${appt.tipAmount} USD${folioPosted?' (added to your room folio)':' (please add this when you settle payment)'}`):''}
       </table>
       <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px">Need to cancel? You can cancel free of charge up to 12 hours before your appointment using the button below.</p>
       <div style="text-align:center;margin-bottom:8px">
@@ -818,6 +823,7 @@ async function sbFinalConfirm(){
       guestCount:svc.groupPricing?SB.guestCount:null,
       groupTotalPriceUSD:svc.groupPricing?SB.groupTotalPrice:null,
       notes:svc.groupPricing?(SB.guestCount+' guests · $'+SB.groupTotalPrice+' USD total'):'',
+      tipAmount:SB.tipAmount||0,
       createdAt:new Date().toISOString(),
     };
 
@@ -831,6 +837,10 @@ async function sbFinalConfirm(){
     // Recorded on the charge itself so staff can see who actually gave the
     // service directly from the guest's folio, not just the service name.
     const chargeTherName=(()=>{const t=SpaData.therapists.find(t=>t.id===appt.therapistId);return t?`${t.firstName} ${t.lastName||''}`.trim():null;})();
+    // A tip posts as its own separate folio line (category 'Tip') rather
+    // than being folded into the service amount, so it's clearly broken out
+    // for the guest's bill and for the tips-by-therapist report.
+    const tipCharge=(SB.tipAmount>0)?{id:'chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7)+'t',date:appt.date,category:'Tip',description:'Tip for '+(chargeTherName||'therapist'),amount:SB.tipAmount,therapistName:chargeTherName,therapistId:appt.therapistId,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'}:null;
     if(isHotel){
       try{
         const {data:rd}=await db.from('registrations').select('id,booking_id,room,guests,charges');
@@ -842,7 +852,7 @@ async function sbFinalConfirm(){
           if(price!=null){
             const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
             const category=/massage/i.test(svc.name)?'Massage':'Spa';
-            const newCharges=[...(match.reg.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:match.guest.name,therapistName:chargeTherName,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'}];
+            const newCharges=[...(match.reg.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:match.guest.name,therapistName:chargeTherName,therapistId:appt.therapistId,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'},...(tipCharge?[{...tipCharge,guestName:match.guest.name}]:[])];
             const {error:chErr}=await db.from('registrations').update({charges:newCharges}).eq('id',match.reg.id);
             if(!chErr){
               appt.folioStatus='POSTED';
@@ -864,7 +874,7 @@ async function sbFinalConfirm(){
             if(price!=null){
               const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
               const category=/massage/i.test(svc.name)?'Massage':'Spa';
-              const newCharges=[...(bkMatch.bk.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:bkMatch.bk.leaderName,therapistName:chargeTherName,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'}];
+              const newCharges=[...(bkMatch.bk.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:bkMatch.bk.leaderName,therapistName:chargeTherName,therapistId:appt.therapistId,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'},...(tipCharge?[{...tipCharge,guestName:bkMatch.bk.leaderName}]:[])];
               const {error:chErr}=await db.from('bookings').update({charges:newCharges}).eq('id',bkMatch.bk.id);
               if(!chErr){
                 appt.folioStatus='POSTED';
@@ -944,6 +954,7 @@ function sbRenderConfirmationScreen(apptId){
     <div class="summary-row"><span class="lbl">Meet at</span><span class="val">${esc(meetAt)}</span></div>
     ${appt.roomNumber?`<div class="summary-row"><span class="lbl">Your room</span><span class="val">${esc(appt.roomNumber)}</span></div>`:''}
     <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc?.groupPricing?appt.groupTotalPriceUSD:svc?.price} USD</span></div>
+    ${appt.tipAmount>0?`<div class="summary-row"><span class="lbl">Tip</span><span class="val">$${appt.tipAmount} USD</span></div>`:''}
     ${!isCancelled?`<div class="section-sub" style="margin-top:14px">${canCancelOnline?'You can cancel free of charge up to 12 hours before your appointment.':"It's less than 12 hours away, so it can't be cancelled online — please contact us directly if you need to."}</div>`:''}
     ${canCancelOnline?`<button class="btn-primary" style="margin-top:16px;background:#b45309" onclick="location.href='spa-booking.html?cancel=${appt.id}'">Cancel My Appointment</button>`:''}
   </div>`;
