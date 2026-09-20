@@ -13,30 +13,30 @@
 
 // ===== ACCOUNTS =====
 const DEF_STAFF_CONFIRM=[
-  {id:'sc_ryan',name:'Ryan',username:'ryan',password:'Tulum123',active:true},
-  {id:'sc_adele',name:'Adele',username:'adele',password:'Tulum123',active:true},
-  {id:'sc_sergio',name:'Sergio',username:'sergio',password:'Tulum123',active:true},
-  {id:'sc_fernando',name:'Fernando',username:'fernando',password:'Tulum123',active:true},
-  {id:'sc_kun',name:'Kun',username:'kun',password:'Tulum123',active:true},
-  {id:'sc_yolanda',name:'Yolanda',username:'yolanda',password:'Tulum123',active:true},
-  {id:'sc_maya',name:'Maya',username:'maya',password:'Tulum123',active:true},
-  {id:'sc_kiki',name:'Kiki',username:'kiki',password:'Tulum123',active:true},
-  {id:'sc_marco',name:'Marco',username:'marco',password:'Tulum123',active:true},
-  {id:'sc_rubi',name:'Rubi',username:'rubi',password:'Tulum123',active:true,isPayrollAdmin:true},
-  {id:'sc_rosy',name:'Rosy',username:'rosy',password:'Tulum123',active:true},
-  {id:'sc_kike',name:'Kike',username:'kike',password:'Tulum123',active:true},
+  {id:'sc_ryan',name:'Ryan',username:'ryan',password:'12345',active:true},
+  {id:'sc_adele',name:'Adele',username:'adele',password:'12345',active:true},
+  {id:'sc_sergio',name:'Sergio',username:'sergio',password:'12345',active:true},
+  {id:'sc_fernando',name:'Fernando',username:'fernando',password:'12345',active:true},
+  {id:'sc_kun',name:'Kun',username:'kun',password:'12345',active:true},
+  {id:'sc_yolanda',name:'Yolanda',username:'yolanda',password:'12345',active:true},
+  {id:'sc_maya',name:'Maya',username:'maya',password:'12345',active:true},
+  {id:'sc_kiki',name:'Kiki',username:'kiki',password:'12345',active:true},
+  {id:'sc_marco',name:'Marco',username:'marco',password:'12345',active:true},
+  {id:'sc_rubi',name:'Rubi',username:'rubi',password:'12345',active:true,isPayrollAdmin:true},
+  {id:'sc_rosy',name:'Rosy',username:'rosy',password:'12345',active:true},
+  {id:'sc_kike',name:'Kike',username:'kike',password:'12345',active:true},
   // Main Spa therapists (Darlene's ask 2026-09-20) — name must match the
   // therapist record in modules/spa.js's SpaData.therapists exactly (case-
   // insensitive) for scSpaItemsForName to find their appointments. Gabby's
   // therapist record is spelled "Gabby", not "Gaby".
-  {id:'sc_julian',name:'Julian',username:'julian',password:'Tulum123',active:true},
-  {id:'sc_laura',name:'Laura',username:'laura',password:'Tulum123',active:true},
-  {id:'sc_miguel',name:'Miguel',username:'miguel',password:'Tulum123',active:true},
-  {id:'sc_marialuisa',name:'Maria Luisa',username:'marialuisa',password:'Tulum123',active:true},
-  {id:'sc_gabby',name:'Gabby',username:'gabby',password:'Tulum123',active:true},
-  {id:'sc_eva',name:'Eva',username:'eva',password:'Tulum123',active:true},
-  {id:'sc_graciela',name:'Graciela',username:'graciela',password:'Tulum123',active:true},
-  {id:'sc_rosario',name:'Rosario',username:'rosario',password:'Tulum123',active:true},
+  {id:'sc_julian',name:'Julian',username:'julian',password:'12345',active:true},
+  {id:'sc_laura',name:'Laura',username:'laura',password:'12345',active:true},
+  {id:'sc_miguel',name:'Miguel',username:'miguel',password:'12345',active:true},
+  {id:'sc_marialuisa',name:'Maria Luisa',username:'marialuisa',password:'12345',active:true},
+  {id:'sc_gabby',name:'Gabby',username:'gabby',password:'12345',active:true},
+  {id:'sc_eva',name:'Eva',username:'eva',password:'12345',active:true},
+  {id:'sc_graciela',name:'Graciela',username:'graciela',password:'12345',active:true},
+  {id:'sc_rosario',name:'Rosario',username:'rosario',password:'12345',active:true},
 ];
 // BBC pay rates per confirmed session — Darlene's spec (2026-08-29). Anything
 // not listed here (tours, ceremonies, meals, Opening Circle, Departures) has
@@ -733,8 +733,14 @@ function scRenderDashboard(){
   const root=document.getElementById('staffConfirmDashboard');if(!root)return;
   const session=getStaffConfirmSession();if(!session)return;
   const name=scSessionName();
+  const today=new Date().toISOString().slice(0,10);
   const bbc=scBbcItemsForName(name).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
-  const spa=scSpaItemsForName(name).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  // Old, already-confirmed massages have no reason to keep cluttering a
+  // therapist's own dashboard forever — matches the same date>=today||
+  // !confirmed rule scRenderAdminBoard already uses, just applied here too.
+  // A past massage that's still unconfirmed keeps showing so it doesn't get
+  // lost. Darlene's ask 2026-09-20 — scoped to Spa only, not BBC/Tours.
+  const spa=scSpaItemsForName(name).filter(i=>i.date>=today||!i.confirmed).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
   const tour=scTourItemsForName(name).sort((a,b)=>a.date.localeCompare(b.date));
   const section=(title,items)=>items.length?`<div style="margin-bottom:26px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">${title}</div>${items.map(i=>scItemCardHtml(i,false)).join('')}</div>`:'';
   const all=[...bbc,...spa,...tour];
