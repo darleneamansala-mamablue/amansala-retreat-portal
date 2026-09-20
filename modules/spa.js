@@ -543,13 +543,17 @@ async function spaChargeApptToRoom(apptId, opts) {
   const guestLabel = match ? match.guest.name : bkMatch.bk.leaderName;
   if (!opts.silent && !confirm(`Charge ${guestLabel}'s room folio ${fmt$(price)} for "${name}"?`)) return;
   const chargeId = uid();
+  // Recorded on the charge itself so staff can see who actually gave the
+  // service directly from the guest's folio, not just the service name.
+  const ther = SpaData.therapists.find(t => t.id === a.therapistId);
+  const therapistName = ther ? `${ther.firstName} ${ther.lastName || ''}`.trim() : null;
   if (match) {
     if (!match.reg.charges) match.reg.charges = [];
-    match.reg.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: match.guest.name, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
+    match.reg.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: match.guest.name, therapistName, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
     a.folioRegId = match.reg.id;
   } else {
     if (!bkMatch.bk.charges) bkMatch.bk.charges = [];
-    bkMatch.bk.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: bkMatch.bk.leaderName, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
+    bkMatch.bk.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: bkMatch.bk.leaderName, therapistName, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
     a.folioBkId = bkMatch.bk.id;
   }
   saveAll();

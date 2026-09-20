@@ -828,6 +828,9 @@ async function sbFinalConfirm(){
     // "Charge to Room" button (spaChargeApptToRoom in modules/spa.js), just
     // run automatically at booking time instead of requiring a staff click.
     let folioPosted=false;
+    // Recorded on the charge itself so staff can see who actually gave the
+    // service directly from the guest's folio, not just the service name.
+    const chargeTherName=(()=>{const t=SpaData.therapists.find(t=>t.id===appt.therapistId);return t?`${t.firstName} ${t.lastName||''}`.trim():null;})();
     if(isHotel){
       try{
         const {data:rd}=await db.from('registrations').select('id,booking_id,room,guests,charges');
@@ -839,7 +842,7 @@ async function sbFinalConfirm(){
           if(price!=null){
             const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
             const category=/massage/i.test(svc.name)?'Massage':'Spa';
-            const newCharges=[...(match.reg.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:match.guest.name,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'}];
+            const newCharges=[...(match.reg.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:match.guest.name,therapistName:chargeTherName,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'}];
             const {error:chErr}=await db.from('registrations').update({charges:newCharges}).eq('id',match.reg.id);
             if(!chErr){
               appt.folioStatus='POSTED';
@@ -861,7 +864,7 @@ async function sbFinalConfirm(){
             if(price!=null){
               const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
               const category=/massage/i.test(svc.name)?'Massage':'Spa';
-              const newCharges=[...(bkMatch.bk.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:bkMatch.bk.leaderName,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'}];
+              const newCharges=[...(bkMatch.bk.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:bkMatch.bk.leaderName,therapistName:chargeTherName,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'}];
               const {error:chErr}=await db.from('bookings').update({charges:newCharges}).eq('id',bkMatch.bk.id);
               if(!chErr){
                 appt.folioStatus='POSTED';

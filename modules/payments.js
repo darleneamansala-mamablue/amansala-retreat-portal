@@ -713,7 +713,7 @@ function renderVmChargesWidget(bk){
       :`<div style="padding:4px 14px 8px">
         ${charges.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9">
           <div style="flex:1;min-width:0">
-            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.description||c.item||'')} <span style="font-weight:400;color:var(--muted);font-size:11px">· ${escHtml(c.category||'Other')}</span></div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.description||c.item||'')} <span style="font-weight:400;color:var(--muted);font-size:11px">· ${escHtml(c.category||'Other')}${c.therapistName?' · '+escHtml(c.therapistName):''}</span></div>
             <div style="font-size:11px;color:var(--muted)">${c.guestName?`👤 ${escHtml(c.guestName)} · `:'🏠 Room · '}${fmtDate((c.date||c.addedAt||'').slice(0,10))} · ${escHtml(c.addedBy||'Staff')}</div>
           </div>
           <div style="font-size:13px;font-weight:700;color:var(--dark);white-space:nowrap">${fmt$(c.amount)}</div>
@@ -903,7 +903,7 @@ function renderGuestFolio(){
       :`<div style="padding:4px 14px 8px">
         ${charges.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9">
           <div style="flex:1;min-width:0">
-            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.description)} <span style="font-weight:400;color:var(--muted);font-size:11px">· ${escHtml(c.category||'Other')}</span></div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.description)} <span style="font-weight:400;color:var(--muted);font-size:11px">· ${escHtml(c.category||'Other')}${c.therapistName?' · '+escHtml(c.therapistName):''}</span></div>
             <div style="font-size:11px;color:var(--muted)">${fmtDate((c.date||c.addedAt||'').slice(0,10))} · ${escHtml(c.addedBy||'Staff')}</div>
           </div>
           <div style="font-size:13px;font-weight:700;color:var(--dark);white-space:nowrap">${fmt$(c.amount)}</div>
@@ -1179,7 +1179,7 @@ function renderBookingFolio(){
       :`<div style="padding:4px 14px 8px">
         ${charges.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9">
           <div style="flex:1;min-width:0">
-            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.description)} <span style="font-weight:400;color:var(--muted);font-size:11px">· ${escHtml(c.category||'Other')}</span></div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--dark)">${escHtml(c.description)} <span style="font-weight:400;color:var(--muted);font-size:11px">· ${escHtml(c.category||'Other')}${c.therapistName?' · '+escHtml(c.therapistName):''}</span></div>
             <div style="font-size:11px;color:var(--muted)">${fmtDate((c.date||c.addedAt||'').slice(0,10))} · ${escHtml(c.addedBy||'Staff')}</div>
           </div>
           <div style="font-size:13px;font-weight:700;color:var(--dark);white-space:nowrap">${fmt$(c.amount)}</div>
