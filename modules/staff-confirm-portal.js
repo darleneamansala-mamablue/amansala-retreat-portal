@@ -652,72 +652,125 @@ function scIsSpaTherapist(account){
   const name=(account.name||'').trim().toLowerCase();
   return (SpaData.therapists||[]).some(t=>t.active&&(t.firstName||'').trim().toLowerCase()===name);
 }
-// Fixed weekly schedule, one row per day (Mon-Sun) — a toggle for
-// working/day-off plus a single start/end time when working. No date
-// ranges, no multiple windows per day — matches the reference layout
-// Darlene provided 2026-09-20, and is meant to be set by the therapist
-// themselves on their own dashboard (also editable by admins in Team
-// Availability). account.spaWorkingHours is keyed by JS day-of-week
-// (0=Sun..6=Sat); a day missing from it defaults to available all day
-// (same safe default as before this existed) so nobody becomes suddenly
-// unbookable just because they haven't opened this yet.
+// Week-to-week schedule, one row per day (Mon-Sun) — a toggle for
+// working/day-off plus a single start/end time when working, set
+// separately for EACH calendar week (not one permanent recurring
+// template). Darlene's ask 2026-09-20: "they should choose week to
+// week... where they can add hours week to week" — followed the first
+// version (a single fixed Mon-Sun template) which she then corrected.
+// account.spaWorkingHoursByWeek is keyed by that week's Monday date
+// (YYYY-MM-DD); a week that hasn't been set up yet defaults to available
+// all day every day (same safe default as before any of this existed),
+// so nobody becomes unbookable just because they haven't confirmed next
+// week yet. Meant to be set by the therapist themselves on their own
+// dashboard (also editable by admins in Team Availability).
 const SC_SPA_WORK_DAY_ORDER=[1,2,3,4,5,6,0]; // Mon..Sun display order
 const SC_SPA_WORK_DAY_NAMES={0:'Sunday',1:'Monday',2:'Tuesday',3:'Wednesday',4:'Thursday',5:'Friday',6:'Saturday'};
-function scSpaWorkDay(account,dow){
-  const wh=account.spaWorkingHours||{};
-  return wh[dow]||{on:true,start:'09:00',end:'18:00'};
+function scSpaFmtDateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function scSpaMondayKeyOf(d){
+  const dow=d.getDay();
+  const diff=dow===0?-6:1-dow; // days to shift back/forward to land on Monday
+  const monday=new Date(d);
+  monday.setDate(d.getDate()+diff);
+  return scSpaFmtDateKey(monday);
 }
-async function scSpaWorkToggleDay(accountId,dow){
+let scSpaViewedWeek={}; // accountId -> Monday date key of the week currently shown
+function scSpaGetViewedWeek(accountId){
+  if(!scSpaViewedWeek[accountId])scSpaViewedWeek[accountId]=scSpaMondayKeyOf(new Date());
+  return scSpaViewedWeek[accountId];
+}
+function scSpaNavWeek(accountId,delta){
+  const cur=new Date(scSpaGetViewedWeek(accountId)+'T12:00:00');
+  cur.setDate(cur.getDate()+7*delta);
+  scSpaViewedWeek[accountId]=scSpaFmtDateKey(cur);
+  scTeamRefreshWhicheverView();
+}
+function scSpaWeekLabel(mondayKey){
+  const mon=new Date(mondayKey+'T12:00:00');
+  const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  const fmt=(d,withYear)=>d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:withYear?'numeric':undefined});
+  const sameMonth=mon.getMonth()===sun.getMonth();
+  return sameMonth?`${fmt(mon)}–${sun.getDate()}, ${sun.getFullYear()}`:`${fmt(mon)} – ${fmt(sun,true)}`;
+}
+function scSpaWorkDay(account,weekKey,dow){
+  const week=(account.spaWorkingHoursByWeek||{})[weekKey];
+  return (week&&week[dow])||{on:true,start:'09:00',end:'18:00'};
+}
+async function scSpaWorkToggleDay(accountId,weekKey,dow){
   const account=staffConfirmAccounts.find(a=>a.id===accountId);if(!account)return;
-  account.spaWorkingHours=account.spaWorkingHours||{};
-  const day=scSpaWorkDay(account,dow);
-  account.spaWorkingHours[dow]={...day,on:!day.on};
+  account.spaWorkingHoursByWeek=account.spaWorkingHoursByWeek||{};
+  account.spaWorkingHoursByWeek[weekKey]=account.spaWorkingHoursByWeek[weekKey]||{};
+  const day=scSpaWorkDay(account,weekKey,dow);
+  account.spaWorkingHoursByWeek[weekKey][dow]={...day,on:!day.on};
   await saveStaffConfirmAccounts();
   scTeamRefreshWhicheverView();
 }
-async function scSpaWorkSetTime(accountId,dow,field,val){
+async function scSpaWorkSetTime(accountId,weekKey,dow,field,val){
   const account=staffConfirmAccounts.find(a=>a.id===accountId);if(!account)return;
-  account.spaWorkingHours=account.spaWorkingHours||{};
-  const day=scSpaWorkDay(account,dow);
-  account.spaWorkingHours[dow]={...day,[field]:val};
+  account.spaWorkingHoursByWeek=account.spaWorkingHoursByWeek||{};
+  account.spaWorkingHoursByWeek[weekKey]=account.spaWorkingHoursByWeek[weekKey]||{};
+  const day=scSpaWorkDay(account,weekKey,dow);
+  account.spaWorkingHoursByWeek[weekKey][dow]={...day,[field]:val};
   await saveStaffConfirmAccounts();
 }
-function scSpaToggleSwitchHtml(accountId,dow,on){
+function scSpaToggleSwitchHtml(accountId,weekKey,dow,on){
   return`<label style="position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0;cursor:pointer">
-    <input type="checkbox" ${on?'checked':''} onchange="scSpaWorkToggleDay('${accountId}',${dow})" style="opacity:0;width:0;height:0">
+    <input type="checkbox" ${on?'checked':''} onchange="scSpaWorkToggleDay('${accountId}','${weekKey}',${dow})" style="opacity:0;width:0;height:0">
     <span style="position:absolute;inset:0;background:${on?'#2d2520':'#e8dfd4'};border-radius:22px;transition:.15s"></span>
     <span style="position:absolute;height:16px;width:16px;left:${on?'19px':'3px'};bottom:3px;background:#fff;border-radius:50%;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.2)"></span>
   </label>`;
 }
 function scSpaHoursHtml(account){
+  const weekKey=scSpaGetViewedWeek(account.id);
+  const isCurrent=weekKey===scSpaMondayKeyOf(new Date());
   return`<div style="margin-top:10px;margin-bottom:26px">
     <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">Spa — Working Hours</div>
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
-      <div style="padding:12px 16px;font-size:12.5px;color:#8a7e74;border-bottom:1px solid #f0ece4">What days and hours are you available for massage appointments? This determines when you can be booked.</div>
+      <div style="padding:12px 16px;font-size:12.5px;color:#8a7e74;border-bottom:1px solid #f0ece4">
+        <div style="margin-bottom:10px">What days and hours are you available for massage appointments this week? Set it fresh each week — it doesn't carry over automatically.</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button onclick="scSpaNavWeek('${account.id}',-1)" style="width:28px;height:28px;border:1.5px solid #e8dfd4;border-radius:7px;background:#fff;cursor:pointer;font-size:14px;color:#2d2520">‹</button>
+          <div style="font-size:13px;font-weight:700;color:#2d2520;min-width:170px">${scSpaWeekLabel(weekKey)}${isCurrent?' <span style="font-weight:600;color:#8a7e74">(this week)</span>':''}</div>
+          <button onclick="scSpaNavWeek('${account.id}',1)" style="width:28px;height:28px;border:1.5px solid #e8dfd4;border-radius:7px;background:#fff;cursor:pointer;font-size:14px;color:#2d2520">›</button>
+        </div>
+      </div>
       ${SC_SPA_WORK_DAY_ORDER.map(dow=>{
-        const day=scSpaWorkDay(account,dow);
-        return`<div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid #f0ece4">
-          ${scSpaToggleSwitchHtml(account.id,dow,day.on)}
-          <div style="min-width:90px;font-size:13.5px;font-weight:600;color:#2d2520">${SC_SPA_WORK_DAY_NAMES[dow]}</div>
-          ${day.on?`<input type="time" step="3600" value="${day.start}" onchange="scSpaWorkSetTime('${account.id}',${dow},'start',this.value)" style="padding:7px 9px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
-            <span style="color:#8a7e74;font-size:12px">–</span>
-            <input type="time" step="3600" value="${day.end}" onchange="scSpaWorkSetTime('${account.id}',${dow},'end',this.value)" style="padding:7px 9px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">`
-            :`<span style="font-size:12.5px;color:#c8bfb5;font-style:italic;margin-left:auto">Day off</span>`}
+        const day=scSpaWorkDay(account,weekKey,dow);
+        // flex-wrap + two grouped sub-rows (toggle+day, then times) so a
+        // narrow phone screen wraps the time inputs onto their own line
+        // instead of squishing everything into one row or overflowing.
+        // Darlene's ask 2026-09-20: "this needs to be mobile friendly."
+        return`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid #f0ece4">
+          <div style="display:flex;align-items:center;gap:10px;min-width:130px">
+            ${scSpaToggleSwitchHtml(account.id,weekKey,dow,day.on)}
+            <div style="font-size:13.5px;font-weight:600;color:#2d2520">${SC_SPA_WORK_DAY_NAMES[dow]}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            ${day.on?`<input type="time" step="3600" value="${day.start}" onchange="scSpaWorkSetTime('${account.id}','${weekKey}',${dow},'start',this.value)" style="padding:7px 9px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;max-width:120px">
+              <span style="color:#8a7e74;font-size:12px">–</span>
+              <input type="time" step="3600" value="${day.end}" onchange="scSpaWorkSetTime('${account.id}','${weekKey}',${dow},'end',this.value)" style="padding:7px 9px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;max-width:120px">`
+              :`<span style="font-size:12.5px;color:#c8bfb5;font-style:italic">Day off</span>`}
+          </div>
         </div>`;
       }).join('')}
     </div>
   </div>`;
 }
 // Called from spaApptSave (modules/spa-calendar.js) before an appointment is
-// saved — hard block, not a warning. No entry at all for that day = safe
-// default of available all day (returns null).
+// saved — hard block, not a warning. No entry at all for the appointment's
+// week/day = safe default of available all day (returns null) — a week the
+// therapist hasn't confirmed yet doesn't suddenly become unbookable.
 function scSpaHoursBlockedRule(name,date,startHHMM){
   if(!name||!date||!startHHMM)return null;
   const list=(typeof staffConfirmAccounts!=='undefined'?staffConfirmAccounts:[]);
   const acct=list.find(a=>a.name.trim().toLowerCase()===name.trim().toLowerCase());
-  if(!acct||!acct.spaWorkingHours)return null;
-  const dow=new Date(date+'T12:00:00').getDay();
-  const day=acct.spaWorkingHours[dow];
+  if(!acct||!acct.spaWorkingHoursByWeek)return null;
+  const apptDate=new Date(date+'T12:00:00');
+  const weekKey=scSpaMondayKeyOf(apptDate);
+  const week=acct.spaWorkingHoursByWeek[weekKey];
+  if(!week)return null;
+  const dow=apptDate.getDay();
+  const day=week[dow];
   if(!day)return null;
   if(!day.on)return{dayOff:true};
   if(startHHMM>=day.start&&startHHMM<day.end)return null;
