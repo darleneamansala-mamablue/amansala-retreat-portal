@@ -682,7 +682,17 @@ function scSpaGetViewedWeek(accountId){
 function scSpaNavWeek(accountId,delta){
   const cur=new Date(scSpaGetViewedWeek(accountId)+'T12:00:00');
   cur.setDate(cur.getDate()+7*delta);
-  scSpaViewedWeek[accountId]=scSpaFmtDateKey(cur);
+  const monday=scSpaFmtDateKey(cur);
+  scSpaViewedWeek[accountId]=monday;
+  // Keep "How Busy Are We" (top of the dashboard) showing the same week
+  // being set here, so a therapist can see actual demand — Guests Onsite,
+  // Massages Booked, etc. — for that exact week while deciding their
+  // hours. Darlene's ask 2026-09-20.
+  if(typeof scBusyStart!=='undefined'){
+    const sunday=new Date(cur);sunday.setDate(cur.getDate()+6);
+    scBusyStart=monday;
+    scBusyEnd=scSpaFmtDateKey(sunday);
+  }
   scTeamRefreshWhicheverView();
 }
 function scSpaWeekLabel(mondayKey){
