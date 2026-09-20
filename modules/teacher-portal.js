@@ -2690,7 +2690,13 @@ function tsRenderCalSection(bk){
       rows.push({time:'9:30 AM',desc:'Brunch &amp; Departures',shala:'',cat:'meal',sk:'09:30'});
     } else {
       if(sr.hasSunrise&&sr.sunriseStart&&(sr.sunriseDates||[]).includes(dateStr)){
-        rows.push({time:fmtT(sr.sunriseStart)+' – '+fmtT(addMin(sr.sunriseStart,sr.sunriseDur||45)),desc:'Sunrise Activity'+(sr.sunriseLocation?' — '+(TS_SUNRISE_LOCATIONS[sr.sunriseLocation]||sr.sunriseLocation):'')+' (no shala, no music — quiet hours)',shala:'',cat:'yoga',sk:sr.sunriseStart});
+        // noShala:true — kept cat:'yoga' for its styling (teal background),
+        // but a Sunrise Activity is explicitly no shala/no music by design
+        // (it's on the beach during quiet hours). Without this flag the
+        // 'yoga' category unconditionally triggers the "⚠ SHALA TO BE
+        // CONFIRMED" warning whenever shala is blank. Real report
+        // 2026-09-20.
+        rows.push({time:fmtT(sr.sunriseStart)+' – '+fmtT(addMin(sr.sunriseStart,sr.sunriseDur||45)),desc:'Sunrise Activity'+(sr.sunriseLocation?' — '+(TS_SUNRISE_LOCATIONS[sr.sunriseLocation]||sr.sunriseLocation):'')+' (no shala, no music — quiet hours)',shala:'',cat:'yoga',noShala:true,sk:sr.sunriseStart});
       }
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea',shala:'',cat:'meal',sk:'07:00'});
       // Retreat-wide admin override, then a per-day override on top of that —
@@ -2785,7 +2791,7 @@ function tsRenderCalSection(bk){
     // on every non-meal row (the old r.cat!=='meal' check) wrongly flagged
     // things like Muyil Float Tour and Ice Bath & Breathwork as needing a
     // shala confirmation they never will.
-    const shalaHtml=r.shala?`<span class="sched-shala">📍 SHALA: ${r.shala.toUpperCase()}</span>`:(r.cat==='yoga'?`<span class="sched-shala" style="background:#fef3c7;color:#92400e">⚠ SHALA TO BE CONFIRMED</span>`:'');
+    const shalaHtml=r.shala?`<span class="sched-shala">📍 SHALA: ${r.shala.toUpperCase()}</span>`:(r.cat==='yoga'&&!r.noShala?`<span class="sched-shala" style="background:#fef3c7;color:#92400e">⚠ SHALA TO BE CONFIRMED</span>`:'');
     return`<div class="sched-item-row ${catCls}"><span class="sched-time">${r.time}</span><span class="sched-desc">${r.desc}</span>${tagHtml}${shalaHtml}</div>`;
   };
 
