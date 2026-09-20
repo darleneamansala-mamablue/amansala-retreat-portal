@@ -727,10 +727,25 @@ function scSpaHoursBlockedRule(name,date,startHHMM){
   const dow=new Date(date+'T12:00:00').getDay();
   return rules.find(r=>date>=r.start&&(!r.end||date<=r.end)&&r.days.includes(dow)&&startHHMM>=r.startTime&&startHHMM<r.endTime)||null;
 }
+// A pure spa therapist has no use for the BBC-oriented AM/PM weekly-pattern
+// and date-blocking UI below (it's literally labeled "you won't be
+// scheduled for BBC classes") — confusing clutter, and the wrong
+// granularity for spa anyway. Only shown when this person actually has
+// real BBC or tour work on record; someone who does both (e.g. Kun,
+// Yolanda) still sees it. Darlene's ask 2026-09-20 ("still wrong" — the
+// old section was still showing for a spa-only account).
+function scHasBbcOrTourRelevance(name){
+  const norm=(name||'').trim().toLowerCase();
+  if(typeof scBbcItemsForName==='function'&&scBbcItemsForName(norm).length)return true;
+  if(typeof scTourItemsForName==='function'&&scTourItemsForName(norm).length)return true;
+  return false;
+}
 function scAvailabilityHtml(account){
   const dates=(account.unavailableDates||[]).map(d=>typeof d==='string'?{id:d,date:d,period:'ALL'}:d).sort((a,b)=>a.date.localeCompare(b.date));
   const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});};
-  return`<div style="margin-top:10px;margin-bottom:26px">
+  const isSpaTher=scIsSpaTherapist(account);
+  const showBbcSection=!isSpaTher||scHasBbcOrTourRelevance(account.name);
+  const bbcSection=!showBbcSection?'':`<div style="margin-top:10px;margin-bottom:26px">
     <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">My Availability</div>
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:16px 18px">
       ${scDaysOfWeekHtml(account)}
@@ -742,7 +757,8 @@ function scAvailabilityHtml(account){
       </div>
       ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${scDateBlockLabel(d,fmtD)}</span><button onclick="scRemoveUnavailable('${d.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked — you\'re available for everything.</div>'}
     </div>
-  </div>${scIsSpaTherapist(account)?scSpaHoursHtml(account):''}`;
+  </div>`;
+  return`${bbcSection}${isSpaTher?scSpaHoursHtml(account):''}`;
 }
 async function scAddUnavailable(){
   const val=document.getElementById('scUnavailInput').value;if(!val){alert('Pick a date first.');return;}
@@ -778,7 +794,7 @@ function scTeamAvailabilityHtml(){
             <span>${a.name}</span>
             ${upcoming.length?`<span style="font-size:10.5px;font-weight:700;color:#dc2626">🚫 ${upcoming.length} date${upcoming.length>1?'s':''}</span>`:'<span style="font-size:10.5px;color:#c8bfb5;font-style:italic">available</span>'}
           </summary>
-          <div style="padding:0 16px 14px">
+          ${(!scIsSpaTherapist(a)||scHasBbcOrTourRelevance(a.name))?`<div style="padding:0 16px 14px">
             ${scDaysOfWeekHtml(a)}
             <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
               <input type="date" id="scTeamUnavailInput_${a.id}" style="flex:1;min-width:140px;padding:8px 10px;border:1.5px solid #e8dfd4;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px">
@@ -786,7 +802,7 @@ function scTeamAvailabilityHtml(){
               <button onclick="scTeamAddUnavailable('${a.id}')" style="background:#2d6a6a;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">Mark Unavailable</button>
             </div>
             ${dates.length?dates.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0ece4;font-size:12.5px;color:#2d2520"><span>${scDateBlockLabel(d,fmtD)}</span><button onclick="scTeamRemoveUnavailable('${a.id}','${d.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;text-decoration:underline">remove</button></div>`).join(''):'<div style="font-size:12px;color:#c8bfb5;font-style:italic">No dates marked.</div>'}
-          </div>
+          </div>`:''}
           ${scIsSpaTherapist(a)?`<div style="padding:0 16px 14px">${scSpaHoursHtml(a)}</div>`:''}
         </details>`;
       }).join('')}
