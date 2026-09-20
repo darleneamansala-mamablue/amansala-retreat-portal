@@ -735,12 +735,11 @@ function scRenderDashboard(){
   const name=scSessionName();
   const today=new Date().toISOString().slice(0,10);
   const bbc=scBbcItemsForName(name).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
-  // Old, already-confirmed massages have no reason to keep cluttering a
-  // therapist's own dashboard forever — matches the same date>=today||
-  // !confirmed rule scRenderAdminBoard already uses, just applied here too.
-  // A past massage that's still unconfirmed keeps showing so it doesn't get
-  // lost. Darlene's ask 2026-09-20 — scoped to Spa only, not BBC/Tours.
-  const spa=scSpaItemsForName(name).filter(i=>i.date>=today||!i.confirmed).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  // Strictly future massages only on a therapist's own dashboard — old ones
+  // (confirmed or not) have no reason to keep cluttering it. Darlene's ask
+  // 2026-09-20 — scoped to Spa only, not BBC/Tours (scRenderAdminBoard's
+  // date>=today||!confirmed rule is unrelated and untouched).
+  const spa=scSpaItemsForName(name).filter(i=>i.date>=today).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
   const tour=scTourItemsForName(name).sort((a,b)=>a.date.localeCompare(b.date));
   const section=(title,items)=>items.length?`<div style="margin-bottom:26px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#8a7e74;margin-bottom:10px">${title}</div>${items.map(i=>scItemCardHtml(i,false)).join('')}</div>`:'';
   const all=[...bbc,...spa,...tour];

@@ -262,35 +262,38 @@ function spaBusySummary(startDate, endDate) {
   const inHouseCount = massages.filter(a => a.guestType === 'hotel' && !a.prepaid).length;
   return { massageCount: massages.length, registeredGuestCount: registeredGuestNames.size, potentialCount, prepaidCount, inHouseCount };
 }
-// ── HOTEL OCCUPANCY — how full the hotel is during a date range, so
-// therapists can gauge demand alongside "How Busy Are We". Peak (busiest
-// single day in the range), not an average, since "when was the hotel
-// filled" is about the crunch point, not a smoothed-out number. Reuses the
-// same room/registration matching convention as room-calendar.html
-// (AppData.roomTypes[].rooms + AppData.regs[].room + AppData.bookings) —
-// read-only, never touches Room List/Reservations data. Darlene's ask
+// ── GUESTS ONSITE — average daily headcount of registered guests actually
+// staying across the selected date range, so therapists can gauge demand
+// alongside "How Busy Are We". Counts PEOPLE (retreat booking guest names +
+// Room Only leaders), not rooms — a room-count version was tried first but
+// the Room List's "Bed in a Double/Triple/Quad" room types list the same
+// physical room twice (once as a whole room, once per bed), so a room
+// denominator came out inflated and the % read low. Reuses the exact
+// guest-name matching spaBusySummary's registeredGuestCount already uses,
+// evaluated per-day and averaged over however many days are in the range
+// (a single-day range just returns that day's count). Darlene's ask
 // 2026-09-20.
-function spaHotelOccupancySummary(startDate, endDate) {
-  const roomTypes = AppData.roomTypes || [];
-  const totalRooms = roomTypes.reduce((sum, rt) => sum + (rt.rooms ? rt.rooms.length : 0), 0);
-  const roomRegs = (AppData.regs || []).filter(r => r.room);
-  let peakDate = startDate, peakCount = 0;
+function spaOnsiteGuestSummary(startDate, endDate) {
+  let totalCount = 0, numDays = 0;
   for (let d = new Date(startDate + 'T12:00:00'); spaCalFmtDateStr(d) <= endDate; d.setDate(d.getDate() + 1)) {
     const ds = spaCalFmtDateStr(d);
-    const roomsToday = new Set();
-    roomRegs.forEach(reg => {
-      const bk = (AppData.bookings || []).find(b => b.id === reg.bookingId);
-      if (!bk || bk.status === 'cancelled') return;
-      if (bk.startDate <= ds && bk.endDate > ds) roomsToday.add(reg.room);
+    const namesToday = new Set();
+    (AppData.bookings || []).forEach(bk => {
+      if (bk.status === 'cancelled') return;
+      if (!(bk.startDate <= ds && bk.endDate > ds)) return;
+      (AppData.regs || []).filter(r => r.bookingId === bk.id).forEach(r => {
+        (r.guests || []).forEach(g => { if (g.name) namesToday.add(g.name.trim().toLowerCase()); });
+      });
+      if (bk.bookingType === 'room_only' && bk.leaderName) namesToday.add(bk.leaderName.trim().toLowerCase());
     });
-    if (roomsToday.size >= peakCount) { peakCount = roomsToday.size; peakDate = ds; }
+    totalCount += namesToday.size;
+    numDays++;
   }
-  return { totalRooms, peakDate, peakCount, pct: totalRooms ? Math.round(peakCount / totalRooms * 100) : 0 };
+  return { avgCount: numDays ? Math.round(totalCount / numDays) : 0, numDays };
 }
 function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
   const s = spaBusySummary(startVal, endVal);
-  const occ = spaHotelOccupancySummary(startVal, endVal);
-  const occFmtD = ds => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const onsite = spaOnsiteGuestSummary(startVal, endVal);
   return `<div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:14px 16px;margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74">How Busy Are We</span>
@@ -300,9 +303,9 @@ function spaBusyWidgetHtml(startId, endId, startVal, endVal, onChangeFn) {
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px">
       <div style="flex:1;min-width:150px;background:#f5f3ff;border-radius:9px;padding:10px 14px">
-        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6d28d9">Hotel Occupancy</div>
-        <div style="font-size:22px;font-weight:800;color:#6d28d9;margin-top:2px">${occ.peakCount} / ${occ.totalRooms} <span style="font-size:13px;font-weight:700">(${occ.pct}%)</span></div>
-        <div style="font-size:10px;color:#9ca3af;margin-top:2px">fullest on ${occFmtD(occ.peakDate)}</div>
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6d28d9">Guests Onsite${onsite.numDays > 1 ? ' (avg)' : ''}</div>
+        <div style="font-size:22px;font-weight:800;color:#6d28d9;margin-top:2px">${onsite.avgCount}</div>
+        ${onsite.numDays > 1 ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px">averaged over ${onsite.numDays} days</div>` : ''}
       </div>
       <div style="flex:1;min-width:150px;background:#f0fdfa;border-radius:9px;padding:10px 14px">
         <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#0f766e">Massages Booked</div>
