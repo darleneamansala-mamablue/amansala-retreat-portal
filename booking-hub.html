@@ -3357,6 +3357,15 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         Refresh
       </button>
+      <!-- General, non-retreat-specific entry point to Manage Tours — same
+      modal the per-retreat clock icon opens (openTourSettings() edits the
+      shared ADD_ONS catalog either way), added here so editing/adding/
+      removing tours and their costs never requires opening a specific
+      retreat first. Darlene's ask 2026-09-20. -->
+      <button onclick="openTourSettings()" style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:#fff;color:#374151;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Manage Tours
+      </button>
       <button onclick="actGuestReport()" style="display:flex;align-items:center;gap:6px;padding:7px 14px;background:#fff;color:#374151;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Guest Report
