@@ -31,6 +31,35 @@ async function saveTourDefaultTimes(){
   try{await db.from('app_store').upsert({key:'tourDefaultTimes',value:TOUR_DEFAULT_TIMES,updated_at:new Date().toISOString()});}catch(e){console.warn('Tour default times sync failed:',e);}
 }
 loadTourDefaultTimes();
+
+// Cost per tour — stored the same way as TOUR_DEFAULT_TIMES/TOUR_WEEKDAYS
+// (a simple app_store key-value blob), NOT as a field on the ADD_ONS row
+// itself. The add_ons SQL table (modules/retreat-builder.js) only writes a
+// fixed whitelist of columns (_ADDON_COLUMNS) and has no `cost` column, so
+// a.cost was being silently dropped on every save — nothing entered in the
+// Cost field was ever actually persisted. Real report 2026-09-20 (Darlene:
+// "not sure if it worked for all the tours" — it hadn't worked for any).
+const TOUR_COSTS_KEY='amansala_tour_costs';
+let TOUR_COSTS={};
+function loadTourCostsLocal(){
+  try{
+    const raw=localStorage.getItem(TOUR_COSTS_KEY);
+    if(raw)TOUR_COSTS={...JSON.parse(raw)};
+  }catch(e){}
+}
+async function loadTourCosts(){
+  loadTourCostsLocal();
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','tourCosts').maybeSingle();
+    if(data?.value&&typeof data.value==='object')TOUR_COSTS={...data.value};
+  }catch(e){}
+}
+async function saveTourCosts(){
+  localStorage.setItem(TOUR_COSTS_KEY,JSON.stringify(TOUR_COSTS));
+  try{await db.from('app_store').upsert({key:'tourCosts',value:TOUR_COSTS,updated_at:new Date().toISOString()});}catch(e){console.warn('Tour costs sync failed:',e);}
+}
+loadTourCosts();
+function tourCost(aoId){return TOUR_COSTS[aoId]||0;}
 // Global helper other modules read from (falls back to 11:45, the standard
 // tour-slot default, for anything not explicitly set here).
 function tourDefaultTime(aoId){return TOUR_DEFAULT_TIMES[aoId]||'11:45';}
@@ -88,7 +117,7 @@ function tourSettingsRenderRows(){
       const on=days.includes(d);
       return `<button type="button" onclick="tourSettingsToggleDay(this,'${a.id}',${d})" data-id="${a.id}" data-day="${d}" data-on="${on?'1':'0'}" style="width:30px;height:26px;border-radius:6px;font-size:10.5px;font-weight:700;cursor:pointer;border:1.5px solid ${on?'var(--teal,#2d6a6a)':'var(--border)'};background:${on?'var(--teal,#2d6a6a)':'#fff'};color:${on?'#fff':'var(--dark)'}">${lbl[0]}</button>`;
     }).join('');
-    const price=a.price??0, cost=a.cost??0, profit=price-cost;
+    const price=a.price??0, cost=tourCost(a.id), profit=price-cost;
     return `<tr data-row-id="${a.id}">
     <td style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">${escHtml(a.name)}</td>
     <td style="padding:8px 12px;border-bottom:1px solid var(--border)"><input type="number" step="0.01" min="0" value="${price}" data-id="${a.id}" data-f="price" oninput="tourSettingsUpdateProfit('${a.id}')" style="width:80px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:13px"></td>
@@ -126,8 +155,9 @@ function tourSettingsAddNew(){
   const time=document.getElementById('tourSettingsNewTime')?.value||'11:45';
   const nextNum=Math.max(0,...ADD_ONS.map(a=>parseInt((a.id||'').replace('ao',''))||0))+1;
   const id='ao'+nextNum;
-  ADD_ONS.push({id,name,desc:'',price,cost});
+  ADD_ONS.push({id,name,desc:'',price});
   TOUR_DEFAULT_TIMES[id]=time;
+  if(cost)TOUR_COSTS[id]=cost;
   document.getElementById('tourSettingsNewName').value='';
   document.getElementById('tourSettingsNewPrice').value='';
   document.getElementById('tourSettingsNewCost').value='';
@@ -141,9 +171,11 @@ async function tourSettingsDeleteRow(aoId,name){
   if(idx>-1)ADD_ONS.splice(idx,1);
   delete TOUR_DEFAULT_TIMES[aoId];
   delete TOUR_WEEKDAYS[aoId];
+  delete TOUR_COSTS[aoId];
   try{await db.from('add_ons').delete().eq('id',aoId);}catch(e){console.warn('add_ons delete failed:',e);}
   await saveTourDefaultTimes();
   await saveTourWeekdays();
+  await saveTourCosts();
   tourSettingsRenderRows();
   showToast(`"${name}" deleted.`);
 }
@@ -152,7 +184,7 @@ function saveTourSettings(){
     const a=ADD_ONS.find(x=>x.id===inp.dataset.id);if(a)a.price=parseFloat(inp.value)||0;
   });
   document.querySelectorAll('#tourSettingsTbody input[data-f="cost"]').forEach(inp=>{
-    const a=ADD_ONS.find(x=>x.id===inp.dataset.id);if(a)a.cost=parseFloat(inp.value)||0;
+    TOUR_COSTS[inp.dataset.id]=parseFloat(inp.value)||0;
   });
   document.querySelectorAll('#tourSettingsTbody input[data-f="time"]').forEach(inp=>{
     if(inp.value)TOUR_DEFAULT_TIMES[inp.dataset.id]=inp.value;
@@ -165,6 +197,7 @@ function saveTourSettings(){
   saveAddOnsToSupabase();
   saveTourDefaultTimes();
   saveTourWeekdays();
+  saveTourCosts();
   closeModal('tourSettingsModal');
-  showToast('Tour prices, default times & weekday schedule saved.');
+  showToast('Tour prices, costs, default times & weekday schedule saved.');
 }
