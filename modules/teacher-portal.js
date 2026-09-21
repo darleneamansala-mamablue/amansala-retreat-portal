@@ -2,6 +2,14 @@
 // Loaded as a classic script; shares global scope with booking-hub.html (same pattern as cb-portal-sync.js).
 // Do not add <script type="module"> here — onclick="..." handlers in the HTML rely on plain globals.
 
+// Bed-in-a-double room types where an admin (never a teacher) may squeeze a 3rd
+// guest into a bed already holding one — Jorge's ask 2026-09-21: this only ever
+// worked on bd1 ("Bed in a Beachview Double"); bd2 ("Bed in a Double Room")
+// needed it too (Karsyn Morse's retreat). The extra guest's rate is set with the
+// same Custom Rate field every registration already has — no separate pricing
+// rule, matching how staging does it.
+const ADMIN_EXTRA_GUEST_RT_IDS=new Set(['bd1','bd2']);
+
 // ===== TEACHER REGISTRATION =====
 // Transport rows for the currently-selected retreat, fetched once on retreat select
 // (matches Staging's own selectBooking() — not on every regRender(), just when the
@@ -629,7 +637,13 @@ function regRender(){
               entry.physical.forEach(p=>{
                 const _pReg=getRegForRoom(regSelBk.id,p);
                 const _pG=(_pReg?.guests||[]).filter(g=>g.name);
-                if(_pG.length===1&&rt.id==='bd1'){
+                // Admin-only "squeeze in a 3rd/extra guest" button — was bd1-only
+                // ("Bed in a Beachview Double"); Jorge's ask 2026-09-21 to also allow
+                // it on bd2 ("Bed in a Double Room", Karsyn Morse's case). The rate for
+                // that extra guest is adjusted manually via the existing Custom Rate
+                // field in the guest modal (same one every room type already has) —
+                // no new pricing formula needed, staging doesn't use one either.
+                if(_pG.length===1&&ADMIN_EXTRA_GUEST_RT_IDS.has(rt.id)){
                   const _xBtn=document.createElement('button');
                   _xBtn.title=`Add extra guest to bed ${p}`;
                   _xBtn.style.cssText='display:block;margin:3px auto 0;font-size:10px;font-weight:700;color:#2d6a6a;background:none;border:1px dashed #2d6a6a;border-radius:4px;padding:1px 5px;cursor:pointer;line-height:1.4;white-space:nowrap;';
