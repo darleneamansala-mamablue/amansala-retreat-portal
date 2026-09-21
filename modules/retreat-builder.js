@@ -1092,8 +1092,12 @@ function buildDashboard(){
   // and arrivals widget as if they were retreat "events".
   // We Travel bookings are also excluded here — the payment already happened on
   // WeTravel's side, so there's no sales pipeline to move through either.
+  // Room Only bookings (walk-in/Direct/OTA/Cloudbeds imports, e.g. Austin Warden)
+  // are a single guest in one room, not a retreat — Contract Signed/Teacher
+  // Room/Transport Arranged etc. don't apply to them, so they don't belong in
+  // this pipeline at all (Jorge's report 2026-09-21).
   const NON_RETREAT_NAMES=new Set(['Extra Night','Escape']);
-  const active=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate>=todayStr&&!NON_RETREAT_NAMES.has(b.retreatName)&&b.source!=='wetravel');
+  const active=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.endDate>=todayStr&&!NON_RETREAT_NAMES.has(b.retreatName)&&b.source!=='wetravel'&&b.bookingType!=='room_only');
 
   // Payment alerts — the Sales Pipeline (CRM) now owns early-lead tracking
   // (soft holds, contract follow-up, deposit reminders), so the Dashboard only
