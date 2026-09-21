@@ -1416,6 +1416,11 @@ function buildPipelineSection(retreats,today){
       return`<span title="${tip}" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 7px;border-radius:5px;border:1px solid ${border};background:${bg};color:${clr};white-space:nowrap">${dot}${rt2.name} <span style="opacity:.7">${assigned}/${total}</span></span>`;
     }).join('')+(unmatchedRooms>0?`<span title="Room numbers not matching any room type" style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:5px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626">${unmatchedRooms} unmatched</span>`:'')+(!roomsBlocked?`<span style="font-size:13px;color:#a89e94;font-style:italic">No rooms blocked yet</span>`:'');
     const rtRow=rtChips?`<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">${rtChips}</div>`:'';
+    // Internal notes (Admin → Notes, bk.notes) weren't shown anywhere on the
+    // Dashboard card — staff had to open the retreat just to see if a note was
+    // even there (Jorge's ask 2026-09-21, matching how staging's dashboard shows
+    // it inline on the card).
+    const notesRow=bk.notes?`<div style="margin-top:8px;padding:6px 10px;background:#faf7f2;border:1px solid #e8dfd4;border-radius:7px;font-size:11.5px;color:#5a5048;display:flex;gap:6px;align-items:flex-start"><span style="flex-shrink:0">📝</span><span style="white-space:pre-wrap;word-break:break-word">${escHtml(bk.notes)}</span></div>`:'';
     const dots=PIPELINE_STEPS.map((s,i)=>{
       const done=doneArr[i];
       const cls='pipe-dot'+(done?' done':'')+(s.manual?' manual':'');
@@ -1456,6 +1461,7 @@ function buildPipelineSection(retreats,today){
       </div>
       ${revenueRow}
       ${rtRow}
+      ${notesRow}
       ${bk.depositInvoiceSentAt&&!doneArr[PIPELINE_STEPS.findIndex(s=>s.id==='depositPaid')]?`<div style="margin-top:8px;padding:6px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:7px;font-size:11.5px;color:#15803d;display:flex;align-items:center;gap:6px">✉ Deposit invoice sent ${new Date(bk.depositInvoiceSentAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} · awaiting payment</div>`:''}
     </div>`;
   };
