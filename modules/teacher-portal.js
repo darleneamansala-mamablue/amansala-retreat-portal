@@ -829,6 +829,8 @@ function regRender(){
           const gTipNights=gShare?gShare.tipNights:_regNights;
           const tipRateDisp=reg.customTipRateOverride!=null?reg.customTipRateOverride:getTip(regSelBk);
           const pkgLine=perPkg>0?`<div class="pb-row addon"><span>Add-ons (${pkgItems.map(p=>p.name).join(', ')})</span><span>${fmt$(perPkg)}</span></div>`:'';
+          const perCredit=gShare?.credit||0;
+          const creditLine=perCredit>0?`<div class="pb-row"><span>Credit</span><span style="color:#dc2626">−${fmt$(perCredit)}</span></div>`:'';
           // The inline-editable rate input writes to reg.customRateOverride (the whole
           // room's default rate) via regSaveRateOverride — only safe to show as editable
           // when this guest doesn't have their OWN customRateOverride; otherwise it would
@@ -848,6 +850,7 @@ function regRender(){
               ${pkgLine}
               <div class="pb-row"><span>Tax (${bd.pkg>0&&getBkTaxRate(regSelBk)!==0.16?`16% rm / ${getBkTaxRate(regSelBk)===0?'0%':Math.round(getBkTaxRate(regSelBk)*100)+'%'} ext`:'16%'})</span><span>${fmt$(perTax)}</span></div>
               <div class="pb-row"><span>Tip ($${tipRateDisp}×${gTipNights}nt)</span><span>${fmt$(perTip)}</span></div>
+              ${creditLine}
             </div>
           </details>`;
         }

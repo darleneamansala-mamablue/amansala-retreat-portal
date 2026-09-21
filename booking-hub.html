@@ -5752,12 +5752,18 @@ function calcBD(rt,gc,nights,dateStr,bk,reg){
   // `total` below (modulo per-guest rounding), so this is a breakdown of the same money.
   const named=(reg?.guests||[]).filter(g=>g.name);
   const pkgShare=gc?+(pkg/gc).toFixed(2):0,caoShare=gc?+(cao/gc).toFixed(2):0;
+  // Credit is a room-level discount, split evenly across named guests just like
+  // pkgShare/caoShare above — without this, the per-guest breakdown (what the Room
+  // List's expandable price cell actually shows) never reflected a Credit at all,
+  // even though the room-level total did (Jorge's report 2026-09-21: credit saved
+  // fine but didn't show in admin or teacher view).
+  const creditShare=gc&&reg?.credit?+(reg.credit/gc).toFixed(2):0;
   const perGuest=named.length?named.map(g=>{
     const sp=guestNightsSplit(g,reg,bk,rate,rNights);
     const gTipNights=guestTipNights(g,reg,bk,tipNights);
     const gTax=+(sp.cost*rmTax+pkgShare*pkgTr).toFixed(2);
     const gDip=+(tipRate*gTipNights).toFixed(2);
-    return{name:g.name,nights:sp.nights,overlapNights:sp.overlapNights,extraNights:sp.extraNights,overlapRate:sp.overlapRate,extraRate:sp.extraRate,tipNights:gTipNights,base:sp.cost,pkg:pkgShare,tax:gTax,dip:gDip,cao:caoShare,total:+(sp.cost+pkgShare+gTax+gDip+caoShare).toFixed(2)};
+    return{name:g.name,nights:sp.nights,overlapNights:sp.overlapNights,extraNights:sp.extraNights,overlapRate:sp.overlapRate,extraRate:sp.extraRate,tipNights:gTipNights,base:sp.cost,pkg:pkgShare,tax:gTax,dip:gDip,cao:caoShare,credit:creditShare,total:+(sp.cost+pkgShare+gTax+gDip+caoShare-creditShare).toFixed(2)};
   }):null;
   const _rawTotal=+(base+pkg+tax+dip+cao).toFixed(2);
   return{rate,base:+base.toFixed(2),pkg:+pkg.toFixed(2),tax,dip,cao,total:applyCancellationAdjustment(reg,_rawTotal),nights:rNights,tipNights,perGuest};}
@@ -6172,7 +6178,7 @@ function switchTab(id,btn){
 <script src="modules/admin-items.js"></script>
 <script src="modules/commissions.js"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20260921c"></script>
+<script src="modules/teacher-portal.js?v=20260921d"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
 // ===== TEACHER REGISTRATION — moved to modules/teacher-portal.js =====
