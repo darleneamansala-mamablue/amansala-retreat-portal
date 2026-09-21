@@ -726,6 +726,15 @@ function gOpenEdit(room,rtId){
   const _tRowE=document.getElementById('gm-teacher-row');if(_tRowE)_tRowE.style.display=IS_TEACHER_MODE?'none':'block';
   const _tChkE=document.getElementById('g-teacher-check');if(_tChkE)_tChkE.checked=gIsTeacherRoom;
   const last=(reg.guests||[]).reduce((a,g,i)=>g.name?i:a,-1);
+  // gSetupTabs/gSwitchTab only show as many tabs as gExtraGuestMode/gRoleMaxOcc allow —
+  // fine the first time an extra guest is added via the "+1" button (which sets
+  // gExtraGuestMode itself), but re-opening that SAME registration afterward through
+  // the plain Edit button left gExtraGuestMode false, so maxOcc collapsed back to 1
+  // and gSwitchTab(1) (jumping to the last named guest) hid EVERY panel — neither
+  // guest showed at all (Jorge's report 2026-09-21). A registration that already has
+  // 2+ named guests always needs at least that many tabs, regardless of how it was
+  // opened.
+  if((reg.guests||[]).filter(g=>g.name).length>=2)gExtraGuestMode=true;
   gSetupTabs(rt);gSwitchTab(Math.max(0,last));gUpdatePrice();openModal('guestModal');
 }
 // Room types where the true occupancy (rt.maxOcc) includes an extra guest slot that
