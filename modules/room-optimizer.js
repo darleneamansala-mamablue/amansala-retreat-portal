@@ -520,6 +520,10 @@ function ozApplyPortalMove(bk,fromRoom,toRoom){
   const reg=getRegForRoom(bk.id,fromRoom);
   if(reg){
     const targetRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(toRoom));
+    // Same fix as rcMoveRoom (manual drag) in venues.js — a customRateOverride
+    // negotiated for the OLD room type doesn't carry over to a different one; only
+    // clear it when the room TYPE actually changed, not on a same-type move.
+    if(targetRt&&reg.roomTypeId&&targetRt.id!==reg.roomTypeId)reg.customRateOverride=null;
     reg.room=toRoom;
     if(targetRt)reg.roomTypeId=targetRt.id;
     reg.customPrice=null;

@@ -2963,6 +2963,13 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
   const reg=getRegForRoom(bkId,fromRoom);
   if(reg){
     const targetRt=AppData.roomTypes.find(rt=>rt.rooms.includes(toRoom));
+    // A customRateOverride negotiated for the OLD room type doesn't mean anything
+    // for a different one — clearing customPrice but leaving customRateOverride
+    // in place silently carried the old type's rate onto the new room (Jorge's
+    // report 2026-09-21: Christine Tsai's retreat, a room-type move didn't
+    // recalculate the rate). Only clear it when the room TYPE actually changed —
+    // moving within the same type (e.g. bed 4a → 4b) keeps a real negotiated rate.
+    if(targetRt&&reg.roomTypeId&&targetRt.id!==reg.roomTypeId)reg.customRateOverride=null;
     reg.room=toRoom;
     if(targetRt)reg.roomTypeId=targetRt.id;
     reg.customPrice=null;
