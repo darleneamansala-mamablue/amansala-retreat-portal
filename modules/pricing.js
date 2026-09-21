@@ -53,7 +53,7 @@ function renderEstQuote(lblId,bodyId){
   });
 
   let roomRows=[];
-  let totalRoomBase=0,totalTip=0,totalRoomTax=0,totalPkgTax=0,totalPkg=0,totalCao=0,totalCancellationAdj=0;
+  let totalRoomBase=0,totalTip=0,totalRoomTax=0,totalPkgTax=0,totalPkg=0,totalCao=0,totalCancellationAdj=0,totalCreditAdj=0;
 
   const _sortedBlocked=Array.from(blockedSet).sort((a,b)=>{
     const rtA=AppData.roomTypes.find(t=>(t.rooms||[]).includes(a));
@@ -96,8 +96,10 @@ function renderEstQuote(lblId,bodyId){
     // from pkgTaxRate) — add on top of tax, don't fold into roomTax/pTax.
     const cao=calcCustomAoCost(regSelBk,gc,reg);
     const rawTotal=+(base+pkgCost+tax+tip+cao).toFixed(2);
+    const afterCancelFee=applyCancellationFeeOnly(reg,rawTotal);
     const total=applyCancellationAdjustment(reg,rawTotal);
-    totalCancellationAdj+=+(total-rawTotal).toFixed(2);
+    totalCancellationAdj+=+(afterCancelFee-rawTotal).toFixed(2);
+    totalCreditAdj+=+(total-afterCancelFee).toFixed(2);
     const guestNames=[...new Set((reg.guests||[]).filter(g=>g.name).map(g=>g.name.trim()))].join(' & ');
     const cancelledGuests=(reg.guests||[]).filter(g=>g.name&&g.cancelled);
     roomRows.push({room,rt,gc,rate,base,pkgCost,roomTax,pTax,tax,tip,cao,total,guestNames,cancelledGuests,isTeacher:reg?.isTeacherRoom,regNights:_eNights});
@@ -105,7 +107,7 @@ function renderEstQuote(lblId,bodyId){
   });
 
   const totalTax=+(totalRoomTax+totalPkgTax).toFixed(2);
-  const grandEst=+(totalRoomBase+totalPkg+totalTax+totalTip+totalCao+totalCancellationAdj).toFixed(2);
+  const grandEst=+(totalRoomBase+totalPkg+totalTax+totalTip+totalCao+totalCancellationAdj+totalCreditAdj).toFixed(2);
   document.getElementById(lblId).textContent=`${estPax} est. guests · ${nights} nights · ${blockedSet.size} rooms · ${roomRows.length} registered`;
 
   // Left card: per-room itemized breakdown
@@ -161,6 +163,7 @@ function renderEstQuote(lblId,bodyId){
     ${totalRoomTax>0?`<div class="eq-row" style="color:#7c3aed"><span>🏛 ISH hab. (16%)</span><span>${fmt$(+totalRoomTax.toFixed(2))}</span></div>`:''}
     ${totalPkgTax>0?`<div class="eq-row" style="color:#7c3aed"><span>🏛 IVA extras (${Math.round(pkgTaxRate*100)}%)</span><span>${fmt$(+totalPkgTax.toFixed(2))}</span></div>`:''}
     ${totalCancellationAdj!==0?`<div class="eq-row" style="color:#dc2626"><span>🚫 Cancellation fees (net)</span><span>${totalCancellationAdj<0?'−':'+'}${fmt$(Math.abs(totalCancellationAdj))}</span></div>`:''}
+    ${totalCreditAdj!==0?`<div class="eq-row" style="color:#dc2626"><span>💳 Credit</span><span>−${fmt$(Math.abs(totalCreditAdj))}</span></div>`:''}
     ${IS_TEACHER_MODE?(eqDiscountAmt>0?`<div class="eq-row" style="color:#dc2626"><span>🏷 Discount</span><span style="color:#dc2626;font-weight:700">−${fmt$(eqDiscountAmt)}</span></div>`:''):`<div class="eq-row" style="color:#dc2626"><span style="display:flex;align-items:center;gap:6px">🏷 Discount $<input id="eqDiscountInput" type="number" min="0" step="0.01" value="${eqDiscountAmt||''}" placeholder="0" style="width:75px;padding:1px 5px;font-size:11px;border:1px solid #fca5a5;border-radius:4px;text-align:right;color:#dc2626;font-weight:700" onchange="setEqDiscountAmt(this.value)"></span><span style="color:#dc2626;font-weight:700">${eqDiscountAmt>0?`−${fmt$(eqDiscountAmt)}`:''}</span></div>`}
     <div style="border-top:2px solid #fcd34d;margin:8px 0"></div>
     <div class="eq-total" style="font-size:16px"><span>Est. Total Revenue</span><span style="color:var(--teal)">${fmt$(grandEstAfterDisc)}</span></div>

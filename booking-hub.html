@@ -5712,7 +5712,7 @@ function sumGuestRoomCost(reg,bk,rate,fallbackNights,gc){
 // by every duplicate room-total implementation (calcBD, _calcRoomRevenue,
 // renderEstQuote) so the fee shows consistently in the Room List, Bill
 // Total/Balance Due, and Est Quote alike.
-function applyCancellationAdjustment(reg,total){
+function applyCancellationFeeOnly(reg,total){
   const named=(reg?.guests||[]).filter(g=>g.name);
   const cancelled=named.filter(g=>g.cancelled);
   let out=total;
@@ -5721,11 +5721,18 @@ function applyCancellationAdjustment(reg,total){
     const feeSum=cancelled.reduce((s,g)=>s+(g.cancellationFee||0),0);
     out=out-perPersonShare*cancelled.length+feeSum;
   }
+  return out;
+}
+function applyCancellationAdjustment(reg,total){
   // A manual credit (Edit Guest → Credit) is a straight dollar-for-dollar discount
   // off the room's total — applied here, the one shared spot every room-total
   // implementation (Bill/Balance Due, Est Quote, Room List) already routes through
   // for cancellation adjustments, so it takes effect everywhere at once instead of
   // needing a separate edit per duplicate implementation (Jorge's ask 2026-09-21).
+  // Callers that need to show the cancellation-fee and credit portions as separate
+  // line items (Est Quote) should call applyCancellationFeeOnly first, then subtract
+  // reg.credit themselves — see renderEstQuote in pricing.js.
+  let out=applyCancellationFeeOnly(reg,total);
   if(reg?.credit)out-=reg.credit;
   return +out.toFixed(2);
 }
@@ -6187,7 +6194,7 @@ function switchTab(id,btn){
 // ===== AUTO FLAGS — moved to modules/teacher-portal.js (loaded above) =====
 // ===== FLAGS MODAL — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/pricing.js?v=20260917a"></script>
+<script src="modules/pricing.js?v=20260921a"></script>
 <script src="modules/teacher-pricelist.js"></script>
 <script>
 // ===== ESTIMATED QUOTE — moved to modules/pricing.js =====
