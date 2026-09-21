@@ -102,7 +102,7 @@ function renderEstQuote(lblId,bodyId){
     totalCreditAdj+=+(total-afterCancelFee).toFixed(2);
     const guestNames=[...new Set((reg.guests||[]).filter(g=>g.name).map(g=>g.name.trim()))].join(' & ');
     const cancelledGuests=(reg.guests||[]).filter(g=>g.name&&g.cancelled);
-    roomRows.push({room,rt,gc,rate,base,pkgCost,roomTax,pTax,tax,tip,cao,total,guestNames,cancelledGuests,isTeacher:reg?.isTeacherRoom,regNights:_eNights});
+    roomRows.push({room,rt,gc,rate,base,pkgCost,roomTax,pTax,tax,tip,cao,total,guestNames,cancelledGuests,credit:reg.credit||0,isTeacher:reg?.isTeacherRoom,regNights:_eNights});
     totalRoomBase+=base;totalTip+=tip;totalRoomTax+=roomTax;totalPkgTax+=pTax;totalPkg+=pkgCost;totalCao+=cao;
   });
 
@@ -129,6 +129,7 @@ function renderEstQuote(lblId,bodyId){
         ${r.pTax>0?`<span>IVA extras (${Math.round(pkgTaxRate*100)}%)</span><span>${fmt$(r.pTax)}</span>`:''}
         <span>Gratuity ($${tipPer}×${r.gc}×${r.regNights}nt)</span><span>${fmt$(r.tip)}</span>
         ${r.cao>0?`<span>Custom add-ons (tax incl.)</span><span>${fmt$(r.cao)}</span>`:''}
+        ${r.credit>0?`<span style="color:#dc2626">💳 Credit</span><span style="color:#dc2626">−${fmt$(r.credit)}</span>`:''}
       </div>
       ${r.cancelledGuests.length?`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #fde68a;font-size:11px;color:#dc2626">${r.cancelledGuests.map(g=>`🚫 ${escHtml(g.name)} cancelled — fee ${fmt$(g.cancellationFee||0)}`).join('<br>')}</div>`:''}
     </div>`;
