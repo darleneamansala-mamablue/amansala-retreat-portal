@@ -202,9 +202,18 @@ function regSetRoomTypeOverride(room,newRtId){
   if(!regSelBk.packageCustomPrices.__cfg__)regSelBk.packageCustomPrices.__cfg__={};
   const overrides={...(regSelBk.packageCustomPrices.__cfg__.roomTypeOverrides||{})};
   const trueRt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
+  const prevEffRtId=overrides[room]||trueRt?.id;
   if(trueRt&&trueRt.id===newRtId)delete overrides[room]; // back to its real type — no override needed
   else overrides[room]=newRtId;
   regSelBk.packageCustomPrices.__cfg__.roomTypeOverrides=overrides;
+  // A customRateOverride negotiated for the OLD category doesn't mean anything for
+  // the new one — this is where Jorge wants the rate recalculated when a room
+  // changes type (not the Rooms grid's manual/Straightline moves, which leave it
+  // alone on purpose). Only clear it when the effective type is actually changing.
+  if(newRtId!==prevEffRtId){
+    const reg=getRegForRoom(regSelBk.id,room);
+    if(reg)reg.customRateOverride=null;
+  }
   saveAll();regRender();
   showToast('Reclassified for this retreat only.');
 }
