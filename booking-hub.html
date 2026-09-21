@@ -2546,7 +2546,7 @@
         </div>
         <div class="frow">
           <div class="fg"><label>Package Price Override <span style="font-weight:400;text-transform:none;letter-spacing:0">(per person · 0 = free)</span></label><input type="number" id="gm-pkg-price" placeholder="Leave blank for default" oninput="gUpdatePrice()" title="Override the total package price for this room"></div>
-          <div></div>
+          <div class="fg"><label>Credit <span style="font-weight:400;text-transform:none;letter-spacing:0">($, subtracted from the total)</span></label><input type="number" id="gm-credit" placeholder="0" oninput="gUpdatePrice()" title="A discount/credit subtracted off this room's calculated total — unlike Total Override, stays correct if the underlying charges change later"></div>
         </div>
         <div class="frow full">
           <div class="fg"><label>Total Override</label><input type="number" id="gm-override" placeholder="Leave blank to use calculated total" oninput="gUpdatePrice()" title="Override the final total price entirely"></div>
@@ -2560,6 +2560,7 @@
         <div class="pb-row" id="pbc-pkg-row" style="display:none"><span id="pbc-pkg-lbl">Packages</span><span id="pbc-pkg" style="font-size:11px;color:#9ca3af"></span></div>
         <div class="pb-row"><span id="pbc-tax-lbl">Tax</span><span id="pbc-tax">$0</span></div>
         <div class="pb-row"><span id="pbc-dip-lbl">Tip fee</span><span id="pbc-dip">$0</span></div>
+        <div class="pb-row" id="pbc-credit-row" style="display:none"><span>Credit</span><span id="pbc-credit" style="color:#dc2626"></span></div>
         <div class="pb-row total"><span>Total</span><span id="pbc-total" style="color:var(--teal)">$0</span></div>
       </div>
       <input type="hidden" id="gm-balance" value="">
@@ -5714,10 +5715,19 @@ function sumGuestRoomCost(reg,bk,rate,fallbackNights,gc){
 function applyCancellationAdjustment(reg,total){
   const named=(reg?.guests||[]).filter(g=>g.name);
   const cancelled=named.filter(g=>g.cancelled);
-  if(!cancelled.length||!named.length)return total;
-  const perPersonShare=total/named.length;
-  const feeSum=cancelled.reduce((s,g)=>s+(g.cancellationFee||0),0);
-  return +(total-perPersonShare*cancelled.length+feeSum).toFixed(2);
+  let out=total;
+  if(cancelled.length&&named.length){
+    const perPersonShare=total/named.length;
+    const feeSum=cancelled.reduce((s,g)=>s+(g.cancellationFee||0),0);
+    out=out-perPersonShare*cancelled.length+feeSum;
+  }
+  // A manual credit (Edit Guest → Credit) is a straight dollar-for-dollar discount
+  // off the room's total — applied here, the one shared spot every room-total
+  // implementation (Bill/Balance Due, Est Quote, Room List) already routes through
+  // for cancellation adjustments, so it takes effect everywhere at once instead of
+  // needing a separate edit per duplicate implementation (Jorge's ask 2026-09-21).
+  if(reg?.credit)out-=reg.credit;
+  return +out.toFixed(2);
 }
 function calcBD(rt,gc,nights,dateStr,bk,reg){
   // custom_nights_override/custom_tip_nights_override/custom_tip_rate_override let an admin
@@ -6179,7 +6189,7 @@ function switchTab(id,btn){
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20260921a"></script>
+<script src="modules/room-blocking.js?v=20260921b"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====

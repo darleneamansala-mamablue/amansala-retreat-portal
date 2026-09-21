@@ -710,6 +710,7 @@ function gOpenEdit(room,rtId){
   }
   document.getElementById('gm-override').value=reg.customPrice!=null?reg.customPrice:'';
   document.getElementById('gm-paid').value=reg.amountPaid||'0';
+  const _creditElE=document.getElementById('gm-credit');if(_creditElE)_creditElE.value=reg.credit!=null?reg.credit:'';
   document.getElementById('gm-notes').value=reg.notes||'';
   const _pkgPriceElE=document.getElementById('gm-pkg-price');if(_pkgPriceElE)_pkgPriceElE.value=reg.customPkgPrice!=null?reg.customPkgPrice:'';
   const _rateElE=document.getElementById('gm-rate-override');if(_rateElE)_rateElE.value=reg.customRateOverride!=null?reg.customRateOverride:'';
@@ -769,7 +770,7 @@ function gSwitchTab(idx){
 function gCountGuests(){let n=0;for(let i=0;i<4;i++){const el=document.getElementById('g'+i+'-name');if(el&&el.value.trim())n=i+1;}return Math.max(1,n);}
 function gDraftRegOverrides(){
   const num=id=>{const v=document.getElementById(id)?.value;return(v!=null&&v!=='')?parseFloat(v):NaN;};
-  const rateOv=num('gm-rate-override'),pkgOv=num('gm-pkg-price'),nightsOv=num('gm-nights-override'),tipNightsOv=num('gm-tip-nights-override'),tipRateOv=num('gm-tip-rate-override');
+  const rateOv=num('gm-rate-override'),pkgOv=num('gm-pkg-price'),nightsOv=num('gm-nights-override'),tipNightsOv=num('gm-tip-nights-override'),tipRateOv=num('gm-tip-rate-override'),creditOv=num('gm-credit');
   // Mirrors gSave()'s guest-collection loop (name + per-guest checkIn/checkOut) so the
   // live price preview reflects per-guest date overrides before the reg is even saved —
   // guestNightsSplit()/guestTipNights() read this same shape off a real saved reg.
@@ -794,6 +795,7 @@ function gDraftRegOverrides(){
     customNightsOverride:!isNaN(nightsOv)?nightsOv:null,
     customTipNightsOverride:!isNaN(tipNightsOv)?tipNightsOv:null,
     customTipRateOverride:!isNaN(tipRateOv)?tipRateOv:null,
+    credit:!isNaN(creditOv)&&creditOv>0?creditOv:null,
     checkIn:(document.getElementById('gm-checkin')?.value||'').trim()||null,
     checkOut:(document.getElementById('gm-checkout')?.value||'').trim()||null,
     guests,
@@ -811,7 +813,14 @@ function gUpdatePrice(){
   const draft=gDraftRegOverrides();
   const bd=calcBD(rt,gc,nights,_effStart,regSelBk,draft);
   const ov=document.getElementById('gm-override').value;
+  // bd.total already has the credit baked in (calcBD routes through
+  // applyCancellationAdjustment, which now also subtracts reg.credit) — but a Total
+  // Override is a hard final say on the number, so it intentionally bypasses credit
+  // entirely rather than getting a second reduction on top of it.
   const final=ov!==''?parseFloat(ov)||0:bd.total;
+  const creditVal=parseFloat(document.getElementById('gm-credit')?.value)||0;
+  const creditRowEl=document.getElementById('pbc-credit-row');
+  if(creditRowEl){creditRowEl.style.display=(creditVal>0&&ov==='')?'':'none';const ce=document.getElementById('pbc-credit');if(ce)ce.textContent='−'+fmt$(creditVal);}
   const paid=parseFloat(document.getElementById('gm-paid')?.value)||0;
   const bal=final-paid;
   const season=isLowSeason(_effStart,bd.nights)?'Low Season (May – Sep)':'High Season (Oct – Apr)';
@@ -838,6 +847,9 @@ function gSave(){
   const name=document.getElementById('g0-name').value.trim();if(!name){alert('Enter guest name.');return;}
   const ov=document.getElementById('gm-override').value;
   const customPrice=ov!==''?parseFloat(ov)||null:null;
+  const _creditVal=document.getElementById('gm-credit')?.value;
+  const _creditParsed=(_creditVal!=null&&_creditVal!=='')?parseFloat(_creditVal):NaN;
+  const credit=!isNaN(_creditParsed)&&_creditParsed>0?_creditParsed:null;
   const amountPaid=parseFloat(document.getElementById('gm-paid').value)||0;
   const notes=document.getElementById('gm-notes').value.trim();
   const _pkgPriceVal=document.getElementById('gm-pkg-price')?.value;
@@ -871,7 +883,7 @@ function gSave(){
     guests.push({name:n,email:(document.getElementById('g'+i+'-email')?.value||'').trim(),phone:(document.getElementById('g'+i+'-phone')?.value||'').trim(),notes:(document.getElementById('g'+i+'-note')?.value||'').trim(),checkIn:_gCi||undefined,checkOut:_gCo||undefined,customRateOverride:!isNaN(_gCrParsed)?_gCrParsed:undefined,extraNightRate:!isNaN(_gXrParsed)?_gXrParsed:undefined,cancelled:_gCancelled||undefined,cancellationFee:_gCancelled&&!isNaN(_gFeeParsed)?_gFeeParsed:undefined,cancelledAt:_gCancelled?(_existingReg?.guests?.find(og=>og.name===n)?.cancelledAt||new Date().toISOString()):undefined});
   }}
   const _regTs=new Date().toISOString();
-  if(gEditRegId){const reg=AppData.regs.find(r=>r.id===gEditRegId);Object.assign(reg,{guests,customPrice,customPkgPrice,customRateOverride,customNightsOverride,customTipNightsOverride,customTipRateOverride,amountPaid,notes,isTeacherRoom:gIsTeacherRoom||undefined,checkIn:checkIn||undefined,checkOut:checkOut||undefined,updatedAt:_regTs});}
+  if(gEditRegId){const reg=AppData.regs.find(r=>r.id===gEditRegId);Object.assign(reg,{guests,customPrice,customPkgPrice,customRateOverride,customNightsOverride,customTipNightsOverride,customTipRateOverride,credit,amountPaid,notes,isTeacherRoom:gIsTeacherRoom||undefined,checkIn:checkIn||undefined,checkOut:checkOut||undefined,updatedAt:_regTs});}
   else{
     // Check room not already assigned in this booking
     if(!gEditRegId){
@@ -882,7 +894,7 @@ function gSave(){
         return;
       }
     }
-    AppData.regs.push({id:uid(),bookingId:regSelBk.id,room:gEditRoom,roomTypeId:gEditRtId,guests,customPrice,customPkgPrice,customRateOverride,customNightsOverride,customTipNightsOverride,customTipRateOverride,amountPaid,notes,isTeacherRoom:gIsTeacherRoom||undefined,updatedAt:_regTs});
+    AppData.regs.push({id:uid(),bookingId:regSelBk.id,room:gEditRoom,roomTypeId:gEditRtId,guests,customPrice,customPkgPrice,customRateOverride,customNightsOverride,customTipNightsOverride,customTipRateOverride,credit,amountPaid,notes,isTeacherRoom:gIsTeacherRoom||undefined,updatedAt:_regTs});
   }
   gExtraGuestMode=false;saveAll();closeModal('guestModal');regRender();showToast(gEditRegId?'Updated.':'Guest added.');
   // If every named guest in this room is now cancelled, the room is genuinely
