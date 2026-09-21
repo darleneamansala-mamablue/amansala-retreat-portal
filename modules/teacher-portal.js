@@ -4101,15 +4101,18 @@ function _trAssignRideGroups(guests,type,allTr){
       }
       continue;
     }
-    if(!e.share){
-      groupOf[e.idx]=groups.length;
-      groups.push({ap:e.ap,date:e.date,idxs:[e.idx],priv:true,minMins:e.mins});
-      continue;
-    }
+    // Visual clustering is by date/airport/time proximity only, same as the admin
+    // Transportation tab's own clustering — NOT gated on willingToShare. A guest
+    // who didn't check that box but is clearly arriving with the rest of their
+    // retreat (identical flight time) still shows grouped with them instead of
+    // looking like a stray solo booking; cost-splitting below is what actually
+    // still respects willingToShare (Jorge's call 2026-09-21 — this kept needing a
+    // one-off willingToShare data fix every time a retreat had someone who forgot
+    // to check the box, so fixed the grouping logic itself instead).
     let joined=false;
     for(let gi=0;gi<groups.length;gi++){
       const grp=groups[gi];
-      if(grp.priv||grp.userGroup||grp.ap!==e.ap||grp.date!==e.date)continue;
+      if(grp.userGroup||grp.ap!==e.ap||grp.date!==e.date)continue;
       if(grp.idxs.some(mi=>Math.abs(info[mi].mins-e.mins)<=30)){
         grp.idxs.push(e.idx);grp.minMins=Math.min(grp.minMins,e.mins);groupOf[e.idx]=gi;joined=true;break;
       }
@@ -4120,14 +4123,36 @@ function _trAssignRideGroups(guests,type,allTr){
   let colorIdx=0;
   const prices=new Array(guests.length).fill(null);
   groups.forEach(grp=>{
-    const globalPax=grp.userGroup?_trGlobalGroupPax(isArr?'arrival':'departure',grp.ugKey,allTr):null;
-    const payCount=globalPax!=null?globalPax:grp.idxs.length;
     grp.color=PASTEL[colorIdx++%PASTEL.length];
-    grp.combinedExtra=(globalPax!=null&&globalPax>grp.idxs.length)?(globalPax-grp.idxs.length):0;
-    grp.pax=payCount;
-    grp.priv=grp.priv||payCount===1;
-    const pp=trGetPrice(grp.ap,payCount);
-    grp.idxs.forEach(idx=>{prices[idx]={pp,pax:payCount,priv:grp.priv,ap:grp.ap,combinedExtra:grp.combinedExtra};});
+    if(grp.userGroup){
+      // Explicit manual grouping (admin dragged these together) always splits
+      // the cost across everyone in it — staff already vouched for the group.
+      const globalPax=_trGlobalGroupPax(isArr?'arrival':'departure',grp.ugKey,allTr);
+      const payCount=globalPax!=null?globalPax:grp.idxs.length;
+      grp.combinedExtra=(globalPax!=null&&globalPax>grp.idxs.length)?(globalPax-grp.idxs.length):0;
+      grp.pax=payCount;
+      grp.priv=payCount===1;
+      const pp=trGetPrice(grp.ap,payCount);
+      grp.idxs.forEach(idx=>{prices[idx]={pp,pax:payCount,priv:grp.priv,ap:grp.ap,combinedExtra:grp.combinedExtra};});
+      return;
+    }
+    // Natural (time-proximity) cluster: split the shared rate only among members
+    // who actually marked willing to share. Anyone else in the same window still
+    // shows grouped here for logistics, but is billed their own private rate.
+    grp.pax=grp.idxs.length;
+    grp.priv=false;
+    grp.combinedExtra=0;
+    const sharingIdxs=grp.idxs.filter(i=>info[i].share);
+    const sharedCount=sharingIdxs.length;
+    const sharedPp=sharedCount>1?trGetPrice(grp.ap,sharedCount):null;
+    const soloPp=trGetPrice(grp.ap,1);
+    grp.idxs.forEach(idx=>{
+      if(sharedPp!=null&&info[idx].share){
+        prices[idx]={pp:sharedPp,pax:sharedCount,priv:false,ap:grp.ap,combinedExtra:0};
+      }else{
+        prices[idx]={pp:soloPp,pax:1,priv:true,ap:grp.ap,combinedExtra:0};
+      }
+    });
   });
   return{groups,groupOf,prices};
 }
