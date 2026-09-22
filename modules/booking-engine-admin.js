@@ -236,7 +236,17 @@ async function beToggleRoomType(rtId, enabled) {
   // reloading — or opening the portal on another device — saw it revert.
   // Confirmed real incident 2026-09-17: Jorge found every room type back to
   // disabled despite having turned them on before.
-  syncRoomTypesToSupabase().catch(e=>console.warn('[be] room type sync failed',e));
+  //
+  // A toggle updates ONLY this one row (not syncRoomTypesToSupabase's full-array
+  // upsert of every room type) — the full-array version re-uploads whatever this
+  // tab currently has for EVERY OTHER room type too, so a stale/older tab's
+  // toggle can silently revert types that were just turned on somewhere else
+  // (confirmed real incident 2026-09-22: toggling "Simple n Small" on turned
+  // other types back off — every row shared the exact same updated_at, proving
+  // each toggle was overwriting the whole table).
+  db.from('room_types').update({be_enabled:enabled}).eq('id',rtId)
+    .then(({error})=>{if(error)console.warn('[be] room type toggle sync failed',error);else rt.updatedAt=new Date().toISOString();})
+    .catch(e=>console.warn('[be] room type toggle sync failed',e));
   showToast(enabled ? 'Room turned on for booking ✓' : 'Room turned off');
   beRenderSettings();
 }
@@ -244,7 +254,9 @@ async function beToggleExtraNights(rtId, enabled) {
   const rt = AppData.roomTypes.find(r => r.id === rtId); if (!rt) return;
   rt.be_extra_nights = enabled;
   saveAll();
-  syncRoomTypesToSupabase().catch(e=>console.warn('[be] room type sync failed',e));
+  db.from('room_types').update({be_extra_nights:enabled}).eq('id',rtId)
+    .then(({error})=>{if(error)console.warn('[be] room type toggle sync failed',error);else rt.updatedAt=new Date().toISOString();})
+    .catch(e=>console.warn('[be] room type toggle sync failed',e));
   showToast(enabled ? 'Visible on Extra Nights ✓' : 'Removed from Extra Nights');
   beRenderSettings();
 }
