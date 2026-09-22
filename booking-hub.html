@@ -108,7 +108,15 @@
     .tab-admin-toggle.open .admin-arrow{transform:rotate(180deg);}
     .tab-bar.collapsed .tab-admin-toggle{justify-content:center;padding:11px;}
     .tab-bar.collapsed .tab-admin-toggle .tab-label,.tab-bar.collapsed .tab-admin-toggle .admin-arrow{display:none;}
-    #adminSideSection{overflow:hidden;max-height:0;transition:max-height .25s ease;}
+    /* flex-shrink:0 matches every other .tab-bar child (.tab-btn, .tab-admin-toggle) —
+       without it, this is the only flex item allowed to shrink, and since overflow:hidden
+       makes its automatic min-height resolve to 0, the flexbox algorithm crushes it down
+       to 0px whenever the rest of the sidebar's content already exceeds the viewport,
+       regardless of max-height/admin-side-open — the sub-buttons never get any space to
+       render into, let alone scroll to (Jorge's report 2026-09-22: nothing shows under
+       Admin). overflow-y:auto on .tab-bar is supposed to handle the overflow by scrolling,
+       but that only works if items aren't first shrunk away. */
+    #adminSideSection{overflow:hidden;max-height:0;flex-shrink:0;transition:max-height .25s ease;}
     #adminSideSection.admin-side-open{max-height:600px;}
     .tab-btn-sub{padding-left:28px!important;}
     .tab-bar.collapsed .tab-btn-sub{padding:11px!important;justify-content:center;}
