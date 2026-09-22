@@ -285,13 +285,30 @@ function getTransportRoster(bkId){
   });
 
   const missing=roster.filter(guest=>!guestSub.has(guest));
+  // A guest who re-submits the form (e.g. to update a flight change) leaves a
+  // SECOND row that the greedy one-sub-per-guest match above never consumes —
+  // that's a duplicate of someone already on the room list, not a stranger.
+  // Only flag a submission as a real "not on your room list" orphan when its
+  // email/name doesn't identify ANY roster guest at all (confirmed real
+  // incident 2026-09-22: Beth Stuart's group — Michelle Toussaint, Holly
+  // Schaefer, Cheryl Zimmerman and Beth Stuart herself each submitted twice,
+  // and the leftover duplicate wrongly showed as "not on your room list").
+  const rosterEmails=new Set(roster.map(g=>(g.email||'').toLowerCase().trim()).filter(Boolean));
+  const rosterNames=new Set(roster.map(g=>trNormName(g.name)));
+  const trueOrphans=allSubs.filter((s,i)=>{
+    if(usedIdx.has(i))return false;
+    const em=(s.email||'').toLowerCase().trim();
+    if(em&&rosterEmails.has(em))return false;
+    if(rosterNames.has(trTransportFullName(s)))return false;
+    return true;
+  });
   return{
     roster,
     allSubs,
     matchedSubs:[...guestSub.values()],
     missing,
     submittedCount:roster.length-missing.length,
-    orphanSubs:allSubs.filter((_,i)=>!usedIdx.has(i)),
+    orphanSubs:trueOrphans,
     // One row per room-list guest, whether or not they've submitted — for views that
     // need to show "not yet submitted" guests inline instead of in a separate list.
     guestsWithTransport:roster.map(guest=>({...guest,tr:guestSub.get(guest)||null}))
