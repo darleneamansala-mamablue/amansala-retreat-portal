@@ -42,7 +42,7 @@ exports.handler = async (event) => {
   try { payload = JSON.parse(event.body || '{}'); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { roomTypeId, checkIn, checkOut, adults, firstName, lastName, email, phone, notes } = payload.arguments || {};
+  const { roomTypeId, checkIn, checkOut, adults, firstName, lastName, email, phone, notes, discountCode } = payload.arguments || {};
   const missing = ['roomTypeId', 'checkIn', 'checkOut', 'firstName', 'lastName', 'email']
     .filter(f => !({ roomTypeId, checkIn, checkOut, firstName, lastName, email }[f]));
   if (missing.length) {
@@ -111,8 +111,36 @@ exports.handler = async (event) => {
     const weekendMult = (isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
     const rate = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
     const subtotal = rate * nights;
-    const taxAmt = Math.round(subtotal * taxPct) / 100;
-    const totalUSD = subtotal + taxAmt;
+
+    // Discount code — same validation as stripe.js (book.html's checkout), so a
+    // code Lana applies behaves identically to one a guest enters directly.
+    let discountAmount = 0, validatedCode = null;
+    if (discountCode) {
+      try {
+        const dcRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/be_discount_codes?code=eq.${encodeURIComponent(String(discountCode).toUpperCase().trim())}&active=eq.true&select=*`,
+          { headers: supaHdrs }
+        );
+        if (dcRes.ok) {
+          const dcRows = await dcRes.json();
+          const dc = dcRows[0];
+          const appliesHere = !dc?.applies_to || dc.applies_to === 'all' || dc.applies_to === 'escape';
+          const inBlackout = dc?.blackout_start && dc?.blackout_end && checkIn < dc.blackout_end && checkOut > dc.blackout_start;
+          if (dc && appliesHere && !inBlackout
+                 && !(dc.expires_at && new Date(dc.expires_at + 'T23:59:59') < new Date())
+                 && !(dc.max_uses != null && dc.used_count >= dc.max_uses)) {
+            validatedCode = dc.code;
+            discountAmount = dc.type === 'pct' ? Math.round(subtotal * dc.value) / 100 : Math.min(dc.value, subtotal);
+          }
+        }
+      } catch (_) { /* non-fatal — proceed without discount */ }
+      if (!validatedCode) {
+        return ok({ success: false, message: `El código "${discountCode}" no es válido, ya expiró, o no aplica para estas fechas — pregúntale al huésped si quiere continuar sin descuento.` });
+      }
+    }
+
+    const taxAmt = Math.round((subtotal - discountAmount) * taxPct) / 100;
+    const totalUSD = subtotal - discountAmount + taxAmt;
     const amountCents = Math.round(totalUSD * 100);
     if (amountCents < 50) return ok({ success: false, message: 'El monto calculado es demasiado bajo para procesar el pago.' });
 
@@ -127,6 +155,8 @@ exports.handler = async (event) => {
       email: email.slice(0, 200),
       phone: (phone || '').slice(0, 50),
       notes: (notes || '').slice(0, 400),
+      discountCode: (validatedCode || '').slice(0, 50),
+      discountAmount: String(discountAmount),
       source: 'Visito AI',
     };
 
@@ -150,14 +180,56 @@ exports.handler = async (event) => {
     const cs = await csRes.json();
     if (cs.error) return jsonErr(400, cs.error.message || 'Stripe error');
 
+    // Also email the payment link directly to the guest — Lana pastes it in
+    // WhatsApp too, but a guest reading it later (or forwarding it) should
+    // have it in their inbox as well (Jorge's ask 2026-09-22).
+    let emailed = false;
+    try {
+      const emailHtml = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f0ea;font-family:'Helvetica Neue',Arial,sans-serif">
+<div style="max-width:600px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+  <div style="background:#1a2332;padding:24px 32px;text-align:center">
+    <span style="color:#fff;font-size:20px;font-weight:700;letter-spacing:1px">AMANSALA</span>
+    <span style="color:rgba(255,255,255,.5);font-size:11px;display:block;letter-spacing:2px;margin-top:2px">ECO-CHIC RESORT + RETREAT</span>
+  </div>
+  <div style="padding:32px 32px 24px">
+    <p style="font-size:15px;color:#1a2332">Hi ${firstName},</p>
+    <p style="color:#4a4a4a;line-height:1.7">Thanks for reaching out! Here's your reservation summary — click below to complete your payment and confirm it.</p>
+    <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:6px;margin:20px 0">
+      <strong style="color:#1a2332">${rt.name}</strong><br>
+      <span style="color:#4a4a4a">${checkIn} – ${checkOut} · ${nights} night${nights !== 1 ? 's' : ''} · ${numAdults} adult${numAdults !== 1 ? 's' : ''}</span><br>
+      <span style="color:#4a4a4a;font-weight:700">Total: $${totalUSD.toFixed(2)} USD</span>
+    </div>
+    <div style="text-align:center;margin:28px 0"><a href="${cs.url}" style="background:#0e9494;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block">Complete Payment</a></div>
+    <p style="color:#6b7280;font-size:12px;text-align:center">If the button doesn't work, copy this link into your browser:<br>${cs.url}</p>
+    <p style="color:#4a4a4a">Warm regards,<br><strong>Amansala Team</strong></p>
+  </div>
+  <div style="background:#f5f0ea;padding:16px 32px;text-align:center;font-size:11px;color:#8a7e74">
+    Amansala Eco-Chic Resort &amp; Retreat · Tulum, Mexico · <a href="mailto:bookings@amansala.com" style="color:#0e9494">bookings@amansala.com</a>
+  </div>
+</div></body></html>`;
+      const emailRes = await fetch(`${siteUrl}/.netlify/functions/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: email, subject: `Complete Your Reservation — ${rt.name}`, html: emailHtml, replyTo: 'bookings@amansala.com' }),
+      });
+      emailed = emailRes.ok;
+    } catch (emailErr) {
+      console.warn('[visito-create-reservation] email failed (non-fatal):', emailErr.message);
+    }
+
     return ok({
       success: true,
       roomTypeName: rt.name,
       checkIn, checkOut, nights, adults: numAdults,
       ratePerNight: rate,
+      discountCode: validatedCode,
+      discountAmount,
       total: totalUSD,
       paymentUrl: cs.url,
-      message: `Reserva pre-creada — envíale este link de pago al huésped para confirmarla: ${cs.url}`,
+      emailedToGuest: emailed,
+      message: emailed
+        ? `Reserva pre-creada — comparte este link de pago con el huésped para confirmarla (también se le mandó por correo a ${email}): ${cs.url}`
+        : `Reserva pre-creada — comparte este link de pago con el huésped para confirmarla: ${cs.url} (no se pudo mandar el correo automático, avísale que revise spam o mándaselo tú por WhatsApp)`,
     });
   } catch (err) {
     console.error('[visito-create-reservation]', err.message);
