@@ -1143,7 +1143,7 @@ async function rmSendPaymentLink(){
         </td></tr>
         <tr><td style="background:#f1f5f9;padding:16px 32px;text-align:center;font-size:12px;color:#9ca3af">Amansala Eco-Chic Resort · Tulum, Mexico</td></tr>
       </table></td></tr></table></body></html>`;
-      await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:bk.leaderEmail,subject:`Payment Link — Amansala Tulum · ${room}`,html})});
+      await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:bk.leaderEmail,subject:`Payment Link — Amansala Tulum · ${room}`,html,cc:_ccList(bk)})});
       logActivity('Payment link sent',`${bk.leaderName||''} · ${room} · ${fmt$(bk.roomRateTotal)} · emailed to ${bk.leaderEmail}`,bk.id);
       showToast('Payment link copied & emailed ✓');
     }else{
