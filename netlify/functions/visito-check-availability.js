@@ -37,7 +37,7 @@ exports.handler = async (event) => {
   try { payload = JSON.parse(event.body || '{}'); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { checkIn, checkOut, adults } = payload.arguments || {};
+  const { checkIn, checkOut, adults, discountCode } = payload.arguments || {};
   if (!checkIn || !checkOut) {
     return ok({ success: false, message: 'Necesito la fecha de entrada y salida (checkIn, checkOut) para revisar disponibilidad.' });
   }
@@ -82,6 +82,30 @@ exports.handler = async (event) => {
     const seasonalPct = Number(seasonalAdj[String(month)] || 0);
     const weekendMult = (isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
 
+    // Discount code — same validation as stripe.js (book.html's checkout). Only
+    // reported back if it actually applies, so Lana never quotes a discount that
+    // create_reservation would then reject.
+    let dc = null, validatedCode = null;
+    if (discountCode) {
+      try {
+        const dcRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/be_discount_codes?code=eq.${encodeURIComponent(String(discountCode).toUpperCase().trim())}&active=eq.true&select=*`,
+          { headers: hdrs }
+        );
+        if (dcRes.ok) {
+          const dcRows = await dcRes.json();
+          const cand = dcRows[0];
+          const appliesHere = !cand?.applies_to || cand.applies_to === 'all' || cand.applies_to === 'escape';
+          const inBlackout = cand?.blackout_start && cand?.blackout_end && checkIn < cand.blackout_end && checkOut > cand.blackout_start;
+          if (cand && appliesHere && !inBlackout
+                 && !(cand.expires_at && new Date(cand.expires_at + 'T23:59:59') < new Date())
+                 && !(cand.max_uses != null && cand.used_count >= cand.max_uses)) {
+            dc = cand; validatedCode = cand.code;
+          }
+        }
+      } catch (_) { /* non-fatal — quote without discount */ }
+    }
+
     const options = (roomTypes || [])
       .map(rt => {
         const rooms = rt.rooms || [];
@@ -96,7 +120,8 @@ exports.handler = async (event) => {
         const baseRate = rt.be_price_single ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
         const rate = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
         const subtotal = rate * nights;
-        const tax = Math.round(subtotal * taxPct) / 100;
+        const discountAmount = dc ? (dc.type === 'pct' ? Math.round(subtotal * dc.value) / 100 : Math.min(dc.value, subtotal)) : 0;
+        const tax = Math.round((subtotal - discountAmount) * taxPct) / 100;
         return {
           roomTypeId: rt.id,
           roomTypeName: rt.name,
@@ -106,8 +131,10 @@ exports.handler = async (event) => {
           ratePerNight: rate,
           nights,
           subtotal,
+          discountCode: validatedCode,
+          discountAmount,
           taxes: tax,
-          total: +(subtotal + tax).toFixed(2),
+          total: +(subtotal - discountAmount + tax).toFixed(2),
         };
       })
       .filter(Boolean);
@@ -116,7 +143,10 @@ exports.handler = async (event) => {
       return ok({ success: false, message: `No hay habitaciones disponibles del ${checkIn} al ${checkOut} para ${numAdults} adulto(s).` });
     }
 
-    return ok({ success: true, checkIn, checkOut, nights, adults: numAdults, options });
+    return ok({
+      success: true, checkIn, checkOut, nights, adults: numAdults, options,
+      ...(discountCode ? { discountCodeApplied: !!validatedCode, discountCode: validatedCode || null } : {}),
+    });
   } catch (err) {
     console.error('[visito-check-availability]', err.message);
     return jsonErr(500, err.message);
