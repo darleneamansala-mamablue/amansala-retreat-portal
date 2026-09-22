@@ -423,7 +423,7 @@ async function emailContract(){
   const btn=document.querySelector('[onclick="emailContract()"]');
   if(btn){btn.disabled=true;btn.textContent='Sending...';}
   try{
-    await _sendEmail(bk.leaderEmail,subject,_emailHtmlWrap(body),'retreats@amansala.com');
+    await _sendEmail(bk.leaderEmail,subject,_emailHtmlWrap(body),'retreats@amansala.com',_ccList(bk));
     showToast(`✉ Contract sent to ${name} (${bk.leaderEmail})`);
     markContractSent();
   }catch(err){
@@ -772,7 +772,7 @@ async function _sendDepositInvoiceEmail(bk){
 </table>
 <p style="color:#6b7280;font-size:12px;line-height:1.7">If the deposit is not received within <strong>7 days</strong> of signing, Casa de Agua reserves the right to release the dates. If you have any questions, please reply to this email.</p>
 <p style="color:#4a4a4a">Warm regards,<br><strong>Amansala Team</strong></p>`;
-  await _sendEmail(bk.leaderEmail,'Deposit Invoice #'+inv.number+' — '+retreat,_emailHtmlWrap(body),'retreats@amansala.com');
+  await _sendEmail(bk.leaderEmail,'Deposit Invoice #'+inv.number+' — '+retreat,_emailHtmlWrap(body),'retreats@amansala.com',_ccList(bk));
   bk.depositInvoiceSentAt=new Date().toISOString();
   saveAll();
   logActivity('Deposit invoice emailed',`Invoice ${inv.number} · $2,500 · due ${dueDate} · sent to ${bk.leaderEmail}`,bk.id);

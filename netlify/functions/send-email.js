@@ -15,7 +15,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
   }
 
-  const { to, subject, html, replyTo, attachments } = payload;
+  const { to, subject, html, replyTo, attachments, cc } = payload;
   if (!to || !subject || !html) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing to, subject, or html' }) };
   }
@@ -33,6 +33,7 @@ exports.handler = async (event) => {
         subject,
         html,
         ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(cc ? { cc: Array.isArray(cc) ? cc : [cc] } : {}),
         // Resend accepts {filename, content} where content is base64 — used by
         // "Email PDF" (Share Schedule) to send a real .pdf attachment instead
         // of just a link. Only filename/content are forwarded; any other
