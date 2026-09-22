@@ -862,6 +862,72 @@ const BE_DEFAULT_INHOTEL_BODY = `<p>Hi {{firstName}},</p>\n<p>We hope you're set
 const BE_DEFAULT_CHECKOUT_SUBJECT = 'Safe travels – thank you for staying with us';
 const BE_DEFAULT_CHECKOUT_BODY = `<p>Hi {{firstName}},</p>\n<p>Today is your check-out day — thank you so much for staying with us at <strong>Amansala Tulum</strong>! We hope you had a wonderful time.</p>\n<p>Safe travels, and we hope to welcome you back soon.</p>`;
 
+// A small contenteditable-based rich editor standing in for each raw HTML
+// textarea (Jorge's ask 2026-09-22: editing raw HTML felt like "código", not
+// visual). The textarea is kept (hidden) as the actual source of truth that
+// beSaveEmailSettings() reads — the visual div's innerHTML is synced into it
+// on every edit and before toggling views, so nothing about how templates
+// are stored/saved changes, only how they're edited.
+const BE_MERGE_VARS = ['firstName', 'lastName', 'roomType', 'checkIn', 'checkOut', 'nights', 'amount', 'email', 'phone'];
+function beRichBody(idPrefix, html) {
+  const varOptions = BE_MERGE_VARS.map(v => `<option value="{{${v}}}">{{${v}}}</option>`).join('');
+  return `<label>Body</label>
+    <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:4px;padding:6px 8px;background:#f8fafc;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <button type="button" onclick="beRte('${idPrefix}','bold')" style="${beRteBtnS()}font-weight:700">B</button>
+        <button type="button" onclick="beRte('${idPrefix}','italic')" style="${beRteBtnS()}font-style:italic">I</button>
+        <button type="button" onclick="beRte('${idPrefix}','underline')" style="${beRteBtnS()}text-decoration:underline">U</button>
+        <button type="button" onclick="beRte('${idPrefix}','insertUnorderedList')" style="${beRteBtnS()}">• List</button>
+        <button type="button" onclick="beRteLink('${idPrefix}')" style="${beRteBtnS()}">🔗 Link</button>
+        <select onchange="beRteInsertVar('${idPrefix}',this.value);this.value=''" style="${beRteBtnS()}padding:4px 6px"><option value="">Insert variable…</option>${varOptions}</select>
+        <button type="button" onclick="beRteToggleHtml('${idPrefix}')" id="be-${idPrefix}-htmlbtn" style="${beRteBtnS()}margin-left:auto">&lt;/&gt; HTML</button>
+      </div>
+      <div id="be-${idPrefix}-visual" contenteditable="true" oninput="beRteSync('${idPrefix}')" style="min-height:120px;max-height:320px;overflow-y:auto;padding:12px 14px;font-size:13px;line-height:1.6;color:var(--dark)"></div>
+      <textarea id="be-${idPrefix}-body" rows="9" style="display:none;width:100%;border:none;border-top:1px solid var(--border);font-family:monospace;font-size:12px;padding:12px 14px;box-sizing:border-box">${escHtml(html)}</textarea>
+    </div>`;
+}
+function beRteBtnS() { return 'background:#fff;border:1px solid var(--border);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;font-family:\'Jost\',sans-serif;color:var(--dark)'; }
+function beRte(idPrefix, cmd) {
+  document.getElementById(`be-${idPrefix}-visual`).focus();
+  document.execCommand(cmd, false, null);
+  beRteSync(idPrefix);
+}
+function beRteLink(idPrefix) {
+  const url = prompt('Link URL:', 'https://');
+  if (!url) return;
+  document.getElementById(`be-${idPrefix}-visual`).focus();
+  document.execCommand('createLink', false, url);
+  beRteSync(idPrefix);
+}
+function beRteInsertVar(idPrefix, token) {
+  if (!token) return;
+  const visual = document.getElementById(`be-${idPrefix}-visual`);
+  visual.focus();
+  document.execCommand('insertText', false, token);
+  beRteSync(idPrefix);
+}
+function beRteSync(idPrefix) {
+  const visual = document.getElementById(`be-${idPrefix}-visual`);
+  const ta = document.getElementById(`be-${idPrefix}-body`);
+  if (visual && ta) ta.value = visual.innerHTML;
+}
+function beRteToggleHtml(idPrefix) {
+  const visual = document.getElementById(`be-${idPrefix}-visual`);
+  const ta = document.getElementById(`be-${idPrefix}-body`);
+  const btn = document.getElementById(`be-${idPrefix}-htmlbtn`);
+  const showingHtml = ta.style.display !== 'none';
+  if (showingHtml) {
+    visual.innerHTML = ta.value;
+    ta.style.display = 'none';
+    visual.style.display = '';
+    btn.textContent = '</> HTML';
+  } else {
+    beRteSync(idPrefix);
+    ta.style.display = '';
+    visual.style.display = 'none';
+    btn.textContent = '✎ Visual';
+  }
+}
 function beRenderEmails() {
   const s = beSettings;
   const gOn = s.email_guest_enabled !== false;
@@ -877,12 +943,12 @@ function beRenderEmails() {
         </div>
         ${extraNote ? `<p style="font-size:11.5px;color:var(--muted);margin:0 0 12px">${extraNote}</p>` : ''}
         <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-${idPrefix}-subject" type="text" value="${escHtml(subVal ?? subDefault)}"></div>
-        <div class="fg"><label>Body (HTML)</label><textarea id="be-${idPrefix}-body" rows="7" style="font-family:monospace;font-size:12px">${escHtml(bodyVal ?? bodyDefault)}</textarea></div>
+        <div class="fg">${beRichBody(idPrefix, bodyVal ?? bodyDefault)}</div>
       </div>`;
   document.getElementById('beBody').innerHTML = `
     <div style="max-width:760px;margin:0 auto">
       <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 16px;margin-bottom:20px;font-size:12px;color:#0369a1">
-        <strong>Available variables:</strong> {{firstName}}, {{lastName}}, {{roomType}}, {{checkIn}}, {{checkOut}}, {{nights}}, {{amount}}, {{email}}, {{phone}}
+        <strong>Available variables:</strong> {{firstName}}, {{lastName}}, {{roomType}}, {{checkIn}}, {{checkOut}}, {{nights}}, {{amount}}, {{email}}, {{phone}} — usa el menú "Insert variable…" para agregarlas sin escribirlas a mano.
       </div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
         <div style="display:flex;align-items:center;margin-bottom:16px">
@@ -890,7 +956,7 @@ function beRenderEmails() {
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-left:auto"><input type="checkbox" id="be-eg-on" ${gOn ? 'checked' : ''}><span style="font-size:12px;font-weight:600;color:var(--text)">Enabled</span></label>
         </div>
         <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-eg-subject" type="text" value="${escHtml(s.email_guest_subject ?? BE_DEFAULT_GUEST_SUBJECT)}"></div>
-        <div class="fg"><label>Body (HTML)</label><textarea id="be-eg-body" rows="9" style="font-family:monospace;font-size:12px">${escHtml(s.email_guest_body ?? BE_DEFAULT_GUEST_BODY)}</textarea></div>
+        <div class="fg">${beRichBody('eg', s.email_guest_body ?? BE_DEFAULT_GUEST_BODY)}</div>
       </div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
         <div style="display:flex;align-items:center;margin-bottom:16px">
@@ -899,7 +965,7 @@ function beRenderEmails() {
         </div>
         <div class="fg" style="margin-bottom:12px"><label>Notify email</label><input id="be-es-to" type="email" value="${escHtml(s.email_staff_to ?? 'amansala.reservations@gmail.com')}"></div>
         <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-es-subject" type="text" value="${escHtml(s.email_staff_subject ?? BE_DEFAULT_STAFF_SUBJECT)}"></div>
-        <div class="fg"><label>Body (HTML)</label><textarea id="be-es-body" rows="9" style="font-family:monospace;font-size:12px">${escHtml(s.email_staff_body ?? BE_DEFAULT_STAFF_BODY)}</textarea></div>
+        <div class="fg">${beRichBody('es', s.email_staff_body ?? BE_DEFAULT_STAFF_BODY)}</div>
       </div>
       ${beEmailBlock('rem', 'Pre-Arrival Reminder', BE_DEFAULT_REMINDER_SUBJECT, BE_DEFAULT_REMINDER_BODY, rOn, s.email_reminder_subject, s.email_reminder_body, 'Sent automatically 3 days before check-in (once per booking).')}
       ${beEmailBlock('inh', 'In-Hotel Check-in', BE_DEFAULT_INHOTEL_SUBJECT, BE_DEFAULT_INHOTEL_BODY, iOn, s.email_inhotel_subject, s.email_inhotel_body, 'Sent automatically the day after check-in (once per booking).')}
@@ -908,9 +974,25 @@ function beRenderEmails() {
         <button onclick="beSaveEmailSettings()" style="${beBtnS('#111827','#fff')}">Save email settings</button>
       </div>
     </div>`;
+  // The visual div starts empty in the template above (embedding raw,
+  // unescaped HTML straight into the template string risks breaking it if
+  // the saved body ever contains a backtick or ${...}) — populate each one
+  // from its hidden textarea's value now that both exist in the DOM.
+  ['eg', 'es', 'rem', 'inh', 'cko'].forEach(id => {
+    const ta = document.getElementById(`be-${id}-body`);
+    const visual = document.getElementById(`be-${id}-visual`);
+    if (ta && visual) visual.innerHTML = ta.value;
+  });
 }
 
 async function beSaveEmailSettings() {
+  // Whichever body editors are currently in visual mode need their hidden
+  // textarea synced one last time — oninput already keeps it current on
+  // every keystroke, but this covers a click straight from toolbar to Save.
+  ['eg', 'es', 'rem', 'inh', 'cko'].forEach(id => {
+    const ta = document.getElementById(`be-${id}-body`);
+    if (ta && ta.style.display === 'none') beRteSync(id);
+  });
   const fields = {
     email_guest_enabled: document.getElementById('be-eg-on')?.checked ?? true,
     email_guest_subject: document.getElementById('be-eg-subject')?.value.trim() ?? '',
