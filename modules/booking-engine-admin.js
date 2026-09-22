@@ -852,11 +852,33 @@ const BE_DEFAULT_GUEST_SUBJECT = 'Your Amansala reservation – {{roomType}}';
 const BE_DEFAULT_GUEST_BODY = `<p>Hi {{firstName}},</p>\n<p>Your reservation at <strong>Amansala Tulum</strong> is confirmed!</p>\n<p><strong>Room type:</strong> {{roomType}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Amount paid:</strong> {{amount}}</p>\n<p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
 const BE_DEFAULT_STAFF_SUBJECT = 'New booking: {{firstName}} {{lastName}} – {{roomType}}';
 const BE_DEFAULT_STAFF_BODY = `<p><strong>New booking received!</strong></p>\n<p><strong>Guest:</strong> {{firstName}} {{lastName}}<br><strong>Email:</strong> {{email}}<br><strong>Phone:</strong> {{phone}}<br><strong>Room type:</strong> {{roomType}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Amount paid:</strong> {{amount}}</p>`;
+// Sent daily by netlify/functions/send-booking-lifecycle-emails.js (pg_cron) —
+// reminder 3 days before check-in, "in hotel" the day after arrival, and a
+// check-out-day message, each only once per booking (Jorge's ask 2026-09-22).
+const BE_DEFAULT_REMINDER_SUBJECT = 'Your Amansala stay is coming up – {{checkIn}}';
+const BE_DEFAULT_REMINDER_BODY = `<p>Hi {{firstName}},</p>\n<p>Just a friendly reminder — your stay at <strong>Amansala Tulum</strong> is in 3 days!</p>\n<p><strong>Room type:</strong> {{roomType}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}</p>\n<p>We can't wait to welcome you. Safe travels!</p>`;
+const BE_DEFAULT_INHOTEL_SUBJECT = 'How is your stay so far?';
+const BE_DEFAULT_INHOTEL_BODY = `<p>Hi {{firstName}},</p>\n<p>We hope you're settling in and enjoying your stay at <strong>Amansala Tulum</strong>! Is there anything you need, or anything we can do to make your stay even better?</p>\n<p>Just reply to this email and we'll take care of it.</p>`;
+const BE_DEFAULT_CHECKOUT_SUBJECT = 'Safe travels – thank you for staying with us';
+const BE_DEFAULT_CHECKOUT_BODY = `<p>Hi {{firstName}},</p>\n<p>Today is your check-out day — thank you so much for staying with us at <strong>Amansala Tulum</strong>! We hope you had a wonderful time.</p>\n<p>Safe travels, and we hope to welcome you back soon.</p>`;
 
 function beRenderEmails() {
   const s = beSettings;
   const gOn = s.email_guest_enabled !== false;
   const sOn = s.email_staff_enabled !== false;
+  const rOn = s.email_reminder_enabled !== false;
+  const iOn = s.email_inhotel_enabled !== false;
+  const cOn = s.email_checkout_enabled !== false;
+  const beEmailBlock = (idPrefix, title, subDefault, bodyDefault, onVal, subVal, bodyVal, extraNote) => `
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;margin-bottom:16px">
+          <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0">${title}</h3>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-left:auto"><input type="checkbox" id="be-${idPrefix}-on" ${onVal ? 'checked' : ''}><span style="font-size:12px;font-weight:600;color:var(--text)">Enabled</span></label>
+        </div>
+        ${extraNote ? `<p style="font-size:11.5px;color:var(--muted);margin:0 0 12px">${extraNote}</p>` : ''}
+        <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-${idPrefix}-subject" type="text" value="${escHtml(subVal ?? subDefault)}"></div>
+        <div class="fg"><label>Body (HTML)</label><textarea id="be-${idPrefix}-body" rows="7" style="font-family:monospace;font-size:12px">${escHtml(bodyVal ?? bodyDefault)}</textarea></div>
+      </div>`;
   document.getElementById('beBody').innerHTML = `
     <div style="max-width:760px;margin:0 auto">
       <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 16px;margin-bottom:20px;font-size:12px;color:#0369a1">
@@ -879,6 +901,9 @@ function beRenderEmails() {
         <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-es-subject" type="text" value="${escHtml(s.email_staff_subject ?? BE_DEFAULT_STAFF_SUBJECT)}"></div>
         <div class="fg"><label>Body (HTML)</label><textarea id="be-es-body" rows="9" style="font-family:monospace;font-size:12px">${escHtml(s.email_staff_body ?? BE_DEFAULT_STAFF_BODY)}</textarea></div>
       </div>
+      ${beEmailBlock('rem', 'Pre-Arrival Reminder', BE_DEFAULT_REMINDER_SUBJECT, BE_DEFAULT_REMINDER_BODY, rOn, s.email_reminder_subject, s.email_reminder_body, 'Sent automatically 3 days before check-in (once per booking).')}
+      ${beEmailBlock('inh', 'In-Hotel Check-in', BE_DEFAULT_INHOTEL_SUBJECT, BE_DEFAULT_INHOTEL_BODY, iOn, s.email_inhotel_subject, s.email_inhotel_body, 'Sent automatically the day after check-in (once per booking).')}
+      ${beEmailBlock('cko', 'Check-out Day', BE_DEFAULT_CHECKOUT_SUBJECT, BE_DEFAULT_CHECKOUT_BODY, cOn, s.email_checkout_subject, s.email_checkout_body, 'Sent automatically on the check-out date (once per booking).')}
       <div style="display:flex;justify-content:flex-end">
         <button onclick="beSaveEmailSettings()" style="${beBtnS('#111827','#fff')}">Save email settings</button>
       </div>
@@ -894,6 +919,15 @@ async function beSaveEmailSettings() {
     email_staff_to:      document.getElementById('be-es-to')?.value.trim() ?? '',
     email_staff_subject: document.getElementById('be-es-subject')?.value.trim() ?? '',
     email_staff_body:    document.getElementById('be-es-body')?.value ?? '',
+    email_reminder_enabled: document.getElementById('be-rem-on')?.checked ?? true,
+    email_reminder_subject: document.getElementById('be-rem-subject')?.value.trim() ?? '',
+    email_reminder_body:    document.getElementById('be-rem-body')?.value ?? '',
+    email_inhotel_enabled:  document.getElementById('be-inh-on')?.checked ?? true,
+    email_inhotel_subject:  document.getElementById('be-inh-subject')?.value.trim() ?? '',
+    email_inhotel_body:     document.getElementById('be-inh-body')?.value ?? '',
+    email_checkout_enabled: document.getElementById('be-cko-on')?.checked ?? true,
+    email_checkout_subject: document.getElementById('be-cko-subject')?.value.trim() ?? '',
+    email_checkout_body:    document.getElementById('be-cko-body')?.value ?? '',
   };
   const ok = await beSaveSettingsRow(fields);
   if (!ok) return;
