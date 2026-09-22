@@ -1181,9 +1181,10 @@ function buildDashboard(){
     false):'';
 
   // ── CANCELLATION BANK ──
-  const cancelledWithFee=AppData.bookings.filter(b=>b.status==='cancelled'&&b.cancellationFee>0)
+  const _isCancelledRetreat=b=>b.status==='cancelled'&&!NON_RETREAT_NAMES.has(b.retreatName)&&b.bookingType!=='room_only';
+  const cancelledWithFee=AppData.bookings.filter(b=>_isCancelledRetreat(b)&&b.cancellationFee>0)
     .sort((a,b)=>b.cancelledAt?.localeCompare(a.cancelledAt||'')||0);
-  const cancelledNoFee=AppData.bookings.filter(b=>b.status==='cancelled'&&!b.cancellationFee)
+  const cancelledNoFee=AppData.bookings.filter(b=>_isCancelledRetreat(b)&&!b.cancellationFee)
     .sort((a,b)=>b.cancelledAt?.localeCompare(a.cancelledAt||'')||0);
   const cancellationBankTotal=cancelledWithFee.reduce((s,b)=>s+(b.cancellationFee||0),0);
   const allCancelled=[...cancelledWithFee,...cancelledNoFee];
