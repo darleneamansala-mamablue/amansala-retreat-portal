@@ -88,9 +88,12 @@ exports.handler = async (event) => {
         const availableCount = rooms.filter(r => !blockedRooms.has(r)).length;
         if (availableCount <= 0) return null;
         if (rt.max_occ && numAdults > rt.max_occ) return null;
-        const baseRate = numAdults >= 2
-          ? (rt.be_price_double ?? rt.be_price_single ?? 0)
-          : (rt.be_price_single ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0);
+        // be_price_single is a FLAT room rate (not per-person) — same regardless of
+        // adults count. be_price_double is NOT a price at all despite the name (it's
+        // an occupancy-count field elsewhere in the schema) — matches stripe.js/
+        // book.html exactly (confirmed real incident 2026-09-22: using be_price_double
+        // here made create_reservation compute $0 for any room type where it was null).
+        const baseRate = rt.be_price_single ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
         const rate = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
         const subtotal = rate * nights;
         const tax = Math.round(subtotal * taxPct) / 100;
