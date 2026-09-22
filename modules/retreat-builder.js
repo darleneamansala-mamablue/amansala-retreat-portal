@@ -662,19 +662,15 @@ function showTip(e,bk,regCount,hideFinancials){
   // main Venues Gantt bars which still should).
   let finHtml='';
   if(!hideFinancials){
-    const nights=getNights(bk);
-    const bkRegs=AppData.regs.filter(r=>r.bookingId===bk.id);
-    let totalCharged=0,totalPaid=0;
-    bkRegs.forEach(reg=>{
-      const rt=AppData.roomTypes.find(t=>t.id===reg.roomTypeId);
-      const gc=(reg.guests||[]).filter(g=>g.name).length||1;
-      const price=reg.customPrice!=null?reg.customPrice:calcPrice(rt,gc,nights,bk.startDate,bk);
-      totalCharged+=price;totalPaid+=reg.amountPaid||0;
-    });
-    // Also include booking-level payments (recorded via Record Payment)
-    const bkPayments=(bk.payments||[]).reduce((s,p)=>s+p.amount,0);
-    totalPaid+=bkPayments;
-    const balance=totalCharged-totalPaid;
+    // Reuse the same calcBkBalance() the Bill/Balance Due tab uses (roomRevenue via
+    // _calcRoomRevenue — per-guest nights, custom rate/nights/tip overrides, package
+    // tax, credit and cancellation-fee adjustments, eqDiscountAmt — plus incidental
+    // guest charges), instead of a separate ad-hoc calc here. The old version used
+    // calcPrice's simpler whole-retreat-nights formula (ignoring per-guest check-in/
+    // checkout and rate overrides) and summed a stale reg.amountPaid field on top of
+    // bk.payments, double-counting or drifting out of sync with the real balance
+    // (Jorge's report 2026-09-22: Venues tooltip Total/Paid/Owing didn't match reality).
+    const {charged:totalCharged,totalPaid,balance}=calcBkBalance(bk);
     finHtml=(totalCharged>0||totalPaid>0)?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;font-size:10.5px">
       ${totalCharged>0?`<span style="color:rgba(255,255,255,.6)">Total</span><span style="color:#fff;font-weight:700">${fmt$(totalCharged)}</span>`:''}
       <span style="color:rgba(255,255,255,.6)">Paid</span><span style="color:#6ee7b7;font-weight:700">${fmt$(totalPaid)}</span>
