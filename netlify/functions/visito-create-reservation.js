@@ -96,9 +96,13 @@ exports.handler = async (event) => {
 
     const numAdults = Math.max(1, parseInt(adults) || 1);
     const nights = Math.max(1, Math.round((new Date(checkOut) - new Date(checkIn)) / 86400000));
-    const baseRate = numAdults >= 2
-      ? (rt.be_price_double ?? rt.be_price_single ?? 0)
-      : (rt.be_price_single ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0);
+    // be_price_single is a FLAT room rate (not per-person) — same regardless of
+    // adults count. be_price_double is NOT a price at all despite the name (it's
+    // an occupancy-count field elsewhere in the schema) — matches stripe.js/
+    // book.html exactly (confirmed real incident 2026-09-22: using be_price_double
+    // here made this compute $0 for any room type where it was null, tripping the
+    // "amount too small" guard and failing the reservation).
+    const baseRate = rt.be_price_single ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
     const ciDate = new Date(checkIn + 'T12:00:00');
     const month = ciDate.getMonth() + 1;
     const dow = ciDate.getDay();
