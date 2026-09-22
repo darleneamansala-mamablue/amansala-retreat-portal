@@ -1101,7 +1101,7 @@ ${bk.guestNotes?`<p style="color:#4a4a4a;line-height:1.7"><b>Note:</b> ${escHtml
   ${balance>0?`<a href="${link}" style="background:#d97706;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;display:inline-block;margin:0 6px 10px">Complete Payment</a>`:''}
 </div>
 <p style="color:#4a4a4a">Warmly,<br><strong>The Amansala Team</strong></p>`;
-    await _sendEmail(bk.leaderEmail,`Your Amansala Reservation — ${bk.confirmationNumber}`,_emailHtmlWrap(body),'bookings@amansala.com');
+    await _sendEmail(bk.leaderEmail,`Your Amansala Reservation — ${bk.confirmationNumber}`,_emailHtmlWrap(body),'bookings@amansala.com',_ccList(bk));
     if(!bk.guestResSentLog)bk.guestResSentLog=[];
     bk.guestResSentLog.push({at:new Date().toISOString(),by:getCurrentSession()?.name||'Staff',method:'email'});
     saveAll();

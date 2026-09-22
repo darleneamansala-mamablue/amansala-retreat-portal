@@ -2324,6 +2324,7 @@
       <div class="frow"><div class="fg"><label>Leader / Group</label><input type="text" id="vm-leader" placeholder="e.g. Megan Aaron" oninput="tpCheckMatch()"></div><div class="fg"><label>Retreat Name</label><input type="text" id="vm-retreat" placeholder="e.g. Flow Studio" oninput="tpCheckMatch()"></div></div>
       <div id="tpMatchBanner" style="display:none"></div>
       <div class="frow"><div class="fg"><label>Leader Email</label><input type="email" id="vm-email" placeholder="leader@example.com"></div><div class="fg"><label>Leader Phone</label><input type="text" id="vm-phone" placeholder="+1 555 000 0000"></div></div>
+      <div class="frow"><div class="fg" style="grid-column:1/-1"><label>CC Email <span style="font-weight:400;color:var(--muted)">(optional, comma-separated)</span></label><input type="text" id="vm-cc-email" placeholder="assistant@example.com, agent@example.com"></div></div>
       <div class="frow"><div class="fg"><label>Arrival</label><input type="date" id="vm-start" onchange="autoSetEnd('vm-start','vm-end')"></div><div class="fg"><label>Departure</label><input type="date" id="vm-end"></div></div>
       <div id="venRoomCalBanner" style="display:none;cursor:pointer;align-items:center;justify-content:space-between;gap:10px;padding:11px 16px;margin:2px 0 10px;border-radius:10px;background:#f0f7f7;border:1.5px solid #bfe0e0" onclick="venOpenRoomCalendar()" onmouseover="this.style.background='#e0efef'" onmouseout="this.style.background='#f0f7f7'">
         <span style="font-size:13px;font-weight:600;color:#1a4a4a">📅 View Room Calendar — see what's booked around these dates</span>
@@ -4364,11 +4365,11 @@ window.addEventListener('beforeunload',()=>{
 });
 
 // ===== EMAIL NOTIFICATIONS (Resend via Netlify Function) =====
-async function _sendEmail(to, subject, html, replyTo) {
+async function _sendEmail(to, subject, html, replyTo, cc) {
   const res = await fetch('/.netlify/functions/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to, subject, html, replyTo })
+    body: JSON.stringify({ to, subject, html, replyTo, cc })
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -4377,6 +4378,11 @@ async function _sendEmail(to, subject, html, replyTo) {
   return res.json();
 }
 
+// bk.leaderCcEmail is a comma-separated string (like leaderEmail) — Jorge's ask
+// 2026-09-22: register a second/CC email for the retreat leader so every email
+// we send them (contract, deposit, reminders, etc.) also goes to it as a real
+// Cc recipient, not just crammed into "to".
+function _ccList(bk){const list=(bk?.leaderCcEmail||'').split(',').map(s=>s.trim()).filter(Boolean);return list.length?list:undefined;}
 function _emailHtmlWrap(bodyHtml) {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f0ea;font-family:'Helvetica Neue',Arial,sans-serif">
 <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
@@ -4435,7 +4441,7 @@ async function sendTeacherEmail(bk, type) {
   };
   const m = msgs[type]; if (!m) return;
   try {
-    await _sendEmail(bk.leaderEmail, m.subject, _emailHtmlWrap(m.body), 'retreats@amansala.com');
+    await _sendEmail(bk.leaderEmail, m.subject, _emailHtmlWrap(m.body), 'retreats@amansala.com', _ccList(bk));
     showToast(`✉ Email sent to ${name}`);
   } catch(err) {
     console.warn('[Email error]', err);
@@ -4466,7 +4472,7 @@ async function sendPaymentReminder(bk) {
 <p style="color:#6b7280;font-size:12px">Wire transfer details are available in your portal under My Finances. If you have any questions, please reply to this email.</p>
 <p style="color:#4a4a4a">Warm regards,<br><strong>Amansala Team</strong></p>`;
   try {
-    await _sendEmail(bk.leaderEmail, subject, _emailHtmlWrap(body), 'retreats@amansala.com');
+    await _sendEmail(bk.leaderEmail, subject, _emailHtmlWrap(body), 'retreats@amansala.com', _ccList(bk));
     showToast(`✉ Payment reminder sent to ${name}`);
     logActivity('Payment reminder sent', `${fmt$(balance)} due · sent to ${bk.leaderEmail}`, bk.id);
   } catch(err) {
@@ -4512,7 +4518,7 @@ function sendRoomsSoldOutEmail(bkId){
     <p style="color:#4a4a4a;line-height:1.7">Would you like us to add more rooms in any of these categories? We would love to help accommodate more guests for your retreat!</p>
     <p style="color:#4a4a4a;line-height:1.7">Simply reply to this email or reach out to us at <a href="mailto:retreats@amansala.com" style="color:#15803d">retreats@amansala.com</a> and we will take care of it right away.</p>
     <p style="color:#4a4a4a">Warm regards,<br><strong>Amansala Team</strong></p>`);
-  _sendEmail(bk.leaderEmail,`Do you need more rooms? — ${retreat}`,html,'retreats@amansala.com')
+  _sendEmail(bk.leaderEmail,`Do you need more rooms? — ${retreat}`,html,'retreats@amansala.com',_ccList(bk))
     .then(()=>{
       showToast(`✉ Email sent to ${name}`);
       logActivity('Rooms sold out email sent',`${soldOut.map(g=>g.rt.name).join(', ')} — ${name}`,bk.id);
@@ -6180,7 +6186,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260921b"></script>
+<script src="modules/venues.js?v=20260922a"></script>
 <script src="modules/room-optimizer.js?v=20260921b"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js?v=20260917a"></script>
@@ -6193,7 +6199,7 @@ function switchTab(id,btn){
 <script src="modules/admin-items.js"></script>
 <script src="modules/commissions.js"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20260921d"></script>
+<script src="modules/teacher-portal.js?v=20260922a"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
 // ===== TEACHER REGISTRATION — moved to modules/teacher-portal.js =====
@@ -6221,13 +6227,13 @@ function switchTab(id,btn){
 // ===== RETREAT BUILDER — moved to modules/retreat-builder.js =====
 // ===== DASHBOARD — moved to modules/retreat-builder.js (loaded above) =====
 </script>
-<script src="modules/contracts.js?v=20260917a"></script>
+<script src="modules/contracts.js?v=20260922a"></script>
 <script>
 // ===== CONTRACT TEMPLATE — moved to modules/contracts.js =====
 // ===== CONTRACT GENERATOR — moved to modules/contracts.js (loaded above) =====
 // ===== SIGNATURE PAD — moved to modules/contracts.js (loaded above) =====
 </script>
-<script src="modules/payments.js?v=20260921a"></script>
+<script src="modules/payments.js?v=20260922a"></script>
 <script src="modules/room-activities.js"></script>
 <script src="modules/booking-detail.js"></script>
 <script>
