@@ -32,24 +32,35 @@ exports.handler = async (event) => {
     if (!res.ok) throw new Error('spa_data fetch failed');
     const [row] = await res.json();
     const spaData = row?.value || {};
+    // Kept deliberately minimal — a first version returning every field
+    // (including a null "description" on 20+ services and a long sentence
+    // in "priceNote") made Lana's reply generation fail right after this
+    // tool "succeeded" (0 tool errors logged, but no answer ever came back)
+    // (confirmed real incident 2026-09-23). Only what's needed to offer a
+    // service and call spa_check_availability next.
     const services = (spaData.services || [])
       .filter(s => s.active && s.duration != null && (s.groupPricing ? true : s.price != null))
       .filter(s => !sessionType || (s.sessionType || 'individual') === sessionType)
-      .map(s => ({
-        serviceId: s.id,
-        name: s.name,
-        category: CAT_LABEL[s.category] || s.category,
-        sessionType: s.sessionType || 'individual',
-        durationMinutes: s.duration,
-        description: s.description || null,
-        genderPreferenceAvailable: !!s.genderPrefEnabled,
-        ...(s.groupPricing
-          ? { groupPricing: true, minGuests: s.groupPricing.minGuests || 1, minGroupForDiscount: s.groupPricing.minGroup, perPersonUSD: s.groupPricing.perPersonUSD, priceNote: `From $${spaGroupPrice(s, s.groupPricing.minGuests || 1)} USD depending on guest count — call spa_check_availability with guestCount to get an exact price.` }
-          : { priceUSD: s.price }),
-      }));
+      .map(s => {
+        const row = {
+          serviceId: s.id,
+          name: s.name,
+          category: CAT_LABEL[s.category] || s.category,
+          durationMinutes: s.duration,
+        };
+        if (s.description) row.description = s.description;
+        if (s.genderPrefEnabled) row.genderPreferenceAvailable = true;
+        if (s.groupPricing) {
+          row.priceUSD = spaGroupPrice(s, s.groupPricing.minGuests || 1);
+          row.priceVariesByGuestCount = true;
+        } else {
+          row.priceUSD = s.price;
+        }
+        return row;
+      });
 
     if (!services.length) return ok({ success: false, message: 'No hay servicios de spa activos ahora mismo.' });
-    return ok({ success: true, services });
+    return ok({ success: true, count: services.length, services });
   } catch (err) {
     console.error('[visito-spa-list-services]', err.message);
     return jsonErr(500, err.message);
