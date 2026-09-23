@@ -41,7 +41,7 @@ exports.handler = async (event) => {
 
   // Fetch room type + booking engine settings in parallel
   const [rtRes, settRes] = await Promise.all([
-    fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,be_price_single,be_price_double,price_single_high,price_single_low,price_double_high`, { headers: supaHdrs }),
+    fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,be_price_single,be_price_single_extra_night,be_price_double,price_single_high,price_single_low,price_double_high`, { headers: supaHdrs }),
     fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: supaHdrs }),
   ]);
 
@@ -64,18 +64,22 @@ exports.handler = async (event) => {
 
   // A Booking Engine override (admin Rates tab) takes priority; otherwise our real
   // seasonal single-occupancy rate — same source get-rates.js uses, so what a guest
-  // sees on the room card matches what they're actually charged.
-  const baseRate = rt.be_price_single ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
+  // sees on the room card matches what they're actually charged. Extra Night has
+  // its OWN separately-adjustable rate (be_price_single_extra_night), falling back
+  // to the Escape rate when not explicitly set — "derived from Escape" until
+  // someone overrides it (Jorge's ask 2026-09-23). Extra Night pricing used to be
+  // static (no seasonal/weekend swings, per Darlene 2026-09-03) — Jorge later asked
+  // for the same seasonal/weekend adjustment as Escape, just on its own base rate.
+  const isExtraNight = source === 'Extra Night';
+  const baseRate = (isExtraNight ? rt.be_price_single_extra_night ?? rt.be_price_single : rt.be_price_single)
+    ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
 
   const ciDate    = new Date(checkIn + 'T12:00:00');
   const month     = ciDate.getMonth() + 1;
   const dow       = ciDate.getDay();
   const isWeekend = dow === 0 || dow === 5 || dow === 6;
-  // Extra Nights pricing is intentionally static — no seasonal/weekend swings,
-  // per Darlene (2026-09-03). Only Book a Stay (source === 'Escape') fluctuates.
-  const isStatic    = source === 'Extra Night';
-  const seasonalPct = isStatic ? 0 : Number(seasonalAdj[String(month)] ?? 0);
-  const weekendMult = isStatic ? 1 : (isWeekend && weekendPremium ? (1 + weekendPremium / 100) : 1);
+  const seasonalPct = Number(seasonalAdj[String(month)] ?? 0);
+  const weekendMult = isWeekend && weekendPremium ? (1 + weekendPremium / 100) : 1;
   const rate        = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
   const subtotal    = rate * nights;
 
