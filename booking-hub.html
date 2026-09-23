@@ -5379,15 +5379,21 @@ function loadAll(){
     localStorage.setItem('amansala_room_migration_v9','1');
   }
   // Room migration v10 — reset all shared/bed room type room lists to DEF (ensures 6c, 32c, etc. present)
+  // Scoped per-row `rooms`-only PATCH, not the full-array syncRoomTypesToSupabase()
+  // — a stale/older tab running this same one-time migration must never be able to
+  // re-upload every OTHER field (be_enabled, be_extra_nights, prices...) on every
+  // row using whatever it happened to have in memory (confirmed real incident
+  // 2026-09-23: all Book/Extra toggles reset right after Jorge turned several on).
   if(!localStorage.getItem('amansala_room_migration_v10')){
     ['rt6','rt7','rt8','rt9','bd1','bd2','bd3','bd4'].forEach(id=>{
       const def=DEF_ROOM_TYPES.find(d=>d.id===id);
       const stored=AppData.roomTypes.find(rt=>rt.id===id);
-      if(def&&stored){stored.rooms=[...def.rooms];}
+      if(def&&stored){
+        stored.rooms=[...def.rooms];
+        db.from('room_types').update({rooms:stored.rooms}).eq('id',id).then(({error})=>{if(!error)stored.updatedAt=new Date().toISOString();});
+      }
     });
     localStorage.setItem('amansala_room_migration_v10','1');
-    // Push corrected room types to Supabase so all devices get the fix
-    setTimeout(()=>syncRoomTypesToSupabase(),2000);
   }
   // Room migration v11 — Casa King Downstairs can now hold 3 guests (was 2), and each
   // Casa Grande 2 Queen Downstairs bed can now hold 2 (was 1 — private only). The extra
@@ -5398,10 +5404,12 @@ function loadAll(){
     ['cg1','cg3'].forEach(id=>{
       const def=DEF_ROOM_TYPES.find(d=>d.id===id);
       const stored=AppData.roomTypes.find(rt=>rt.id===id);
-      if(def&&stored)stored.maxOcc=def.maxOcc;
+      if(def&&stored){
+        stored.maxOcc=def.maxOcc;
+        db.from('room_types').update({max_occ:stored.maxOcc}).eq('id',id).then(({error})=>{if(!error)stored.updatedAt=new Date().toISOString();});
+      }
     });
     localStorage.setItem('amansala_room_migration_v11','1');
-    setTimeout(()=>syncRoomTypesToSupabase(),2000);
   }
   // Cleanup: remove any auto-injected $2,500 deposit payments from previous migration
   let cleaned=false;
@@ -6189,7 +6197,7 @@ function switchTab(id,btn){
 <script src="modules/venues.js?v=20260922b"></script>
 <script src="modules/room-optimizer.js?v=20260921b"></script>
 <script src="modules/sales-pipeline.js"></script>
-<script src="modules/booking-engine-admin.js?v=20260922c"></script>
+<script src="modules/booking-engine-admin.js?v=20260923a"></script>
 <script>
 // ===== VENUE GANTT — moved to modules/venues.js =====
 // ===== DATE FINDER — moved to modules/venues.js (loaded above) =====
@@ -6208,7 +6216,7 @@ function switchTab(id,btn){
 // ===== AUTO FLAGS — moved to modules/teacher-portal.js (loaded above) =====
 // ===== FLAGS MODAL — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/pricing.js?v=20260921c"></script>
+<script src="modules/pricing.js?v=20260923a"></script>
 <script src="modules/teacher-pricelist.js"></script>
 <script>
 // ===== ESTIMATED QUOTE — moved to modules/pricing.js =====
@@ -6348,20 +6356,34 @@ try{if(typeof syncAddOnsFromSupabase==='function')syncAddOnsFromSupabase();}catc
 loadFromSupabase().then(async loaded=>{
   if(loaded){
     try{
-      // Room type merge: add missing DEF rooms, and move any room that's now in a different DEF type
-      let rtNeedsSync=false;
+      // Room type merge: add missing DEF rooms, and move any room that's now in a different DEF type.
+      // Runs on EVERY page load for EVERY user — used to call the full-array
+      // syncRoomTypesToSupabase() whenever any type's `rooms` list changed, which
+      // re-uploads every OTHER field on every row too (be_enabled, be_extra_nights,
+      // prices...) using whatever this tab happened to have in memory at that
+      // moment. A second tab/device loading the page around the same time as an
+      // admin toggling Book/Extra elsewhere could silently revert those toggles
+      // (confirmed real incident 2026-09-23: all Book/Extra switches reset right
+      // after Jorge had just turned several on). Scope the write to ONLY the
+      // `rooms` field of the specific row(s) that actually changed instead.
+      const rtDirtyIds=new Set();
       const defRoomToRtId=new Map();
       DEF_ROOM_TYPES.forEach(defRt=>defRt.rooms.forEach(r=>defRoomToRtId.set(r,defRt.id)));
       DEF_ROOM_TYPES.forEach(defRt=>{
         const stored=AppData.roomTypes.find(rt=>rt.id===defRt.id);
-        if(stored){defRt.rooms.forEach(r=>{if(!stored.rooms.includes(r)){stored.rooms.push(r);rtNeedsSync=true;}});}
+        if(stored){defRt.rooms.forEach(r=>{if(!stored.rooms.includes(r)){stored.rooms.push(r);rtDirtyIds.add(stored.id);}});}
       });
       AppData.roomTypes.forEach(storedRt=>{
         const before=storedRt.rooms.length;
         storedRt.rooms=storedRt.rooms.filter(r=>{const c=defRoomToRtId.get(r);return!c||c===storedRt.id;});
-        if(storedRt.rooms.length!==before)rtNeedsSync=true;
+        if(storedRt.rooms.length!==before)rtDirtyIds.add(storedRt.id);
       });
-      if(rtNeedsSync)await syncRoomTypesToSupabase();
+      if(rtDirtyIds.size){
+        await Promise.all([...rtDirtyIds].map(id=>{
+          const rt=AppData.roomTypes.find(r=>r.id===id);
+          return rt?db.from('room_types').update({rooms:rt.rooms}).eq('id',id).then(({error})=>{if(!error)rt.updatedAt=new Date().toISOString();}):null;
+        }));
+      }
       recoverBuildBookings();
       if(typeof buildDashboard==='function')buildDashboard();
       if(typeof venBuild==='function')venBuild();
