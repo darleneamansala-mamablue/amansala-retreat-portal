@@ -32,7 +32,11 @@ const CONTRACT_TMPL_DEFAULTS={
   ],
   paymentTerms:'All prices in this contract are in U.S. Dollars (USD).\n\nA deposit of {depositAmount} USD is due upon signing this contract. An invoice will be issued after the contract is signed. If the deposit is not received within seven (7) days of signing, Casa de Agua reserves the right to release the dates.\n\nAll payments must be made via bank wire or bank transfer. Credit cards are not accepted.\n\nFull payment for the group is due 6 weeks prior to the retreat start date. Any last-minute registrations must be paid within 3 weeks of the start date.',
   cancellationPolicy:'Cancellation by the Retreat Leader\n\nMore than 16 weeks before the start date: deposit refunded less {cancellationFee} USD.\n\nWithin 16 weeks of the start date: deposit is non-refundable and non-transferable to other dates or personal use.\n\nCancellation by Participants\n\nMore than 3 weeks prior to the start date: two (2) nights will be charged according to the occupancy type booked.\n\n3 weeks or less prior to the start date: non-refundable and non-transferable.\n\nThe Retreat Leader must clearly communicate this cancellation policy to their registrants. Casa de Agua\'s cancellation policy is independent of the Retreat Leader\'s own participant cancellation policy.',
-  teacherPolicy:'With 10 paying guests (not including the Retreat Leader): one teacher receives room and board in a Garden King room. The comped room is for one person only — any additional person is charged at the group rate.\n\nIf the group does not reach 10 paying guests, the Retreat Leader\'s accommodations are charged at the group rate.\n\nWith 20 paying guests: two teachers each receive a Garden King room. Upgrades are available by paying the difference.\n\nIf the minimum number of paying guests is not reached for a free room, Casa de Agua will offer a $20 USD per person, per day credit for each paying signup, applied toward the room. Example: 10 paying guests = $200 USD room credit.',
+  // Split by season (Jorge's report 2026-09-23: the free-teacher-room threshold
+  // is different in high season — 15/25 paying guests — vs. the 10/20 that was
+  // hardcoded as one flat policy regardless of the retreat's dates).
+  teacherPolicyHigh:'With 15 paying guests (not including the Retreat Leader): one teacher receives room and board in a Garden King room. The comped room is for one person only — any additional person is charged at the group rate.\n\nIf the group does not reach 15 paying guests, the Retreat Leader\'s accommodations are charged at the group rate.\n\nWith 25 paying guests: two teachers each receive a Garden King room. Upgrades are available by paying the difference.\n\nIf the minimum number of paying guests is not reached for a free room, Casa de Agua will offer a $20 USD per person, per day credit for each paying signup, applied toward the room. Example: 15 paying guests = $300 USD room credit.',
+  teacherPolicyLow:'With 10 paying guests (not including the Retreat Leader): one teacher receives room and board in a Garden King room. The comped room is for one person only — any additional person is charged at the group rate.\n\nIf the group does not reach 10 paying guests, the Retreat Leader\'s accommodations are charged at the group rate.\n\nWith 20 paying guests: two teachers each receive a Garden King room. Upgrades are available by paying the difference.\n\nIf the minimum number of paying guests is not reached for a free room, Casa de Agua will offer a $20 USD per person, per day credit for each paying signup, applied toward the room. Example: 10 paying guests = $200 USD room credit.',
   yogaPolicy:'Amansala has four yoga shalas: one for up to 15 people, two for up to 25 people, and two for up to 45 people.\n\nSpace requests are honored on a best-effort basis; shalas are assigned based on group size and availability and cannot be guaranteed. All scheduling requests must be submitted 6 weeks prior to arrival.',
   propertyPolicy:'Property and Room Assignment: Amansala consists of two neighboring properties, Amansala Grande and Amansala Chica, which operate together as one resort. Guest rooms may be assigned at either location based on availability and operational needs. Requests for a specific property or room location may be noted but cannot be guaranteed unless confirmed in writing by Amansala. Final room assignments are made at Amansala\'s discretion.\n\nAir Conditioning: Room AC operates from 9:00 PM – 9:00 AM due to generator usage. 24-hour AC may be added for {acFee} per person per night (typically only necessary June–October).\n\nRoom Allotment Adjustments: Requests to increase or decrease room allotments are subject to availability at the time of request. If rooms remain unused 45 days prior to arrival, Casa de Agua reserves the right to resell them. The Retreat Leader will not be responsible for unused rooms.\n\nFlight Details: Flight details must be submitted 30 days prior to arrival using the form provided.\n\nCheck-In / Check-Out: Check-in is at 3:00 PM. Check-out is at 12:00 PM (noon). Early check-in is subject to availability and may incur an additional fee.',
   liabilityPolicy:'Limitation of Liability — Force Majeure: Performance of this Agreement is subject to acts of God, natural disasters, hurricanes, war, government regulations, transportation interruptions, civil disorder, or other events making travel impossible or inadvisable. In such cases, a credit toward a future retreat will be issued, valid for 24 months from the date of issuance. No cash refunds shall be issued under force majeure circumstances.\n\nLiability & Responsibility Disclaimer: The Retreat Organizer (signatory) acknowledges and agrees that the Retreat Organizer is the sole organizer and promoter of the retreat and is fully responsible for their guests, including their safety, legal claims, and travel arrangements. Casa de Agua acts solely as the reservation and contracting party for this booking and is not the operator or provider of on-site accommodations, services, meals, classes, or activities. All on-site services and retreat operations are delivered exclusively by Agua y Paz, an independent Mexican operational company. Casa de Agua bears no responsibility for any acts, omissions, injuries, losses, or claims of any nature arising from on-site operations or any matter occurring within the country of retreat. All such responsibility rests solely with Agua y Paz.\n\nIndemnification: The Organizer agrees to indemnify, defend, and hold harmless Casa de Agua, its owners, employees, and affiliates, from any and all claims, injuries, damages, losses, or liabilities related to the retreat, including but not limited to accidents, cancellations, or disputes arising between the Organizer and their participants. This indemnification obligation shall survive the termination or expiration of this Agreement.\n\nOrganizer Communications to Participants: The Organizer agrees to communicate clearly to all retreat participants that Casa de Agua is not the operator of the retreat, and that any concerns or liabilities related to the retreat experience must be addressed with the Organizer or with Agua y Paz directly.\n\nGoverning Law: This Agreement shall be governed by and construed in accordance with the laws of the United Mexican States. Any disputes arising under or in connection with this Agreement shall be subject to the jurisdiction of the competent courts of Quintana Roo, Mexico.'
@@ -40,7 +44,17 @@ const CONTRACT_TMPL_DEFAULTS={
 function loadContractTmpl(){
   try{
     const s=localStorage.getItem(CONTRACT_TMPL_KEY);
-    if(s){const p=JSON.parse(s);return Object.assign({},CONTRACT_TMPL_DEFAULTS,p,{highRates:p.highRates||CONTRACT_TMPL_DEFAULTS.highRates,lowRates:p.lowRates||CONTRACT_TMPL_DEFAULTS.lowRates});}
+    if(s){
+      const p=JSON.parse(s);
+      // Migration: a template saved before the high/low split only has the old
+      // flat `teacherPolicy` — carry that custom text over to both seasons
+      // instead of silently reverting to the new defaults.
+      if(p.teacherPolicy&&!p.teacherPolicyHigh&&!p.teacherPolicyLow){
+        p.teacherPolicyHigh=p.teacherPolicy;
+        p.teacherPolicyLow=p.teacherPolicy;
+      }
+      return Object.assign({},CONTRACT_TMPL_DEFAULTS,p,{highRates:p.highRates||CONTRACT_TMPL_DEFAULTS.highRates,lowRates:p.lowRates||CONTRACT_TMPL_DEFAULTS.lowRates});
+    }
   }catch(e){}
   return Object.assign({},CONTRACT_TMPL_DEFAULTS);
 }
@@ -73,7 +87,8 @@ function openContractTemplateEditor(){
   document.getElementById('ctLowInclusions').value=t.lowInclusions||'';
   document.getElementById('ctPaymentTerms').value=t.paymentTerms||'';
   document.getElementById('ctCancellationPolicy').value=t.cancellationPolicy||'';
-  document.getElementById('ctTeacherPolicy').value=t.teacherPolicy||'';
+  document.getElementById('ctTeacherPolicyHigh').value=t.teacherPolicyHigh||'';
+  document.getElementById('ctTeacherPolicyLow').value=t.teacherPolicyLow||'';
   document.getElementById('ctYogaPolicy').value=t.yogaPolicy||'';
   document.getElementById('ctPropertyPolicy').value=t.propertyPolicy||'';
   document.getElementById('ctLiabilityPolicy').value=t.liabilityPolicy||'';
@@ -88,7 +103,9 @@ function saveContractTemplateFromForm(){
   t.lowInclusions=document.getElementById('ctLowInclusions').value.trim();
   t.paymentTerms=document.getElementById('ctPaymentTerms').value.trim();
   t.cancellationPolicy=document.getElementById('ctCancellationPolicy').value.trim();
-  t.teacherPolicy=document.getElementById('ctTeacherPolicy').value.trim();
+  t.teacherPolicyHigh=document.getElementById('ctTeacherPolicyHigh').value.trim();
+  t.teacherPolicyLow=document.getElementById('ctTeacherPolicyLow').value.trim();
+  delete t.teacherPolicy;
   t.yogaPolicy=document.getElementById('ctYogaPolicy').value.trim();
   t.propertyPolicy=document.getElementById('ctPropertyPolicy').value.trim();
   t.liabilityPolicy=document.getElementById('ctLiabilityPolicy').value.trim();
@@ -114,6 +131,14 @@ function openContractModal(bkId){
 }
 function _openContractModalRender(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  // Default gratuity to $30/person/night for any UNSIGNED contract that never
+  // had its own tipPerNight set — getTip(bk) otherwise falls back to $0,
+  // which reads as "no gratuity" on the printed contract (confirmed real
+  // incident 2026-09-23: Jen Russell's contract showed "$0 USD per person,
+  // per day gratuity"). Scoped to contracts generated from today forward
+  // (Jorge's ask) and only while unsigned — never rewrite a contract's
+  // financial terms after the leader already signed it.
+  if(bk.tipPerNight==null&&!bk.contractSignedAt){bk.tipPerNight=30;saveAll();}
   _contractBkId=bkId;
   const isLow=isLowSeasonContract(bk.startDate);
   const today=new Date();today.setHours(0,0,0,0);
@@ -216,7 +241,7 @@ function generateContractHTML(bk,isLow,signDate){
     <p style="font-size:12px;color:#7f8c9a;margin-top:6px">Cancellation deadline: ${cancelDeadline} · Last-minute cutoff: ${lastMinReg}</p>
     ${hr}
     <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a;margin-bottom:10px">Teacher / Leader Complimentary Policy</h3>
-    ${tmpl.teacherPolicy.split('\n\n').map(p=>`<p style="font-size:12.5px;line-height:1.85;color:#374151;margin-top:8px">${p.replace(/\n/g,'<br>')}</p>`).join('')}
+    ${(isLow?tmpl.teacherPolicyLow:tmpl.teacherPolicyHigh).split('\n\n').map(p=>`<p style="font-size:12.5px;line-height:1.85;color:#374151;margin-top:8px">${p.replace(/\n/g,'<br>')}</p>`).join('')}
     ${hr}
     <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a;margin-bottom:10px">Yoga Shalas</h3>
     ${tmpl.yogaPolicy.split('\n\n').map(p=>`<p style="font-size:12.5px;line-height:1.85;color:#374151;margin-top:8px">${p.replace(/\n/g,'<br>')}</p>`).join('')}
@@ -326,14 +351,21 @@ Casa de Agua's cancellation policy is independent of the Retreat Leader's own po
 
 5. TEACHER / LEADER COMPLIMENTARY POLICY
 ${dash}
-• With 10 paying guests: one teacher receives room and board in a Garden King room.
+${isLow?`• With 10 paying guests: one teacher receives room and board in a Garden King room.
   Comped room is for one person only.
 • If the group does not reach 10 paying guests, the Retreat Leader's accommodations are
   charged at the group rate.
 • With 20 paying guests: two teachers each receive a Garden King room.
   Upgrades available by paying the difference.
 • If the minimum is not reached, Casa de Agua offers a $20 USD per person, per day credit
-  for each paying signup applied toward the room. Example: 10 guests = $200 USD credit.
+  for each paying signup applied toward the room. Example: 10 guests = $200 USD credit.`:`• With 15 paying guests: one teacher receives room and board in a Garden King room.
+  Comped room is for one person only.
+• If the group does not reach 15 paying guests, the Retreat Leader's accommodations are
+  charged at the group rate.
+• With 25 paying guests: two teachers each receive a Garden King room.
+  Upgrades available by paying the difference.
+• If the minimum is not reached, Casa de Agua offers a $20 USD per person, per day credit
+  for each paying signup applied toward the room. Example: 15 guests = $300 USD credit.`}
 
 6. YOGA SHALAS
 ${dash}
