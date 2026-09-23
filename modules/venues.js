@@ -1103,6 +1103,13 @@ function rmSaveNewBooking(){
   if(_rmEditId){
     const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
     Object.assign(bk,{leaderName:leader,leaderEmail,notes,mealPlan,retreatName:type,startDate:start,endDate:end,pax:adults,status,roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights});
+    // Keep the matching registration (the one that unlocks the rich Booking
+    // Detail/Folio view — Jorge's ask 2026-09-23) in sync with the leader
+    // name/email/room shown here. Create it if this booking predates the fix
+    // below and never got one.
+    let reg=getRegForRoom(_rmEditId,room);
+    if(!reg){reg={id:uid(),bookingId:_rmEditId,room,roomTypeId:rtId,guests:[{name:leader,email:leaderEmail||'',phone:'',notes:''}],charges:[],notes:''};AppData.regs.push(reg);}
+    else{reg.room=room;reg.roomTypeId=rtId;if(reg.guests&&reg.guests[0]){reg.guests[0].name=leader;reg.guests[0].email=leaderEmail||'';}}
     saveAll();rmClose();venBuild();rcBuild();
     logActivity('Room-only booking updated',`${leader} · ${room} · ${fmtDate(start)} – ${fmtDate(end)}`,_rmEditId);
     showToast('Reservation updated ✓');
@@ -1111,6 +1118,13 @@ function rmSaveNewBooking(){
   const bestRow=findAvailableRow(start,end,null);
   const newId=uid();
   AppData.bookings.push({id:newId,bookingType:'room_only',leaderName:leader,leaderEmail,notes,mealPlan,retreatName:type,startDate:start,endDate:end,row:bestRow,pax:adults,status,docLink:'',roomAssignments:[],roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights,charges:[],payments:[]});
+  // A registration row (even though Room Only has just the one guest — the
+  // leader) is what unlocks the rich Booking Detail/Folio view on the Rooms
+  // tab, same as any retreat guest (Jorge's ask 2026-09-23 — Room Only should
+  // look and work the same as every other reservation, not the bare-bones
+  // charges modal). getRegForRoom()/venues.js's click handler already prefer
+  // a matching reg when one exists — no routing change needed, just this.
+  AppData.regs.push({id:uid(),bookingId:newId,room,roomTypeId:rtId,guests:[{name:leader,email:leaderEmail||'',phone:'',notes:''}],charges:[],notes:''});
   saveAll();rmClose();venBuild();rcBuild();
   logActivity('Room-only booking created',`${leader} · ${room} · ${type} · ${fmtDate(start)} – ${fmtDate(end)}${rate?' · '+fmt$(rate)+'/night':''}`,newId);
   showToast(`Reservation created — ${room} · ${leader} ✓`);
@@ -2930,6 +2944,11 @@ function importExternalReservation(r){
     charges:[],payments:[],cbReservationIds,
     notes:`Imported from Cloudbeds reservation #${r.reservationID}`,
   });
+  // Same registration row rmSaveNewBooking now creates for a manually-entered
+  // Room Only booking (Jorge's ask 2026-09-23) — without it this import
+  // would still fall back to the bare-bones charges modal instead of the
+  // rich Booking Detail/Folio view every other reservation gets.
+  AppData.regs.push({id:uid(),bookingId:newId,room,roomTypeId:rt?rt.id:'',guests:[{name:r.guestName,email:r._email||'',phone:'',notes:''}],charges:[],notes:''});
   saveAll();venBuild();rcBuild();
   logActivity('Booking created',`Imported from Cloudbeds — ${r.guestName} · ${room}`,newId);
   showToast('Imported ✓ — you can now add charges to this reservation.');
