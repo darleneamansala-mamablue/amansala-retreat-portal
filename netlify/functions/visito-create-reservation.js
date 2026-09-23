@@ -180,6 +180,24 @@ exports.handler = async (event) => {
     const cs = await csRes.json();
     if (cs.error) return jsonErr(400, cs.error.message || 'Stripe error');
 
+    // Stripe Checkout URLs are ~600 characters — unusable pasted into
+    // WhatsApp — so hand Lana a short /pay/<id> link instead (resolved by
+    // pay-redirect.js) that 302s to the real cs.url (Jorge's ask 2026-09-23).
+    // Falls back to the raw Stripe URL if the shortlink insert fails for any
+    // reason — a working ugly link beats a broken pretty one.
+    let paymentUrl = cs.url;
+    try {
+      const shortId = Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
+      const slRes = await fetch(`${SUPABASE_URL}/rest/v1/payment_shortlinks`, {
+        method: 'POST',
+        headers: { ...supaHdrs, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ id: shortId, target_url: cs.url }),
+      });
+      if (slRes.ok) paymentUrl = `https://amansalaportal.com/pay/${shortId}`;
+    } catch (slErr) {
+      console.warn('[visito-create-reservation] shortlink insert failed (non-fatal):', slErr.message);
+    }
+
     // Also email the payment link directly to the guest — Lana pastes it in
     // WhatsApp too, but a guest reading it later (or forwarding it) should
     // have it in their inbox as well (Jorge's ask 2026-09-22).
@@ -199,8 +217,8 @@ exports.handler = async (event) => {
       <span style="color:#4a4a4a">${checkIn} – ${checkOut} · ${nights} night${nights !== 1 ? 's' : ''} · ${numAdults} adult${numAdults !== 1 ? 's' : ''}</span><br>
       <span style="color:#4a4a4a;font-weight:700">Total: $${totalUSD.toFixed(2)} USD</span>
     </div>
-    <div style="text-align:center;margin:28px 0"><a href="${cs.url}" style="background:#0e9494;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block">Complete Payment</a></div>
-    <p style="color:#6b7280;font-size:12px;text-align:center">If the button doesn't work, copy this link into your browser:<br>${cs.url}</p>
+    <div style="text-align:center;margin:28px 0"><a href="${paymentUrl}" style="background:#0e9494;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block">Complete Payment</a></div>
+    <p style="color:#6b7280;font-size:12px;text-align:center">If the button doesn't work, copy this link into your browser:<br>${paymentUrl}</p>
     <p style="color:#4a4a4a">Warm regards,<br><strong>Amansala Team</strong></p>
   </div>
   <div style="background:#f5f0ea;padding:16px 32px;text-align:center;font-size:11px;color:#8a7e74">
@@ -225,11 +243,11 @@ exports.handler = async (event) => {
       discountCode: validatedCode,
       discountAmount,
       total: totalUSD,
-      paymentUrl: cs.url,
+      paymentUrl,
       emailedToGuest: emailed,
       message: emailed
-        ? `Reserva pre-creada — comparte este link de pago con el huésped para confirmarla (también se le mandó por correo a ${email}): ${cs.url}`
-        : `Reserva pre-creada — comparte este link de pago con el huésped para confirmarla: ${cs.url} (no se pudo mandar el correo automático, avísale que revise spam o mándaselo tú por WhatsApp)`,
+        ? `Reserva pre-creada — comparte este link de pago con el huésped para confirmarla (también se le mandó por correo a ${email}): ${paymentUrl}`
+        : `Reserva pre-creada — comparte este link de pago con el huésped para confirmarla: ${paymentUrl} (no se pudo mandar el correo automático, avísale que revise spam o mándaselo tú por WhatsApp)`,
     });
   } catch (err) {
     console.error('[visito-create-reservation]', err.message);
