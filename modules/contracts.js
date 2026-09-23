@@ -631,6 +631,13 @@ function renderTeacherContract(bkId){
     return;
   }
 
+  // Same default as the admin contract view (_openContractModalRender) —
+  // the teacher portal renders the contract independently, so it needs the
+  // same $30/person/night gratuity fallback for any never-touched booking,
+  // only while unsigned (confirmed real incident 2026-09-23: still showed
+  // "$0" here for Jen Russell even after the admin-side fix).
+  if(bk.tipPerNight==null&&!bk.contractSignedAt){bk.tipPerNight=30;saveAll();}
+
   const isLow=isLowSeasonContract(bk.startDate);
   const sentDate=bk.contractSentAt?new Date(bk.contractSentAt):new Date();
   sentDate.setHours(0,0,0,0);
