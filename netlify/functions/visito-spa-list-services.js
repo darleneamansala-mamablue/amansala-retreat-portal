@@ -6,7 +6,11 @@
 // guest always matches what the public booking page would show.
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
-const CAT_LABEL = { massage: 'Massage', bodywork: 'Bodywork', ceremony: 'Ceremony', class: 'Classes & Readings', fitness: 'Fitness' };
+const CAT_LABEL = {
+  massage: 'Massage', bodywork: 'Bodywork', ceremony: 'Ceremony', spirit: 'Ceremony & Ritual',
+  class: 'Classes & Readings', fitness: 'Fitness', yoga: 'Yoga', pilates: 'Pilates', dance: 'Dance',
+};
+const CATEGORY_SUMMARY_THRESHOLD = 8;
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return jsonErr(405, 'Method Not Allowed');
@@ -23,7 +27,9 @@ exports.handler = async (event) => {
   try { payload = JSON.parse(event.body || '{}'); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const sessionType = (payload.arguments || {}).sessionType || null; // 'individual' | 'group' | null (both)
+  const args = payload.arguments || {};
+  const sessionType = args.sessionType || null; // 'individual' | 'group' | null (both)
+  const categoryFilter = (args.category || '').trim().toLowerCase() || null;
 
   const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}` };
 
@@ -32,40 +38,72 @@ exports.handler = async (event) => {
     if (!res.ok) throw new Error('spa_data fetch failed');
     const [row] = await res.json();
     const spaData = row?.value || {};
-    // Kept deliberately minimal — a first version returning every field
-    // (including a null "description" on 20+ services and a long sentence
-    // in "priceNote") made Lana's reply generation fail right after this
-    // tool "succeeded" (0 tool errors logged, but no answer ever came back)
-    // (confirmed real incident 2026-09-23). Only what's needed to offer a
-    // service and call spa_check_availability next.
-    const services = (spaData.services || [])
+
+    const eligible = (spaData.services || [])
       .filter(s => s.active && s.duration != null && (s.groupPricing ? true : s.price != null))
       .filter(s => !sessionType || (s.sessionType || 'individual') === sessionType)
-      .map(s => {
-        const row = {
-          serviceId: s.id,
-          name: s.name,
-          category: CAT_LABEL[s.category] || s.category,
-          durationMinutes: s.duration,
-        };
-        if (s.description) row.description = s.description;
-        if (s.genderPrefEnabled) row.genderPreferenceAvailable = true;
-        if (s.groupPricing) {
-          row.priceUSD = spaGroupPrice(s, s.groupPricing.minGuests || 1);
-          row.priceVariesByGuestCount = true;
-        } else {
-          row.priceUSD = s.price;
-        }
-        return row;
-      });
+      .map(s => ({ ...s, _label: labelFor(s.category) }));
 
-    if (!services.length) return ok({ success: false, message: 'No hay servicios de spa activos ahora mismo.' });
+    // Kept deliberately minimal — a first version returning every service
+    // at once (24+ items) made Lana's reply generation fail right after
+    // this tool "succeeded" (0 tool errors logged, but no answer ever came
+    // back) — confirmed real incident 2026-09-23, and NOT fixed by shrinking
+    // each item's fields, only by shrinking the number of items. So: when
+    // the guest hasn't narrowed it down yet and the full list is long,
+    // return category counts instead and let Lana ask which one, then call
+    // this again with `category` set for a short list.
+    if (!categoryFilter && eligible.length > CATEGORY_SUMMARY_THRESHOLD) {
+      const byCat = {};
+      eligible.forEach(s => { (byCat[s._label] = byCat[s._label] || []).push(s); });
+      const categories = Object.keys(byCat).map(label => {
+        const items = byCat[label];
+        const prices = items.map(s => s.groupPricing ? spaGroupPrice(s, s.groupPricing.minGuests || 1) : s.price).filter(p => p != null);
+        return {
+          category: label,
+          count: items.length,
+          priceRangeUSD: prices.length ? `${Math.min(...prices)}-${Math.max(...prices)}` : null,
+        };
+      });
+      return ok({
+        success: true,
+        needsCategory: true,
+        totalCount: eligible.length,
+        categories,
+        message: `Hay ${eligible.length} servicios de spa en total. Pregúntale al huésped qué tipo busca (una de las categorías en "categories") y vuelve a llamar a esta función con ese valor en "category" para ver la lista corta con precios.`,
+      });
+    }
+
+    const filtered = categoryFilter
+      ? eligible.filter(s => s._label.toLowerCase().includes(categoryFilter) || (s.category || '').toLowerCase().includes(categoryFilter))
+      : eligible;
+
+    if (!filtered.length) return ok({ success: false, message: 'No encontré servicios de spa activos con ese filtro. Intenta sin category o revisa el valor.' });
+
+    const services = filtered.map(s => {
+      const out = { serviceId: s.id, name: s.name, category: s._label, durationMinutes: s.duration };
+      if (s.description) out.description = s.description;
+      if (s.genderPrefEnabled) out.genderPreferenceAvailable = true;
+      if (s.groupPricing) {
+        out.priceUSD = spaGroupPrice(s, s.groupPricing.minGuests || 1);
+        out.priceVariesByGuestCount = true;
+      } else {
+        out.priceUSD = s.price;
+      }
+      return out;
+    });
+
     return ok({ success: true, count: services.length, services });
   } catch (err) {
     console.error('[visito-spa-list-services]', err.message);
     return jsonErr(500, err.message);
   }
 };
+
+function labelFor(raw) {
+  const key = (raw || '').trim().toLowerCase();
+  if (CAT_LABEL[key]) return CAT_LABEL[key];
+  return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : 'Other';
+}
 
 function spaGroupPrice(s, n) {
   if (!s.groupPricing || !n || n < 1) return null;
