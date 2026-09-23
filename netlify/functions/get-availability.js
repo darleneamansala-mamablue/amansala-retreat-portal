@@ -24,7 +24,7 @@ exports.handler = async (event) => {
     'Content-Type': 'application/json',
   };
 
-  const RT_FIELDS = 'id,name,rooms,max_occ,price_single_high,price_single_low,price_double_high,price_double_low,be_price_single,be_price_double,be_photos,be_description,be_amenities,color';
+  const RT_FIELDS = 'id,name,rooms,max_occ,price_single_high,price_single_low,price_double_high,price_double_low,be_price_single,be_price_single_extra_night,be_price_double,be_photos,be_description,be_amenities,color';
   const rtFilter  = source === 'extra_nights' ? 'be_extra_nights=eq.true' : 'be_enabled=eq.true';
 
   try {

@@ -46,11 +46,12 @@ exports.handler = async (event) => {
   }
   // "escape" = the general Book a Stay page (book.html); "extra_night" = a
   // night added right before/after an existing group retreat (extra-nights.html).
-  // Different room-type pool (be_extra_nights, not be_enabled) AND different
-  // pricing (static — no seasonal/weekend swings — per Darlene 2026-09-03,
-  // matches extra-nights.html/stripe.js's isStatic check) (Jorge's ask 2026-09-23:
-  // "que va a pasar cuando alguien diga quiero reservar una extra noche antes
-  // de mi retiro de yoga" — until now check_availability only knew "escape").
+  // Different room-type pool (be_extra_nights, not be_enabled) AND its own
+  // separately-adjustable rate (be_price_single_extra_night, falling back to
+  // the Escape rate) — same seasonal/weekend adjustment as Escape applies to
+  // both now (Jorge's ask 2026-09-23: originally Extra Night was static/no
+  // adjustment at all; he then asked for the same dynamic pricing as Escape,
+  // just on its own rate).
   const isExtraNight = stayType === 'extra_night';
 
   const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}` };
@@ -59,7 +60,7 @@ exports.handler = async (event) => {
     const rtFilter = isExtraNight ? 'be_extra_nights=eq.true' : 'be_enabled=eq.true';
     const [bkRes, rtRes, settingsRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: hdrs }),
-      fetch(`${SUPABASE_URL}/rest/v1/room_types?${rtFilter}&select=id,name,rooms,max_occ,be_price_single,be_price_double,price_single_high,price_single_low,be_description`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/room_types?${rtFilter}&select=id,name,rooms,max_occ,be_price_single,be_price_single_extra_night,be_price_double,price_single_high,price_single_low,be_description`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: hdrs }),
     ]);
     if (!bkRes.ok || !rtRes.ok) throw new Error('availability fetch failed');
@@ -88,9 +89,8 @@ exports.handler = async (event) => {
     const month = ciDate.getMonth() + 1;
     const dow = ciDate.getDay();
     const isWeekend = dow === 0 || dow === 5 || dow === 6;
-    // Extra Nights pricing is static — no seasonal/weekend multiplier at all.
-    const seasonalPct = isExtraNight ? 0 : Number(seasonalAdj[String(month)] || 0);
-    const weekendMult = (!isExtraNight && isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
+    const seasonalPct = Number(seasonalAdj[String(month)] || 0);
+    const weekendMult = (isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
 
     // Discount code — same validation as stripe.js (book.html's checkout). Only
     // reported back if it actually applies, so Lana never quotes a discount that
@@ -128,7 +128,10 @@ exports.handler = async (event) => {
         // an occupancy-count field elsewhere in the schema) — matches stripe.js/
         // book.html exactly (confirmed real incident 2026-09-22: using be_price_double
         // here made create_reservation compute $0 for any room type where it was null).
-        const baseRate = rt.be_price_single ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
+        // Extra Night prefers its own rate (be_price_single_extra_night), falling
+        // back to the Escape rate when not explicitly set.
+        const baseRate = (isExtraNight ? rt.be_price_single_extra_night ?? rt.be_price_single : rt.be_price_single)
+          ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
         const rate = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
         const subtotal = rate * nights;
         const discountAmount = dc ? (dc.type === 'pct' ? Math.round(subtotal * dc.value) / 100 : Math.min(dc.value, subtotal)) : 0;

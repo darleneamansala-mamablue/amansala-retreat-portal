@@ -45,8 +45,9 @@ exports.handler = async (event) => {
   const { roomTypeId, checkIn, checkOut, adults, firstName, lastName, email, phone, notes, discountCode, stayType } = payload.arguments || {};
   // "escape" (default) = the general Book a Stay page; "extra_night" = a night
   // added right before/after an existing group retreat — different room-type
-  // pool (be_extra_nights) and static pricing, mirrors check_availability's
-  // stayType (Jorge's ask 2026-09-23).
+  // pool (be_extra_nights) and its own separately-adjustable rate
+  // (be_price_single_extra_night), mirrors check_availability's stayType
+  // (Jorge's ask 2026-09-23).
   const isExtraNight = stayType === 'extra_night';
   const missing = ['roomTypeId', 'checkIn', 'checkOut', 'firstName', 'lastName', 'email']
     .filter(f => !({ roomTypeId, checkIn, checkOut, firstName, lastName, email }[f]));
@@ -67,7 +68,7 @@ exports.handler = async (event) => {
     // working from a check_availability answer that's a few minutes stale.
     const [bkRes, rtRes, settRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: supaHdrs }),
-      fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,rooms,max_occ,be_enabled,be_extra_nights,be_price_single,be_price_double,price_single_high,price_single_low`, { headers: supaHdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,rooms,max_occ,be_enabled,be_extra_nights,be_price_single,be_price_single_extra_night,be_price_double,price_single_high,price_single_low`, { headers: supaHdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: supaHdrs }),
     ]);
     if (!rtRes.ok) throw new Error('room_types fetch failed');
@@ -110,14 +111,16 @@ exports.handler = async (event) => {
     // book.html exactly (confirmed real incident 2026-09-22: using be_price_double
     // here made this compute $0 for any room type where it was null, tripping the
     // "amount too small" guard and failing the reservation).
-    const baseRate = rt.be_price_single ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
+    // Extra Night prefers its own rate (be_price_single_extra_night), falling back
+    // to the Escape rate when not explicitly set.
+    const baseRate = (isExtraNight ? rt.be_price_single_extra_night ?? rt.be_price_single : rt.be_price_single)
+      ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
     const ciDate = new Date(checkIn + 'T12:00:00');
     const month = ciDate.getMonth() + 1;
     const dow = ciDate.getDay();
     const isWeekend = dow === 0 || dow === 5 || dow === 6;
-    // Extra Nights pricing is static — no seasonal/weekend multiplier at all.
-    const seasonalPct = isExtraNight ? 0 : Number(seasonalAdj[String(month)] || 0);
-    const weekendMult = (!isExtraNight && isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
+    const seasonalPct = Number(seasonalAdj[String(month)] || 0);
+    const weekendMult = (isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
     const rate = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
     const subtotal = rate * nights;
 

@@ -937,25 +937,27 @@ async function searchRooms() {
   const checkOut = _calOut;
   if (!checkIn || !checkOut || checkOut <= checkIn) { openCalendar('in'); return; }
 
-  // Static offer — no per-room availability shopping. Staff assign the actual
-  // physical room (Garden King, or an on-site upgrade) at check-in.
-  _available = [{
-    id: EXTRA_NIGHT_ROOM_ID,
-    name: EXTRA_NIGHT_ROOM_NAME,
-    be_price_single: EXTRA_NIGHT_RATE,
-    be_description: 'A bright, comfortable garden-view room — the perfect spot for an extra night before or after your retreat. Complimentary upgrades may be available on-site, subject to availability.',
-    max_occ: 2,
-    be_photos: [],
-  }];
+  showOutput(`<div class="section-heading"><div><p class="kicker" style="font-size:32px;letter-spacing:.12em">Extra nights</p><h2>Choose your room</h2></div><p>Finding available rooms…</p></div><div class="state-box"><div class="state-icon" style="font-size:40px;margin-bottom:12px">⏳</div><div class="state-title">Checking availability</div></div>`);
+
+  // Real per-room-type availability shopping (be_extra_nights=true room types),
+  // same as book.html's Escape flow — used to be a single hardcoded "Garden
+  // King $275" offer regardless of what's actually available/priced, which
+  // also meant every room card showed the same price even though the real
+  // Stripe charge (stripe.js) already used each room's own rate — a genuine
+  // display-vs-charge mismatch (Jorge's ask 2026-09-23: real multi-room
+  // Extra Night engine with its own adjustable, seasonally-adjusted rates).
   try {
     const res = await fetch('/.netlify/functions/get-availability', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ checkIn, checkOut, source: 'extra_nights' }),
     });
-    const { settings } = await res.json();
-    _settings = settings ?? _settings;
-  } catch (err) { /* non-fatal — settings only affect taxes, rate itself is static */ }
-  renderRooms();
+    const { available, settings } = await res.json();
+    _available = available ?? [];
+    _settings  = settings ?? _settings;
+    renderRooms();
+  } catch (err) {
+    showOutput(`<div class="state-box"><div class="state-icon">😔</div><div class="state-title">Something went wrong</div><div class="state-sub">${esc(err.message)}</div></div>`);
+  }
 }
 
 // ─── RENDER ROOMS ─────────────────────────────────────────────
@@ -984,7 +986,8 @@ function renderRooms() {
     const eyebrow = getRoomTag(rt);
     const desc    = rt.be_description ?? getDefaultDesc(rt);
     const feats   = getFeatures(rt);
-    const adjRate = EXTRA_NIGHT_RATE, origRate = null, isOffer = false;
+    const rate = getExtraNightRate(rt);
+    const { price: adjRate, original: origRate, isOffer } = applyRules(rate, checkIn);
     const img     = getRoomImage(rt);
     const photos  = rt.be_photos ?? [];
     const imgSrc  = photos[0] ?? img;
@@ -1099,7 +1102,7 @@ function openBooking(rtId) {
 
   const gc       = _guestCount;
   const nights   = Math.round((new Date(checkOut)-new Date(checkIn))/86400000);
-  const adjRate  = EXTRA_NIGHT_RATE;
+  const adjRate  = applyRules(getExtraNightRate(_selectedRt), checkIn).price;
   const taxes    = _settings.taxes_pct ?? 0;
   const subtotal = adjRate * nights;
   const taxAmt   = Math.round(subtotal * taxes) / 100;
@@ -1203,7 +1206,7 @@ function _refreshSummary() {
   if (!_selectedRt || !_calIn || !_calOut) return;
   const nights    = Math.round((new Date(_calOut) - new Date(_calIn)) / 86400000);
   const gc        = parseInt(document.getElementById('fm-adults')?.value) || _guestCount;
-  const adjRate   = EXTRA_NIGHT_RATE;
+  const adjRate   = applyRules(getExtraNightRate(_selectedRt), _calIn).price;
   const taxes     = _settings.taxes_pct ?? 0;
   const subtotal  = adjRate * nights;
   const discAmt   = Math.min(_discountAmount, subtotal);
@@ -1248,7 +1251,7 @@ async function applyDiscount() {
     }
 
     const nights   = Math.round((new Date(_calOut) - new Date(_calIn)) / 86400000);
-    const adjRate  = EXTRA_NIGHT_RATE;
+    const adjRate  = applyRules(getExtraNightRate(_selectedRt), _calIn).price;
     const subtotal = adjRate * nights;
 
     _discountCode   = data.code;
@@ -1380,6 +1383,16 @@ function getRatePerPerson(rt, gc) {
   // be_price_double is used for occupancy counts in this property, not a price
   if (rt.be_price_single != null) return rt.be_price_single;
   return rt.price_single_high ?? 0;
+}
+
+// be_price_single_extra_night is a SEPARATE, independently-adjustable rate for
+// this page only — falls back to the Escape rate (be_price_single) when not
+// explicitly set, since Extra Night is "derived from Escape" until someone
+// overrides it (Jorge's ask 2026-09-23).
+function getExtraNightRate(rt) {
+  if (!rt) return 0;
+  if (rt.be_price_single_extra_night != null) return rt.be_price_single_extra_night;
+  return getRatePerPerson(rt);
 }
 
 function fmtDate(s) {

@@ -399,13 +399,14 @@ function beRenderRates() {
     ${rateWarnHtml}
     <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
       <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0 0 4px">Base Rates</h3>
-      <p style="font-size:12px;color:var(--muted);margin:0 0 16px">Escape rate per room type. "Pricing Rules" below adjusts on top of these.</p>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 16px">Escape rate per room type. "Pricing Rules" below adjusts on top of these. Extra Night defaults to the Escape rate — set it only for rooms where it should differ.</p>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr style="border-bottom:2px solid #f3f4f6">
             <th style="text-align:left;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Room</th>
             <th style="text-align:center;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Single</th>
             <th style="text-align:center;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Double (pp)</th>
+            <th style="text-align:center;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Extra Night</th>
             <th style="text-align:center;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Max occ.</th>
           </tr></thead>
           <tbody>
@@ -414,6 +415,7 @@ function beRenderRates() {
               <td style="padding:8px;color:var(--dark);font-weight:600">${escHtml(rt.name)}</td>
               <td style="padding:8px;text-align:center"><input type="number" id="br-single-${rt.id}" value="${rt.be_price_single ?? ''}" placeholder="—" min="0" step="any" style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;text-align:center"></td>
               <td style="padding:8px;text-align:center"><input type="number" id="br-double-${rt.id}" value="${rt.be_price_double ?? ''}" placeholder="= single" min="0" step="any" style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;text-align:center"></td>
+              <td style="padding:8px;text-align:center"><input type="number" id="br-extranight-${rt.id}" value="${rt.bePriceSingleExtraNight ?? ''}" placeholder="= escape" min="0" step="any" style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;text-align:center"></td>
               <td style="padding:8px;text-align:center"><input type="number" id="br-maxocc-${rt.id}" value="${rt.maxOcc ?? ''}" placeholder="—" min="1" max="20" step="1" style="width:65px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;text-align:center"></td>
             </tr>`).join('')}
           </tbody>
@@ -448,24 +450,48 @@ function beRenderRates() {
 }
 
 async function beSaveBaseRates() {
-  let changed = 0;
+  // Previously called saveAll() only, which never actually reaches Supabase for
+  // room_types (saveAll() syncs bookings/registrations/app_store — room_types
+  // needs its own write). The toast said "saved" and the tab looked right, but
+  // the rate never left this browser tab — confirmed real incident 2026-09-23:
+  // Jorge's rates looked saved here but were gone on reload. Each changed row
+  // now gets a scoped PATCH of just its rate fields (not a full-row/full-array
+  // upload — see beToggleRoomType above for why that matters).
+  const dirty = [];
   for (const rt of AppData.roomTypes) {
     const sEl = document.getElementById(`br-single-${rt.id}`); if (!sEl) continue;
     const sVal = sEl.value.trim();
     const dVal = document.getElementById(`br-double-${rt.id}`)?.value.trim() ?? '';
+    const enVal = document.getElementById(`br-extranight-${rt.id}`)?.value.trim() ?? '';
     const mVal = document.getElementById(`br-maxocc-${rt.id}`)?.value.trim() ?? '';
     const priceSingle = sVal !== '' ? parseFloat(sVal) : null;
     const priceDouble = dVal !== '' ? parseFloat(dVal) : null;
+    const priceExtraNight = enVal !== '' ? parseFloat(enVal) : null;
     const maxOcc = mVal !== '' ? parseInt(mVal) : (rt.maxOcc ?? null);
-    if (priceSingle === (rt.be_price_single ?? null) && priceDouble === (rt.be_price_double ?? null) && maxOcc === (rt.maxOcc ?? null)) continue;
+    if (priceSingle === (rt.be_price_single ?? null) && priceDouble === (rt.be_price_double ?? null)
+        && priceExtraNight === (rt.bePriceSingleExtraNight ?? null) && maxOcc === (rt.maxOcc ?? null)) continue;
     rt.be_price_single = priceSingle;
     rt.be_price_double = priceDouble;
+    rt.bePriceSingleExtraNight = priceExtraNight;
     rt.maxOcc = maxOcc;
-    changed++;
+    dirty.push(rt);
   }
-  if (!changed) { showToast('No changes'); return; }
+  if (!dirty.length) { showToast('No changes'); return; }
   saveAll();
-  showToast(`Base rates saved (${changed} room${changed > 1 ? 's' : ''}) ✓`);
+  const results = await Promise.all(dirty.map(rt =>
+    db.from('room_types').update({
+      be_price_single: rt.be_price_single, be_price_double: rt.be_price_double,
+      be_price_single_extra_night: rt.bePriceSingleExtraNight, max_occ: rt.maxOcc,
+    }).eq('id', rt.id)
+  ));
+  const failed = results.filter(r => r.error);
+  dirty.forEach(rt => { rt.updatedAt = new Date().toISOString(); });
+  if (failed.length) {
+    console.warn('[be] base rates sync failed for', failed.length, 'room(s)', failed.map(f=>f.error));
+    showToast(`⚠ Saved locally, but ${failed.length} room(s) failed to sync — try again`);
+  } else {
+    showToast(`Base rates saved (${dirty.length} room${dirty.length > 1 ? 's' : ''}) ✓`);
+  }
   beRenderRates();
 }
 
