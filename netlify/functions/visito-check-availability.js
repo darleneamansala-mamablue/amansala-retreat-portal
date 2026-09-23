@@ -37,20 +37,29 @@ exports.handler = async (event) => {
   try { payload = JSON.parse(event.body || '{}'); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { checkIn, checkOut, adults, discountCode } = payload.arguments || {};
+  const { checkIn, checkOut, adults, discountCode, stayType } = payload.arguments || {};
   if (!checkIn || !checkOut) {
     return ok({ success: false, message: 'Necesito la fecha de entrada y salida (checkIn, checkOut) para revisar disponibilidad.' });
   }
   if (checkIn >= checkOut) {
     return ok({ success: false, message: 'La fecha de salida debe ser después de la de entrada.' });
   }
+  // "escape" = the general Book a Stay page (book.html); "extra_night" = a
+  // night added right before/after an existing group retreat (extra-nights.html).
+  // Different room-type pool (be_extra_nights, not be_enabled) AND different
+  // pricing (static — no seasonal/weekend swings — per Darlene 2026-09-03,
+  // matches extra-nights.html/stripe.js's isStatic check) (Jorge's ask 2026-09-23:
+  // "que va a pasar cuando alguien diga quiero reservar una extra noche antes
+  // de mi retiro de yoga" — until now check_availability only knew "escape").
+  const isExtraNight = stayType === 'extra_night';
 
   const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}` };
 
   try {
+    const rtFilter = isExtraNight ? 'be_extra_nights=eq.true' : 'be_enabled=eq.true';
     const [bkRes, rtRes, settingsRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: hdrs }),
-      fetch(`${SUPABASE_URL}/rest/v1/room_types?be_enabled=eq.true&select=id,name,rooms,max_occ,be_price_single,be_price_double,price_single_high,price_single_low,be_description`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/room_types?${rtFilter}&select=id,name,rooms,max_occ,be_price_single,be_price_double,price_single_high,price_single_low,be_description`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: hdrs }),
     ]);
     if (!bkRes.ok || !rtRes.ok) throw new Error('availability fetch failed');
@@ -79,8 +88,9 @@ exports.handler = async (event) => {
     const month = ciDate.getMonth() + 1;
     const dow = ciDate.getDay();
     const isWeekend = dow === 0 || dow === 5 || dow === 6;
-    const seasonalPct = Number(seasonalAdj[String(month)] || 0);
-    const weekendMult = (isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
+    // Extra Nights pricing is static — no seasonal/weekend multiplier at all.
+    const seasonalPct = isExtraNight ? 0 : Number(seasonalAdj[String(month)] || 0);
+    const weekendMult = (!isExtraNight && isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
 
     // Discount code — same validation as stripe.js (book.html's checkout). Only
     // reported back if it actually applies, so Lana never quotes a discount that
@@ -95,7 +105,8 @@ exports.handler = async (event) => {
         if (dcRes.ok) {
           const dcRows = await dcRes.json();
           const cand = dcRows[0];
-          const appliesHere = !cand?.applies_to || cand.applies_to === 'all' || cand.applies_to === 'escape';
+          const pageKey = isExtraNight ? 'extra_nights' : 'escape';
+          const appliesHere = !cand?.applies_to || cand.applies_to === 'all' || cand.applies_to === pageKey;
           const inBlackout = cand?.blackout_start && cand?.blackout_end && checkIn < cand.blackout_end && checkOut > cand.blackout_start;
           if (cand && appliesHere && !inBlackout
                  && !(cand.expires_at && new Date(cand.expires_at + 'T23:59:59') < new Date())
@@ -140,11 +151,11 @@ exports.handler = async (event) => {
       .filter(Boolean);
 
     if (!options.length) {
-      return ok({ success: false, message: `No hay habitaciones disponibles del ${checkIn} al ${checkOut} para ${numAdults} adulto(s).` });
+      return ok({ success: false, message: `No hay habitaciones disponibles del ${checkIn} al ${checkOut} para ${numAdults} adulto(s)${isExtraNight ? ' (Extra Night)' : ''}.` });
     }
 
     return ok({
-      success: true, checkIn, checkOut, nights, adults: numAdults, options,
+      success: true, stayType: isExtraNight ? 'extra_night' : 'escape', checkIn, checkOut, nights, adults: numAdults, options,
       ...(discountCode ? { discountCodeApplied: !!validatedCode, discountCode: validatedCode || null } : {}),
     });
   } catch (err) {

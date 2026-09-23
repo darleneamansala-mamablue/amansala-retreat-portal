@@ -42,7 +42,12 @@ exports.handler = async (event) => {
   try { payload = JSON.parse(event.body || '{}'); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { roomTypeId, checkIn, checkOut, adults, firstName, lastName, email, phone, notes, discountCode } = payload.arguments || {};
+  const { roomTypeId, checkIn, checkOut, adults, firstName, lastName, email, phone, notes, discountCode, stayType } = payload.arguments || {};
+  // "escape" (default) = the general Book a Stay page; "extra_night" = a night
+  // added right before/after an existing group retreat — different room-type
+  // pool (be_extra_nights) and static pricing, mirrors check_availability's
+  // stayType (Jorge's ask 2026-09-23).
+  const isExtraNight = stayType === 'extra_night';
   const missing = ['roomTypeId', 'checkIn', 'checkOut', 'firstName', 'lastName', 'email']
     .filter(f => !({ roomTypeId, checkIn, checkOut, firstName, lastName, email }[f]));
   if (missing.length) {
@@ -62,12 +67,15 @@ exports.handler = async (event) => {
     // working from a check_availability answer that's a few minutes stale.
     const [bkRes, rtRes, settRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: supaHdrs }),
-      fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,rooms,max_occ,be_price_single,be_price_double,price_single_high,price_single_low`, { headers: supaHdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,rooms,max_occ,be_enabled,be_extra_nights,be_price_single,be_price_double,price_single_high,price_single_low`, { headers: supaHdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: supaHdrs }),
     ]);
     if (!rtRes.ok) throw new Error('room_types fetch failed');
     const [rt] = await rtRes.json();
     if (!rt) return ok({ success: false, message: 'No encontré ese tipo de habitación — vuelve a llamar a check_availability para obtener un roomTypeId válido.' });
+    if (isExtraNight ? !rt.be_extra_nights : !rt.be_enabled) {
+      return ok({ success: false, message: `${rt.name} no está disponible para ${isExtraNight ? 'Extra Night' : 'Escape'} — vuelve a llamar a check_availability con el mismo stayType para obtener opciones válidas.` });
+    }
 
     const bookings = bkRes.ok ? await bkRes.json() : [];
     const blockedRooms = new Set((bookings || []).flatMap(bk => bk.blocked_rooms || []));
@@ -107,8 +115,9 @@ exports.handler = async (event) => {
     const month = ciDate.getMonth() + 1;
     const dow = ciDate.getDay();
     const isWeekend = dow === 0 || dow === 5 || dow === 6;
-    const seasonalPct = Number(seasonalAdj[String(month)] || 0);
-    const weekendMult = (isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
+    // Extra Nights pricing is static — no seasonal/weekend multiplier at all.
+    const seasonalPct = isExtraNight ? 0 : Number(seasonalAdj[String(month)] || 0);
+    const weekendMult = (!isExtraNight && isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
     const rate = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
     const subtotal = rate * nights;
 
@@ -124,7 +133,8 @@ exports.handler = async (event) => {
         if (dcRes.ok) {
           const dcRows = await dcRes.json();
           const dc = dcRows[0];
-          const appliesHere = !dc?.applies_to || dc.applies_to === 'all' || dc.applies_to === 'escape';
+          const pageKey = isExtraNight ? 'extra_nights' : 'escape';
+          const appliesHere = !dc?.applies_to || dc.applies_to === 'all' || dc.applies_to === pageKey;
           const inBlackout = dc?.blackout_start && dc?.blackout_end && checkIn < dc.blackout_end && checkOut > dc.blackout_start;
           if (dc && appliesHere && !inBlackout
                  && !(dc.expires_at && new Date(dc.expires_at + 'T23:59:59') < new Date())
@@ -157,7 +167,7 @@ exports.handler = async (event) => {
       notes: (notes || '').slice(0, 400),
       discountCode: (validatedCode || '').slice(0, 50),
       discountAmount: String(discountAmount),
-      source: 'Visito AI',
+      source: isExtraNight ? 'Visito AI (Extra Night)' : 'Visito AI',
     };
 
     const params = new URLSearchParams({
