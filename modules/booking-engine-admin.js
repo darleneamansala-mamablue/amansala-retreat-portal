@@ -353,7 +353,12 @@ function beSaveRoomEdit() {
   rt.be_price_single = isNaN(rawSingle) ? null : rawSingle;
   rt.be_price_double = isNaN(rawDouble) ? null : rawDouble;
   saveAll();
-  syncRoomTypesToSupabase().catch(e=>console.warn('[be] room type sync failed',e));
+  // Scoped to just this row's edited fields, not the full-array
+  // syncRoomTypesToSupabase() — see beToggleRoomType above for why.
+  db.from('room_types').update({
+    be_description: rt.be_description, be_amenities: rt.be_amenities, be_photos: rt.be_photos,
+    be_price_single: rt.be_price_single, be_price_double: rt.be_price_double,
+  }).eq('id', rt.id).then(({error})=>{if(error)console.warn('[be] room type sync failed',error);else rt.updatedAt=new Date().toISOString();});
   showToast('Room updated ✓');
   closeModal('beRoomModal');
   beEditRtId = null;

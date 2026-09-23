@@ -361,7 +361,12 @@ async function resetRoomLists(){
   });
   // Write roomTypes to Supabase FIRST — so that when saveAll()'s realtime event fires and
   // calls loadFromSupabase(), Supabase already has the correct room lists and won't overwrite them.
-  await syncRoomTypesToSupabase();
+  // Scoped per-row `rooms`-only PATCH, not the full-array syncRoomTypesToSupabase() — this
+  // is a rarely-used admin action, but a full-array upload would still risk clobbering
+  // be_enabled/be_extra_nights/prices on every row with whatever this tab has in memory.
+  await Promise.all(AppData.roomTypes.map(rt=>
+    db.from('room_types').update({rooms:rt.rooms}).eq('id',rt.id).then(({error})=>{if(!error)rt.updatedAt=new Date().toISOString();})
+  ));
   saveAll();
   openSettings();
   if(typeof rcBuild==='function')rcBuild();
