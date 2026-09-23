@@ -30,6 +30,7 @@ function spaGroupPrice(s, n) {
   if (n >= gp.minGroup) return gp.perPersonUSD * n;
   return null;
 }
+function normName(s) { return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
 function findGuestReg(regs, clientName, roomNumber) {
   const key = (clientName || '').toLowerCase().replace(/\s+/g, ' ').trim();
   if (!key) return null;
@@ -102,7 +103,6 @@ exports.handler = async (event) => {
   if (missing.length) return ok({ success: false, message: `Me faltan estos datos: ${missing.join(', ')}.` });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return ok({ success: false, message: 'El correo no parece válido.' });
   if (guestType !== 'hotel' && guestType !== 'offsite') return ok({ success: false, message: 'guestType debe ser "hotel" u "offsite".' });
-  if (guestType === 'hotel' && !roomNumber) return ok({ success: false, message: 'Para un huésped del hotel necesito el número de cuarto.' });
 
   const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}` };
   const clientName = `${firstName} ${lastName}`.trim();
@@ -137,18 +137,49 @@ exports.handler = async (event) => {
     if (priceUSD == null) return ok({ success: false, message: 'No pude calcular el precio para ese número de invitados — pregúntale al huésped un número distinto o avisa al equipo.' });
 
     const isHotel = guestType === 'hotel';
-    let stayStart = null, stayEnd = null, regMatch = null, bkMatch = null;
-    let regsAll = [], bookingsAll = [];
+    let stayStart = null, stayEnd = null, regMatch = null, bkMatch = null, matchedRoomNumber = roomNumber || null;
     if (isHotel) {
       const [regRes, bkRes] = await Promise.all([
         fetch(`${SUPABASE_URL}/rest/v1/registrations?select=id,booking_id,room,guests,charges`, { headers: hdrs }),
         fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,leader_name,booking_type,blocked_rooms,charges,start_date,end_date`, { headers: hdrs }),
       ]);
-      regsAll = regRes.ok ? await regRes.json() : [];
-      bookingsAll = bkRes.ok ? await bkRes.json() : [];
-      regMatch = findGuestReg(regsAll, clientName, roomNumber);
-      bkMatch = !regMatch ? findGuestBooking(bookingsAll, clientName, roomNumber) : null;
-      const parentBk = regMatch ? bookingsAll.find(b => b.id === regMatch.reg.booking_id) : (bkMatch ? bkMatch.bk : null);
+      const regsAll = regRes.ok ? await regRes.json() : [];
+      const bookingsAll = bkRes.ok ? await bkRes.json() : [];
+
+      // Only ever match against a stay that actually covers the appointment
+      // date -- matching a name against a past or future stay is how you'd
+      // charge (or fail to charge) the wrong person.
+      const activeBookings = bookingsAll.filter(b => b.start_date && b.end_date && date >= b.start_date && date <= b.end_date);
+      const activeBookingIds = new Set(activeBookings.map(b => b.id));
+      const activeRegs = regsAll.filter(r => activeBookingIds.has(r.booking_id));
+      const activeRoomOnlyBookings = activeBookings.filter(b => b.booking_type === 'room_only');
+
+      if (roomNumber) {
+        regMatch = findGuestReg(activeRegs, clientName, roomNumber);
+        bkMatch = !regMatch ? findGuestBooking(activeRoomOnlyBookings, clientName, roomNumber) : null;
+      } else {
+        // Name-only: auto-match the room if there's exactly one guest with
+        // this name staying right now; otherwise ask instead of guessing.
+        const regNameMatches = activeRegs.filter(r => (r.guests || []).some(g => normName(g.name) === normName(clientName)));
+        const bkNameMatches = activeRoomOnlyBookings.filter(b => normName(b.leader_name) === normName(clientName));
+        const totalMatches = regNameMatches.length + bkNameMatches.length;
+        if (totalMatches > 1) {
+          return ok({ success: false, needsRoomNumber: true, message: `Hay más de un huésped registrado con el nombre "${clientName}" — pídele su número de cuarto para confirmar a quién cobrar y vuelve a llamar con roomNumber.` });
+        }
+        if (regNameMatches.length === 1) {
+          const reg = regNameMatches[0];
+          regMatch = { reg, guest: (reg.guests || []).find(g => normName(g.name) === normName(clientName)) };
+        } else if (bkNameMatches.length === 1) {
+          bkMatch = { bk: bkNameMatches[0] };
+        }
+      }
+
+      if (!regMatch && !bkMatch) {
+        return ok({ success: false, message: `No encontré a "${clientName}" como huésped con estancia activa el ${date}${roomNumber ? ` en el cuarto ${roomNumber}` : ''}. Confirma el nombre completo (como está en la reservación) ${roomNumber ? 'y el número de cuarto' : 'o pídele su número de cuarto'}.` });
+      }
+
+      matchedRoomNumber = roomNumber || (regMatch ? regMatch.reg.room : (bkMatch.bk.blocked_rooms || [])[0]) || null;
+      const parentBk = regMatch ? activeBookings.find(b => b.id === regMatch.reg.booking_id) : bkMatch.bk;
       if (parentBk?.start_date && parentBk?.end_date) { stayStart = parentBk.start_date; stayEnd = parentBk.end_date; }
       if ((stayStart && date < stayStart) || (stayEnd && date > stayEnd)) {
         return ok({ success: false, message: `Esa fecha está fuera de la estancia del huésped (${stayStart} – ${stayEnd}) — pídele una fecha dentro de su estadía.` });
@@ -159,7 +190,7 @@ exports.handler = async (event) => {
     const appt = {
       id: apptId,
       clientName, guestType, sessionType: svc.sessionType || 'individual',
-      email, phone, roomNumber: roomNumber || null,
+      email, phone, roomNumber: matchedRoomNumber,
       serviceId, therapistId, roomId: roomId || null,
       date, start, duration: svc.duration,
       status: isHotel ? 'CONFIRMED' : 'PAYMENT_PENDING',
@@ -254,7 +285,7 @@ exports.handler = async (event) => {
       const rows = [
         emailRow('Service', esc(svc.name)), emailRow('Date', fmtDateLong(date)), emailRow('Time', fmtT(start)),
         emailRow('Therapist', esc(therName)), emailRow('Meet at', esc(meetAt)),
-        ...(roomNumber ? [emailRow('Your room', esc(roomNumber))] : []),
+        ...(matchedRoomNumber ? [emailRow('Your room', esc(matchedRoomNumber))] : []),
         ...(folioPosted ? [emailRow('Payment', 'Charged to your room folio')] : []),
       ].join('');
       const payBlock = paymentUrl
@@ -282,10 +313,10 @@ exports.handler = async (event) => {
       success: true,
       appointmentId: apptId,
       serviceName: svc.name, therapistName: therName, date, start, durationMinutes: svc.duration,
-      priceUSD, guestType, folioPosted,
+      priceUSD, guestType, folioPosted, roomNumber: matchedRoomNumber,
       paymentUrl,
       message: isHotel
-        ? `Cita creada y cargada a la habitación de ${clientName}. Correo de confirmación enviado.`
+        ? `Cita creada y cargada al cuarto ${matchedRoomNumber || ''} (${clientName}). Correo de confirmación enviado.`
         : (paymentUrl
           ? `Cita creada — comparte este link de pago con el huésped para confirmarla (también se le mandó por correo): ${paymentUrl}`
           : `Cita creada, pero no se pudo generar el link de pago automático — avísale al equipo que necesita cobrarle a ${clientName} manualmente.`),
