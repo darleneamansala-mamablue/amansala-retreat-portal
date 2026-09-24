@@ -656,6 +656,23 @@ const tip=document.getElementById('tip');
 function showTip(e,bk,regCount,hideFinancials){
   const st=STATUS[bk.status]||STATUS.confirmed;
   const rc=regCount!=null?regCount:registeredCount(bk.id);
+  // Beds filled out of beds actually blocked for this retreat, instead of
+  // registered/estimated pax — "54/50" said nothing about what's still left to
+  // sell (Darlene's ask 2026-09-24). A bed/room counts as filled once it has at
+  // least one named, non-cancelled guest; a virtual group parent room (rt8/rt9)
+  // counts each of its individual beds.
+  const _bedList=[];
+  [...new Set(bk.blockedRooms||[])].forEach(room=>{
+    const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
+    const sub=rt&&VIRTUAL_GROUP_RT_IDS.has(rt.id)&&typeof _getSharedBeds==='function'?_getSharedBeds(room):[];
+    (sub.length?sub:[room]).forEach(b=>_bedList.push(b));
+  });
+  const bedsTotal=_bedList.length;
+  const bedsFilled=_bedList.filter(b=>{const r=getRegForRoom(bk.id,b);return (r?.guests||[]).some(g=>g.name&&!g.cancelled);}).length;
+  const bedsLeft=bedsTotal-bedsFilled;
+  const bedsHtml=bedsTotal
+    ?`<div style="font-size:10.5px;color:rgba(255,255,255,.7);margin-top:3px">Beds filled: <b style="color:#fff">${bedsFilled}/${bedsTotal}</b> · <b style="color:${bedsLeft>0?'#fde68a':'#6ee7b7'}">${bedsLeft>0?bedsLeft+' left to sell':'sold out'}</b></div>`
+    :(rc?`<div style="font-size:10.5px;color:rgba(255,255,255,.7);margin-top:3px">Registered: <b style="color:#fff">${rc}</b> · no rooms blocked yet</div>`:'');
   const flags=getAutoFlags(bk).concat((bk.flags||[]).filter(f=>!f.resolved));
   // Financial totals — skipped entirely for the "Happening Now" strip (Jorge's ask
   // 2026-09-18: that quick-glance strip shouldn't show Total/Paid/Owing, unlike the
@@ -679,7 +696,7 @@ function showTip(e,bk,regCount,hideFinancials){
   }
   let flagsHtml=flags.length?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px">`+flags.slice(0,3).map(f=>`<div style="font-size:10px;color:#fca5a5">🚩 ${f.message}</div>`).join('')+'</div>':'';
   const notesHtml=bk.notes?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px;font-size:10.5px;color:#fde68a">📝 ${escHtml(bk.notes)}</div>`:'';
-  tip.innerHTML=`<div class="tip-n">${bk.leaderName||bk.retreatName}</div><div class="tip-d">${fmtDate(bk.startDate)} → ${fmtDate(bk.endDate)}</div><div style="font-size:10.5px;font-weight:600;color:${st.border};margin-top:3px">${st.label}</div>${bk.pax?`<div style="font-size:10.5px;color:rgba(255,255,255,.7);margin-top:3px">Registered: <b style="color:#fff">${rc}/${bk.pax}</b></div>`:''}${finHtml}${flagsHtml}${notesHtml}`;
+  tip.innerHTML=`<div class="tip-n">${bk.leaderName||bk.retreatName}</div><div class="tip-d">${fmtDate(bk.startDate)} → ${fmtDate(bk.endDate)}</div><div style="font-size:10.5px;font-weight:600;color:${st.border};margin-top:3px">${st.label}</div>${bedsHtml}${finHtml}${flagsHtml}${notesHtml}`;
   tip.classList.add('show');moveTip(e);
 }
 function moveTip(e){let x=e.clientX+14,y=e.clientY-10;if(x+260>window.innerWidth)x=e.clientX-260;tip.style.left=x+'px';tip.style.top=y+'px';}
