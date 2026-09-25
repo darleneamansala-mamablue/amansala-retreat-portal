@@ -357,8 +357,27 @@ async function bdCheckOut(){
 
 async function bdDeleteReservation(){
   const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
-  if(!confirm('Cancel this reservation? This action will mark the booking as cancelled.'))return;
   const bookingId=reg.bookingId;
+  const _bk=AppData.bookings.find(b=>b.id===bookingId);
+  // Only a Room Only booking IS this one room — cancelling the booking there is
+  // right. For a retreat, the booking is the whole group: cancelling it hid
+  // every room of the retreat from the calendar (real incident 2026-09-25:
+  // deleting room 21 cancelled all of Loco Luxury on its arrival day). For a
+  // retreat, remove just this room's registration and leave the booking alone.
+  if(_bk&&_bk.bookingType!=='room_only'){
+    const names=(reg.guests||[]).map(g=>g.name).filter(Boolean).join(', ');
+    if(!confirm(`Remove ${names||'this guest'} from room ${reg.room}?\n\nOnly this room's registration is removed — the rest of ${_bk.leaderName||_bk.retreatName||'the retreat'} is not touched.`))return;
+    const {error:rErr}=await db.from('registrations').delete().eq('id',reg.id);
+    if(rErr){showToast('Error: '+rErr.message);return;}
+    AppData.regs=AppData.regs.filter(r=>r.id!==reg.id);
+    if(typeof logActivity==='function')logActivity('Guest removed from room',`${names||'Guest'} · ${reg.room} · ${_bk.leaderName||_bk.retreatName||''}`,bookingId);
+    showToast(`Removed from room ${reg.room} ✓ — retreat not changed`);
+    closeModal('bookingDetailModal');
+    if(typeof venBuild==='function')venBuild();
+    if(typeof rcBuild==='function')rcBuild();
+    return;
+  }
+  if(!confirm('Cancel this reservation? This action will mark the booking as cancelled.'))return;
   const {error:bErr}=await db.from('bookings').update({status:'cancelled'}).eq('id',bookingId);
   if(bErr){showToast('Error: '+bErr.message);return;}
   const {error:rErr}=await db.from('registrations').delete().eq('id',reg.id);
