@@ -87,6 +87,7 @@ function _bdRender(){
   let headerBtns='';
   if(!reg.checkedInAt) headerBtns+=`<button onclick="bdCheckIn()" style="${hBtnS}">Check In</button>`;
   else if(!reg.checkedOutAt) headerBtns+=`<button onclick="bdCheckOut()" style="${hBtnS}">Check Out</button>`;
+  else headerBtns+=`<button onclick="bdUndoCheckOut()" style="${hBtnS}">Undo Check Out</button>`;
   headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Delete</button>`;
 
   document.getElementById('bdHdr').innerHTML=`
@@ -347,11 +348,28 @@ async function bdCheckIn(){
 
 async function bdCheckOut(){
   const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
+  // Check In and Check Out share the same button spot, so a double-click on
+  // Check In used to check the guest straight back out a second later (real
+  // incident 2026-09-25, Binnie & Minnie CH14). Ignore Check Out clicks for a
+  // few seconds after check-in, and always ask before checking out.
+  if(reg.checkedInAt&&Date.now()-new Date(reg.checkedInAt).getTime()<5000)return;
+  const names=(reg.guests||[]).map(g=>g.name).filter(Boolean).join(' & ');
+  if(!confirm(`Check out ${names||'this guest'} from room ${reg.room}?`))return;
   const now=new Date().toISOString();
   const {error}=await db.from('registrations').update({checked_out_at:now}).eq('id',reg.id);
   if(error){showToast('Error: '+error.message);return;}
   reg.checkedOutAt=now;
   showToast('Checked out ✓');
+  _bdRender();
+}
+
+async function bdUndoCheckOut(){
+  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
+  if(!confirm('Undo check-out? The guest goes back to In House.'))return;
+  const {error}=await db.from('registrations').update({checked_out_at:null}).eq('id',reg.id);
+  if(error){showToast('Error: '+error.message);return;}
+  reg.checkedOutAt=null;
+  showToast('Check-out undone ✓ — back In House');
   _bdRender();
 }
 
