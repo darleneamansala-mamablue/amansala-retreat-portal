@@ -131,7 +131,8 @@ function _bdRender(){
         <div style="margin-top:10px">
           ${reg.stripePaymentMethodId
             ?`<span style="font-size:12px;color:#374151">💳 ${escHtml(_bdCardLabel(reg))} on file</span>
-              <button class="btn btn-secondary btn-sm" onclick="bdOpenSaveCard()" style="margin-left:8px;padding:2px 10px;font-size:11px">Update</button>`
+              <button class="btn btn-secondary btn-sm" onclick="bdOpenSaveCard()" style="margin-left:8px;padding:2px 10px;font-size:11px">Update</button>
+              <button class="btn btn-danger btn-sm" onclick="bdRemoveCard()" style="margin-left:4px;padding:2px 10px;font-size:11px">Remove</button>`
             :`<button class="btn btn-secondary btn-sm" onclick="bdOpenSaveCard()">💳 Save Card</button>`}
         </div>
       </div>
@@ -485,6 +486,21 @@ async function bdConfirmSaveCard(){
   }catch(e){
     errEl.textContent=e.message||'Error al guardar la tarjeta';
     saveBtn.disabled=false;saveBtn.textContent='Save Card';
+  }
+}
+
+async function bdRemoveCard(){
+  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
+  if(!confirm(`Quitar la tarjeta guardada (${_bdCardLabel(reg)})?`))return;
+  try{
+    const res=await fetch('/.netlify/functions/remove-card-on-file',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regId:_bdRegId})});
+    const data=await res.json();
+    if(!res.ok||data.error)throw new Error(data.error||'No se pudo quitar la tarjeta');
+    reg.stripePaymentMethodId=null;reg.stripeCardBrand=null;reg.stripeCardLast4=null;
+    showToast('Tarjeta eliminada ✓');
+    _bdRender();
+  }catch(e){
+    showToast(e.message||'Error al quitar la tarjeta');
   }
 }
 
