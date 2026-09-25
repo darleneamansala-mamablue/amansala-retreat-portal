@@ -383,7 +383,7 @@ async function bdOpenStripePayment(fid){
     modal=document.createElement('div');
     modal.id='bdStripeModal';
     modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;align-items:center;justify-content:center';
-    modal.innerHTML=`<div style="background:#fff;border-radius:14px;width:420px;max-width:96vw;padding:28px;box-shadow:0 24px 80px rgba(0,0,0,.4)">
+    modal.innerHTML=`<div style="background:#fff;border-radius:14px;width:420px;max-width:96vw;max-height:90vh;overflow-y:auto;padding:28px;box-shadow:0 24px 80px rgba(0,0,0,.4)">
       <div style="font-size:16px;font-weight:800;color:#111827;margin-bottom:4px">Credit Card Payment</div>
       <div id="bdStripeAmtLabel" style="font-size:13px;color:#6b7280;margin-bottom:18px"></div>
       <div id="bdStripeEl" style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;min-height:44px;margin-bottom:8px"><div style="color:#9ca3af;font-size:13px">Loading payment form…</div></div>
@@ -411,7 +411,7 @@ async function bdOpenStripePayment(fid){
     if(!res.ok||data.error)throw new Error(data.error||'Payment setup failed');
     _bdStripe=Stripe(data.publishableKey);
     _bdStripeElems=_bdStripe.elements({clientSecret:data.clientSecret,appearance:{theme:'stripe',variables:{fontFamily:'Jost, sans-serif',borderRadius:'6px',colorPrimary:'#7c3aed'}}});
-    _bdStripeElems.create('payment').mount('#bdStripeEl');
+    _bdStripeElems.create('payment',{wallets:{link:'never'}}).mount('#bdStripeEl');
     payBtn.textContent=`Pay ${fmt$(amount)}`;payBtn.disabled=false;payBtn.style.opacity='1';
   }catch(e){
     document.getElementById('bdStripeErr').textContent=e.message||'Could not load payment form.';
@@ -432,7 +432,7 @@ async function bdOpenSaveCard(){
     modal=document.createElement('div');
     modal.id='bdSaveCardModal';
     modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;align-items:center;justify-content:center';
-    modal.innerHTML=`<div style="background:#fff;border-radius:14px;width:420px;max-width:96vw;padding:28px;box-shadow:0 24px 80px rgba(0,0,0,.4)">
+    modal.innerHTML=`<div style="background:#fff;border-radius:14px;width:420px;max-width:96vw;max-height:90vh;overflow-y:auto;padding:28px;box-shadow:0 24px 80px rgba(0,0,0,.4)">
       <div style="font-size:16px;font-weight:800;color:#111827;margin-bottom:4px">Save Card on File</div>
       <div style="font-size:13px;color:#6b7280;margin-bottom:18px">No se cobra nada ahora — se guarda para cargos futuros al folio.</div>
       <div id="bdSaveCardEl" style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;min-height:44px;margin-bottom:8px"><div style="color:#9ca3af;font-size:13px">Loading form…</div></div>
@@ -459,7 +459,7 @@ async function bdOpenSaveCard(){
     if(!res.ok||data.error)throw new Error(data.error||'No se pudo iniciar el guardado de tarjeta');
     _bdSaveCardStripe=Stripe(data.publishableKey);
     _bdSaveCardElems=_bdSaveCardStripe.elements({clientSecret:data.clientSecret,appearance:{theme:'stripe',variables:{fontFamily:'Jost, sans-serif',borderRadius:'6px',colorPrimary:'#7c3aed'}}});
-    _bdSaveCardElems.create('payment').mount('#bdSaveCardEl');
+    _bdSaveCardElems.create('payment',{wallets:{link:'never'}}).mount('#bdSaveCardEl');
     saveBtn.textContent='Save Card';saveBtn.disabled=false;saveBtn.style.opacity='1';
   }catch(e){
     document.getElementById('bdSaveCardErr').textContent=e.message||'Could not load card form.';
