@@ -6,7 +6,12 @@
 // so it can't interfere with the already-migrated bookings/registrations/payments sync.
 let _bdRegId=null,_bdFolios=[],_bdAddOpen={};
 
-const _BD_PAY_METHODS=['Cash','Zelle','Venmo','Paypal','Bank Transfer','Clip','Credit Card (Stripe)'];
+const _BD_PAY_METHODS=['Cash','Zelle','Venmo','Paypal','Bank Transfer','Clip','Credit Card (Stripe)','Card on File'];
+
+function _bdCardLabel(reg){
+  const brand=reg.stripeCardBrand?reg.stripeCardBrand.charAt(0).toUpperCase()+reg.stripeCardBrand.slice(1):'Card';
+  return reg.stripeCardLast4?`${brand} •••• ${reg.stripeCardLast4}`:brand;
+}
 
 function _bdShortId(id){return String(id||'').replace(/-/g,'').slice(-6).toUpperCase();}
 // Friendly label for bookings.source (raw values like 'wetravel' are machine-friendly
@@ -123,6 +128,12 @@ function _bdRender(){
           <div style="font-size:22px;font-weight:800;color:${balanceDue>0?'#dc2626':'#059669'}">${fmt$(balanceDue)}</div>
         </div>
         <div style="margin-top:8px;font-size:12px;color:var(--muted)">Room Total &nbsp; ${nights} × ${fmt$(dailyRate)} = ${fmt$(roomTotal)}</div>
+        <div style="margin-top:10px">
+          ${reg.stripePaymentMethodId
+            ?`<span style="font-size:12px;color:#374151">💳 ${escHtml(_bdCardLabel(reg))} on file</span>
+              <button class="btn btn-secondary btn-sm" onclick="bdOpenSaveCard()" style="margin-left:8px;padding:2px 10px;font-size:11px">Update</button>`
+            :`<button class="btn btn-secondary btn-sm" onclick="bdOpenSaveCard()">💳 Save Card</button>`}
+        </div>
       </div>
     </div>
     <div style="padding:20px 28px 28px">
@@ -204,14 +215,34 @@ function bdOnPayMethodChange(fid){
   const method=document.getElementById(`bd-pay-method-${fid}`)?.value;
   const btn=document.getElementById(`bd-pay-btn-${fid}`);if(!btn)return;
   const amountEl=document.getElementById(`bd-pay-amount-${fid}`);
-  if(method==='Credit Card (Stripe)'){
-    btn.textContent='💳 Charge Card';
-    btn.onclick=()=>bdOpenStripePayment(fid);
+  if(method==='Credit Card (Stripe)'||method==='Card on File'){
+    btn.textContent=method==='Card on File'?'💳 Charge Card on File':'💳 Charge Card';
+    btn.onclick=method==='Card on File'?()=>bdChargeCardOnFile(fid):()=>bdOpenStripePayment(fid);
     const f=_bdFolios.find(x=>x.folio.id===fid);
     if(amountEl&&(!amountEl.value||parseFloat(amountEl.value)===0)&&f){const bal=_bdFolioTotal(f);if(bal>0)amountEl.value=bal.toFixed(2);}
   }else{
     btn.textContent='Record';
     btn.onclick=()=>bdRecordPayment(fid);
+  }
+}
+
+async function bdChargeCardOnFile(fid){
+  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
+  if(!reg.stripePaymentMethodId){showToast('No hay tarjeta guardada para este huésped — guarda una primero con "Save Card".');return;}
+  const amount=parseFloat(document.getElementById(`bd-pay-amount-${fid}`)?.value);
+  if(!amount||amount<=0){showToast('Enter a valid amount');return;}
+  const btn=document.getElementById(`bd-pay-btn-${fid}`);
+  const origLabel=btn.textContent;btn.disabled=true;btn.textContent='Cobrando…';
+  try{
+    const res=await fetch('/.netlify/functions/charge-card-on-file',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regId:_bdRegId,folioId:fid,amount,description:'Amansala · Folio charge'})});
+    const data=await res.json();
+    if(!res.ok||data.error)throw new Error(data.error||'No se pudo cobrar');
+    showToast('Tarjeta cobrada ✓');
+    const f=_bdFolios.find(x=>x.folio.id===fid);
+    await _bdLoadFolios(_bdRegId,f?.folio.guest_name);
+  }catch(e){
+    showToast(e.message||'Error al cobrar la tarjeta');
+    btn.disabled=false;btn.textContent=origLabel;
   }
 }
 
@@ -383,6 +414,77 @@ async function bdOpenStripePayment(fid){
     payBtn.textContent=`Pay ${fmt$(amount)}`;payBtn.disabled=false;payBtn.style.opacity='1';
   }catch(e){
     document.getElementById('bdStripeErr').textContent=e.message||'Could not load payment form.';
+  }
+}
+
+// ── "Save Card" (Stripe SetupIntent) — vault a card at check-in without
+// charging it, so later folio charges can use "Card on File" instead of a
+// one-time payment link (Jorge's ask 2026-09-25). Mirrors bdOpenStripePayment/
+// bdConfirmStripe's modal pattern exactly, but for setup instead of payment.
+let _bdSaveCardStripe=null,_bdSaveCardElems=null;
+
+async function bdOpenSaveCard(){
+  _bdSaveCardStripe=null;_bdSaveCardElems=null;
+
+  let modal=document.getElementById('bdSaveCardModal');
+  if(!modal){
+    modal=document.createElement('div');
+    modal.id='bdSaveCardModal';
+    modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;align-items:center;justify-content:center';
+    modal.innerHTML=`<div style="background:#fff;border-radius:14px;width:420px;max-width:96vw;padding:28px;box-shadow:0 24px 80px rgba(0,0,0,.4)">
+      <div style="font-size:16px;font-weight:800;color:#111827;margin-bottom:4px">Save Card on File</div>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:18px">No se cobra nada ahora — se guarda para cargos futuros al folio.</div>
+      <div id="bdSaveCardEl" style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;min-height:44px;margin-bottom:8px"><div style="color:#9ca3af;font-size:13px">Loading form…</div></div>
+      <div id="bdSaveCardErr" style="color:#dc2626;font-size:12px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button onclick="document.getElementById('bdSaveCardModal').style.display='none'" style="padding:8px 18px;border:1.5px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:13px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">Cancel</button>
+        <button id="bdSaveCardBtn" onclick="bdConfirmSaveCard()" disabled style="padding:8px 20px;border:none;border-radius:8px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif;opacity:.5">Loading…</button>
+      </div>
+      <div style="font-size:10px;color:#9ca3af;text-align:center;margin-top:10px">🔒 Secured by Stripe</div>
+    </div>`;
+    document.body.appendChild(modal);
+  }
+  document.getElementById('bdSaveCardErr').textContent='';
+  const saveBtn=document.getElementById('bdSaveCardBtn');
+  saveBtn.textContent='Loading…';saveBtn.disabled=true;saveBtn.style.opacity='.5';
+  modal.style.display='flex';
+
+  try{
+    if(!window.Stripe){
+      await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://js.stripe.com/v3/';s.onload=resolve;s.onerror=reject;document.head.appendChild(s);});
+    }
+    const res=await fetch('/.netlify/functions/create-card-setup-intent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regId:_bdRegId})});
+    const data=await res.json();
+    if(!res.ok||data.error)throw new Error(data.error||'No se pudo iniciar el guardado de tarjeta');
+    _bdSaveCardStripe=Stripe(data.publishableKey);
+    _bdSaveCardElems=_bdSaveCardStripe.elements({clientSecret:data.clientSecret,appearance:{theme:'stripe',variables:{fontFamily:'Jost, sans-serif',borderRadius:'6px',colorPrimary:'#7c3aed'}}});
+    _bdSaveCardElems.create('payment').mount('#bdSaveCardEl');
+    saveBtn.textContent='Save Card';saveBtn.disabled=false;saveBtn.style.opacity='1';
+  }catch(e){
+    document.getElementById('bdSaveCardErr').textContent=e.message||'Could not load card form.';
+  }
+}
+
+async function bdConfirmSaveCard(){
+  if(!_bdSaveCardStripe||!_bdSaveCardElems)return;
+  const saveBtn=document.getElementById('bdSaveCardBtn');
+  const errEl=document.getElementById('bdSaveCardErr');
+  errEl.textContent='';saveBtn.disabled=true;saveBtn.textContent='Guardando…';
+  try{
+    const {error,setupIntent}=await _bdSaveCardStripe.confirmSetup({elements:_bdSaveCardElems,confirmParams:{return_url:window.location.href},redirect:'if_required'});
+    if(error){errEl.textContent=error.message;saveBtn.disabled=false;saveBtn.textContent='Save Card';return;}
+    if(!setupIntent?.id){errEl.textContent='No se recibió confirmación de Stripe.';return;}
+    const confirmRes=await fetch('/.netlify/functions/confirm-card-setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setupIntentId:setupIntent.id,regId:_bdRegId})});
+    const confirmData=await confirmRes.json();
+    if(!confirmRes.ok||confirmData.error){errEl.textContent='Tarjeta guardada pero no se pudo confirmar: '+(confirmData.error||'error desconocido');return;}
+    const reg=AppData.regs.find(r=>r.id===_bdRegId);
+    if(reg){reg.stripeCustomerId=confirmData.customerId;reg.stripePaymentMethodId=confirmData.paymentMethodId;reg.stripeCardBrand=confirmData.brand;reg.stripeCardLast4=confirmData.last4;}
+    document.getElementById('bdSaveCardModal').style.display='none';
+    showToast('Tarjeta guardada ✓');
+    _bdRender();
+  }catch(e){
+    errEl.textContent=e.message||'Error al guardar la tarjeta';
+    saveBtn.disabled=false;saveBtn.textContent='Save Card';
   }
 }
 
