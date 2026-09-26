@@ -4772,7 +4772,13 @@ async function _fetchAllRows(table,pageSize,selectCols){
   pageSize=pageSize||1000;
   let all=[],from=0;
   while(true){
-    const{data,error}=await db.from(table).select(selectCols||'*').range(from,from+pageSize-1);
+    // .order('id') — paging with .range() and no ORDER BY lets Postgres return rows in
+    // whatever physical order they happen to sit in, and every UPDATE (e.g. a Check In)
+    // moves a row. With registrations past 1000 rows, rows updated while a load was
+    // paging could land on the page already fetched and be skipped entirely — rooms
+    // then show "blocked" with no guest names (real report 2026-09-25, Loco Luxury
+    // during a busy check-in). A stable sort key makes every page consistent.
+    const{data,error}=await db.from(table).select(selectCols||'*').order('id').range(from,from+pageSize-1);
     if(error)throw error;
     if(!data||!data.length)break;
     all=all.concat(data);
