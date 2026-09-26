@@ -18,6 +18,46 @@
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
 
+// Posts a charge to the guest's OWN folio (folios/folio_items) -- the same
+// tables modules/booking-detail.js's Rate and Folios section and
+// modules/reservations.js's Balance column actually read. Charges posted
+// straight to registrations.charges (the old way this function used to work)
+// are invisible there and, worse, silently inflate the retreat's shared
+// master balance (calcBkBalance in modules/payments.js) -- a per-guest spa
+// charge should never touch that (Jorge's report 2026-09-26: Jay Z's spa
+// charge "not showing up" in his folio). Mirrors auto-charge-transport.js's
+// chargeFolio() helper.
+async function chargeFolio(hdrs, { registrationId, guestName, description, unitPrice, category }) {
+  let folioId = null;
+  const exactRes = await fetch(`${SUPABASE_URL}/rest/v1/folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(guestName)}&limit=1`, { headers: hdrs });
+  const exact = exactRes.ok ? await exactRes.json() : [];
+  if (exact.length) folioId = exact[0].id;
+  else {
+    const anyRes = await fetch(`${SUPABASE_URL}/rest/v1/folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&status=eq.open&order=created_at.asc&limit=1`, { headers: hdrs });
+    const any = anyRes.ok ? await anyRes.json() : [];
+    if (any.length) folioId = any[0].id;
+  }
+  if (!folioId) {
+    const token = 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const createRes = await fetch(`${SUPABASE_URL}/rest/v1/folios`, {
+      method: 'POST', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ registration_id: registrationId, guest_name: guestName, name: guestName, payment_token: token, status: 'open' }),
+    });
+    if (!createRes.ok) return { error: 'folio_create_failed: ' + await createRes.text() };
+    const [created] = await createRes.json();
+    folioId = created?.id;
+    if (!folioId) return { error: 'folio_created_no_id' };
+  }
+
+  const itemRes = await fetch(`${SUPABASE_URL}/rest/v1/folio_items`, {
+    method: 'POST', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ folio_id: folioId, description, qty: 1, unit_price: unitPrice, tax_rate: 13 }),
+  });
+  if (!itemRes.ok) return { error: 'folio_item_failed: ' + await itemRes.text() };
+  const [saved] = await itemRes.json();
+  return { folioItemId: saved?.id, folioId };
+}
+
 function hhmmToMin(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
 function fmtDateLong(ds) { return new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }); }
 function fmtT(t) { const [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM'; return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + ' ' + ap; }
@@ -208,17 +248,21 @@ exports.handler = async (event) => {
     const therName = `${ther.firstName} ${ther.lastName || ''}`.trim();
     if (isHotel) {
       const category = /massage/i.test(svc.name) ? 'Massage' : 'Spa';
-      const chargeId = 'chg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-      const charge = { id: chargeId, date, category, description: svc.name, amount: priceUSD, guestName: clientName, therapistName: therName, therapistId, addedAt: new Date().toISOString(), addedBy: 'Visito AI (auto)', source: 'spa' };
       try {
         if (regMatch) {
-          const newCharges = [...(regMatch.reg.charges || []), charge];
-          const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/registrations?id=eq.${regMatch.reg.id}`, {
-            method: 'PATCH', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ charges: newCharges }),
+          const { folioItemId, error } = await chargeFolio(hdrs, {
+            registrationId: regMatch.reg.id, guestName: clientName,
+            description: `${category} — ${svc.name} (${therName})`, unitPrice: priceUSD,
           });
-          if (patchRes.ok) { appt.folioStatus = 'POSTED'; appt.folioChargeId = chargeId; appt.folioRegId = regMatch.reg.id; folioPosted = true; }
-          else console.warn('[visito-spa-create-booking] registrations charge PATCH failed:', await patchRes.text());
+          if (folioItemId) { appt.folioStatus = 'POSTED'; appt.folioChargeId = folioItemId; appt.folioRegId = regMatch.reg.id; folioPosted = true; }
+          else console.warn('[visito-spa-create-booking] folio charge failed:', error);
         } else if (bkMatch) {
+          // Legacy fallback for a room_only booking somehow still without a
+          // registrations row (pre-2026-09-25 bookings that never got
+          // backfilled) -- folios has no generic booking_id anchor, so this
+          // one path still posts to bookings.charges rather than a folio.
+          const chargeId = 'chg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+          const charge = { id: chargeId, date, category, description: svc.name, amount: priceUSD, guestName: clientName, therapistName: therName, therapistId, addedAt: new Date().toISOString(), addedBy: 'Visito AI (auto)', source: 'spa' };
           const newCharges = [...(bkMatch.bk.charges || []), charge];
           const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/bookings?id=eq.${bkMatch.bk.id}`, {
             method: 'PATCH', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ charges: newCharges }),
