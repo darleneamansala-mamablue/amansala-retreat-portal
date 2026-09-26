@@ -335,9 +335,19 @@ exports.handler = async (event) => {
       const payBlock = paymentUrl
         ? `<div style="text-align:center;margin:24px 0"><a href="${paymentUrl}" style="display:inline-block;background:#0e9494;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700">Pay for Your Appointment</a></div><p style="font-size:12.5px;color:#6b7280;text-align:center">Or copy this link: ${paymentUrl}</p>`
         : (!isHotel ? '<p style="font-size:13.5px;color:#374151">Our team will follow up shortly to collect payment.</p>' : '');
+      const cancelUrl = `${process.env.URL || 'https://amansalaportal.com'}/spa-booking.html?cancel=${apptId}`;
+      const cancelBlock = `<div style="text-align:center;margin:28px 0 4px;padding-top:20px;border-top:1px solid #f0ede8">
+        <a href="${cancelUrl}" style="display:inline-block;background:#dc2626;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700">Cancel My Appointment</a>
+      </div>
+      <p style="font-size:12px;color:#6b7280;text-align:center;line-height:1.5;margin:12px 0 0">
+        <strong>Cancellation policy:</strong> appointments may be cancelled free of charge up to 12 hours before the scheduled start time.
+        Cancelling 12 hours or more in advance will remove the charge from your room folio.
+        Cancelling less than 12 hours in advance will not remove the charge.
+      </p>`;
       const body = `<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(firstName)}, you're booked! Here are your appointment details:</p>
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px">${rows}</table>
-        ${payBlock}`;
+        ${payBlock}
+        ${cancelBlock}`;
       await fetch(`${process.env.URL || 'https://amansalaportal.com'}/.netlify/functions/send-email`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: email, subject: 'Spa Appointment Confirmed — Amansala', html: emailShell('Your Spa Appointment is Confirmed', body) }),
