@@ -34,7 +34,6 @@ async function resInit(){
           <button id="res-tab-inhotel"    onclick="resSetTab('inhotel')"    style="${_RES_TAB_INA}">In House</button>
           <button id="res-tab-departures" onclick="resSetTab('departures')" style="${_RES_TAB_INA}">Departures</button>
           <button id="res-tab-search"     onclick="resSetTab('search')"     style="${_RES_TAB_INA}">Advanced Search</button>
-          <button id="res-tab-create"     onclick="resSetTab('create')"     style="${_RES_TAB_INA}">Create Reservation</button>
         </div>
       </div>
       <div id="res-body" style="flex:1;overflow-y:auto;padding:20px"></div>
@@ -68,7 +67,7 @@ async function _resFetchRequests(){
 
 function resSetTab(t){
   _resTab=t;
-  ['arrivals','inhotel','departures','search','create'].forEach(id=>{
+  ['arrivals','inhotel','departures','search'].forEach(id=>{
     document.getElementById('res-tab-'+id)?.setAttribute('style',t===id?_RES_TAB_ACT:_RES_TAB_INA);
   });
   _resRender();
@@ -82,8 +81,7 @@ async function _resRender(){
   if(_resTab==='inhotel') html=await _resBuildInHotelView();
   else if(_resTab==='arrivals') html=await _resBuildMovementView('arrivals');
   else if(_resTab==='departures') html=await _resBuildMovementView('departures');
-  else if(_resTab==='search'){body.innerHTML=_resBuildSearchView();return;}
-  else{_resBuildCreateView(body);return;}
+  else{body.innerHTML=_resBuildSearchView();return;}
   if(mySeq!==_resRenderSeq)return; // superseded by a newer render (tab switched mid-fetch)
   body.innerHTML=html;
 }
@@ -433,16 +431,4 @@ async function resRunSearch(){
   await _resAttachFolioBalances(rows);
   resultsEl.innerHTML=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${rows.length} result${rows.length!==1?'s':''} found</div>
     ${_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkin',balanceCol:true,discountCol:true})}`;
-}
-
-// ─── CREATE RESERVATION ───────────────────────────────────────
-// Reuses the existing "Book a Room" guided flow (modules/venues.js) instead of
-// re-implementing room-type/date/rate selection a second time.
-function _resBuildCreateView(body){
-  body.innerHTML=`<div style="max-width:520px;margin:60px auto;text-align:center;background:#fff;border:1px solid var(--border);border-radius:12px;padding:48px">
-    <div style="font-size:32px;margin-bottom:10px">📅</div>
-    <div style="font-size:15px;font-weight:700;color:var(--dark);margin-bottom:8px">Create a Reservation</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:20px">Search availability by dates, then pick a room -- same flow as "+ Book a Room" on the Rooms tab.</div>
-    <button class="btn btn-primary" onclick="rsOpen()">+ Book a Room</button>
-  </div>`;
 }
