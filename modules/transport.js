@@ -1241,6 +1241,14 @@ async function tr2Drop(targetFirstDirId) {
     ? [...tr2GroupKeyMap.entries()].filter(([dk, gk]) => gk === oldSrcKey && dk !== src && dk.startsWith(direction + '|'))
         .filter(([dk]) => !!tr2RawRows[dk.split('|')[1]]?.data?.folioCharged?.[dirKey]).map(([dk]) => dk.split('|')[1])
     : [];
+  // Jorge's ask 2026-09-26: dropping someone INTO a group changes that
+  // group's size/rate too -- previously only the one row dropped onto got
+  // recharged, leaving every OTHER already-charged member of the target
+  // group stale. Captured before targetKey gets reassigned to a fresh ugKey
+  // below, same pattern as oldSrcGroupChargedIds.
+  const oldTgtGroupChargedIds = [...tr2GroupKeyMap.entries()]
+    .filter(([dk, gk]) => gk === targetKey && dk !== targetFirstDirId && dk.startsWith(direction + '|'))
+    .filter(([dk]) => !!tr2RawRows[dk.split('|')[1]]?.data?.folioCharged?.[dirKey]).map(([dk]) => dk.split('|')[1]);
 
   if (targetKey.startsWith('#') || targetKey.startsWith('__solo__')) {
     const ugKey = 'ug_' + (++tr2UgCounter);
@@ -1253,7 +1261,12 @@ async function tr2Drop(targetFirstDirId) {
 
   const srcHasCharge = !!tr2RawRows[srcRowId]?.data?.folioCharged?.[dirKey];
   const tgtHasCharge = !!tr2RawRows[tgtRowId]?.data?.folioCharged?.[dirKey];
-  if (srcHasCharge || tgtHasCharge || oldSrcGroupChargedIds.length) {
+  if (srcHasCharge || tgtHasCharge || oldSrcGroupChargedIds.length || oldTgtGroupChargedIds.length) {
+    // One adjust call per booking is enough -- adjust-transport-charge.js
+    // sweeps every same-booking sibling itself. What it does NOT do is reach
+    // siblings from a DIFFERENT booking sharing the same van, so every
+    // distinct booking touched by either the old or new group still needs
+    // its own representative call (Jorge's ask 2026-09-26).
     const seenBkIds = new Set();
     const tryAdjust = async (rId) => {
       const bkId = tr2RawRows[rId]?.booking_id;
@@ -1264,6 +1277,7 @@ async function tr2Drop(targetFirstDirId) {
     if (srcHasCharge) await tryAdjust(srcRowId);
     if (tgtHasCharge) await tryAdjust(tgtRowId);
     for (const rId of oldSrcGroupChargedIds) await tryAdjust(rId);
+    for (const rId of oldTgtGroupChargedIds) await tryAdjust(rId);
     await tr2LoadData();
   }
 }
