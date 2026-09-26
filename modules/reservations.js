@@ -74,14 +74,20 @@ function resSetTab(t){
   _resRender();
 }
 
-function _resRender(){
+async function _resRender(){
   const body=document.getElementById('res-body');if(!body)return;
-  if(_resTab==='inhotel') body.innerHTML=_resBuildInHotelView();
-  else if(_resTab==='arrivals') body.innerHTML=_resBuildMovementView('arrivals');
-  else if(_resTab==='departures') body.innerHTML=_resBuildMovementView('departures');
-  else if(_resTab==='search') body.innerHTML=_resBuildSearchView();
-  else _resBuildCreateView(body);
+  const mySeq=++_resRenderSeq;
+  if(_resTab==='inhotel'||_resTab==='arrivals'||_resTab==='departures')body.innerHTML=`<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>`;
+  let html;
+  if(_resTab==='inhotel') html=await _resBuildInHotelView();
+  else if(_resTab==='arrivals') html=await _resBuildMovementView('arrivals');
+  else if(_resTab==='departures') html=await _resBuildMovementView('departures');
+  else if(_resTab==='search'){body.innerHTML=_resBuildSearchView();return;}
+  else{_resBuildCreateView(body);return;}
+  if(mySeq!==_resRenderSeq)return; // superseded by a newer render (tab switched mid-fetch)
+  body.innerHTML=html;
 }
+let _resRenderSeq=0;
 
 // ─── SHARED ROW BUILDERS ──────────────────────────────────────
 // One row per named guest across every active registrations row (retreat +
@@ -89,13 +95,6 @@ function _resRender(){
 // here always matches what Balance Due/the folio actually charges.
 function _resGroupRows(){
   const out=[];
-  // calcBkBalance() (modules/payments.js) walks every room/reg of a booking --
-  // cache per booking so a multi-guest room/retreat doesn't recompute it once
-  // per named guest. It's the same "Balance Due" number shown everywhere else
-  // in the app (room total + reg.charges extras - payments), reused as-is
-  // rather than inventing a second definition of balance (Jorge's ask
-  // 2026-09-26: Balance should reflect an unpaid reservation or extras).
-  const bkBalanceCache=new Map();
   AppData.regs.forEach(reg=>{
     const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
     if(!bk||bk.status==='cancelled')return;
@@ -107,13 +106,11 @@ function _resGroupRows(){
     const gc=named.length;
     const nights=Math.max(1,Math.round((pd(checkOut)-pd(checkIn))/DAY_MS));
     const rate=reg.customRateOverride!=null?Number(reg.customRateOverride):(rt?getRoomRate(rt,gc,checkIn,nights):null);
-    if(!bkBalanceCache.has(bk.id))bkBalanceCache.set(bk.id,calcBkBalance(bk).balance);
-    const balance=bkBalanceCache.get(bk.id);
     named.forEach(g=>out.push({
       name:g.name,room:reg.room||'—',checkIn,checkOut,rate,
       notes:reg.notes||g.notes||'',source:bk.leaderName||bk.retreatName||'Group',
       type:'group',id:reg.id,checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
-      cardOnFile:!!reg.stripePaymentMethodId,balance,
+      cardOnFile:!!reg.stripePaymentMethodId,balance:null,
     }));
   });
   return out;
@@ -124,19 +121,13 @@ function _resIndivRows(){
     .map(r=>{
       const rt=AppData.roomTypes.find(t=>t.id===r.roomTypeId||t.name===r.roomTypeName);
       const rate=r.dailyRate!=null?Number(r.dailyRate):(rt?roomOnlyRateForDate(rt,r.checkIn):null);
-      const nights=r.checkIn&&r.checkOut?Math.max(1,Math.round((pd(r.checkOut)-pd(r.checkIn))/DAY_MS)):1;
-      // No folios/reg.charges equivalent wired up for these yet (see Card on
-      // File note below) -- just room total vs. what Stripe actually
-      // collected at booking time, so an unpaid/partial reservation still
-      // shows a balance even though we can't see folio extras here.
-      const balance=rate!=null?Math.max(0,+(rate*nights-(r.amountPaid||0)).toFixed(2)):null;
       return {
         name:`${r.firstName||''} ${r.lastName||''}`.trim()||'Guest',room:r.room||r.roomTypeName||'—',
         checkIn:r.checkIn,checkOut:r.checkOut,rate,notes:r.notes||r.dietary||'',
         source:r.source||'Booking Engine',type:'individual',id:r.id,status:r.status,
         checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
         cardOnFile:false, // Card on File isn't wired up for Booking Engine reservations yet
-        balance,
+        balance:null,
       };
     });
 }
@@ -144,6 +135,50 @@ function _resOpenRowAt(i){
   const r=_resLastRows[i];if(!r)return;
   if(r.type==='individual')openBookingDetailForRequest(r.id);
   else openBookingDetailForReg(r.id,r.name);
+}
+
+// Per-guest folio balance -- deliberately NOT calcBkBalance() (the retreat's
+// shared master bill). Each guest has their own folio (registration_id +
+// guest_name, or booking_request_id for individual reservations), same
+// tables/scoping modules/booking-detail.js's Rate and Folios uses -- Jorge's
+// correction 2026-09-26: "esas reservas deben de tener un folio para el
+// cargo de cada persona, no deben de compartir el mismo balance." Mutates
+// each row's .balance in place; one bulk fetch for the whole visible list
+// instead of one round trip per guest.
+async function _resAttachFolioBalances(rows){
+  const regIds=[...new Set(rows.filter(r=>r.type==='group').map(r=>r.id))];
+  const reqIds=[...new Set(rows.filter(r=>r.type==='individual').map(r=>r.id))];
+  if(!regIds.length&&!reqIds.length)return;
+  try{
+    const [regRes,reqRes]=await Promise.all([
+      regIds.length?db.from('folios').select('id,registration_id,booking_request_id,guest_name,status').in('registration_id',regIds):Promise.resolve({data:[]}),
+      reqIds.length?db.from('folios').select('id,registration_id,booking_request_id,guest_name,status').in('booking_request_id',reqIds):Promise.resolve({data:[]}),
+    ]);
+    if(regRes.error)throw regRes.error;
+    if(reqRes.error)throw reqRes.error;
+    const folios=[...(regRes.data||[]),...(reqRes.data||[])];
+    rows.forEach(r=>{r.balance=0;});
+    if(!folios||!folios.length)return;
+    const openFolios=folios.filter(f=>f.status==='open');
+    if(!openFolios.length)return;
+    const folioIds=openFolios.map(f=>f.id);
+    const {data:items,error:iErr}=await db.from('folio_items').select('folio_id,qty,unit_price,tax_rate').in('folio_id',folioIds);
+    if(iErr)throw iErr;
+    const totalByFolio={};
+    (items||[]).forEach(i=>{totalByFolio[i.folio_id]=(totalByFolio[i.folio_id]||0)+Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100);});
+    const balanceByKey={};
+    openFolios.forEach(f=>{
+      const key=`${f.registration_id||''}:${f.booking_request_id||''}:${f.guest_name}`;
+      balanceByKey[key]=(balanceByKey[key]||0)+(totalByFolio[f.id]||0);
+    });
+    rows.forEach(r=>{
+      const key=r.type==='group'?`${r.id}::${r.name}`:`:${r.id}:${r.name}`;
+      if(balanceByKey[key]!=null)r.balance=+balanceByKey[key].toFixed(2);
+    });
+  }catch(e){
+    console.warn('[reservations] folio balances',e.message);
+    rows.forEach(r=>{if(r.balance==null)r.balance=null;});
+  }
 }
 async function resCheckIn(type,id){
   if(type==='individual'){
@@ -235,7 +270,7 @@ function _resBuildOccupancyPanel(date){
 function resSetAuditDate(d){_resAuditDate=d;if(_resTab==='inhotel')_resRender();}
 
 // ─── IN HOTEL ─────────────────────────────────────────────────
-function _resBuildInHotelView(){
+async function _resBuildInHotelView(){
   const d=_resAuditDate;
   // "In House" means actually checked in, not just "today falls within their
   // stay dates" -- a guest who hasn't been checked in yet belongs on Arrivals
@@ -244,6 +279,7 @@ function _resBuildInHotelView(){
     ..._resGroupRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&!r.checkedOutAt),
     ..._resIndivRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&r.status!=='checked_out'),
   ].sort((a,b)=>(a.room||'').localeCompare(b.room||''));
+  await _resAttachFolioBalances(rows);
 
   return `<div style="max-width:1000px;margin:0 auto">
     ${_resBuildOccupancyPanel(d)}
@@ -257,7 +293,7 @@ function _resBuildInHotelView(){
 }
 
 // ─── ARRIVALS / DEPARTURES ────────────────────────────────────
-function _resBuildMovementView(type){
+async function _resBuildMovementView(type){
   const isArr=type==='arrivals';
   const date=isArr?_resArrDate:_resDepDate;
   const setter=isArr?'resSetArrDate':'resSetDepDate';
@@ -268,6 +304,7 @@ function _resBuildMovementView(type){
     ..._resGroupRows().filter(r=>(isArr?r.checkIn:r.checkOut)===date),
     ..._resIndivRows().filter(r=>(isArr?r.checkIn:r.checkOut)===date),
   ];
+  await _resAttachFolioBalances(rows);
   const todayStr=fmtISO(new Date());
   const dateLabel=date===todayStr?'Today':fmtDate(date);
 
@@ -365,7 +402,7 @@ function _resBuildSearchView(){
     <div id="res-srch-results"></div>
   </div>`;
 }
-function resRunSearch(){
+async function resRunSearch(){
   const name=document.getElementById('res-srch-name')?.value.trim().toLowerCase();
   const room=document.getElementById('res-srch-room')?.value.trim().toLowerCase();
   const source=document.getElementById('res-srch-source')?.value.trim().toLowerCase();
@@ -383,6 +420,8 @@ function resRunSearch(){
   rows.sort((a,b)=>(b.checkIn||'').localeCompare(a.checkIn||''));
 
   if(!rows.length){resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">No results found.</p>`;return;}
+  resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">Loading…</p>`;
+  await _resAttachFolioBalances(rows);
   resultsEl.innerHTML=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${rows.length} result${rows.length!==1?'s':''} found</div>
     ${_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkin',balanceCol:true})}`;
 }
