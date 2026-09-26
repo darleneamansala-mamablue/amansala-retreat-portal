@@ -8,6 +8,9 @@ let actSheetSignups = {}; // { bookingId: [{firstName,lastName,activities,...}] 
 let actOpsData = {}; // { 'aoId|date': {guide, van1, van2, guideConfirmed, driverConfirmed, entranceMXN} }
 let actSummaryFilterBkId = '';
 let actSummaryShowUndated = false;
+// Tours that stay on a retreat's schedule but never appear on the activity
+// sheet or the guest sign-up sheet (Darlene 2026-09-26): Cooking Class.
+const ACT_SHEET_HIDDEN = new Set(['ao14']);
 const TOUR_GUIDE_NAMES=['Marco','Yolanda','Sergio','Ryan'];
 const TOUR_DRIVER_NAMES=['Rubi','Rosy','Kike'];
 const TEMAZCAL_FIRE_KEEPER_NAMES=['Golloy','Francisco'];
@@ -114,6 +117,7 @@ function actSheetRenderWeek() {
     if(!s||!e||s>wLast||e<wFirst) return;
     const sups = actSheetSignups[bk.id]||[];
     (bk.retreatActivities||[]).forEach(act=>{
+      if (ACT_SHEET_HIDDEN.has(act.aoId)) return;
       const ds=(act.date||'').slice(0,10);
       if(!ds||!dayActs[ds]) return;
       const ao=aoMap[act.aoId]||{name:act.aoId,price:0,dur:0};
@@ -276,7 +280,7 @@ function actByRetreatBuildEntries(bkId) {
     // Never show a column for an entry with no real tour behind it — it used
     // to print as "undefined" or a raw code like "ao12" (Darlene 2026-09-26) —
     // or for a tour on the arrival/departure day (activity-rules.js).
-    if (a.aoId==='undefined' || !aoMap[a.aoId]) return false;
+    if (a.aoId==='undefined' || !aoMap[a.aoId] || ACT_SHEET_HIDDEN.has(a.aoId)) return false;
     if (typeof tourDateAllowed==='function' && a.date && !tourDateAllowed(bk,a.date.slice(0,10))) return false;
     const key = a.aoId+'|'+(a.date||'');
     if (seen.has(key)) return false;
@@ -551,6 +555,7 @@ function actSheetRenderSummary() {
     const scheduledAoIds = new Set((bk.retreatActivities||[]).map(a=>a.aoId));
     // Existing scheduled activities
     (bk.retreatActivities||[]).forEach(act=>{
+      if (ACT_SHEET_HIDDEN.has(act.aoId)) return;
       const ao = aoMap[act.aoId]||{name:act.aoId,price:0,dur:0};
       const key = act.aoId+'|'+(act.date||'');
       const signedUp = sups.filter(s=>(s.activities||[]).includes(act.aoId))
@@ -1233,6 +1238,7 @@ function actSheetPrint() {
     if(!s||!e||s>wLast||e<wFirst) return;
     const sups=actSheetSignups[bk.id]||[];
     (bk.retreatActivities||[]).forEach(act=>{
+      if (ACT_SHEET_HIDDEN.has(act.aoId)) return;
       const ds=(act.date||'').slice(0,10);
       if(!ds||ds<wFirst||ds>wLast) return;
       const ao=aoMap[act.aoId]||{name:act.aoId,price:0,dur:0};
