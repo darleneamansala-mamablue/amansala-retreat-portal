@@ -479,12 +479,26 @@ function menuPopulateFromRetreats(silent=false){
       // cleared above since it's still in grpSet.
       if(bk.mealPlan==='none') return;
       const planMeals=MEAL_PLANS[bk.mealPlan]||MEAL_PLANS.standard;
+      // Arrival/departure days (Darlene's rule 2026-09-26, applies to every
+      // group): guests arrive in the afternoon, so the first meal on arrival
+      // day is the snack; on departure day the last meal is brunch (or lunch
+      // for a Full plan) — no snack or dinner. Single-day stays keep every meal.
+      const _isArrival=dateStr===s&&s!==e, _isDeparture=dateStr===e&&s!==e;
+      const ARRIVAL_MEALS=new Set(['snack','dinner']);
+      const DEPARTURE_MEALS=new Set(['lightBreakfast','breakfast','brunch','lunch']);
       planMeals.forEach(meal=>{
+        if(_isArrival&&!ARRIVAL_MEALS.has(meal))return;
+        if(_isDeparture&&!DEPARTURE_MEALS.has(meal))return;
         const t=menuMealTime(bk,meal,dateStr);
-        const actualMeal=routeMeal(meal,t);
+        let actualMeal=routeMeal(meal,t);
         // If brunch routes back to lightBreakfast, skip — LB is already
-        // being added separately and brunch was too early to serve.
-        if(meal==='brunch'&&actualMeal==='lightBreakfast') return;
+        // being added separately and brunch was too early to serve. Except on
+        // departure day: brunch is the group's last meal there (no morning
+        // class → default 09:30), so it must stay on the list.
+        if(meal==='brunch'&&actualMeal==='lightBreakfast'){
+          if(!_isDeparture) return;
+          actualMeal='brunch';
+        }
         menuEnsure(dateStr,actualMeal);
         menuSchedule[dateStr][actualMeal].push({time:t,group:grp,pax:px});
         added++;
