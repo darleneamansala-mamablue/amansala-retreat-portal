@@ -35,6 +35,7 @@ function _bdSubject(){
       sourceLabel:r.source||null,retreatLabel:null,retreatBkId:null,
       folioCol:'booking_request_id',bookingType:'room_only',
       stripeCustomerId:null,stripePaymentMethodId:null,stripeCardBrand:null,stripeCardLast4:null,
+      cancelled:r.status==='declined',
     };
   }
   const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return null;
@@ -61,6 +62,7 @@ function _bdSubject(){
     folioCol:'registration_id',bookingType:bk.bookingType,
     stripeCustomerId:reg.stripeCustomerId,stripePaymentMethodId:reg.stripePaymentMethodId,
     stripeCardBrand:reg.stripeCardBrand,stripeCardLast4:reg.stripeCardLast4,
+    cancelled:!!reg.cancelled,
   };
 }
 
@@ -155,13 +157,23 @@ function _bdRender(){
   const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
   const roomTotal=nights*(subj.rate||0);
   const balanceDue=_bdBalanceDue();
-  const statusBadge=subj.checkedOutAt?{label:'Checked Out',bg:'rgba(255,255,255,.15)'}:subj.checkedInAt?{label:'In House',bg:'rgba(34,197,94,.25)'}:{label:'Expected',bg:'rgba(255,255,255,.15)'};
+  const statusBadge=subj.cancelled?{label:'Cancelled',bg:'rgba(239,68,68,.4)'}:subj.checkedOutAt?{label:'Checked Out',bg:'rgba(255,255,255,.15)'}:subj.checkedInAt?{label:'In House',bg:'rgba(34,197,94,.25)'}:{label:'Expected',bg:'rgba(255,255,255,.15)'};
 
   const hBtnS='background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'Jost\',sans-serif';
   let headerBtns='';
-  if(!subj.checkedInAt) headerBtns+=`<button onclick="bdCheckIn()" style="${hBtnS}">Check In</button>`;
+  if(subj.cancelled){
+    // Nothing to check in/out on a cancelled reservation.
+  }else if(!subj.checkedInAt) headerBtns+=`<button onclick="bdCheckIn()" style="${hBtnS}">Check In</button>`;
   else if(!subj.checkedOutAt) headerBtns+=`<button onclick="bdCheckOut()" style="${hBtnS}">Check Out</button>`;
   else headerBtns+=`<button onclick="bdUndoCheckOut()" style="${hBtnS}">Undo Check Out</button>`;
+  // Cancel marks just THIS room's reservation as cancelled (kept, not deleted --
+  // shows up in Advanced Search tagged "Cancelled" for reporting) without
+  // splitting it per-guest -- a whole physical room (e.g. CH16, two named
+  // guests) cancels as one unit, unlike Nicole Chavez's earlier per-guest case.
+  // Jorge's ask 2026-09-26: "solo quiero un boton cancel...cancelar es cancelar
+  // y en un reporte salen cancelados" -- kept fully separate from Delete, which
+  // still hard-removes the registration and is untouched.
+  if(_bdKind==='reg'&&!subj.cancelled) headerBtns+=`<button onclick="bdCancelReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Cancel</button>`;
   headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Delete</button>`;
 
   document.getElementById('bdHdr').innerHTML=`
@@ -485,6 +497,28 @@ async function bdUndoCheckOut(){
   }
   showToast('Check-out undone ✓ — back In House');
   _bdRender();
+}
+
+// Marks THIS room's registration as cancelled -- kept (not deleted), excluded
+// from Arrivals/In House/Departures and Transport (modules/reservations.js,
+// modules/transport.js, netlify/functions/auto-charge-transport.js all check
+// reg.cancelled), but still findable/tagged "Cancelled" in Advanced Search.
+// 'req' kind (booking_requests) has its own equivalent already -- Delete sets
+// status='declined' there -- so this button only shows for 'reg' kind.
+async function bdCancelReservation(){
+  if(_bdKind!=='reg')return;
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+  if(reg.cancelled){showToast('Ya está cancelada.');return;}
+  const names=(reg.guests||[]).map(g=>g.name).filter(Boolean).join(' & ');
+  if(!confirm(`Cancel this reservation — room ${reg.room||''} (${names||'guest'})?\n\nStays on record as cancelled (not deleted) — comes out of Arrivals/In House/Departures and Transport, but you can still find it later in Advanced Search.`))return;
+  const now=new Date().toISOString();
+  const {error}=await db.from('registrations').update({cancelled:true,cancelled_at:now}).eq('id',reg.id);
+  if(error){showToast('Error: '+error.message);return;}
+  reg.cancelled=true;reg.cancelledAt=now;
+  if(typeof logActivity==='function')logActivity('Reservation cancelled',`${names||'Guest'} · ${reg.room||''}`,reg.bookingId);
+  showToast('Reservation cancelled ✓');
+  _bdRender();
+  if(typeof resRefresh==='function')resRefresh();
 }
 
 async function bdDeleteReservation(){

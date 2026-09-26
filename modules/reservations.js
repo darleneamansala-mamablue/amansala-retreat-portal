@@ -117,6 +117,10 @@ function _resGroupRows(){
       type:'group',id:reg.id,checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
       cardOnFile:!!reg.stripePaymentMethodId,balance:null,
       discountCode:null, // no discount-code concept for retreat/Room Only regs
+      // Whole-room cancel (Booking Detail's "Cancel" button, Jorge's ask
+      // 2026-09-26) -- excluded from Arrivals/In House/Departures below, but
+      // still shown (tagged) in Advanced Search so it's a findable record.
+      cancelled:!!reg.cancelled,
     };
     if(named.length>1&&rt&&_RES_ONE_BED_RT_IDS.includes(rt.id)){
       out.push({...base,name:_joinNames(named.map(g=>g.name)),guestNames:named.map(g=>g.name),notes:reg.notes||named.map(g=>g.notes).filter(Boolean).join(' / ')});
@@ -322,7 +326,7 @@ async function _resBuildInHotelView(){
   // stay dates" -- a guest who hasn't been checked in yet belongs on Arrivals
   // with a Check In button, not here (Jorge's ask 2026-09-26).
   const rows=_resSortRows([
-    ..._resGroupRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&!r.checkedOutAt),
+    ..._resGroupRows().filter(r=>!r.cancelled&&r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&!r.checkedOutAt),
     ..._resIndivRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&r.status!=='checked_out'),
   ]);
   await _resAttachFolioBalances(rows);
@@ -347,7 +351,7 @@ async function _resBuildMovementView(type){
   const color=isArr?'#0d9488':'#7c3aed';
 
   const rows=_resSortRows([
-    ..._resGroupRows().filter(r=>(isArr?r.checkIn:r.checkOut)===date),
+    ..._resGroupRows().filter(r=>!r.cancelled&&(isArr?r.checkIn:r.checkOut)===date),
     ..._resIndivRows().filter(r=>(isArr?r.checkIn:r.checkOut)===date),
   ]);
   await _resAttachFolioBalances(rows);
@@ -409,7 +413,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol,di
         <tr style="border-bottom:1px solid #f3f4f6;cursor:pointer" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''" onclick="_resOpenRowAt(${i})">
           <td style="padding:11px 16px;font-size:12px;color:var(--text)">${escHtml(r.room)}</td>
           <td style="padding:11px 16px;font-size:12px;color:var(--text)">${escHtml(r.roomType)}</td>
-          <td style="padding:11px 16px;font-size:13px;font-weight:700;color:#1d4ed8;text-decoration:underline;text-underline-offset:2px">${escHtml(r.name)}</td>
+          <td style="padding:11px 16px;font-size:13px;font-weight:700;color:#1d4ed8;text-decoration:underline;text-underline-offset:2px">${escHtml(r.name)}${r.cancelled?` <span style="font-size:10px;font-weight:700;color:#dc2626;background:#fee2e2;padding:1px 7px;border-radius:20px;text-decoration:none;display:inline-block">CANCELLED</span>`:''}</td>
           ${checkInCol?`<td style="padding:11px 16px;font-size:12px;color:var(--text)">${fmtDate(r.checkIn)}</td>`:''}
           ${checkOutCol?`<td style="padding:11px 16px;font-size:12px;color:var(--text)">${fmtDate(r.checkOut)}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;font-weight:600;color:#0d9488">${r.rate!=null?fmt$(r.rate):'—'}</td>
