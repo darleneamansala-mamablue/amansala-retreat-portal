@@ -1,0 +1,375 @@
+// ===== RESERVATIONS — Arrivals / In House / Departures / Search / Create =====
+// Jorge's ask 2026-09-26: a unified front-desk dashboard the portal never had,
+// ported from a separate, disconnected "staging" rewrite (js/modules/reservations.js,
+// recovered from an old Netlify deploy with no git history) and adapted to this
+// app's actual conventions -- no live Supabase re-query per render (AppData.regs/
+// AppData.bookings/AppData.roomTypes are already loaded), and reusing the folio/
+// check-in system already built into modules/booking-detail.js instead of
+// reimplementing it.
+//
+// Two kinds of guest, unified into one dashboard:
+// - "group": any registrations row (retreat guests AND Room Only bookings both
+//   get one, per the 2026-09-25 fix) -- read straight from AppData.regs/AppData.bookings.
+// - "individual": a paid Booking Engine reservation (`booking_requests`, no
+//   registrations row at all -- see booking-engine-admin.js). Not part of
+//   AppData, so fetched here and cached locally; resRefresh() re-fetches.
+let _resTab='arrivals';
+let _resRequests=[];
+let _resRequestsLoaded=false;
+let _resArrDate=fmtISO(new Date());
+let _resDepDate=fmtISO(new Date());
+let _resAuditDate=fmtISO(new Date());
+
+const _RES_TAB_ACT='background:#fff;border:1px solid var(--border);border-bottom:1px solid #fff;padding:8px 18px;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;color:var(--dark);cursor:pointer;font-family:\'Jost\',sans-serif;margin-bottom:-1px';
+const _RES_TAB_INA='background:transparent;border:none;padding:8px 18px;border-radius:8px 8px 0 0;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;font-family:\'Jost\',sans-serif';
+
+async function resInit(){
+  const root=document.getElementById('resRoot');if(!root)return;
+  root.innerHTML=`
+    <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+      <div style="background:#fff;border-bottom:1px solid var(--border);padding:14px 20px 0;flex-shrink:0">
+        <div style="display:flex;align-items:flex-end;gap:0;flex-wrap:wrap">
+          <h2 style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--dark);margin:0 20px 10px 0">Reservations</h2>
+          <button id="res-tab-arrivals"   onclick="resSetTab('arrivals')"   style="${_RES_TAB_ACT}">Arrivals</button>
+          <button id="res-tab-inhotel"    onclick="resSetTab('inhotel')"    style="${_RES_TAB_INA}">In House</button>
+          <button id="res-tab-departures" onclick="resSetTab('departures')" style="${_RES_TAB_INA}">Departures</button>
+          <button id="res-tab-search"     onclick="resSetTab('search')"     style="${_RES_TAB_INA}">Advanced Search</button>
+          <button id="res-tab-create"     onclick="resSetTab('create')"     style="${_RES_TAB_INA}">Create Reservation</button>
+        </div>
+      </div>
+      <div id="res-body" style="flex:1;overflow-y:auto;padding:20px"></div>
+    </div>`;
+  if(!_resRequestsLoaded){
+    await _resFetchRequests();
+    _resRequestsLoaded=true;
+  }
+  _resRender();
+}
+
+// Called by booking-detail.js after a booking_requests check-in/out/notes/
+// cancel, since that data isn't part of AppData and this page keeps its own
+// cached copy -- re-fetches only if this tab is actually the one showing.
+async function resRefresh(){
+  if(!document.getElementById('tab-reservations')?.classList.contains('active'))return;
+  await _resFetchRequests();
+  _resRender();
+}
+
+async function _resFetchRequests(){
+  try{
+    const {data,error}=await db.from('booking_requests').select('*').order('check_in',{ascending:true});
+    if(error)throw error;
+    _resRequests=(data||[]).map(_bdReqSqlToApp);
+  }catch(e){
+    console.warn('[reservations] load booking_requests',e.message);
+    _resRequests=[];
+  }
+}
+
+function resSetTab(t){
+  _resTab=t;
+  ['arrivals','inhotel','departures','search','create'].forEach(id=>{
+    document.getElementById('res-tab-'+id)?.setAttribute('style',t===id?_RES_TAB_ACT:_RES_TAB_INA);
+  });
+  _resRender();
+}
+
+function _resRender(){
+  const body=document.getElementById('res-body');if(!body)return;
+  if(_resTab==='inhotel') body.innerHTML=_resBuildInHotelView();
+  else if(_resTab==='arrivals') body.innerHTML=_resBuildMovementView('arrivals');
+  else if(_resTab==='departures') body.innerHTML=_resBuildMovementView('departures');
+  else if(_resTab==='search') body.innerHTML=_resBuildSearchView();
+  else _resBuildCreateView(body);
+}
+
+// ─── SHARED ROW BUILDERS ──────────────────────────────────────
+// One row per named guest across every active registrations row (retreat +
+// Room Only) -- mirrors getRoomRate's own gc/nights inputs so the rate shown
+// here always matches what Balance Due/the folio actually charges.
+function _resGroupRows(){
+  const out=[];
+  AppData.regs.forEach(reg=>{
+    const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
+    if(!bk||bk.status==='cancelled')return;
+    const named=(reg.guests||[]).filter(g=>g.name&&!g.cancelled);
+    if(!named.length)return;
+    const checkIn=reg.checkIn||bk.startDate,checkOut=reg.checkOut||bk.endDate;
+    if(!checkIn||!checkOut)return;
+    const rt=AppData.roomTypes.find(r=>(r.rooms||[]).includes(reg.room));
+    const gc=named.length;
+    const nights=Math.max(1,Math.round((pd(checkOut)-pd(checkIn))/DAY_MS));
+    const rate=reg.customRateOverride!=null?Number(reg.customRateOverride):(rt?getRoomRate(rt,gc,checkIn,nights):null);
+    named.forEach(g=>out.push({
+      name:g.name,room:reg.room||'—',checkIn,checkOut,rate,
+      notes:reg.notes||g.notes||'',source:bk.leaderName||bk.retreatName||'Group',
+      type:'group',id:reg.id,checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
+    }));
+  });
+  return out;
+}
+function _resIndivRows(){
+  return _resRequests
+    .filter(r=>r.status!=='declined')
+    .map(r=>{
+      const rt=AppData.roomTypes.find(t=>t.id===r.roomTypeId||t.name===r.roomTypeName);
+      const rate=r.dailyRate!=null?Number(r.dailyRate):(rt?roomOnlyRateForDate(rt,r.checkIn):null);
+      return {
+        name:`${r.firstName||''} ${r.lastName||''}`.trim()||'Guest',room:r.room||r.roomTypeName||'—',
+        checkIn:r.checkIn,checkOut:r.checkOut,rate,notes:r.notes||r.dietary||'',
+        source:r.source||'Booking Engine',type:'individual',id:r.id,status:r.status,
+        checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
+      };
+    });
+}
+function _resOpenRowAt(i){
+  const r=_resLastRows[i];if(!r)return;
+  if(r.type==='individual')openBookingDetailForRequest(r.id);
+  else openBookingDetailForReg(r.id,r.name);
+}
+async function resCheckIn(type,id){
+  if(type==='individual'){
+    const r=_resRequests.find(x=>x.id===id);if(!r)return;
+    const now=new Date().toISOString();
+    const {error}=await db.from('booking_requests').update({checked_in_at:now,status:'in_house'}).eq('id',id);
+    if(error){showToast('Error: '+error.message);return;}
+    r.checkedInAt=now;r.status='in_house';
+  }else{
+    const reg=AppData.regs.find(x=>x.id===id);if(!reg)return;
+    const now=new Date().toISOString();
+    const {error}=await db.from('registrations').update({checked_in_at:now}).eq('id',id);
+    if(error){showToast('Error: '+error.message);return;}
+    reg.checkedInAt=now;
+  }
+  showToast('Checked in ✓');
+  _resRender();
+  if(typeof hkInit==='function'&&document.getElementById('tab-housekeeping')?.classList.contains('active'))hkInit();
+}
+async function resCheckOut(type,id){
+  if(type==='individual'){
+    const r=_resRequests.find(x=>x.id===id);if(!r)return;
+    if(!confirm(`Check out ${r.firstName||''} ${r.lastName||''} from ${r.room||r.roomTypeName||'this room'}?`))return;
+    const now=new Date().toISOString();
+    const {error}=await db.from('booking_requests').update({checked_out_at:now,status:'checked_out'}).eq('id',id);
+    if(error){showToast('Error: '+error.message);return;}
+    r.checkedOutAt=now;r.status='checked_out';
+  }else{
+    const reg=AppData.regs.find(x=>x.id===id);if(!reg)return;
+    if(reg.checkedInAt&&Date.now()-new Date(reg.checkedInAt).getTime()<5000)return;
+    const names=(reg.guests||[]).map(g=>g.name).filter(Boolean).join(' & ');
+    if(!confirm(`Check out ${names||'this guest'} from room ${reg.room}?`))return;
+    const now=new Date().toISOString();
+    const {error}=await db.from('registrations').update({checked_out_at:now}).eq('id',id);
+    if(error){showToast('Error: '+error.message);return;}
+    reg.checkedOutAt=now;
+  }
+  showToast('Checked out ✓');
+  _resRender();
+  if(typeof hkInit==='function'&&document.getElementById('tab-housekeeping')?.classList.contains('active'))hkInit();
+}
+
+// ─── NIGHT AUDIT OCCUPANCY PANEL ──────────────────────────────
+function _resBuildOccupancyPanel(date){
+  const occRooms=new Set();
+  AppData.regs.forEach(reg=>{
+    const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk||bk.status==='cancelled')return;
+    const ci=reg.checkIn||bk.startDate,co=reg.checkOut||bk.endDate;
+    if(!ci||!co||ci>date||co<=date)return;
+    if(reg.room)occRooms.add(reg.room);
+  });
+  _resRequests.forEach(r=>{
+    if(r.status==='declined'||r.status==='checked_out')return;
+    if(!r.checkIn||!r.checkOut||r.checkIn>date||r.checkOut<=date)return;
+    if(r.room)occRooms.add(r.room);
+  });
+  let totalRooms=0,totalOcc=0;
+  const byType=AppData.roomTypes.filter(rt=>(rt.rooms||[]).length>0).map(rt=>{
+    const rooms=rt.rooms||[];const occ=rooms.filter(r=>occRooms.has(r)).length;
+    totalRooms+=rooms.length;totalOcc+=occ;
+    return{name:rt.name,color:rt.color||'#6b7280',total:rooms.length,occ};
+  });
+  const pct=totalRooms>0?Math.round(totalOcc/totalRooms*100):0;
+  const pctColor=pct>=80?'#16a34a':pct>=50?'#d97706':'#6b7280';
+  const typeRows=byType.map(t=>{
+    const tPct=t.total>0?Math.round(t.occ/t.total*100):0;
+    return `<div style="display:flex;align-items:center;gap:8px">
+      <div style="width:9px;height:9px;border-radius:50%;background:${t.color};flex-shrink:0"></div>
+      <span style="font-size:12px;color:var(--text);min-width:130px">${escHtml(t.name)}</span>
+      <div style="flex:1;height:5px;background:#f1f5f9;border-radius:3px;overflow:hidden;min-width:80px">
+        <div style="height:5px;background:${t.color};border-radius:3px;width:${tPct}%"></div>
+      </div>
+      <span style="font-size:12px;font-weight:600;color:var(--text);min-width:36px;text-align:right">${t.occ}/${t.total}</span>
+    </div>`;
+  }).join('');
+  return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:18px">
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:${byType.length?12:0}px">
+      <span style="font-size:13px;font-weight:700;color:var(--dark)">Night Audit</span>
+      <input type="date" value="${date}" onchange="resSetAuditDate(this.value)" style="border:1.5px solid var(--border);border-radius:7px;padding:4px 9px;font-size:12px;font-family:'Jost',sans-serif;outline:none;color:var(--text)">
+      <span style="font-size:24px;font-weight:700;color:${pctColor}">${pct}%</span>
+      <span style="font-size:13px;color:var(--muted)">${totalOcc} of ${totalRooms} rooms occupied</span>
+      <div style="flex:1;height:7px;background:#f1f5f9;border-radius:4px;overflow:hidden;min-width:100px">
+        <div style="height:7px;background:${pctColor};border-radius:4px;width:${pct}%"></div>
+      </div>
+    </div>
+    ${byType.length?`<div style="display:flex;flex-direction:column;gap:6px">${typeRows}</div>`:''}
+  </div>`;
+}
+function resSetAuditDate(d){_resAuditDate=d;if(_resTab==='inhotel')_resRender();}
+
+// ─── IN HOTEL ─────────────────────────────────────────────────
+function _resBuildInHotelView(){
+  const d=_resAuditDate;
+  const rows=[
+    ..._resGroupRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&!r.checkedOutAt),
+    ..._resIndivRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.status!=='checked_out'),
+  ].sort((a,b)=>(a.room||'').localeCompare(b.room||''));
+
+  return `<div style="max-width:1000px;margin:0 auto">
+    ${_resBuildOccupancyPanel(d)}
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+      <span style="font-size:14px;font-weight:700;color:#1d4ed8">In House</span>
+      <span style="background:#dbeafe;color:#1d4ed8;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px">${rows.length} guest${rows.length!==1?'s':''}</span>
+      <span style="font-size:12px;color:var(--muted)">${fmtDate(d)}</span>
+    </div>
+    ${rows.length===0?_resEmptyState('🏨','No guests in hotel today'):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkout'})}
+  </div>`;
+}
+
+// ─── ARRIVALS / DEPARTURES ────────────────────────────────────
+function _resBuildMovementView(type){
+  const isArr=type==='arrivals';
+  const date=isArr?_resArrDate:_resDepDate;
+  const setter=isArr?'resSetArrDate':'resSetDepDate';
+  const title=isArr?'Arrivals':'Departures';
+  const color=isArr?'#0d9488':'#7c3aed';
+
+  const rows=[
+    ..._resGroupRows().filter(r=>(isArr?r.checkIn:r.checkOut)===date),
+    ..._resIndivRows().filter(r=>(isArr?r.checkIn:r.checkOut)===date),
+  ];
+  const todayStr=fmtISO(new Date());
+  const dateLabel=date===todayStr?'Today':fmtDate(date);
+
+  return `<div style="max-width:960px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap">
+      <span style="font-size:14px;font-weight:700;color:${color}">${title} for</span>
+      <input type="date" value="${date}" onchange="${setter}(this.value)" style="font-size:13px;font-weight:600;border:2px solid ${color}40;border-radius:8px;padding:5px 10px;color:${color};outline:none;cursor:pointer;background:#fff">
+      <button onclick="${setter}('${todayStr}')" style="font-size:11.5px;background:${color}10;color:${color};border:1px solid ${color}30;border-radius:6px;padding:4px 10px;font-weight:600;cursor:pointer">Today</button>
+      <span style="font-size:13px;font-weight:700;color:var(--text)">${rows.length} guest${rows.length!==1?'s':''}</span>
+    </div>
+    ${rows.length===0?_resEmptyState(isArr?'🛬':'🛫',`No ${title.toLowerCase()} on ${dateLabel}`):_resTable(rows,{actionMode:isArr?'checkin':'checkout'})}
+  </div>`;
+}
+function resSetArrDate(d){_resArrDate=d;_resRender();}
+function resSetDepDate(d){_resDepDate=d;_resRender();}
+
+function _resEmptyState(emoji,msg){
+  return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:48px;text-align:center">
+    <div style="font-size:32px;margin-bottom:10px">${emoji}</div>
+    <div style="font-size:14px;font-weight:600;color:var(--text)">${escHtml(msg)}</div>
+  </div>`;
+}
+
+let _resLastRows=[];
+function _resTable(rows,{checkInCol,checkOutCol,actionMode}){
+  _resLastRows=rows;
+  const actionCell=(r)=>{
+    if(actionMode==='checkin'){
+      return r.checkedInAt
+        ?`<span style="font-size:11px;font-weight:700;color:#059669;background:#d1fae5;padding:3px 10px;border-radius:20px">✓ Checked In</span>`
+        :`<button onclick="resCheckIn('${r.type}','${r.id}')" style="background:#0d9488;color:#fff;border:none;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">Check In</button>`;
+    }
+    return r.checkedOutAt
+      ?`<span style="font-size:11px;font-weight:700;color:#059669;background:#d1fae5;padding:3px 10px;border-radius:20px">✓ Checked Out</span>`
+      :`<button onclick="resCheckOut('${r.type}','${r.id}')" style="background:#7c3aed;color:#fff;border:none;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">Check Out</button>`;
+  };
+  return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:#f8fafc;border-bottom:1px solid var(--border)">
+        <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">NAME</th>
+        <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">ROOM</th>
+        ${checkInCol?'<th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">CHECK-IN</th>':''}
+        ${checkOutCol?'<th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">CHECK-OUT</th>':''}
+        <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">RATE / NIGHT</th>
+        <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">SOURCE</th>
+        <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">NOTES</th>
+        <th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">ACTION</th>
+      </tr></thead>
+      <tbody>${rows.map((r,i)=>`
+        <tr style="border-bottom:1px solid #f3f4f6;cursor:pointer" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''" onclick="_resOpenRowAt(${i})">
+          <td style="padding:11px 16px;font-size:13px;font-weight:700;color:#1d4ed8;text-decoration:underline;text-underline-offset:2px">${escHtml(r.name)}</td>
+          <td style="padding:11px 16px;font-size:12px;color:var(--text)">${escHtml(r.room)}</td>
+          ${checkInCol?`<td style="padding:11px 16px;font-size:12px;color:var(--text)">${fmtDate(r.checkIn)}</td>`:''}
+          ${checkOutCol?`<td style="padding:11px 16px;font-size:12px;color:var(--text)">${fmtDate(r.checkOut)}</td>`:''}
+          <td style="padding:11px 16px;font-size:12px;font-weight:600;color:#0d9488">${r.rate!=null?fmt$(r.rate):'—'}</td>
+          <td style="padding:11px 16px"><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;background:${r.type==='group'?'#dbeafe':'#f0fdf4'};color:${r.type==='group'?'#1e3a8a':'#065f46'}">${escHtml(r.source)}</span></td>
+          <td style="padding:11px 16px;font-size:12px;color:var(--muted);max-width:220px;white-space:pre-wrap">${escHtml(r.notes)}</td>
+          <td style="padding:11px 16px;text-align:center" onclick="event.stopPropagation()">${actionCell(r)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ─── ADVANCED SEARCH ──────────────────────────────────────────
+// Searches everything already in memory (both group regs and cached booking_requests)
+// instead of re-querying Supabase per keystroke -- it's all local already.
+function _resBuildSearchView(){
+  const fi=`padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;outline:none;color:var(--text);background:#fff`;
+  return `<div style="max-width:860px">
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
+      <h3 style="font-size:14px;font-weight:800;color:var(--dark);margin:0 0 16px">Search Reservations</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">NAME</label>
+          <input id="res-srch-name" type="text" placeholder="First or last name" style="${fi};width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')resRunSearch()"></div>
+        <div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">ROOM</label>
+          <input id="res-srch-room" type="text" placeholder="e.g. 22" style="${fi};width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')resRunSearch()"></div>
+        <div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">SOURCE</label>
+          <input id="res-srch-source" type="text" placeholder="online, Escape, retreat name…" style="${fi};width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')resRunSearch()"></div>
+        <div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">CHECK-IN FROM</label>
+          <input id="res-srch-from" type="date" style="${fi};width:100%;box-sizing:border-box"></div>
+        <div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">CHECK-IN TO</label>
+          <input id="res-srch-to" type="date" style="${fi};width:100%;box-sizing:border-box"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="resRunSearch()" style="background:#0d9488;color:#fff;border:none;padding:8px 22px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">Search</button>
+        <button onclick="['res-srch-name','res-srch-room','res-srch-source','res-srch-from','res-srch-to'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});document.getElementById('res-srch-results').innerHTML=''"
+          style="background:#fff;color:var(--muted);border:1px solid var(--border);padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Jost',sans-serif">Clear</button>
+      </div>
+    </div>
+    <div id="res-srch-results"></div>
+  </div>`;
+}
+function resRunSearch(){
+  const name=document.getElementById('res-srch-name')?.value.trim().toLowerCase();
+  const room=document.getElementById('res-srch-room')?.value.trim().toLowerCase();
+  const source=document.getElementById('res-srch-source')?.value.trim().toLowerCase();
+  const from=document.getElementById('res-srch-from')?.value;
+  const to=document.getElementById('res-srch-to')?.value;
+  const resultsEl=document.getElementById('res-srch-results');if(!resultsEl)return;
+  if(!name&&!room&&!source&&!from&&!to){resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">Enter at least one search criteria.</p>`;return;}
+
+  let rows=[..._resGroupRows(),..._resIndivRows()];
+  if(name)rows=rows.filter(r=>r.name.toLowerCase().includes(name));
+  if(room)rows=rows.filter(r=>(r.room||'').toLowerCase().includes(room));
+  if(source)rows=rows.filter(r=>(r.source||'').toLowerCase().includes(source));
+  if(from)rows=rows.filter(r=>r.checkIn>=from);
+  if(to)rows=rows.filter(r=>r.checkIn<=to);
+  rows.sort((a,b)=>(b.checkIn||'').localeCompare(a.checkIn||''));
+
+  if(!rows.length){resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">No results found.</p>`;return;}
+  resultsEl.innerHTML=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${rows.length} result${rows.length!==1?'s':''} found</div>
+    ${_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkin'})}`;
+}
+
+// ─── CREATE RESERVATION ───────────────────────────────────────
+// Reuses the existing "Book a Room" guided flow (modules/venues.js) instead of
+// re-implementing room-type/date/rate selection a second time.
+function _resBuildCreateView(body){
+  body.innerHTML=`<div style="max-width:520px;margin:60px auto;text-align:center;background:#fff;border:1px solid var(--border);border-radius:12px;padding:48px">
+    <div style="font-size:32px;margin-bottom:10px">📅</div>
+    <div style="font-size:15px;font-weight:700;color:var(--dark);margin-bottom:8px">Create a Reservation</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:20px">Search availability by dates, then pick a room -- same flow as "+ Book a Room" on the Rooms tab.</div>
+    <button class="btn btn-primary" onclick="rsOpen()">+ Book a Room</button>
+  </div>`;
+}
