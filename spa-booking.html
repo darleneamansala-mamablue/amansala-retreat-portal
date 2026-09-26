@@ -1008,22 +1008,28 @@ async function sbDoCancel(apptId){
     const appt=latest[idx];
     if(appt.status==='CANCELLED'){showToast('Already cancelled.');SpaAppointments=latest;sbRenderCancelScreen(apptId);return;}
     if((sbApptDateTime(appt)-new Date())/3600000<12){showToast('Too close to your appointment time to cancel online.');SpaAppointments=latest;sbRenderCancelScreen(apptId);return;}
-    if(appt.folioStatus==='POSTED'&&appt.folioChargeId&&appt.folioRegId){
-      try{
-        const {data:reg}=await db.from('registrations').select('charges').eq('id',appt.folioRegId).maybeSingle();
-        if(reg&&Array.isArray(reg.charges)){
-          const newCharges=reg.charges.filter(c=>c.id!==appt.folioChargeId);
-          await db.from('registrations').update({charges:newCharges}).eq('id',appt.folioRegId);
-        }
-      }catch(e){}
-    }else if(appt.folioStatus==='POSTED'&&appt.folioChargeId&&appt.folioBkId){
-      try{
-        const {data:bk}=await db.from('bookings').select('charges').eq('id',appt.folioBkId).maybeSingle();
-        if(bk&&Array.isArray(bk.charges)){
-          const newCharges=bk.charges.filter(c=>c.id!==appt.folioChargeId);
-          await db.from('bookings').update({charges:newCharges}).eq('id',appt.folioBkId);
-        }
-      }catch(e){}
+    if(appt.folioStatus==='POSTED'&&appt.folioChargeId){
+      // Newer bookings (e.g. via Visito) post the charge as a real folio_items
+      // row keyed by its own id -- try that first. Harmless no-op if this was
+      // actually an old-style reg/bk.charges entry instead (no row with that id).
+      try{ await db.from('folio_items').delete().eq('id',appt.folioChargeId); }catch(e){}
+      if(appt.folioRegId){
+        try{
+          const {data:reg}=await db.from('registrations').select('charges').eq('id',appt.folioRegId).maybeSingle();
+          if(reg&&Array.isArray(reg.charges)){
+            const newCharges=reg.charges.filter(c=>c.id!==appt.folioChargeId);
+            if(newCharges.length!==reg.charges.length) await db.from('registrations').update({charges:newCharges}).eq('id',appt.folioRegId);
+          }
+        }catch(e){}
+      }else if(appt.folioBkId){
+        try{
+          const {data:bk}=await db.from('bookings').select('charges').eq('id',appt.folioBkId).maybeSingle();
+          if(bk&&Array.isArray(bk.charges)){
+            const newCharges=bk.charges.filter(c=>c.id!==appt.folioChargeId);
+            if(newCharges.length!==bk.charges.length) await db.from('bookings').update({charges:newCharges}).eq('id',appt.folioBkId);
+          }
+        }catch(e){}
+      }
     }
     appt.status='CANCELLED';
     appt.cancelledAt=new Date().toISOString();
