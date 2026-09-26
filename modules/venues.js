@@ -958,6 +958,13 @@ function rmOpenNewBooking(room,rtId,startDate){
   const err=document.getElementById('rm-err');err.textContent='';err.style.display='none';
   document.getElementById('rm-pay-link-row').style.display='none';
   document.getElementById('rm-folio-wrap').style.display='none';
+  const staffRow=document.getElementById('rm-staff-row');
+  if(staffRow){
+    staffRow.style.display='block';
+    const staffSel=document.getElementById('rm-staff');
+    const activeStaff=(typeof staffAccounts!=='undefined'?staffAccounts:[]).filter(s=>s.active);
+    staffSel.innerHTML='<option value="">— Sin comisión —</option>'+activeStaff.map(s=>`<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
+  }
   rmSetRateMode('solo');
   rmUpdateNights();
   document.getElementById('rmModal').style.display='flex';document.getElementById('rmModal').classList.add('open');
@@ -985,6 +992,8 @@ function rmOpenEditBooking(id){
   const hintEl=document.getElementById('rm-rate-hint');if(hintEl&&rt)hintEl.textContent=`${rt.name} · ${bk.roomRateNights||0} night(s) · ${fmt$(bk.roomRateTotal||0)} total`;
   rmUpdateNights();
   document.getElementById('rm-pay-link-row').style.display=bk.roomRateTotal>0?'block':'none';
+  const staffRowEdit=document.getElementById('rm-staff-row');
+  if(staffRowEdit)staffRowEdit.style.display='none';
   document.getElementById('rmModal').style.display='flex';document.getElementById('rmModal').classList.add('open');
   _rmAddChargeOpen=false;
   document.getElementById('rm-folio-wrap').style.display='block';
@@ -1127,7 +1136,23 @@ function rmSaveNewBooking(){
   AppData.regs.push({id:uid(),bookingId:newId,room,roomTypeId:rtId,guests:[{name:leader,email:leaderEmail||'',phone:'',notes:''}],charges:[],notes:''});
   saveAll();rmClose();venBuild();rcBuild();
   logActivity('Room-only booking created',`${leader} · ${room} · ${type} · ${fmtDate(start)} – ${fmtDate(end)}${rate?' · '+fmt$(rate)+'/night':''}`,newId);
-  showToast(`Reservation created — ${room} · ${leader} ✓`);
+  // Optional staff commission on the sale — same 5%-of-pretax convention as
+  // room upgrades (tr2ConfirmUpgrade in modules/transport.js). Jorge's ask
+  // 2026-09-26: staff who books a reservation directly can commission it too.
+  const staffSel=document.getElementById('rm-staff');
+  const staffId=staffSel?staffSel.value:'';
+  if(staffId&&roomRateTotal>0){
+    const staffName=(typeof staffAccounts!=='undefined'?staffAccounts:[]).find(s=>s.id===staffId)?.name||'';
+    const commissionAmount=+(roomRateTotal*0.05).toFixed(2);
+    db.from('commissions').insert({
+      staff_id:staffId,staff_name:staffName,type:'reservation',guest_name:leader,booking_id:newId,
+      room_from:null,room_to:room,upgrade_pretax:roomRateTotal,upgrade_total:+(roomRateTotal*1.16).toFixed(2),
+      commission_rate:0.05,commission_amount:commissionAmount,date:start,status:'pending',
+    }).then(({error})=>{if(error)console.warn('[commission] insert failed:',error.message);});
+    showToast(`Reservation created — ${room} · ${leader} ✓ · Comisión $${commissionAmount} para ${staffName} ✓`);
+  }else{
+    showToast(`Reservation created — ${room} · ${leader} ✓`);
+  }
 }
 async function rmSendPaymentLink(){
   if(!_rmEditId)return;

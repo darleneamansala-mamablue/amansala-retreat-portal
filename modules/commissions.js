@@ -93,18 +93,21 @@ function commissionsRenderBody(){
   html+=`<div style="background:#fff;border:1.5px solid var(--border);border-radius:10px;overflow:hidden">
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="background:#f8fafc">
-        ${['Fecha','Staff','Huésped','Upgrade','Pretax','IVA 16%','Total huésped','Comisión','Status',''].map(h=>
+        ${['Fecha','Staff','Huésped','Detalle','Pretax','IVA 16%','Total huésped','Comisión','Status',''].map(h=>
           `<th style="padding:9px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);text-align:left;border-bottom:2px solid var(--border)">${h}</th>`
         ).join('')}
       </tr></thead><tbody>`;
   filtered.forEach(c=>{
     const iva=(Number(c.upgrade_pretax)*0.16).toFixed(2);
     const isPaid=c.status==='paid';
+    const detailTxt=c.type==='reservation'
+      ?`Reserva nueva · ${escHtml(c.room_to||'')}`
+      :`${escHtml(c.room_from||'')} → ${escHtml(c.room_to||'')}`;
     html+=`<tr style="border-bottom:1px solid #f1f5f9">
       <td style="padding:9px 12px;font-size:12px;color:#374151">${fmtDate(c.date)}</td>
       <td style="padding:9px 12px;font-size:12px;font-weight:600;color:var(--dark)">${escHtml(c.staff_name)}</td>
       <td style="padding:9px 12px;font-size:12px;color:#374151">${escHtml(c.guest_name||'—')}</td>
-      <td style="padding:9px 12px;font-size:11.5px;color:var(--muted)">${escHtml(c.room_from||'')} → ${escHtml(c.room_to||'')}</td>
+      <td style="padding:9px 12px;font-size:11.5px;color:var(--muted)">${detailTxt}</td>
       <td style="padding:9px 12px;font-size:12px;color:#374151">$${Number(c.upgrade_pretax).toFixed(2)}</td>
       <td style="padding:9px 12px;font-size:12px;color:#374151">$${iva}</td>
       <td style="padding:9px 12px;font-size:12px;font-weight:600;color:#0369a1">$${Number(c.upgrade_total).toFixed(2)}</td>

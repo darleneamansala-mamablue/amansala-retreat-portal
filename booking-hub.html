@@ -2379,6 +2379,7 @@
       </div></div>
       <div class="frow"><div class="fg"><label>Guests</label><input type="number" id="rm-adults" min="1" max="20" value="1" onchange="rmAutoRate()"></div><div class="fg"><label>Status</label><select id="rm-status"><option value="requested">Soft Hold</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Confirmed</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Meals Included</label><select id="rm-mealplan"><option value="breakfast">Breakfast Only</option><option value="none">None</option><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option><option value="weTravel">WeTravel — LB · Breakfast · Brunch · Lunch · Snack · Dinner</option></select></div></div>
+      <div class="frow full" id="rm-staff-row"><div class="fg"><label>Staff (comisión 5% antes de impuestos)</label><select id="rm-staff"><option value="">— Sin comisión —</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Notes</label><textarea id="rm-notes" placeholder="Internal notes..."></textarea></div></div>
       <div id="rm-err" style="display:none;color:#dc2626;font-size:12px;margin-top:4px"></div>
       <div id="rm-pay-link-row" style="display:none;margin-top:10px;padding-top:12px;border-top:1px solid var(--border)">
@@ -6213,7 +6214,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260926a"></script>
+<script src="modules/venues.js?v=20260926b"></script>
 <script src="modules/room-optimizer.js?v=20260921b"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js?v=20260923b"></script>
@@ -6225,7 +6226,7 @@ function switchTab(id,btn){
 // ===== ROOM CALENDAR — moved to modules/venues.js (loaded above) =====
 </script>
 <script src="modules/admin-items.js"></script>
-<script src="modules/commissions.js"></script>
+<script src="modules/commissions.js?v=20260926a"></script>
 <script src="modules/admin-bot-log.js"></script>
 <script src="modules/teacher-portal.js?v=20260922a"></script>
 <script src="modules/dietary-report.js"></script>
@@ -6280,7 +6281,7 @@ function switchTab(id,btn){
 // ===== FILL SAMPLE RETREATS — moved to modules/demo-seed.js (loaded above) =====
 // ===== TEACHER SCHEDULE — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/transport.js?v=20260926b"></script>
+<script src="modules/transport.js?v=20260926c"></script>
 <script>
 // ===== TRANSPORTATION — moved to modules/transport.js =====
 </script>
