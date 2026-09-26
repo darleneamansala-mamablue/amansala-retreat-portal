@@ -700,7 +700,7 @@ function qrUpdatePreview(){
     if(other.status==='cancelled')return;
     if(!datesOverlap(qrPending.start,qrPending.end,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(r=>takenRooms.add(r));
-    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&!r.cancelled&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   const preset=getBldPreset(pax);
   const selected=[];
@@ -736,7 +736,7 @@ function qrSave(){
     if(other.status==='cancelled')return;
     if(!datesOverlap(start,end,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(r=>takenRooms.add(r));
-    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&!r.cancelled&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   const preset=getBldPreset(pax);
   const selected=[],skipped=[];
@@ -1243,7 +1243,7 @@ function rsComputeAvailability(checkIn,checkOut,extReservations){
     if(!(bk.startDate<checkOut&&bk.endDate>checkIn))return;
     const info={label:bk.leaderName||bk.retreatName||'Blocked',bkId:bk.id};
     (bk.blockedRooms||[]).forEach(r=>{if(!blockedBy.has(r))blockedBy.set(r,info);});
-    AppData.regs.filter(r=>r.bookingId===bk.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{if(!blockedBy.has(r.room))blockedBy.set(r.room,info);});
+    AppData.regs.filter(r=>r.bookingId===bk.id&&r.room&&!r.cancelled&&(r.guests||[]).some(g=>g.name)).forEach(r=>{if(!blockedBy.has(r.room))blockedBy.set(r.room,info);});
   });
   // A room booked DIRECTLY in Cloudbeds is genuinely occupied whether or
   // not anyone has clicked to "link" or "import" it into the portal yet —
@@ -1412,7 +1412,7 @@ async function showAvailPreview(id){
   // booking's blockedRooms (an "orphaned registration"; confirmed real
   // incidents: Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
   [...overlapping,bk].forEach(b=>{
-    AppData.regs.filter(r=>r.bookingId===b.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
+    AppData.regs.filter(r=>r.bookingId===b.id&&r.room&&!r.cancelled&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   // Rooms booked directly in Cloudbeds count as taken too, whether or not
   // they've been linked/imported into the portal yet.
@@ -1909,7 +1909,7 @@ function crUpdatePreview(){
     if(other.id===bk.id||other.id===srcId||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(r=>takenRooms.add(r));
-    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&!r.cancelled&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   const available=(src.blockedRooms||[]).filter(r=>!takenRooms.has(r));
   const blocked=(src.blockedRooms||[]).filter(r=>takenRooms.has(r));
@@ -1932,7 +1932,7 @@ function crSave(){
     if(other.id===bk.id||other.id===srcId||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(r=>takenRooms.add(r));
-    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&!r.cancelled&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   const available=(src.blockedRooms||[]).filter(r=>!takenRooms.has(r));
   const skipped=(src.blockedRooms||[]).filter(r=>takenRooms.has(r));
@@ -1957,7 +1957,7 @@ function computeAutoRoomBlock(bk){
     if(other.id===bk.id||other.status==='cancelled')return;
     if(!datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate))return;
     (other.blockedRooms||[]).forEach(r=>takenRooms.add(r));
-    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&!r.cancelled&&(r.guests||[]).some(g=>g.name)).forEach(r=>takenRooms.add(r.room));
   });
   const rowAllowed=getRowAllowedRooms(bk.row);
   const slRooms=getStraightLineRooms(bk);
@@ -2447,7 +2447,10 @@ function rcBuild(){
         // is untouched (Jorge's call 2026-09-17: Teachers still shows the
         // cancelled guest + fee; only Rooms should look empty).
         const _namedInRoom=(regEntry?.guests||[]).filter(g=>g.name);
-        if(_namedInRoom.length&&_namedInRoom.every(g=>g.cancelled))return;
+        // A whole-room cancel (Booking Detail's "Cancel" button, Jorge's ask
+        // 2026-09-26 -- e.g. CH14/Binnie) vacates the room here exactly like
+        // the every-guest-cancelled case above already does.
+        if(regEntry?.cancelled||(_namedInRoom.length&&_namedInRoom.every(g=>g.cancelled)))return;
         const guestNames=regEntry?_namedInRoom.filter(g=>!g.cancelled).map(g=>g.name):(isRealRoomOnly?[bk.leaderName]:[]);
         const hasGuest=guestNames.length>0;
         const bl=document.createElement('div');
