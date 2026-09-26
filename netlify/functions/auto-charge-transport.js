@@ -191,13 +191,13 @@ exports.handler = async (event) => {
   if (bookingIds.length) {
     const regFilter = bookingIds.map(id => `booking_id.eq.${id}`).join(',');
     const regRes = await supaFetch(supaKey,
-      `registrations?select=id,booking_id,room,guests,is_teacher_room&or=(${regFilter})`
+      `registrations?select=id,booking_id,room,guests,is_teacher_room,cancelled&or=(${regFilter})`
     );
     (Array.isArray(regRes.data) ? regRes.data : []).forEach(r => { (regsByBk[r.booking_id] ??= []).push(r); });
   }
 
   // 3b. All registrations — used as fallback for entries without a retreat (extra nights, escapes, etc.)
-  const allRegsRes = await supaFetch(supaKey, 'registrations?select=id,booking_id,room,guests&limit=2000');
+  const allRegsRes = await supaFetch(supaKey, 'registrations?select=id,booking_id,room,guests,cancelled&limit=2000');
   const allRegs = allRegsRes.ok ? (allRegsRes.data ?? []) : [];
   // Fuzzy name search across all registrations
   const findRegByName = (fullName, excludeTeacher = true) => {
@@ -238,11 +238,15 @@ exports.handler = async (event) => {
   // being charged, so they also stop counting toward anyone else's shared-van
   // group size (Jorge's ask 2026-09-26, after Nicole Chavez -- cancelled on
   // her registration -- still would have been charged/counted here otherwise).
+  // A guest counts as cancelled either per-guest (g.cancelled, e.g. one of
+  // several sharing a room) or when their WHOLE registration is cancelled
+  // (r.cancelled -- the "Cancel" button in Booking Detail, added 2026-09-26
+  // for a room/reservation that isn't split per-guest, e.g. CH16).
   entries = entries.filter(e => {
     const fullName = `${e.firstName} ${e.lastName}`.trim();
     if (!fullName) return true;
     const candidateRegs = e.bookingId ? (regsByBk[e.bookingId] ?? []) : allRegs;
-    const cancelled = candidateRegs.some(r => (r.guests ?? []).some(g => g.cancelled && g.name && nameMatch(g.name, fullName)));
+    const cancelled = candidateRegs.some(r => (r.guests ?? []).some(g => g.name && nameMatch(g.name, fullName) && (g.cancelled || r.cancelled)));
     if (cancelled) results.skipped.push({ rowId: e.rowId, name: fullName, reason: 'guest_cancelled' });
     return !cancelled;
   });

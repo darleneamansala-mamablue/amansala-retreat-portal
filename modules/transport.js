@@ -806,14 +806,19 @@ async function tr2LoadData() {
   // Chavez, cancelled but her real transport form submission kept showing
   // up here) shouldn't show in Transport at all -- tracked separately from
   // roomLookup/etc. so a cancelled guest's name never resolves a room, and
-  // her real submitted row gets skipped entirely below.
+  // her real submitted row gets skipped entirely below. A whole registration
+  // can also be cancelled (reg.cancelled -- the Booking Detail "Cancel"
+  // button, for a room that isn't split per-guest, e.g. CH16), which cancels
+  // every guest in it the same way one guest's own g.cancelled would.
   const cancelledKeys = new Set();
   tr2ActiveBooks.forEach(bk => {
     const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
     AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => {
+      const regCancelled = !!reg.cancelled;
       (reg.guests || []).forEach(g => {
-        if (g.name && g.cancelled) cancelledKeys.add(`${bk.id}|${tr2NormName(g.name)}`);
-        if (g.name && !g.cancelled) {
+        const isCancelled = regCancelled || g.cancelled;
+        if (g.name && isCancelled) cancelledKeys.add(`${bk.id}|${tr2NormName(g.name)}`);
+        if (g.name && !isCancelled) {
           roomLookup[`${bk.id}|${g.name.toLowerCase()}`] = reg.room || '';
           const firstName = g.name.trim().split(/\s+/)[0].toLowerCase();
           if (firstName.length >= 3) {
@@ -824,7 +829,7 @@ async function tr2LoadData() {
           const key = tr2NormName(g.name);
           if (key) tr2NameMap[key] = { bkId: bk.id, retreatLabel, origName: g.name };
         }
-        if (g.email && !g.cancelled) {
+        if (g.email && !isCancelled) {
           const ek = `${bk.id}|${g.email.toLowerCase().trim()}`;
           if (!emailRoomIdx[ek]) emailRoomIdx[ek] = { room: reg.room || '', count: 0 };
           emailRoomIdx[ek].count++;
@@ -953,7 +958,7 @@ async function tr2LoadData() {
     AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => {
       const room = reg.room || '';
       (reg.guests || []).forEach(g => {
-        if (!g.name || g.cancelled) return;
+        if (!g.name || g.cancelled || reg.cancelled) return;
         if (transportedKeys.has(`${bk.id}|${tr2NormName(g.name)}`)) return;
         // Only trust "this email already submitted" when the email actually identifies
         // ONE roster guest — several family members can share one household email in
