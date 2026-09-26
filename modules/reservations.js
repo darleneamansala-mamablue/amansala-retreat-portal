@@ -111,6 +111,7 @@ function _resGroupRows(){
       notes:reg.notes||g.notes||'',source:bk.leaderName||bk.retreatName||'Group',
       type:'group',id:reg.id,checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
       cardOnFile:!!reg.stripePaymentMethodId,balance:null,
+      discountCode:null, // no discount-code concept for retreat/Room Only regs
     }));
   });
   return out;
@@ -127,7 +128,7 @@ function _resIndivRows(){
         source:r.source||'Booking Engine',type:'individual',id:r.id,status:r.status,
         checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
         cardOnFile:false, // Card on File isn't wired up for Booking Engine reservations yet
-        balance:null,
+        balance:null,discountCode:r.discountCode||null,
       };
     });
 }
@@ -329,7 +330,7 @@ function _resEmptyState(emoji,msg){
 }
 
 let _resLastRows=[];
-function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol}){
+function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol,discountCol}){
   _resLastRows=rows;
   const actionCell=(r)=>{
     if(actionMode==='checkin'){
@@ -352,6 +353,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol}){
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">SOURCE</th>
         ${cardCol?'<th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">CARD ON FILE</th>':''}
         ${balanceCol?'<th style="padding:10px 16px;text-align:right;font-size:10.5px;font-weight:700;color:var(--muted)">BALANCE</th>':''}
+        ${discountCol?'<th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">DISCOUNT</th>':''}
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">NOTES</th>
         <th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">ACTION</th>
       </tr></thead>
@@ -365,6 +367,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol}){
           <td style="padding:11px 16px"><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;background:${r.type==='group'?'#dbeafe':'#f0fdf4'};color:${r.type==='group'?'#1e3a8a':'#065f46'}">${escHtml(r.source)}</span></td>
           ${cardCol?`<td style="padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:${r.cardOnFile?'#059669':'#dc2626'}">${r.cardOnFile?'Yes':'No'}</td>`:''}
           ${balanceCol?`<td style="padding:11px 16px;text-align:right;font-size:12px;font-weight:700;color:${r.balance>0?'#dc2626':'#059669'}">${r.balance!=null?fmt$(r.balance):'—'}</td>`:''}
+          ${discountCol?`<td style="padding:11px 16px;font-size:12px;color:#7c3aed;font-family:monospace">${escHtml(r.discountCode||'—')}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;color:var(--muted);max-width:220px;white-space:pre-wrap">${escHtml(r.notes)}</td>
           <td style="padding:11px 16px;text-align:center" onclick="event.stopPropagation()">${actionCell(r)}</td>
         </tr>`).join('')}
@@ -392,10 +395,12 @@ function _resBuildSearchView(){
           <input id="res-srch-from" type="date" style="${fi};width:100%;box-sizing:border-box"></div>
         <div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">CHECK-IN TO</label>
           <input id="res-srch-to" type="date" style="${fi};width:100%;box-sizing:border-box"></div>
+        <div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">DISCOUNT CODE</label>
+          <input id="res-srch-code" type="text" placeholder="EXTRANIGHT, STAFF…" style="${fi};width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')resRunSearch()"></div>
       </div>
       <div style="display:flex;gap:8px">
         <button onclick="resRunSearch()" style="background:#0d9488;color:#fff;border:none;padding:8px 22px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">Search</button>
-        <button onclick="['res-srch-name','res-srch-room','res-srch-source','res-srch-from','res-srch-to'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});document.getElementById('res-srch-results').innerHTML=''"
+        <button onclick="['res-srch-name','res-srch-room','res-srch-source','res-srch-from','res-srch-to','res-srch-code'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});document.getElementById('res-srch-results').innerHTML=''"
           style="background:#fff;color:var(--muted);border:1px solid var(--border);padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Jost',sans-serif">Clear</button>
       </div>
     </div>
@@ -408,8 +413,9 @@ async function resRunSearch(){
   const source=document.getElementById('res-srch-source')?.value.trim().toLowerCase();
   const from=document.getElementById('res-srch-from')?.value;
   const to=document.getElementById('res-srch-to')?.value;
+  const code=document.getElementById('res-srch-code')?.value.trim().toLowerCase();
   const resultsEl=document.getElementById('res-srch-results');if(!resultsEl)return;
-  if(!name&&!room&&!source&&!from&&!to){resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">Enter at least one search criteria.</p>`;return;}
+  if(!name&&!room&&!source&&!from&&!to&&!code){resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">Enter at least one search criteria.</p>`;return;}
 
   let rows=[..._resGroupRows(),..._resIndivRows()];
   if(name)rows=rows.filter(r=>r.name.toLowerCase().includes(name));
@@ -417,13 +423,16 @@ async function resRunSearch(){
   if(source)rows=rows.filter(r=>(r.source||'').toLowerCase().includes(source));
   if(from)rows=rows.filter(r=>r.checkIn>=from);
   if(to)rows=rows.filter(r=>r.checkIn<=to);
+  // Only individual Booking Engine reservations (booking_requests) carry a
+  // discount code -- retreat/Room Only regs have no equivalent field.
+  if(code)rows=rows.filter(r=>(r.discountCode||'').toLowerCase().includes(code));
   rows.sort((a,b)=>(b.checkIn||'').localeCompare(a.checkIn||''));
 
   if(!rows.length){resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">No results found.</p>`;return;}
   resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">Loading…</p>`;
   await _resAttachFolioBalances(rows);
   resultsEl.innerHTML=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${rows.length} result${rows.length!==1?'s':''} found</div>
-    ${_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkin',balanceCol:true})}`;
+    ${_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkin',balanceCol:true,discountCol:true})}`;
 }
 
 // ─── CREATE RESERVATION ───────────────────────────────────────
