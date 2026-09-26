@@ -89,6 +89,13 @@ function _resRender(){
 // here always matches what Balance Due/the folio actually charges.
 function _resGroupRows(){
   const out=[];
+  // calcBkBalance() (modules/payments.js) walks every room/reg of a booking --
+  // cache per booking so a multi-guest room/retreat doesn't recompute it once
+  // per named guest. It's the same "Balance Due" number shown everywhere else
+  // in the app (room total + reg.charges extras - payments), reused as-is
+  // rather than inventing a second definition of balance (Jorge's ask
+  // 2026-09-26: Balance should reflect an unpaid reservation or extras).
+  const bkBalanceCache=new Map();
   AppData.regs.forEach(reg=>{
     const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
     if(!bk||bk.status==='cancelled')return;
@@ -100,11 +107,13 @@ function _resGroupRows(){
     const gc=named.length;
     const nights=Math.max(1,Math.round((pd(checkOut)-pd(checkIn))/DAY_MS));
     const rate=reg.customRateOverride!=null?Number(reg.customRateOverride):(rt?getRoomRate(rt,gc,checkIn,nights):null);
+    if(!bkBalanceCache.has(bk.id))bkBalanceCache.set(bk.id,calcBkBalance(bk).balance);
+    const balance=bkBalanceCache.get(bk.id);
     named.forEach(g=>out.push({
       name:g.name,room:reg.room||'—',checkIn,checkOut,rate,
       notes:reg.notes||g.notes||'',source:bk.leaderName||bk.retreatName||'Group',
       type:'group',id:reg.id,checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
-      cardOnFile:!!reg.stripePaymentMethodId,
+      cardOnFile:!!reg.stripePaymentMethodId,balance,
     }));
   });
   return out;
@@ -115,12 +124,19 @@ function _resIndivRows(){
     .map(r=>{
       const rt=AppData.roomTypes.find(t=>t.id===r.roomTypeId||t.name===r.roomTypeName);
       const rate=r.dailyRate!=null?Number(r.dailyRate):(rt?roomOnlyRateForDate(rt,r.checkIn):null);
+      const nights=r.checkIn&&r.checkOut?Math.max(1,Math.round((pd(r.checkOut)-pd(r.checkIn))/DAY_MS)):1;
+      // No folios/reg.charges equivalent wired up for these yet (see Card on
+      // File note below) -- just room total vs. what Stripe actually
+      // collected at booking time, so an unpaid/partial reservation still
+      // shows a balance even though we can't see folio extras here.
+      const balance=rate!=null?Math.max(0,+(rate*nights-(r.amountPaid||0)).toFixed(2)):null;
       return {
         name:`${r.firstName||''} ${r.lastName||''}`.trim()||'Guest',room:r.room||r.roomTypeName||'—',
         checkIn:r.checkIn,checkOut:r.checkOut,rate,notes:r.notes||r.dietary||'',
         source:r.source||'Booking Engine',type:'individual',id:r.id,status:r.status,
         checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
         cardOnFile:false, // Card on File isn't wired up for Booking Engine reservations yet
+        balance,
       };
     });
 }
@@ -236,7 +252,7 @@ function _resBuildInHotelView(){
       <span style="background:#dbeafe;color:#1d4ed8;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px">${rows.length} guest${rows.length!==1?'s':''}</span>
       <span style="font-size:12px;color:var(--muted)">${fmtDate(d)}</span>
     </div>
-    ${rows.length===0?_resEmptyState('🏨','No guests in hotel today'):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkout',cardCol:true})}
+    ${rows.length===0?_resEmptyState('🏨','No guests in hotel today'):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkout',cardCol:true,balanceCol:true})}
   </div>`;
 }
 
@@ -262,7 +278,7 @@ function _resBuildMovementView(type){
       <button onclick="${setter}('${todayStr}')" style="font-size:11.5px;background:${color}10;color:${color};border:1px solid ${color}30;border-radius:6px;padding:4px 10px;font-weight:600;cursor:pointer">Today</button>
       <span style="font-size:13px;font-weight:700;color:var(--text)">${rows.length} guest${rows.length!==1?'s':''}</span>
     </div>
-    ${rows.length===0?_resEmptyState(isArr?'🛬':'🛫',`No ${title.toLowerCase()} on ${dateLabel}`):_resTable(rows,{actionMode:isArr?'checkin':'checkout'})}
+    ${rows.length===0?_resEmptyState(isArr?'🛬':'🛫',`No ${title.toLowerCase()} on ${dateLabel}`):_resTable(rows,{actionMode:isArr?'checkin':'checkout',balanceCol:true})}
   </div>`;
 }
 function resSetArrDate(d){_resArrDate=d;_resRender();}
@@ -276,7 +292,7 @@ function _resEmptyState(emoji,msg){
 }
 
 let _resLastRows=[];
-function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol}){
+function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol}){
   _resLastRows=rows;
   const actionCell=(r)=>{
     if(actionMode==='checkin'){
@@ -298,6 +314,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol}){
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">RATE / NIGHT</th>
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">SOURCE</th>
         ${cardCol?'<th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">CARD ON FILE</th>':''}
+        ${balanceCol?'<th style="padding:10px 16px;text-align:right;font-size:10.5px;font-weight:700;color:var(--muted)">BALANCE</th>':''}
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">NOTES</th>
         <th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">ACTION</th>
       </tr></thead>
@@ -310,6 +327,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol}){
           <td style="padding:11px 16px;font-size:12px;font-weight:600;color:#0d9488">${r.rate!=null?fmt$(r.rate):'—'}</td>
           <td style="padding:11px 16px"><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;background:${r.type==='group'?'#dbeafe':'#f0fdf4'};color:${r.type==='group'?'#1e3a8a':'#065f46'}">${escHtml(r.source)}</span></td>
           ${cardCol?`<td style="padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:${r.cardOnFile?'#059669':'#dc2626'}">${r.cardOnFile?'Yes':'No'}</td>`:''}
+          ${balanceCol?`<td style="padding:11px 16px;text-align:right;font-size:12px;font-weight:700;color:${r.balance>0?'#dc2626':'#059669'}">${r.balance!=null?fmt$(r.balance):'—'}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;color:var(--muted);max-width:220px;white-space:pre-wrap">${escHtml(r.notes)}</td>
           <td style="padding:11px 16px;text-align:center" onclick="event.stopPropagation()">${actionCell(r)}</td>
         </tr>`).join('')}
@@ -366,7 +384,7 @@ function resRunSearch(){
 
   if(!rows.length){resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">No results found.</p>`;return;}
   resultsEl.innerHTML=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${rows.length} result${rows.length!==1?'s':''} found</div>
-    ${_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkin'})}`;
+    ${_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkin',balanceCol:true})}`;
 }
 
 // ─── CREATE RESERVATION ───────────────────────────────────────
