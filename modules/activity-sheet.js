@@ -520,7 +520,7 @@ function actByRetreatPrint(bkId) {
       <div class="title">${retreatName}</div>
       <div class="sub">${dateRangeLbl}</div>
       <div class="divider"></div>
-      <div class="instr">Please mark an X by your name if you will participate in the activities</div>
+      <div class="instr">Please put a check ✓ or an X in the box by your name for each activity you would like to join</div>
       <div class="meta-row">
         <span class="warn-pill">Minimum of 6 people required</span>
         <span class="pax-pill">${roster.length} guests total</span>
