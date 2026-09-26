@@ -802,11 +802,18 @@ async function tr2LoadData() {
 
   const roomLookup = {}, firstNameIdx = {}, emailRoomIdx = {};
   tr2NameMap = {};
+  // Guests cancelled from a shared room (Jorge's ask 2026-09-26: Nicole
+  // Chavez, cancelled but her real transport form submission kept showing
+  // up here) shouldn't show in Transport at all -- tracked separately from
+  // roomLookup/etc. so a cancelled guest's name never resolves a room, and
+  // her real submitted row gets skipped entirely below.
+  const cancelledKeys = new Set();
   tr2ActiveBooks.forEach(bk => {
     const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
     AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => {
       (reg.guests || []).forEach(g => {
-        if (g.name) {
+        if (g.name && g.cancelled) cancelledKeys.add(`${bk.id}|${tr2NormName(g.name)}`);
+        if (g.name && !g.cancelled) {
           roomLookup[`${bk.id}|${g.name.toLowerCase()}`] = reg.room || '';
           const firstName = g.name.trim().split(/\s+/)[0].toLowerCase();
           if (firstName.length >= 3) {
@@ -817,7 +824,7 @@ async function tr2LoadData() {
           const key = tr2NormName(g.name);
           if (key) tr2NameMap[key] = { bkId: bk.id, retreatLabel, origName: g.name };
         }
-        if (g.email) {
+        if (g.email && !g.cancelled) {
           const ek = `${bk.id}|${g.email.toLowerCase().trim()}`;
           if (!emailRoomIdx[ek]) emailRoomIdx[ek] = { room: reg.room || '', count: 0 };
           emailRoomIdx[ek].count++;
@@ -874,11 +881,12 @@ async function tr2LoadData() {
   tr2AllEntries = [];
   tr2RawRows = {};
   for (const row of dedupedRows) {
-    tr2RawRows[row.id] = row;
     const d = row.data || {};
     const bkId = row.booking_id;
     const bk = bkMap[bkId];
     const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
+    if (bkId && cancelledKeys.has(`${bkId}|${tr2NormName(name)}`)) continue;
+    tr2RawRows[row.id] = row;
     // A manual correction from the edit modal (d.roomOverride) always wins — the
     // auto-match (exact name, then unique first name, then unique email) is a best
     // guess and has no way to fix itself when it's wrong, unlike the room list itself
@@ -945,7 +953,7 @@ async function tr2LoadData() {
     AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => {
       const room = reg.room || '';
       (reg.guests || []).forEach(g => {
-        if (!g.name) return;
+        if (!g.name || g.cancelled) return;
         if (transportedKeys.has(`${bk.id}|${tr2NormName(g.name)}`)) return;
         // Only trust "this email already submitted" when the email actually identifies
         // ONE roster guest — several family members can share one household email in
