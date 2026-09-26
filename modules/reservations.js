@@ -219,9 +219,12 @@ function resSetAuditDate(d){_resAuditDate=d;if(_resTab==='inhotel')_resRender();
 // ─── IN HOTEL ─────────────────────────────────────────────────
 function _resBuildInHotelView(){
   const d=_resAuditDate;
+  // "In House" means actually checked in, not just "today falls within their
+  // stay dates" -- a guest who hasn't been checked in yet belongs on Arrivals
+  // with a Check In button, not here (Jorge's ask 2026-09-26).
   const rows=[
-    ..._resGroupRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&!r.checkedOutAt),
-    ..._resIndivRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.status!=='checked_out'),
+    ..._resGroupRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&!r.checkedOutAt),
+    ..._resIndivRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&r.status!=='checked_out'),
   ].sort((a,b)=>(a.room||'').localeCompare(b.room||''));
 
   return `<div style="max-width:1000px;margin:0 auto">
