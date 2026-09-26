@@ -515,9 +515,21 @@ async function bdCancelReservation(){
   const {error}=await db.from('registrations').update({cancelled:true,cancelled_at:now}).eq('id',reg.id);
   if(error){showToast('Error: '+error.message);return;}
   reg.cancelled=true;reg.cancelledAt=now;
+  // Room Only is a 1:1 booking↔room — also mark the BOOKING cancelled so the
+  // room actually frees up everywhere that already checks bk.status (Room
+  // Calendar availability, the "+ Book a Room" conflict check, etc.). A
+  // retreat's booking stays untouched -- it's the whole group, not this room.
+  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
+  if(bk&&bk.bookingType==='room_only'&&bk.status!=='cancelled'){
+    const {error:bErr}=await db.from('bookings').update({status:'cancelled'}).eq('id',bk.id);
+    if(bErr)showToast('Cancelled the reservation, but could not free the room: '+bErr.message);
+    else bk.status='cancelled';
+  }
   if(typeof logActivity==='function')logActivity('Reservation cancelled',`${names||'Guest'} · ${reg.room||''}`,reg.bookingId);
   showToast('Reservation cancelled ✓');
   _bdRender();
+  if(typeof venBuild==='function')venBuild();
+  if(typeof rcBuild==='function')rcBuild();
   if(typeof resRefresh==='function')resRefresh();
 }
 
