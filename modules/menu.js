@@ -911,7 +911,12 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
     @page{size:letter landscape;margin:0.45in}
     *{box-sizing:border-box}
     body{font-family:'Jost',sans-serif;margin:0;color:#2d2520;background:#fdfbf7}
-    .rw-page{padding:6px 4px 10px}
+    /* Each half-week must fit one landscape letter page (11in − 0.9in margins
+       = 10.1in wide, 8.5in − 0.9in = 7.6in tall). A fixed page width lets
+       rwFit() below measure the real printed height and shrink just that
+       page to fit, instead of the browser pushing the day columns onto the
+       next sheet and leaving a near-blank first page (Darlene 2026-09-26). */
+    .rw-page{padding:6px 4px 10px;width:10.1in;margin:0 auto}
     .rw-page-break{page-break-before:always}
     .rw-hdr{text-align:center;margin-bottom:14px}
     .rw-brand{font-family:'Cormorant Garamond',serif;font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#8a7e74}
@@ -933,8 +938,13 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
     .rw-groups{margin-top:6px;padding-top:6px;border-top:1px dashed #e0d8cc}
     .rw-group-row{font-size:9pt;color:#6b7280}
     .rw-footer{text-align:center;margin-top:10px;font-size:8.5pt;color:#b8ab9e;letter-spacing:.3px}
-    @media print{.rw-day{break-inside:avoid}}
-  </style></head>
+    @media print{body{background:#fff}.rw-page{margin:0}}
+  </style>
+  <script>
+    function rwFit(){var H=7.6*96-4;document.querySelectorAll('.rw-page').forEach(function(p){p.style.zoom=1;var h=p.getBoundingClientRect().height;if(h>H)p.style.zoom=(H/h).toFixed(3);});}
+    window.addEventListener('load',rwFit);window.addEventListener('beforeprint',rwFit);
+    if(document.fonts&&document.fonts.ready)document.fonts.ready.then(rwFit);
+  </script></head>
   <body>${pagesHtml}
   <div class="rw-print-actions" style="text-align:center;padding:16px 0" data-no-print="1">
     <button onclick="window.print()" style="padding:9px 22px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Print / Save PDF</button>
