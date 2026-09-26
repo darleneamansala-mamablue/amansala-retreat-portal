@@ -105,7 +105,7 @@ function _resGroupRows(){
     const nights=Math.max(1,Math.round((pd(checkOut)-pd(checkIn))/DAY_MS));
     const rate=reg.customRateOverride!=null?Number(reg.customRateOverride):(rt?getRoomRate(rt,gc,checkIn,nights):null);
     named.forEach(g=>out.push({
-      name:g.name,room:reg.room||'—',checkIn,checkOut,rate,
+      name:g.name,room:reg.room||'—',roomType:rt?.name||'—',checkIn,checkOut,rate,
       notes:reg.notes||g.notes||'',source:bk.leaderName||bk.retreatName||'Group',
       type:'group',id:reg.id,checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
       cardOnFile:!!reg.stripePaymentMethodId,balance:null,
@@ -122,6 +122,7 @@ function _resIndivRows(){
       const rate=r.dailyRate!=null?Number(r.dailyRate):(rt?roomOnlyRateForDate(rt,r.checkIn):null);
       return {
         name:`${r.firstName||''} ${r.lastName||''}`.trim()||'Guest',room:r.room||r.roomTypeName||'—',
+        roomType:rt?.name||r.roomTypeName||'—',
         checkIn:r.checkIn,checkOut:r.checkOut,rate,notes:r.notes||r.dietary||'',
         source:r.source||'Booking Engine',type:'individual',id:r.id,status:r.status,
         checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
@@ -314,7 +315,7 @@ async function _resBuildMovementView(type){
       <button onclick="${setter}('${todayStr}')" style="font-size:11.5px;background:${color}10;color:${color};border:1px solid ${color}30;border-radius:6px;padding:4px 10px;font-weight:600;cursor:pointer">Today</button>
       <span style="font-size:13px;font-weight:700;color:var(--text)">${rows.length} guest${rows.length!==1?'s':''}</span>
     </div>
-    ${rows.length===0?_resEmptyState(isArr?'🛬':'🛫',`No ${title.toLowerCase()} on ${dateLabel}`):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:isArr?'checkin':'checkout',balanceCol:true})}
+    ${rows.length===0?_resEmptyState(isArr?'🛬':'🛫',`No ${title.toLowerCase()} on ${dateLabel}`):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:isArr?'checkin':'checkout',balanceCol:true,cardCol:true})}
   </div>`;
 }
 function resSetArrDate(d){_resArrDate=d;_resRender();}
@@ -340,31 +341,35 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol,di
       ?`<span style="font-size:11px;font-weight:700;color:#059669;background:#d1fae5;padding:3px 10px;border-radius:20px">✓ Checked Out</span>`
       :`<button onclick="resCheckOut('${r.type}','${r.id}')" style="background:#7c3aed;color:#fff;border:none;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">Check Out</button>`;
   };
+  // Fixed column order per Jorge's ask 2026-09-26: Room, Room Type, Name,
+  // Check-In, Check-Out, Rate/Night, Source, Balance, Card on File, Notes, Action.
   return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="background:#f8fafc;border-bottom:1px solid var(--border)">
-        <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">NAME</th>
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">ROOM</th>
+        <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">ROOM TYPE</th>
+        <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">NAME</th>
         ${checkInCol?'<th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">CHECK-IN</th>':''}
         ${checkOutCol?'<th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">CHECK-OUT</th>':''}
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">RATE / NIGHT</th>
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">SOURCE</th>
-        ${cardCol?'<th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">CARD ON FILE</th>':''}
         ${balanceCol?'<th style="padding:10px 16px;text-align:right;font-size:10.5px;font-weight:700;color:var(--muted)">BALANCE</th>':''}
+        ${cardCol?'<th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">CARD ON FILE</th>':''}
         ${discountCol?'<th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">DISCOUNT</th>':''}
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">NOTES</th>
         <th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">ACTION</th>
       </tr></thead>
       <tbody>${rows.map((r,i)=>`
         <tr style="border-bottom:1px solid #f3f4f6;cursor:pointer" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''" onclick="_resOpenRowAt(${i})">
-          <td style="padding:11px 16px;font-size:13px;font-weight:700;color:#1d4ed8;text-decoration:underline;text-underline-offset:2px">${escHtml(r.name)}</td>
           <td style="padding:11px 16px;font-size:12px;color:var(--text)">${escHtml(r.room)}</td>
+          <td style="padding:11px 16px;font-size:12px;color:var(--text)">${escHtml(r.roomType)}</td>
+          <td style="padding:11px 16px;font-size:13px;font-weight:700;color:#1d4ed8;text-decoration:underline;text-underline-offset:2px">${escHtml(r.name)}</td>
           ${checkInCol?`<td style="padding:11px 16px;font-size:12px;color:var(--text)">${fmtDate(r.checkIn)}</td>`:''}
           ${checkOutCol?`<td style="padding:11px 16px;font-size:12px;color:var(--text)">${fmtDate(r.checkOut)}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;font-weight:600;color:#0d9488">${r.rate!=null?fmt$(r.rate):'—'}</td>
           <td style="padding:11px 16px"><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;background:${r.type==='group'?'#dbeafe':'#f0fdf4'};color:${r.type==='group'?'#1e3a8a':'#065f46'}">${escHtml(r.source)}</span></td>
-          ${cardCol?`<td style="padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:${r.cardOnFile?'#059669':'#dc2626'}">${r.cardOnFile?'Yes':'No'}</td>`:''}
           ${balanceCol?`<td style="padding:11px 16px;text-align:right;font-size:12px;font-weight:700;color:${r.balance>0?'#dc2626':'#059669'}">${r.balance!=null?fmt$(r.balance):'—'}</td>`:''}
+          ${cardCol?`<td style="padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:${r.cardOnFile?'#059669':'#dc2626'}">${r.cardOnFile?'Yes':'No'}</td>`:''}
           ${discountCol?`<td style="padding:11px 16px;font-size:12px;color:#7c3aed;font-family:monospace">${escHtml(r.discountCode||'—')}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;color:var(--muted);max-width:220px;white-space:pre-wrap">${escHtml(r.notes)}</td>
           <td style="padding:11px 16px;text-align:center" onclick="event.stopPropagation()">${actionCell(r)}</td>
@@ -430,5 +435,5 @@ async function resRunSearch(){
   resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">Loading…</p>`;
   await _resAttachFolioBalances(rows);
   resultsEl.innerHTML=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${rows.length} result${rows.length!==1?'s':''} found</div>
-    ${_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkin',balanceCol:true,discountCol:true})}`;
+    ${_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkin',balanceCol:true,cardCol:true,discountCol:true})}`;
 }
