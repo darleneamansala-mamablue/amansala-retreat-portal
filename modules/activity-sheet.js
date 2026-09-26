@@ -510,7 +510,7 @@ function actByRetreatPrint(bkId) {
       .ops-label{font-weight:700;color:#1e4f4f;background:#faf7f0;white-space:nowrap;font-size:10.5pt;text-transform:uppercase;letter-spacing:.4px}
       .footer{text-align:center;font-size:11pt;color:#4a7070;margin-top:30px;line-height:1.8}
       .footer a{color:#2d6a6a;font-weight:600}
-      .footer .policy{color:#a89a86;font-style:italic}
+      .footer .policy{display:block;font-size:15pt;font-weight:600;color:#1a2332;line-height:1.5;margin-top:4px} /* bigger + readable (Darlene 2026-09-26) */
       @media print{.no-print{display:none}body{padding:22px 26px}}
     </style>
   </head><body>
