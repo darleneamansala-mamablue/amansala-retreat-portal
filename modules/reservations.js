@@ -269,16 +269,40 @@ function _resBuildOccupancyPanel(date){
 }
 function resSetAuditDate(d){_resAuditDate=d;if(_resTab==='inhotel')_resRender();}
 
+// Same room ordering the Rooms tab uses (modules/venues.js's Room Calendar):
+// AppData.roomTypes' own order for the type section, then each room type's
+// own `rooms` array order within it -- not alphabetical (e.g. room "35"
+// sorts before "6a" alphabetically, which is never what Rooms shows).
+function _resRoomSortKey(room){
+  if(!room)return[9999,9999];
+  for(let ti=0;ti<AppData.roomTypes.length;ti++){
+    const idx=(AppData.roomTypes[ti].rooms||[]).indexOf(room);
+    if(idx!==-1)return[ti,idx];
+  }
+  return[9999,9999];
+}
+// Jorge's ask 2026-09-26: group multiple sources (retreats) together, room-
+// ordered within each group, instead of interleaving different retreats.
+function _resSortRows(rows){
+  rows.sort((a,b)=>{
+    const sc=(a.source||'').localeCompare(b.source||'');
+    if(sc!==0)return sc;
+    const ka=_resRoomSortKey(a.room),kb=_resRoomSortKey(b.room);
+    return ka[0]!==kb[0]?ka[0]-kb[0]:ka[1]-kb[1];
+  });
+  return rows;
+}
+
 // ─── IN HOTEL ─────────────────────────────────────────────────
 async function _resBuildInHotelView(){
   const d=_resAuditDate;
   // "In House" means actually checked in, not just "today falls within their
   // stay dates" -- a guest who hasn't been checked in yet belongs on Arrivals
   // with a Check In button, not here (Jorge's ask 2026-09-26).
-  const rows=[
+  const rows=_resSortRows([
     ..._resGroupRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&!r.checkedOutAt),
     ..._resIndivRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&r.status!=='checked_out'),
-  ].sort((a,b)=>(a.room||'').localeCompare(b.room||''));
+  ]);
   await _resAttachFolioBalances(rows);
 
   return `<div style="max-width:1000px;margin:0 auto">
@@ -300,10 +324,10 @@ async function _resBuildMovementView(type){
   const title=isArr?'Arrivals':'Departures';
   const color=isArr?'#0d9488':'#7c3aed';
 
-  const rows=[
+  const rows=_resSortRows([
     ..._resGroupRows().filter(r=>(isArr?r.checkIn:r.checkOut)===date),
     ..._resIndivRows().filter(r=>(isArr?r.checkIn:r.checkOut)===date),
-  ];
+  ]);
   await _resAttachFolioBalances(rows);
   const todayStr=fmtISO(new Date());
   const dateLabel=date===todayStr?'Today':fmtDate(date);
