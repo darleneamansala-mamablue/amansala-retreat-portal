@@ -418,6 +418,34 @@ async function spaNotifyTherapistCancelled(appt, therapistId) {
   } catch (e) {}
 }
 
+// Staff can drag/edit an appointment's date or time directly in this admin
+// calendar, but until now the guest was never told — only a self-service
+// cancellation (spa-booking.html) or a Visito-created booking sent any kind
+// of email at all (Jorge's report 2026-09-26). Fires whenever a save changes
+// date/start on an appointment that ISN'T being cancelled in the same edit
+// (cancelling already has its own separate notice path).
+async function spaNotifyGuestRescheduled(appt) {
+  if (!appt.email) return;
+  const svc = SpaData.services.find(s => s.id === appt.serviceId);
+  const ther = appt.therapistId ? SpaData.therapists.find(t => t.id === appt.therapistId) : null;
+  const html = `<div style="font-family:'Jost',sans-serif;padding:20px;background:#faf7f2">
+    <div style="background:#fff;border-radius:12px;padding:24px;max-width:480px;margin:0 auto">
+      <div style="font-size:16px;font-weight:700;color:#2d2520;margin-bottom:10px">Your Spa Appointment Has Been Rescheduled</div>
+      <p style="font-size:14px;color:#374151;margin:0 0 14px">Hi ${(appt.clientName || '').split(' ')[0] || 'there'}, our team just moved your appointment:</p>
+      <div style="font-size:13.5px;color:#5a5048;line-height:1.8">
+        <div><b>Service:</b> ${svc ? svc.name : '—'}</div>
+        <div><b>New Date:</b> ${new Date(appt.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+        <div><b>New Time:</b> ${spaCalFmtT(appt.start)}</div>
+        ${ther ? `<div><b>Therapist:</b> ${ther.firstName} ${ther.lastName || ''}</div>` : ''}
+      </div>
+      <p style="font-size:13px;color:#6b7280;margin-top:16px">Questions about the change? Just reply to this email or reach out to the front desk.</p>
+    </div>
+  </div>`;
+  try {
+    await fetch('/.netlify/functions/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: appt.email, subject: 'Spa Appointment Updated — Amansala', html }) });
+  } catch (e) {}
+}
+
 // Hotel Guest appointments bill straight to the guest's room and get paid
 // when they settle their folio at checkout — a separate Payment Status
 // toggle on the appointment itself was a redundant, easy-to-forget step
@@ -535,6 +563,8 @@ function spaApptSave() {
     // also reassigned the therapist in this same save.
     if (before.status !== 'CANCELLED' && appt.status === 'CANCELLED') {
       spaNotifyTherapistCancelled(appt, before.therapistId);
+    } else if (appt.status !== 'CANCELLED' && changes.some(c => c.field === 'date' || c.field === 'start')) {
+      spaNotifyGuestRescheduled(appt);
     }
   } else {
     id = spaNewId('ap');
