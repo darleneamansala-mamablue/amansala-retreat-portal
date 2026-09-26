@@ -273,6 +273,11 @@ function actByRetreatBuildEntries(bkId) {
   const seen = new Set();
   const entries = (bk.retreatActivities||[]).filter(a=>{
     if (!a.aoId) return false;
+    // Never show a column for an entry with no real tour behind it — it used
+    // to print as "undefined" or a raw code like "ao12" (Darlene 2026-09-26) —
+    // or for a tour on the arrival/departure day (activity-rules.js).
+    if (a.aoId==='undefined' || !aoMap[a.aoId]) return false;
+    if (typeof tourDateAllowed==='function' && a.date && !tourDateAllowed(bk,a.date.slice(0,10))) return false;
     const key = a.aoId+'|'+(a.date||'');
     if (seen.has(key)) return false;
     seen.add(key);
@@ -376,7 +381,10 @@ function actByRetreatPrint(bkId) {
   // Chronological (not prepaid-first) — this is a sign-up grid organized by
   // when each activity actually happens, matching the paper sheet this
   // replaces: one column per tour/ceremony occurrence, one row per guest.
-  const entries = actByRetreatBuildEntries(bkId).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.time||'').localeCompare(b.time||''));
+  // Tours that stay on the activity sheet (for staff) but never go on the
+  // guests' printed sign-up sheet — nothing for guests to sign up for.
+  const ACT_SHEET_NO_SIGNUP = new Set(['ao12']); // Group Salsa Class
+  const entries = actByRetreatBuildEntries(bkId).filter(e=>!ACT_SHEET_NO_SIGNUP.has(e.ao.id)).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.time||'').localeCompare(b.time||''));
   const retreatName = bk.leaderName||bk.retreatName||'Retreat';
 
   const ordinal = n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
