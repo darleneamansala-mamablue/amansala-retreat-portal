@@ -216,8 +216,11 @@ exports.handler = async (event) => {
   const savedGroups = (grpRes.ok && Array.isArray(grpRes.data) && grpRes.data[0]?.value) ? grpRes.data[0].value : [];
   const userGroupMap = new Map(savedGroups); // "arrival|rowId" or "departure|rowId" → "ug_N"
 
+  const results = { date: tomorrow, charged: [], skipped: [], errors: [] };
+  const now_iso = new Date().toISOString();
+
   // 5. Build entry list
-  const entries = rows.map(r => {
+  let entries = rows.map(r => {
     const d = r.data ?? {};
     return {
       rowId:          r.id,
@@ -229,6 +232,19 @@ exports.handler = async (event) => {
       alreadyCharged: !!d.folioCharged?.[chargedF],
       data:           d,
     };
+  });
+
+  // 5b. Cancelled guests never travel -- exclude them entirely, not just from
+  // being charged, so they also stop counting toward anyone else's shared-van
+  // group size (Jorge's ask 2026-09-26, after Nicole Chavez -- cancelled on
+  // her registration -- still would have been charged/counted here otherwise).
+  entries = entries.filter(e => {
+    const fullName = `${e.firstName} ${e.lastName}`.trim();
+    if (!fullName) return true;
+    const candidateRegs = e.bookingId ? (regsByBk[e.bookingId] ?? []) : allRegs;
+    const cancelled = candidateRegs.some(r => (r.guests ?? []).some(g => g.cancelled && g.name && nameMatch(g.name, fullName)));
+    if (cancelled) results.skipped.push({ rowId: e.rowId, name: fullName, reason: 'guest_cancelled' });
+    return !cancelled;
   });
 
   // 6. Build direction-scoped group map
@@ -254,9 +270,6 @@ exports.handler = async (event) => {
     if (!groups.has(gk)) groups.set(gk, []);
     groups.get(gk).push(e);
   });
-
-  const results = { date: tomorrow, charged: [], skipped: [], errors: [] };
-  const now_iso = new Date().toISOString();
 
   // 7. Process each booking
   for (const bkId of bookingIds) {
