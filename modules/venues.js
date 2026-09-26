@@ -2254,6 +2254,11 @@ function openCopyModal(){
 
 
 // ===== ROOM CALENDAR =====
+function _joinNames(names){
+  if(names.length<=1)return names[0]||'';
+  if(names.length===2)return `${names[0]} & ${names[1]}`;
+  return `${names.slice(0,-1).join(', ')} & ${names[names.length-1]}`;
+}
 function rcBuild(){
   const end=addDays(rcStart,rcShowDays-1);
   document.getElementById('rcRangeLbl').textContent=`${fmtShort(rcStart)} — ${fmtShort(end)}`;
@@ -2441,8 +2446,15 @@ function rcBuild(){
         // guest's name; an unassigned-but-blocked room still shows the
         // retreat name (there's no guest name to pair it with) plus "blocked".
         const roomOnlyIcon=bk.bookingType==='room_only'?'🏨 ':'';
+        // Single-bed room types (Jorge's ask 2026-09-26: Beachfront King,
+        // Superior, Garden Plus, Garden, Simple n Small) show every sharing
+        // guest's name, not just the first — that one bed/room is genuinely
+        // shared between them, unlike a "Bed in a ___" type where each lettered
+        // code (6a/6b/6c) is already its own separately-booked bed/guest.
+        const _ONE_BED_RT_IDS=['rt1','rt2','rt3','rt4','rt5'];
+        const displayName=hasGuest?(guestNames.length>1&&_ONE_BED_RT_IDS.includes(rt.id)?_joinNames(guestNames):guestNames[0]):null;
         bl.innerHTML=`<span class="bk-lock" title="${bk.roomLocked?'Locked — the Straightline optimizer will never move this (click to unlock). You can still drag it yourself.':'Click to lock — protects this from the Straightline optimizer, not from you dragging it'}" onclick="event.stopPropagation();bkToggleLock('${bk.id}')" style="cursor:pointer;margin-right:4px;opacity:${bk.roomLocked?'1':'.35'}">${bk.roomLocked?'🔒':'🔓'}</span>`
-          +(hasGuest?`<span class="bk-n">${roomOnlyIcon}${guestNames[0]}</span>`:`<span class="bk-n">${roomOnlyIcon}${bk.leaderName||bk.retreatName}</span><span class="bk-s" style="opacity:.5;font-style:italic">blocked</span>`);
+          +(hasGuest?`<span class="bk-n">${roomOnlyIcon}${displayName}</span>`:`<span class="bk-n">${roomOnlyIcon}${bk.leaderName||bk.retreatName}</span><span class="bk-s" style="opacity:.5;font-style:italic">blocked</span>`);
         bl.addEventListener('dragstart',e=>{
           rcDragData={bkId:bk.id,fromRoom:room,rtId:rt.id};
           e.dataTransfer.effectAllowed='move';
