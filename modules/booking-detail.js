@@ -1,10 +1,61 @@
 // ===== BOOKING DETAIL / FOLIO VIEW =====
-// Rich per-reservation view opened from the Rooms tab (modules/venues.js), matching
-// the equivalent screen in the staging app (js/modules/reservations.js). Reads/writes
-// the real `folios`/`folio_items` SQL tables directly, on-demand per registration --
-// this is intentionally NOT part of the bulk loadFromSupabase()/syncToSupabase() cycle,
-// so it can't interfere with the already-migrated bookings/registrations/payments sync.
-let _bdRegId=null,_bdFolios=[],_bdAddOpen={};
+// Rich per-reservation view opened from the Rooms tab (modules/venues.js) AND from
+// modules/reservations.js, matching the equivalent screen in the staging app
+// (js/modules/reservations.js). Reads/writes the real `folios`/`folio_items` SQL
+// tables directly, on-demand -- this is intentionally NOT part of the bulk
+// loadFromSupabase()/syncToSupabase() cycle, so it can't interfere with the
+// already-migrated bookings/registrations/payments sync.
+//
+// Two "kinds" of subject share this one modal: a retreat/room-only guest
+// (_bdKind='reg', keyed by a `registrations` row) and an individual Booking
+// Engine reservation (_bdKind='req', keyed by a `booking_requests` row --
+// these have no registration at all, per booking-engine-admin.js). Folio
+// rendering/payments/charges (_bdFolioRowHtml, bdRecordPayment, etc.) are
+// already subject-agnostic (keyed only by folio id) -- _bdSubject() is the
+// one seam that normalizes the two into a common shape for everything else
+// (header, check-in/out, notes, delete).
+let _bdKind='reg',_bdId=null,_bdReqCache=null,_bdFolios=[],_bdAddOpen={};
+
+function _bdReqSqlToApp(row){const o={};for(const k in row)o[_s2c(k)]=row[k];return o;}
+
+// Normalizes the current subject (registration+booking, or booking_request)
+// into one shape every render/action function below reads from -- Card on
+// File is intentionally left registration-only for now (booking_requests has
+// no stripe_* columns yet), _bdRender() hides that section for kind='req'.
+function _bdSubject(){
+  if(_bdKind==='req'){
+    const r=_bdReqCache;if(!r)return null;
+    return {
+      id:r.id,guestName:`${r.firstName||''} ${r.lastName||''}`.trim()||'Guest',guestEmail:r.email||'',
+      room:r.room||r.roomTypeName||'—',
+      checkIn:r.checkIn,checkOut:r.checkOut,notes:r.notes||r.dietary||'',
+      checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
+      rate:r.dailyRate!=null?Number(r.dailyRate):null,adults:r.adults||1,
+      sourceLabel:r.source||null,retreatLabel:null,retreatBkId:null,
+      folioCol:'booking_request_id',bookingType:'room_only',
+      stripeCustomerId:null,stripePaymentMethodId:null,stripeCardBrand:null,stripeCardLast4:null,
+    };
+  }
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return null;
+  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return null;
+  const guest=(reg.guests||[]).find(g=>g.name)||{name:'Guest'};
+  const gc=(reg.guests||[]).filter(g=>g.name).length||1;
+  const rt=AppData.roomTypes.find(r=>(r.rooms||[]).includes(reg.room));
+  const checkIn=reg.checkIn||bk.startDate,checkOut=reg.checkOut||bk.endDate;
+  const nights=Math.max(1,Math.round((pd(checkOut)-pd(checkIn))/DAY_MS));
+  const rate=reg.customRateOverride!=null?Number(reg.customRateOverride):(rt?getRoomRate(rt,gc,checkIn,nights):0);
+  return {
+    id:reg.id,guestName:guest.name,guestEmail:guest.email||'',
+    room:reg.room||'—',
+    checkIn,checkOut,notes:reg.notes||'',
+    checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
+    rate,adults:gc,sourceLabel:bk.source?_bdSourceLabel(bk.source):null,
+    retreatLabel:bk.leaderName||bk.retreatName||'',retreatBkId:bk.id,
+    folioCol:'registration_id',bookingType:bk.bookingType,
+    stripeCustomerId:reg.stripeCustomerId,stripePaymentMethodId:reg.stripePaymentMethodId,
+    stripeCardBrand:reg.stripeCardBrand,stripeCardLast4:reg.stripeCardLast4,
+  };
+}
 
 const _BD_PAY_METHODS=['Cash','Zelle','Venmo','Paypal','Bank Transfer','Clip','Credit Card (Stripe)','Card on File'];
 
@@ -39,20 +90,42 @@ function _bdGoToRegistration(bkId){
 async function openBookingDetailForReg(regId,guestName){
   const reg=AppData.regs.find(r=>r.id===regId);if(!reg)return;
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return;
-  _bdRegId=regId;_bdAddOpen={};
+  _bdKind='reg';_bdId=regId;_bdReqCache=null;_bdAddOpen={};
+  _bdGuestNameOverride=guestName||(reg.guests||[]).find(g=>g.name)?.name||'Guest';
   document.getElementById('bdBody').innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px">Loading folio…</div>';
   openModal('bookingDetailModal');
-  await _bdLoadFolios(regId,guestName||(reg.guests||[]).find(g=>g.name)?.name||'Guest');
+  await _bdLoadFolios();
 }
 
-async function _bdLoadFolios(regId,guestName){
-  const reg=AppData.regs.find(r=>r.id===regId);if(!reg)return;
+// Individual Booking Engine reservation (no registrations row at all -- see
+// booking-engine-admin.js's beFetchRequests()). Opened from
+// modules/reservations.js's Arrivals/In House/Departures/Search tabs.
+let _bdGuestNameOverride=null;
+async function openBookingDetailForRequest(requestId){
+  _bdKind='req';_bdId=requestId;_bdGuestNameOverride=null;_bdAddOpen={};
+  document.getElementById('bdBody').innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px">Loading folio…</div>';
+  openModal('bookingDetailModal');
   try{
-    let {data:folios,error}=await db.from('folios').select('*').eq('registration_id',regId).eq('guest_name',guestName);
+    const {data,error}=await db.from('booking_requests').select('*').eq('id',requestId).maybeSingle();
+    if(error)throw error;
+    if(!data)throw new Error('Reservation not found');
+    _bdReqCache=_bdReqSqlToApp(data);
+  }catch(e){
+    document.getElementById('bdBody').innerHTML=`<div style="padding:40px 20px;text-align:center;color:#dc2626;font-size:13px">Could not load reservation: ${escHtml(e.message||String(e))}</div>`;
+    return;
+  }
+  await _bdLoadFolios();
+}
+
+async function _bdLoadFolios(){
+  const subj=_bdSubject();if(!subj)return;
+  const guestName=_bdKind==='reg'?(_bdGuestNameOverride||subj.guestName):subj.guestName;
+  try{
+    let {data:folios,error}=await db.from('folios').select('*').eq(subj.folioCol,subj.id).eq('guest_name',guestName);
     if(error)throw error;
     if(!folios||!folios.length){
       const token=uid().replace(/[^a-z0-9]/gi,'');
-      const {data:created,error:cErr}=await db.from('folios').insert({registration_id:regId,guest_name:guestName,name:guestName,payment_token:token,status:'open'}).select().single();
+      const {data:created,error:cErr}=await db.from('folios').insert({[subj.folioCol]:subj.id,guest_name:guestName,name:guestName,payment_token:token,status:'open'}).select().single();
       if(cErr)throw cErr;
       folios=[created];
     }
@@ -71,29 +144,23 @@ function _bdFolioTotal(f){return f.items.reduce((s,i)=>s+_bdItemTotal(i),0);}
 function _bdBalanceDue(){return _bdFolios.filter(f=>f.folio.status==='open').reduce((s,f)=>s+_bdFolioTotal(f),0);}
 
 function _bdRender(){
-  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
-  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return;
-  const guest=(reg.guests||[]).find(g=>g.name)||{name:'Guest'};
-  const gc=(reg.guests||[]).filter(g=>g.name).length||1;
-  const rt=AppData.roomTypes.find(r=>(r.rooms||[]).includes(reg.room));
-  const checkIn=reg.checkIn||bk.startDate,checkOut=reg.checkOut||bk.endDate;
-  const nights=Math.max(1,Math.round((pd(checkOut)-pd(checkIn))/DAY_MS));
-  const dailyRate=reg.customRateOverride!=null?Number(reg.customRateOverride):(rt?getRoomRate(rt,gc,checkIn,nights):0);
-  const roomTotal=nights*dailyRate;
+  const subj=_bdSubject();if(!subj)return;
+  const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
+  const roomTotal=nights*(subj.rate||0);
   const balanceDue=_bdBalanceDue();
-  const statusBadge=reg.checkedOutAt?{label:'Checked Out',bg:'rgba(255,255,255,.15)'}:reg.checkedInAt?{label:'In House',bg:'rgba(34,197,94,.25)'}:{label:'Expected',bg:'rgba(255,255,255,.15)'};
+  const statusBadge=subj.checkedOutAt?{label:'Checked Out',bg:'rgba(255,255,255,.15)'}:subj.checkedInAt?{label:'In House',bg:'rgba(34,197,94,.25)'}:{label:'Expected',bg:'rgba(255,255,255,.15)'};
 
   const hBtnS='background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'Jost\',sans-serif';
   let headerBtns='';
-  if(!reg.checkedInAt) headerBtns+=`<button onclick="bdCheckIn()" style="${hBtnS}">Check In</button>`;
-  else if(!reg.checkedOutAt) headerBtns+=`<button onclick="bdCheckOut()" style="${hBtnS}">Check Out</button>`;
+  if(!subj.checkedInAt) headerBtns+=`<button onclick="bdCheckIn()" style="${hBtnS}">Check In</button>`;
+  else if(!subj.checkedOutAt) headerBtns+=`<button onclick="bdCheckOut()" style="${hBtnS}">Check Out</button>`;
   else headerBtns+=`<button onclick="bdUndoCheckOut()" style="${hBtnS}">Undo Check Out</button>`;
   headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Delete</button>`;
 
   document.getElementById('bdHdr').innerHTML=`
     <div style="display:flex;align-items:center;gap:14px">
       <button onclick="closeModal('bookingDetailModal')" style="${hBtnS}">&larr; Back</button>
-      <div style="font-size:15px;font-weight:700">Booking <span style="font-weight:400;opacity:.85">${escHtml(guest.name)}, ${fmtDate(bk.startDate)}, #${_bdShortId(reg.id)}</span></div>
+      <div style="font-size:15px;font-weight:700">Booking <span style="font-weight:400;opacity:.85">${escHtml(subj.guestName)}, ${fmtDate(subj.checkIn)}, #${_bdShortId(subj.id)}</span></div>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
       ${headerBtns}
@@ -105,37 +172,37 @@ function _bdRender(){
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">📅 Booking</div>
         <table style="width:100%;font-size:13px">
-          <tr><td style="color:var(--muted);padding:5px 0;width:90px">Period</td><td style="padding:5px 0">${fmtDate(bk.startDate)} — ${fmtDate(bk.endDate)} <span style="color:var(--muted)">(${nights} night${nights!==1?'s':''})</span></td></tr>
-          <tr><td style="color:var(--muted);padding:5px 0">Retreat</td><td style="padding:5px 0"><span onclick="_bdGoToRegistration('${bk.id}')" title="Open this retreat's Registration tab" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(bk.leaderName||bk.retreatName||'')}</span></td></tr>
-          ${bk.source?`<tr><td style="color:var(--muted);padding:5px 0">Source</td><td style="padding:5px 0;color:#1d4ed8;font-weight:600">${escHtml(_bdSourceLabel(bk.source))}</td></tr>`:''}
-          <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${escHtml(reg.room||'—')}</td></tr>
-          <tr><td style="color:var(--muted);padding:5px 0">Rate</td><td style="padding:5px 0;color:#059669;font-weight:700">${fmt$(dailyRate)}/night</td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0;width:90px">Period</td><td style="padding:5px 0">${fmtDate(subj.checkIn)} — ${fmtDate(subj.checkOut)} <span style="color:var(--muted)">(${nights} night${nights!==1?'s':''})</span></td></tr>
+          ${subj.retreatLabel!=null?`<tr><td style="color:var(--muted);padding:5px 0">Retreat</td><td style="padding:5px 0"><span onclick="_bdGoToRegistration('${subj.retreatBkId}')" title="Open this retreat's Registration tab" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(subj.retreatLabel)}</span></td></tr>`:''}
+          ${subj.sourceLabel?`<tr><td style="color:var(--muted);padding:5px 0">Source</td><td style="padding:5px 0;color:#1d4ed8;font-weight:600">${escHtml(subj.sourceLabel)}</td></tr>`:''}
+          <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${escHtml(subj.room||'—')}</td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0">Rate</td><td style="padding:5px 0;color:#059669;font-weight:700">${subj.rate!=null?fmt$(subj.rate)+'/night':'—'}</td></tr>
         </table>
         <div style="margin-top:10px">
           <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px">Notes</label>
-          <textarea id="bdNotes" placeholder="Internal notes..." style="width:100%;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;resize:vertical">${escHtml(reg.notes||'')}</textarea>
+          <textarea id="bdNotes" placeholder="Internal notes..." style="width:100%;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;resize:vertical">${escHtml(subj.notes||'')}</textarea>
           <button class="btn btn-secondary btn-sm" onclick="bdSaveNotes()" style="margin-top:6px">Save</button>
         </div>
       </div>
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">👤 Guest</div>
         <table style="width:100%;font-size:13px">
-          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Name</td><td style="padding:5px 0;font-weight:700">${escHtml(guest.name)}</td></tr>
-          <tr><td style="color:var(--muted);padding:5px 0">Adults</td><td style="padding:5px 0">${gc}</td></tr>
-          ${guest.email?`<tr><td style="color:var(--muted);padding:5px 0">Email</td><td style="padding:5px 0">${escHtml(guest.email)}</td></tr>`:''}
+          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Name</td><td style="padding:5px 0;font-weight:700">${escHtml(subj.guestName)}</td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0">Adults</td><td style="padding:5px 0">${subj.adults}</td></tr>
+          ${subj.guestEmail?`<tr><td style="color:var(--muted);padding:5px 0">Email</td><td style="padding:5px 0">${escHtml(subj.guestEmail)}</td></tr>`:''}
         </table>
         <div style="margin-top:14px;padding:12px 14px;background:#fef2f2;border-radius:10px">
           <div style="font-size:11px;color:var(--muted);font-weight:600">Balance Due</div>
           <div style="font-size:22px;font-weight:800;color:${balanceDue>0?'#dc2626':'#059669'}">${fmt$(balanceDue)}</div>
         </div>
-        <div style="margin-top:8px;font-size:12px;color:var(--muted)">Room Total &nbsp; ${nights} × ${fmt$(dailyRate)} = ${fmt$(roomTotal)}</div>
-        <div style="margin-top:10px">
-          ${reg.stripePaymentMethodId
-            ?`<span style="font-size:12px;color:#374151">💳 ${escHtml(_bdCardLabel(reg))} on file</span>
+        ${subj.rate!=null?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">Room Total &nbsp; ${nights} × ${fmt$(subj.rate)} = ${fmt$(roomTotal)}</div>`:''}
+        ${_bdKind==='reg'?`<div style="margin-top:10px">
+          ${subj.stripePaymentMethodId
+            ?`<span style="font-size:12px;color:#374151">💳 ${escHtml(_bdCardLabel(subj))} on file</span>
               <button class="btn btn-secondary btn-sm" onclick="bdOpenSaveCard()" style="margin-left:8px;padding:2px 10px;font-size:11px">Update</button>
               <button class="btn btn-danger btn-sm" onclick="bdRemoveCard()" style="margin-left:4px;padding:2px 10px;font-size:11px">Remove</button>`
             :`<button class="btn btn-secondary btn-sm" onclick="bdOpenSaveCard()">💳 Save Card</button>`}
-        </div>
+        </div>`:''}
       </div>
     </div>
     <div style="padding:20px 28px 28px">
@@ -202,10 +269,13 @@ function _bdFolioRowHtml(f){
 }
 
 function _bdPaymentRowHtml(fid){
+  // Card on File is registration-only for now (booking_requests has no
+  // stripe_* columns yet) -- don't offer an option that would silently no-op.
+  const methods=_bdKind==='req'?_BD_PAY_METHODS.filter(m=>m!=='Card on File'):_BD_PAY_METHODS;
   return `<div style="display:flex;gap:8px;align-items:center;padding:10px 16px;background:#f8fafc;border-top:1px solid var(--border);flex-wrap:wrap">
     <span style="font-size:11px;font-weight:700;color:var(--muted)">Payment</span>
     <select id="bd-pay-method-${fid}" onchange="bdOnPayMethodChange('${fid}')" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
-      ${_BD_PAY_METHODS.map(m=>`<option value="${m}">${m}</option>`).join('')}
+      ${methods.map(m=>`<option value="${m}">${m}</option>`).join('')}
     </select>
     <input id="bd-pay-amount-${fid}" type="number" step="0.01" placeholder="Amount" style="width:100px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
     <input id="bd-pay-ref-${fid}" type="text" placeholder="Reference (optional)" style="flex:1;min-width:120px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
@@ -229,19 +299,19 @@ function bdOnPayMethodChange(fid){
 }
 
 async function bdChargeCardOnFile(fid){
-  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
   if(!reg.stripePaymentMethodId){showToast('No hay tarjeta guardada para este huésped — guarda una primero con "Save Card".');return;}
   const amount=parseFloat(document.getElementById(`bd-pay-amount-${fid}`)?.value);
   if(!amount||amount<=0){showToast('Enter a valid amount');return;}
   const btn=document.getElementById(`bd-pay-btn-${fid}`);
   const origLabel=btn.textContent;btn.disabled=true;btn.textContent='Cobrando…';
   try{
-    const res=await fetch('/.netlify/functions/charge-card-on-file',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regId:_bdRegId,folioId:fid,amount,description:'Amansala · Folio charge'})});
+    const res=await fetch('/.netlify/functions/charge-card-on-file',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regId:_bdId,folioId:fid,amount,description:'Amansala · Folio charge'})});
     const data=await res.json();
     if(!res.ok||data.error)throw new Error(data.error||'No se pudo cobrar');
     showToast('Tarjeta cobrada ✓');
     const f=_bdFolios.find(x=>x.folio.id===fid);
-    await _bdLoadFolios(_bdRegId,f?.folio.guest_name);
+    await _bdLoadFolios();
   }catch(e){
     showToast(e.message||'Error al cobrar la tarjeta');
     btn.disabled=false;btn.textContent=origLabel;
@@ -258,7 +328,7 @@ async function bdAddItem(fid){
   const {error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax});
   if(error){showToast('Error: '+error.message);return;}
   _bdAddOpen[fid]=false;
-  await _bdLoadFolios(_bdRegId,_bdFolios.find(f=>f.folio.id===fid)?.folio.guest_name);
+  await _bdLoadFolios();
 }
 
 async function bdEditItem(fid,itemId){
@@ -268,7 +338,7 @@ async function bdEditItem(fid,itemId){
   const tax=parseFloat(prompt('Tax %',item.tax_rate||0))||0;
   const {error}=await db.from('folio_items').update({description:desc,unit_price:price,tax_rate:tax}).eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
-  await _bdLoadFolios(_bdRegId,f.folio.guest_name);
+  await _bdLoadFolios();
 }
 
 async function bdDeleteItem(fid,itemId){
@@ -276,7 +346,7 @@ async function bdDeleteItem(fid,itemId){
   const f=_bdFolios.find(x=>x.folio.id===fid);
   const {error}=await db.from('folio_items').delete().eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
-  await _bdLoadFolios(_bdRegId,f.folio.guest_name);
+  await _bdLoadFolios();
 }
 
 async function bdRecordPayment(fid){
@@ -289,14 +359,14 @@ async function bdRecordPayment(fid){
   if(error){showToast('Error recording payment: '+error.message);return;}
   showToast('Payment recorded ✓');
   const f=_bdFolios.find(x=>x.folio.id===fid);
-  await _bdLoadFolios(_bdRegId,f.folio.guest_name);
+  await _bdLoadFolios();
 }
 
 async function bdCloseFolio(fid){
   const {error}=await db.from('folios').update({status:'closed'}).eq('id',fid);
   if(error){showToast('Error: '+error.message);return;}
   const f=_bdFolios.find(x=>x.folio.id===fid);
-  await _bdLoadFolios(_bdRegId,f.folio.guest_name);
+  await _bdLoadFolios();
 }
 
 async function bdDeleteFolioRow(fid){
@@ -305,17 +375,17 @@ async function bdDeleteFolioRow(fid){
   await db.from('folio_items').delete().eq('folio_id',fid);
   const {error}=await db.from('folios').delete().eq('id',fid);
   if(error){showToast('Error: '+error.message);return;}
-  await _bdLoadFolios(_bdRegId,f.folio.guest_name);
+  await _bdLoadFolios();
 }
 
 async function bdAddFolio(){
-  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
-  const guestName=_bdFolios[0]?.folio.guest_name||(reg.guests||[]).find(g=>g.name)?.name||'Guest';
+  const subj=_bdSubject();if(!subj)return;
+  const guestName=_bdFolios[0]?.folio.guest_name||subj.guestName;
   const name=prompt('Folio name',guestName);if(!name)return;
   const token=uid().replace(/[^a-z0-9]/gi,'');
-  const {error}=await db.from('folios').insert({registration_id:_bdRegId,guest_name:guestName,name,payment_token:token,status:'open'});
+  const {error}=await db.from('folios').insert({[subj.folioCol]:subj.id,guest_name:guestName,name,payment_token:token,status:'open'});
   if(error){showToast('Error: '+error.message);return;}
-  await _bdLoadFolios(_bdRegId,guestName);
+  await _bdLoadFolios();
 }
 
 function bdCopyGuestLink(token){
@@ -327,54 +397,99 @@ function bdCopyGuestLink(token){
   });
 }
 
+// Notifies modules/reservations.js (if its Arrivals/In House/Departures/
+// Search tab is open) to refetch after a booking_requests row changes here --
+// that page keeps its own local copy since booking_requests isn't part of
+// AppData, unlike registrations (mutated in place above, already live).
+function _bdNotifyReqChanged(){if(typeof resRefresh==='function')resRefresh();}
+
 async function bdSaveNotes(){
-  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
   const notes=document.getElementById('bdNotes')?.value||'';
-  reg.notes=notes;
-  const {error}=await db.from('registrations').update({notes}).eq('id',reg.id);
-  if(error){showToast('Error: '+error.message);return;}
+  if(_bdKind==='req'){
+    const {error}=await db.from('booking_requests').update({notes}).eq('id',_bdId);
+    if(error){showToast('Error: '+error.message);return;}
+    if(_bdReqCache)_bdReqCache.notes=notes;
+    _bdNotifyReqChanged();
+  }else{
+    const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+    const {error}=await db.from('registrations').update({notes}).eq('id',reg.id);
+    if(error){showToast('Error: '+error.message);return;}
+    reg.notes=notes;
+  }
   showToast('Notes saved ✓');
 }
 
 async function bdCheckIn(){
-  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
   const now=new Date().toISOString();
-  const {error}=await db.from('registrations').update({checked_in_at:now}).eq('id',reg.id);
-  if(error){showToast('Error: '+error.message);return;}
-  reg.checkedInAt=now;
+  if(_bdKind==='req'){
+    const {error}=await db.from('booking_requests').update({checked_in_at:now,status:'in_house'}).eq('id',_bdId);
+    if(error){showToast('Error: '+error.message);return;}
+    if(_bdReqCache){_bdReqCache.checkedInAt=now;_bdReqCache.status='in_house';}
+    _bdNotifyReqChanged();
+  }else{
+    const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+    const {error}=await db.from('registrations').update({checked_in_at:now}).eq('id',reg.id);
+    if(error){showToast('Error: '+error.message);return;}
+    reg.checkedInAt=now;
+  }
   showToast('Checked in ✓');
   _bdRender();
 }
 
 async function bdCheckOut(){
-  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
+  const subj=_bdSubject();if(!subj)return;
   // Check In and Check Out share the same button spot, so a double-click on
   // Check In used to check the guest straight back out a second later (real
   // incident 2026-09-25, Binnie & Minnie CH14). Ignore Check Out clicks for a
   // few seconds after check-in, and always ask before checking out.
-  if(reg.checkedInAt&&Date.now()-new Date(reg.checkedInAt).getTime()<5000)return;
-  const names=(reg.guests||[]).map(g=>g.name).filter(Boolean).join(' & ');
-  if(!confirm(`Check out ${names||'this guest'} from room ${reg.room}?`))return;
+  if(subj.checkedInAt&&Date.now()-new Date(subj.checkedInAt).getTime()<5000)return;
+  if(!confirm(`Check out ${subj.guestName||'this guest'} from room ${subj.room}?`))return;
   const now=new Date().toISOString();
-  const {error}=await db.from('registrations').update({checked_out_at:now}).eq('id',reg.id);
-  if(error){showToast('Error: '+error.message);return;}
-  reg.checkedOutAt=now;
+  if(_bdKind==='req'){
+    const {error}=await db.from('booking_requests').update({checked_out_at:now,status:'checked_out'}).eq('id',_bdId);
+    if(error){showToast('Error: '+error.message);return;}
+    if(_bdReqCache){_bdReqCache.checkedOutAt=now;_bdReqCache.status='checked_out';}
+    _bdNotifyReqChanged();
+  }else{
+    const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+    const {error}=await db.from('registrations').update({checked_out_at:now}).eq('id',reg.id);
+    if(error){showToast('Error: '+error.message);return;}
+    reg.checkedOutAt=now;
+  }
   showToast('Checked out ✓');
   _bdRender();
 }
 
 async function bdUndoCheckOut(){
-  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
   if(!confirm('Undo check-out? The guest goes back to In House.'))return;
-  const {error}=await db.from('registrations').update({checked_out_at:null}).eq('id',reg.id);
-  if(error){showToast('Error: '+error.message);return;}
-  reg.checkedOutAt=null;
+  if(_bdKind==='req'){
+    const {error}=await db.from('booking_requests').update({checked_out_at:null,status:'in_house'}).eq('id',_bdId);
+    if(error){showToast('Error: '+error.message);return;}
+    if(_bdReqCache){_bdReqCache.checkedOutAt=null;_bdReqCache.status='in_house';}
+    _bdNotifyReqChanged();
+  }else{
+    const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+    const {error}=await db.from('registrations').update({checked_out_at:null}).eq('id',reg.id);
+    if(error){showToast('Error: '+error.message);return;}
+    reg.checkedOutAt=null;
+  }
   showToast('Check-out undone ✓ — back In House');
   _bdRender();
 }
 
 async function bdDeleteReservation(){
-  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
+  if(_bdKind==='req'){
+    const subj=_bdSubject();if(!subj)return;
+    if(!confirm(`Cancel ${subj.guestName||'this'} reservation?`))return;
+    const {error}=await db.from('booking_requests').update({status:'declined'}).eq('id',_bdId);
+    if(error){showToast('Error: '+error.message);return;}
+    if(_bdReqCache)_bdReqCache.status='declined';
+    showToast('Reservation cancelled ✓');
+    closeModal('bookingDetailModal');
+    _bdNotifyReqChanged();
+    return;
+  }
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
   const bookingId=reg.bookingId;
   const _bk=AppData.bookings.find(b=>b.id===bookingId);
   // Only a Room Only booking IS this one room — cancelling the booking there is
@@ -491,7 +606,7 @@ async function bdOpenSaveCard(){
     if(!window.Stripe){
       await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://js.stripe.com/v3/';s.onload=resolve;s.onerror=reject;document.head.appendChild(s);});
     }
-    const res=await fetch('/.netlify/functions/create-card-setup-intent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regId:_bdRegId})});
+    const res=await fetch('/.netlify/functions/create-card-setup-intent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regId:_bdId})});
     const data=await res.json();
     if(!res.ok||data.error)throw new Error(data.error||'No se pudo iniciar el guardado de tarjeta');
     _bdSaveCardStripe=Stripe(data.publishableKey);
@@ -512,10 +627,10 @@ async function bdConfirmSaveCard(){
     const {error,setupIntent}=await _bdSaveCardStripe.confirmSetup({elements:_bdSaveCardElems,confirmParams:{return_url:window.location.href},redirect:'if_required'});
     if(error){errEl.textContent=error.message;saveBtn.disabled=false;saveBtn.textContent='Save Card';return;}
     if(!setupIntent?.id){errEl.textContent='No se recibió confirmación de Stripe.';return;}
-    const confirmRes=await fetch('/.netlify/functions/confirm-card-setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setupIntentId:setupIntent.id,regId:_bdRegId})});
+    const confirmRes=await fetch('/.netlify/functions/confirm-card-setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setupIntentId:setupIntent.id,regId:_bdId})});
     const confirmData=await confirmRes.json();
     if(!confirmRes.ok||confirmData.error){errEl.textContent='Tarjeta guardada pero no se pudo confirmar: '+(confirmData.error||'error desconocido');return;}
-    const reg=AppData.regs.find(r=>r.id===_bdRegId);
+    const reg=AppData.regs.find(r=>r.id===_bdId);
     if(reg){reg.stripeCustomerId=confirmData.customerId;reg.stripePaymentMethodId=confirmData.paymentMethodId;reg.stripeCardBrand=confirmData.brand;reg.stripeCardLast4=confirmData.last4;}
     document.getElementById('bdSaveCardModal').style.display='none';
     showToast('Tarjeta guardada ✓');
@@ -527,10 +642,10 @@ async function bdConfirmSaveCard(){
 }
 
 async function bdRemoveCard(){
-  const reg=AppData.regs.find(r=>r.id===_bdRegId);if(!reg)return;
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
   if(!confirm(`Quitar la tarjeta guardada (${_bdCardLabel(reg)})?`))return;
   try{
-    const res=await fetch('/.netlify/functions/remove-card-on-file',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regId:_bdRegId})});
+    const res=await fetch('/.netlify/functions/remove-card-on-file',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regId:_bdId})});
     const data=await res.json();
     if(!res.ok||data.error)throw new Error(data.error||'No se pudo quitar la tarjeta');
     reg.stripePaymentMethodId=null;reg.stripeCardBrand=null;reg.stripeCardLast4=null;
@@ -556,7 +671,7 @@ async function bdConfirmStripe(){
     document.getElementById('bdStripeModal').style.display='none';
     showToast('Payment charged ✓');
     const f=_bdFolios.find(x=>x.folio.id===_bdStripeFolioId);
-    await _bdLoadFolios(_bdRegId,f?.folio.guest_name);
+    await _bdLoadFolios();
   }catch(e){
     errEl.textContent=e.message||'Payment error';
     payBtn.disabled=false;payBtn.textContent=`Pay ${fmt$(_bdStripeAmt)}`;
