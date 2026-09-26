@@ -7,49 +7,54 @@ let menuSchedule = {};       // { 'YYYY-MM-DD': { lightBreakfast:[{time,group,pa
 let menuCurrentMonday = null;
 
 const WEEKLY_MENU = {
-  1: { // Lunes (Monday) — Day 1 (dinner swapped with Tuesday's per Darlene, 2026-09-03)
+  // Re-ordered 2026-09-26 (Darlene): whole brunch/lunch and dinner menus moved
+  // between days — no dish changed except Tinga de Pollo → Estofado de
+  // Garbanzos — so proteins rotate (chicken never at brunch AND dinner the
+  // same day, never 3 meals of the same kind in a row). Light breakfast and
+  // snack stay on their original day. See modules/menu-variety.js.
+  1: { // Lunes (Monday) — Day 1 · brunch/lunch from old Wed · dinner from old Wed
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
-    brunch: ['Chilaquiles','Omelette de Espinaca','Protein Pancakes','Tinga de Pollo ★','Ensalada Amansala','Tostada Bar'],
-    lunch:  ['Tinga de Pollo ★','Ensalada Amansala'],
+    brunch: ['Chilaquiles','Huevos Verdes','Pan de Frances','Blackened Tacos ★','Ensalada Mexicana'],
+    lunch:  ['Blackened Tacos ★','Ensalada Mexicana'],
     snack:  ['Summer Rolls con Gazpacho'],
-    dinner: {protein:'Pescado',dishes:['Sopa de Calabaza','Quinoa Verduras'],dessert:'Vegan Choco Mousse'}
+    dinner: {protein:'Pollo',dishes:['Ensalada Verde','Risotto de Espinaca'],dessert:'Flan de Cafe'}
   },
-  2: { // Martes (Tuesday) — Day 2 (dinner swapped with Monday's per Darlene, 2026-09-03)
+  2: { // Martes (Tuesday) — Day 2 · brunch/lunch from old Tue · dinner from old Sat
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
     brunch: ['Huevos Rancheros','Avocado Toast','Pan de Platano','Salmon con Miel y Ajo ★','Ensalada Edamame','Poke Bowl'],
     lunch:  ['Salmon con Miel y Ajo ★','Ensalada Edamame','Poke Bowl'],
     snack:  ['Guacamole con Veggies y Chips'],
-    dinner: {protein:'Grilled Lemon Kebabs Pollo',dishes:['Grilled Eggplant con Tahini'],dessert:'Deconstructed Cheesecake'}
+    dinner: {protein:'Pescado en Hoja de Platano',dishes:['Ensalada de Pepino','Spinach con Ajo'],dessert:'Brownie'}
   },
-  3: { // Miércoles (Wednesday) — Day 3
+  3: { // Miércoles (Wednesday) — Day 3 · brunch/lunch from old Sat · dinner from old Fri
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
-    brunch: ['Chilaquiles','Huevos Verdes','Pan de Frances','Blackened Tacos ★','Ensalada Mexicana'],
-    lunch:  ['Blackened Tacos ★','Ensalada Mexicana'],
+    brunch: ['Huevos Rancheros','Huevos Revueltos','Protein Pancakes','Bang Bang Chicken ★','Crispy Rice Salad'],
+    lunch:  ['Bang Bang Chicken ★','Crispy Rice Salad'],
     snack:  ['Hummus con Veggies y Chips'],
-    dinner: {protein:'Pollo',dishes:['Ensalada Verde','Risotto de Espinaca'],dessert:'Flan de Cafe'}
+    dinner: {protein:'Salmon',dishes:['Cabbage Steak con Tahini','Camote al Horno'],dessert:'Pie de Manzana'}
   },
-  4: { // Jueves (Thursday) — Day 4 (swapped with what was Friday's menu)
+  4: { // Jueves (Thursday) — Day 4 · brunch/lunch from old Thu · dinner from old Thu
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
     brunch: ['Chilaquiles','Huevos Duros','Pan de Platano','Pescado Congelado ★','Ensalada Mexicana'],
     lunch:  ['Pescado Congelado ★','Ensalada Mexicana'],
     snack:  ['Protein Balls con Fruta Fresca'],
     dinner: {protein:'Pollo',dishes:['Corn Ribs','Sopa de Tortilla','Tostada Bar'],dessert:'Pay de Manzana · Brownie'}
   },
-  5: { // Viernes (Friday) — Day 5 (swapped with what was Thursday's menu)
+  5: { // Viernes (Friday) — Day 5 · brunch/lunch from old Fri · dinner from old Mon
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
     brunch: ['Huevos Rancheros','Omelette de Espinaca','Protein Pancakes','Kebabs Pollo/Tofu ★','Ensalada Griega','Babaganoush Tostada'],
     lunch:  ['Kebabs Pollo/Tofu ★','Ensalada Griega','Babaganoush Tostada'],
     snack:  ['Quesadillas con Brócoli y Queso'],
-    dinner: {protein:'Salmon',dishes:['Cabbage Steak con Tahini','Camote al Horno'],dessert:'Pie de Manzana'}
+    dinner: {protein:'Pescado',dishes:['Sopa de Calabaza','Quinoa Verduras'],dessert:'Vegan Choco Mousse'}
   },
-  6: { // Sábado (Saturday) — Day 6
+  6: { // Sábado (Saturday) — Day 6 · brunch/lunch from old Mon · dinner from old Tue
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
-    brunch: ['Huevos Rancheros','Huevos Revueltos','Protein Pancakes','Bang Bang Chicken ★','Crispy Rice Salad'],
-    lunch:  ['Bang Bang Chicken ★','Crispy Rice Salad'],
+    brunch: ['Chilaquiles','Omelette de Espinaca','Protein Pancakes','Estofado de Garbanzos ★','Ensalada Amansala','Tostada Bar'],
+    lunch:  ['Estofado de Garbanzos ★','Ensalada Amansala'],
     snack:  ['Guacamole con Veggies y Chips'],
-    dinner: {protein:'Pescado en Hoja de Platano',dishes:['Ensalada de Pepino','Spinach con Ajo'],dessert:'Brownie'}
+    dinner: {protein:'Grilled Lemon Kebabs Pollo',dishes:['Grilled Eggplant con Tahini'],dessert:'Deconstructed Cheesecake'}
   },
-  7: { // Domingo (Sunday) — Day 7
+  7: { // Domingo (Sunday) — Day 7 · brunch/lunch from old Sun · dinner from old Sun
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
     brunch: ['Huevos Rancheros','Fritatta','Pan de Frances con Coco','Pollo con Ajo Asado ★','Chicken Teriyaki Poke Bowl','Fruta'],
     lunch:  ['Pollo con Ajo Asado ★','Chicken Teriyaki Poke Bowl','Fruta'],
@@ -439,6 +444,12 @@ function menuPopulateFromRetreats(silent=false){
   };
   const allMeals=['lightBreakfast','breakfast','brunch','lunch','snack','dinner'];
 
+  // Groups on meal plan "None" never get kitchen rows — clear any they already
+  // have on every date (not just this week), so a group switched to None later
+  // (Loco Luxury, 2026-09-26) doesn't leave stale rows in weeks nobody re-populates.
+  const noMealGrps=new Set(allActive.filter(b=>b.mealPlan==='none').map(b=>b.leaderName||b.retreatName||'Group'));
+  if(noMealGrps.size)Object.values(menuSchedule).forEach(day=>allMeals.forEach(meal=>{if(day?.[meal])day[meal]=day[meal].filter(r=>!noMealGrps.has(r.group));}));
+
   // Clear ALL existing rows for these retreat groups across this week first,
   // so re-running always refreshes with the current meal plan rules
   const grpSet=new Set(hits.map(b=>b.leaderName||b.retreatName||'Group'));
@@ -463,6 +474,10 @@ function menuPopulateFromRetreats(silent=false){
       // bk.pax IS their actual guest count — so only retreat groups route
       // through registeredCount.
       const px=String((bk.bookingType==='room_only'?bk.pax:registeredCount(bk.id))||'');
+      // Meal plan "None" (e.g. Loco Luxury — room-only group, no meals
+      // included) gets no kitchen rows at all; its old rows were already
+      // cleared above since it's still in grpSet.
+      if(bk.mealPlan==='none') return;
       const planMeals=MEAL_PLANS[bk.mealPlan]||MEAL_PLANS.standard;
       planMeals.forEach(meal=>{
         const t=menuMealTime(bk,meal,dateStr);
@@ -586,6 +601,7 @@ const MENU_EN={
   'Chilaquiles':'Chilaquiles',
   'Omelette de Espinaca':'Spinach Omelette',
   'Tinga de Pollo':'Chicken Tinga',
+  'Estofado de Garbanzos':'Chickpea Stew',
   'Ensalada Amansala':'Amansala Salad',
   'Summer Rolls con Gazpacho':'Summer Rolls with Gazpacho',
   'Grilled Lemon Kebabs Pollo':'Grilled Lemon Chicken Kebabs',
@@ -642,6 +658,7 @@ const MENU_DETAIL={
   'Chilaquiles':{name:'Chilaquiles',desc:'Tortilla chips, salsa, cream, cheese.'},
   'Protein Pancakes':{name:'Hotcakes',desc:'Hotcakes, fresh fruit, honey.'},
   'Tinga de Pollo':{name:'Chicken Tinga',desc:'Shredded chicken, chipotle, tomato.'},
+  'Estofado de Garbanzos':{name:'Chickpea Stew',desc:'Slow-simmered chickpeas, tomato, vegetables, spices.'},
   'Ensalada Amansala':{name:'Amansala Salad',desc:'Mixed greens, seeds, citrus vinaigrette.'},
   'Huevos Rancheros':{name:'Huevos Rancheros',desc:'Eggs, tortilla, ranchero salsa, fresh cheese.'},
   'Avocado Toast':{name:'Avocado Toast',desc:'Bread, avocado, lime, chili.'},
@@ -1070,14 +1087,14 @@ const DEF_MENU_RECIPE_COSTS=[
 // Best-guess mapping of each day's ★ protein to a priced product — clearly
 // editable in the panel since some of these (e.g. plain "Pescado") are
 // genuinely ambiguous until Darlene confirms which fish is actually used.
-const DEF_MENU_PROTEIN_ASSIGN={
-  1:{midday:'pollo',  dinner:'pollo'},
-  2:{midday:'salmon', dinner:'entero'},   // Tue dinner is now "Pescado" after the Tue/Wed swap
-  3:{midday:'pollo',  dinner:'pollo'},    // Wed dinner is now "Pollo" after the Tue/Wed swap
-  4:{midday:'basa',   dinner:'pollo'},
-  5:{midday:'pollo',  dinner:'salmon'},
-  6:{midday:'pollo',  dinner:'entero'},
-  7:{midday:'pollo',  dinner:''},         // Sunday dinner is plant-based — no protein cost
+const DEF_MENU_PROTEIN_ASSIGN={ // re-mapped 2026-09-26 to follow the re-ordered WEEKLY_MENU
+  1:{midday:'basa',   dinner:'pollo'},   // Blackened Tacos · Pollo (Risotto)
+  2:{midday:'salmon', dinner:'entero'},  // Salmon con Miel y Ajo · Pescado en Hoja de Platano
+  3:{midday:'pollo',  dinner:'salmon'},  // Bang Bang Chicken · Salmon
+  4:{midday:'basa',   dinner:'pollo'},   // Pescado Congelado · Pollo (Mexican night)
+  5:{midday:'pollo',  dinner:'entero'},  // Kebabs Pollo/Tofu · Pescado (Sopa de Calabaza)
+  6:{midday:'',       dinner:'pollo'},   // Estofado de Garbanzos (plant) · Lemon Kebabs Pollo
+  7:{midday:'pollo',  dinner:''},        // Pollo con Ajo Asado · Plant Based Night
 };
 const MENU_DAY_NAMES={1:'Monday',2:'Tuesday',3:'Wednesday',4:'Thursday',5:'Friday',6:'Saturday',7:'Sunday'};
 // Full supplier catalog (June 2026) — a growing reference for costing more
