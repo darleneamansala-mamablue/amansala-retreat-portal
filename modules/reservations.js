@@ -453,7 +453,7 @@ async function resRunSearch(){
   // Only individual Booking Engine reservations (booking_requests) carry a
   // discount code -- retreat/Room Only regs have no equivalent field.
   if(code)rows=rows.filter(r=>(r.discountCode||'').toLowerCase().includes(code));
-  rows.sort((a,b)=>(b.checkIn||'').localeCompare(a.checkIn||''));
+  _resSortRows(rows);
 
   if(!rows.length){resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">No results found.</p>`;return;}
   resultsEl.innerHTML=`<p style="color:var(--muted);font-size:13px">Loading…</p>`;
