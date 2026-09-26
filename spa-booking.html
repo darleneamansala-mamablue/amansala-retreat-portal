@@ -133,8 +133,12 @@ async function init(){
   }catch(e){}
   const cancelId=new URLSearchParams(location.search).get('cancel');
   if(cancelId) return sbRenderCancelScreen(cancelId);
+  // Time changes always go through a human now (Jorge's boss's ask
+  // 2026-09-26) — an old ?reschedule= link (from an email sent before this
+  // change) still resolves, just to a "contact us" message instead of a
+  // self-service flow.
   const rescheduleId=new URLSearchParams(location.search).get('reschedule');
-  if(rescheduleId) return sbRenderRescheduleScreen(rescheduleId);
+  if(rescheduleId) return sbRenderRescheduleScreen();
   const confirmationId=new URLSearchParams(location.search).get('confirmation');
   if(confirmationId) return sbRenderConfirmationScreen(confirmationId);
   renderStep();
@@ -678,7 +682,6 @@ async function sbSendConfirmEmail(appt,svc,therName,location_,folioPosted){
   try{
     const confirmationUrl=`${location.origin}/spa-booking.html?confirmation=${appt.id}`;
     const cancelUrl=`${location.origin}/spa-booking.html?cancel=${appt.id}`;
-    const rescheduleUrl=`${location.origin}/spa-booking.html?reschedule=${appt.id}`;
     const body=`<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(SB.firstName)}, you're booked! Here are your appointment details:</p>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px">
         ${sbEmailRow('Service',esc(svc.name))}
@@ -690,10 +693,9 @@ async function sbSendConfirmEmail(appt,svc,therName,location_,folioPosted){
         ${folioPosted?sbEmailRow('Payment','Charged to your room folio'):''}
         ${appt.tipAmount>0?sbEmailRow('Tip',`$${appt.tipAmount} USD${folioPosted?' (added to your room folio)':' (please add this when you settle payment)'}`):''}
       </table>
-      <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px">Need to cancel, or would you like a different time? Both are free up to 12 hours before your appointment — cancelling is instant, and a time-change request goes to our team to confirm.</p>
+      <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px">Need to cancel? You can cancel free of charge up to 12 hours before your appointment using the button below. Need a different time instead? Please contact us directly — our team handles all time changes personally.</p>
       <div style="text-align:center;margin-bottom:8px">
-        <a href="${rescheduleUrl}" style="display:inline-block;background:#2d6a6a;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.3px;margin:0 6px 8px">Request a Time Change</a>
-        <a href="${cancelUrl}" style="display:inline-block;background:#b45309;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.3px;margin:0 6px 8px">Cancel My Appointment</a>
+        <a href="${cancelUrl}" style="display:inline-block;background:#b45309;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.3px">Cancel My Appointment</a>
       </div>
       <div style="text-align:center">
         <a href="${confirmationUrl}" style="display:inline-block;color:#2d6a6a;text-decoration:underline;font-size:13px;font-weight:600">View this confirmation anytime</a>
@@ -765,44 +767,6 @@ async function sbSendTherapistCancelEmail(appt,svc,ther){
       <p style="font-size:13.5px;color:#6b7280;margin:20px 0 0">That time is now open on your schedule.</p>`;
     const html=sbEmailShell('A Client Cancelled Their Appointment',body);
     await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:ther.email,subject:'Appointment Cancelled — Amansala Spa',html})});
-  }catch(e){}
-}
-// Guest self-service "Request a Time Change" — NEVER moves the appointment
-// itself (Jorge's boss's ask 2026-09-26: every change goes through a human,
-// to cut down on errors). Just confirms to the guest that the request was
-// sent, and separately emails the assigned therapist with what's being asked
-// for so a real person makes the actual change in the admin Spa Calendar
-// (which emails the guest once THEY move it — spaNotifyGuestRescheduled in
-// modules/spa-calendar.js).
-async function sbSendRescheduleRequestEmail(appt,svc,requestedDate,requestedStart){
-  try{
-    const cancelUrl=`${location.origin}/spa-booking.html?cancel=${appt.id}`;
-    const body=`<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(SB_cancelFirstName(appt))}, we've received your request to change the time of your ${esc(svc?.name||'appointment')}:</p>
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">
-        ${sbEmailRow('Current',fmtDateLong(appt.date)+' at '+fmtT(appt.start))}
-        ${sbEmailRow('Requested',fmtDateLong(requestedDate)+' at '+fmtT(requestedStart))}
-      </table>
-      <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px">Your appointment hasn't moved yet — our team will confirm availability and make the change. You'll get another email as soon as it's updated.</p>
-      <div style="text-align:center;margin-bottom:8px">
-        <a href="${cancelUrl}" style="display:inline-block;background:#b45309;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.3px">Cancel My Appointment Instead</a>
-      </div>`;
-    const html=sbEmailShell('Time Change Requested',body);
-    await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:appt.email,subject:'We Received Your Time Change Request — Amansala',html})});
-  }catch(e){}
-}
-async function sbSendTherapistRescheduleRequestEmail(appt,svc,ther,requestedDate,requestedStart){
-  if(!ther?.email)return;
-  try{
-    const body=`<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(ther.firstName)}, a guest asked to change the time of an appointment on your schedule. This has NOT been changed yet — please confirm availability and update it directly in the Spa Calendar:</p>
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px">
-        ${sbEmailRow('Client',esc(appt.clientName||''))}
-        ${sbEmailRow('Service',esc(svc?.name||''))}
-        ${sbEmailRow('Current',fmtDateLong(appt.date)+' at '+fmtT(appt.start))}
-        ${sbEmailRow('Requested',fmtDateLong(requestedDate)+' at '+fmtT(requestedStart))}
-      </table>
-      <p style="font-size:13.5px;color:#6b7280;margin:20px 0 0">Once you update it in the Spa Calendar, the guest is emailed automatically with the new time.</p>`;
-    const html=sbEmailShell('Time Change Requested',body);
-    await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:ther.email,subject:'Guest Requested a Time Change — Amansala Spa',html})});
   }catch(e){}
 }
 
@@ -1006,9 +970,8 @@ function sbRenderConfirmationScreen(apptId){
     ${appt.roomNumber?`<div class="summary-row"><span class="lbl">Your room</span><span class="val">${esc(appt.roomNumber)}</span></div>`:''}
     <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc?.groupPricing?appt.groupTotalPriceUSD:svc?.price} USD</span></div>
     ${appt.tipAmount>0?`<div class="summary-row"><span class="lbl">Tip</span><span class="val">$${appt.tipAmount} USD</span></div>`:''}
-    ${!isCancelled?`<div class="section-sub" style="margin-top:14px">${canCancelOnline?'You can cancel free of charge, or request a different time, up to 12 hours before your appointment.':"It's less than 12 hours away, so it can't be changed or cancelled online — please contact us directly if you need to."}</div>`:''}
-    ${canCancelOnline?`<button class="btn-primary" style="margin-top:16px" onclick="location.href='spa-booking.html?reschedule=${appt.id}'">Request a Time Change</button>
-    <button class="btn-primary" style="margin-top:8px;background:#b45309" onclick="location.href='spa-booking.html?cancel=${appt.id}'">Cancel My Appointment</button>`:''}
+    ${!isCancelled?`<div class="section-sub" style="margin-top:14px">${canCancelOnline?'You can cancel free of charge up to 12 hours before your appointment. Need a different time instead? Please contact us directly — our team handles all time changes personally.':"It's less than 12 hours away, so it can't be cancelled online — please contact us directly if you need to."}</div>`:''}
+    ${canCancelOnline?`<button class="btn-primary" style="margin-top:16px;background:#b45309" onclick="location.href='spa-booking.html?cancel=${appt.id}'">Cancel My Appointment</button>`:''}
   </div>`;
 }
 // ── GUEST-FACING CANCELLATION (reached via ?cancel=<apptId> link in the
@@ -1093,105 +1056,13 @@ async function sbDoCancel(apptId){
   }
 }
 
-// ── GUEST-FACING RESCHEDULE (reached via ?reschedule=<apptId> link in the
-// confirmation email/screen) — same 12-hour cutoff as cancellation. Keeps
-// the same therapist and treatment room. This only SENDS A REQUEST — staff
-// makes the actual change in the admin Spa Calendar (Jorge's boss's ask
-// 2026-09-26: every change goes through a human to cut down on errors); the
-// slot picker below just helps the guest state a concrete preference instead
-// of a vague "sometime else," it doesn't move anything itself. ───────────
-let SBResched={apptId:null,date:null};
-async function sbRenderRescheduleScreen(apptId){
+// ── Old ?reschedule= links (from emails sent before this change) resolve
+// here — time changes always go through a human now, no self-service flow
+// at all (Jorge's boss's ask 2026-09-26, reinforced 2026-09-26: "nada de
+// emails a terapeutas" — not even an automated request email). ──────────
+function sbRenderRescheduleScreen(){
   document.getElementById('stepDots').style.display='none';
-  const el=document.getElementById('mainContent');
-  el.innerHTML=`<div class="msg"><div class="msg-icon">⏳</div><div class="msg-title">Loading…</div></div>`;
-  const appt=SpaAppointments.find(a=>a.id===apptId);
-  if(!appt){
-    el.innerHTML=`<div class="msg"><div class="msg-icon">🤔</div><div class="msg-title">Appointment Not Found</div><div class="msg-sub">We couldn't find that appointment. Please contact us directly if you need to make a change.</div></div>`;
-    return;
-  }
-  if(appt.status==='CANCELLED'){
-    el.innerHTML=`<div class="msg"><div class="msg-icon">✓</div><div class="msg-title">Already Cancelled</div><div class="msg-sub">This appointment has already been cancelled — nothing to change.</div></div>`;
-    return;
-  }
-  const svc=SpaData.services.find(s=>s.id===appt.serviceId);
-  const hoursLeft=(sbApptDateTime(appt)-new Date())/3600000;
-  if(hoursLeft<12){
-    el.innerHTML=`<div class="msg"><div class="msg-icon">⏰</div><div class="msg-title">Too Late to Request Online</div><div class="msg-sub">Your <b>${esc(svc?.name||'appointment')}</b> on ${fmtDateLong(appt.date)} at ${fmtT(appt.start)} is less than 12 hours away, so a time change can't be requested online. Please contact us directly at the front desk if you still need to move it.</div></div>`;
-    return;
-  }
-  SBResched.apptId=apptId;
-  // Hotel guests can only pick dates within their actual stay — regs have no
-  // dates of their own, so look the parent booking's window up fresh, same
-  // as the original booking flow (sbLookupStayWindow).
-  let stayStart=null,stayEnd=null;
-  if(appt.guestType==='hotel'){
-    const win=await sbLookupStayWindow(appt.clientName,appt.roomNumber);
-    if(win){stayStart=win.start;stayEnd=win.end;}
-  }
-  const today=new Date(sbTulumNow().dateStr+'T00:00:00');
-  let start=today,end=new Date(today.getTime()+13*86400000);
-  if(stayStart){const ss=new Date(stayStart+'T00:00:00');if(ss>start)start=ss;}
-  if(stayEnd){const se=new Date(stayEnd+'T00:00:00');if(se<end)end=se;}
-  const days=[];
-  for(let d=new Date(start);d<=end;d=new Date(d.getTime()+86400000))days.push(d);
-  if(!SBResched.date||!days.some(d=>d.toISOString().slice(0,10)===SBResched.date)) SBResched.date=days.length?days[0].toISOString().slice(0,10):appt.date;
-  const ther=SpaData.therapists.find(t=>t.id===appt.therapistId);
-  el.innerHTML=`<div class="card">
-    <div class="section-title">Request a Different Time</div>
-    <div class="section-sub">${esc(svc?.name||'')} with ${esc(ther?ther.firstName:'your therapist')} · currently ${fmtDateLong(appt.date)} at ${fmtT(appt.start)}. Pick a time below and we'll send the request to our team to confirm — your appointment won't move until they do.</div>
-    ${days.length?`<div class="date-scroller" id="sbDateScroller">
-      ${days.map(d=>{
-        const ds=d.toISOString().slice(0,10);
-        return `<div class="date-pill ${ds===SBResched.date?'on':''}" onclick="sbReschedPickDate('${ds}')">
-          <div class="dow">${d.toLocaleDateString('en-US',{weekday:'short'})}</div>
-          <div class="dnum">${d.getDate()}</div>
-        </div>`;
-      }).join('')}
-    </div>
-    <div id="sbReschedSlots"></div>`:`<div class="no-slots">No bookable dates available right now — please contact us directly.</div>`}
-  </div>`;
-  if(days.length) sbRenderReschedSlots(appt);
-}
-function sbReschedPickDate(ds){
-  SBResched.date=ds;
-  sbRenderRescheduleScreen(SBResched.apptId);
-}
-function sbRenderReschedSlots(appt){
-  const wrap=document.getElementById('sbReschedSlots');
-  if(!wrap)return;
-  const tn=sbTulumNow();
-  const rows=[];
-  for(let m=SB_START_H*60;m<=SB_END_H*60-(appt.duration||60);m+=30){
-    if(SBResched.date===tn.dateStr&&m<=tn.minutes)continue;
-    if(SBResched.date===appt.date&&m===hhmmToMin(appt.start))continue; // that's your current time
-    if(sbSlotFree(appt.therapistId,appt.roomId,SBResched.date,m,appt.duration||60,appt.id)) rows.push(m);
-  }
-  if(!rows.length){wrap.innerHTML=`<div class="no-slots">No open times on this day for your therapist — try another date.</div>`;return;}
-  wrap.innerHTML=`<div class="slot-grid">${rows.map(m=>`<button class="slot-btn" onclick="sbRequestReschedule('${appt.id}','${SBResched.date}','${minToHHMM(m)}')">${fmtT(minToHHMM(m))}</button>`).join('')}</div>`;
-}
-// Sends the request only — never writes date/start onto the appointment
-// itself. Still re-validates against fresh data so we don't ask the team to
-// confirm something that's already impossible (already cancelled, or now
-// less than 12 hours out).
-async function sbRequestReschedule(apptId,requestedDate,requestedStart){
-  try{
-    const {data:ad}=await db.from('app_store').select('value').eq('key','spa_appointments').single();
-    const latest=(ad?.value)||[];
-    const appt=latest.find(a=>a.id===apptId);
-    if(!appt){showToast('Appointment not found.');return;}
-    if(appt.status==='CANCELLED'){showToast('Already cancelled.');SpaAppointments=latest;sbRenderRescheduleScreen(apptId);return;}
-    if((sbApptDateTime(appt)-new Date())/3600000<12){showToast('Too close to your appointment time to request a change online.');SpaAppointments=latest;sbRenderRescheduleScreen(apptId);return;}
-    SpaAppointments=latest;
-    const svc=SpaData.services.find(s=>s.id===appt.serviceId);
-    const ther=appt.therapistId?SpaData.therapists.find(t=>t.id===appt.therapistId):null;
-    if(appt.email) await sbSendRescheduleRequestEmail(appt,svc,requestedDate,requestedStart);
-    if(ther) await sbSendTherapistRescheduleRequestEmail(appt,svc,ther,requestedDate,requestedStart);
-    document.getElementById('mainContent').innerHTML=`<div class="msg"><div class="msg-icon">📨</div><div class="msg-title">Request Sent</div><div class="msg-sub">We've asked our team to move your <b>${esc(svc?.name||'appointment')}</b> to ${fmtDateLong(requestedDate)} at ${fmtT(requestedStart)}. Your appointment is still at its original time until they confirm — you'll get an email as soon as it's updated.</div></div>`;
-  }catch(e){
-    showToast('Something went wrong — please try again.');
-    sbRenderRescheduleScreen(apptId);
-  }
+  document.getElementById('mainContent').innerHTML=`<div class="msg"><div class="msg-icon">☎️</div><div class="msg-title">Please Contact Us Directly</div><div class="msg-sub">Our team handles all appointment time changes personally — please contact us directly (front desk or the spa) to request a different time.</div></div>`;
 }
 
 init();
