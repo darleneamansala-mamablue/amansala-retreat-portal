@@ -314,7 +314,7 @@ async function _resBuildMovementView(type){
       <button onclick="${setter}('${todayStr}')" style="font-size:11.5px;background:${color}10;color:${color};border:1px solid ${color}30;border-radius:6px;padding:4px 10px;font-weight:600;cursor:pointer">Today</button>
       <span style="font-size:13px;font-weight:700;color:var(--text)">${rows.length} guest${rows.length!==1?'s':''}</span>
     </div>
-    ${rows.length===0?_resEmptyState(isArr?'🛬':'🛫',`No ${title.toLowerCase()} on ${dateLabel}`):_resTable(rows,{actionMode:isArr?'checkin':'checkout',balanceCol:true})}
+    ${rows.length===0?_resEmptyState(isArr?'🛬':'🛫',`No ${title.toLowerCase()} on ${dateLabel}`):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:isArr?'checkin':'checkout',balanceCol:true})}
   </div>`;
 }
 function resSetArrDate(d){_resArrDate=d;_resRender();}
