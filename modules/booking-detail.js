@@ -27,6 +27,7 @@ function _bdSubject(){
     const r=_bdReqCache;if(!r)return null;
     return {
       id:r.id,guestName:`${r.firstName||''} ${r.lastName||''}`.trim()||'Guest',guestEmail:r.email||'',
+      allGuests:[{name:`${r.firstName||''} ${r.lastName||''}`.trim()||'Guest',email:r.email||'',phone:r.phone||''}],
       room:r.room||r.roomTypeName||'—',
       checkIn:r.checkIn,checkOut:r.checkOut,notes:r.notes||r.dietary||'',
       checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
@@ -38,14 +39,20 @@ function _bdSubject(){
   }
   const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return null;
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return null;
-  const guest=(reg.guests||[]).find(g=>g.name)||{name:'Guest'};
-  const gc=(reg.guests||[]).filter(g=>g.name).length||1;
+  const namedGuests=(reg.guests||[]).filter(g=>g.name&&!g.cancelled);
+  const guest=namedGuests[0]||{name:'Guest'};
+  const gc=namedGuests.length||1;
   const rt=AppData.roomTypes.find(r=>(r.rooms||[]).includes(reg.room));
   const checkIn=reg.checkIn||bk.startDate,checkOut=reg.checkOut||bk.endDate;
   const nights=Math.max(1,Math.round((pd(checkOut)-pd(checkIn))/DAY_MS));
   const rate=reg.customRateOverride!=null?Number(reg.customRateOverride):(rt?getRoomRate(rt,gc,checkIn,nights):0);
   return {
     id:reg.id,guestName:guest.name,guestEmail:guest.email||'',
+    // Every guest sharing this room (Jorge's ask 2026-09-26: single-bed rooms
+    // like Sonu & Preeti Phabi in CH1 should show both people's contact info
+    // here, not just the one this folio happens to be for -- each still has
+    // their own separate folio below, unaffected).
+    allGuests:namedGuests.length?namedGuests.map(g=>({name:g.name,email:g.email||'',phone:g.phone||''})):[{name:guest.name,email:guest.email||'',phone:guest.phone||''}],
     room:reg.room||'—',
     checkIn,checkOut,notes:reg.notes||'',
     checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
@@ -160,7 +167,7 @@ function _bdRender(){
   document.getElementById('bdHdr').innerHTML=`
     <div style="display:flex;align-items:center;gap:14px">
       <button onclick="closeModal('bookingDetailModal')" style="${hBtnS}">&larr; Back</button>
-      <div style="font-size:15px;font-weight:700">Booking <span style="font-weight:400;opacity:.85">${escHtml(subj.guestName)}, ${fmtDate(subj.checkIn)}, #${_bdShortId(subj.id)}</span></div>
+      <div style="font-size:15px;font-weight:700">Booking <span style="font-weight:400;opacity:.85">${escHtml(_joinNames(subj.allGuests.map(g=>g.name)))}, ${fmtDate(subj.checkIn)}, #${_bdShortId(subj.id)}</span></div>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
       ${headerBtns}
@@ -185,12 +192,15 @@ function _bdRender(){
         </div>
       </div>
       <div>
-        <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">👤 Guest</div>
+        <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">👤 Guest${subj.allGuests.length>1?'s':''}</div>
         <table style="width:100%;font-size:13px">
-          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Name</td><td style="padding:5px 0;font-weight:700">${escHtml(subj.guestName)}</td></tr>
-          <tr><td style="color:var(--muted);padding:5px 0">Adults</td><td style="padding:5px 0">${subj.adults}</td></tr>
-          ${subj.guestEmail?`<tr><td style="color:var(--muted);padding:5px 0">Email</td><td style="padding:5px 0">${escHtml(subj.guestEmail)}</td></tr>`:''}
+          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Adults</td><td style="padding:5px 0">${subj.adults}</td></tr>
         </table>
+        ${subj.allGuests.map((g,gi)=>`<table style="width:100%;font-size:13px;${gi>0?'margin-top:10px;border-top:1px solid var(--border);padding-top:10px':''}">
+          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Name</td><td style="padding:5px 0;font-weight:700">${escHtml(g.name)}</td></tr>
+          ${g.email?`<tr><td style="color:var(--muted);padding:5px 0">Email</td><td style="padding:5px 0">${escHtml(g.email)}</td></tr>`:''}
+          ${g.phone?`<tr><td style="color:var(--muted);padding:5px 0">Phone</td><td style="padding:5px 0">${escHtml(g.phone)}</td></tr>`:''}
+        </table>`).join('')}
         <div style="margin-top:14px;padding:12px 14px;background:#fef2f2;border-radius:10px">
           <div style="font-size:11px;color:var(--muted);font-weight:600">Balance Due</div>
           <div style="font-size:22px;font-weight:800;color:${balanceDue>0?'#dc2626':'#059669'}">${fmt$(balanceDue)}</div>
@@ -443,7 +453,7 @@ async function bdCheckOut(){
   // incident 2026-09-25, Binnie & Minnie CH14). Ignore Check Out clicks for a
   // few seconds after check-in, and always ask before checking out.
   if(subj.checkedInAt&&Date.now()-new Date(subj.checkedInAt).getTime()<5000)return;
-  if(!confirm(`Check out ${subj.guestName||'this guest'} from room ${subj.room}?`))return;
+  if(!confirm(`Check out ${_joinNames(subj.allGuests.map(g=>g.name))||'this guest'} from room ${subj.room}?`))return;
   const now=new Date().toISOString();
   if(_bdKind==='req'){
     const {error}=await db.from('booking_requests').update({checked_out_at:now,status:'checked_out'}).eq('id',_bdId);

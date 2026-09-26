@@ -91,6 +91,13 @@ let _resRenderSeq=0;
 // One row per named guest across every active registrations row (retreat +
 // Room Only) -- mirrors getRoomRate's own gc/nights inputs so the rate shown
 // here always matches what Balance Due/the folio actually charges.
+// Same single-bed room types as the Room Calendar (modules/venues.js) --
+// Jorge's ask 2026-09-26: these should be ONE row combining every sharing
+// guest's name, not one row per guest (unlike "Bed in a ___" types, where
+// each lettered code is already its own separately-booked bed/guest).
+// Check-in/out is already tracked on the registration, not per guest, so a
+// combined row's action correctly applies to everyone sharing it.
+const _RES_ONE_BED_RT_IDS=['rt1','rt2','rt3','rt4','rt5'];
 function _resGroupRows(){
   const out=[];
   AppData.regs.forEach(reg=>{
@@ -104,13 +111,18 @@ function _resGroupRows(){
     const gc=named.length;
     const nights=Math.max(1,Math.round((pd(checkOut)-pd(checkIn))/DAY_MS));
     const rate=reg.customRateOverride!=null?Number(reg.customRateOverride):(rt?getRoomRate(rt,gc,checkIn,nights):null);
-    named.forEach(g=>out.push({
-      name:g.name,room:reg.room||'—',roomType:rt?.name||'—',checkIn,checkOut,rate,
-      notes:reg.notes||g.notes||'',source:bk.leaderName||bk.retreatName||'Group',
+    const base={
+      room:reg.room||'—',roomType:rt?.name||'—',checkIn,checkOut,rate,
+      notes:reg.notes||'',source:bk.leaderName||bk.retreatName||'Group',
       type:'group',id:reg.id,checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
       cardOnFile:!!reg.stripePaymentMethodId,balance:null,
       discountCode:null, // no discount-code concept for retreat/Room Only regs
-    }));
+    };
+    if(named.length>1&&rt&&_RES_ONE_BED_RT_IDS.includes(rt.id)){
+      out.push({...base,name:_joinNames(named.map(g=>g.name)),guestNames:named.map(g=>g.name),notes:reg.notes||named.map(g=>g.notes).filter(Boolean).join(' / ')});
+    }else{
+      named.forEach(g=>out.push({...base,name:g.name,guestNames:[g.name],notes:reg.notes||g.notes||''}));
+    }
   });
   return out;
 }
@@ -134,7 +146,10 @@ function _resIndivRows(){
 function _resOpenRowAt(i){
   const r=_resLastRows[i];if(!r)return;
   if(r.type==='individual')openBookingDetailForRequest(r.id);
-  else openBookingDetailForReg(r.id,r.name);
+  // A merged single-bed-room row opens the first sharing guest's own folio --
+  // each guest still has their own separate folio underneath (booking-detail.js
+  // itself now also lists every sharing guest in its Guest panel).
+  else openBookingDetailForReg(r.id,(r.guestNames||[r.name])[0]);
 }
 
 // Per-guest folio balance -- deliberately NOT calcBkBalance() (the retreat's
@@ -172,8 +187,15 @@ async function _resAttachFolioBalances(rows){
       balanceByKey[key]=(balanceByKey[key]||0)+(totalByFolio[f.id]||0);
     });
     rows.forEach(r=>{
-      const key=r.type==='group'?`${r.id}::${r.name}`:`:${r.id}:${r.name}`;
-      if(balanceByKey[key]!=null)r.balance=+balanceByKey[key].toFixed(2);
+      // A merged row (2+ names sharing one single-bed room) sums every
+      // sharing guest's own folio -- each still has their own separate one.
+      const names=r.type==='group'?(r.guestNames||[r.name]):[r.name];
+      let sum=null;
+      names.forEach(n=>{
+        const key=r.type==='group'?`${r.id}::${n}`:`:${r.id}:${n}`;
+        if(balanceByKey[key]!=null)sum=(sum||0)+balanceByKey[key];
+      });
+      if(sum!=null)r.balance=+sum.toFixed(2);
     });
   }catch(e){
     console.warn('[reservations] folio balances',e.message);
