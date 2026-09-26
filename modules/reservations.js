@@ -309,7 +309,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol}){
           ${checkOutCol?`<td style="padding:11px 16px;font-size:12px;color:var(--text)">${fmtDate(r.checkOut)}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;font-weight:600;color:#0d9488">${r.rate!=null?fmt$(r.rate):'—'}</td>
           <td style="padding:11px 16px"><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;background:${r.type==='group'?'#dbeafe':'#f0fdf4'};color:${r.type==='group'?'#1e3a8a':'#065f46'}">${escHtml(r.source)}</span></td>
-          ${cardCol?`<td style="padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:${r.cardOnFile?'#059669':'#9ca3af'}">${r.cardOnFile?'Yes':'No'}</td>`:''}
+          ${cardCol?`<td style="padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:${r.cardOnFile?'#059669':'#dc2626'}">${r.cardOnFile?'Yes':'No'}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;color:var(--muted);max-width:220px;white-space:pre-wrap">${escHtml(r.notes)}</td>
           <td style="padding:11px 16px;text-align:center" onclick="event.stopPropagation()">${actionCell(r)}</td>
         </tr>`).join('')}
