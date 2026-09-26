@@ -16,7 +16,9 @@ function tourDateAllowed(bk,date){
 function cleanRetreatActivities(bk){
   const acts=bk&&bk.retreatActivities;
   if(!Array.isArray(acts)||!acts.length)return 0;
-  const keep=acts.filter(a=>a&&a.aoId&&a.aoId!=='undefined'&&tourDateAllowed(bk,(a.date||'').slice(0,10)));
+  // Tours unchecked in "Tours for this group" (tour-picker.js) never stay on.
+  const off=new Set(bk?.packageCustomPrices?.__cfg__?.tourOff||[]);
+  const keep=acts.filter(a=>a&&a.aoId&&a.aoId!=='undefined'&&!off.has(a.aoId)&&tourDateAllowed(bk,(a.date||'').slice(0,10)));
   const removed=acts.length-keep.length;
   if(removed){bk.retreatActivities=keep;bk.retreatActivitiesUpdatedAt=new Date().toISOString();}
   return removed;
@@ -29,7 +31,7 @@ if(typeof saveAll==='function'){
       // really happened on a departure day stays on record).
       const today=new Date().toISOString().slice(0,10);
       let n=0;(AppData.bookings||[]).forEach(bk=>{if(bk.status!=='cancelled'&&(bk.endDate||'').slice(0,10)>=today)n+=cleanRetreatActivities(bk);});
-      if(n&&typeof showToast==='function')showToast(`${n} tour${n===1?'':'s'} removed from an arrival/departure day — tours can't be scheduled on those days.`);
+      if(n&&typeof showToast==='function')showToast(`${n} tour${n===1?'':'s'} removed (arrival/departure day or not offered for that group).`);
     }catch(e){console.warn('[activity-rules]',e);}
     return _arOrigSaveAll.apply(this,arguments);
   };
