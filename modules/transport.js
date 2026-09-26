@@ -1328,6 +1328,13 @@ function tr2ToggleUpgradeMode() {
 async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, nights, nightlyRate) {
   const newRoom = document.getElementById(selId)?.value;
   if (!newRoom) return;
+  // Staff is mandatory for any PAID upgrade — Jorge's ask 2026-09-26: skipping
+  // staff meant the commission silently never got created. Free lateral moves
+  // (pretaxTotal null/0) have no commission on the line, so no staff required.
+  if (pretaxTotal != null && pretaxTotal > 0) {
+    const rawStaffId = staffSelId ? document.getElementById(staffSelId)?.value : '';
+    if (!rawStaffId) { showToast('Selecciona qué miembro del staff vendió este upgrade antes de confirmar.'); return; }
+  }
   const entry = tr2AllEntries.find(e => e.rowId === rowId);
   if (!entry?.room || !entry.retreatId) { showToast('Sin cuarto asignado'); return; }
 
