@@ -104,6 +104,7 @@ function _resGroupRows(){
       name:g.name,room:reg.room||'—',checkIn,checkOut,rate,
       notes:reg.notes||g.notes||'',source:bk.leaderName||bk.retreatName||'Group',
       type:'group',id:reg.id,checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
+      cardOnFile:!!reg.stripePaymentMethodId,
     }));
   });
   return out;
@@ -119,6 +120,7 @@ function _resIndivRows(){
         checkIn:r.checkIn,checkOut:r.checkOut,rate,notes:r.notes||r.dietary||'',
         source:r.source||'Booking Engine',type:'individual',id:r.id,status:r.status,
         checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
+        cardOnFile:false, // Card on File isn't wired up for Booking Engine reservations yet
       };
     });
 }
@@ -234,7 +236,7 @@ function _resBuildInHotelView(){
       <span style="background:#dbeafe;color:#1d4ed8;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px">${rows.length} guest${rows.length!==1?'s':''}</span>
       <span style="font-size:12px;color:var(--muted)">${fmtDate(d)}</span>
     </div>
-    ${rows.length===0?_resEmptyState('🏨','No guests in hotel today'):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkout'})}
+    ${rows.length===0?_resEmptyState('🏨','No guests in hotel today'):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkout',cardCol:true})}
   </div>`;
 }
 
@@ -274,7 +276,7 @@ function _resEmptyState(emoji,msg){
 }
 
 let _resLastRows=[];
-function _resTable(rows,{checkInCol,checkOutCol,actionMode}){
+function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol}){
   _resLastRows=rows;
   const actionCell=(r)=>{
     if(actionMode==='checkin'){
@@ -295,6 +297,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode}){
         ${checkOutCol?'<th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">CHECK-OUT</th>':''}
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">RATE / NIGHT</th>
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">SOURCE</th>
+        ${cardCol?'<th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">CARD ON FILE</th>':''}
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">NOTES</th>
         <th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">ACTION</th>
       </tr></thead>
@@ -306,6 +309,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode}){
           ${checkOutCol?`<td style="padding:11px 16px;font-size:12px;color:var(--text)">${fmtDate(r.checkOut)}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;font-weight:600;color:#0d9488">${r.rate!=null?fmt$(r.rate):'—'}</td>
           <td style="padding:11px 16px"><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;background:${r.type==='group'?'#dbeafe':'#f0fdf4'};color:${r.type==='group'?'#1e3a8a':'#065f46'}">${escHtml(r.source)}</span></td>
+          ${cardCol?`<td style="padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:${r.cardOnFile?'#059669':'#9ca3af'}">${r.cardOnFile?'Yes':'No'}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;color:var(--muted);max-width:220px;white-space:pre-wrap">${escHtml(r.notes)}</td>
           <td style="padding:11px 16px;text-align:center" onclick="event.stopPropagation()">${actionCell(r)}</td>
         </tr>`).join('')}
