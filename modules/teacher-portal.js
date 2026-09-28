@@ -776,8 +776,14 @@ function regRender(){
         nameTd.className='r-guest';
         const _teacherStar=reg.isTeacherRoom?`<span style="color:#b45309;font-size:13px;margin-right:4px" title="Teacher Room">★</span>`:'';
         const _teacherStyle=reg.isTeacherRoom?'color:#92400e;font-weight:700;':'';
-        const _cancelledBadge=g.cancelled?` <span style="font-size:10px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:5px;padding:1px 6px;margin-left:4px">Cancelled</span>`:'';
-        const _cancelledNameStyle=g.cancelled?'text-decoration:line-through;color:#9ca3af;':'';
+        // reg.cancelled (the whole-room "Cancel" button in Booking Detail,
+        // 2026-09-26) wasn't shown here at all -- Teachers kept listing a
+        // cancelled reservation as if nothing happened, which is exactly how
+        // Kristen Bughaher's mistaken cancellation went unnoticed until it
+        // also hid her from the Room Calendar (Jorge's report 2026-09-28).
+        const _isCancelled=g.cancelled||reg.cancelled;
+        const _cancelledBadge=_isCancelled?` <span style="font-size:10px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:5px;padding:1px 6px;margin-left:4px">Cancelled</span>`:'';
+        const _cancelledNameStyle=_isCancelled?'text-decoration:line-through;color:#9ca3af;':'';
         nameTd.innerHTML=`<div class="r-gname" style="${_teacherStyle}${_cancelledNameStyle}cursor:pointer" title="Click to open ${escHtml(g.name)}'s folio" onclick="event.stopPropagation();openGuestFolio('${g._reg.id}',${g._guestIdx})">${_teacherStar}${g.name}${entry.merged&&entry.physical.length>1?` <span style="font-size:10px;color:#8a7e74">(${g._physical})</span>`:''}${_cancelledBadge}</div>`;
         tr.appendChild(nameTd);
 
@@ -805,8 +811,8 @@ function regRender(){
         const priceTd=document.createElement('td');
         priceTd.className='r-price';
         priceTd.style.cssText='text-align:right;vertical-align:top;padding:10px 12px;min-width:160px;width:160px;';
-        if(g.cancelled){
-          priceTd.innerHTML=`<div style="font-weight:700;font-size:13px;color:#dc2626">${fmt$(g.cancellationFee||0)}</div><div style="font-size:10.5px;color:#8a7e74;margin-top:2px">cancellation fee</div>`;
+        if(_isCancelled){
+          priceTd.innerHTML=`<div style="font-weight:700;font-size:13px;color:#dc2626">${fmt$(g.cancellationFee||0)}</div><div style="font-size:10.5px;color:#8a7e74;margin-top:2px">${reg.cancelled&&!g.cancelled?'reservation cancelled':'cancellation fee'}</div>`;
         } else if(reg.customPrice!=null&&!reg.isTeacherRoom){
           const perCustom=+(reg.customPrice/gc).toFixed(2);
           priceTd.innerHTML=`<div style="font-weight:700;font-size:13px;color:var(--dark)">${fmt$(perCustom)}</div><div style="font-size:10.5px;color:#8a7e74;margin-top:2px">custom price${gc>1?' (per person)':''}</div>`;
