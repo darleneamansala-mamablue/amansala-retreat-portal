@@ -2371,13 +2371,17 @@ function rcBuild(){
       const track=document.createElement('div');track.className='g-track';track.style.cssText=`width:${W}px;min-width:${W}px`;
       track.dataset.room=entry.physical[0];track.dataset.rtid=rt.id;track.setAttribute('data-droptarget','1');
       track.addEventListener('dragover',e=>{
-        if(!rcDragData||rcDragData.rtId!==rt.id||entry.physical.includes(rcDragData.fromRoom))return;
+        // Dragging between DIFFERENT room-type categories is allowed (Jorge's
+        // ask 2026-09-28 -- e.g. dragging a guest straight from a Basico room
+        // into a Garden one, not just via the Transport Upgrade flow); only
+        // dropping back onto the room it's already in is blocked.
+        if(!rcDragData||entry.physical.includes(rcDragData.fromRoom))return;
         e.preventDefault();track.classList.add('rc-drag-over');
       });
       track.addEventListener('dragleave',()=>track.classList.remove('rc-drag-over'));
       track.addEventListener('drop',e=>{
         e.preventDefault();track.classList.remove('rc-drag-over');
-        if(!rcDragData||rcDragData.rtId!==rt.id)return;
+        if(!rcDragData)return;
         if(rcDragData.external)rcMoveExternalReservation(rcDragData.reservationID,rcDragData.fromRoom,room,rcDragData.guestName,rcDragData.startDate,rcDragData.endDate);
         else rcMoveRoom(rcDragData.bkId,rcDragData.fromRoom,room);
       });
@@ -3021,10 +3025,24 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
   // guest's registration at the old room label while an empty one "moves" instead.
   const reg=getRegForRoom(bkId,fromRoom);
   if(reg){
+    const fromRt=AppData.roomTypes.find(rt=>rt.rooms.includes(fromRoom));
     const targetRt=AppData.roomTypes.find(rt=>rt.rooms.includes(toRoom));
-    // customRateOverride is intentionally left untouched by a Rooms-grid move —
-    // Jorge's call 2026-09-21: rate recalculation on a room-type change belongs in
-    // Teachers (regSetRoomTypeOverride), not here.
+    // Dragging into a DIFFERENT category (Jorge's ask 2026-09-28 -- allowed
+    // here now, not just via Transport's Upgrade flow) must not silently
+    // inflate the retreat's own master bill any more than an Upgrade would --
+    // freeze the pre-move rate the same way tr2ConfirmUpgrade does, unless a
+    // custom rate was already negotiated (leave that alone, it's real).
+    // customRateOverride was previously left untouched by every Rooms-grid
+    // move on purpose (Jorge's call 2026-09-21: rate recalculation on a
+    // room-type change belonged in Teachers/regSetRoomTypeOverride only) --
+    // that's now specifically for a SAME-category move (nothing to freeze).
+    if(targetRt&&fromRt&&targetRt.id!==fromRt.id&&reg.customRateOverride==null){
+      const gc=(reg.guests||[]).filter(g=>g.name&&!g.cancelled).length||1;
+      const checkIn=reg.checkIn||bk.startDate;
+      const nights=Math.max(1,Math.round((pd(reg.checkOut||bk.endDate)-pd(checkIn))/DAY_MS));
+      const origRate=getRoomRate(fromRt,gc,checkIn,nights);
+      if(origRate!=null)reg.customRateOverride=origRate;
+    }
     reg.room=toRoom;
     if(targetRt)reg.roomTypeId=targetRt.id;
     reg.customPrice=null;
