@@ -655,6 +655,13 @@ function spaGuestPackageIncludesMassage(clientName, guestRoom) {
 // match" toasts — used when auto-charging right after a Hotel Guest
 // appointment is saved (the save itself is the staff's affirmative action;
 // see spaApptSave in spa-calendar.js), so it doesn't nag with a second popup.
+// Folio line for a spa service: what, when and who — folio_items has no date
+// column, so the service date goes in the text (Darlene 2026-09-28), e.g.
+// "Massage — 60 minute Mayan Healing massage · Sep 27, 2026 · Laura".
+function spaFolioChargeLabel(category, svcName, dateStr, therapistName) {
+  const d = dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  return [`${category} — ${svcName}`, d, therapistName].filter(Boolean).join(' · ');
+}
 async function spaChargeApptToRoom(apptId, opts) {
   opts = opts || {};
   const a = (SpaAppointments || []).find(x => x.id === apptId); if (!a) return;
@@ -693,7 +700,7 @@ async function spaChargeApptToRoom(apptId, opts) {
         if (cErr) throw cErr;
         folioId = created.id;
       }
-      const { data: item, error: iErr } = await db.from('folio_items').insert({ folio_id: folioId, description: therapistName ? `Spa · ${name} — ${therapistName}` : `Spa · ${name}`, qty: 1, unit_price: Number(price), tax_rate: 13 }).select('id').single();
+      const { data: item, error: iErr } = await db.from('folio_items').insert({ folio_id: folioId, description: spaFolioChargeLabel(category, name, a.date, therapistName), qty: 1, unit_price: Number(price), tax_rate: 13 }).select('id').single();
       if (iErr) throw iErr;
       a.folioRegId = match.reg.id;
       a.folioId = folioId;
@@ -710,7 +717,7 @@ async function spaChargeApptToRoom(apptId, opts) {
   }
   saveAll();
   a.folioStatus = 'POSTED';
-  a.folioChargeId = chargeId;
+  a.folioChargeId = a.folioItemId || chargeId; // folio item id, so a cancel can remove it (spa-booking.html)
   if (typeof spaCalSave === 'function') await spaCalSave();
   logActivity('Charge added', `${fmt$(price)} — ${name} — ${guestLabel} (from Spa)`, match ? match.reg.bookingId : bkMatch.bk.id);
   showToast(`${opts.silent ? 'Auto-charged' : 'Charged'} ${fmt$(price)} to ${guestLabel}'s ${opts.silent ? 'room' : 'folio'} ✓`);

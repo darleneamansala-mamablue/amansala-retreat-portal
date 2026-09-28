@@ -252,7 +252,7 @@ exports.handler = async (event) => {
         if (regMatch) {
           const { folioItemId, error } = await chargeFolio(hdrs, {
             registrationId: regMatch.reg.id, guestName: clientName,
-            description: `${category} — ${svc.name} (${therName})`, unitPrice: priceUSD,
+            description: [`${category} — ${svc.name}`, new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), therName].filter(Boolean).join(' · '), unitPrice: priceUSD,
           });
           if (folioItemId) { appt.folioStatus = 'POSTED'; appt.folioChargeId = folioItemId; appt.folioRegId = regMatch.reg.id; folioPosted = true; }
           else console.warn('[visito-spa-create-booking] folio charge failed:', error);

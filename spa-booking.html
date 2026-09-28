@@ -867,14 +867,30 @@ async function sbFinalConfirm(){
           if(price!=null){
             const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
             const category=/massage/i.test(svc.name)?'Massage':'Spa';
-            const newCharges=[...(match.reg.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:match.guest.name,therapistName:chargeTherName,therapistId:appt.therapistId,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'},...(tipCharge?[{...tipCharge,guestName:match.guest.name}]:[])];
-            const {error:chErr}=await db.from('registrations').update({charges:newCharges}).eq('id',match.reg.id);
-            if(!chErr){
+            // Post to the guest's OWN folio (folios/folio_items) — the account the
+            // portal's Booking Detail, Card on File and check-out use — instead of
+            // the legacy reg.charges list, which only rolls up to the retreat
+            // leader's master bill (Darlene 2026-09-28). Tip = its own folio line.
+            const fmtD=ds=>ds?new Date(ds+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+            try{
+              const gName=match.guest.name;
+              let {data:fl}=await db.from('folios').select('id').eq('registration_id',match.reg.id).eq('guest_name',gName).eq('status','open').order('created_at',{ascending:true}).limit(1);
+              let folioId=fl&&fl[0]&&fl[0].id;
+              if(!folioId){
+                const token=(Date.now().toString(36)+Math.random().toString(36).slice(2,12));
+                const {data:cf,error:cfErr}=await db.from('folios').insert({registration_id:match.reg.id,guest_name:gName,name:gName,payment_token:token,status:'open'}).select('id').single();
+                if(cfErr)throw cfErr;folioId=cf.id;
+              }
+              const label=[`${category} — ${svc.name}`,fmtD(appt.date),chargeTherName].filter(Boolean).join(' · ');
+              const {data:it,error:itErr}=await db.from('folio_items').insert({folio_id:folioId,description:label,qty:1,unit_price:Number(price),tax_rate:13}).select('id').single();
+              if(itErr)throw itErr;
+              if(tipCharge)await db.from('folio_items').insert({folio_id:folioId,description:['Tip',fmtD(appt.date),chargeTherName].filter(Boolean).join(' · '),qty:1,unit_price:Number(tipCharge.amount),tax_rate:0});
               appt.folioStatus='POSTED';
-              appt.folioChargeId=chargeId;
+              appt.folioChargeId=it.id;
               appt.folioRegId=match.reg.id;
+              appt.folioId=folioId;
               folioPosted=true;
-            }
+            }catch(e){console.warn('[spa-booking] folio charge failed',e);}
           }
         }else{
           // No reg match (e.g. Room Only / BBC / Restore & Renew guests have
