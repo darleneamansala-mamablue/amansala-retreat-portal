@@ -3744,6 +3744,13 @@ const CL_ITEMS=[
 function getChecklist(bkId){return JSON.parse(localStorage.getItem('amansala_cl_'+bkId)||'{}');}
 function saveChecklist(bkId,obj){localStorage.setItem('amansala_cl_'+bkId,JSON.stringify(obj));}
 function toggleCheck(bkId,key){const c=getChecklist(bkId);c[key]=!c[key];saveChecklist(bkId,c);renderChecklist(bkId);}
+// One-off per Darlene's request 2026-09-24: hide the "Welcome Letter" checklist
+// step (and its template) for Jen Russell's two April 2027 retreats only —
+// contract signed but no deposit yet. NOT a general deposit-based rule; every
+// other teacher (and Jen's other retreats) still sees this step normally.
+function _isWelcomeLetterHidden(bk){
+  return !!bk && bk.leaderName==='Jen Russell' && (bk.startDate==='2027-04-03'||bk.startDate==='2027-04-14');
+}
 // Shown on the teacher's own Dashboard whenever their retreat is within 6
 // weeks and their guests haven't all submitted travel details yet.
 function tdRenderTransportReminder(bkId){
@@ -3774,11 +3781,12 @@ function renderChecklist(bkId){
   // Auto-complete add-ons item when teacher has confirmed their selections
   if(bk&&bk.addOnsConfirmedAt&&!c.cl7){c.cl7=true;saveChecklist(bkId,c);}
   const start=bk&&bk.startDate?pd(bk.startDate):null;
-  const done=CL_ITEMS.filter(i=>c[i.id]).length;
+  const items=CL_ITEMS.filter(i=>!(i.id==='cl5'&&_isWelcomeLetterHidden(bk)));
+  const done=items.filter(i=>c[i.id]).length;
   const prog=document.getElementById('cl-progress');
-  if(prog)prog.textContent=`${done}/${CL_ITEMS.length} done`;
+  if(prog)prog.textContent=`${done}/${items.length} done`;
   const body=document.getElementById('clBody');if(!body)return;
-  body.innerHTML=CL_ITEMS.map(i=>{
+  body.innerHTML=items.map(i=>{
     let deadline='';
     if(i.deadlineDays&&start){
       const dl=new Date(start);dl.setDate(dl.getDate()-i.deadlineDays);
@@ -3793,6 +3801,7 @@ function renderChecklist(bkId){
 }
 function renderYogiLetter(bk){
   const el=document.getElementById('yogiLetter');if(!el)return;
+  if(_isWelcomeLetterHidden(bk)){const card=el.closest('.td-card');if(card)card.style.display='none';el.textContent='';return;}
   const retreat=bk.retreatName||bk.leaderName||'our upcoming retreat';
   const dates=`${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}`;
   const nights=getNights(bk);
