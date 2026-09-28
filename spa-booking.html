@@ -881,10 +881,10 @@ async function sbFinalConfirm(){
                 const {data:cf,error:cfErr}=await db.from('folios').insert({registration_id:match.reg.id,guest_name:gName,name:gName,payment_token:token,status:'open'}).select('id').single();
                 if(cfErr)throw cfErr;folioId=cf.id;
               }
-              const label=[`${category} — ${svc.name}`,fmtD(appt.date),chargeTherName].filter(Boolean).join(' · ');
-              const {data:it,error:itErr}=await db.from('folio_items').insert({folio_id:folioId,description:label,qty:1,unit_price:Number(price),tax_rate:13}).select('id').single();
+              const label=chargeTherName?`${chargeTherName} - ${svc.name}`:svc.name;const svcDay=appt.date?`${appt.date}T17:00:00Z`:undefined;
+              const {data:it,error:itErr}=await db.from('folio_items').insert({folio_id:folioId,description:label,created_at:svcDay,qty:1,unit_price:Number(price),tax_rate:13}).select('id').single();
               if(itErr)throw itErr;
-              if(tipCharge)await db.from('folio_items').insert({folio_id:folioId,description:['Tip',fmtD(appt.date),chargeTherName].filter(Boolean).join(' · '),qty:1,unit_price:Number(tipCharge.amount),tax_rate:0});
+              if(tipCharge)await db.from('folio_items').insert({folio_id:folioId,description:chargeTherName?`${chargeTherName} - Tip`:'Tip',created_at:svcDay,qty:1,unit_price:Number(tipCharge.amount),tax_rate:0});
               appt.folioStatus='POSTED';
               appt.folioChargeId=it.id;
               appt.folioRegId=match.reg.id;

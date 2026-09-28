@@ -657,11 +657,13 @@ function spaGuestPackageIncludesMassage(clientName, guestRoom) {
 // see spaApptSave in spa-calendar.js), so it doesn't nag with a second popup.
 // Folio line for a spa service: what, when and who — folio_items has no date
 // column, so the service date goes in the text (Darlene 2026-09-28), e.g.
-// "Massage — 60 minute Mayan Healing massage · Sep 27, 2026 · Laura".
+// "Laura - 60 minute Mayan Healing massage", dated the day of the service.
 function spaFolioChargeLabel(category, svcName, dateStr, therapistName) {
-  const d = dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-  return [`${category} — ${svcName}`, d, therapistName].filter(Boolean).join(' · ');
+  // Cloudbeds-style "Miguel - 60 min massage" (Darlene 2026-09-28); the date
+  // shows in the folio's Date column (created_at = service day, see spaFolioDate).
+  return therapistName ? `${therapistName} - ${svcName}` : svcName;
 }
+function spaFolioDate(dateStr) { return dateStr ? `${dateStr}T17:00:00Z` : undefined; } // noon in Tulum
 async function spaChargeApptToRoom(apptId, opts) {
   opts = opts || {};
   const a = (SpaAppointments || []).find(x => x.id === apptId); if (!a) return;
@@ -700,7 +702,7 @@ async function spaChargeApptToRoom(apptId, opts) {
         if (cErr) throw cErr;
         folioId = created.id;
       }
-      const { data: item, error: iErr } = await db.from('folio_items').insert({ folio_id: folioId, description: spaFolioChargeLabel(category, name, a.date, therapistName), qty: 1, unit_price: Number(price), tax_rate: 13 }).select('id').single();
+      const { data: item, error: iErr } = await db.from('folio_items').insert({ folio_id: folioId, description: spaFolioChargeLabel(category, name, a.date, therapistName), created_at: spaFolioDate(a.date), qty: 1, unit_price: Number(price), tax_rate: 13 }).select('id').single();
       if (iErr) throw iErr;
       a.folioRegId = match.reg.id;
       a.folioId = folioId;

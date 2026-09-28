@@ -27,7 +27,7 @@ const STRIPE_API = 'https://api.stripe.com/v1';
 // charge should never touch that (Jorge's report 2026-09-26: Jay Z's spa
 // charge "not showing up" in his folio). Mirrors auto-charge-transport.js's
 // chargeFolio() helper.
-async function chargeFolio(hdrs, { registrationId, guestName, description, unitPrice, category }) {
+async function chargeFolio(hdrs, { registrationId, guestName, description, unitPrice, category, serviceDate }) {
   let folioId = null;
   const exactRes = await fetch(`${SUPABASE_URL}/rest/v1/folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(guestName)}&limit=1`, { headers: hdrs });
   const exact = exactRes.ok ? await exactRes.json() : [];
@@ -51,7 +51,9 @@ async function chargeFolio(hdrs, { registrationId, guestName, description, unitP
 
   const itemRes = await fetch(`${SUPABASE_URL}/rest/v1/folio_items`, {
     method: 'POST', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify({ folio_id: folioId, description, qty: 1, unit_price: unitPrice, tax_rate: 13 }),
+    // created_at = the service day (noon Tulum) so the folio's Date column shows
+    // when the treatment was given, like Cloudbeds.
+    body: JSON.stringify({ folio_id: folioId, description, qty: 1, unit_price: unitPrice, tax_rate: 13, ...(serviceDate ? { created_at: `${serviceDate}T17:00:00Z` } : {}) }),
   });
   if (!itemRes.ok) return { error: 'folio_item_failed: ' + await itemRes.text() };
   const [saved] = await itemRes.json();
@@ -252,7 +254,7 @@ exports.handler = async (event) => {
         if (regMatch) {
           const { folioItemId, error } = await chargeFolio(hdrs, {
             registrationId: regMatch.reg.id, guestName: clientName,
-            description: [`${category} — ${svc.name}`, new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), therName].filter(Boolean).join(' · '), unitPrice: priceUSD,
+            description: therName ? `${therName} - ${svc.name}` : svc.name, serviceDate: date, unitPrice: priceUSD,
           });
           if (folioItemId) { appt.folioStatus = 'POSTED'; appt.folioChargeId = folioItemId; appt.folioRegId = regMatch.reg.id; folioPosted = true; }
           else console.warn('[visito-spa-create-booking] folio charge failed:', error);

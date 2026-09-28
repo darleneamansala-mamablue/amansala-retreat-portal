@@ -243,7 +243,11 @@ function _bdFolioRowHtml(f){
   const itemRows=f.items.map(i=>{
     const isPayment=Number(i.unit_price)<0;
     const lineTotal=_bdItemTotal(i);
+    // Date column, like Cloudbeds' folio (Darlene 2026-09-28). Spa charges set
+    // created_at to the service day, so this shows when the massage was given.
+    const itemDate=i.created_at?new Date(i.created_at).toLocaleDateString('en-CA'):'';
     return `<tr style="${isPayment?'background:#f0fdf4':''}">
+      <td style="padding:8px 12px;font-size:12px;white-space:nowrap;color:var(--dark)">${itemDate}</td>
       <td style="padding:8px 12px;font-size:12.5px">${isPayment?'💳 ':''}${escHtml(i.description||'')}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${Number(i.qty)}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${fmt$(i.unit_price)}</td>
@@ -257,6 +261,7 @@ function _bdFolioRowHtml(f){
   }).join('');
   const addFormHtml=_bdAddOpen[fid]?`
     <tr>
+      <td></td>
       <td style="padding:6px 12px" colspan="2"><input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td style="padding:6px 12px"><input id="bdc-price-${fid}" type="number" step="0.01" placeholder="Price" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td style="padding:6px 12px"><input id="bdc-tax-${fid}" type="number" step="0.01" placeholder="Tax%" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
@@ -278,12 +283,12 @@ function _bdFolioRowHtml(f){
     </div>
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">
-        <th style="text-align:left;padding:6px 12px">Description</th><th style="text-align:right;padding:6px 12px">Qty</th>
+        <th style="text-align:left;padding:6px 12px">Date</th><th style="text-align:left;padding:6px 12px">Description</th><th style="text-align:right;padding:6px 12px">Qty</th>
         <th style="text-align:right;padding:6px 12px">Unit Price</th><th style="text-align:right;padding:6px 12px">Tax</th>
         <th style="text-align:right;padding:6px 12px">Total</th><th style="padding:6px 12px"></th>
       </tr></thead>
-      <tbody>${itemRows||`<tr><td colspan="6" style="padding:14px 12px;text-align:center;color:var(--muted);font-size:12px">No charges yet.</td></tr>`}
-      ${isOpen?`<tr><td colspan="6" style="padding:6px 12px"><button class="btn btn-secondary btn-sm" onclick="bdToggleAdd('${fid}')" style="font-size:11px">${_bdAddOpen[fid]?'Cancel':'+ Add manually'}</button></td></tr>${addFormHtml}`:''}
+      <tbody>${itemRows||`<tr><td colspan="7" style="padding:14px 12px;text-align:center;color:var(--muted);font-size:12px">No charges yet.</td></tr>`}
+      ${isOpen?`<tr><td colspan="7" style="padding:6px 12px"><button class="btn btn-secondary btn-sm" onclick="bdToggleAdd('${fid}')" style="font-size:11px">${_bdAddOpen[fid]?'Cancel':'+ Add manually'}</button></td></tr>${addFormHtml}`:''}
       </tbody>
     </table>
     ${isOpen?_bdPaymentRowHtml(fid):''}
