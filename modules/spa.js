@@ -675,9 +675,34 @@ async function spaChargeApptToRoom(apptId, opts) {
   const ther = SpaData.therapists.find(t => t.id === a.therapistId);
   const therapistName = ther ? `${ther.firstName} ${ther.lastName || ''}`.trim() : null;
   if (match) {
-    if (!match.reg.charges) match.reg.charges = [];
-    match.reg.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: match.guest.name, therapistName, therapistId: a.therapistId, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
-    a.folioRegId = match.reg.id;
+    // Post to the guest's OWN folio (folios/folio_items) — the account the
+    // Booking Detail window, Card on File and check-out actually use. This
+    // used to push onto the legacy reg.charges list instead, which only rolls
+    // up to the retreat leader's master bill, so the charge never appeared on
+    // the guest's account and front desk re-entered it by hand (real report
+    // 2026-09-28: Michelle Meywes' Sep 27 massage). Same folio lookup/create as
+    // booking-detail.js _bdLoadFolios; same 13% tax as the other folio charges.
+    try {
+      const guestName = match.guest.name;
+      let { data: folios, error } = await db.from('folios').select('id').eq('registration_id', match.reg.id).eq('guest_name', guestName).eq('status', 'open').order('created_at', { ascending: true }).limit(1);
+      if (error) throw error;
+      let folioId = folios && folios[0] && folios[0].id;
+      if (!folioId) {
+        const token = uid().replace(/[^a-z0-9]/gi, '');
+        const { data: created, error: cErr } = await db.from('folios').insert({ registration_id: match.reg.id, guest_name: guestName, name: guestName, payment_token: token, status: 'open' }).select('id').single();
+        if (cErr) throw cErr;
+        folioId = created.id;
+      }
+      const { data: item, error: iErr } = await db.from('folio_items').insert({ folio_id: folioId, description: therapistName ? `Spa · ${name} — ${therapistName}` : `Spa · ${name}`, qty: 1, unit_price: Number(price), tax_rate: 13 }).select('id').single();
+      if (iErr) throw iErr;
+      a.folioRegId = match.reg.id;
+      a.folioId = folioId;
+      a.folioItemId = item && item.id;
+    } catch (e) {
+      console.warn('[spa] folio charge failed', e);
+      showToast(`Could not charge ${match.guest.name}'s folio — ${e.message || e}. Try "Charge to Room" again.`);
+      return;
+    }
   } else {
     if (!bkMatch.bk.charges) bkMatch.bk.charges = [];
     bkMatch.bk.charges.push({ id: chargeId, date: a.date, category, description: name, amount: price, guestName: bkMatch.bk.leaderName, therapistName, therapistId: a.therapistId, addedAt: new Date().toISOString(), addedBy: getCurrentSession()?.name || 'Staff', source: 'spa' });
