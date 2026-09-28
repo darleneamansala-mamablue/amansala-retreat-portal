@@ -1346,11 +1346,36 @@ async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, 
   const reg = getRegForRoom(entry.retreatId, entry.room);
   if (!reg) { showToast('No se encontró el registro del huésped'); return; }
 
-  try { await db.from('registrations').update({ room: newRoom, room_type_id: toRtId }).eq('id', reg.id); } catch (e) { showToast('Error: ' + e.message); return; }
-  reg.room = newRoom; reg.roomTypeId = toRtId; saveAll();
-
   const lateral = toRtId === tr2RoomNameToRtId[entry.room];
   const bk = tr2ActiveBooks.find(b => b.id === entry.retreatId);
+
+  const regUpdate = { room: newRoom, room_type_id: toRtId };
+  // Freeze the retreat's own MASTER bill (Teachers/Registration, calcBkBalance
+  // -> _calcRoomRevenue) at the PRE-upgrade rate -- Jorge's ask 2026-09-28.
+  // _calcRoomRevenue derives a room's rate from whatever physical room a reg
+  // currently sits in (via AppData.roomTypes), so moving someone into a
+  // pricier room type silently inflated the WHOLE GROUP's bill on top of the
+  // guest's own upgrade folio charge below -- double-billing the retreat for
+  // money that's only supposed to hit that one guest's personal folio. Skip
+  // for a lateral move (same room type -- nothing to freeze) and skip if a
+  // custom rate was already set (that's the real negotiated group rate,
+  // already frozen -- don't overwrite it with a computed one).
+  if (!lateral && bk && reg.customRateOverride == null) {
+    const fromRtId = tr2RoomNameToRtId[entry.room];
+    const fromRt = fromRtId ? AppData.roomTypes.find(r => r.id === fromRtId) : null;
+    if (fromRt) {
+      const gc = (reg.guests || []).filter(g => g.name && !g.cancelled).length || 1;
+      const origNights = Math.max(1, Math.round((pd(bk.endDate) - pd(bk.startDate)) / DAY_MS));
+      const origRate = getRoomRate(fromRt, gc, reg.checkIn || bk.startDate, origNights);
+      if (origRate != null) regUpdate.custom_rate_override = origRate;
+    }
+  }
+
+  try { await db.from('registrations').update(regUpdate).eq('id', reg.id); } catch (e) { showToast('Error: ' + e.message); return; }
+  reg.room = newRoom; reg.roomTypeId = toRtId;
+  if (regUpdate.custom_rate_override != null) reg.customRateOverride = regUpdate.custom_rate_override;
+  saveAll();
+
   if (bk) {
     const oldRoom = entry.room.trim();
     const updatedBlocked = (bk.blockedRooms || []).map(r => r.trim().toLowerCase() === oldRoom.toLowerCase() ? newRoom : r);
