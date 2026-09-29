@@ -239,7 +239,74 @@ function _bdRender(){
         <button class="btn btn-secondary btn-sm" onclick="bdAddFolio()">+ Add Folio</button>
       </div>
       ${_bdFolios.map(f=>_bdFolioRowHtml(f)).join('')}
+      ${_bdFolios.length?_bdTotalPaymentRowHtml():''}
     </div>`;
+}
+
+// One combined "pay everything" control instead of having to pick a specific
+// folio first (Jorge's ask 2026-09-29). Recorded against whichever folio
+// currently carries the largest balance -- open OR closed (closed only means
+// no more CHARGES, not that it can't be paid off). The aggregate Balance Due
+// above sums every folio either way, so settling the whole thing through one
+// folio still zeroes the total out correctly.
+function _bdTotalPaymentRowHtml(){
+  const methods=_bdKind==='req'?_BD_PAY_METHODS.filter(m=>m!=='Card on File'):_BD_PAY_METHODS;
+  const bal=_bdBalanceDue();
+  return `<div style="display:flex;gap:8px;align-items:center;padding:14px 16px;margin-top:4px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;flex-wrap:wrap">
+    <span style="font-size:11px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">Pay Full Balance</span>
+    <select id="bd-pay-total-method" onchange="bdOnTotalPayMethodChange()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+      ${methods.map(m=>`<option value="${m}">${m}</option>`).join('')}
+    </select>
+    <input id="bd-pay-total-amount" type="number" step="0.01" placeholder="Amount" value="${bal>0?bal.toFixed(2):''}" style="width:110px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+    <input id="bd-pay-total-ref" type="text" placeholder="Reference (optional)" style="flex:1;min-width:120px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+    <button id="bd-pay-total-btn" class="btn btn-primary btn-sm" onclick="bdRecordTotalPayment()">Record</button>
+  </div>`;
+}
+function _bdLargestBalanceFolio(){
+  if(!_bdFolios.length)return null;
+  return _bdFolios.reduce((best,f)=>_bdFolioTotal(f)>_bdFolioTotal(best)?f:best,_bdFolios[0]);
+}
+function bdOnTotalPayMethodChange(){
+  const method=document.getElementById('bd-pay-total-method')?.value;
+  const btn=document.getElementById('bd-pay-total-btn');if(!btn)return;
+  const amountEl=document.getElementById('bd-pay-total-amount');
+  if(method==='Credit Card (Stripe)'||method==='Card on File'){
+    btn.textContent=method==='Card on File'?'💳 Charge Card on File':'💳 Charge Card';
+    btn.onclick=method==='Card on File'?bdChargeCardOnFileTotal:bdOpenStripePaymentTotal;
+    if(amountEl&&(!amountEl.value||parseFloat(amountEl.value)===0)){
+      const bal=_bdBalanceDue();if(bal>0)amountEl.value=bal.toFixed(2);
+    }
+  }else{
+    btn.textContent='Record';
+    btn.onclick=bdRecordTotalPayment;
+  }
+}
+async function bdRecordTotalPayment(){
+  const method=document.getElementById('bd-pay-total-method')?.value;
+  const amount=parseFloat(document.getElementById('bd-pay-total-amount')?.value);
+  const ref=document.getElementById('bd-pay-total-ref')?.value.trim();
+  if(!amount||amount<=0){showToast('Enter a valid amount');return;}
+  const target=_bdLargestBalanceFolio();
+  if(!target){showToast('No folio to record this payment against.');return;}
+  const description=`Payment — ${method}${ref?': '+ref:''}`;
+  const {error}=await db.from('folio_items').insert({folio_id:target.folio.id,description,qty:1,unit_price:-amount,tax_rate:0});
+  if(error){showToast('Error recording payment: '+error.message);return;}
+  showToast('Payment recorded ✓');
+  await _bdLoadFolios();
+}
+function bdChargeCardOnFileTotal(){
+  const amount=parseFloat(document.getElementById('bd-pay-total-amount')?.value);
+  if(!amount||amount<=0){showToast('Enter a valid amount');return;}
+  const target=_bdLargestBalanceFolio();
+  if(!target){showToast('No folio to record this payment against.');return;}
+  bdChargeCardOnFile(target.folio.id,amount,'bd-pay-total-btn');
+}
+function bdOpenStripePaymentTotal(){
+  const amount=parseFloat(document.getElementById('bd-pay-total-amount')?.value);
+  if(!amount||amount<=0){showToast('Enter a valid amount');return;}
+  const target=_bdLargestBalanceFolio();
+  if(!target){showToast('No folio to record this payment against.');return;}
+  bdOpenStripePayment(target.folio.id,amount);
 }
 
 function _bdFolioRowHtml(f){
@@ -331,23 +398,26 @@ function bdOnPayMethodChange(fid){
   }
 }
 
-async function bdChargeCardOnFile(fid){
+// amountOverride/btnIdOverride let bdChargeCardOnFileTotal() (the "Pay Full
+// Balance" row, 2026-09-29) reuse this exact same charge flow for whichever
+// folio has the largest balance, even a CLOSED one that has no per-folio
+// payment row of its own in the DOM to read an amount/button from.
+async function bdChargeCardOnFile(fid,amountOverride,btnIdOverride){
   const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
   if(!reg.stripePaymentMethodId){showToast('No hay tarjeta guardada para este huésped — guarda una primero con "Save Card".');return;}
-  const amount=parseFloat(document.getElementById(`bd-pay-amount-${fid}`)?.value);
+  const amount=amountOverride??parseFloat(document.getElementById(`bd-pay-amount-${fid}`)?.value);
   if(!amount||amount<=0){showToast('Enter a valid amount');return;}
-  const btn=document.getElementById(`bd-pay-btn-${fid}`);
-  const origLabel=btn.textContent;btn.disabled=true;btn.textContent='Cobrando…';
+  const btn=document.getElementById(btnIdOverride||`bd-pay-btn-${fid}`);
+  const origLabel=btn?.textContent;if(btn){btn.disabled=true;btn.textContent='Cobrando…';}
   try{
     const res=await fetch('/.netlify/functions/charge-card-on-file',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({regId:_bdId,folioId:fid,amount,description:'Amansala · Folio charge'})});
     const data=await res.json();
     if(!res.ok||data.error)throw new Error(data.error||'No se pudo cobrar');
     showToast('Tarjeta cobrada ✓');
-    const f=_bdFolios.find(x=>x.folio.id===fid);
     await _bdLoadFolios();
   }catch(e){
     showToast(e.message||'Error al cobrar la tarjeta');
-    btn.disabled=false;btn.textContent=origLabel;
+    if(btn){btn.disabled=false;btn.textContent=origLabel;}
   }
 }
 
@@ -592,8 +662,11 @@ async function bdDeleteReservation(){
 // ── Admin "Charge Card" (Stripe) ──
 let _bdStripe=null,_bdStripeElems=null,_bdStripeFolioId=null,_bdStripeAmt=0;
 
-async function bdOpenStripePayment(fid){
-  const amount=parseFloat(document.getElementById(`bd-pay-amount-${fid}`)?.value);
+// amountOverride lets bdOpenStripePaymentTotal() ("Pay Full Balance", 2026-09-29)
+// target whichever folio has the largest balance, even a CLOSED one with no
+// per-folio payment row of its own in the DOM to read an amount from.
+async function bdOpenStripePayment(fid,amountOverride){
+  const amount=amountOverride??parseFloat(document.getElementById(`bd-pay-amount-${fid}`)?.value);
   if(!amount||amount<=0){showToast('Enter a valid amount');return;}
   _bdStripeFolioId=fid;_bdStripeAmt=amount;_bdStripe=null;_bdStripeElems=null;
 
