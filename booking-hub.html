@@ -966,6 +966,7 @@
   <button class="tab-btn" id="activityTabBtn" onclick="switchTab('activity',this)" style="display:none"></button>
   <button class="tab-btn" id="itemsTabBtn" onclick="switchTab('items',this)" style="display:none"></button>
   <button class="tab-btn" id="commissionsTabBtn" onclick="switchTab('commissions',this)" style="display:none"></button>
+  <button class="tab-btn" id="reportsTabBtn" onclick="switchTab('reports',this)" style="display:none"></button>
   <button class="tab-btn" id="botLogAdminTabBtn" onclick="switchTab('botlogadmin',this)" style="display:none"></button>
   <button class="tab-btn" id="transportTabBtn" onclick="switchTab('transport',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.5H2M17 3H7L3 16.5h18L17 3z"/><circle cx="7.5" cy="20" r="1.5"/><circle cx="16.5" cy="20" r="1.5"/></svg>
@@ -1043,6 +1044,10 @@
     <button class="tab-btn tab-btn-sub" onclick="switchTab('commissions',document.getElementById('commissionsTabBtn'));document.getElementById('commissionsTabBtn').style.display='flex'" style="color:#34d399">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
       <span class="tab-label">Commissions</span>
+    </button>
+    <button class="tab-btn tab-btn-sub" onclick="switchTab('reports',document.getElementById('reportsTabBtn'));document.getElementById('reportsTabBtn').style.display='flex'" style="color:#0e9494">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span class="tab-label">Reports</span>
     </button>
     <button class="tab-btn tab-btn-sub" onclick="switchTab('botlogadmin',document.getElementById('botLogAdminTabBtn'));document.getElementById('botLogAdminTabBtn').style.display='flex'" style="color:#a78bfa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h4M9 15h5"/><circle cx="17" cy="17" r="3" fill="#a78bfa" stroke="none"/><path d="M17 15.5v1.5l1 1" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>
@@ -3151,6 +3156,10 @@
 <!-- ===== COMMISSIONS (admin) — ported from staging's new modular app ===== -->
 <div class="tab-panel" id="tab-commissions" style="flex-direction:column">
   <div id="commissionsContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column"></div>
+</div>
+
+<div class="tab-panel" id="tab-reports" style="flex-direction:column">
+  <div id="reportsContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column"></div>
 </div>
 
 <!-- ===== BOT LOG (admin, cross-retreat) — ported from staging's new modular app ===== -->
@@ -6198,6 +6207,7 @@ function switchTab(id,btn){
   if(id==='activity')  buildActivityLog();
   if(id==='items')     adminItemsRender();
   if(id==='commissions') commissionsRender();
+  if(id==='reports') reportsRender();
   if(id==='botlogadmin') adminBotLogRender();
   if(id==='actsheet')  actSheetInit().catch(()=>actSheetRenderWeek());
   if(id==='skedda'){loadFromSupabase().then(()=>{skedBuild();if(skedSubViewMode==='retreats')buildRetreatSchedulesPanel();});}
@@ -6227,6 +6237,7 @@ function switchTab(id,btn){
 </script>
 <script src="modules/admin-items.js"></script>
 <script src="modules/commissions.js?v=20260926a"></script>
+<script src="modules/reports.js?v=20260929a"></script>
 <script src="modules/admin-bot-log.js"></script>
 <script src="modules/teacher-portal.js?v=20260929b"></script>
 <script src="modules/dietary-report.js"></script>
