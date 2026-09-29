@@ -111,6 +111,15 @@ function _resGroupRows(){
     const gc=named.length;
     const nights=Math.max(1,Math.round((pd(checkOut)-pd(checkIn))/DAY_MS));
     const rate=reg.customRateOverride!=null?Number(reg.customRateOverride):(rt?getRoomRate(rt,gc,checkIn,nights):null);
+    // Split Stay (modules/booking-detail.js) creates a second registration for
+    // the new room -- its checkIn lands exactly on the other segment's
+    // checkOut. Without this, Arrivals/Departures below read that as the
+    // guest checking out of the old room AND a brand new guest checking into
+    // the new one on the same day (Jorge's report 2026-09-29: "en lugar de
+    // dividir la reserva crea una reserva separada"), when really they never
+    // left -- reuses booking-detail.js's own lineage detector (shared global
+    // scope) so both places agree on what counts as a split.
+    const _lineage=typeof _bdSplitLineage==='function'?_bdSplitLineage(reg,bk):null;
     const base={
       room:reg.room||'—',roomType:rt?.name||'—',checkIn,checkOut,rate,
       notes:reg.notes||'',source:bk.leaderName||bk.retreatName||'Group',
@@ -121,6 +130,8 @@ function _resGroupRows(){
       // 2026-09-26) -- excluded from Arrivals/In House/Departures below, but
       // still shown (tagged) in Advanced Search so it's a findable record.
       cancelled:!!reg.cancelled,
+      isSplitContinuation:!!_lineage?.prev, // this segment's checkIn is really just a room change -- not a new arrival
+      isSplitMidStay:!!_lineage?.next,      // this segment's checkOut is really just a room change -- not a real departure
     };
     if(named.length>1&&rt&&_RES_ONE_BED_RT_IDS.includes(rt.id)){
       out.push({...base,name:_joinNames(named.map(g=>g.name)),guestNames:named.map(g=>g.name),notes:reg.notes||named.map(g=>g.notes).filter(Boolean).join(' / ')});
@@ -354,7 +365,7 @@ async function _resBuildMovementView(type){
   const color=isArr?'#0d9488':'#7c3aed';
 
   const rows=_resSortRows([
-    ..._resGroupRows().filter(r=>!r.cancelled&&(isArr?r.checkIn:r.checkOut)===date),
+    ..._resGroupRows().filter(r=>!r.cancelled&&(isArr?(r.checkIn===date&&!r.isSplitContinuation):(r.checkOut===date&&!r.isSplitMidStay))),
     ..._resIndivRows().filter(r=>(isArr?r.checkIn:r.checkOut)===date),
   ]);
   await _resAttachFolioBalances(rows);
