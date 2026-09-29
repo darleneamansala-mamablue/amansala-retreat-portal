@@ -4565,6 +4565,15 @@ function openTeacherEmailModal(){
   const retreat=regSelBk.retreatName||regSelBk.leaderName||'Retreat';
   const dates=`${fmtDate(regSelBk.startDate)} – ${fmtDate(regSelBk.endDate)}`;
   const nights=getNights(regSelBk);
+  // Jorge's report 2026-09-29: "Send to Teacher deberia de mandar el
+  // correo desde ahi, eso tampoco esta configurado" -- this modal's "to"
+  // was never actually set anywhere, so "Open in Email App" always opened
+  // a blank-recipient mailto: and there was no way to send directly from
+  // the app at all. Stash the teacher's email here for both.
+  const modal=document.getElementById('teacherEmailModal');
+  modal.dataset.to=regSelBk.leaderEmail||'';
+  const toLine=document.getElementById('teacherEmailToLine');
+  if(toLine)toLine.textContent=regSelBk.leaderEmail?`To: ${regSelBk.leaderEmail}`:'⚠ No teacher email on file — add one in Edit Booking to send directly.';
   document.getElementById('teacherEmailSub').textContent=name;
   document.getElementById('teacherEmailSubject').value=
     `Your Room Registration Portal — ${retreat} (${dates})`;
@@ -4590,6 +4599,36 @@ function openTeacherEmailApp(){
   const subj=document.getElementById('teacherEmailSubject').value;
   const body=document.getElementById('teacherEmailBody').value;
   window.location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body);
+}
+
+// Plain-text textarea -> simple HTML for send-email.js (Resend requires html,
+// not plain text) -- blank lines become paragraph breaks, single line breaks
+// stay as <br> within a paragraph.
+function _teacherEmailBodyToHtml(text){
+  return(text||'').split(/\n{2,}/).map(p=>`<p>${escHtml(p).replace(/\n/g,'<br>')}</p>`).join('');
+}
+
+// Actually sends the email via the app's own Resend-backed function instead
+// of only offering Copy/mailto: -- Jorge's ask 2026-09-29.
+async function sendTeacherEmailNow(){
+  const modal=document.getElementById('teacherEmailModal');
+  const to=modal.dataset.to||'';
+  if(!to){showToast('No teacher email on file for this retreat — add one in Edit Booking first.');return;}
+  const subj=document.getElementById('teacherEmailSubject').value;
+  const body=document.getElementById('teacherEmailBody').value;
+  const btn=document.getElementById('teacherEmailSendBtn');
+  const orig=btn.textContent;btn.disabled=true;btn.textContent='Sending…';
+  try{
+    const res=await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to,subject:subj,html:_teacherEmailBodyToHtml(body)})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok||data.error)throw new Error(data.error||'Send failed');
+    showToast('Email sent ✓ — '+to);
+    closeModal('teacherEmailModal');
+  }catch(e){
+    showToast('Error: '+(e.message||'Could not send.'));
+  }finally{
+    btn.disabled=false;btn.textContent=orig;
+  }
 }
 
 function copyTeacherEmailAll(){
