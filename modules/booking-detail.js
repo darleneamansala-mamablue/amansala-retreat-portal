@@ -350,7 +350,7 @@ function _bdFolioRowHtml(f){
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-primary btn-sm" onclick="bdCopyGuestLink('${f.folio.payment_token}')">Send to Guest</button>
-        ${isOpen?`<button class="btn btn-secondary btn-sm" onclick="bdCloseFolio('${fid}')">Close</button>`:''}
+        ${isOpen?`<button class="btn btn-secondary btn-sm" onclick="bdCloseFolio('${fid}')">Close</button>`:`<button class="btn btn-secondary btn-sm" onclick="bdReopenFolio('${fid}')">Reopen</button>`}
         <button class="btn btn-danger btn-sm" onclick="bdDeleteFolioRow('${fid}')">Delete</button>
       </div>
     </div>
@@ -469,6 +469,14 @@ async function bdCloseFolio(fid){
   const {error}=await db.from('folios').update({status:'closed'}).eq('id',fid);
   if(error){showToast('Error: '+error.message);return;}
   const f=_bdFolios.find(x=>x.folio.id===fid);
+  await _bdLoadFolios();
+}
+// Jorge's ask 2026-09-29: undo an accidental/premature Close -- reopens a
+// folio so charges can be added/edited and its own payment row shows again.
+async function bdReopenFolio(fid){
+  const {error}=await db.from('folios').update({status:'open'}).eq('id',fid);
+  if(error){showToast('Error: '+error.message);return;}
+  showToast('Folio reopened ✓');
   await _bdLoadFolios();
 }
 
