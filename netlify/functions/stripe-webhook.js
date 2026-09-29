@@ -137,10 +137,19 @@ exports.handler = async (event) => {
       try {
         const supaHdrs = { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` };
         const settRes  = await fetch(
-          `${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1&select=email_guest_enabled,email_guest_subject,email_guest_body,email_staff_enabled,email_staff_to,email_staff_subject,email_staff_body`,
+          `${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1&select=email_guest_enabled,email_guest_subject,email_guest_body,email_extra_night_enabled,email_extra_night_subject,email_extra_night_body,email_staff_enabled,email_staff_to,email_staff_subject,email_staff_body`,
           { headers: supaHdrs }
         );
         const [sett] = settRes.ok ? await settRes.json() : [{}];
+        // Jorge's ask 2026-09-29: Escape (book.html) and Extra Night
+        // (extra-nights.html) get independent guest-confirmation templates.
+        // Both flows already send `source` in the PaymentIntent metadata
+        // (see stripe.js line ~140) — Escape is the fallback/default so any
+        // other/future source keeps the original template unchanged.
+        const isExtraNight = meta.source === 'Extra Night';
+        const guestEnabledKey = isExtraNight ? 'email_extra_night_enabled' : 'email_guest_enabled';
+        const guestSubjectKey = isExtraNight ? 'email_extra_night_subject' : 'email_guest_subject';
+        const guestBodyKey    = isExtraNight ? 'email_extra_night_body'    : 'email_guest_body';
 
         const nights = Math.max(1, Math.round((new Date(meta.checkOut) - new Date(meta.checkIn)) / 86400000));
         const amount = `$${(pi.amount / 100).toFixed(2)} USD`;
@@ -157,8 +166,12 @@ exports.handler = async (event) => {
         };
         const applyVars = (tpl, v) => tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => v[k] ?? '');
 
-        const defaultGuestSubject = `Your Amansala reservation – ${vars.roomType}`;
-        const defaultGuestBody    = `<p>Hi ${vars.firstName},</p><p>Your reservation at <strong>Amansala Tulum</strong> is confirmed!</p><p><strong>Room type:</strong> ${vars.roomType}<br><strong>Check-in:</strong> ${vars.checkIn}<br><strong>Check-out:</strong> ${vars.checkOut}<br><strong>Nights:</strong> ${vars.nights}<br><strong>Amount paid:</strong> ${vars.amount}</p><p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
+        const defaultGuestSubject = isExtraNight
+          ? `Your Amansala extra night is confirmed – ${vars.roomType}`
+          : `Your Amansala reservation – ${vars.roomType}`;
+        const defaultGuestBody    = isExtraNight
+          ? `<p>Hi ${vars.firstName},</p><p>Your extra night at <strong>Amansala Tulum</strong> is confirmed!</p><p><strong>Room type:</strong> ${vars.roomType}<br><strong>Check-in:</strong> ${vars.checkIn}<br><strong>Check-out:</strong> ${vars.checkOut}<br><strong>Nights:</strong> ${vars.nights}<br><strong>Amount paid:</strong> ${vars.amount}</p><p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`
+          : `<p>Hi ${vars.firstName},</p><p>Your reservation at <strong>Amansala Tulum</strong> is confirmed!</p><p><strong>Room type:</strong> ${vars.roomType}<br><strong>Check-in:</strong> ${vars.checkIn}<br><strong>Check-out:</strong> ${vars.checkOut}<br><strong>Nights:</strong> ${vars.nights}<br><strong>Amount paid:</strong> ${vars.amount}</p><p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
         const defaultStaffSubject = `New booking: ${vars.firstName} ${vars.lastName} – ${vars.roomType}`;
         const defaultStaffBody    = `<p><strong>New booking received!</strong></p><p><strong>Guest:</strong> ${vars.firstName} ${vars.lastName}<br><strong>Email:</strong> ${vars.email}<br><strong>Phone:</strong> ${vars.phone}<br><strong>Room type:</strong> ${vars.roomType}<br><strong>Check-in:</strong> ${vars.checkIn}<br><strong>Check-out:</strong> ${vars.checkOut}<br><strong>Nights:</strong> ${vars.nights}<br><strong>Amount paid:</strong> ${vars.amount}</p>`;
 
@@ -168,13 +181,13 @@ exports.handler = async (event) => {
           body:    JSON.stringify({ from: 'Amansala <retreats@amansala.com>', to: [to], subject, html }),
         });
 
-        // Guest confirmation
-        if (sett?.email_guest_enabled !== false) {
-          const subj = applyVars(sett?.email_guest_subject || defaultGuestSubject, vars);
-          const body = applyVars(sett?.email_guest_body    || defaultGuestBody,    vars);
+        // Guest confirmation — Escape vs Extra Night template, see isExtraNight above
+        if (sett?.[guestEnabledKey] !== false) {
+          const subj = applyVars(sett?.[guestSubjectKey] || defaultGuestSubject, vars);
+          const body = applyVars(sett?.[guestBodyKey]    || defaultGuestBody,    vars);
           const gr   = await sendResend(meta.email, subj, body);
           if (!gr.ok) console.warn('[stripe-webhook] Guest email failed:', await gr.text());
-          else        console.log('[stripe-webhook] Guest email sent to', meta.email);
+          else        console.log('[stripe-webhook] Guest email sent to', meta.email, '(source:', meta.source || 'Escape', ')');
         }
 
         // Staff notification

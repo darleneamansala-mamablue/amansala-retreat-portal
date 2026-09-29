@@ -381,6 +381,7 @@ function bldSaveSoftHold(){
   } else {
     const newBk={id:uid(),row:effectiveRow,leaderName:leader,leaderEmail,retreatName:name,startDate:start,endDate:end,pax:bldPaxN,status:'requested',notes:bldNotesVal,roomAssignments:[],blockedRooms:[]};
     AppData.bookings.push(newBk);bldCurBkId=newBk.id;
+    sendGroupConfirmationEmail(newBk);
   }
   const sel=bldGetSelected();
   const obj={id:bldSelId||uid(),bkId:bldCurBkId,leaderName:leader,leaderEmail,retreatName:name,venRow,startDate:start,endDate:end,estPax:bldPaxN,addOns:sel,notes:bldNotesVal};
@@ -447,6 +448,7 @@ function bldNext1(){
   } else {
     const newBk={id:uid(),row:effectiveRow,leaderName:leader,leaderEmail,retreatName:name,startDate:start,endDate:end,pax:bldPaxN,status:'contract_sent',notes:bldNotesVal,roomAssignments:[],blockedRooms:[]};
     AppData.bookings.push(newBk);bldCurBkId=newBk.id;
+    sendGroupConfirmationEmail(newBk);
   }
   // Save build
   const sel=bldGetSelected();

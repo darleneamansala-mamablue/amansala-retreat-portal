@@ -1641,6 +1641,39 @@ function renderVmHistory(bkId){
     </div>`;
   }).join('')+`<div style="font-size:11px;color:#ccc;text-align:center;padding:8px 0">${log.length} event${log.length!==1?'s':''} total</div>`;
 }
+// Sends the "Pre-Arrival Groups" confirmation email to a retreat/group
+// leader the moment their booking is first created (Jorge's ask 2026-09-29:
+// "Automático al crear la reserva de grupo" — "Ambos deben mandar el
+// correo", i.e. both the Venues "New Booking" flow and the Builder "New
+// Retreat" flow). A group booking has no guest-facing Stripe payment event
+// (unlike Escape/Extra Night), so this fires client-side instead of from
+// stripe-webhook.js — non-fatal on failure, never blocks the save. Template
+// lives in booking_engine_settings.email_pre_arrival_group_* (same table/
+// pattern as the other Booking Engine email slots).
+async function sendGroupConfirmationEmail(bk){
+  if(!bk?.leaderEmail)return;
+  try{
+    const{data:sett}=await db.from('booking_engine_settings').select('email_pre_arrival_group_enabled,email_pre_arrival_group_subject,email_pre_arrival_group_body').eq('id',1).maybeSingle();
+    if(sett&&sett.email_pre_arrival_group_enabled===false)return;
+    const nights=Math.max(1,Math.round((pd(bk.endDate)-pd(bk.startDate))/86400000));
+    const vars={
+      firstName:(bk.leaderName||'').split(' ')[0]||'',
+      lastName:(bk.leaderName||'').split(' ').slice(1).join(' ')||'',
+      retreatName:bk.retreatName||bk.leaderName||'',
+      checkIn:fmtDate(bk.startDate),checkOut:fmtDate(bk.endDate),
+      nights:String(nights),pax:String(bk.pax||''),
+      season:isLowSeason(bk.startDate)?'Low Season':'High Season',
+      email:bk.leaderEmail||'',phone:bk.leaderPhone||'',
+    };
+    const applyVars=(tpl,v)=>tpl.replace(/\{\{(\w+)\}\}/g,(_,k)=>v[k]??'');
+    const defSubject='Your Amansala group retreat – {{retreatName}}';
+    const defBody=`<p>Hi {{firstName}},</p><p>Thank you for booking your group retreat with <strong>Amansala Tulum</strong>!</p><p><strong>Retreat:</strong> {{retreatName}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Guests:</strong> {{pax}}<br><strong>Season:</strong> {{season}}</p><p>Our team will follow up shortly with your group rate details and next steps.</p><p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
+    const subj=applyVars(sett?.email_pre_arrival_group_subject||defSubject,vars);
+    const body=applyVars(sett?.email_pre_arrival_group_body||defBody,vars);
+    const res=await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:bk.leaderEmail,subject:subj,html:body})});
+    if(!res.ok)console.warn('[sendGroupConfirmationEmail] send failed',await res.text());
+  }catch(e){console.warn('[sendGroupConfirmationEmail]',e.message);}
+}
 function venSave(){const lead=document.getElementById('vm-leader').value.trim(),ret=document.getElementById('vm-retreat').value.trim(),leaderEmail=document.getElementById('vm-email').value.trim(),leaderCcEmail=document.getElementById('vm-cc-email').value.trim(),leaderPhone=document.getElementById('vm-phone').value.trim(),start=document.getElementById('vm-start').value,end=document.getElementById('vm-end').value,row=document.getElementById('vm-row').value,pax=parseInt(document.getElementById('vm-pax').value)||0,status=document.getElementById('vm-status').value,notes=document.getElementById('vm-notes').value.trim(),docLink=document.getElementById('vm-doc-link').value.trim(),mealPlan=document.getElementById('vm-mealplan')?.value||'standard';if(!lead&&!ret){alert('Enter a leader or retreat name.');return;}if(!start||!end){alert('Select dates.');return;}if(start>end){alert('Departure must be after arrival.');return;}if(venEditId){const bk=AppData.bookings.find(b=>b.id===venEditId);const prevStatus=bk.status,prevStart=bk.startDate,prevEnd=bk.endDate,prevPax=bk.pax;
   // Intercept cancellation: show policy modal instead of saving directly
   if(status==='cancelled'&&prevStatus!=='cancelled'){
@@ -1681,10 +1714,12 @@ function venSave(){const lead=document.getElementById('vm-leader').value.trim(),
   let assignedRow=row;
   const rowConflict=AppData.bookings.some(b=>b.row===row&&datesOverlap(start,end,b.startDate,b.endDate));
   if(rowConflict){assignedRow=findAvailableRow(start,end,null);showToast(`Dates conflict in ${row} — placed in ${assignedRow} instead.`);}
-  AppData.bookings.push({id:uid(),leaderName:lead,retreatName:ret,leaderEmail,leaderCcEmail,leaderPhone,startDate:start,endDate:end,row:assignedRow,pax,status,notes,docLink,mealPlan,roomAssignments:[]});
-  const savedBkId=AppData.bookings[AppData.bookings.length-1]?.id;const savedName=lead||ret;
+  const newBk={id:uid(),leaderName:lead,retreatName:ret,leaderEmail,leaderCcEmail,leaderPhone,startDate:start,endDate:end,row:assignedRow,pax,status,notes,docLink,mealPlan,roomAssignments:[]};
+  AppData.bookings.push(newBk);
+  const savedBkId=newBk.id;const savedName=lead||ret;
   saveAll();closeModal('venModal');venBuild();
   logActivity('Booking created',`${savedName} · ${fmtDate(start)} – ${fmtDate(end)} · ${assignedRow}`,savedBkId);
+  sendGroupConfirmationEmail(newBk);
 }
   showToast(venEditId?'Updated.':'Booking added.');}
 function venDelete(){
