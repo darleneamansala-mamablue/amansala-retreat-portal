@@ -158,8 +158,30 @@ function _bdFolioTotal(f){return f.items.reduce((s,i)=>s+_bdItemTotal(i),0);}
 // what the guest appeared to owe. Every folio's real balance counts here.
 function _bdBalanceDue(){return _bdFolios.reduce((s,f)=>s+_bdFolioTotal(f),0);}
 
+// Detects a Split Stay's other half(s) -- two registrations under the same
+// booking where one's checkout is the other's checkin (using the same
+// checkIn||bk.startDate / checkOut||bk.endDate fallback _bdSubject() uses,
+// since the FIRST segment of a split never gets its own check_in set).
+// Jorge's report 2026-09-29: after splitting, neither half showed any sign
+// of the other -- staff had no way to tell why TEST CYAN had two entries.
+function _bdSplitLineage(reg,bk){
+  if(!reg||!bk)return null;
+  const eff=r=>({in:r.checkIn||bk.startDate,out:r.checkOut||bk.endDate});
+  const me=eff(reg);
+  let prev=null,next=null;
+  AppData.regs.filter(r=>r.bookingId===bk.id&&r.id!==reg.id).forEach(r=>{
+    const s=eff(r);
+    if(s.out===me.in)prev=r;
+    if(s.in===me.out)next=r;
+  });
+  return(prev||next)?{prev,next}:null;
+}
+
 function _bdRender(){
   const subj=_bdSubject();if(!subj)return;
+  const _bdReg=_bdKind==='reg'?AppData.regs.find(r=>r.id===_bdId):null;
+  const _bdBk=_bdReg?AppData.bookings.find(b=>b.id===_bdReg.bookingId):null;
+  const _splitLineage=_bdReg?_bdSplitLineage(_bdReg,_bdBk):null;
   const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
   const roomTotal=nights*(subj.rate||0);
   const balanceDue=_bdBalanceDue();
@@ -209,6 +231,7 @@ function _bdRender(){
           ${subj.retreatLabel!=null?`<tr><td style="color:var(--muted);padding:5px 0">Retreat</td><td style="padding:5px 0"><span onclick="_bdGoToRegistration('${subj.retreatBkId}')" title="Open this retreat's Registration tab" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(subj.retreatLabel)}</span></td></tr>`:''}
           ${subj.sourceLabel?`<tr><td style="color:var(--muted);padding:5px 0">Source</td><td style="padding:5px 0;color:#1d4ed8;font-weight:600">${escHtml(subj.sourceLabel)}</td></tr>`:''}
           <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${escHtml(subj.room||'—')}</td></tr>
+          ${_splitLineage?`<tr><td style="color:var(--muted);padding:5px 0">Split Stay</td><td style="padding:5px 0;font-size:12px">${_splitLineage.prev?`<span onclick="openBookingDetailForReg('${_splitLineage.prev.id}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">Room ${escHtml(_splitLineage.prev.room)}</span> until ${fmtDate(subj.checkIn)} → `:''}<strong>this room</strong>${_splitLineage.next?` → <span onclick="openBookingDetailForReg('${_splitLineage.next.id}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">Room ${escHtml(_splitLineage.next.room)}</span> from ${fmtDate(subj.checkOut)}`:''}</td></tr>`:''}
           <tr><td style="color:var(--muted);padding:5px 0">Rate</td><td style="padding:5px 0;color:#059669;font-weight:700">${subj.rate!=null?fmt$(subj.rate)+'/night':'—'}</td></tr>
         </table>
         <div style="margin-top:10px">
@@ -486,6 +509,22 @@ async function bdReopenFolio(fid){
   if(error){showToast('Error: '+error.message);return;}
   showToast('Folio reopened ✓');
   await _bdLoadFolios();
+}
+
+// _bdLoadFolios() auto-creates a folio for a registration the first time its
+// Booking Detail is opened -- so by the time anyone clicks Delete there's
+// almost always at least one folio already pointing at that registration_id.
+// folios.registration_id is a foreign key with no ON DELETE CASCADE, so
+// deleting the registration first (Jorge's report 2026-09-29: deleting a
+// Split Stay segment failed silently) violates that constraint. Delete the
+// registration's own folios/folio_items first, same order bdDeleteFolioRow
+// already uses for a single folio.
+async function _bdDeleteFoliosForReg(regId){
+  const {data:folios}=await db.from('folios').select('id').eq('registration_id',regId);
+  const ids=(folios||[]).map(f=>f.id);
+  if(!ids.length)return;
+  await db.from('folio_items').delete().in('folio_id',ids);
+  await db.from('folios').delete().in('id',ids);
 }
 
 async function bdDeleteFolioRow(fid){
@@ -785,6 +824,7 @@ async function bdDeleteReservation(){
   if(_bk&&(_bk.bookingType!=='room_only'||_otherRegsCount>0)){
     const names=(reg.guests||[]).map(g=>g.name).filter(Boolean).join(', ');
     if(!confirm(`Remove ${names||'this guest'} from room ${reg.room}?\n\nOnly this room's registration is removed — the rest of ${_bk.leaderName||_bk.retreatName||'the retreat'} is not touched.`))return;
+    await _bdDeleteFoliosForReg(reg.id);
     const {error:rErr}=await db.from('registrations').delete().eq('id',reg.id);
     if(rErr){showToast('Error: '+rErr.message);return;}
     AppData.regs=AppData.regs.filter(r=>r.id!==reg.id);
@@ -798,6 +838,7 @@ async function bdDeleteReservation(){
   if(!confirm('Cancel this reservation? This action will mark the booking as cancelled.'))return;
   const {error:bErr}=await db.from('bookings').update({status:'cancelled'}).eq('id',bookingId);
   if(bErr){showToast('Error: '+bErr.message);return;}
+  await _bdDeleteFoliosForReg(reg.id);
   const {error:rErr}=await db.from('registrations').delete().eq('id',reg.id);
   if(rErr){showToast('Error: '+rErr.message);return;}
   const bk=AppData.bookings.find(b=>b.id===bookingId);if(bk)bk.status='cancelled';
