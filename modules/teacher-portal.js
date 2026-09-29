@@ -63,7 +63,11 @@ function regSearchInput(){
     const hid=document.getElementById('regRetreatSel');
     if(hid&&hid.value){hid.value='';regSelBk=null;regOnRetreat();}
   }
-  const opts=AppData.bookings.filter(b=>b.status!=='cancelled').sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||'')).filter(bk=>{
+  // Room Only bookings (walk-ins, extra nights) have no retreat/teacher data
+  // at all -- they don't belong in a search meant for picking a RETREAT
+  // (Jorge's report 2026-09-29: an extra-night stay like "Katie McClelland
+  // Nov 11–12" was showing up here right next to real retreats).
+  const opts=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.bookingType!=='room_only').sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||'')).filter(bk=>{
     const label=`${(bk.leaderName||bk.retreatName||'')} ${fmtDate(bk.startDate)} ${fmtDate(bk.endDate)}`.toLowerCase();
     return label.includes(q);
   });
@@ -4942,7 +4946,7 @@ function buildRetreatSchedulesPanel(){
   // who has and hasn't submitted a schedule flagged in red so it's obvious
   // at a glance who still needs to be chased.
   const todayStr=fmtISO(new Date());
-  const upcoming=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.startDate&&b.startDate>=todayStr)
+  const upcoming=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.bookingType!=='room_only'&&b.startDate&&b.startDate>=todayStr)
     .sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
   const missingCount=upcoming.filter(b=>!b.scheduleRequest?.submittedAt).length;
   const overviewRows=upcoming.map(b=>{

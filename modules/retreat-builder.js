@@ -141,7 +141,7 @@ function bldListRender(){
   recoverBuildBookings();
   // Merge builds + any bookings not yet linked to a build
   const linkedBkIds=new Set(builds.map(b=>b.bkId).filter(Boolean));
-  const unlinked=AppData.bookings.filter(bk=>!linkedBkIds.has(bk.id)&&bk.status!=='cancelled')
+  const unlinked=AppData.bookings.filter(bk=>!linkedBkIds.has(bk.id)&&bk.status!=='cancelled'&&bk.bookingType!=='room_only')
     .map(bk=>({_fromBooking:true,id:null,bkId:bk.id,leaderName:bk.leaderName,retreatName:bk.retreatName,startDate:bk.startDate,estPax:bk.pax,venRow:bk.row,notes:bk.notes||''}));
   const allItems=[...builds,...unlinked];
   if(allItems.length===0){el.innerHTML='<div style="padding:14px 22px;font-size:12.5px;color:var(--muted);font-style:italic">No saved retreats yet.</div>';return;}
@@ -1293,7 +1293,7 @@ function buildDashboard(){
   const retPct=totalGuests>0?Math.round(returningCount/totalGuests*100):0;
   const avgYrs=yearsCount>0?(totalYears/yearsCount).toFixed(1):'—';
   // Rebook rate: leaders who appear in 2+ bookings
-  const leaderCounts={};AppData.bookings.filter(b=>b.status!=='cancelled').forEach(b=>{const k=(b.leaderName||'').trim().toLowerCase();if(k){leaderCounts[k]=(leaderCounts[k]||0)+1;}});
+  const leaderCounts={};AppData.bookings.filter(b=>b.status!=='cancelled'&&b.bookingType!=='room_only').forEach(b=>{const k=(b.leaderName||'').trim().toLowerCase();if(k){leaderCounts[k]=(leaderCounts[k]||0)+1;}});
   const totalLeaders=Object.keys(leaderCounts).length;
   const rebookedLeaders=Object.values(leaderCounts).filter(c=>c>1).length;
   const rebookPct=totalLeaders>0?Math.round(rebookedLeaders/totalLeaders*100):0;
