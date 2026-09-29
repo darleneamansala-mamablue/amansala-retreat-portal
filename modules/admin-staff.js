@@ -213,6 +213,21 @@ function logActivity(action,detail,bkId){
   log.unshift(entry);
   if(log.length>1000)log.splice(1000);
   localStorage.setItem('amansala_activity_log',JSON.stringify(log));
+  // Also persist to Supabase (fire-and-forget, never blocks the caller) --
+  // localStorage alone never left the browser that performed the action, so
+  // Jorge couldn't see what staff did to a reservation from Booking Detail
+  // on a different device (his report 2026-09-29: "no veo el log de lo que
+  // hicieron en esas reservas"). Requires this one-time SQL:
+  //   CREATE TABLE IF NOT EXISTS activity_log (
+  //     id text primary key, created_at timestamptz default now(),
+  //     user_name text, user_role text, action text, detail text, booking_id text
+  //   );
+  if(typeof db!=='undefined'){
+    db.from('activity_log').insert({
+      id:entry.id,created_at:entry.ts,user_name:entry.userName,user_role:entry.userRole,
+      action:entry.action,detail:entry.detail,booking_id:entry.bkId,
+    }).then(({error})=>{if(error)console.warn('[logActivity] Supabase insert failed',error.message);});
+  }
 }
 
 function buildActivityLog(){
