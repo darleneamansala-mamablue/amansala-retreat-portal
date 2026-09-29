@@ -249,6 +249,24 @@ async function bdUndoSplit(){
       if(e2)throw new Error(e2.message);
       bk.blockedRooms=updatedBlocked;
     }
+    // Cancel the removed room's own Cloudbeds reservation, if it has one --
+    // same cleanup blockSave() already does when a room is unblocked
+    // (modules/room-blocking.js). Jorge's report 2026-09-29: "cuando quito
+    // el split la reserva se queda ahi" -- Undo Split deleted the portal
+    // registration but left the room's CB reservation orphaned.
+    removedRooms.forEach(rm=>{
+      if(stillUsed(rm))return; // another active reg still needs this room's CB link
+      const rid=(bk.cbReservationIds||{})[rm];
+      if(!rid)return;
+      fetch(`${CLOUDBEDS_PROXY}?action=cancelReservation`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reservationId:rid})})
+        .then(res=>res.json()).then(d=>console.log('[CB cancel undo-split]',rm,rid,JSON.stringify(d).slice(0,150)))
+        .catch(e=>console.warn('[CB cancel undo-split]',e));
+      delete bk.cbReservationIds[rm];
+      if(bk.cbGuestIds)delete bk.cbGuestIds[rm];
+      if(bk.cbAdjustmentIds)delete bk.cbAdjustmentIds[rm];
+      if(bk.cbNoteIds)delete bk.cbNoteIds[rm];
+    });
+    saveAll();
     showToast('Split undone ✓');
     _bdId=survivor.id;
     if(typeof venBuild==='function')venBuild();
