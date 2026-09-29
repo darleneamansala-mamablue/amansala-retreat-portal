@@ -180,6 +180,12 @@ function _bdRender(){
   // y en un reporte salen cancelados" -- kept fully separate from Delete, which
   // still hard-removes the registration and is untouched.
   if(_bdKind==='reg'&&!subj.cancelled) headerBtns+=`<button onclick="bdCancelReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Cancel</button>`;
+  // "Split Stay" — a guest changes physical room mid-stay without it being a
+  // paid Upgrade (Jorge's ask 2026-09-29: "unos días está en un cuarto y
+  // otros días en otro, eso no lo tenemos"). Room Only has no retreat room
+  // list to split within (its one room IS the whole booking), so this only
+  // makes sense for a retreat's own registration.
+  if(_bdKind==='reg'&&!subj.cancelled&&subj.bookingType!=='room_only') headerBtns+=`<button onclick="bdOpenSplitStay()" style="${hBtnS}">Split Stay</button>`;
   headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Delete</button>`;
 
   document.getElementById('bdHdr').innerHTML=`
@@ -620,6 +626,129 @@ async function bdCancelReservation(){
   if(typeof venBuild==='function')venBuild();
   if(typeof rcBuild==='function')rcBuild();
   if(typeof resRefresh==='function')resRefresh();
+}
+
+// ── Split Stay — a guest moves to a DIFFERENT physical room mid-stay without
+// it being a paid Upgrade (Jorge's ask 2026-09-29: "unos días está en un
+// cuarto y otros días en otro, eso no lo tenemos"). Shortens this reg's own
+// stay to end at the split date, then creates a SECOND registration for the
+// new room covering the rest of the stay — _calcRoomRevenue already bills
+// per physical room, so two regs under the same booking just work, no
+// billing-engine change needed. The new segment's rate is frozen at the SAME
+// per-night rate this reg was already paying (same principle as
+// rcMoveRoom's cross-category protection, added earlier today) so switching
+// rooms mid-stay never silently changes what the guest owes.
+function bdOpenSplitStay(){
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return;
+  const checkIn=reg.checkIn||bk.startDate,checkOut=reg.checkOut||bk.endDate;
+  const minSplit=fmtISO(addDays(pd(checkIn),1));
+  const maxSplit=fmtISO(addDays(pd(checkOut),-1));
+  if(pd(minSplit)>pd(maxSplit)){showToast('This stay is too short to split (needs at least 2 nights).');return;}
+
+  let modal=document.getElementById('bdSplitModal');
+  if(!modal){
+    modal=document.createElement('div');
+    modal.id='bdSplitModal';
+    modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;align-items:center;justify-content:center';
+    modal.innerHTML=`<div style="background:#fff;border-radius:14px;width:420px;max-width:96vw;max-height:90vh;overflow-y:auto;padding:28px;box-shadow:0 24px 80px rgba(0,0,0,.4)">
+      <div style="font-size:16px;font-weight:800;color:#111827;margin-bottom:4px">Split Stay</div>
+      <div id="bdSplitSub" style="font-size:13px;color:#6b7280;margin-bottom:18px"></div>
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Moves to a new room starting</label>
+      <input id="bd-split-date" type="date" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:14px">
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">New room</label>
+      <select id="bd-split-room" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:8px"></select>
+      <div id="bdSplitErr" style="color:#dc2626;font-size:12px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button onclick="document.getElementById('bdSplitModal').style.display='none'" style="padding:8px 18px;border:1.5px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:13px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">Cancel</button>
+        <button id="bdSplitBtn" onclick="bdConfirmSplitStay()" style="padding:8px 20px;border:none;border-radius:8px;background:#2d6a6a;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">Split</button>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+  }
+  const names=(reg.guests||[]).map(g=>g.name).filter(Boolean).join(' & ');
+  document.getElementById('bdSplitSub').textContent=`${names||'Guest'} — currently room ${reg.room} (${fmtDate(checkIn)}–${fmtDate(checkOut)})`;
+  const dateEl=document.getElementById('bd-split-date');
+  dateEl.min=minSplit;dateEl.max=maxSplit;dateEl.value=minSplit;
+  const roomSel=document.getElementById('bd-split-room');
+  const opts=[];
+  AppData.roomTypes.forEach(rt=>{
+    const rooms=(rt.rooms||[]).filter(r=>!roomCodesEqual(r,reg.room));
+    if(!rooms.length)return;
+    opts.push(`<optgroup label="${escHtml(rt.name)}">${rooms.map(r=>`<option value="${escHtml(r)}">${escHtml(r)}</option>`).join('')}</optgroup>`);
+  });
+  roomSel.innerHTML=opts.join('');
+  document.getElementById('bdSplitErr').textContent='';
+  const btn=document.getElementById('bdSplitBtn');btn.disabled=false;btn.textContent='Split';
+  modal.style.display='flex';
+}
+async function bdConfirmSplitStay(){
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return;
+  const errEl=document.getElementById('bdSplitErr');
+  const splitDate=document.getElementById('bd-split-date')?.value;
+  const newRoom=document.getElementById('bd-split-room')?.value;
+  if(!splitDate||!newRoom){errEl.textContent='Pick a date and a room.';return;}
+  const checkIn=reg.checkIn||bk.startDate,checkOut=reg.checkOut||bk.endDate;
+  if(!(splitDate>checkIn&&splitDate<checkOut)){errEl.textContent='The split date must fall strictly within the current stay.';return;}
+  // Same conflict check rcMoveRoom uses (modules/venues.js) -- is the new
+  // room already blocked by another booking for any of those nights?
+  const conflict=AppData.bookings.find(other=>
+    other.id!==bk.id&&other.status!=='cancelled'&&
+    roomListIncludes(other.blockedRooms,newRoom)&&
+    datesOverlap(splitDate,checkOut,other.startDate,other.endDate)
+  );
+  if(conflict){errEl.textContent=`Room ${newRoom} is already blocked by ${conflict.leaderName||conflict.retreatName} for part of those dates.`;return;}
+
+  const btn=document.getElementById('bdSplitBtn');
+  const origLabel=btn.textContent;btn.disabled=true;btn.textContent='Splitting…';
+  try{
+    const newRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(newRoom));
+    const currentRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(reg.room));
+    const gc=(reg.guests||[]).filter(g=>g.name&&!g.cancelled).length||1;
+    const origNights=Math.max(1,Math.round((pd(checkOut)-pd(checkIn))/DAY_MS));
+    const carryRate=reg.customRateOverride!=null?reg.customRateOverride:(currentRt?getRoomRate(currentRt,gc,checkIn,origNights):null);
+
+    const {error:e1}=await db.from('registrations').update({check_out:splitDate}).eq('id',reg.id);
+    if(e1)throw new Error(e1.message);
+
+    const newRegPayload={
+      booking_id:bk.id,room:newRoom,room_type_id:newRt?.id||null,
+      guests:JSON.parse(JSON.stringify(reg.guests||[])),
+      check_in:splitDate,check_out:checkOut,
+      checked_in_at:reg.checkedInAt||null,
+      custom_rate_override:carryRate,
+      stripe_customer_id:reg.stripeCustomerId||null,
+      stripe_payment_method_id:reg.stripePaymentMethodId||null,
+      stripe_card_brand:reg.stripeCardBrand||null,
+      stripe_card_last4:reg.stripeCardLast4||null,
+      notes:reg.notes||'',
+    };
+    const {data:createdRows,error:e2}=await db.from('registrations').insert(newRegPayload).select();
+    if(e2)throw new Error(e2.message);
+    const created=createdRows?.[0];
+
+    if(!roomListIncludes(bk.blockedRooms,newRoom)){
+      const updatedBlocked=[...(bk.blockedRooms||[]),newRoom];
+      const {error:e3}=await db.from('bookings').update({blocked_rooms:updatedBlocked}).eq('id',bk.id);
+      if(e3)throw new Error(e3.message);
+      bk.blockedRooms=updatedBlocked;
+    }
+
+    reg.checkOut=splitDate;
+    if(created)AppData.regs.push(sqlRegToApp(created));
+    saveAll();
+    if(typeof logActivity==='function')logActivity('Stay split',`${reg.room} → ${newRoom} from ${fmtDate(splitDate)}`,bk.id);
+    showToast(`Split ✓ — moves to ${newRoom} on ${fmtDate(splitDate)}`);
+    document.getElementById('bdSplitModal').style.display='none';
+    _bdRender();
+    if(typeof venBuild==='function')venBuild();
+    if(typeof rcBuild==='function')rcBuild();
+    if(typeof resRefresh==='function')resRefresh();
+  }catch(e){
+    errEl.textContent=e.message||'Something went wrong.';
+    btn.disabled=false;btn.textContent=origLabel;
+  }
 }
 
 async function bdDeleteReservation(){
