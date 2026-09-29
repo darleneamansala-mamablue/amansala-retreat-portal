@@ -158,23 +158,87 @@ function _bdFolioTotal(f){return f.items.reduce((s,i)=>s+_bdItemTotal(i),0);}
 // what the guest appeared to owe. Every folio's real balance counts here.
 function _bdBalanceDue(){return _bdFolios.reduce((s,f)=>s+_bdFolioTotal(f),0);}
 
-// Detects a Split Stay's other half(s) -- two registrations under the same
-// booking where one's checkout is the other's checkin (using the same
-// checkIn||bk.startDate / checkOut||bk.endDate fallback _bdSubject() uses,
-// since the FIRST segment of a split never gets its own check_in set).
-// Jorge's report 2026-09-29: after splitting, neither half showed any sign
-// of the other -- staff had no way to tell why TEST CYAN had two entries.
-function _bdSplitLineage(reg,bk){
-  if(!reg||!bk)return null;
+// Walks a Split Stay's full chain of registrations under the same booking --
+// not just this reg's immediate neighbor(s) -- by following checkout===checkin
+// links backward and forward (using the same checkIn||bk.startDate /
+// checkOut||bk.endDate fallback _bdSubject() uses, since the FIRST segment of
+// a split never gets its own check_in set). Returns [reg] alone when it isn't
+// part of a split. Jorge's ask 2026-09-29: the Period/nights shown for one
+// segment only ("1 night") looked wrong when the guest's real stay spans
+// several rooms -- this is what lets the render show the FULL stay too.
+function _bdSplitChain(reg,bk){
+  if(!reg||!bk)return[reg];
   const eff=r=>({in:r.checkIn||bk.startDate,out:r.checkOut||bk.endDate});
-  const me=eff(reg);
-  let prev=null,next=null;
-  AppData.regs.filter(r=>r.bookingId===bk.id&&r.id!==reg.id).forEach(r=>{
-    const s=eff(r);
-    if(s.out===me.in)prev=r;
-    if(s.in===me.out)next=r;
-  });
-  return(prev||next)?{prev,next}:null;
+  const all=AppData.regs.filter(r=>r.bookingId===bk.id);
+  let chain=[reg],cur=reg;
+  while(true){
+    const me=eff(cur);
+    const prev=all.find(r=>!chain.includes(r)&&eff(r).out===me.in);
+    if(!prev)break;
+    chain.unshift(prev);cur=prev;
+  }
+  cur=reg;
+  while(true){
+    const me=eff(cur);
+    const next=all.find(r=>!chain.includes(r)&&eff(r).in===me.out);
+    if(!next)break;
+    chain.push(next);cur=next;
+  }
+  return chain;
+}
+// Detects a Split Stay's immediate neighbor(s) -- Jorge's report 2026-09-29:
+// after splitting, neither half showed any sign of the other -- staff had no
+// way to tell why TEST CYAN had two entries.
+function _bdSplitLineage(reg,bk){
+  const chain=_bdSplitChain(reg,bk);
+  if(chain.length<2)return null;
+  const idx=chain.indexOf(reg);
+  return{prev:chain[idx-1]||null,next:chain[idx+1]||null};
+}
+
+// Undoes a Split Stay -- Jorge's ask 2026-09-29: "como cancelo el split".
+// Keeps the EARLIEST segment (the original room), stretches its check_out
+// back to cover the whole chain, and deletes every other segment (folios
+// first, same FK reason as bdDeleteReservation) -- also drops any room that
+// split added to blocked_rooms and nothing else still uses.
+async function bdUndoSplit(){
+  if(_bdKind!=='reg')return;
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return;
+  const chain=_bdSplitChain(reg,bk);
+  if(chain.length<2){showToast('This reservation is not part of a split.');return;}
+  const eff=r=>({in:r.checkIn||bk.startDate,out:r.checkOut||bk.endDate});
+  const survivor=chain[0];
+  const toRemove=chain.slice(1);
+  const fullOut=eff(chain[chain.length-1]).out;
+  if(!confirm(`Undo this split?\n\nRoom${toRemove.length>1?'s':''} ${toRemove.map(r=>r.room).join(', ')} will be removed, and room ${survivor.room} will cover the whole stay again through ${fmtDate(fullOut)}.`))return;
+  try{
+    for(const r of toRemove){
+      await _bdDeleteFoliosForReg(r.id);
+      const {error}=await db.from('registrations').delete().eq('id',r.id);
+      if(error)throw new Error(error.message);
+    }
+    const {error:e1}=await db.from('registrations').update({check_out:fullOut}).eq('id',survivor.id);
+    if(e1)throw new Error(e1.message);
+    AppData.regs=AppData.regs.filter(r=>!toRemove.some(x=>x.id===r.id));
+    survivor.checkOut=fullOut;
+    const removedRooms=[...new Set(toRemove.map(r=>r.room))];
+    const stillUsed=room=>AppData.regs.some(r=>r.bookingId===bk.id&&roomCodesEqual(r.room,room));
+    const updatedBlocked=(bk.blockedRooms||[]).filter(rm=>!removedRooms.some(x=>roomCodesEqual(x,rm))||stillUsed(rm));
+    if(updatedBlocked.length!==(bk.blockedRooms||[]).length){
+      const {error:e2}=await db.from('bookings').update({blocked_rooms:updatedBlocked}).eq('id',bk.id);
+      if(e2)throw new Error(e2.message);
+      bk.blockedRooms=updatedBlocked;
+    }
+    showToast('Split undone ✓');
+    _bdId=survivor.id;
+    if(typeof venBuild==='function')venBuild();
+    if(typeof rcBuild==='function')rcBuild();
+    if(typeof resRefresh==='function')resRefresh();
+    await _bdLoadFolios();
+  }catch(e){
+    showToast('Error: '+(e.message||'Something went wrong.'));
+  }
 }
 
 function _bdRender(){
@@ -182,6 +246,17 @@ function _bdRender(){
   const _bdReg=_bdKind==='reg'?AppData.regs.find(r=>r.id===_bdId):null;
   const _bdBk=_bdReg?AppData.bookings.find(b=>b.id===_bdReg.bookingId):null;
   const _splitLineage=_bdReg?_bdSplitLineage(_bdReg,_bdBk):null;
+  // Jorge's ask 2026-09-29: "en el total de noches se deberia de ver toda su
+  // estancia no solo las partes del split" -- Period/nights below still show
+  // just THIS segment (Room/Rate/Room Total all correctly stay per-segment,
+  // since each room bills separately), but the guest's real, full stay across
+  // every split segment is shown too when this reg is part of one.
+  const _splitChain=_bdReg?_bdSplitChain(_bdReg,_bdBk):[_bdReg];
+  const _fullStay=_splitChain.length>1?(()=>{
+    const eff=r=>({in:r.checkIn||_bdBk.startDate,out:r.checkOut||_bdBk.endDate});
+    const fullIn=eff(_splitChain[0]).in,fullOut=eff(_splitChain[_splitChain.length-1]).out;
+    return{checkIn:fullIn,checkOut:fullOut,nights:Math.max(1,Math.round((pd(fullOut)-pd(fullIn))/DAY_MS))};
+  })():null;
   const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
   const roomTotal=nights*(subj.rate||0);
   const balanceDue=_bdBalanceDue();
@@ -210,6 +285,10 @@ function _bdRender(){
   // are actually under the booking rather than booking_type, so a split Room
   // Only booking's two segments can each be cancelled/deleted independently.
   if(_bdKind==='reg'&&!subj.cancelled) headerBtns+=`<button onclick="bdOpenSplitStay()" style="${hBtnS}">Split Stay</button>`;
+  // "Undo Split" -- Jorge's ask 2026-09-29: "como cancelo el split". Only
+  // offered when this reg is actually part of one (_splitLineage is null
+  // otherwise).
+  if(_bdKind==='reg'&&!subj.cancelled&&_splitLineage) headerBtns+=`<button onclick="bdUndoSplit()" style="${hBtnS}">Undo Split</button>`;
   headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Delete</button>`;
 
   document.getElementById('bdHdr').innerHTML=`
@@ -228,6 +307,7 @@ function _bdRender(){
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">📅 Booking</div>
         <table style="width:100%;font-size:13px">
           <tr><td style="color:var(--muted);padding:5px 0;width:90px">Period</td><td style="padding:5px 0">${fmtDate(subj.checkIn)} — ${fmtDate(subj.checkOut)} <span style="color:var(--muted)">(${nights} night${nights!==1?'s':''})</span></td></tr>
+          ${_fullStay?`<tr><td style="color:var(--muted);padding:5px 0">Full Stay</td><td style="padding:5px 0">${fmtDate(_fullStay.checkIn)} — ${fmtDate(_fullStay.checkOut)} <span style="color:var(--muted)">(${_fullStay.nights} night${_fullStay.nights!==1?'s':''} total, across ${_splitChain.length} rooms)</span></td></tr>`:''}
           ${subj.retreatLabel!=null?`<tr><td style="color:var(--muted);padding:5px 0">Retreat</td><td style="padding:5px 0"><span onclick="_bdGoToRegistration('${subj.retreatBkId}')" title="Open this retreat's Registration tab" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(subj.retreatLabel)}</span></td></tr>`:''}
           ${subj.sourceLabel?`<tr><td style="color:var(--muted);padding:5px 0">Source</td><td style="padding:5px 0;color:#1d4ed8;font-weight:600">${escHtml(subj.sourceLabel)}</td></tr>`:''}
           <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${escHtml(subj.room||'—')}</td></tr>
