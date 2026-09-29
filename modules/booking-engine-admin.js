@@ -881,6 +881,19 @@ async function beDeleteItem(id) {
 // ─── EMAILS TAB ──────────────────────────────────────────────
 const BE_DEFAULT_GUEST_SUBJECT = 'Your Amansala reservation – {{roomType}}';
 const BE_DEFAULT_GUEST_BODY = `<p>Hi {{firstName}},</p>\n<p>Your reservation at <strong>Amansala Tulum</strong> is confirmed!</p>\n<p><strong>Room type:</strong> {{roomType}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Amount paid:</strong> {{amount}}</p>\n<p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
+// Jorge's ask 2026-09-29: split the one shared guest-confirmation template
+// into three independent ones by booking source — this one is Escape's
+// (book.html), kept as the fallback/default in stripe-webhook.js so nothing
+// else regresses. Extra Night (extra-nights.html) gets its own below.
+const BE_DEFAULT_EXTRA_NIGHT_SUBJECT = 'Your Amansala extra night is confirmed – {{roomType}}';
+const BE_DEFAULT_EXTRA_NIGHT_BODY = `<p>Hi {{firstName}},</p>\n<p>Your extra night at <strong>Amansala Tulum</strong> is confirmed!</p>\n<p><strong>Room type:</strong> {{roomType}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Amount paid:</strong> {{amount}}</p>\n<p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
+// Sent client-side (not from a Stripe webhook — a group booking has no
+// guest-facing payment event) the moment a NEW retreat/group booking is
+// first created, from either the Venues "New Booking" modal or the Builder's
+// Step 1 (Save Soft Hold / Next) — see sendGroupConfirmationEmail() in
+// modules/venues.js. Linked to group season rates via the {{season}} var.
+const BE_DEFAULT_GROUP_SUBJECT = 'Your Amansala group retreat – {{retreatName}}';
+const BE_DEFAULT_GROUP_BODY = `<p>Hi {{firstName}},</p>\n<p>Thank you for booking your group retreat with <strong>Amansala Tulum</strong>!</p>\n<p><strong>Retreat:</strong> {{retreatName}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Guests:</strong> {{pax}}<br><strong>Season:</strong> {{season}}</p>\n<p>Our team will follow up shortly with your group rate details and next steps.</p>\n<p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
 const BE_DEFAULT_STAFF_SUBJECT = 'New booking: {{firstName}} {{lastName}} – {{roomType}}';
 const BE_DEFAULT_STAFF_BODY = `<p><strong>New booking received!</strong></p>\n<p><strong>Guest:</strong> {{firstName}} {{lastName}}<br><strong>Email:</strong> {{email}}<br><strong>Phone:</strong> {{phone}}<br><strong>Room type:</strong> {{roomType}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Amount paid:</strong> {{amount}}</p>`;
 // Sent daily by netlify/functions/send-booking-lifecycle-emails.js (pg_cron) —
@@ -900,8 +913,11 @@ const BE_DEFAULT_CHECKOUT_BODY = `<p>Hi {{firstName}},</p>\n<p>Today is your che
 // on every edit and before toggling views, so nothing about how templates
 // are stored/saved changes, only how they're edited.
 const BE_MERGE_VARS = ['firstName', 'lastName', 'roomType', 'checkIn', 'checkOut', 'nights', 'amount', 'email', 'phone'];
-function beRichBody(idPrefix, html) {
-  const varOptions = BE_MERGE_VARS.map(v => `<option value="{{${v}}}">{{${v}}}</option>`).join('');
+// Pre-Arrival Groups fires before any room/rate is assigned to a specific
+// guest, so it has no roomType/amount — retreatName/pax/season instead.
+const BE_GROUP_MERGE_VARS = ['firstName', 'lastName', 'retreatName', 'checkIn', 'checkOut', 'nights', 'pax', 'season', 'email', 'phone'];
+function beRichBody(idPrefix, html, varsList) {
+  const varOptions = (varsList || BE_MERGE_VARS).map(v => `<option value="{{${v}}}">{{${v}}}</option>`).join('');
   return `<label>Body</label>
     <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
       <div style="display:flex;align-items:center;gap:4px;padding:6px 8px;background:#f8fafc;border-bottom:1px solid var(--border);flex-wrap:wrap">
@@ -962,6 +978,8 @@ function beRteToggleHtml(idPrefix) {
 function beRenderEmails() {
   const s = beSettings;
   const gOn = s.email_guest_enabled !== false;
+  const extOn = s.email_extra_night_enabled !== false;
+  const grpOn = s.email_pre_arrival_group_enabled !== false;
   const sOn = s.email_staff_enabled !== false;
   const rOn = s.email_reminder_enabled !== false;
   const iOn = s.email_inhotel_enabled !== false;
@@ -983,11 +1001,30 @@ function beRenderEmails() {
       </div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
         <div style="display:flex;align-items:center;margin-bottom:16px">
-          <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0">Confirmation Email to Guest</h3>
+          <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0">Escape Confirmation Email to Guest</h3>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-left:auto"><input type="checkbox" id="be-eg-on" ${gOn ? 'checked' : ''}><span style="font-size:12px;font-weight:600;color:var(--text)">Enabled</span></label>
         </div>
+        <p style="font-size:11.5px;color:var(--muted);margin:0 0 12px">Sent automatically after a paid booking on the Escape page (book.html).</p>
         <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-eg-subject" type="text" value="${escHtml(s.email_guest_subject ?? BE_DEFAULT_GUEST_SUBJECT)}"></div>
         <div class="fg">${beRichBody('eg', s.email_guest_body ?? BE_DEFAULT_GUEST_BODY)}</div>
+      </div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;margin-bottom:16px">
+          <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0">Extra Night Confirmation Email to Guest</h3>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-left:auto"><input type="checkbox" id="be-ext-on" ${extOn ? 'checked' : ''}><span style="font-size:12px;font-weight:600;color:var(--text)">Enabled</span></label>
+        </div>
+        <p style="font-size:11.5px;color:var(--muted);margin:0 0 12px">Sent automatically after a paid booking on the Extra Night page (extra-nights.html).</p>
+        <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-ext-subject" type="text" value="${escHtml(s.email_extra_night_subject ?? BE_DEFAULT_EXTRA_NIGHT_SUBJECT)}"></div>
+        <div class="fg">${beRichBody('ext', s.email_extra_night_body ?? BE_DEFAULT_EXTRA_NIGHT_BODY)}</div>
+      </div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;margin-bottom:16px">
+          <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0">Pre-Arrival Groups Confirmation Email to Guest</h3>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-left:auto"><input type="checkbox" id="be-grp-on" ${grpOn ? 'checked' : ''}><span style="font-size:12px;font-weight:600;color:var(--text)">Enabled</span></label>
+        </div>
+        <p style="font-size:11.5px;color:var(--muted);margin:0 0 12px">Sent automatically to the group leader the moment a new group/retreat booking is created (Venues "New Booking" or Builder "New Retreat"). Variables: {{firstName}}, {{lastName}}, {{retreatName}}, {{checkIn}}, {{checkOut}}, {{nights}}, {{pax}}, {{season}} (High/Low, based on group rates), {{email}}, {{phone}}.</p>
+        <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-grp-subject" type="text" value="${escHtml(s.email_pre_arrival_group_subject ?? BE_DEFAULT_GROUP_SUBJECT)}"></div>
+        <div class="fg">${beRichBody('grp', s.email_pre_arrival_group_body ?? BE_DEFAULT_GROUP_BODY, BE_GROUP_MERGE_VARS)}</div>
       </div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
         <div style="display:flex;align-items:center;margin-bottom:16px">
@@ -1009,7 +1046,7 @@ function beRenderEmails() {
   // unescaped HTML straight into the template string risks breaking it if
   // the saved body ever contains a backtick or ${...}) — populate each one
   // from its hidden textarea's value now that both exist in the DOM.
-  ['eg', 'es', 'rem', 'inh', 'cko'].forEach(id => {
+  ['eg', 'ext', 'grp', 'es', 'rem', 'inh', 'cko'].forEach(id => {
     const ta = document.getElementById(`be-${id}-body`);
     const visual = document.getElementById(`be-${id}-visual`);
     if (ta && visual) visual.innerHTML = ta.value;
@@ -1020,7 +1057,7 @@ async function beSaveEmailSettings() {
   // Whichever body editors are currently in visual mode need their hidden
   // textarea synced one last time — oninput already keeps it current on
   // every keystroke, but this covers a click straight from toolbar to Save.
-  ['eg', 'es', 'rem', 'inh', 'cko'].forEach(id => {
+  ['eg', 'ext', 'grp', 'es', 'rem', 'inh', 'cko'].forEach(id => {
     const ta = document.getElementById(`be-${id}-body`);
     if (ta && ta.style.display === 'none') beRteSync(id);
   });
@@ -1028,6 +1065,12 @@ async function beSaveEmailSettings() {
     email_guest_enabled: document.getElementById('be-eg-on')?.checked ?? true,
     email_guest_subject: document.getElementById('be-eg-subject')?.value.trim() ?? '',
     email_guest_body:    document.getElementById('be-eg-body')?.value ?? '',
+    email_extra_night_enabled: document.getElementById('be-ext-on')?.checked ?? true,
+    email_extra_night_subject: document.getElementById('be-ext-subject')?.value.trim() ?? '',
+    email_extra_night_body:    document.getElementById('be-ext-body')?.value ?? '',
+    email_pre_arrival_group_enabled: document.getElementById('be-grp-on')?.checked ?? true,
+    email_pre_arrival_group_subject: document.getElementById('be-grp-subject')?.value.trim() ?? '',
+    email_pre_arrival_group_body:    document.getElementById('be-grp-body')?.value ?? '',
     email_staff_enabled: document.getElementById('be-es-on')?.checked ?? true,
     email_staff_to:      document.getElementById('be-es-to')?.value.trim() ?? '',
     email_staff_subject: document.getElementById('be-es-subject')?.value.trim() ?? '',
