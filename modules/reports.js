@@ -21,6 +21,7 @@ const _rptTabBtn=(id,label,active)=>`<button onclick="_rptSetTab('${id}')" style
 function _rptSetTab(tab){
   _rptActiveTab=tab;
   if(tab==='daily')_rptRenderDaily();
+  else if(tab==='gratuity')_rptRenderGratuity();
   else _rptRenderBody();
 }
 
@@ -37,6 +38,8 @@ function _rptBuildRows(){
       rooms:(bk.blockedRooms||[]).length,
       occupied:occupiedRooms,
       guests:guestNames.size,
+      tipRate:getTip(bk),
+      tipTotal:calcBkTipTotal(bk),
     };
   });
 }
@@ -57,6 +60,7 @@ function reportsRender(){
   if(!el)return;
   _rptRows=_rptBuildRows();
   if(_rptActiveTab==='daily')_rptRenderDaily();
+  else if(_rptActiveTab==='gratuity')_rptRenderGratuity();
   else _rptRenderBody();
 }
 
@@ -102,6 +106,7 @@ function _rptRenderBody(){
       <div style="display:flex;gap:6px">
         ${_rptTabBtn('financial','Financial Summary',true)}
         ${_rptTabBtn('daily','Daily Report',false)}
+        ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
       </div>
       <div style="flex:1"></div>
       <select onchange="_rptSetYear(this.value)" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff;cursor:pointer">
@@ -383,6 +388,7 @@ function _rptRenderDailyView(){
       <div style="display:flex;gap:6px">
         ${_rptTabBtn('financial','Financial Summary',false)}
         ${_rptTabBtn('daily','Daily Report',true)}
+        ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
       </div>
       <div style="flex:1"></div>
       <input type="date" value="${_dailyFrom}" onchange="_rptSetDailyFrom(this.value)" style="${inputS}" title="From">
@@ -544,6 +550,158 @@ function _rptExportDailyCsv(){
   const blob=new Blob([csv],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
   const a=Object.assign(document.createElement('a'),{href:url,download:`daily-report-${_dailyFrom}${_dailyFrom!==_dailyTo?'_to_'+_dailyTo:''}.csv`});
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ─── GRATUITY RETREATS ───────────────────────────────────────────
+// Jorge's ask 2026-09-29: a tab listing every group with name/dates/guest
+// count/tip-per-night/total gratuity, one row per retreat plus a month-by-
+// month subtotal -- same per-retreat rows _rptBuildRows() already computes
+// for Financial Summary (tipRate/tipTotal added there via calcBkTipTotal(),
+// modules/payments.js), same year/show-cancelled filters, same CSV pattern.
+function _rptRenderGratuity(){
+  const el=document.getElementById('reportsContent');
+  if(!el)return;
+  const rows=_rptFiltered();
+  const totalGuests=rows.reduce((s,r)=>s+r.guests,0);
+  const totalTip=rows.reduce((s,r)=>s+r.tipTotal,0);
+  const active=rows.filter(r=>r.bk.status!=='cancelled').length;
+  const years=[...new Set(_rptRows.map(r=>(r.bk.startDate||'').slice(0,4)).filter(Boolean))].sort().reverse();
+
+  const monthMap=new Map();
+  rows.forEach(r=>{
+    if(r.bk.status==='cancelled')return;
+    const key=(r.bk.startDate||'').slice(0,7)||'?';
+    const m=monthMap.get(key)||{key,tip:0,guests:0,count:0};
+    m.tip+=r.tipTotal;m.guests+=r.guests;m.count++;
+    monthMap.set(key,m);
+  });
+  const months=[...monthMap.values()].sort((a,b)=>b.key.localeCompare(a.key));
+
+  el.innerHTML=`
+  <div style="padding:24px 28px;font-family:'Jost',sans-serif;overflow-y:auto;height:100%;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      <div>
+        <h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">Gratuity Retreats</h2>
+        <div style="font-size:12px;color:#9ca3af;margin-top:2px">${active} retreat${active!==1?'s':''} · ${_rptYear==='all'?'All time':_rptYear}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        ${_rptTabBtn('financial','Financial Summary',false)}
+        ${_rptTabBtn('daily','Daily Report',false)}
+        ${_rptTabBtn('gratuity','Gratuity Retreats',true)}
+      </div>
+      <div style="flex:1"></div>
+      <select onchange="_rptSetYear(this.value)" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff;cursor:pointer">
+        <option value="all" ${_rptYear==='all'?'selected':''}>All years</option>
+        ${years.map(y=>`<option value="${y}" ${_rptYear===y?'selected':''}>${y}</option>`).join('')}
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;cursor:pointer">
+        <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked);_rptRenderGratuity()">
+        Show cancelled
+      </label>
+      <button onclick="_rptExportGratuityCsv()" style="padding:6px 14px;background:#0e5a5a;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">
+        ↓ Export CSV
+      </button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">
+      ${_rptCard('Total Gratuity',fmt$(totalTip),'#f0fdf9','#0e5a5a')}
+      ${_rptCard('Guests Registered',String(totalGuests),'#f0f9ff','#0369a1')}
+      ${_rptCard('Retreats',String(active),'#fefce8','#854d0e')}
+    </div>
+
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:24px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
+          <tr>
+            <th style="${_rptTh()}">Retreat</th>
+            <th style="${_rptTh()}">Dates</th>
+            <th style="${_rptTh('center')}">Guests</th>
+            <th style="${_rptTh('right')}">Tip / Night</th>
+            <th style="${_rptTh('right')}">Total Gratuity</th>
+            <th style="${_rptTh('center')}">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.length===0
+            ?`<tr><td colspan="6" style="padding:60px;text-align:center;color:#9ca3af">No retreats found for this filter</td></tr>`
+            :rows.slice().sort((a,b)=>(a.bk.startDate||'').localeCompare(b.bk.startDate||'')).map(_rptGratuityRowHtml).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    ${months.length>0?`
+    <div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:10px">Monthly Summary</div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse">
+          <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
+            <tr>
+              <th style="${_rptTh()}">Month</th>
+              <th style="${_rptTh('center')}">Retreats</th>
+              <th style="${_rptTh('center')}">Guests</th>
+              <th style="${_rptTh('right')}">Total Gratuity</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${months.map(m=>`
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="${_rptTd()};font-weight:600;font-size:13px">${_rptFmtMonth(m.key)}</td>
+              <td style="${_rptTd('center')};font-size:13px;color:#6b7280">${m.count}</td>
+              <td style="${_rptTd('center')};font-size:13px;color:#6b7280">${m.guests}</td>
+              <td style="${_rptTd('right')};font-weight:700;font-size:13px;color:#0e5a5a">${fmt$(m.tip)}</td>
+            </tr>`).join('')}
+            <tr style="background:#f8fafc;border-top:2px solid var(--border)">
+              <td style="${_rptTd()};font-weight:800;font-size:13px">TOTAL</td>
+              <td style="${_rptTd('center')};font-weight:700">${months.reduce((s,m)=>s+m.count,0)}</td>
+              <td style="${_rptTd('center')};font-weight:700">${months.reduce((s,m)=>s+m.guests,0)}</td>
+              <td style="${_rptTd('right')};font-weight:800;font-size:13px;color:#0e5a5a">${fmt$(totalTip)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`:''}
+  </div>`;
+}
+
+function _rptGratuityRowHtml(r){
+  const bk=r.bk;
+  const canc=bk.status==='cancelled';
+  const statusBadge=canc
+    ?`<span style="background:#fee2e2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px">Cancelled</span>`
+    :`<span style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px">Active</span>`;
+  return`<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer;${canc?'opacity:.55':''}" onclick="switchTab('teacherreg',document.getElementById('teacherregTabBtn'));regInitSel();regSelectRetreat('${bk.id}')">
+    <td style="${_rptTd()}">
+      <div style="font-weight:700;font-size:13px;color:#111827">${escHtml(bk.retreatName||bk.leaderName||'—')}</div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:1px">${escHtml(bk.leaderName||'')}</div>
+    </td>
+    <td style="${_rptTd()};white-space:nowrap;font-size:12px;color:#6b7280">
+      ${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}<br>
+      <span style="color:#d1d5db">${r.nights} night${r.nights!==1?'s':''}</span>
+    </td>
+    <td style="${_rptTd('center')};font-size:13px;font-weight:700;color:#374151">${r.guests||'—'}</td>
+    <td style="${_rptTd('right')};font-size:13px;font-weight:600;color:#6b7280">${r.tipRate>0?fmt$(r.tipRate):'—'}</td>
+    <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#0e5a5a">${r.tipTotal>0?fmt$(r.tipTotal):'—'}</td>
+    <td style="${_rptTd('center')}">${statusBadge}</td>
+  </tr>`;
+}
+
+function _rptExportGratuityCsv(){
+  const rows=_rptFiltered().slice().sort((a,b)=>(b.bk.startDate||'').localeCompare(a.bk.startDate||''));
+  const header=['Retreat','Teacher','Start Date','End Date','Nights','Guests','Tip Per Night','Total Gratuity','Status'];
+  const lines=[header,...rows.map(r=>[
+    r.bk.retreatName||r.bk.leaderName||'',
+    r.bk.leaderName||'',
+    r.bk.startDate||'',
+    r.bk.endDate||'',
+    r.nights,r.guests,
+    r.tipRate.toFixed(2),r.tipTotal.toFixed(2),
+    r.bk.status||'',
+  ])].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([lines],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=Object.assign(document.createElement('a'),{href:url,download:`amansala-gratuity-${_rptYear}.csv`});
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
