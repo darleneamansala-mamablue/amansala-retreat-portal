@@ -126,15 +126,34 @@ async function openBookingDetailForRequest(requestId){
   await _bdLoadFolios();
 }
 
+// A Split Stay reg (modules/booking-detail.js's bdConfirmSplitStay) is a
+// separate `registrations` row purely so _calcRoomRevenue can bill each
+// physical room correctly -- it's still the SAME guest's SAME stay, so the
+// folio (charges/payments) should be shared across every segment, not
+// re-created per room. Without this, each segment auto-created its own
+// empty folio and a charge added on one half was invisible on the other --
+// Jorge's report 2026-09-29: "los cargos no se ven en las dos partes del
+// split" (this is also why it still felt like two separate reservations).
+// Always anchor the folio to the chain's EARLIEST segment, whichever one is
+// currently open.
+function _bdFolioAnchorId(subj){
+  if(_bdKind!=='reg')return subj.id;
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return subj.id;
+  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return subj.id;
+  const chain=_bdSplitChain(reg,bk);
+  return chain.length>1?chain[0].id:subj.id;
+}
+
 async function _bdLoadFolios(){
   const subj=_bdSubject();if(!subj)return;
   const guestName=_bdKind==='reg'?(_bdGuestNameOverride||subj.guestName):subj.guestName;
+  const folioSubjId=_bdFolioAnchorId(subj);
   try{
-    let {data:folios,error}=await db.from('folios').select('*').eq(subj.folioCol,subj.id).eq('guest_name',guestName);
+    let {data:folios,error}=await db.from('folios').select('*').eq(subj.folioCol,folioSubjId).eq('guest_name',guestName);
     if(error)throw error;
     if(!folios||!folios.length){
       const token=uid().replace(/[^a-z0-9]/gi,'');
-      const {data:created,error:cErr}=await db.from('folios').insert({[subj.folioCol]:subj.id,guest_name:guestName,name:guestName,payment_token:token,status:'open'}).select().single();
+      const {data:created,error:cErr}=await db.from('folios').insert({[subj.folioCol]:folioSubjId,guest_name:guestName,name:guestName,payment_token:token,status:'open'}).select().single();
       if(cErr)throw cErr;
       folios=[created];
     }
@@ -599,6 +618,22 @@ async function bdReopenFolio(fid){
 // Split Stay segment failed silently) violates that constraint. Delete the
 // registration's own folios/folio_items first, same order bdDeleteFolioRow
 // already uses for a single folio.
+// A Split Stay's shared folio is anchored to the chain's EARLIEST segment
+// (see _bdFolioAnchorId) -- deleting THAT segment while a later one still
+// exists would otherwise take its charges/payments down with it. Hand the
+// folio off to the next remaining segment instead of deleting it whenever
+// that's the case; only actually delete the folio when this reg either
+// isn't part of a split or is the last segment left.
+async function _bdReleaseFoliosForDelete(reg,bk){
+  const chain=bk?_bdSplitChain(reg,bk):[reg];
+  if(chain.length>1&&chain[0].id===reg.id){
+    const {error}=await db.from('folios').update({registration_id:chain[1].id}).eq('registration_id',reg.id);
+    if(error)throw new Error(error.message);
+    return;
+  }
+  await _bdDeleteFoliosForReg(reg.id);
+}
+
 async function _bdDeleteFoliosForReg(regId){
   const {data:folios}=await db.from('folios').select('id').eq('registration_id',regId);
   const ids=(folios||[]).map(f=>f.id);
@@ -621,7 +656,7 @@ async function bdAddFolio(){
   const guestName=_bdFolios[0]?.folio.guest_name||subj.guestName;
   const name=prompt('Folio name',guestName);if(!name)return;
   const token=uid().replace(/[^a-z0-9]/gi,'');
-  const {error}=await db.from('folios').insert({[subj.folioCol]:subj.id,guest_name:guestName,name,payment_token:token,status:'open'});
+  const {error}=await db.from('folios').insert({[subj.folioCol]:_bdFolioAnchorId(subj),guest_name:guestName,name,payment_token:token,status:'open'});
   if(error){showToast('Error: '+error.message);return;}
   await _bdLoadFolios();
 }
@@ -904,7 +939,7 @@ async function bdDeleteReservation(){
   if(_bk&&(_bk.bookingType!=='room_only'||_otherRegsCount>0)){
     const names=(reg.guests||[]).map(g=>g.name).filter(Boolean).join(', ');
     if(!confirm(`Remove ${names||'this guest'} from room ${reg.room}?\n\nOnly this room's registration is removed — the rest of ${_bk.leaderName||_bk.retreatName||'the retreat'} is not touched.`))return;
-    await _bdDeleteFoliosForReg(reg.id);
+    try{await _bdReleaseFoliosForDelete(reg,_bk);}catch(e){showToast('Error: '+e.message);return;}
     const {error:rErr}=await db.from('registrations').delete().eq('id',reg.id);
     if(rErr){showToast('Error: '+rErr.message);return;}
     AppData.regs=AppData.regs.filter(r=>r.id!==reg.id);
@@ -918,7 +953,7 @@ async function bdDeleteReservation(){
   if(!confirm('Cancel this reservation? This action will mark the booking as cancelled.'))return;
   const {error:bErr}=await db.from('bookings').update({status:'cancelled'}).eq('id',bookingId);
   if(bErr){showToast('Error: '+bErr.message);return;}
-  await _bdDeleteFoliosForReg(reg.id);
+  try{await _bdReleaseFoliosForDelete(reg,_bk);}catch(e){showToast('Error: '+e.message);return;}
   const {error:rErr}=await db.from('registrations').delete().eq('id',reg.id);
   if(rErr){showToast('Error: '+rErr.message);return;}
   const bk=AppData.bookings.find(b=>b.id===bookingId);if(bk)bk.status='cancelled';
