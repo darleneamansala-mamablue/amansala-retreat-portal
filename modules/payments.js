@@ -408,6 +408,37 @@ function _openPaymentModalReal(bkId,quickMethod){
   renderPayBalance(bk);renderPayHistory(bk);
   openModal('paymentModal');
 }
+// Isolated tip-only slice of _calcRoomRevenue's own loop, for modules/reports.js's
+// Gratuity Retreats tab (Jorge's ask 2026-09-29) -- reuses the SAME shared helpers
+// (getTip/sumGuestTipNights/getRegsForBk) _calcRoomRevenue and regRender's own BILL
+// bar already call, instead of re-deriving nights/rates a third time (that drift is
+// exactly what caused the Anthony Chavez BILL/BAL DUE bug earlier today).
+function calcBkTipTotal(bk){
+  const blockedSet=new Set(bk.blockedRooms||[]);
+  const bkRegs=getRegsForBk(bk.id);
+  const regByRoom={};
+  bkRegs.forEach(r=>{
+    if(!blockedSet.has(r.room))return;
+    const prev=regByRoom[r.room];
+    if(!prev){regByRoom[r.room]=r;return;}
+    if((r.guests||[]).filter(g=>g.name).length>(prev.guests||[]).filter(g=>g.name).length)regByRoom[r.room]=r;
+  });
+  const tipPer=getTip(bk);
+  let total=0;
+  Array.from(blockedSet).forEach(room=>{
+    const reg=regByRoom[room];if(!reg)return;
+    const gc=new Set((reg.guests||[]).filter(g=>g.name).map(g=>g.name.trim())).size;
+    if(!gc)return;
+    const _eCI=reg.checkIn||bk.startDate,_eCO=reg.checkOut||bk.endDate;
+    const _eNightsRaw=Math.max(1,Math.round((pd(_eCO)-pd(_eCI))/DAY_MS));
+    const _eNights=reg.customNightsOverride!=null?Number(reg.customNightsOverride):_eNightsRaw;
+    const _eTipNights=reg.customTipNightsOverride!=null?Number(reg.customTipNightsOverride):_eNights;
+    const _eTipRate=reg.customTipRateOverride!=null?Number(reg.customTipRateOverride):tipPer;
+    const tipNightsSum=sumGuestTipNights(reg,bk,_eTipNights,gc);
+    total+=+(_eTipRate*tipNightsSum).toFixed(2);
+  });
+  return +total.toFixed(2);
+}
 function _calcRoomRevenue(bk){
   // Exact mirror of renderEstQuote grand total — single source of truth
   const nights=getNights(bk);
