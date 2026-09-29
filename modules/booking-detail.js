@@ -719,7 +719,7 @@ async function bdConfirmSplitStay(){
     if(e1)throw new Error(e1.message);
 
     const newRegPayload={
-      booking_id:bk.id,room:newRoom,room_type_id:newRt?.id||null,
+      id:uid(),booking_id:bk.id,room:newRoom,room_type_id:newRt?.id||null,
       guests:JSON.parse(JSON.stringify(reg.guests||[])),
       check_in:splitDate,check_out:checkOut,
       checked_in_at:reg.checkedInAt||null,
