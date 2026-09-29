@@ -178,15 +178,18 @@ async function _resAttachFolioBalances(rows){
     const folios=[...(regRes.data||[]),...(reqRes.data||[])];
     rows.forEach(r=>{r.balance=0;});
     if(!folios||!folios.length)return;
-    const openFolios=folios.filter(f=>f.status==='open');
-    if(!openFolios.length)return;
-    const folioIds=openFolios.map(f=>f.id);
+    // "Closed" only means no more charges can be added -- it's a lock, not
+    // proof a folio was paid, so a closed-but-unpaid folio (e.g. a room
+    // upgrade charge) still counts toward what the guest owes here too
+    // (Jorge's report 2026-09-29 -- same bug as booking-detail.js's
+    // _bdBalanceDue).
+    const folioIds=folios.map(f=>f.id);
     const {data:items,error:iErr}=await db.from('folio_items').select('folio_id,qty,unit_price,tax_rate').in('folio_id',folioIds);
     if(iErr)throw iErr;
     const totalByFolio={};
     (items||[]).forEach(i=>{totalByFolio[i.folio_id]=(totalByFolio[i.folio_id]||0)+Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100);});
     const balanceByKey={};
-    openFolios.forEach(f=>{
+    folios.forEach(f=>{
       const key=`${f.registration_id||''}:${f.booking_request_id||''}:${f.guest_name}`;
       balanceByKey[key]=(balanceByKey[key]||0)+(totalByFolio[f.id]||0);
     });

@@ -150,7 +150,13 @@ async function _bdLoadFolios(){
 
 function _bdItemTotal(i){return Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100);}
 function _bdFolioTotal(f){return f.items.reduce((s,i)=>s+_bdItemTotal(i),0);}
-function _bdBalanceDue(){return _bdFolios.filter(f=>f.folio.status==='open').reduce((s,f)=>s+_bdFolioTotal(f),0);}
+// "Closed" only means no more charges can be added to a folio -- it's a lock,
+// not proof it was paid (bdCloseFolio never checks the balance first). The
+// header Balance Due used to only sum OPEN folios, so a closed-but-unpaid
+// folio (e.g. a room upgrade charge, Jorge's report 2026-09-29: Kristen
+// Bughaher's $232 upgrade folio, CLOSED, never paid) silently vanished from
+// what the guest appeared to owe. Every folio's real balance counts here.
+function _bdBalanceDue(){return _bdFolios.reduce((s,f)=>s+_bdFolioTotal(f),0);}
 
 function _bdRender(){
   const subj=_bdSubject();if(!subj)return;
