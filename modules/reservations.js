@@ -175,8 +175,20 @@ function _resOpenRowAt(i){
 // cargo de cada persona, no deben de compartir el mismo balance." Mutates
 // each row's .balance in place; one bulk fetch for the whole visible list
 // instead of one round trip per guest.
+// A Split Stay's folio is shared, anchored to the chain's earliest segment
+// (see booking-detail.js's _bdFolioAnchorId, same reasoning) -- resolve
+// every 'group' row to that anchor before querying/keying folios here too,
+// or the later segment's row would show $0 even though its guest's actual
+// balance lives on the shared folio (Jorge's report 2026-09-29: "los cargos
+// no se ven en las dos partes del split").
+function _resFolioAnchorId(regId){
+  const reg=AppData.regs.find(r=>r.id===regId);if(!reg)return regId;
+  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return regId;
+  const chain=typeof _bdSplitChain==='function'?_bdSplitChain(reg,bk):[reg];
+  return chain.length>1?chain[0].id:regId;
+}
 async function _resAttachFolioBalances(rows){
-  const regIds=[...new Set(rows.filter(r=>r.type==='group').map(r=>r.id))];
+  const regIds=[...new Set(rows.filter(r=>r.type==='group').map(r=>_resFolioAnchorId(r.id)))];
   const reqIds=[...new Set(rows.filter(r=>r.type==='individual').map(r=>r.id))];
   if(!regIds.length&&!reqIds.length)return;
   try{
@@ -209,8 +221,9 @@ async function _resAttachFolioBalances(rows){
       // sharing guest's own folio -- each still has their own separate one.
       const names=r.type==='group'?(r.guestNames||[r.name]):[r.name];
       let sum=null;
+      const anchorId=r.type==='group'?_resFolioAnchorId(r.id):r.id;
       names.forEach(n=>{
-        const key=r.type==='group'?`${r.id}::${n}`:`:${r.id}:${n}`;
+        const key=r.type==='group'?`${anchorId}::${n}`:`:${anchorId}:${n}`;
         if(balanceByKey[key]!=null)sum=(sum||0)+balanceByKey[key];
       });
       if(sum!=null)r.balance=+sum.toFixed(2);
