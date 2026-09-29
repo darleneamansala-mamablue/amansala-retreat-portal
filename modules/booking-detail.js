@@ -103,6 +103,8 @@ async function openBookingDetailForReg(regId,guestName){
   _bdGuestNameOverride=guestName||(reg.guests||[]).find(g=>g.name)?.name||'Guest';
   document.getElementById('bdBody').innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px">Loading folio…</div>';
   openModal('bookingDetailModal');
+  if(_bdActivityBkId!==bk.id){_bdActivityRows=[];_bdActivityBkId=null;} // don't show a stale booking's log while the new one loads
+  _bdLoadActivity(bk.id); // fire-and-forget -- doesn't block the folio view
   await _bdLoadFolios();
 }
 
@@ -303,7 +305,10 @@ function _bdRender(){
   // bdCancelReservation/bdDeleteReservation all key off how many registrations
   // are actually under the booking rather than booking_type, so a split Room
   // Only booking's two segments can each be cancelled/deleted independently.
-  if(_bdKind==='reg'&&!subj.cancelled) headerBtns+=`<button onclick="bdOpenSplitStay()" style="${hBtnS}">Split Stay</button>`;
+  // Mutually exclusive with "Undo Split" below -- Jorge's ask 2026-09-29:
+  // "debe de salir en lugar de split stay cuando ya esta split" (both were
+  // showing together once a reg was actually part of a split).
+  if(_bdKind==='reg'&&!subj.cancelled&&!_splitLineage) headerBtns+=`<button onclick="bdOpenSplitStay()" style="${hBtnS}">Split Stay</button>`;
   // "Undo Split" -- Jorge's ask 2026-09-29: "como cancelo el split". Only
   // offered when this reg is actually part of one (_splitLineage is null
   // otherwise).
@@ -370,7 +375,57 @@ function _bdRender(){
       </div>
       ${_bdFolios.map(f=>_bdFolioRowHtml(f)).join('')}
       ${_bdFolios.length?_bdTotalPaymentRowHtml():''}
-    </div>`;
+    </div>
+    ${_bdKind==='reg'?`<div style="padding:0 28px 28px">
+      <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">📜 Activity</div>
+      <div id="bdActivityBody" style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:6px 16px">
+        <div style="padding:20px;text-align:center;color:var(--muted);font-size:12.5px">Loading…</div>
+      </div>
+    </div>`:''}`;
+  // _bdRender() re-runs on every action (cancel/split/payment/etc.) -- if the
+  // activity log for this booking is already cached, paint it back in
+  // immediately instead of flashing "Loading…" every time.
+  if(_bdKind==='reg'&&_bdActivityBkId===_bdBk?.id)_bdRenderActivitySection();
+}
+
+// Jorge's ask 2026-09-29: "no veo el log de lo que hicieron en esas
+// reservas quiero un log de que hace que de el staff cuando toca una
+// reserva" -- surfaces the existing logActivity() trail (now also written
+// to Supabase, see admin-staff.js) scoped to just this booking, right in
+// Booking Detail. Loaded once per booking-open (openBookingDetailForReg),
+// not re-fetched on every _bdRender() call.
+let _bdActivityRows=[],_bdActivityBkId=null;
+async function _bdLoadActivity(bkId){
+  if(!bkId){_bdActivityRows=[];_bdActivityBkId=null;return;}
+  _bdActivityBkId=bkId;
+  try{
+    const{data,error}=await db.from('activity_log').select('*').eq('booking_id',bkId).order('created_at',{ascending:false}).limit(50);
+    if(error)throw error;
+    if(_bdActivityBkId!==bkId)return; // superseded by opening a different booking meanwhile
+    _bdActivityRows=data||[];
+  }catch(e){
+    if(_bdActivityBkId!==bkId)return;
+    _bdActivityRows=[];
+    console.warn('[booking-detail] activity log load failed',e.message);
+  }
+  _bdRenderActivitySection();
+}
+function _bdRenderActivitySection(){
+  const el=document.getElementById('bdActivityBody');
+  if(!el)return;
+  if(!_bdActivityRows.length){
+    el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--muted);font-size:12.5px">No activity recorded yet.</div>`;
+    return;
+  }
+  el.innerHTML=_bdActivityRows.map(e=>`
+    <div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6">
+      <div style="width:26px;height:26px;border-radius:50%;background:#0e5a5a22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0e5a5a;flex-shrink:0">${escHtml(((e.user_name||'?')[0]||'?').toUpperCase())}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;color:#111827"><strong>${escHtml(e.user_name||'System')}</strong> — ${escHtml(e.action||'')}</div>
+        ${e.detail?`<div style="font-size:12px;color:#6b7280;margin-top:2px">${escHtml(e.detail)}</div>`:''}
+      </div>
+      <div style="font-size:11px;color:#9ca3af;white-space:nowrap">${new Date(e.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+    </div>`).join('');
 }
 
 // One combined "pay everything" control instead of having to pick a specific
