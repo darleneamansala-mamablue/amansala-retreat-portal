@@ -182,10 +182,12 @@ function _bdRender(){
   if(_bdKind==='reg'&&!subj.cancelled) headerBtns+=`<button onclick="bdCancelReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Cancel</button>`;
   // "Split Stay" — a guest changes physical room mid-stay without it being a
   // paid Upgrade (Jorge's ask 2026-09-29: "unos días está en un cuarto y
-  // otros días en otro, eso no lo tenemos"). Room Only has no retreat room
-  // list to split within (its one room IS the whole booking), so this only
-  // makes sense for a retreat's own registration.
-  if(_bdKind==='reg'&&!subj.cancelled&&subj.bookingType!=='room_only') headerBtns+=`<button onclick="bdOpenSplitStay()" style="${hBtnS}">Split Stay</button>`;
+  // otros días en otro, eso no lo tenemos" — then "lo quiero para todos no
+  // solo para grupos", so this applies to Room Only too. bdConfirmSplitStay/
+  // bdCancelReservation/bdDeleteReservation all key off how many registrations
+  // are actually under the booking rather than booking_type, so a split Room
+  // Only booking's two segments can each be cancelled/deleted independently.
+  if(_bdKind==='reg'&&!subj.cancelled) headerBtns+=`<button onclick="bdOpenSplitStay()" style="${hBtnS}">Split Stay</button>`;
   headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Delete</button>`;
 
   document.getElementById('bdHdr').innerHTML=`
@@ -610,12 +612,16 @@ async function bdCancelReservation(){
   const {error}=await db.from('registrations').update({cancelled:true,cancelled_at:now}).eq('id',reg.id);
   if(error){showToast('Error: '+error.message);return;}
   reg.cancelled=true;reg.cancelledAt=now;
-  // Room Only is a 1:1 booking↔room — also mark the BOOKING cancelled so the
-  // room actually frees up everywhere that already checks bk.status (Room
-  // Calendar availability, the "+ Book a Room" conflict check, etc.). A
-  // retreat's booking stays untouched -- it's the whole group, not this room.
+  // Room Only is normally 1:1 booking↔room — also mark the BOOKING cancelled
+  // so the room actually frees up everywhere that already checks bk.status
+  // (Room Calendar availability, the "+ Book a Room" conflict check, etc.).
+  // But a Split Stay (bdConfirmSplitStay, 2026-09-29) can leave a room_only
+  // booking with a SECOND registration/room too -- cancelling the booking
+  // there would wrongly take the other segment's room down as well, so only
+  // do this when this really is the only registration left under it.
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
-  if(bk&&bk.bookingType==='room_only'&&bk.status!=='cancelled'){
+  const _otherActiveRegs=AppData.regs.filter(r=>r.bookingId===reg.bookingId&&r.id!==reg.id&&!r.cancelled).length;
+  if(bk&&bk.bookingType==='room_only'&&!_otherActiveRegs&&bk.status!=='cancelled'){
     const {error:bErr}=await db.from('bookings').update({status:'cancelled'}).eq('id',bk.id);
     if(bErr)showToast('Cancelled the reservation, but could not free the room: '+bErr.message);
     else bk.status='cancelled';
@@ -771,7 +777,12 @@ async function bdDeleteReservation(){
   // every room of the retreat from the calendar (real incident 2026-09-25:
   // deleting room 21 cancelled all of Loco Luxury on its arrival day). For a
   // retreat, remove just this room's registration and leave the booking alone.
-  if(_bk&&_bk.bookingType!=='room_only'){
+  // A Room Only booking that's been Split (bdConfirmSplitStay, 2026-09-29)
+  // now has MORE than one registration under it too -- in that case it needs
+  // the exact same "just this one" treatment, or deleting one segment would
+  // wrongly cancel the whole booking (and the other segment's room with it).
+  const _otherRegsCount=AppData.regs.filter(r=>r.bookingId===bookingId&&r.id!==reg.id).length;
+  if(_bk&&(_bk.bookingType!=='room_only'||_otherRegsCount>0)){
     const names=(reg.guests||[]).map(g=>g.name).filter(Boolean).join(', ');
     if(!confirm(`Remove ${names||'this guest'} from room ${reg.room}?\n\nOnly this room's registration is removed — the rest of ${_bk.leaderName||_bk.retreatName||'the retreat'} is not touched.`))return;
     const {error:rErr}=await db.from('registrations').delete().eq('id',reg.id);
