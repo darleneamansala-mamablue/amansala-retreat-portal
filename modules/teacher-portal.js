@@ -339,6 +339,16 @@ function regRender(){
     _regedRooms.add(room);totalGuests+=gc;
   });
   grandTotal=+(grandTotal-(regSelBk.eqDiscountAmt||0)).toFixed(2);
+  // Individual guest charges (spa/transport/etc. posted per-registration via reg.charges)
+  // roll up onto the master bill here too -- the same incidentalCharges component
+  // calcBkBalance()/_calcRoomRevenue() (modules/payments.js) already adds, which this
+  // separate inline BILL/BAL DUE calc was missing entirely. Real incident 2026-09-29:
+  // Michelle Meywes' two $111 spa massages (reg.charges, Anthony Chavez's retreat) meant
+  // the true bill was $222 more than this bar showed -- bad enough that it displayed
+  // "PAID ✓" when $222 was actually still owed (Reports/Dashboard, which both go through
+  // calcBkBalance, showed the correct $222 balance the whole time).
+  const _incidentalCharges=allRegs.reduce((s,reg)=>s+((reg.charges||[]).reduce((s2,c)=>s2+(c.amount||0),0)),0);
+  grandTotal=+(grandTotal+_incidentalCharges).toFixed(2);
   // Use booking-level payments (bk.payments) — that's where admin records actual money
   // received. A We Travel booking never gets a bk.payments entry (the payment happened
   // on WeTravel's side, not through this app's Record Payment flow) — its real paid
