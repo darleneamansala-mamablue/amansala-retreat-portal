@@ -419,7 +419,7 @@ async function bdRecordTotalPayment(){
   const target=_bdLargestBalanceFolio();
   if(!target){showToast('No folio to record this payment against.');return;}
   const description=`Payment — ${method}${ref?': '+ref:''}`;
-  const {error}=await db.from('folio_items').insert({folio_id:target.folio.id,description,qty:1,unit_price:-amount,tax_rate:0});
+  const {error}=await db.from('folio_items').insert({folio_id:target.folio.id,description,qty:1,unit_price:-amount,tax_rate:0,staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error recording payment: '+error.message);return;}
   showToast('Payment recorded ✓');
   await _bdLoadFolios();
@@ -558,7 +558,7 @@ async function bdAddItem(fid){
   const price=parseFloat(document.getElementById(`bdc-price-${fid}`)?.value);
   const tax=parseFloat(document.getElementById(`bdc-tax-${fid}`)?.value)||0;
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
-  const {error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax});
+  const {error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax,staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error: '+error.message);return;}
   _bdAddOpen[fid]=false;
   await _bdLoadFolios();
@@ -588,7 +588,7 @@ async function bdRecordPayment(fid){
   const ref=document.getElementById(`bd-pay-ref-${fid}`)?.value.trim();
   if(!amount||amount<=0){showToast('Enter a valid amount');return;}
   const description=`Payment — ${method}${ref?': '+ref:''}`;
-  const {error}=await db.from('folio_items').insert({folio_id:fid,description,qty:1,unit_price:-amount,tax_rate:0});
+  const {error}=await db.from('folio_items').insert({folio_id:fid,description,qty:1,unit_price:-amount,tax_rate:0,staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error recording payment: '+error.message);return;}
   showToast('Payment recorded ✓');
   const f=_bdFolios.find(x=>x.folio.id===fid);

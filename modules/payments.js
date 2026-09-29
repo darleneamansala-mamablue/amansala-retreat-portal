@@ -543,7 +543,10 @@ function savePayment(){
     showToast('Payment updated ✓');
     return;
   }
-  bk.payments.push({id:uid(),amount,date,method,ref,note,guestName,ts:new Date().toISOString()});
+  // staffName: who actually recorded this payment -- feeds the Daily Report's
+  // per-user attribution (Jorge's ask 2026-09-29), same getCurrentSession()
+  // pattern spa.js's folio charges already use for "addedBy".
+  bk.payments.push({id:uid(),amount,date,method,ref,note,guestName,ts:new Date().toISOString(),staffName:getCurrentSession()?.name||null});
   // Advance status to deposit_paid when first payment recorded
   if(['contract_sent','contract_signed','requested'].includes(bk.status)){
     bk.status='deposit_paid';
