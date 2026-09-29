@@ -993,11 +993,12 @@ function beRenderEmails() {
         ${extraNote ? `<p style="font-size:11.5px;color:var(--muted);margin:0 0 12px">${extraNote}</p>` : ''}
         <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-${idPrefix}-subject" type="text" value="${escHtml(subVal ?? subDefault)}"></div>
         <div class="fg">${beRichBody(idPrefix, bodyVal ?? bodyDefault)}</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px"><button onclick="beSaveEmailSettings()" style="${beBtnS('#111827', '#fff')}">Save</button></div>
       </div>`;
   document.getElementById('beBody').innerHTML = `
     <div style="max-width:760px;margin:0 auto">
       <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 16px;margin-bottom:20px;font-size:12px;color:#0369a1">
-        <strong>Available variables:</strong> {{firstName}}, {{lastName}}, {{roomType}}, {{checkIn}}, {{checkOut}}, {{nights}}, {{amount}}, {{email}}, {{phone}} — usa el menú "Insert variable…" para agregarlas sin escribirlas a mano.
+        <strong>Available variables:</strong> {{firstName}}, {{lastName}}, {{roomType}}, {{checkIn}}, {{checkOut}}, {{nights}}, {{amount}}, {{email}}, {{phone}} para Escape, Extra Night, Staff, Reminder, In-Hotel y Check-out — usa el menú "Insert variable…" en cada uno para agregarlas sin escribirlas a mano. <strong>Pre-Arrival Groups</strong> usa su propio set (ver nota debajo de ese template) ya que aún no tiene cuarto ni monto asignado.
       </div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
         <div style="display:flex;align-items:center;margin-bottom:16px">
@@ -1007,6 +1008,7 @@ function beRenderEmails() {
         <p style="font-size:11.5px;color:var(--muted);margin:0 0 12px">Sent automatically after a paid booking on the Escape page (book.html).</p>
         <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-eg-subject" type="text" value="${escHtml(s.email_guest_subject ?? BE_DEFAULT_GUEST_SUBJECT)}"></div>
         <div class="fg">${beRichBody('eg', s.email_guest_body ?? BE_DEFAULT_GUEST_BODY)}</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px"><button onclick="beSaveEmailSettings()" style="${beBtnS('#111827', '#fff')}">Save</button></div>
       </div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
         <div style="display:flex;align-items:center;margin-bottom:16px">
@@ -1016,6 +1018,7 @@ function beRenderEmails() {
         <p style="font-size:11.5px;color:var(--muted);margin:0 0 12px">Sent automatically after a paid booking on the Extra Night page (extra-nights.html).</p>
         <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-ext-subject" type="text" value="${escHtml(s.email_extra_night_subject ?? BE_DEFAULT_EXTRA_NIGHT_SUBJECT)}"></div>
         <div class="fg">${beRichBody('ext', s.email_extra_night_body ?? BE_DEFAULT_EXTRA_NIGHT_BODY)}</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px"><button onclick="beSaveEmailSettings()" style="${beBtnS('#111827', '#fff')}">Save</button></div>
       </div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
         <div style="display:flex;align-items:center;margin-bottom:16px">
@@ -1025,6 +1028,7 @@ function beRenderEmails() {
         <p style="font-size:11.5px;color:var(--muted);margin:0 0 12px">Sent automatically to the group leader the moment a new group/retreat booking is created (Venues "New Booking" or Builder "New Retreat"). Variables: {{firstName}}, {{lastName}}, {{retreatName}}, {{checkIn}}, {{checkOut}}, {{nights}}, {{pax}}, {{season}} (High/Low, based on group rates), {{email}}, {{phone}}.</p>
         <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-grp-subject" type="text" value="${escHtml(s.email_pre_arrival_group_subject ?? BE_DEFAULT_GROUP_SUBJECT)}"></div>
         <div class="fg">${beRichBody('grp', s.email_pre_arrival_group_body ?? BE_DEFAULT_GROUP_BODY, BE_GROUP_MERGE_VARS)}</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px"><button onclick="beSaveEmailSettings()" style="${beBtnS('#111827', '#fff')}">Save</button></div>
       </div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
         <div style="display:flex;align-items:center;margin-bottom:16px">
@@ -1034,6 +1038,7 @@ function beRenderEmails() {
         <div class="fg" style="margin-bottom:12px"><label>Notify email</label><input id="be-es-to" type="email" value="${escHtml(s.email_staff_to ?? 'amansala.reservations@gmail.com')}"></div>
         <div class="fg" style="margin-bottom:12px"><label>Subject</label><input id="be-es-subject" type="text" value="${escHtml(s.email_staff_subject ?? BE_DEFAULT_STAFF_SUBJECT)}"></div>
         <div class="fg">${beRichBody('es', s.email_staff_body ?? BE_DEFAULT_STAFF_BODY)}</div>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px"><button onclick="beSaveEmailSettings()" style="${beBtnS('#111827', '#fff')}">Save</button></div>
       </div>
       ${beEmailBlock('rem', 'Pre-Arrival Reminder', BE_DEFAULT_REMINDER_SUBJECT, BE_DEFAULT_REMINDER_BODY, rOn, s.email_reminder_subject, s.email_reminder_body, 'Sent automatically 3 days before check-in (once per booking).')}
       ${beEmailBlock('inh', 'In-Hotel Check-in', BE_DEFAULT_INHOTEL_SUBJECT, BE_DEFAULT_INHOTEL_BODY, iOn, s.email_inhotel_subject, s.email_inhotel_body, 'Sent automatically the day after check-in (once per booking).')}
