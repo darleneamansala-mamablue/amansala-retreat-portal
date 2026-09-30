@@ -712,19 +712,39 @@ async function bdToggleAdd(fid){
 // mirrors the 5%-of-pretax `commissions` row shape already used elsewhere
 // (tr2ConfirmUpgrade in transport.js, rmSave in venues.js) so a commission
 // logged from a folio charge shows up in the existing Commissions tab too.
-function _bdLogCommission(fid,staffId,baseAmount,taxRate,commissionAmount,desc){
+// Upsert (not blind insert) keyed on folio_item_id -- Jorge's report
+// 2026-09-30: a commission for Max silently never appeared. Root cause: this
+// folio_item's category was ALREADY "Comisión" from before the Staff field
+// existed (no commission had ever actually been logged for it), so the old
+// "only log if category is NEWLY Comisión" guard assumed one already existed
+// and skipped it forever. Checking for a real, linked commissions row (by
+// folio_item_id) instead of inferring from category state fixes that, and
+// also makes re-saving (e.g. changing the staff) update the same row
+// instead of creating a duplicate.
+async function _bdUpsertCommission(fid,itemId,staffId,baseAmount,taxRate,commissionAmount,desc){
   const staffName=(typeof staffAccounts!=='undefined'?staffAccounts:[]).find(s=>s.id===staffId)?.name||'';
   const f=_bdFolios.find(x=>x.folio.id===fid);
   const guestName=f?.folio?.name||_bdGuestNameOverride||'';
   const bookingId=_bdKind==='reg'?(AppData.regs.find(r=>r.id===_bdId)?.bookingId||null):null;
-  db.from('commissions').insert({
+  const payload={
     staff_id:staffId,staff_name:staffName,type:'folio',guest_name:guestName,booking_id:bookingId,
+    folio_item_id:itemId,
     // room_from/room_to are free text on this table -- repurposed here to
     // carry the folio charge's own description so it shows up readably in
     // the Commissions tab (commissionsRenderBody()'s detail column).
     room_from:null,room_to:desc||'Cargo de folio',upgrade_pretax:baseAmount,upgrade_total:+(baseAmount*(1+(taxRate||0)/100)).toFixed(2),
     commission_rate:0.05,commission_amount:commissionAmount,date:new Date().toISOString().slice(0,10),status:'pending',
-  }).then(({error})=>{if(error)console.warn('[commission] insert failed:',error.message);});
+  };
+  try{
+    const{data:existing}=await db.from('commissions').select('id').eq('folio_item_id',itemId).maybeSingle();
+    if(existing){
+      const{error}=await db.from('commissions').update(payload).eq('id',existing.id);
+      if(error)console.warn('[commission] update failed:',error.message);
+    }else{
+      const{error}=await db.from('commissions').insert(payload);
+      if(error)console.warn('[commission] insert failed:',error.message);
+    }
+  }catch(e){console.warn('[commission] upsert failed:',e.message);}
 }
 
 async function bdAddItem(fid){
@@ -744,9 +764,9 @@ async function bdAddItem(fid){
     if(!staffId){showToast('Selecciona el staff de la comisión');return;}
   }
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
-  const {error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax,category,staff_name:getCurrentSession()?.name||null});
+  const {data:newItem,error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax,category,staff_name:getCurrentSession()?.name||null}).select().single();
   if(error){showToast('Error: '+error.message);return;}
-  if(isComm&&staffId)_bdLogCommission(fid,staffId,price,tax,+(price*0.05).toFixed(2),desc);
+  if(isComm&&staffId)await _bdUpsertCommission(fid,newItem.id,staffId,price,tax,+(price*0.05).toFixed(2),desc);
   _bdAddOpen[fid]=false;
   await _bdLoadFolios();
 }
@@ -762,11 +782,6 @@ async function bdSaveEditItem(fid,itemId){
   const tax=parseFloat(document.getElementById(`bde-tax-${itemId}`)?.value)||0;
   const category=document.getElementById(`bde-cat-${itemId}`)?.value.trim()||null;
   const isComm=category==='Comisión';
-  // Only log a NEW commission when this edit is the one turning the charge
-  // INTO Comisión -- resaving an already-Comisión row (e.g. just fixing the
-  // description) must not insert a duplicate into the commissions table.
-  const origItem=_bdFolios.find(x=>x.folio.id===fid)?.items.find(x=>x.id===itemId);
-  const alreadyWasComm=origItem?.category==='Comisión';
   const price=parseFloat(document.getElementById(`bde-price-${itemId}`)?.value);
   let staffId='';
   if(isComm){
@@ -776,7 +791,7 @@ async function bdSaveEditItem(fid,itemId){
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
   const {error}=await db.from('folio_items').update({description:desc,unit_price:price,tax_rate:tax,category}).eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
-  if(isComm&&staffId&&!alreadyWasComm)_bdLogCommission(fid,staffId,price,tax,+(price*0.05).toFixed(2),desc);
+  if(isComm&&staffId)await _bdUpsertCommission(fid,itemId,staffId,price,tax,+(price*0.05).toFixed(2),desc);
   delete _bdEditOpen[itemId];
   await _bdLoadFolios();
 }
