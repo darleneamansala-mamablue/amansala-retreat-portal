@@ -722,7 +722,13 @@ let _rptOnlyMissing=false;
 
 function _rptContractStatus(bk){
   const contractSent=!!bk.contractSentAt||!!bk.contractSentViaPortal||['contract_sent','contract_signed','deposit_paid','room_list_sent','confirmed'].includes(bk.status);
-  const contractSigned=!!bk.contractSignedAt||bk.status==='contract_signed';
+  // 'contract_signed' itself is just one stop on the pipeline -- deposit_paid/
+  // room_list_sent/confirmed all come AFTER it, so a booking sitting in any of
+  // those already has a signed contract even if contractSignedAt itself was
+  // never recorded (same reasoning contractSent already applies to its own
+  // downstream statuses). Jorge's ask 2026-09-30: don't show "Not Signed" for
+  // retreats that are clearly past that stage.
+  const contractSigned=!!bk.contractSignedAt||['contract_signed','deposit_paid','room_list_sent','confirmed'].includes(bk.status);
   const portalSent=!!bk.roomListSentAt||!!bk.roomListSentViaPortal||['room_list_sent','confirmed'].includes(bk.status);
   return{
     contractSent,contractSentAt:bk.contractSentAt||null,
