@@ -234,7 +234,14 @@ function getTransportRoster(bkId){
   // by mistake once the email-collision fix stopped that (Jorge's report
   // 2026-09-17: "sigo sin ver Marcia en My Transportation, no se debe de excluir").
   const roster=[];
-  AppData.regs.filter(r=>r.bookingId===bkId).forEach(r=>{
+  // A room removed from the retreat's own room list (blockedRooms) can still
+  // have a leftover registrations row -- without this check that orphaned reg
+  // kept the guest on the teacher's own "My Transport" roster after being
+  // removed from her room list (Jorge's report 2026-09-30: "en monica teacher
+  // view my tranpsort sigue saliendo gv13 y ya ni estan ahi" -- same fix
+  // already applied to the admin Transport tab's synthetic-entries loop).
+  const _rosterBk=AppData.bookings.find(b=>b.id===bkId);
+  AppData.regs.filter(r=>r.bookingId===bkId&&(!_rosterBk||roomListIncludes(_rosterBk.blockedRooms,r.room))).forEach(r=>{
     (r.guests||[]).filter(g=>g.name).forEach(g=>{
       roster.push({name:g.name,email:(g.email||r.email||'').trim(),room:r.room||''});
     });
