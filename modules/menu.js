@@ -380,6 +380,15 @@ function menuMealTime(bk,meal,dateStr){
       mStart=mornOv?mornOv.start:(ov.morningStart||sr.morningStart||'');
       mDur=parseInt(mornOv?(mornOv.dur||90):(ov.morningDur||sr.morningDur||90));
     }
+    // No class that morning (day skipped / no morning class): brunch still
+    // runs at the retreat's usual time — same as the printed schedule — not a
+    // 09:30 default, which routeMeal then folded into light breakfast and
+    // dropped from the kitchen count entirely (Darlene 2026-09-30).
+    if(!mStart&&!isArrival){
+      const uStart=ov.morningStart||sr.morningStart||'';
+      const uDur=parseInt(ov.morningDur||sr.morningDur||90);
+      return uStart?(addMin(uStart,uDur+15)||'10:00'):'10:00';
+    }
     return mStart ? addMin(mStart,mDur+15)||'09:30' : '09:30';
   }
 
