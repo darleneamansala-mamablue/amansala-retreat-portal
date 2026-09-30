@@ -1128,8 +1128,15 @@ function regSplitGuestToRoom(reg,guestIdx,targetRoom,targetRtId){
 
 
 // ===== REGISTERED COUNT =====
+// Same "room removed from blockedRooms but its registrations row was never
+// deleted" guard as Transport (Jorge's report 2026-09-30) -- this count
+// feeds pax badges across Contracts/Payments/Menu/Builder/Venues, so an
+// orphaned reg for an unblocked room was inflating the guest count
+// everywhere those show, not just Transport.
 function registeredCount(bkId){
-  return AppData.regs.filter(r=>r.bookingId===bkId&&!r.isTeacherRoom).reduce((s,r)=>s+new Set((r.guests||[]).filter(g=>g.name).map(g=>g.name.trim())).size,0);
+  const bk=AppData.bookings.find(b=>b.id===bkId);
+  const blockedSet=bk?new Set(bk.blockedRooms||[]):null;
+  return AppData.regs.filter(r=>r.bookingId===bkId&&!r.isTeacherRoom&&(!blockedSet||blockedSet.has(r.room))).reduce((s,r)=>s+new Set((r.guests||[]).filter(g=>g.name).map(g=>g.name.trim())).size,0);
 }
 
 
