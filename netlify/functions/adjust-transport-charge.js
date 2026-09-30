@@ -103,6 +103,7 @@ async function chargeFolio(supaKey, { registrationId, guestName, description, un
     qty:        1,
     unit_price: unitPrice,
     tax_rate:   13,
+    category:   'Transport',
   });
   if (!itemRes.ok) return { error: `folio_item_failed: ${JSON.stringify(itemRes.data)}` };
   const saved = Array.isArray(itemRes.data) ? itemRes.data[0] : itemRes.data;

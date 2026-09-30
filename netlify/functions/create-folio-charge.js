@@ -62,7 +62,7 @@ exports.handler = async (event) => {
   try { fields = JSON.parse(event.body); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { registrationId, guestName, description, amount, qty, unitPrice, taxRate } = fields;
+  const { registrationId, guestName, description, amount, qty, unitPrice, taxRate, category } = fields;
   if (!registrationId || !description) {
     return jsonErr(400, 'Missing required fields: registrationId, description');
   }
@@ -130,6 +130,7 @@ exports.handler = async (event) => {
     qty:        resolvedQty,
     unit_price: resolvedUnitPrice,
     tax_rate:   resolvedTaxRate,
+    category:   category ?? null,
   });
   if (!itemRes.ok) {
     const d = itemRes.data;

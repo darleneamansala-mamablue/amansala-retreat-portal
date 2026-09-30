@@ -71,6 +71,7 @@ exports.handler = async (event) => {
         qty: 1,
         unit_price: -amount,
         tax_rate: 0,
+        category: 'Payment',
       }),
     });
     if (!insertRes.ok) {

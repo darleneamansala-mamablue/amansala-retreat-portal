@@ -1414,7 +1414,7 @@ async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, 
     try {
       const fcRes = await fetch('/.netlify/functions/create-folio-charge', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ registrationId: reg.id, guestName: entry.guest, description: folioDesc, qty: nights || 1, unitPrice: nightlyRate || pretaxTotal, taxRate: 16 }),
+        body: JSON.stringify({ registrationId: reg.id, guestName: entry.guest, description: folioDesc, qty: nights || 1, unitPrice: nightlyRate || pretaxTotal, taxRate: 16, category: 'Upgrade' }),
       });
       const fcJson = await fcRes.json().catch(() => ({}));
       if (!fcRes.ok) showToast('Error folio (' + fcRes.status + '): ' + (fcJson.error || JSON.stringify(fcJson)));

@@ -94,6 +94,7 @@ exports.handler = async (event) => {
   }
 
   // ── 5. Insert folio_item ───────────────────────────────────────────────────
+  const category = /massage/i.test(svcName) ? 'Massage' : 'Spa';
   const itemRes = await fetch(`${SUPABASE_URL}/rest/v1/folio_items`, {
     method:  'POST',
     headers: { ...h, 'Prefer': 'return=representation' },
@@ -103,6 +104,7 @@ exports.handler = async (event) => {
       qty:         1,
       unit_price:  Number(svcPrice),
       tax_rate:    Number(taxRate),
+      category,
     }),
   });
   const itemData = await itemRes.json().catch(() => null);

@@ -449,7 +449,7 @@ async function bdRecordTotalPayment(){
   const target=_bdLargestBalanceFolio();
   if(!target){showToast('No folio to record this payment against.');return;}
   const description=`Payment — ${method}${ref?': '+ref:''}`;
-  const {error}=await db.from('folio_items').insert({folio_id:target.folio.id,description,qty:1,unit_price:-amount,tax_rate:0,staff_name:getCurrentSession()?.name||null});
+  const {error}=await db.from('folio_items').insert({folio_id:target.folio.id,description,qty:1,unit_price:-amount,tax_rate:0,category:'Payment',staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error recording payment: '+error.message);return;}
   showToast('Payment recorded ✓');
   await _bdLoadFolios();
@@ -603,7 +603,7 @@ function _bdItemPickerHtml(fid){
   Object.keys(groups).sort().forEach(cat=>{
     opts+=`<optgroup label="${escHtml(cat)}">`;
     groups[cat].forEach(it=>{
-      opts+=`<option value="${escHtml(it.id)}" data-price="${Number(it.price).toFixed(2)}" data-tax="${Number(it.tax_rate)||0}" data-name="${escHtml(it.name)}">${escHtml(it.name)} — ${fmt$(it.price)}</option>`;
+      opts+=`<option value="${escHtml(it.id)}" data-price="${Number(it.price).toFixed(2)}" data-tax="${Number(it.tax_rate)||0}" data-name="${escHtml(it.name)}" data-category="${escHtml(it.category||'General')}">${escHtml(it.name)} — ${fmt$(it.price)}</option>`;
     });
     opts+=`</optgroup>`;
   });
@@ -616,11 +616,11 @@ function bdPickItem(fid){
   const priceEl=document.getElementById(`bdc-price-${fid}`);
   const taxEl=document.getElementById(`bdc-tax-${fid}`);
   if(opt&&opt.value){
-    if(descEl){descEl.value=opt.dataset.name||'';descEl.style.display='none';}
+    if(descEl){descEl.value=opt.dataset.name||'';descEl.style.display='none';descEl.dataset.category=opt.dataset.category||'';}
     if(priceEl)priceEl.value=opt.dataset.price||'';
     if(taxEl)taxEl.value=opt.dataset.tax||'0';
   }else{
-    if(descEl){descEl.value='';descEl.style.display='';descEl.focus();}
+    if(descEl){descEl.value='';descEl.style.display='';descEl.dataset.category='';descEl.focus();}
     if(priceEl)priceEl.value='';
     if(taxEl)taxEl.value='';
   }
@@ -633,11 +633,16 @@ async function bdToggleAdd(fid){
 }
 
 async function bdAddItem(fid){
-  const desc=document.getElementById(`bdc-desc-${fid}`)?.value.trim();
+  const descEl=document.getElementById(`bdc-desc-${fid}`);
+  const desc=descEl?.value.trim();
   const price=parseFloat(document.getElementById(`bdc-price-${fid}`)?.value);
   const tax=parseFloat(document.getElementById(`bdc-tax-${fid}`)?.value)||0;
+  // Set by bdPickItem() when the charge came from the Items catalog picker --
+  // null for a freely-typed manual description (Jorge's ask 2026-09-30: track
+  // category on every charge, manual and automatic alike).
+  const category=descEl?.dataset.category||null;
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
-  const {error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax,staff_name:getCurrentSession()?.name||null});
+  const {error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax,category,staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error: '+error.message);return;}
   _bdAddOpen[fid]=false;
   await _bdLoadFolios();
@@ -667,7 +672,7 @@ async function bdRecordPayment(fid){
   const ref=document.getElementById(`bd-pay-ref-${fid}`)?.value.trim();
   if(!amount||amount<=0){showToast('Enter a valid amount');return;}
   const description=`Payment — ${method}${ref?': '+ref:''}`;
-  const {error}=await db.from('folio_items').insert({folio_id:fid,description,qty:1,unit_price:-amount,tax_rate:0,staff_name:getCurrentSession()?.name||null});
+  const {error}=await db.from('folio_items').insert({folio_id:fid,description,qty:1,unit_price:-amount,tax_rate:0,category:'Payment',staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error recording payment: '+error.message);return;}
   showToast('Payment recorded ✓');
   const f=_bdFolios.find(x=>x.folio.id===fid);
