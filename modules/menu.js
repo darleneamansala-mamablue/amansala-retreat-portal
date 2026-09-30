@@ -355,6 +355,9 @@ function menuMealTime(bk,meal,dateStr){
   const isArrival   = dateStr && bk.startDate && dateStr===bk.startDate.slice(0,10);
   const isDeparture = dateStr && bk.endDate   && dateStr===bk.endDate.slice(0,10);
 
+  // Breakfast (Breakfast · Lunch plans): same slot brunch would take — right
+  // after the morning class.
+  if(meal==='breakfast') meal='brunch';
   // Fruit, Coffee &amp; Tea: always 7:00 AM
   if(meal==='lightBreakfast') return '07:00';
 
@@ -435,6 +438,8 @@ function menuPopulateFromRetreats(silent=false){
   const MEAL_PLANS={
     standard:['lightBreakfast','brunch','snack','dinner'],
     full:['lightBreakfast','lunch','dinner'],
+    bld:['breakfast','lunch','dinner'],
+    blsd:['breakfast','lunch','snack','dinner'],
     weTravel:['lightBreakfast','breakfast','brunch','lunch','snack','dinner']
   };
   // Brunch ≤ 11:45; 12:15–14:30 → lunch
@@ -492,6 +497,9 @@ function menuPopulateFromRetreats(silent=false){
       planMeals.forEach(meal=>{
         if(_isArrival&&!ARRIVAL_MEALS.has(meal))return;
         if(_isDeparture&&!DEPARTURE_MEALS.has(meal))return;
+        // Plans with a morning meal end with it on departure day — lunch only
+        // for a plan that has no breakfast/brunch (Full: LB · Lunch · Dinner).
+        if(_isDeparture&&meal==='lunch'&&(planMeals.includes('breakfast')||planMeals.includes('brunch')))return;
         const t=menuMealTime(bk,meal,dateStr);
         let actualMeal=routeMeal(meal,t);
         // If brunch routes back to lightBreakfast, skip — LB is already

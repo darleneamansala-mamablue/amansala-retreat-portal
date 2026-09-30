@@ -2821,6 +2821,7 @@ function tsRenderCalSection(bk){
         rows.push({time:timeRange,desc:ao.name+(ao.price?' — $'+ao.price+'/person':''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:'Optional',prepaid:false,sk:a.time||'99:99'});
       }
     });
+    rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
     rows.sort((a,b)=>sk(a.sk).localeCompare(sk(b.sk)));
     days.push({lbl,dayName:DAY_NAMES[d.getDay()],dateNum:d.getDate(),month:MON_NAMES[d.getMonth()],rows,prepaidActs});
   }
@@ -3002,6 +3003,13 @@ function openScheduleViewer(bkId){
   // app (teacher's own Schedule Request page, planning guide, etc.) — this is
   // the one place admin can override it for the whole retreat when a teacher
   // asks for a different time (Darlene's ask 2026-09-28).
+  html+=`<div style="margin-bottom:10px;padding:10px 14px;background:#f5f3ee;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <b>🍽 Meals:</b>
+    <select onchange="svSetMealPlan('${bkId}',this.value)" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">
+      ${['standard','bld','blsd'].concat(bk.mealPlan==='full'?['full']:[]).map(k=>`<option value="${k}"${(bk.mealPlan||'standard')===k?' selected':''}>${TS_MEAL_PLAN_LABELS[k]}</option>`).join('')}
+    </select>
+    <span style="font-size:11.5px;color:var(--muted)">Shows on the teacher's schedule, the printed schedule and the kitchen Menu.</span>
+  </div>`;
   html+=`<div style="margin-bottom:14px;padding:10px 14px;background:#f5f3ee;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <b>🌙 Dinner Time:</b>
     <input type="time" id="svDinnerTime_${bkId}" value="${sr.dinnerTimeOverride||''}" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">
@@ -3517,6 +3525,52 @@ function svSetTourMode(bkId,mode){
   openScheduleViewer(bkId);
 }
 
+// Meals a retreat's plan includes (bk.mealPlan, set in the retreat window or
+// Review Schedule). The day-by-day and printed schedules are built with the
+// standard Light Breakfast · Brunch · Snack · Dinner rows; tsApplyMealPlan
+// then drops/renames/adds rows so each teacher sees their own plan
+// (Darlene 2026-09-30).
+const TS_MEAL_PLANS={
+  standard:['lightBreakfast','brunch','snack','dinner'],
+  full:['lightBreakfast','lunch','dinner'],
+  bld:['breakfast','lunch','dinner'],
+  blsd:['breakfast','lunch','snack','dinner'],
+  weTravel:['lightBreakfast','breakfast','brunch','lunch','snack','dinner'],
+};
+const TS_MEAL_PLAN_LABELS={standard:'Light Breakfast · Brunch · Snack · Dinner',bld:'Breakfast · Lunch · Dinner',blsd:'Breakfast · Lunch · Snack · Dinner',full:'Light Breakfast · Lunch · Dinner'};
+function tsApplyMealPlan(bk,rows,dayIdx,nights){
+  const plan=new Set(TS_MEAL_PLANS[bk.mealPlan]||TS_MEAL_PLANS.standard);
+  if(!bk.mealPlan||bk.mealPlan==='standard'||bk.mealPlan==='weTravel')return rows;
+  const sr=bk.scheduleRequest||{};
+  const out=[];let tmpl=null;
+  rows.forEach(r=>{
+    const d=String(r.desc||'');
+    if(/^Fruit, Coffee/.test(d)){if(plan.has('lightBreakfast'))out.push(r);tmpl=tmpl||r;return;}
+    if(/^(Brunch|Breakfast)\b/.test(d)){
+      tmpl=tmpl||r;
+      if(plan.has('brunch'))out.push(r);
+      else if(plan.has('breakfast'))out.push({...r,desc:d.replace(/^(Brunch|Breakfast)/,'Breakfast')});
+      return;
+    }
+    if(/Snack$/.test(d)&&(r.cat==='meal'||r.cls===''||r.cls===undefined)){if(plan.has('snack'))out.push(r);return;}
+    out.push(r);
+  });
+  // Lunch on full days (not arrival/departure — guests arrive mid-afternoon
+  // and leave after the morning meal).
+  if(plan.has('lunch')&&dayIdx>0&&dayIdx<nights){
+    const t=(sr.adminOverride||{}).lunchStart||sr.lunchStart||'13:00';
+    const base=tmpl||rows.find(r=>/Dinner/.test(r.desc||''))||{};
+    out.push({...base,time:tsFmt(t),desc:'Lunch',shala:'',sk:t});
+  }
+  return out;
+}
+function svSetMealPlan(bkId,val){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  bk.mealPlan=val;
+  saveAll();
+  openScheduleViewer(bkId);
+  showToast(`Meals set to ${TS_MEAL_PLAN_LABELS[val]||val}.`);
+}
 // Dinner time for one night: that night's own time (per-night editor in
 // Review Schedule) → the retreat-wide time → the usual default passed in.
 function svDinnerTimeFor(sr,dateStr,dflt){
@@ -4902,6 +4956,7 @@ function openPrintSchedule(bkId){
       const desc=a.prepaid?(ao.name+(a.requestedTime?' (requested this time)':'')):('Optional '+ao.name+(ao.price?' — $'+ao.price+' USD per person':''));
       rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99'});
     });
+    rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
     rows.sort((a,b)=>(a.sk||'99:99').localeCompare(b.sk||'99:99'));
     days.push({label:dayLabel,rows});
   }
