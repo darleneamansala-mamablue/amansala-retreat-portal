@@ -183,7 +183,7 @@ async function handleWeTravelBookingUpdate(key, tripUuid, orderId, d, eventType,
           const folios = await supa(key, `folios?select=id,status&registration_id=eq.${reg.id}&guest_name=eq.${encodeURIComponent(gName)}&name=eq.${encodeURIComponent('Room Charges')}`, 'GET');
           const folio = folios[0];
           if (!folio) continue;
-          await supa(key, 'folio_items', 'POST', [{ folio_id: folio.id, description: 'Payment — We Travel', qty: 1, unit_price: -perGuestDelta, tax_rate: 0 }]);
+          await supa(key, 'folio_items', 'POST', [{ folio_id: folio.id, description: 'Payment — We Travel', qty: 1, unit_price: -perGuestDelta, tax_rate: 0, category: 'Payment' }]);
           if (isFullyPaid && folio.status !== 'closed') {
             await supa(key, `folios?id=eq.${folio.id}`, 'PATCH', { status: 'closed' });
           }
@@ -489,8 +489,8 @@ exports.handler = async (event) => {
           const key = `${f.registrationId}::${f.guestName}`;
           const rcFolio = folioByToken.get(roomChargesTokenOf.get(key));
           if (rcFolio) {
-            items.push({ folio_id: rcFolio.id, description: f.description, qty: 1, unit_price: f.chargeAmount, tax_rate: 0 });
-            if (f.paidAmount > 0) items.push({ folio_id: rcFolio.id, description: 'Payment — We Travel', qty: 1, unit_price: -f.paidAmount, tax_rate: 0 });
+            items.push({ folio_id: rcFolio.id, description: f.description, qty: 1, unit_price: f.chargeAmount, tax_rate: 0, category: 'Room' });
+            if (f.paidAmount > 0) items.push({ folio_id: rcFolio.id, description: 'Payment — We Travel', qty: 1, unit_price: -f.paidAmount, tax_rate: 0, category: 'Payment' });
           }
           // Every WeTravel booking (BBC or RNR) includes two spa credits as part of
           // the package price — logged as a single credit line each in the open
@@ -500,7 +500,7 @@ exports.handler = async (event) => {
           const exFolio = folioByToken.get(extrasTokenOf.get(key));
           if (exFolio) {
             for (let n = 1; n <= 2; n++) {
-              items.push({ folio_id: exFolio.id, description: `Spa Credit (included – WeTravel)`, qty: 1, unit_price: -95, tax_rate: 13 });
+              items.push({ folio_id: exFolio.id, description: `Spa Credit (included – WeTravel)`, qty: 1, unit_price: -95, tax_rate: 13, category: 'Spa' });
             }
           }
         });

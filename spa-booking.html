@@ -882,9 +882,9 @@ async function sbFinalConfirm(){
                 if(cfErr)throw cfErr;folioId=cf.id;
               }
               const label=chargeTherName?`${chargeTherName} - ${svc.name}`:svc.name;const svcDay=appt.date?`${appt.date}T17:00:00Z`:undefined;
-              const {data:it,error:itErr}=await db.from('folio_items').insert({folio_id:folioId,description:label,created_at:svcDay,qty:1,unit_price:Number(price),tax_rate:13}).select('id').single();
+              const {data:it,error:itErr}=await db.from('folio_items').insert({folio_id:folioId,description:label,created_at:svcDay,qty:1,unit_price:Number(price),tax_rate:13,category}).select('id').single();
               if(itErr)throw itErr;
-              if(tipCharge)await db.from('folio_items').insert({folio_id:folioId,description:chargeTherName?`${chargeTherName} - Tip`:'Tip',created_at:svcDay,qty:1,unit_price:Number(tipCharge.amount),tax_rate:0});
+              if(tipCharge)await db.from('folio_items').insert({folio_id:folioId,description:chargeTherName?`${chargeTherName} - Tip`:'Tip',created_at:svcDay,qty:1,unit_price:Number(tipCharge.amount),tax_rate:0,category:'Tip'});
               appt.folioStatus='POSTED';
               appt.folioChargeId=it.id;
               appt.folioRegId=match.reg.id;

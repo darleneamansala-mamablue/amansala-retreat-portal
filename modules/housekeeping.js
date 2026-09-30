@@ -16,6 +16,9 @@ let hkStatusMap={};
 let hkFilter='all';
 let hkDate=null;        // board date (YYYY-MM-DD, hotel-local); null until hkInit
 let hkCleanLog={};      // roomId -> latest finished cleaning on hkDate, from the HK app
+let hkCleanList=[];     // every finished cleaning on hkDate, newest first (activity feed)
+let hkPrevSeen=null;    // badge "seen" time from before this visit -- rows after it are NEW
+let hkFeedExpanded=false;
 let hkAutoTimer=null;
 
 // Finished cleanings (room, housekeeper name, times) come from the housekeeping
@@ -31,15 +34,20 @@ async function hkFetchCleanLog(date){
   if(!d.success)throw new Error(d.error||'getCleanLog failed');
   return d.cleaned||[];
 }
+// Returns the cleanings that weren't in the previous load (for the live alert)
 async function hkLoadCleanLog(){
   const date=hkDate;
   try{
     const list=await hkFetchCleanLog(date);
-    if(date!==hkDate)return; // user moved to another day meanwhile
+    if(date!==hkDate)return[]; // user moved to another day meanwhile
+    const key=c=>c.room+'|'+c.roomType+'|'+c.finishedAt;
+    const before=new Set(hkCleanList.map(key));
     const map={};
     list.forEach(c=>{const prev=map[c.room];if(!prev||(c.finishedAt||'')>(prev.finishedAt||''))map[c.room]=c;});
     hkCleanLog=map;
-  }catch(e){console.warn('HK clean log failed:',e);}
+    hkCleanList=list.slice().sort((a,b)=>(b.finishedAt||'').localeCompare(a.finishedAt||''));
+    return hkCleanList.filter(c=>!before.has(key(c)));
+  }catch(e){console.warn('HK clean log failed:',e);return[];}
 }
 function hkFmtTime(iso){return new Date(iso).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}
 let hkModalRoom=null;
@@ -125,6 +133,7 @@ function hkMatchesFilter(roomId,occ){
 function hkInit(){
   if(!hkDate)hkDate=hkToday();
   hkLoadStatusLocal();
+  try{hkPrevSeen=localStorage.getItem(HK_BADGE_SEEN_KEY);}catch(e){}
   hkMarkBadgeSeen();
   hkRender();
   Promise.all([loadFromSupabase(),hkSyncStatusFromSupabase(),hkLoadCleanLog()]).then(()=>hkRender());
@@ -141,14 +150,18 @@ function hkStartAutoRefresh(){
   if(hkAutoTimer)return;
   hkAutoTimer=setInterval(async()=>{
     if(!hkIsOpen()||document.hidden)return;
-    await Promise.all([hkSyncStatusFromSupabase(),hkLoadCleanLog()]);
+    const [,fresh]=await Promise.all([hkSyncStatusFromSupabase(),hkLoadCleanLog()]);
     hkMarkBadgeSeen();
+    if(fresh.length&&hkDate===hkToday()){
+      const c=fresh[0];
+      showToast(fresh.length===1?`✓ ${c.cleanedBy||'Housekeeping'} finished ${c.room}`:`✓ ${fresh.length} rooms finished: ${fresh.map(f=>f.room).join(', ')}`);
+    }
     if(!document.getElementById('hkStatusModal')?.classList.contains('open'))hkRender();
   },60000);
 }
 function hkSetDate(date){
   if(!date)return;
-  hkDate=date;hkCleanLog={};
+  hkDate=date;hkCleanLog={};hkCleanList=[];hkFeedExpanded=false;
   hkRender();
   hkLoadCleanLog().then(()=>hkRender());
 }
@@ -189,7 +202,38 @@ function hkRender(){
   hkRenderDateNav();
   hkRenderFilters();
   hkRenderSummary(occ);
+  hkRenderFeed();
   hkRenderGrid(occ);
+}
+
+// ===== ACTIVITY FEED: what each housekeeper has finished, newest first =====
+const HK_TASK_LABEL={checkout:'Departure',arrival:'Arrival',stayover:'Stayover',refresh:'Refresh'};
+function hkRenderFeed(){
+  const el=document.getElementById('hkFeed');if(!el)return;
+  if(!hkCleanList.length){el.innerHTML='';return;}
+  const LIMIT=6;
+  const rows=hkFeedExpanded?hkCleanList:hkCleanList.slice(0,LIMIT);
+  const isNew=c=>hkPrevSeen&&hkDate===hkToday()&&(c.finishedAt||'')>hkPrevSeen;
+  const newN=hkCleanList.filter(isNew).length;
+  el.innerHTML=`
+    <div style="background:#fff;border-radius:12px;border:1px solid #e8dfd4;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04);margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;padding:11px 16px;background:#f0fdfa;border-bottom:1px solid #ccfbf1">
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#0f766e">&#10003; Housekeeping activity</span>
+        <span style="font-size:11px;color:#5a8a84">${hkCleanList.length} finished</span>
+        ${newN?`<span style="font-size:10px;font-weight:700;background:#4db6ac;color:#fff;padding:2px 8px;border-radius:10px">${newN} new</span>`:''}
+      </div>
+      ${rows.map(c=>{
+        const mins=c.startedAt&&c.finishedAt?Math.max(0,Math.round((new Date(c.finishedAt)-new Date(c.startedAt))/60000)):null;
+        return `<div style="display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid #f5f1eb;font-size:12.5px;${isNew(c)?'background:#f0fdfa':''}">
+          <span style="font-weight:700;color:#2d2520;min-width:62px">${escHtml(c.room)}</span>
+          <span style="color:#0f766e;font-weight:600;flex:1">${escHtml(c.cleanedBy||'Housekeeping')}</span>
+          <span style="color:#8a7e74">${escHtml(HK_TASK_LABEL[c.roomType]||c.roomType||'')}</span>
+          ${mins!==null?`<span style="color:#8a7e74">${mins} min</span>`:''}
+          <span style="color:#5a5048;font-weight:600;min-width:70px;text-align:right">${c.finishedAt?hkFmtTime(c.finishedAt):''}</span>
+          ${isNew(c)?'<span style="font-size:9.5px;font-weight:700;color:#0f766e;border:1px solid #5eead4;border-radius:8px;padding:1px 6px">NEW</span>':''}
+        </div>`;}).join('')}
+      ${hkCleanList.length>LIMIT?`<div onclick="hkFeedExpanded=!hkFeedExpanded;hkRenderFeed()" style="padding:8px 16px;font-size:12px;font-weight:600;color:#2d6a6a;cursor:pointer;text-align:center">${hkFeedExpanded?'Show less':'Show all '+hkCleanList.length}</div>`:''}
+    </div>`;
 }
 
 function hkRenderDateNav(){
@@ -243,7 +287,7 @@ function hkRenderSummary(occ){
     <span style="font-size:18px;font-weight:800;color:#92400e">${inhouse}</span>
   </div>`);
   const cleanedN=Object.keys(hkCleanLog).length;
-  pills.push(`<div style="display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;background:#f0fdfa;border:1px solid #99f6e4">
+  pills.push(`<div onclick="document.getElementById('hkFeed')?.scrollIntoView({behavior:'smooth',block:'start'})" title="See which rooms" style="cursor:pointer;display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;background:#f0fdfa;border:1px solid #99f6e4">
     <span style="font-size:12px;font-weight:700;color:#0f766e">&#10003; Cleaned by housekeeping</span>
     <span style="font-size:18px;font-weight:800;color:#0f766e">${cleanedN}</span>
   </div>`);

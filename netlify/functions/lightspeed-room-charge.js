@@ -163,6 +163,7 @@ exports.handler = async (event) => {
     qty:         1,
     unit_price:  amount,
     tax_rate:    0,
+    category:    'Restaurant',
   });
   if (!itemRes.ok) {
     return { statusCode: 500, body: JSON.stringify({ error: 'folio_item_failed', detail: itemRes.data }) };

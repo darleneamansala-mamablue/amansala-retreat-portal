@@ -53,7 +53,7 @@ async function chargeFolio(hdrs, { registrationId, guestName, description, unitP
     method: 'POST', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'return=representation' },
     // created_at = the service day (noon Tulum) so the folio's Date column shows
     // when the treatment was given, like Cloudbeds.
-    body: JSON.stringify({ folio_id: folioId, description, qty: 1, unit_price: unitPrice, tax_rate: 13, ...(serviceDate ? { created_at: `${serviceDate}T17:00:00Z` } : {}) }),
+    body: JSON.stringify({ folio_id: folioId, description, qty: 1, unit_price: unitPrice, tax_rate: 13, category: category || null, ...(serviceDate ? { created_at: `${serviceDate}T17:00:00Z` } : {}) }),
   });
   if (!itemRes.ok) return { error: 'folio_item_failed: ' + await itemRes.text() };
   const [saved] = await itemRes.json();
@@ -254,7 +254,7 @@ exports.handler = async (event) => {
         if (regMatch) {
           const { folioItemId, error } = await chargeFolio(hdrs, {
             registrationId: regMatch.reg.id, guestName: clientName,
-            description: therName ? `${therName} - ${svc.name}` : svc.name, serviceDate: date, unitPrice: priceUSD,
+            description: therName ? `${therName} - ${svc.name}` : svc.name, serviceDate: date, unitPrice: priceUSD, category,
           });
           if (folioItemId) { appt.folioStatus = 'POSTED'; appt.folioChargeId = folioItemId; appt.folioRegId = regMatch.reg.id; folioPosted = true; }
           else console.warn('[visito-spa-create-booking] folio charge failed:', error);

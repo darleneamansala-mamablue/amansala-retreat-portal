@@ -306,7 +306,7 @@ async function _rptLoadDaily(){
   try{
     const fromTs=_dailyFrom+'T00:00:00.000Z',toTs=_dailyTo+'T23:59:59.999Z';
     const[itemsRes,staffRes]=await Promise.all([
-      db.from('folio_items').select('id,folio_id,description,qty,unit_price,tax_rate,staff_name,created_at').gte('created_at',fromTs).lte('created_at',toTs).order('created_at',{ascending:false}),
+      db.from('folio_items').select('id,folio_id,description,qty,unit_price,tax_rate,staff_name,category,created_at').gte('created_at',fromTs).lte('created_at',toTs).order('created_at',{ascending:false}),
       db.from('staff').select('name,active').order('name',{ascending:true}),
     ]);
     if(itemsRes.error)throw itemsRes.error;
@@ -472,7 +472,7 @@ function _rptRenderDailyView(){
         :`<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
         <table style="width:100%;border-collapse:collapse">
           <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
-            <tr><th style="${_rptTh()}">Date / Time</th><th style="${_rptTh()}">User</th><th style="${_rptTh()}">Guest</th><th style="${_rptTh()}">Description</th><th style="${_rptTh('right')}">Amount</th></tr>
+            <tr><th style="${_rptTh()}">Date / Time</th><th style="${_rptTh()}">User</th><th style="${_rptTh()}">Guest</th><th style="${_rptTh()}">Description</th><th style="${_rptTh('center')}">Category</th><th style="${_rptTh('right')}">Amount</th></tr>
           </thead>
           <tbody>
             ${folioCharges.map(r=>{
@@ -489,6 +489,7 @@ function _rptRenderDailyView(){
                   :`<span style="color:#d1d5db">—</span>`}</td>
                 <td style="${_rptTd()};font-size:12px;color:#374151;max-width:200px">${escHtml(guestLine)}</td>
                 <td style="${_rptTd()};font-size:12px;color:#374151;max-width:240px">${escHtml(r.description||'—')}</td>
+                <td style="${_rptTd('center')}">${r.category?`<span style="background:#f3f4f6;color:#374151;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap">${escHtml(r.category)}</span>`:'<span style="color:#d1d5db">—</span>'}</td>
                 <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#7e22ce">${fmt$(r.amount)}</td>
               </tr>`;
             }).join('')}
@@ -538,17 +539,17 @@ function _rptExportDailyCsv(){
   const folioPayments=_rptDailyFolioPayments();
   const payLines=payEntries.map(e=>[
     'Payment',e.date||'',e.staffName||'',e.bk?.retreatName||e.bk?.leaderName||'',
-    Number(e.amount||0).toFixed(2),e.method||'',e.ref||'',e.note||'',
+    Number(e.amount||0).toFixed(2),'',e.method||'',e.ref||'',e.note||'',
   ]);
   const chargeLines=folioCharges.map(r=>[
     'Folio Charge',(r.created_at||'').slice(0,10),r.staff_name||'',r.guestName||r.bk?.retreatName||r.bk?.leaderName||'',
-    r.amount.toFixed(2),r.description||'','','',
+    r.amount.toFixed(2),r.category||'',r.description||'','','',
   ]);
   const payFolioLines=folioPayments.map(r=>[
     'Folio Payment',(r.created_at||'').slice(0,10),r.staff_name||'',r.guestName||r.bk?.retreatName||r.bk?.leaderName||'',
-    Math.abs(r.amount).toFixed(2),r.description||'','','',
+    Math.abs(r.amount).toFixed(2),r.category||'',r.description||'','','',
   ]);
-  const header=['Type','Date','User','Retreat/Guest','Amount','Method/Description','Ref','Note'];
+  const header=['Type','Date','User','Retreat/Guest','Amount','Category','Method/Description','Ref','Note'];
   const csvRows=[header,...payLines,...chargeLines,...payFolioLines];
   const csv=csvRows.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv'});

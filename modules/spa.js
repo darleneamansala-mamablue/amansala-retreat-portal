@@ -702,7 +702,7 @@ async function spaChargeApptToRoom(apptId, opts) {
         if (cErr) throw cErr;
         folioId = created.id;
       }
-      const { data: item, error: iErr } = await db.from('folio_items').insert({ folio_id: folioId, description: spaFolioChargeLabel(category, name, a.date, therapistName), created_at: spaFolioDate(a.date), qty: 1, unit_price: Number(price), tax_rate: 13, staff_name: getCurrentSession()?.name || null }).select('id').single();
+      const { data: item, error: iErr } = await db.from('folio_items').insert({ folio_id: folioId, description: spaFolioChargeLabel(category, name, a.date, therapistName), created_at: spaFolioDate(a.date), qty: 1, unit_price: Number(price), tax_rate: 13, category, staff_name: getCurrentSession()?.name || null }).select('id').single();
       if (iErr) throw iErr;
       a.folioRegId = match.reg.id;
       a.folioId = folioId;

@@ -84,6 +84,7 @@ exports.handler = async (event) => {
         qty: 1,
         unit_price: -(pi.amount_received / 100),
         tax_rate: 0,
+        category: 'Payment',
       }),
     });
     if (!insertRes.ok) return jsonErr(500, 'Charged but could not save to the folio: ' + await insertRes.text());
