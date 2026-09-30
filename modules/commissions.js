@@ -102,6 +102,8 @@ function commissionsRenderBody(){
     const isPaid=c.status==='paid';
     const detailTxt=c.type==='reservation'
       ?`Reserva nueva · ${escHtml(c.room_to||'')}`
+      :c.type==='folio'
+      ?escHtml(c.room_to||'Cargo de folio')
       :`${escHtml(c.room_from||'')} → ${escHtml(c.room_to||'')}`;
     html+=`<tr style="border-bottom:1px solid #f1f5f9">
       <td style="padding:9px 12px;font-size:12px;color:#374151">${fmtDate(c.date)}</td>
