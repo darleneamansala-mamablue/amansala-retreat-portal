@@ -495,7 +495,7 @@ function _bdFolioRowHtml(f){
   const addFormHtml=_bdAddOpen[fid]?`
     <tr>
       <td></td>
-      <td style="padding:6px 12px" colspan="2">${_bdItemPickerHtml(fid)}<input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
+      <td style="padding:6px 12px" colspan="2">${_bdItemPickerHtml(fid)}<input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><input id="bdc-cat-${fid}" placeholder="Category (optional)" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td style="padding:6px 12px"><input id="bdc-price-${fid}" type="number" step="0.01" placeholder="Price" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td style="padding:6px 12px"><input id="bdc-tax-${fid}" type="number" step="0.01" placeholder="Tax%" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td colspan="2" style="padding:6px 12px;text-align:right"><button class="btn btn-primary btn-sm" onclick="bdAddItem('${fid}')">+ Add</button></td>
@@ -615,14 +615,21 @@ function bdPickItem(fid){
   const descEl=document.getElementById(`bdc-desc-${fid}`);
   const priceEl=document.getElementById(`bdc-price-${fid}`);
   const taxEl=document.getElementById(`bdc-tax-${fid}`);
+  const catEl=document.getElementById(`bdc-cat-${fid}`);
   if(opt&&opt.value){
-    if(descEl){descEl.value=opt.dataset.name||'';descEl.style.display='none';descEl.dataset.category=opt.dataset.category||'';}
+    if(descEl){descEl.value=opt.dataset.name||'';descEl.style.display='none';}
     if(priceEl)priceEl.value=opt.dataset.price||'';
     if(taxEl)taxEl.value=opt.dataset.tax||'0';
+    // Pre-filled from the item's own category but still a normal, editable
+    // text field -- Jorge's report 2026-09-30: "no veo category para
+    // seleccionar" (the category was only ever attached invisibly via a
+    // data- attribute, never shown as a field staff could see or edit).
+    if(catEl)catEl.value=opt.dataset.category||'';
   }else{
-    if(descEl){descEl.value='';descEl.style.display='';descEl.dataset.category='';descEl.focus();}
+    if(descEl){descEl.value='';descEl.style.display='';descEl.focus();}
     if(priceEl)priceEl.value='';
     if(taxEl)taxEl.value='';
+    if(catEl)catEl.value='';
   }
 }
 
@@ -637,10 +644,11 @@ async function bdAddItem(fid){
   const desc=descEl?.value.trim();
   const price=parseFloat(document.getElementById(`bdc-price-${fid}`)?.value);
   const tax=parseFloat(document.getElementById(`bdc-tax-${fid}`)?.value)||0;
-  // Set by bdPickItem() when the charge came from the Items catalog picker --
-  // null for a freely-typed manual description (Jorge's ask 2026-09-30: track
+  // Pre-filled by bdPickItem() when the charge came from the Items catalog
+  // picker, but always a normal editable field -- staff can type/change it
+  // for a freely-typed manual charge too (Jorge's ask 2026-09-30: track
   // category on every charge, manual and automatic alike).
-  const category=descEl?.dataset.category||null;
+  const category=document.getElementById(`bdc-cat-${fid}`)?.value.trim()||null;
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
   const {error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax,category,staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error: '+error.message);return;}
