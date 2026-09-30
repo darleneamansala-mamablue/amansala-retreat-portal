@@ -813,7 +813,11 @@ async function tr2LoadData() {
   const cancelledKeys = new Set();
   tr2ActiveBooks.forEach(bk => {
     const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
-    AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => {
+    // Same guard as the synthetic "Missing Transport" loop below -- a room
+    // removed from the retreat's own room list shouldn't feed room-lookup/
+    // name-matching indices either, or a stale reg can still resolve a real
+    // submitted form to a room the guest isn't actually on the list for.
+    AppData.regs.filter(r => r.bookingId === bk.id && roomListIncludes(bk.blockedRooms, r.room)).forEach(reg => {
       const regCancelled = !!reg.cancelled;
       (reg.guests || []).forEach(g => {
         const isCancelled = regCancelled || g.cancelled;
@@ -955,7 +959,13 @@ async function tr2LoadData() {
   });
   tr2ActiveBooks.forEach(bk => {
     const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
-    AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => {
+    // A room removed from the retreat's own room list (bk.blockedRooms) can still
+    // have a leftover registrations row (nobody deletes it, just unblocks the
+    // room) -- without this check that orphaned reg kept spawning a synthetic
+    // "Missing Transport" entry for a guest who isn't even on the room list
+    // anymore (Jorge's report 2026-09-30: GV13a/GV13b still showing after being
+    // removed from Monica's "Just Breathe Yoga Retreat").
+    AppData.regs.filter(r => r.bookingId === bk.id && roomListIncludes(bk.blockedRooms, r.room)).forEach(reg => {
       const room = reg.room || '';
       (reg.guests || []).forEach(g => {
         if (!g.name || g.cancelled || reg.cancelled) return;
