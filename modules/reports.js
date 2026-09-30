@@ -746,12 +746,18 @@ function _rptStatusBadge(on,onLabel,offLabel){
 function _rptRenderStatus(){
   const el=document.getElementById('reportsContent');
   if(!el)return;
-  let rows=_rptFiltered().map(r=>({...r,cs:_rptContractStatus(r.bk)}));
+  // WeTravel-sourced retreats never go through this app's own Send Contract/
+  // Send Room List flows at all -- their contract happens on WeTravel's own
+  // platform, so "Sent"/"Signed"/"Portal" here is meaningless noise for them
+  // (Jorge's report 2026-09-30: "esos no deben de salir ahi en ese reporte",
+  // pointing at We Travel BBC/RNR).
+  const _statusFiltered=_rptFiltered().filter(r=>r.bk.source!=='wetravel');
+  let rows=_statusFiltered.map(r=>({...r,cs:_rptContractStatus(r.bk)}));
   if(_rptOnlyMissing)rows=rows.filter(r=>!r.cs.contractSent||!r.cs.portalSent);
-  const active=_rptFiltered().filter(r=>r.bk.status!=='cancelled').length;
+  const active=_statusFiltered.filter(r=>r.bk.status!=='cancelled').length;
   const years=[...new Set(_rptRows.map(r=>(r.bk.startDate||'').slice(0,4)).filter(Boolean))].sort().reverse();
-  const missingContract=_rptFiltered().filter(r=>!_rptContractStatus(r.bk).contractSent).length;
-  const missingPortal=_rptFiltered().filter(r=>!_rptContractStatus(r.bk).portalSent).length;
+  const missingContract=_statusFiltered.filter(r=>!_rptContractStatus(r.bk).contractSent).length;
+  const missingPortal=_statusFiltered.filter(r=>!_rptContractStatus(r.bk).portalSent).length;
 
   el.innerHTML=`
   <div style="padding:24px 28px;font-family:'Jost',sans-serif;overflow-y:auto;height:100%;box-sizing:border-box">
