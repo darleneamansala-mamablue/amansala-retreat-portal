@@ -99,6 +99,8 @@
     .tab-bar.collapsed .tab-btn{padding:11px;justify-content:center;border-left:3px solid transparent;}
     .tab-bar.collapsed .tab-btn.active{border-left-color:#4db6ac;background:rgba(255,255,255,.1);}
     .tab-bar.collapsed .tab-label{display:none;}
+    .hk-nav-badge{background:#4db6ac;color:#fff;font-size:10.5px;font-weight:700;line-height:1;padding:3px 7px;border-radius:10px;flex-shrink:0;}
+    .tab-bar.collapsed .hk-nav-badge{position:absolute;top:3px;right:4px;font-size:9px;padding:2px 4px;}
     .tab-bar-section-label{padding:6px 14px 2px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,.3);}
     .tab-bar.collapsed .tab-bar-section-label{display:none;}
     .tab-admin-toggle{display:flex;align-items:center;gap:10px;padding:9px 14px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;color:rgba(255,255,255,.5);background:none;border:none;border-left:3px solid transparent;cursor:pointer;width:100%;text-align:left;transition:all .15s;flex-shrink:0;text-transform:uppercase;letter-spacing:.5px;font-size:11px;}
@@ -130,6 +132,7 @@
       .tab-bar .tab-bar-toggle-label{display:none;}
       .tab-bar .tab-bar-toggle{justify-content:center;padding:10px;}
       .tab-btn{padding:11px;justify-content:center;}
+      .hk-nav-badge{position:absolute;top:3px;right:4px;font-size:9px;padding:2px 4px;}
     }
     @media(max-width:600px){
       .app-brand{font-size:17px;}
@@ -3235,7 +3238,8 @@
         <h2 style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:#2d2520;margin:0">Housekeeping</h2>
         <p style="font-size:12.5px;color:#8a7e74;margin:4px 0 0">Room cleaning status — arrivals, departures &amp; stays default to needing a clean each day</p>
       </div>
-      <button onclick="hkRefresh()" style="padding:7px 14px;border:1.5px solid #2d6a6a;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;font-weight:600;cursor:pointer;color:#2d6a6a;margin-left:auto">↻ Refresh</button>
+      <div id="hkDateNav" style="display:flex;align-items:center;gap:6px;margin-left:auto"></div>
+      <button onclick="hkRefresh()" style="padding:7px 14px;border:1.5px solid #2d6a6a;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;font-weight:600;cursor:pointer;color:#2d6a6a">↻ Refresh</button>
       <div id="hkFilters" style="display:flex;gap:6px;flex-wrap:wrap"></div>
     </div>
     <div id="hkSummary" style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap"></div>
@@ -6299,7 +6303,7 @@ function switchTab(id,btn){
 </script>
 <script src="modules/driver-portal.js"></script>
 <script src="modules/spa-staff-portal.js"></script>
-<script src="modules/housekeeping.js"></script>
+<script src="modules/housekeeping.js?v=20260930a"></script>
 <script src="modules/teacher-profiles.js"></script>
 <script src="modules/cloudbeds-extra.js"></script>
 <script src="modules/wetravel-admin.js?v=20260917b"></script>

@@ -14,6 +14,34 @@ const HK_STATUS_CFG={
 
 let hkStatusMap={};
 let hkFilter='all';
+let hkDate=null;        // board date (YYYY-MM-DD, hotel-local); null until hkInit
+let hkCleanLog={};      // roomId -> latest finished cleaning on hkDate, from the HK app
+let hkAutoTimer=null;
+
+// Finished cleanings (room, housekeeper name, times) come from the housekeeping
+// app's own DB through its Netlify function -- see getCleanLog in
+// amansala-housekeeping/netlify/functions/housekeeping.js.
+const HK_CLEANLOG_URL='https://amansala-housekeeping.netlify.app/.netlify/functions/housekeeping?action=getCleanLog';
+const HK_BADGE_SEEN_KEY='hk_badge_seen_at';
+
+function hkToday(){return fmtISO(new Date());}
+async function hkFetchCleanLog(date){
+  const r=await fetch(HK_CLEANLOG_URL+'&date='+date);
+  const d=await r.json();
+  if(!d.success)throw new Error(d.error||'getCleanLog failed');
+  return d.cleaned||[];
+}
+async function hkLoadCleanLog(){
+  const date=hkDate;
+  try{
+    const list=await hkFetchCleanLog(date);
+    if(date!==hkDate)return; // user moved to another day meanwhile
+    const map={};
+    list.forEach(c=>{const prev=map[c.room];if(!prev||(c.finishedAt||'')>(prev.finishedAt||''))map[c.room]=c;});
+    hkCleanLog=map;
+  }catch(e){console.warn('HK clean log failed:',e);}
+}
+function hkFmtTime(iso){return new Date(iso).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}
 let hkModalRoom=null;
 let hkPendingStatus=null;
 
@@ -33,9 +61,9 @@ function hkSaveStatusMap(){
   (async()=>{try{await db.from('app_store').upsert({key:'roomStatus',value:hkStatusMap,updated_at:new Date().toISOString()});}catch(e){console.warn('Room status sync failed:',e);}})();
 }
 
-// ===== OCCUPANCY (today only — this is an operational board, not a planner) =====
+// ===== OCCUPANCY (for the board's selected date) =====
 function hkOccupancyToday(){
-  const today=fmtISO(new Date());
+  const today=hkDate||hkToday();
   const occ={};
   const addOcc=(room,entry)=>{
     const prev=occ[room];
@@ -50,7 +78,7 @@ function hkOccupancyToday(){
   };
   (AppData.roomTypes||[]).forEach(rt=>{
     (rt.rooms||[]).forEach(roomId=>{
-      getRoomBks(roomId).filter(b=>b.status!=='cancelled'&&b.startDate<=today&&today<=b.endDate).forEach(b=>{
+      getRoomBks(roomId).filter(b=>b.status!=='cancelled'&&b.startDate<=today&&today<=b.endDate&&hkRegCounts(b,roomId)).forEach(b=>{
         const type=b.startDate===today?'arriving':b.endDate===today?'departing':'staying';
         addOcc(roomId,{type,guestNames:(b.guests||[]).join(', '),retreatName:b.retreatName||b.leaderName,checkIn:b.startDate,checkOut:b.endDate});
       });
@@ -59,13 +87,32 @@ function hkOccupancyToday(){
   return occ;
 }
 
+// A room removed from the retreat's blockedRooms keeps its old registrations
+// row, and a reg whose named guests are all cancelled is empty too -- neither
+// is an occupied room. Jorge's report 2026-09-30: GV8 (guest moved to GV15)
+// and CH17 showed "In-house · Anthony Chavez" with nobody in them. Same guard
+// as Transport (#136) and registeredCount() (#137).
+function hkRegCounts(b,roomId){
+  const bk=AppData.bookings.find(x=>x.id===b.bookingId);
+  if(bk?.blockedRooms?.length&&!bk.blockedRooms.includes(roomId))return false;
+  const reg=AppData.regs.find(r=>r.id===b.id);
+  const named=(reg?.guests||[]).filter(g=>g.name);
+  if(named.length&&named.every(g=>g.cancelled))return false;
+  return true;
+}
+
 function hkEffectiveStatus(roomId,occ){
   const stored=hkStatusMap[roomId];
-  const today=fmtISO(new Date());
-  const updatedToday=stored?.updated_at?.slice(0,10)===today;
-  const o=occ[roomId];
-  if(o&&!updatedToday)return'dirty';
-  return stored?.status||'clean';
+  const date=hkDate||hkToday();
+  const isToday=date===hkToday();
+  // local date, not updated_at.slice(0,10) (UTC -- flipped to tomorrow at 7pm)
+  const storedOnDate=isToday&&stored?.updated_at&&fmtISO(new Date(stored.updated_at))===date;
+  const log=hkCleanLog[roomId];
+  // A finished cleaning in the HK app wins unless someone changed it here later
+  if(log&&(!storedOnDate||(log.finishedAt||'')>=stored.updated_at))return'clean';
+  if(storedOnDate)return stored.status;
+  if(occ[roomId])return'dirty';
+  return isToday?(stored?.status||'clean'):'clean';
 }
 
 function hkMatchesFilter(roomId,occ){
@@ -76,23 +123,84 @@ function hkMatchesFilter(roomId,occ){
 
 // ===== INIT / REFRESH =====
 function hkInit(){
+  if(!hkDate)hkDate=hkToday();
   hkLoadStatusLocal();
+  hkMarkBadgeSeen();
   hkRender();
-  Promise.all([loadFromSupabase(),hkSyncStatusFromSupabase()]).then(()=>hkRender());
+  Promise.all([loadFromSupabase(),hkSyncStatusFromSupabase(),hkLoadCleanLog()]).then(()=>hkRender());
+  hkStartAutoRefresh();
 }
 function hkRefresh(){
   const body=document.getElementById('hkBody');
   if(body)body.innerHTML='<div style="color:#8a7e74;text-align:center;padding:60px 0">Refreshing…</div>';
-  Promise.all([loadFromSupabase(),hkSyncStatusFromSupabase()]).then(()=>hkRender());
+  Promise.all([loadFromSupabase(),hkSyncStatusFromSupabase(),hkLoadCleanLog()]).then(()=>hkRender());
 }
+function hkIsOpen(){return document.getElementById('tab-housekeeping')?.classList.contains('active');}
+// While the board is open, pick up cleanings finished in the HK app every 60s
+function hkStartAutoRefresh(){
+  if(hkAutoTimer)return;
+  hkAutoTimer=setInterval(async()=>{
+    if(!hkIsOpen()||document.hidden)return;
+    await Promise.all([hkSyncStatusFromSupabase(),hkLoadCleanLog()]);
+    hkMarkBadgeSeen();
+    if(!document.getElementById('hkStatusModal')?.classList.contains('open'))hkRender();
+  },60000);
+}
+function hkSetDate(date){
+  if(!date)return;
+  hkDate=date;hkCleanLog={};
+  hkRender();
+  hkLoadCleanLog().then(()=>hkRender());
+}
+function hkShiftDate(days){hkSetDate(fmtISO(addDays(pd(hkDate||hkToday()),days)));}
+
+// ===== SIDEBAR BADGE: "+N" rooms cleaned today since you last opened the board =====
+function hkMarkBadgeSeen(){
+  try{localStorage.setItem(HK_BADGE_SEEN_KEY,new Date().toISOString());}catch(e){}
+  hkSetBadge(0);
+}
+function hkSetBadge(n){
+  const btn=document.getElementById('housekeepingTabBtn');if(!btn)return;
+  let b=btn.querySelector('.hk-nav-badge');
+  if(!n){if(b)b.remove();return;}
+  if(!b){b=document.createElement('span');b.className='hk-nav-badge';btn.appendChild(b);}
+  b.textContent='+'+n;
+  b.title=n+' room'+(n!==1?'s':'')+' cleaned since you last looked';
+}
+async function hkPollBadge(){
+  const btn=document.getElementById('housekeepingTabBtn');
+  if(!btn||btn.offsetParent===null||document.hidden)return;
+  if(hkIsOpen()){hkMarkBadgeSeen();return;}
+  let seen=null;try{seen=localStorage.getItem(HK_BADGE_SEEN_KEY);}catch(e){}
+  if(!seen){hkMarkBadgeSeen();return;} // first run: start counting from now
+  try{
+    const list=await hkFetchCleanLog(hkToday());
+    hkSetBadge(list.filter(c=>(c.finishedAt||'')>seen).length);
+  }catch(e){}
+}
+setTimeout(hkPollBadge,5000);
+setInterval(hkPollBadge,60000);
 
 // ===== RENDER =====
 function hkRender(){
   const root=document.getElementById('hkRoot');if(!root)return;
+  if(!hkDate)hkDate=hkToday();
   const occ=hkOccupancyToday();
+  hkRenderDateNav();
   hkRenderFilters();
   hkRenderSummary(occ);
   hkRenderGrid(occ);
+}
+
+function hkRenderDateNav(){
+  const el=document.getElementById('hkDateNav');if(!el)return;
+  const isToday=hkDate===hkToday();
+  const btn="padding:5px 10px;border:1.5px solid #e5ddd2;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;font-weight:600;cursor:pointer;color:#5a5048";
+  el.innerHTML=`
+    <button onclick="hkShiftDate(-1)" style="${btn}" title="Previous day">&lsaquo;</button>
+    <input type="date" value="${hkDate}" onchange="hkSetDate(this.value)" style="padding:4px 8px;border:1.5px solid #e5ddd2;border-radius:8px;font-family:'Jost',sans-serif;font-size:12px;color:#2d2520;background:#fff">
+    <button onclick="hkShiftDate(1)" style="${btn}" title="Next day">&rsaquo;</button>
+    ${isToday?'':`<button onclick="hkSetDate(hkToday())" style="${btn};border-color:#2d6a6a;color:#2d6a6a">Today</button>`}`;
 }
 
 function hkRenderFilters(){
@@ -133,6 +241,11 @@ function hkRenderSummary(occ){
     <span style="width:9px;height:9px;border-radius:50%;background:#d97706"></span>
     <span style="font-size:12px;font-weight:700;color:#92400e">In-house</span>
     <span style="font-size:18px;font-weight:800;color:#92400e">${inhouse}</span>
+  </div>`);
+  const cleanedN=Object.keys(hkCleanLog).length;
+  pills.push(`<div style="display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;background:#f0fdfa;border:1px solid #99f6e4">
+    <span style="font-size:12px;font-weight:700;color:#0f766e">&#10003; Cleaned by housekeeping</span>
+    <span style="font-size:18px;font-weight:800;color:#0f766e">${cleanedN}</span>
   </div>`);
   el.innerHTML=pills.join('');
 }
@@ -188,7 +301,9 @@ function hkRoomCard(roomId,rt,occ){
   }
 
   const notesBadge=notes?`<div style="font-size:10px;color:#8a7e74;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escHtml(notes)}">&#128221; ${escHtml(notes)}</div>`:'';
-  const timeAgo=updatedAt?`<div style="font-size:9px;color:#c8bfb5;margin-top:3px">${hkTimeAgo(updatedAt)}</div>`:'';
+  const log=hkCleanLog[roomId];
+  const cleanedBadge=log?`<div style="font-size:10px;font-weight:700;color:#0f766e;margin-top:4px">&#10003; Cleaned by ${escHtml(log.cleanedBy||'housekeeping')}${log.finishedAt?' &middot; '+hkFmtTime(log.finishedAt):''}</div>`:'';
+  const timeAgo=updatedAt&&hkDate===hkToday()?`<div style="font-size:9px;color:#c8bfb5;margin-top:3px">${hkTimeAgo(updatedAt)}</div>`:'';
 
   return `<div onclick="hkOpenModal('${roomId}','${escHtml(rt.name)}','${modalStatus}')"
     style="padding:14px 16px;border-right:1px solid #f5f1eb;border-bottom:1px solid #f5f1eb;cursor:pointer;transition:background .15s"
@@ -197,7 +312,7 @@ function hkRoomCard(roomId,rt,occ){
       <span style="font-size:13px;font-weight:700;color:#2d2520">${escHtml(roomId)}</span>
       <span style="font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:20px;background:${cfg.bg};color:${cfg.color};border:1px solid ${cfg.border};white-space:nowrap">${cfg.label}</span>
     </div>
-    ${occBadge}${notesBadge}${timeAgo}
+    ${occBadge}${cleanedBadge}${notesBadge}${timeAgo}
   </div>`;
 }
 
