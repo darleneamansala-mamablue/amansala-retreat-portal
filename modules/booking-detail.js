@@ -487,8 +487,8 @@ function _bdFolioRowHtml(f){
       const commOpenE=i.category==='Comisión';
       return `<tr style="background:#fffbeb">
         <td style="padding:6px 12px;font-size:12px;white-space:nowrap;color:var(--dark)">${itemDate}</td>
-        <td style="padding:6px 12px" colspan="2"><input id="bde-desc-${i.id}" value="${escHtml(i.description||'')}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bde-cat-${i.id}" onchange="_bdOnCategoryChange('bde','${i.id}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml(i.category||'')}</select>${_bdCommissionFieldsHtml('bde',i.id,commOpenE)}</td>
-        <td style="padding:6px 12px"><input id="bde-price-${i.id}" type="number" step="0.01" value="${Number(i.unit_price)}"${commOpenE?' readonly':''} style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px${commOpenE?';background:#f3f4f6':''}"></td>
+        <td style="padding:6px 12px" colspan="2"><input id="bde-desc-${i.id}" value="${escHtml(i.description||'')}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bde-cat-${i.id}" onchange="_bdOnCategoryChange('bde','${i.id}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml(i.category||'')}</select>${_bdCommissionFieldsHtml('bde',i.id,commOpenE,Number(i.unit_price))}</td>
+        <td style="padding:6px 12px"><input id="bde-price-${i.id}" type="number" step="0.01" value="${Number(i.unit_price)}" oninput="_bdOnPriceInput('bde','${i.id}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
         <td style="padding:6px 12px"><input id="bde-tax-${i.id}" type="number" step="0.01" value="${Number(i.tax_rate)||0}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
         <td colspan="2" style="padding:6px 12px;text-align:right;white-space:nowrap">
           <button class="btn btn-primary btn-sm" onclick="bdSaveEditItem('${fid}','${i.id}')" style="padding:2px 8px;font-size:11px">Save</button>
@@ -512,8 +512,8 @@ function _bdFolioRowHtml(f){
   const addFormHtml=_bdAddOpen[fid]?`
     <tr>
       <td></td>
-      <td style="padding:6px 12px" colspan="2">${_bdItemPickerHtml(fid)}<input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bdc-cat-${fid}" onchange="_bdOnCategoryChange('bdc','${fid}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml('')}</select>${_bdCommissionFieldsHtml('bdc',fid,false)}</td>
-      <td style="padding:6px 12px"><input id="bdc-price-${fid}" type="number" step="0.01" placeholder="Price" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
+      <td style="padding:6px 12px" colspan="2">${_bdItemPickerHtml(fid)}<input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bdc-cat-${fid}" onchange="_bdOnCategoryChange('bdc','${fid}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml('')}</select>${_bdCommissionFieldsHtml('bdc',fid,false,0)}</td>
+      <td style="padding:6px 12px"><input id="bdc-price-${fid}" type="number" step="0.01" placeholder="Price" oninput="_bdOnPriceInput('bdc','${fid}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td style="padding:6px 12px"><input id="bdc-tax-${fid}" type="number" step="0.01" placeholder="Tax%" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td colspan="2" style="padding:6px 12px;text-align:right"><button class="btn btn-primary btn-sm" onclick="bdAddItem('${fid}')">+ Add</button></td>
     </tr>`:'';
@@ -625,46 +625,43 @@ function _bdCategoryOptionsHtml(selected){
   return`<option value="">— None —</option>`+sorted.map(c=>`<option value="${escHtml(c)}"${c===selected?' selected':''}>${escHtml(c)}</option>`).join('');
 }
 // Jorge's ask 2026-09-30: picking Category "Comisión" should reveal a Staff
-// field and auto-derive the charge amount as 5% of a pretax base -- same
+// field and auto-derive a 5% commission from the charge's own Price -- same
 // 5%-of-pretax convention already used for upgrade/reservation commissions
-// (tr2ConfirmUpgrade in transport.js, rmSave in venues.js), and the result
-// also lands in the `commissions` table so it shows up in the existing
-// Commissions tab, not just on this folio.
+// (tr2ConfirmUpgrade in transport.js, rmSave in venues.js). Price keeps its
+// normal meaning (the real charge, e.g. $200 for an upgrade) -- Jorge's
+// follow-up ("QUE ES MONTO ANTES DE IMPUESTO?") was because an earlier
+// version added a SECOND, separate amount field for this, which was
+// confusing since Price already *is* the pretax amount. The commission
+// itself (5% of Price) only ever lands in the `commissions` table, it
+// never overwrites what the guest is actually charged on this folio.
 function _bdStaffOptionsHtml(selected){
   const list=(typeof staffAccounts!=='undefined'?staffAccounts:[]).filter(s=>s.active);
   return`<option value="">— Selecciona staff —</option>`+list.map(s=>`<option value="${escHtml(s.id)}"${s.id===selected?' selected':''}>${escHtml(s.name)}</option>`).join('');
 }
-function _bdCommissionFieldsHtml(prefix,id,open){
+function _bdCommissionFieldsHtml(prefix,id,open,initialPrice){
   return`<div id="${prefix}-commwrap-${id}" style="display:${open?'block':'none'};margin-top:6px">
     <select id="${prefix}-staff-${id}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px">${_bdStaffOptionsHtml('')}</select>
-    <input id="${prefix}-base-${id}" type="number" step="0.01" placeholder="Monto base (antes de impuesto)" oninput="_bdRecalcCommission('${prefix}','${id}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+    <div id="${prefix}-commpreview-${id}" style="font-size:11px;color:var(--muted)">${_bdCommissionPreviewText(initialPrice||0)}</div>
   </div>`;
+}
+function _bdCommissionPreviewText(price){
+  return`Comisión (5% del precio, antes de impuesto): $${(( parseFloat(price)||0)*0.05).toFixed(2)}`;
 }
 function _bdOnCategoryChange(prefix,id){
   const catEl=document.getElementById(`${prefix}-cat-${id}`);
   const wrap=document.getElementById(`${prefix}-commwrap-${id}`);
-  const priceEl=document.getElementById(`${prefix}-price-${id}`);
   if(!catEl||!wrap)return;
   const isComm=catEl.value==='Comisión';
   wrap.style.display=isComm?'block':'none';
-  if(!priceEl)return;
-  if(isComm){
-    if(priceEl.dataset.prevValue===undefined)priceEl.dataset.prevValue=priceEl.value;
-    priceEl.readOnly=true;
-    priceEl.style.background='#f3f4f6';
-    _bdRecalcCommission(prefix,id);
-  }else{
-    priceEl.readOnly=false;
-    priceEl.style.background='';
-    if(priceEl.dataset.prevValue!==undefined){priceEl.value=priceEl.dataset.prevValue;delete priceEl.dataset.prevValue;}
-  }
+  if(isComm)_bdOnPriceInput(prefix,id);
 }
-function _bdRecalcCommission(prefix,id){
-  const baseEl=document.getElementById(`${prefix}-base-${id}`);
+function _bdOnPriceInput(prefix,id){
+  const catEl=document.getElementById(`${prefix}-cat-${id}`);
+  if(!catEl||catEl.value!=='Comisión')return;
   const priceEl=document.getElementById(`${prefix}-price-${id}`);
-  if(!baseEl||!priceEl)return;
-  const base=parseFloat(baseEl.value)||0;
-  priceEl.value=(base*0.05).toFixed(2);
+  const previewEl=document.getElementById(`${prefix}-commpreview-${id}`);
+  if(!priceEl||!previewEl)return;
+  previewEl.textContent=_bdCommissionPreviewText(priceEl.value);
 }
 function _bdItemPickerHtml(fid){
   if(!_bdCatalogItems.length)return'';
@@ -740,21 +737,16 @@ async function bdAddItem(fid){
   // category on every charge, manual and automatic alike).
   const category=document.getElementById(`bdc-cat-${fid}`)?.value.trim()||null;
   const isComm=category==='Comisión';
-  let price,staffId='',baseAmount=null,commissionAmount=null;
+  const price=parseFloat(document.getElementById(`bdc-price-${fid}`)?.value);
+  let staffId='';
   if(isComm){
-    baseAmount=parseFloat(document.getElementById(`bdc-base-${fid}`)?.value);
     staffId=document.getElementById(`bdc-staff-${fid}`)?.value||'';
-    if(isNaN(baseAmount)||baseAmount<=0){showToast('Ingresa el monto base (antes de impuesto) de la comisión');return;}
     if(!staffId){showToast('Selecciona el staff de la comisión');return;}
-    commissionAmount=+(baseAmount*0.05).toFixed(2);
-    price=commissionAmount;
-  }else{
-    price=parseFloat(document.getElementById(`bdc-price-${fid}`)?.value);
   }
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
   const {error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax,category,staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error: '+error.message);return;}
-  if(isComm&&staffId)_bdLogCommission(fid,staffId,baseAmount,tax,commissionAmount,desc);
+  if(isComm&&staffId)_bdLogCommission(fid,staffId,price,tax,+(price*0.05).toFixed(2),desc);
   _bdAddOpen[fid]=false;
   await _bdLoadFolios();
 }
@@ -775,21 +767,16 @@ async function bdSaveEditItem(fid,itemId){
   // description) must not insert a duplicate into the commissions table.
   const origItem=_bdFolios.find(x=>x.folio.id===fid)?.items.find(x=>x.id===itemId);
   const alreadyWasComm=origItem?.category==='Comisión';
-  let price,staffId='',baseAmount=null,commissionAmount=null;
+  const price=parseFloat(document.getElementById(`bde-price-${itemId}`)?.value);
+  let staffId='';
   if(isComm){
-    baseAmount=parseFloat(document.getElementById(`bde-base-${itemId}`)?.value);
     staffId=document.getElementById(`bde-staff-${itemId}`)?.value||'';
-    if(isNaN(baseAmount)||baseAmount<=0){showToast('Ingresa el monto base (antes de impuesto) de la comisión');return;}
     if(!staffId){showToast('Selecciona el staff de la comisión');return;}
-    commissionAmount=+(baseAmount*0.05).toFixed(2);
-    price=commissionAmount;
-  }else{
-    price=parseFloat(document.getElementById(`bde-price-${itemId}`)?.value);
   }
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
   const {error}=await db.from('folio_items').update({description:desc,unit_price:price,tax_rate:tax,category}).eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
-  if(isComm&&staffId&&!alreadyWasComm)_bdLogCommission(fid,staffId,baseAmount,tax,commissionAmount,desc);
+  if(isComm&&staffId&&!alreadyWasComm)_bdLogCommission(fid,staffId,price,tax,+(price*0.05).toFixed(2),desc);
   delete _bdEditOpen[itemId];
   await _bdLoadFolios();
 }
