@@ -148,7 +148,8 @@ function _openContractModalRender(bkId){
   const note=document.getElementById('contractSeasonNote');
   if(isLow){badge.textContent='Low Season';badge.style.cssText='font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#dcfce7;color:#15803d';note.textContent='Rates and inclusions reflect low season (May – Sep)';}
   else{badge.textContent='High Season';badge.style.cssText='font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#fef3c7;color:#92400e';note.textContent='Rates and inclusions reflect high season (Oct – Apr)';}
-  document.getElementById('contractPreview').innerHTML=generateContractHTML(bk,isLow,today);
+  contractRenderPreview(bk);
+  const editBtn=document.getElementById('contractEditBtn');if(editBtn)editBtn.style.display=bk.contractSignedAt?'none':'';
   const notesInput=document.getElementById('contractNotesInput');if(notesInput)notesInput.value=bk.contractNotes||'';
   // Buttons
   const alreadyMarkedSent=['contract_sent','contract_signed','deposit_paid','room_list_sent'].includes(bk.status);
@@ -184,6 +185,99 @@ function _openContractModalRender(bkId){
   }
   openModal('contractModal');
 }
+// ===== PER-RETREAT CONTRACT EDITS =====
+// Jorge's ask 2026-09-30: change the contract wording for ONE retreat before
+// sending it, without touching the shared template (Edit Template). Edited
+// sections live on the booking (bk.contractOverrides -> bookings.contract_overrides,
+// {sectionKey: text}); only sections that differ from the template are stored,
+// so later template changes still reach every section nobody customized. The
+// teacher portal renders the same generateContractHTML, so it shows the edits.
+const CONTRACT_EDIT_SECTIONS=[
+  {key:'paymentTerms',label:'Payment Terms'},
+  {key:'cancellationPolicy',label:'Cancellation Policy'},
+  {key:'teacherPolicy',label:'Teacher / Leader Complimentary Policy'},
+  {key:'yogaPolicy',label:'Yoga Shalas'},
+  {key:'propertyPolicy',label:'Property Policies'},
+  {key:'liabilityPolicy',label:'Liability & Governing Terms'},
+];
+function contractTemplateSectionText(key,isLow,tmpl){
+  const raw=key==='teacherPolicy'?(isLow?tmpl.teacherPolicyLow:tmpl.teacherPolicyHigh):tmpl[key];
+  return applyTmplVars(raw,tmpl);
+}
+function contractSectionText(bk,key,isLow,tmpl){
+  const ov=bk.contractOverrides&&bk.contractOverrides[key];
+  return typeof ov==='string'?ov:contractTemplateSectionText(key,isLow,tmpl||loadContractTmpl());
+}
+function contractEditedLabels(bk){
+  return CONTRACT_EDIT_SECTIONS.filter(s=>typeof bk.contractOverrides?.[s.key]==='string').map(s=>s.label);
+}
+function _contractEditBanner(bk){
+  const labels=contractEditedLabels(bk);
+  return labels.length?`<div style="max-width:720px;margin:0 auto 18px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:9px 14px;font-size:12px;color:#92400e">&#9998; Custom wording for this retreat only: <strong>${escHtml(labels.join(', '))}</strong></div>`:'';
+}
+function contractRenderPreview(bk){
+  const isLow=isLowSeasonContract(bk.startDate);
+  const today=new Date();today.setHours(0,0,0,0);
+  document.getElementById('contractPreview').innerHTML=_contractEditBanner(bk)+generateContractHTML(bk,isLow,today);
+}
+function contractOpenEditor(){
+  const bk=AppData.bookings.find(b=>b.id===_contractBkId);if(!bk)return;
+  if(bk.contractSignedAt){showToast('This contract is already signed — void the signature first to change it.');return;}
+  const isLow=isLowSeasonContract(bk.startDate);
+  const tmpl=loadContractTmpl();
+  const el=document.getElementById('contractPreview');
+  el.innerHTML=`<div style="max-width:720px;margin:0 auto">
+    <div style="font-size:13px;color:#374151;margin-bottom:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px">
+      Editing the contract for <strong>${escHtml(bk.leaderName||bk.retreatName||'')}</strong> only &mdash; the template for other retreats doesn't change.
+      Leave a blank line between paragraphs.</div>
+    ${CONTRACT_EDIT_SECTIONS.map(sct=>{
+      const custom=typeof bk.contractOverrides?.[sct.key]==='string';
+      return `<div style="margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a">${escHtml(sct.label)}</span>
+          <span id="ctEditChip-${sct.key}" style="font-size:10px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:8px;padding:1px 7px;${custom?'':'display:none'}">Custom</span>
+          <button type="button" onclick="contractEditorReset('${sct.key}')" style="margin-left:auto;font-size:11px;border:none;background:none;color:#0369a1;cursor:pointer;font-family:'Jost',sans-serif">Reset to template</button>
+        </div>
+        <textarea id="ctEdit-${sct.key}" oninput="contractEditorMark('${sct.key}')" style="width:100%;box-sizing:border-box;min-height:140px;resize:vertical;border:1.5px solid #e5e7eb;border-radius:8px;padding:10px 12px;font-family:'Jost',sans-serif;font-size:12.5px;line-height:1.7;color:#374151">${escHtml(contractSectionText(bk,sct.key,isLow,tmpl))}</textarea>
+      </div>`;}).join('')}
+    <div style="display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:-36px;background:#fff;padding:12px 0">
+      <button class="btn btn-secondary" onclick="contractCloseEditor()">Cancel</button>
+      <button class="btn btn-primary" onclick="contractSaveEditor()">Save for this retreat</button>
+    </div>
+  </div>`;
+  el.scrollTop=0;
+}
+function contractEditorMark(key){
+  const bk=AppData.bookings.find(b=>b.id===_contractBkId);if(!bk)return;
+  const tmplText=contractTemplateSectionText(key,isLowSeasonContract(bk.startDate),loadContractTmpl());
+  const chip=document.getElementById('ctEditChip-'+key);
+  if(chip)chip.style.display=document.getElementById('ctEdit-'+key).value.trim()!==tmplText.trim()?'':'none';
+}
+function contractEditorReset(key){
+  const bk=AppData.bookings.find(b=>b.id===_contractBkId);if(!bk)return;
+  document.getElementById('ctEdit-'+key).value=contractTemplateSectionText(key,isLowSeasonContract(bk.startDate),loadContractTmpl());
+  contractEditorMark(key);
+}
+function contractCloseEditor(){
+  const bk=AppData.bookings.find(b=>b.id===_contractBkId);if(bk)contractRenderPreview(bk);
+}
+function contractSaveEditor(){
+  const bk=AppData.bookings.find(b=>b.id===_contractBkId);if(!bk)return;
+  if(bk.contractSignedAt){showToast('This contract is already signed — void the signature first to change it.');return;}
+  const isLow=isLowSeasonContract(bk.startDate);
+  const tmpl=loadContractTmpl();
+  const ov={};
+  CONTRACT_EDIT_SECTIONS.forEach(sct=>{
+    const v=(document.getElementById('ctEdit-'+sct.key)?.value||'').replace(/\r/g,'').trim();
+    if(v&&v!==contractTemplateSectionText(sct.key,isLow,tmpl).trim())ov[sct.key]=v;
+  });
+  bk.contractOverrides=Object.keys(ov).length?ov:null;
+  saveAll();
+  logActivity('Contract wording edited',Object.keys(ov).length?`Custom: ${contractEditedLabels(bk).join(', ')}`:'Reset to template',bk.id);
+  contractRenderPreview(bk);
+  showToast(Object.keys(ov).length?'Contract saved for this retreat ✓':'Contract back to the template ✓');
+}
+
 function isLowSeasonContract(dateStr){if(!dateStr)return false;const m=pd(dateStr).getMonth()+1;return m>=5&&m<=9;}
 function generateContractHTML(bk,isLow,signDate){
   const leader=bk.leaderName||'Retreat Leader';
@@ -198,6 +292,8 @@ function generateContractHTML(bk,isLow,signDate){
   const lastMinReg=fmtShort(addDays(pd(bk.startDate),-21));
   const hr=`<hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0">`;
   const tmpl=loadContractTmpl();
+  // Section text: this retreat's own edited version if it has one, else the template
+  const sec=key=>contractSectionText(bk,key,isLow,tmpl).split('\n\n').map(p=>`<p style="font-size:12.5px;line-height:1.85;color:#374151;margin-top:8px">${p.replace(/\n/g,'<br>')}</p>`).join('');
   function buildRatesTable(rates,season){
     const isHigh=season==='high';
     const bg=isHigh?'#fef9ec':'#f0fdf4';
@@ -233,25 +329,25 @@ function generateContractHTML(bk,isLow,signDate){
     ${isLow?ratesLow:ratesHigh}
     ${hr}
     <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a;margin-bottom:10px">Payment Terms</h3>
-    ${applyTmplVars(tmpl.paymentTerms,tmpl).split('\n\n').map(p=>`<p style="font-size:12.5px;line-height:1.85;color:#374151;margin-top:8px">${p.replace(/\n/g,'<br>')}</p>`).join('')}
+    ${sec('paymentTerms')}
     <p style="font-size:12px;color:#7f8c9a;margin-top:6px">Deposit due by ${depositDue} · Full payment due by ${payFullDue} · Last-minute cutoff ${lastMinReg}</p>
     ${hr}
     <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a;margin-bottom:10px">Cancellation Policy</h3>
-    ${applyTmplVars(tmpl.cancellationPolicy,tmpl).split('\n\n').map(p=>`<p style="font-size:12.5px;line-height:1.85;color:#374151;margin-top:8px">${p.replace(/\n/g,'<br>')}</p>`).join('')}
+    ${sec('cancellationPolicy')}
     <p style="font-size:12px;color:#7f8c9a;margin-top:6px">Cancellation deadline: ${cancelDeadline} · Last-minute cutoff: ${lastMinReg}</p>
     ${hr}
     <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a;margin-bottom:10px">Teacher / Leader Complimentary Policy</h3>
-    ${(isLow?tmpl.teacherPolicyLow:tmpl.teacherPolicyHigh).split('\n\n').map(p=>`<p style="font-size:12.5px;line-height:1.85;color:#374151;margin-top:8px">${p.replace(/\n/g,'<br>')}</p>`).join('')}
+    ${sec('teacherPolicy')}
     ${hr}
     <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a;margin-bottom:10px">Yoga Shalas</h3>
-    ${tmpl.yogaPolicy.split('\n\n').map(p=>`<p style="font-size:12.5px;line-height:1.85;color:#374151;margin-top:8px">${p.replace(/\n/g,'<br>')}</p>`).join('')}
+    ${sec('yogaPolicy')}
     ${hr}
     <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a;margin-bottom:10px">Property Policies</h3>
-    ${applyTmplVars(tmpl.propertyPolicy,tmpl).split('\n\n').map(p=>`<p style="font-size:12.5px;line-height:1.85;color:#374151;margin-top:8px">${p.replace(/\n/g,'<br>')}</p>`).join('')}
+    ${sec('propertyPolicy')}
     <p style="font-size:12px;color:#7f8c9a;margin-top:6px">Room release: ${roomRelease} · Flight info due: ${flightDue}</p>
     ${hr}
     <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a;margin-bottom:10px">Liability &amp; Governing Terms</h3>
-    ${tmpl.liabilityPolicy.split('\n\n').map(p=>`<p style="font-size:12.5px;line-height:1.85;color:#374151;margin-top:8px">${p.replace(/\n/g,'<br>')}</p>`).join('')}
+    ${sec('liabilityPolicy')}
     ${hr}
     ${hr}
     <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#0369a1;margin-bottom:10px">Special Notes</h3>
@@ -414,9 +510,7 @@ function contractNotesSave(){
   const bk=AppData.bookings.find(b=>b.id===_contractBkId);if(!bk)return;
   bk.contractNotes=(document.getElementById('contractNotesInput').value||'').trim();
   saveAll();
-  const isLow=isLowSeasonContract(bk.startDate);
-  const today=new Date();today.setHours(0,0,0,0);
-  document.getElementById('contractPreview').innerHTML=generateContractHTML(bk,isLow,today);
+  contractRenderPreview(bk);
   const msg=document.getElementById('contractNotesSavedMsg');
   if(msg){msg.style.display='inline';setTimeout(()=>msg.style.display='none',2500);}
 }
