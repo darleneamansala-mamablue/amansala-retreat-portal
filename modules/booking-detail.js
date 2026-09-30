@@ -495,7 +495,7 @@ function _bdFolioRowHtml(f){
   const addFormHtml=_bdAddOpen[fid]?`
     <tr>
       <td></td>
-      <td style="padding:6px 12px" colspan="2">${_bdItemPickerHtml(fid)}<input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><input id="bdc-cat-${fid}" placeholder="Category (optional)" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
+      <td style="padding:6px 12px" colspan="2">${_bdItemPickerHtml(fid)}<input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bdc-cat-${fid}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml('')}</select></td>
       <td style="padding:6px 12px"><input id="bdc-price-${fid}" type="number" step="0.01" placeholder="Price" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td style="padding:6px 12px"><input id="bdc-tax-${fid}" type="number" step="0.01" placeholder="Tax%" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td colspan="2" style="padding:6px 12px;text-align:right"><button class="btn btn-primary btn-sm" onclick="bdAddItem('${fid}')">+ Add</button></td>
@@ -594,6 +594,18 @@ async function _bdLoadCatalogItems(){
     if(error)throw error;
     _bdCatalogItems=data||[];
   }catch(e){console.warn('[booking-detail] catalog items load failed',e.message);}
+}
+// Categories that don't come from the Items catalog at all (payments, tips,
+// commissions, etc.) -- unioned with whatever categories the catalog itself
+// has, so the "+ Add manually" Category dropdown always covers both. Jorge's
+// ask 2026-09-30: make Category an actual pick-list (not free text), and add
+// "Tip Tarjeta" and "Comisión" to it.
+const BD_EXTRA_CATEGORIES=['Payment','Transport','Restaurant','Upgrade','Room','Tip','Tip Tarjeta','Comisión'];
+function _bdCategoryOptionsHtml(selected){
+  const cats=new Set(BD_EXTRA_CATEGORIES);
+  _bdCatalogItems.forEach(it=>{if(it.category)cats.add(it.category);});
+  const sorted=[...cats].sort((a,b)=>a.localeCompare(b));
+  return`<option value="">— None —</option>`+sorted.map(c=>`<option value="${escHtml(c)}"${c===selected?' selected':''}>${escHtml(c)}</option>`).join('');
 }
 function _bdItemPickerHtml(fid){
   if(!_bdCatalogItems.length)return'';
