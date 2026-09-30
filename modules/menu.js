@@ -389,6 +389,9 @@ function menuMealTime(bk,meal,dateStr){
 
   // Dinner: 45 min after evening class ends
   if(meal==='dinner'){
+    // Admin's retreat-wide dinner time from Review Schedule (svSetDinnerTime,
+    // teacher-portal.js) wins over the "45 min after class" default.
+    if(sr.dinnerTimeOverride) return sr.dinnerTimeOverride;
     // Arrival day: may have an arrival evening class
     if(isArrival && sr.hasArrivalClass && sr.arrivalSlot){
       const afDur=parseInt(sr.arrivalDur||60);

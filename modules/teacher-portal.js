@@ -1665,6 +1665,17 @@ function tsSaveManualActivity(aoId){
   tsRenderPrepaidActivities(bk);
 }
 
+// Dinner has always just said "45 min after your afternoon class" — fine by
+// default, but there was no way to override it when a teacher actually asked
+// for dinner at a specific different time (Darlene's ask 2026-09-28). Admin
+// sets bk.scheduleRequest.dinnerTimeOverride from the schedule review screen
+// (svSetDinnerTime); this just displays whichever applies on the teacher's
+// own Schedule Request page.
+function tsRenderDinnerTime(bk){
+  const el=document.getElementById('tsDinnerTimeText');if(!el)return;
+  const ov=bk?.scheduleRequest?.dinnerTimeOverride;
+  el.textContent=ov?`${tsFmt(ov)} (set for this retreat)`:'45 min after your afternoon class';
+}
 function tsInit(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   // Already editing this booking's schedule — don't reset the in-progress draft
@@ -1711,6 +1722,7 @@ function tsInit(bkId){
   tsRenderPrepaidActivities(bk);
   tsRenderBrowseGrid();
   tsRenderWindows();
+  tsRenderDinnerTime(bk);
   tsBuildMorningFields();
   tsBuildDailySchedule();
   tsRenderShalaGrid('morning');
@@ -2985,6 +2997,17 @@ function openScheduleViewer(bkId){
   const _mArr=Array.isArray(sr.music)?sr.music:(sr.music?[sr.music]:[]);
   html+=`<div style="margin-bottom:14px"><b>Music:</b> ${_mArr.length?_mArr.map(m=>_mLabels[m]||m).join(', '):'Not specified'}</div>`;
   if(sr.shalaFlexibility){html+=`<div style="margin-bottom:14px"><b>Shala Preference:</b> ${sr.shalaFlexibility==='flexible'?'Happy to move around — any favourite shala works':'Prefers not to move around — keep same shala each day'}</div>`;}
+  // Dinner defaults to "45 min after afternoon class" everywhere else in the
+  // app (teacher's own Schedule Request page, planning guide, etc.) — this is
+  // the one place admin can override it for the whole retreat when a teacher
+  // asks for a different time (Darlene's ask 2026-09-28).
+  html+=`<div style="margin-bottom:14px;padding:10px 14px;background:#f5f3ee;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <b>🌙 Dinner Time:</b>
+    <input type="time" id="svDinnerTime_${bkId}" value="${sr.dinnerTimeOverride||''}" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">
+    <button class="btn" style="font-size:11.5px;padding:5px 10px;background:#fff;border:1.5px solid var(--teal);color:var(--teal)" onclick="svSetDinnerTime('${bkId}',document.getElementById('svDinnerTime_${bkId}').value)">Save</button>
+    ${sr.dinnerTimeOverride?`<button class="btn" style="font-size:11.5px;padding:5px 10px;background:#fff;border:1.5px solid var(--border);color:var(--muted)" onclick="svSetDinnerTime('${bkId}','')">Clear (use default)</button>`:''}
+    <span style="font-size:11.5px;color:var(--muted)">${sr.dinnerTimeOverride?'Overridden for this retreat':'Default: 45 min after afternoon class'}</span>
+  </div>`;
   if(sr.bowlRental&&sr.bowlQty&&sr.bowlDays&&sr.bowlDays.length){
     const DAYS2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];const MONTHS2=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const slots=(sr.bowlDays||[]).reduce((n,e)=>n+(e.am?1:0)+(e.pm?1:0),0);
@@ -3483,6 +3506,14 @@ function svSetTourMode(bkId,mode){
   bk.scheduleRequest.tourMode=mode;
   saveAll();
   openScheduleViewer(bkId);
+}
+
+function svSetDinnerTime(bkId,val){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.scheduleRequest)return;
+  bk.scheduleRequest.dinnerTimeOverride=val||'';
+  saveAll();
+  openScheduleViewer(bkId);
+  showToast(val?`Dinner time set to ${tsFmt(val)} for this retreat.`:'Dinner time reset to default.');
 }
 
 function svSyncPrepaidFlags(bkId){
@@ -4764,7 +4795,7 @@ function openPrintSchedule(bkId){
         const end=fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60));
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:mShala,cls:'shala',sk:sr.arrivalSlot});
       }
-      const _pArrDinnerT=(sr?.hasArrivalClass&&sr?.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30';
+      const _pArrDinnerT=sr?.dinnerTimeOverride||((sr?.hasArrivalClass&&sr?.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30');
       rows.push({time:fmtT(_pArrDinnerT),desc:'Dinner',shala:'',cls:'',sk:_pArrDinnerT});
     } else if(i===nights){
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea — Closing Comments',shala:'',cls:'',sk:'07:00'});
@@ -4836,7 +4867,7 @@ function openPrintSchedule(bkId){
         return Math.abs(d.getTime()-ofNight)<DAY_MS/2;
       })();
       const hasGitanoPrint=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
-      const _pDinnerT=(sr?.hasAfternoon&&_pDayAfSlot&&!_pAftSkipped)?addMin(_pDayAfSlot,_pDayAfDur+45):'19:30';
+      const _pDinnerT=sr?.dinnerTimeOverride||((sr?.hasAfternoon&&_pDayAfSlot&&!_pAftSkipped)?addMin(_pDayAfSlot,_pDayAfDur+45):'19:30');
       if(!hasGitanoPrint)rows.push({time:fmtT(_pDinnerT),desc:isOffsite?(sr?.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner | Off-site'):'Dinner',shala:'',cls:'',sk:_pDinnerT});
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT arrival.
