@@ -1674,7 +1674,8 @@ function tsSaveManualActivity(aoId){
 function tsRenderDinnerTime(bk){
   const el=document.getElementById('tsDinnerTimeText');if(!el)return;
   const ov=bk?.scheduleRequest?.dinnerTimeOverride;
-  el.textContent=ov?`${tsFmt(ov)} (set for this retreat)`:'45 min after your afternoon class';
+  const perNight=Object.keys(bk?.scheduleRequest?.dinnerTimeByDate||{}).length;
+  el.textContent=(ov?`${tsFmt(ov)} (set for this retreat)`:'45 min after your afternoon class')+(perNight?` · ${perNight} night${perNight>1?'s':''} at a different time — see your schedule`:'');
 }
 function tsInit(bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
@@ -3007,6 +3008,14 @@ function openScheduleViewer(bkId){
     <button class="btn" style="font-size:11.5px;padding:5px 10px;background:#fff;border:1.5px solid var(--teal);color:var(--teal)" onclick="svSetDinnerTime('${bkId}',document.getElementById('svDinnerTime_${bkId}').value)">Save</button>
     ${sr.dinnerTimeOverride?`<button class="btn" style="font-size:11.5px;padding:5px 10px;background:#fff;border:1.5px solid var(--border);color:var(--muted)" onclick="svSetDinnerTime('${bkId}','')">Clear (use default)</button>`:''}
     <span style="font-size:11.5px;color:var(--muted)">${sr.dinnerTimeOverride?'Overridden for this retreat':'Default: 45 min after afternoon class'}</span>
+    <div style="flex-basis:100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:6px">
+      ${(()=>{const out=[];const n=getNights(bk);for(let i=0;i<n;i++){const ds=fmtISO(new Date(pd(bk.startDate).getTime()+i*DAY_MS));const v=(sr.dinnerTimeByDate||{})[ds]||'';
+        out.push(`<label style="display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-weight:600;color:var(--dark);padding:6px 8px;background:#fff;border:1.5px solid ${v?'var(--teal)':'var(--border)'};border-radius:7px">
+          ${new Date(ds+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}${i===0?' (arrival)':''}
+          <input type="time" value="${v}" onchange="svSetNightDinnerTime('${bkId}','${ds}',this.value)" style="padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-family:'Jost',sans-serif;font-size:12px">
+        </label>`);}return out.join('');})()}
+    </div>
+    <span style="flex-basis:100%;font-size:11.5px;color:var(--muted)">Change one night above, or set the time for every night with Save. A blank night uses the usual time.</span>
   </div>`;
   if(sr.bowlRental&&sr.bowlQty&&sr.bowlDays&&sr.bowlDays.length){
     const DAYS2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];const MONTHS2=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -3508,6 +3517,20 @@ function svSetTourMode(bkId,mode){
   openScheduleViewer(bkId);
 }
 
+// Dinner time for one night: that night's own time (per-night editor in
+// Review Schedule) → the retreat-wide time → the usual default passed in.
+function svDinnerTimeFor(sr,dateStr,dflt){
+  return (sr&&sr.dinnerTimeByDate&&sr.dinnerTimeByDate[dateStr])||(sr&&sr.dinnerTimeOverride)||dflt;
+}
+function svSetNightDinnerTime(bkId,dateStr,val){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.scheduleRequest)return;
+  const sr=bk.scheduleRequest;
+  if(!sr.dinnerTimeByDate)sr.dinnerTimeByDate={};
+  if(val)sr.dinnerTimeByDate[dateStr]=val;else delete sr.dinnerTimeByDate[dateStr];
+  saveAll();
+  openScheduleViewer(bkId);
+  showToast(val?`Dinner on ${fmtDate(dateStr)} set to ${tsFmt(val)}.`:`Dinner on ${fmtDate(dateStr)} back to the usual time.`);
+}
 function svSetDinnerTime(bkId,val){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.scheduleRequest)return;
   bk.scheduleRequest.dinnerTimeOverride=val||'';
@@ -4795,7 +4818,7 @@ function openPrintSchedule(bkId){
         const end=fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60));
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:mShala,cls:'shala',sk:sr.arrivalSlot});
       }
-      const _pArrDinnerT=sr?.dinnerTimeOverride||((sr?.hasArrivalClass&&sr?.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30');
+      const _pArrDinnerT=svDinnerTimeFor(sr,dateStr,(sr?.hasArrivalClass&&sr?.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30');
       rows.push({time:fmtT(_pArrDinnerT),desc:'Dinner',shala:'',cls:'',sk:_pArrDinnerT});
     } else if(i===nights){
       rows.push({time:'7:00 AM',desc:'Fruit, Coffee &amp; Tea — Closing Comments',shala:'',cls:'',sk:'07:00'});
@@ -4867,7 +4890,7 @@ function openPrintSchedule(bkId){
         return Math.abs(d.getTime()-ofNight)<DAY_MS/2;
       })();
       const hasGitanoPrint=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
-      const _pDinnerT=sr?.dinnerTimeOverride||((sr?.hasAfternoon&&_pDayAfSlot&&!_pAftSkipped)?addMin(_pDayAfSlot,_pDayAfDur+45):'19:30');
+      const _pDinnerT=svDinnerTimeFor(sr,dateStr,(sr?.hasAfternoon&&_pDayAfSlot&&!_pAftSkipped)?addMin(_pDayAfSlot,_pDayAfDur+45):'19:30');
       if(!hasGitanoPrint)rows.push({time:fmtT(_pDinnerT),desc:isOffsite?(sr?.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner | Off-site'):'Dinner',shala:'',cls:'',sk:_pDinnerT});
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT arrival.
