@@ -495,7 +495,7 @@ function _bdFolioRowHtml(f){
   const addFormHtml=_bdAddOpen[fid]?`
     <tr>
       <td></td>
-      <td style="padding:6px 12px" colspan="2"><input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
+      <td style="padding:6px 12px" colspan="2">${_bdItemPickerHtml(fid)}<input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td style="padding:6px 12px"><input id="bdc-price-${fid}" type="number" step="0.01" placeholder="Price" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td style="padding:6px 12px"><input id="bdc-tax-${fid}" type="number" step="0.01" placeholder="Tax%" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td colspan="2" style="padding:6px 12px;text-align:right"><button class="btn btn-primary btn-sm" onclick="bdAddItem('${fid}')">+ Add</button></td>
@@ -581,7 +581,56 @@ async function bdChargeCardOnFile(fid,amountOverride,btnIdOverride){
   }
 }
 
-async function bdToggleAdd(fid){_bdAddOpen[fid]=!_bdAddOpen[fid];_bdRender();}
+// Item catalog picker for "+ Add manually" -- Jorge's report 2026-09-30:
+// staging's folio charge form lets staff pick from the same `items` catalog
+// (Admin > Items, already shared/synced with Cloudbeds) instead of typing
+// description/price/tax from scratch every time; this app's own version had
+// no picker at all. Loaded once and cached (items rarely change mid-session).
+let _bdCatalogItems=[];
+async function _bdLoadCatalogItems(){
+  if(_bdCatalogItems.length)return;
+  try{
+    const{data,error}=await db.from('items').select('*').eq('active',true).order('category').order('name');
+    if(error)throw error;
+    _bdCatalogItems=data||[];
+  }catch(e){console.warn('[booking-detail] catalog items load failed',e.message);}
+}
+function _bdItemPickerHtml(fid){
+  if(!_bdCatalogItems.length)return'';
+  const groups={};
+  _bdCatalogItems.forEach(it=>{const c=it.category||'General';(groups[c]=groups[c]||[]).push(it);});
+  let opts=`<option value="">— Manual —</option>`;
+  Object.keys(groups).sort().forEach(cat=>{
+    opts+=`<optgroup label="${escHtml(cat)}">`;
+    groups[cat].forEach(it=>{
+      opts+=`<option value="${escHtml(it.id)}" data-price="${Number(it.price).toFixed(2)}" data-tax="${Number(it.tax_rate)||0}" data-name="${escHtml(it.name)}">${escHtml(it.name)} — ${fmt$(it.price)}</option>`;
+    });
+    opts+=`</optgroup>`;
+  });
+  return`<select id="bdc-pick-${fid}" onchange="bdPickItem('${fid}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px">${opts}</select>`;
+}
+function bdPickItem(fid){
+  const sel=document.getElementById(`bdc-pick-${fid}`);if(!sel)return;
+  const opt=sel.options[sel.selectedIndex];
+  const descEl=document.getElementById(`bdc-desc-${fid}`);
+  const priceEl=document.getElementById(`bdc-price-${fid}`);
+  const taxEl=document.getElementById(`bdc-tax-${fid}`);
+  if(opt&&opt.value){
+    if(descEl){descEl.value=opt.dataset.name||'';descEl.style.display='none';}
+    if(priceEl)priceEl.value=opt.dataset.price||'';
+    if(taxEl)taxEl.value=opt.dataset.tax||'0';
+  }else{
+    if(descEl){descEl.value='';descEl.style.display='';descEl.focus();}
+    if(priceEl)priceEl.value='';
+    if(taxEl)taxEl.value='';
+  }
+}
+
+async function bdToggleAdd(fid){
+  _bdAddOpen[fid]=!_bdAddOpen[fid];
+  if(_bdAddOpen[fid])_bdLoadCatalogItems().then(()=>{if(_bdAddOpen[fid])_bdRender();});
+  _bdRender();
+}
 
 async function bdAddItem(fid){
   const desc=document.getElementById(`bdc-desc-${fid}`)?.value.trim();
