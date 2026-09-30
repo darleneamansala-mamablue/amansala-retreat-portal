@@ -22,6 +22,7 @@ function _rptSetTab(tab){
   _rptActiveTab=tab;
   if(tab==='daily')_rptRenderDaily();
   else if(tab==='gratuity')_rptRenderGratuity();
+  else if(tab==='status')_rptRenderStatus();
   else _rptRenderBody();
 }
 
@@ -61,6 +62,7 @@ function reportsRender(){
   _rptRows=_rptBuildRows();
   if(_rptActiveTab==='daily')_rptRenderDaily();
   else if(_rptActiveTab==='gratuity')_rptRenderGratuity();
+  else if(_rptActiveTab==='status')_rptRenderStatus();
   else _rptRenderBody();
 }
 
@@ -107,6 +109,7 @@ function _rptRenderBody(){
         ${_rptTabBtn('financial','Financial Summary',true)}
         ${_rptTabBtn('daily','Daily Report',false)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
+        ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
       <select onchange="_rptSetYear(this.value)" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff;cursor:pointer">
@@ -389,6 +392,7 @@ function _rptRenderDailyView(){
         ${_rptTabBtn('financial','Financial Summary',false)}
         ${_rptTabBtn('daily','Daily Report',true)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
+        ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
       <input type="date" value="${_dailyFrom}" onchange="_rptSetDailyFrom(this.value)" style="${inputS}" title="From">
@@ -590,6 +594,7 @@ function _rptRenderGratuity(){
         ${_rptTabBtn('financial','Financial Summary',false)}
         ${_rptTabBtn('daily','Daily Report',false)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',true)}
+        ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
       <select onchange="_rptSetYear(this.value)" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff;cursor:pointer">
@@ -705,3 +710,124 @@ function _rptExportGratuityCsv(){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ─── CONTRACT & PORTAL STATUS ────────────────────────────────────
+// Jorge's ask 2026-09-30: "podemos tener un apartado en donde podamos ver
+// a quien ya le enviamos contratos? o sent to teacher que es el portal?"
+// -- who's missing a contract or their room list/portal, across every
+// retreat, at a glance. Reads fields the app already persists (no schema
+// change) -- venSendRoomList()/the contract flow in booking-hub.html
+// already set these on bk itself.
+let _rptOnlyMissing=false;
+
+function _rptContractStatus(bk){
+  const contractSent=!!bk.contractSentAt||!!bk.contractSentViaPortal||['contract_sent','contract_signed','deposit_paid','room_list_sent','confirmed'].includes(bk.status);
+  const contractSigned=!!bk.contractSignedAt||bk.status==='contract_signed';
+  const portalSent=!!bk.roomListSentAt||!!bk.roomListSentViaPortal||['room_list_sent','confirmed'].includes(bk.status);
+  return{
+    contractSent,contractSentAt:bk.contractSentAt||null,
+    contractSigned,contractSignedAt:bk.contractSignedAt||null,
+    portalSent,portalSentAt:bk.roomListSentAt||null,
+  };
+}
+
+function _rptStatusBadge(on,onLabel,offLabel){
+  return on
+    ?`<span style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap">✓ ${onLabel}</span>`
+    :`<span style="background:#fee2e2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap">${offLabel}</span>`;
+}
+
+function _rptRenderStatus(){
+  const el=document.getElementById('reportsContent');
+  if(!el)return;
+  let rows=_rptFiltered().map(r=>({...r,cs:_rptContractStatus(r.bk)}));
+  if(_rptOnlyMissing)rows=rows.filter(r=>!r.cs.contractSent||!r.cs.portalSent);
+  const active=_rptFiltered().filter(r=>r.bk.status!=='cancelled').length;
+  const years=[...new Set(_rptRows.map(r=>(r.bk.startDate||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  const missingContract=_rptFiltered().filter(r=>!_rptContractStatus(r.bk).contractSent).length;
+  const missingPortal=_rptFiltered().filter(r=>!_rptContractStatus(r.bk).portalSent).length;
+
+  el.innerHTML=`
+  <div style="padding:24px 28px;font-family:'Jost',sans-serif;overflow-y:auto;height:100%;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      <div>
+        <h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">Contract & Portal Status</h2>
+        <div style="font-size:12px;color:#9ca3af;margin-top:2px">${active} retreat${active!==1?'s':''} · ${_rptYear==='all'?'All time':_rptYear}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        ${_rptTabBtn('financial','Financial Summary',false)}
+        ${_rptTabBtn('daily','Daily Report',false)}
+        ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
+        ${_rptTabBtn('status','Contract & Portal',true)}
+      </div>
+      <div style="flex:1"></div>
+      <select onchange="_rptSetYear(this.value);_rptRenderStatus()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff;cursor:pointer">
+        <option value="all" ${_rptYear==='all'?'selected':''}>All years</option>
+        ${years.map(y=>`<option value="${y}" ${_rptYear===y?'selected':''}>${y}</option>`).join('')}
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;cursor:pointer">
+        <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked);_rptRenderStatus()">
+        Show cancelled
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;cursor:pointer">
+        <input type="checkbox" ${_rptOnlyMissing?'checked':''} onchange="_rptSetOnlyMissing(this.checked)">
+        Only missing something
+      </label>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">
+      ${_rptCard('Retreats',String(active),'#f0f9ff','#0369a1')}
+      ${_rptCard('Missing Contract',String(missingContract),missingContract>0?'#fef2f2':'#f0fdf4',missingContract>0?'#dc2626':'#15803d')}
+      ${_rptCard('Missing Portal / Room List',String(missingPortal),missingPortal>0?'#fef2f2':'#f0fdf4',missingPortal>0?'#dc2626':'#15803d')}
+    </div>
+
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse">
+        <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
+          <tr>
+            <th style="${_rptTh()}">Retreat</th>
+            <th style="${_rptTh()}">Dates</th>
+            <th style="${_rptTh('center')}">Contract</th>
+            <th style="${_rptTh('center')}">Signed</th>
+            <th style="${_rptTh('center')}">Portal / Room List</th>
+            <th style="${_rptTh('center')}">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.length===0
+            ?`<tr><td colspan="6" style="padding:60px;text-align:center;color:#9ca3af">${_rptOnlyMissing?'Nothing missing for this filter 🎉':'No retreats found for this filter'}</td></tr>`
+            :rows.slice().sort((a,b)=>(a.bk.startDate||'').localeCompare(b.bk.startDate||'')).map(_rptStatusRowHtml).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function _rptStatusRowHtml(r){
+  const bk=r.bk,cs=r.cs;
+  const canc=bk.status==='cancelled';
+  return`<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer;${canc?'opacity:.55':''}" onclick="switchTab('teacherreg',document.getElementById('teacherregTabBtn'));regInitSel();regSelectRetreat('${bk.id}')">
+    <td style="${_rptTd()}">
+      <div style="font-weight:700;font-size:13px;color:#111827">${escHtml(bk.retreatName||bk.leaderName||'—')}</div>
+      <div style="font-size:11px;color:#9ca3af;margin-top:1px">${escHtml(bk.leaderName||'')}</div>
+    </td>
+    <td style="${_rptTd()};white-space:nowrap;font-size:12px;color:#6b7280">${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)}</td>
+    <td style="${_rptTd('center')}">
+      ${_rptStatusBadge(cs.contractSent,'Sent','Not Sent')}
+      ${cs.contractSentAt?`<div style="font-size:10px;color:#9ca3af;margin-top:3px">${fmtDate(cs.contractSentAt.slice(0,10))}</div>`:''}
+    </td>
+    <td style="${_rptTd('center')}">
+      ${_rptStatusBadge(cs.contractSigned,'Signed','Not Signed')}
+      ${cs.contractSignedAt?`<div style="font-size:10px;color:#9ca3af;margin-top:3px">${fmtDate(cs.contractSignedAt.slice(0,10))}</div>`:''}
+    </td>
+    <td style="${_rptTd('center')}">
+      ${_rptStatusBadge(cs.portalSent,'Sent','Not Sent')}
+      ${cs.portalSentAt?`<div style="font-size:10px;color:#9ca3af;margin-top:3px">${fmtDate(cs.portalSentAt.slice(0,10))}</div>`:''}
+    </td>
+    <td style="${_rptTd('center')}">
+      ${canc?`<span style="background:#fee2e2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px">Cancelled</span>`:`<span style="font-size:11px;color:#6b7280">${escHtml((bk.status||'').replace(/_/g,' '))}</span>`}
+    </td>
+  </tr>`;
+}
+
+function _rptSetOnlyMissing(v){_rptOnlyMissing=v;_rptRenderStatus();}
