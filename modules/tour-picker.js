@@ -48,7 +48,8 @@ function tpDefaultDate(bk,aoId){
   const nights=getNights(bk);
   for(let i=1;i<nights;i++){
     const d=new Date(pd(bk.startDate).getTime()+i*DAY_MS);
-    if(days.includes(d.getDay()))return fmtISO(d);
+    // Skip a day that already has another tour (one tour per day, activity-rules.js).
+    if(days.includes(d.getDay())&&!(typeof tourDayTaken==='function'&&tourDayTaken(bk,fmtISO(d),-1)))return fmtISO(d);
   }
   return null;
 }
