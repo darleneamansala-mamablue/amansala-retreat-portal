@@ -484,10 +484,11 @@ function _bdFolioRowHtml(f){
     // bdEditItem() used to be three sequential prompt()s with no category).
     // Reuses the same pick-list as "+ Add manually" instead of free text.
     if(isOpen&&_bdEditOpen[i.id]){
+      const commOpenE=i.category==='Comisión';
       return `<tr style="background:#fffbeb">
         <td style="padding:6px 12px;font-size:12px;white-space:nowrap;color:var(--dark)">${itemDate}</td>
-        <td style="padding:6px 12px" colspan="2"><input id="bde-desc-${i.id}" value="${escHtml(i.description||'')}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bde-cat-${i.id}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml(i.category||'')}</select></td>
-        <td style="padding:6px 12px"><input id="bde-price-${i.id}" type="number" step="0.01" value="${Number(i.unit_price)}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
+        <td style="padding:6px 12px" colspan="2"><input id="bde-desc-${i.id}" value="${escHtml(i.description||'')}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bde-cat-${i.id}" onchange="_bdOnCategoryChange('bde','${i.id}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml(i.category||'')}</select>${_bdCommissionFieldsHtml('bde',i.id,commOpenE)}</td>
+        <td style="padding:6px 12px"><input id="bde-price-${i.id}" type="number" step="0.01" value="${Number(i.unit_price)}"${commOpenE?' readonly':''} style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px${commOpenE?';background:#f3f4f6':''}"></td>
         <td style="padding:6px 12px"><input id="bde-tax-${i.id}" type="number" step="0.01" value="${Number(i.tax_rate)||0}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
         <td colspan="2" style="padding:6px 12px;text-align:right;white-space:nowrap">
           <button class="btn btn-primary btn-sm" onclick="bdSaveEditItem('${fid}','${i.id}')" style="padding:2px 8px;font-size:11px">Save</button>
@@ -511,7 +512,7 @@ function _bdFolioRowHtml(f){
   const addFormHtml=_bdAddOpen[fid]?`
     <tr>
       <td></td>
-      <td style="padding:6px 12px" colspan="2">${_bdItemPickerHtml(fid)}<input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bdc-cat-${fid}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml('')}</select></td>
+      <td style="padding:6px 12px" colspan="2">${_bdItemPickerHtml(fid)}<input id="bdc-desc-${fid}" placeholder="Description" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bdc-cat-${fid}" onchange="_bdOnCategoryChange('bdc','${fid}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml('')}</select>${_bdCommissionFieldsHtml('bdc',fid,false)}</td>
       <td style="padding:6px 12px"><input id="bdc-price-${fid}" type="number" step="0.01" placeholder="Price" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td style="padding:6px 12px"><input id="bdc-tax-${fid}" type="number" step="0.01" placeholder="Tax%" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
       <td colspan="2" style="padding:6px 12px;text-align:right"><button class="btn btn-primary btn-sm" onclick="bdAddItem('${fid}')">+ Add</button></td>
@@ -623,6 +624,48 @@ function _bdCategoryOptionsHtml(selected){
   const sorted=[...cats].sort((a,b)=>a.localeCompare(b));
   return`<option value="">— None —</option>`+sorted.map(c=>`<option value="${escHtml(c)}"${c===selected?' selected':''}>${escHtml(c)}</option>`).join('');
 }
+// Jorge's ask 2026-09-30: picking Category "Comisión" should reveal a Staff
+// field and auto-derive the charge amount as 5% of a pretax base -- same
+// 5%-of-pretax convention already used for upgrade/reservation commissions
+// (tr2ConfirmUpgrade in transport.js, rmSave in venues.js), and the result
+// also lands in the `commissions` table so it shows up in the existing
+// Commissions tab, not just on this folio.
+function _bdStaffOptionsHtml(selected){
+  const list=(typeof staffAccounts!=='undefined'?staffAccounts:[]).filter(s=>s.active);
+  return`<option value="">— Selecciona staff —</option>`+list.map(s=>`<option value="${escHtml(s.id)}"${s.id===selected?' selected':''}>${escHtml(s.name)}</option>`).join('');
+}
+function _bdCommissionFieldsHtml(prefix,id,open){
+  return`<div id="${prefix}-commwrap-${id}" style="display:${open?'block':'none'};margin-top:6px">
+    <select id="${prefix}-staff-${id}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px">${_bdStaffOptionsHtml('')}</select>
+    <input id="${prefix}-base-${id}" type="number" step="0.01" placeholder="Monto base (antes de impuesto)" oninput="_bdRecalcCommission('${prefix}','${id}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+  </div>`;
+}
+function _bdOnCategoryChange(prefix,id){
+  const catEl=document.getElementById(`${prefix}-cat-${id}`);
+  const wrap=document.getElementById(`${prefix}-commwrap-${id}`);
+  const priceEl=document.getElementById(`${prefix}-price-${id}`);
+  if(!catEl||!wrap)return;
+  const isComm=catEl.value==='Comisión';
+  wrap.style.display=isComm?'block':'none';
+  if(!priceEl)return;
+  if(isComm){
+    if(priceEl.dataset.prevValue===undefined)priceEl.dataset.prevValue=priceEl.value;
+    priceEl.readOnly=true;
+    priceEl.style.background='#f3f4f6';
+    _bdRecalcCommission(prefix,id);
+  }else{
+    priceEl.readOnly=false;
+    priceEl.style.background='';
+    if(priceEl.dataset.prevValue!==undefined){priceEl.value=priceEl.dataset.prevValue;delete priceEl.dataset.prevValue;}
+  }
+}
+function _bdRecalcCommission(prefix,id){
+  const baseEl=document.getElementById(`${prefix}-base-${id}`);
+  const priceEl=document.getElementById(`${prefix}-price-${id}`);
+  if(!baseEl||!priceEl)return;
+  const base=parseFloat(baseEl.value)||0;
+  priceEl.value=(base*0.05).toFixed(2);
+}
 function _bdItemPickerHtml(fid){
   if(!_bdCatalogItems.length)return'';
   const groups={};
@@ -659,6 +702,7 @@ function bdPickItem(fid){
     if(taxEl)taxEl.value='';
     if(catEl)catEl.value='';
   }
+  _bdOnCategoryChange('bdc',fid);
 }
 
 async function bdToggleAdd(fid){
@@ -667,19 +711,50 @@ async function bdToggleAdd(fid){
   _bdRender();
 }
 
+// Guest folio's own commissions insert, shared by bdAddItem/bdSaveEditItem --
+// mirrors the 5%-of-pretax `commissions` row shape already used elsewhere
+// (tr2ConfirmUpgrade in transport.js, rmSave in venues.js) so a commission
+// logged from a folio charge shows up in the existing Commissions tab too.
+function _bdLogCommission(fid,staffId,baseAmount,taxRate,commissionAmount,desc){
+  const staffName=(typeof staffAccounts!=='undefined'?staffAccounts:[]).find(s=>s.id===staffId)?.name||'';
+  const f=_bdFolios.find(x=>x.folio.id===fid);
+  const guestName=f?.folio?.name||_bdGuestNameOverride||'';
+  const bookingId=_bdKind==='reg'?(AppData.regs.find(r=>r.id===_bdId)?.bookingId||null):null;
+  db.from('commissions').insert({
+    staff_id:staffId,staff_name:staffName,type:'folio',guest_name:guestName,booking_id:bookingId,
+    // room_from/room_to are free text on this table -- repurposed here to
+    // carry the folio charge's own description so it shows up readably in
+    // the Commissions tab (commissionsRenderBody()'s detail column).
+    room_from:null,room_to:desc||'Cargo de folio',upgrade_pretax:baseAmount,upgrade_total:+(baseAmount*(1+(taxRate||0)/100)).toFixed(2),
+    commission_rate:0.05,commission_amount:commissionAmount,date:new Date().toISOString().slice(0,10),status:'pending',
+  }).then(({error})=>{if(error)console.warn('[commission] insert failed:',error.message);});
+}
+
 async function bdAddItem(fid){
   const descEl=document.getElementById(`bdc-desc-${fid}`);
   const desc=descEl?.value.trim();
-  const price=parseFloat(document.getElementById(`bdc-price-${fid}`)?.value);
   const tax=parseFloat(document.getElementById(`bdc-tax-${fid}`)?.value)||0;
   // Pre-filled by bdPickItem() when the charge came from the Items catalog
   // picker, but always a normal editable field -- staff can type/change it
   // for a freely-typed manual charge too (Jorge's ask 2026-09-30: track
   // category on every charge, manual and automatic alike).
   const category=document.getElementById(`bdc-cat-${fid}`)?.value.trim()||null;
+  const isComm=category==='Comisión';
+  let price,staffId='',baseAmount=null,commissionAmount=null;
+  if(isComm){
+    baseAmount=parseFloat(document.getElementById(`bdc-base-${fid}`)?.value);
+    staffId=document.getElementById(`bdc-staff-${fid}`)?.value||'';
+    if(isNaN(baseAmount)||baseAmount<=0){showToast('Ingresa el monto base (antes de impuesto) de la comisión');return;}
+    if(!staffId){showToast('Selecciona el staff de la comisión');return;}
+    commissionAmount=+(baseAmount*0.05).toFixed(2);
+    price=commissionAmount;
+  }else{
+    price=parseFloat(document.getElementById(`bdc-price-${fid}`)?.value);
+  }
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
   const {error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax,category,staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error: '+error.message);return;}
+  if(isComm&&staffId)_bdLogCommission(fid,staffId,baseAmount,tax,commissionAmount,desc);
   _bdAddOpen[fid]=false;
   await _bdLoadFolios();
 }
@@ -692,12 +767,29 @@ async function bdToggleEditItem(itemId){
 
 async function bdSaveEditItem(fid,itemId){
   const desc=document.getElementById(`bde-desc-${itemId}`)?.value.trim();
-  const price=parseFloat(document.getElementById(`bde-price-${itemId}`)?.value);
   const tax=parseFloat(document.getElementById(`bde-tax-${itemId}`)?.value)||0;
   const category=document.getElementById(`bde-cat-${itemId}`)?.value.trim()||null;
+  const isComm=category==='Comisión';
+  // Only log a NEW commission when this edit is the one turning the charge
+  // INTO Comisión -- resaving an already-Comisión row (e.g. just fixing the
+  // description) must not insert a duplicate into the commissions table.
+  const origItem=_bdFolios.find(x=>x.folio.id===fid)?.items.find(x=>x.id===itemId);
+  const alreadyWasComm=origItem?.category==='Comisión';
+  let price,staffId='',baseAmount=null,commissionAmount=null;
+  if(isComm){
+    baseAmount=parseFloat(document.getElementById(`bde-base-${itemId}`)?.value);
+    staffId=document.getElementById(`bde-staff-${itemId}`)?.value||'';
+    if(isNaN(baseAmount)||baseAmount<=0){showToast('Ingresa el monto base (antes de impuesto) de la comisión');return;}
+    if(!staffId){showToast('Selecciona el staff de la comisión');return;}
+    commissionAmount=+(baseAmount*0.05).toFixed(2);
+    price=commissionAmount;
+  }else{
+    price=parseFloat(document.getElementById(`bde-price-${itemId}`)?.value);
+  }
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
   const {error}=await db.from('folio_items').update({description:desc,unit_price:price,tax_rate:tax,category}).eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
+  if(isComm&&staffId&&!alreadyWasComm)_bdLogCommission(fid,staffId,baseAmount,tax,commissionAmount,desc);
   delete _bdEditOpen[itemId];
   await _bdLoadFolios();
 }
