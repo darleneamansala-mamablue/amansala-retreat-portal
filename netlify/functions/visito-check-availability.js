@@ -38,6 +38,11 @@ exports.handler = async (event) => {
   catch { return jsonErr(400, 'Invalid JSON'); }
 
   const { checkIn, checkOut, adults, discountCode, stayType } = payload.arguments || {};
+  // Which arguments Lana actually sent (names only, plus the discount code) --
+  // Jorge's test 2026-09-30: a discount code wasn't applied and Lana handed
+  // off to staff; this shows whether the Visito tool schema even has
+  // discountCode.
+  console.log('[visito-check-availability] args:', Object.keys(payload.arguments || {}).join(','), '| discountCode:', discountCode || '(none)');
   if (!checkIn || !checkOut) {
     return ok({ success: false, message: 'Necesito la fecha de entrada y salida (checkIn, checkOut) para revisar disponibilidad.' });
   }
