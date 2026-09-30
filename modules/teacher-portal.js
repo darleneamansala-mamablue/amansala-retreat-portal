@@ -5909,7 +5909,10 @@ function openDailyReport(){
   if(!regSelBk)return;
   const bk=regSelBk;
   const nights=getNights(bk);
-  const bkRegs=AppData.regs.filter(r=>r.bookingId===bk.id);
+  // Same "unblocked room, orphaned registration" guard as Transport/
+  // registeredCount() -- a room removed from the retreat's own list
+  // shouldn't show up in its own Daily Room Report either.
+  const bkRegs=AppData.regs.filter(r=>r.bookingId===bk.id&&roomListIncludes(bk.blockedRooms,r.room));
   const DAY_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   let html='';
