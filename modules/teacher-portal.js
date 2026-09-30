@@ -2736,7 +2736,7 @@ function tsRenderCalSection(bk){
         const arShala=snm(sr.arrivalShala1||sr.morningShala1);
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60)),desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:arShala,cat:'yoga',sk:sr.arrivalSlot});
       }
-      const _arrDinnerT=(sr.hasArrivalClass&&sr.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30';
+      const _arrDinnerT=svDinnerTimeFor(sr,dateStr,(sr.hasArrivalClass&&sr.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30');
       rows.push({time:fmtT(_arrDinnerT),desc:'Dinner',shala:'',cat:'meal',sk:_arrDinnerT});
     } else if(i===nights){
       // Departure day (endDate)
@@ -2802,7 +2802,7 @@ function tsRenderCalSection(bk){
       // "Already Prepaid" onsite is a definite, already-included dinner — show
       // "Dinner Onsite" plainly, not "Dinner (Off-site)" (that label only fits
       // when the group is actually going offsite, e.g. Gitano).
-      const _dinnerT=(sr.hasAfternoon&&dayAfSlot&&!_dayAftSkipped)?addMin(dayAfSlot,dayAfDur+45):'19:30';
+      const _dinnerT=svDinnerTimeFor(sr,dateStr,(sr.hasAfternoon&&dayAfSlot&&!_dayAftSkipped)?addMin(dayAfSlot,dayAfDur+45):'19:30');
       if(!hasGitanoToday)rows.push({time:fmtT(_dinnerT),desc:isOffsite?(sr.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner (Off-site)'):'Dinner',shala:'',cat:'meal',sk:_dinnerT});
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT the arrival
