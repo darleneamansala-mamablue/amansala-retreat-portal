@@ -14,7 +14,7 @@
 // already subject-agnostic (keyed only by folio id) -- _bdSubject() is the
 // one seam that normalizes the two into a common shape for everything else
 // (header, check-in/out, notes, delete).
-let _bdKind='reg',_bdId=null,_bdReqCache=null,_bdFolios=[],_bdAddOpen={};
+let _bdKind='reg',_bdId=null,_bdReqCache=null,_bdFolios=[],_bdAddOpen={},_bdEditOpen={};
 
 function _bdReqSqlToApp(row){const o={};for(const k in row)o[_s2c(k)]=row[k];return o;}
 
@@ -99,7 +99,7 @@ function _bdGoToRegistration(bkId){
 async function openBookingDetailForReg(regId,guestName){
   const reg=AppData.regs.find(r=>r.id===regId);if(!reg)return;
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return;
-  _bdKind='reg';_bdId=regId;_bdReqCache=null;_bdAddOpen={};
+  _bdKind='reg';_bdId=regId;_bdReqCache=null;_bdAddOpen={};_bdEditOpen={};
   _bdGuestNameOverride=guestName||(reg.guests||[]).find(g=>g.name)?.name||'Guest';
   document.getElementById('bdBody').innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px">Loading folio…</div>';
   openModal('bookingDetailModal');
@@ -111,7 +111,7 @@ async function openBookingDetailForReg(regId,guestName){
 // modules/reservations.js's Arrivals/In House/Departures/Search tabs.
 let _bdGuestNameOverride=null;
 async function openBookingDetailForRequest(requestId){
-  _bdKind='req';_bdId=requestId;_bdGuestNameOverride=null;_bdAddOpen={};
+  _bdKind='req';_bdId=requestId;_bdGuestNameOverride=null;_bdAddOpen={};_bdEditOpen={};
   document.getElementById('bdBody').innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px">Loading folio…</div>';
   openModal('bookingDetailModal');
   try{
@@ -479,15 +479,31 @@ function _bdFolioRowHtml(f){
     // Date column, like Cloudbeds' folio (Darlene 2026-09-28). Spa charges set
     // created_at to the service day, so this shows when the massage was given.
     const itemDate=i.created_at?new Date(i.created_at).toLocaleDateString('en-CA'):'';
+    // Jorge's ask 2026-09-30: editing a charge should let staff change
+    // everything, including Category (it had no way to edit that at all --
+    // bdEditItem() used to be three sequential prompt()s with no category).
+    // Reuses the same pick-list as "+ Add manually" instead of free text.
+    if(isOpen&&_bdEditOpen[i.id]){
+      return `<tr style="background:#fffbeb">
+        <td style="padding:6px 12px;font-size:12px;white-space:nowrap;color:var(--dark)">${itemDate}</td>
+        <td style="padding:6px 12px" colspan="2"><input id="bde-desc-${i.id}" value="${escHtml(i.description||'')}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bde-cat-${i.id}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml(i.category||'')}</select></td>
+        <td style="padding:6px 12px"><input id="bde-price-${i.id}" type="number" step="0.01" value="${Number(i.unit_price)}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
+        <td style="padding:6px 12px"><input id="bde-tax-${i.id}" type="number" step="0.01" value="${Number(i.tax_rate)||0}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
+        <td colspan="2" style="padding:6px 12px;text-align:right;white-space:nowrap">
+          <button class="btn btn-primary btn-sm" onclick="bdSaveEditItem('${fid}','${i.id}')" style="padding:2px 8px;font-size:11px">Save</button>
+          <button class="btn btn-secondary btn-sm" onclick="bdToggleEditItem('${i.id}')" style="padding:2px 8px;font-size:11px">Cancel</button>
+        </td>
+      </tr>`;
+    }
     return `<tr style="${isPayment?'background:#f0fdf4':''}">
       <td style="padding:8px 12px;font-size:12px;white-space:nowrap;color:var(--dark)">${itemDate}</td>
-      <td style="padding:8px 12px;font-size:12.5px">${isPayment?'💳 ':''}${escHtml(i.description||'')}</td>
+      <td style="padding:8px 12px;font-size:12.5px">${isPayment?'💳 ':''}${escHtml(i.description||'')}${i.category?`<span style="margin-left:8px;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:#f3f4f6;color:var(--muted)">${escHtml(i.category)}</span>`:''}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${Number(i.qty)}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${fmt$(i.unit_price)}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${i.tax_rate?i.tax_rate+'%':'—'}</td>
       <td style="padding:8px 12px;font-size:12.5px;text-align:right;font-weight:700;color:${isPayment?'#059669':'inherit'}">${fmt$(lineTotal)}</td>
       <td style="padding:8px 12px;text-align:right;white-space:nowrap">
-        ${isOpen?`<button class="btn btn-secondary btn-sm" onclick="bdEditItem('${fid}','${i.id}')" style="padding:2px 8px;font-size:11px">Edit</button>
+        ${isOpen?`<button class="btn btn-secondary btn-sm" onclick="bdToggleEditItem('${i.id}')" style="padding:2px 8px;font-size:11px">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="bdDeleteItem('${fid}','${i.id}')" style="padding:2px 8px;font-size:11px">✕</button>`:''}
       </td>
     </tr>`;
@@ -668,13 +684,21 @@ async function bdAddItem(fid){
   await _bdLoadFolios();
 }
 
-async function bdEditItem(fid,itemId){
-  const f=_bdFolios.find(x=>x.folio.id===fid);const item=f?.items.find(i=>i.id===itemId);if(!item)return;
-  const desc=prompt('Description',item.description);if(desc==null)return;
-  const price=parseFloat(prompt('Unit price',item.unit_price));if(isNaN(price))return;
-  const tax=parseFloat(prompt('Tax %',item.tax_rate||0))||0;
-  const {error}=await db.from('folio_items').update({description:desc,unit_price:price,tax_rate:tax}).eq('id',itemId);
+async function bdToggleEditItem(itemId){
+  _bdEditOpen[itemId]=!_bdEditOpen[itemId];
+  if(_bdEditOpen[itemId])_bdLoadCatalogItems().then(()=>{if(_bdEditOpen[itemId])_bdRender();});
+  _bdRender();
+}
+
+async function bdSaveEditItem(fid,itemId){
+  const desc=document.getElementById(`bde-desc-${itemId}`)?.value.trim();
+  const price=parseFloat(document.getElementById(`bde-price-${itemId}`)?.value);
+  const tax=parseFloat(document.getElementById(`bde-tax-${itemId}`)?.value)||0;
+  const category=document.getElementById(`bde-cat-${itemId}`)?.value.trim()||null;
+  if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
+  const {error}=await db.from('folio_items').update({description:desc,unit_price:price,tax_rate:tax,category}).eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
+  delete _bdEditOpen[itemId];
   await _bdLoadFolios();
 }
 
