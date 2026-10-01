@@ -4627,7 +4627,17 @@ async function syncToSupabase(){
           if(_isRecentLocalId(b.id))return true; // genuinely new, never synced yet
           _staleZombieBks.push(b.id);return false; // old id, gone from Supabase — don't resurrect
         }
-        if(b.updatedAt&&new Date(b.updatedAt)<new Date(remoteUpdatedAt)){_staleOverwriteBks.push(b.id);return false;}
+        // Fail-safe, not fail-open: a booking with NO local updatedAt at all (e.g. one
+        // that came from an imported backup file, which never carries this field) used
+        // to sail through here as "not stale" — b.updatedAt&&... short-circuits false on
+        // undefined, so the staleness check silently never ran for it. That's exactly how
+        // a Restore-from-backup could mass-overwrite tipPerNight/blockedRooms/etc. across
+        // every booking at once with no warning. Real incident 2026-09-23 (Jen Russell,
+        // Carla Rosas/Sahara Rodriguez, and others — every booking updated_at identical
+        // to the millisecond, consistent with one wholesale import+saveAll()). Missing
+        // updatedAt now counts as stale — skip it, don't overwrite, same as if it were
+        // provably older.
+        if(!b.updatedAt||new Date(b.updatedAt)<new Date(remoteUpdatedAt)){_staleOverwriteBks.push(b.id);return false;}
         return true;
       });
       const bkRows=_bkOkCandidates.map(appBookingToSqlRow);
@@ -4719,7 +4729,9 @@ async function syncToSupabase(){
         const remoteUpdatedAt=freshMap.get(c.key);
         if(remoteUpdatedAt===undefined)return true; // never synced yet
         const known=_appStoreUpdatedAt[c.key];
-        if(known&&new Date(known)<new Date(remoteUpdatedAt)){_staleKeys.push(c.key);return false;}
+        // Fail-safe, matching the bookings/room_types guard fix above — no known local
+        // timestamp for this key now counts as stale rather than skipping the check.
+        if(!known||new Date(known)<new Date(remoteUpdatedAt)){_staleKeys.push(c.key);return false;}
         return true;
       }).map(c=>({key:c.key,value:c.value,updated_at:new Date().toISOString()}));
       if(_staleKeys.length)console.warn('[sync guard] skipped overwriting stale app_store key(s):',_staleKeys);
@@ -4746,7 +4758,10 @@ async function syncRoomTypesToSupabase(){
     const okTypes=AppData.roomTypes.filter(rt=>{
       const remoteUpdatedAt=remoteMap.get(rt.id);
       if(remoteUpdatedAt===undefined)return true; // new type, nothing to compare against
-      if(rt.updatedAt&&new Date(rt.updatedAt)<new Date(remoteUpdatedAt))return false;
+      // Fail-safe: missing local updatedAt (e.g. from an imported backup) now counts as
+      // stale, same fix as the bookings guard above — see that comment for the real
+      // incident (2026-09-23) this closes off. Was rt.updatedAt&&... (fail-open).
+      if(!rt.updatedAt||new Date(rt.updatedAt)<new Date(remoteUpdatedAt))return false;
       return true;
     });
     const skipped=AppData.roomTypes.length-okTypes.length;
