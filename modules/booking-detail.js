@@ -14,7 +14,7 @@
 // already subject-agnostic (keyed only by folio id) -- _bdSubject() is the
 // one seam that normalizes the two into a common shape for everything else
 // (header, check-in/out, notes, delete).
-let _bdKind='reg',_bdId=null,_bdReqCache=null,_bdFolios=[],_bdAddOpen={},_bdEditOpen={};
+let _bdKind='reg',_bdId=null,_bdReqCache=null,_bdFolios=[],_bdAddOpen={},_bdEditOpen={},_bdCommissionStaffByItem={};
 
 function _bdReqSqlToApp(row){const o={};for(const k in row)o[_s2c(k)]=row[k];return o;}
 
@@ -161,6 +161,17 @@ async function _bdLoadFolios(){
     const {data:items,error:iErr}=await db.from('folio_items').select('*').in('folio_id',folioIds).order('created_at',{ascending:true});
     if(iErr)throw iErr;
     _bdFolios=folios.map(f=>({folio:f,items:(items||[]).filter(i=>i.folio_id===f.id)}));
+    // Jorge's report 2026-10-01: reopening Edit on a Comisión charge always
+    // showed the Staff field blank, even after it had saved correctly --
+    // folio_items itself has no staff/commission columns, so look up which
+    // staff is actually linked (via the commissions.folio_item_id we added)
+    // and pre-select it when rendering the edit form.
+    const commItemIds=(items||[]).filter(i=>i.category==='Comisión').map(i=>i.id);
+    _bdCommissionStaffByItem={};
+    if(commItemIds.length){
+      const{data:comms}=await db.from('commissions').select('folio_item_id,staff_id').in('folio_item_id',commItemIds);
+      (comms||[]).forEach(c=>{if(c.folio_item_id)_bdCommissionStaffByItem[c.folio_item_id]=c.staff_id;});
+    }
     _bdRender();
   }catch(e){
     document.getElementById('bdBody').innerHTML=`<div style="padding:40px 20px;text-align:center;color:#dc2626;font-size:13px">Could not load folio: ${escHtml(e.message||String(e))}</div>`;
@@ -487,7 +498,7 @@ function _bdFolioRowHtml(f){
       const commOpenE=i.category==='Comisión';
       return `<tr style="background:#fffbeb">
         <td style="padding:6px 12px;font-size:12px;white-space:nowrap;color:var(--dark)">${itemDate}</td>
-        <td style="padding:6px 12px" colspan="2"><input id="bde-desc-${i.id}" value="${escHtml(i.description||'')}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bde-cat-${i.id}" onchange="_bdOnCategoryChange('bde','${i.id}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml(i.category||'')}</select>${_bdCommissionFieldsHtml('bde',i.id,commOpenE,Number(i.unit_price))}</td>
+        <td style="padding:6px 12px" colspan="2"><input id="bde-desc-${i.id}" value="${escHtml(i.description||'')}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px"><select id="bde-cat-${i.id}" onchange="_bdOnCategoryChange('bde','${i.id}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">${_bdCategoryOptionsHtml(i.category||'')}</select>${_bdCommissionFieldsHtml('bde',i.id,commOpenE,Number(i.unit_price),_bdCommissionStaffByItem[i.id])}</td>
         <td style="padding:6px 12px"><input id="bde-price-${i.id}" type="number" step="0.01" value="${Number(i.unit_price)}" oninput="_bdOnPriceInput('bde','${i.id}')" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
         <td style="padding:6px 12px"><input id="bde-tax-${i.id}" type="number" step="0.01" value="${Number(i.tax_rate)||0}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"></td>
         <td colspan="2" style="padding:6px 12px;text-align:right;white-space:nowrap">
@@ -605,7 +616,14 @@ async function bdChargeCardOnFile(fid,amountOverride,btnIdOverride){
 // no picker at all. Loaded once and cached (items rarely change mid-session).
 let _bdCatalogItems=[];
 async function _bdLoadCatalogItems(){
-  if(_bdCatalogItems.length)return;
+  // Used to skip the query entirely once _bdCatalogItems had anything in it
+  // ("items rarely change mid-session") -- but a colleague adding a new item
+  // to the catalog in a DIFFERENT tab/session (Jorge's report 2026-10-01:
+  // "Tour Atik Cenote" never showed up) never invalidates that cache, so
+  // anyone with this page already open never saw it, no matter how many
+  // times they reopened "+ Add manually". Always re-fetch -- it only runs
+  // when that form is opened, not on every keystroke/render, so the cost is
+  // one small query per open, not per render.
   try{
     const{data,error}=await db.from('items').select('*').eq('active',true).order('category').order('name');
     if(error)throw error;
@@ -638,9 +656,9 @@ function _bdStaffOptionsHtml(selected){
   const list=(typeof staffAccounts!=='undefined'?staffAccounts:[]).filter(s=>s.active);
   return`<option value="">— Selecciona staff —</option>`+list.map(s=>`<option value="${escHtml(s.id)}"${s.id===selected?' selected':''}>${escHtml(s.name)}</option>`).join('');
 }
-function _bdCommissionFieldsHtml(prefix,id,open,initialPrice){
+function _bdCommissionFieldsHtml(prefix,id,open,initialPrice,selectedStaffId){
   return`<div id="${prefix}-commwrap-${id}" style="display:${open?'block':'none'};margin-top:6px">
-    <select id="${prefix}-staff-${id}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px">${_bdStaffOptionsHtml('')}</select>
+    <select id="${prefix}-staff-${id}" style="width:100%;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px">${_bdStaffOptionsHtml(selectedStaffId||'')}</select>
     <div id="${prefix}-commpreview-${id}" style="font-size:11px;color:var(--muted)">${_bdCommissionPreviewText(initialPrice||0)}</div>
   </div>`;
 }
@@ -704,7 +722,14 @@ function bdPickItem(fid){
 
 async function bdToggleAdd(fid){
   _bdAddOpen[fid]=!_bdAddOpen[fid];
-  if(_bdAddOpen[fid])_bdLoadCatalogItems().then(()=>{if(_bdAddOpen[fid])_bdRender();});
+  // Jorge's report 2026-10-01: Staff selection for Comisión kept resetting
+  // to blank before Save. Root cause: this used to render immediately, THEN
+  // render AGAIN once the Items catalog finished loading -- on a fresh page
+  // load _bdLoadCatalogItems() is a real network round-trip, so if staff had
+  // already picked something in the live form before that second render
+  // fired, the whole row got rebuilt from scratch and silently wiped it.
+  // Awaiting the catalog load first means there's only ever one render.
+  if(_bdAddOpen[fid])await _bdLoadCatalogItems();
   _bdRender();
 }
 
@@ -739,12 +764,12 @@ async function _bdUpsertCommission(fid,itemId,staffId,baseAmount,taxRate,commiss
     const{data:existing}=await db.from('commissions').select('id').eq('folio_item_id',itemId).maybeSingle();
     if(existing){
       const{error}=await db.from('commissions').update(payload).eq('id',existing.id);
-      if(error)console.warn('[commission] update failed:',error.message);
+      if(error){console.warn('[commission] update failed:',error.message);showToast('Cargo guardado, pero la comisión no se pudo actualizar: '+error.message);}
     }else{
       const{error}=await db.from('commissions').insert(payload);
-      if(error)console.warn('[commission] insert failed:',error.message);
+      if(error){console.warn('[commission] insert failed:',error.message);showToast('Cargo guardado, pero la comisión no se pudo registrar: '+error.message);}
     }
-  }catch(e){console.warn('[commission] upsert failed:',e.message);}
+  }catch(e){console.warn('[commission] upsert failed:',e.message);showToast('Cargo guardado, pero la comisión no se pudo registrar: '+e.message);}
 }
 
 async function bdAddItem(fid){
@@ -773,7 +798,10 @@ async function bdAddItem(fid){
 
 async function bdToggleEditItem(itemId){
   _bdEditOpen[itemId]=!_bdEditOpen[itemId];
-  if(_bdEditOpen[itemId])_bdLoadCatalogItems().then(()=>{if(_bdEditOpen[itemId])_bdRender();});
+  // Same race as bdToggleAdd() above -- await the catalog load so there's
+  // only one render, instead of a second one later that can wipe out a
+  // Staff pick made in the meantime.
+  if(_bdEditOpen[itemId])await _bdLoadCatalogItems();
   _bdRender();
 }
 
