@@ -704,7 +704,14 @@ function bdPickItem(fid){
 
 async function bdToggleAdd(fid){
   _bdAddOpen[fid]=!_bdAddOpen[fid];
-  if(_bdAddOpen[fid])_bdLoadCatalogItems().then(()=>{if(_bdAddOpen[fid])_bdRender();});
+  // Jorge's report 2026-10-01: Staff selection for Comisión kept resetting
+  // to blank before Save. Root cause: this used to render immediately, THEN
+  // render AGAIN once the Items catalog finished loading -- on a fresh page
+  // load _bdLoadCatalogItems() is a real network round-trip, so if staff had
+  // already picked something in the live form before that second render
+  // fired, the whole row got rebuilt from scratch and silently wiped it.
+  // Awaiting the catalog load first means there's only ever one render.
+  if(_bdAddOpen[fid])await _bdLoadCatalogItems();
   _bdRender();
 }
 
@@ -739,12 +746,12 @@ async function _bdUpsertCommission(fid,itemId,staffId,baseAmount,taxRate,commiss
     const{data:existing}=await db.from('commissions').select('id').eq('folio_item_id',itemId).maybeSingle();
     if(existing){
       const{error}=await db.from('commissions').update(payload).eq('id',existing.id);
-      if(error)console.warn('[commission] update failed:',error.message);
+      if(error){console.warn('[commission] update failed:',error.message);showToast('Cargo guardado, pero la comisión no se pudo actualizar: '+error.message);}
     }else{
       const{error}=await db.from('commissions').insert(payload);
-      if(error)console.warn('[commission] insert failed:',error.message);
+      if(error){console.warn('[commission] insert failed:',error.message);showToast('Cargo guardado, pero la comisión no se pudo registrar: '+error.message);}
     }
-  }catch(e){console.warn('[commission] upsert failed:',e.message);}
+  }catch(e){console.warn('[commission] upsert failed:',e.message);showToast('Cargo guardado, pero la comisión no se pudo registrar: '+e.message);}
 }
 
 async function bdAddItem(fid){
@@ -773,7 +780,10 @@ async function bdAddItem(fid){
 
 async function bdToggleEditItem(itemId){
   _bdEditOpen[itemId]=!_bdEditOpen[itemId];
-  if(_bdEditOpen[itemId])_bdLoadCatalogItems().then(()=>{if(_bdEditOpen[itemId])_bdRender();});
+  // Same race as bdToggleAdd() above -- await the catalog load so there's
+  // only one render, instead of a second one later that can wipe out a
+  // Staff pick made in the meantime.
+  if(_bdEditOpen[itemId])await _bdLoadCatalogItems();
   _bdRender();
 }
 
