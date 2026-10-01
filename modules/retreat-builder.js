@@ -696,7 +696,12 @@ function showTip(e,bk,regCount,hideFinancials){
       ${totalCharged>0?`<span style="color:rgba(255,255,255,.6)">Owing</span><span style="font-weight:700;color:${balance>0?'#fca5a5':'#6ee7b7'}">${fmt$(balance)}</span>`:''}
     </div>`:'';
   }
-  let flagsHtml=flags.length?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px">`+flags.slice(0,3).map(f=>`<div style="font-size:10px;color:#fca5a5">🚩 ${f.message}</div>`).join('')+'</div>':'';
+  // Jorge's report 2026-10-01: only showing the first 3 here (out of 11 for
+  // Carter Foxworth) while the 🚩 badge shows the real total (11) and the
+  // full Flags & Notes modal lists all of them made it look like the badge
+  // count was wrong, when it was just this preview being a lot shorter --
+  // say how many more there are instead of leaving it looking cut off.
+  let flagsHtml=flags.length?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px">`+flags.slice(0,3).map(f=>`<div style="font-size:10px;color:#fca5a5">🚩 ${f.message}</div>`).join('')+(flags.length>3?`<div style="font-size:10px;color:rgba(255,255,255,.5);margin-top:2px">+${flags.length-3} more — click to see all</div>`:'')+'</div>':'';
   const notesHtml=bk.notes?`<div style="margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:5px;font-size:10.5px;color:#fde68a">📝 ${escHtml(bk.notes)}</div>`:'';
   tip.innerHTML=`<div class="tip-n">${bk.leaderName||bk.retreatName}</div><div class="tip-d">${fmtDate(bk.startDate)} → ${fmtDate(bk.endDate)}</div><div style="font-size:10.5px;font-weight:600;color:${st.border};margin-top:3px">${st.label}</div>${bedsHtml}${finHtml}${flagsHtml}${notesHtml}`;
   tip.classList.add('show');moveTip(e);

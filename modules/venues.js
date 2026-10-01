@@ -108,10 +108,19 @@ function venBuild(){
       const lane=bkLane.get(bk.id)||0;
       const isInquiry=bk.source==='inquiry'&&bk.status==='requested';
       const isRoomOnly=bk.bookingType==='room_only';
+      // Jorge's ask 2026-10-01: a retreat already at Deposit Paid whose
+      // balance has since reached $0 should show as "Paid in Full", not sit
+      // forever labeled "Deposit Paid" once the rest got paid off too.
+      // Purely a display override -- bk.status itself stays 'deposit_paid'
+      // (that's still the real pipeline stage), so nothing else that reads
+      // status is affected.
+      const isPaidInFull=!isInquiry&&!isRoomOnly&&bk.status==='deposit_paid'&&calcBkBalance(bk).balance<=0;
       const st=isInquiry
         ?{label:'Inquiry',bg:'#f3f4f6',border:'#9ca3af',text:'#6b7280',dash:false}
         :isRoomOnly
         ?{label:(STATUS[bk.status]||STATUS.requested).label,...rmTypeColor(bk),dash:(STATUS[bk.status]||STATUS.requested).dash}
+        :isPaidInFull
+        ?STATUS.paid_in_full
         :(STATUS[bk.status]||STATUS.requested);
       const regCount=registeredCount(bk.id);
       const autoFlags=getAutoFlags(bk);
@@ -132,7 +141,7 @@ function venBuild(){
       // Contract Signed).
       const stBadge=isInquiry
         ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#e5e7eb;color:#6b7280;border-radius:3px;padding:1px 5px;margin-left:6px">Inquiry</span>`
-        :bk.status==='deposit_paid'
+        :bk.status==='deposit_paid'&&!isPaidInFull
         ?roomOnlyBadge
         :`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;opacity:.75;margin-left:5px">${st.label}</span>${roomOnlyBadge}`;
       const finBadge=bk.finalPaymentRequested?`<span title="Final payment requested" style="font-size:9.5px;background:rgba(0,0,0,.15);border-radius:3px;padding:1px 5px;margin-left:3px;font-weight:700">$</span>`:'';

@@ -1103,6 +1103,7 @@
     <div class="leg-item"><div class="leg-sw" style="background:#fef9c3;border-color:#fcd34d;border-style:dashed"></div>Contract Sent</div>
     <div class="leg-item"><div class="leg-sw" style="background:#fee2e2;border-color:#f87171"></div>Contract Signed</div>
     <div class="leg-item"><div class="leg-sw" style="background:#dcfce7;border-color:#22c55e"></div>Deposit Paid</div>
+    <div class="leg-item"><div class="leg-sw" style="background:#bbf7d0;border-color:#15803d"></div>Paid in Full</div>
     <div class="leg-item"><div class="leg-sw" style="background:#e0f2fe;border-color:#0891b2"></div>Room List Sent</div>
     <div class="leg-item"><div class="leg-sw" style="background:#fef2f2;border-color:#fca5a5;border-style:dashed"></div>Cancelled</div>
     <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-left:8px">Programs:</span>
@@ -4993,6 +4994,11 @@ const STATUS={
   contract_sent:  {label:'Contract Sent',   bg:'#fef9c3',border:'#fcd34d',text:'#854d0e',dash:true},
   contract_signed:{label:'Contract Signed', bg:'#fde8d8',border:'#f97316',text:'#7c2d12',dash:false},
   deposit_paid:   {label:'Deposit Paid',    bg:'#dcfce7',border:'#22c55e',text:'#14532d',dash:false},
+  // Display-only override (venues.js) for a 'deposit_paid' retreat whose
+  // balance has reached $0 -- status itself stays 'deposit_paid'. Jorge's
+  // ask 2026-10-01: it shouldn't sit forever labeled "Deposit Paid" once
+  // the rest got paid off too.
+  paid_in_full:   {label:'Paid in Full',    bg:'#bbf7d0',border:'#15803d',text:'#052e16',dash:false},
   room_list_sent: {label:'Room List Sent',  bg:'#e0f2fe',border:'#0891b2',text:'#0c4a6e',dash:false},
   cancelled:      {label:'Cancelled',       bg:'#fef2f2',border:'#fca5a5',text:'#991b1b',dash:true},
   // legacy aliases so existing saved data still renders
@@ -6245,7 +6251,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20260929a"></script>
+<script src="modules/venues.js?v=20261001a"></script>
 <script src="modules/room-optimizer.js?v=20260921b"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js?v=20260929b"></script>
@@ -6282,7 +6288,7 @@ function switchTab(id,btn){
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/retreat-builder.js?v=20260929b"></script>
+<script src="modules/retreat-builder.js?v=20261001a"></script>
 <script src="modules/tour-settings.js"></script>
 <script>
 // ===== RETREAT BUILDER — moved to modules/retreat-builder.js =====
