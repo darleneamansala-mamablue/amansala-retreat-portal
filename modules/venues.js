@@ -3018,6 +3018,13 @@ function importExternalReservation(r){
     id:newId,bookingType:'room_only',leaderName:r.guestName,leaderEmail:r._email||'',
     retreatName:'Direct/OTA (Cloudbeds)',startDate:r.startDate,endDate:r.endDate,
     row:findAvailableRow(r.startDate,r.endDate,null),pax:1,status:'confirmed',
+    // No mealPlan here used to leave it undefined, which menuPopulateFromRetreats
+    // reads as the default "standard" plan — so every direct/OTA walk-in guest
+    // imported this way (not part of any retreat, no meals included) silently
+    // got a full Breakfast/Brunch/Snack/Dinner group row on the kitchen menu
+    // (Darlene's report 2026-10-01). Explicit 'none', same as the Room Only
+    // form's own default.
+    mealPlan:'none',
     docLink:'',roomAssignments:[],roomTypeId:rt?rt.id:'',blockedRooms:r.rooms&&r.rooms.length?r.rooms:[room],
     roomRateTotal:0,roomRateNights:Math.max(1,Math.round((pd(r.endDate)-pd(r.startDate))/DAY_MS)),
     charges:[],payments:[],cbReservationIds,

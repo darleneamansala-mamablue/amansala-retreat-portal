@@ -432,7 +432,15 @@ function menuPopulateFromRetreats(silent=false){
   }
   const wFirst=weekDays[0], wLast=weekDays[6];
 
-  const allActive=AppData.bookings.filter(b=>b.status!=='cancelled');
+  // Only real retreats, Bikini Bootcamp, or WeTravel groups ever get a kitchen
+  // row — every other Room Only booking (plain hotel walk-ins, Direct/OTA
+  // Cloudbeds imports, etc.) is an individual guest, not a dining group, and
+  // must never land on the menu regardless of whatever Meal Plan value it
+  // happens to carry (Darlene's rule 2026-10-01, after Cloudbeds-imported
+  // walk-ins with no mealPlan set were silently defaulting to the full
+  // Standard plan and showing up as kitchen group rows).
+  const isMenuEligible=b=>b.bookingType!=='room_only'||b.retreatName==='Bikini Bootcamp'||b.mealPlan==='weTravel';
+  const allActive=AppData.bookings.filter(b=>b.status!=='cancelled'&&isMenuEligible(b));
   const hits=allActive.filter(b=>{
     const s=(b.startDate||'').slice(0,10), e=(b.endDate||'').slice(0,10);
     return s&&e&&s<=wLast&&e>=wFirst;
@@ -449,6 +457,12 @@ function menuPopulateFromRetreats(silent=false){
     full:['lightBreakfast','lunch','dinner'],
     bld:['breakfast','lunch','dinner'],
     blsd:['breakfast','lunch','snack','dinner'],
+    // "Breakfast Only" has been an option in the Room Only form's dropdown
+    // (value="breakfast") with no matching entry here — MEAL_PLANS[bk.mealPlan]
+    // fell through to MEAL_PLANS.standard, silently giving a breakfast-only
+    // guest the full Brunch/Snack/Dinner plan too (found alongside the
+    // Cloudbeds-import menu bug, 2026-10-01).
+    breakfast:['breakfast'],
     weTravel:['lightBreakfast','breakfast','brunch','lunch','snack','dinner']
   };
   // Brunch ≤ 11:45; 12:15–14:30 → lunch
@@ -824,6 +838,7 @@ function menuPrintDay(dateStr){
       <div class="menu-poster-day">${dayName}</div>
       <div class="menu-poster-date">${dateFmt}</div>
       <div class="menu-poster-divider"></div>
+      ${section('Brunch',mData.brunch)}
       ${dinnerHtml}
     </div>`:''}
     <div class="menu-poster-footer">Please let the front desk know if you'll be dining off-site tonight.<br>For specific requests, please see your waiter. Please confirm any severe allergies with your host.</div>
@@ -1360,6 +1375,21 @@ let menuCatalogFilter='';
 let menuCostGuestCount=6;
 let menuActualKg={}; // { [dayIndex]: {midday: kg, dinner: kg} } — actual protein used, entered after the meal
 
+// Real per-day headcount, for comparison against the Cost panel's manually-typed
+// "Guests" number — that number is a static planning figure (defaults to 6, stays
+// whatever was last typed), completely disconnected from how many people are
+// actually on a given day's real menu (Darlene's report 2026-10-01: showed 6
+// while the actual day had 23). Dinner is the most complete/final group list for
+// a day, so sum pax there; fall back to whichever meal has the most rows if
+// dinner's empty (e.g. an off-site-dinner day with no dinner rows logged here).
+function menuTodayActualGuestCount(dateStr){
+  const day=menuSchedule[dateStr]||{};
+  const sumPax=rows=>(rows||[]).reduce((n,r)=>n+(parseInt(r.pax)||0),0);
+  const dinnerTotal=sumPax(day.dinner);
+  if(dinnerTotal>0)return dinnerTotal;
+  return Math.max(0,...['lightBreakfast','breakfast','brunch','lunch','snack'].map(m=>sumPax(day[m])));
+}
+
 function menuSetGuestCount(val){
   menuCostGuestCount=parseInt(val)||1;
   localStorage.setItem('amansala_menu_guest_count',String(menuCostGuestCount));
@@ -1578,6 +1608,8 @@ function menuRenderCostPanel(){
           <span style="font-weight:700;font-size:13.5px;color:var(--dark)">Weekly Menu Cost Estimate — per person (MXN)</span>
           <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--dark)">Guests: <input id="menuCostGuestInput" type="number" min="1" value="${menuCostGuestCount}" oninput="menuSetGuestCount(this.value)" style="width:60px;padding:4px 7px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px"></label>
+            ${(()=>{const todayISO=new Date().toISOString().split('T')[0];const actual=menuTodayActualGuestCount(todayISO);
+              return actual&&actual!==menuCostGuestCount?`<span style="font-size:11.5px;color:#b45309;font-weight:600">Today's actual: ${actual} <button onclick="menuSetGuestCount(${actual})" style="margin-left:4px;padding:2px 8px;background:#fff;border:1.5px solid var(--teal,#2d6a6a);color:var(--teal,#2d6a6a);border-radius:5px;font-family:'Jost',sans-serif;font-size:11px;font-weight:700;cursor:pointer">Use this</button></span>`:'';})()}
             <span style="font-size:12.5px;font-weight:700;color:var(--teal,#2d6a6a)">Week total: $${weeklyTotal.toFixed(2)}/person</span>
             <span style="font-size:12.5px;font-weight:700;color:var(--teal,#2d6a6a)">Group total (${menuCostGuestCount}): $${(weeklyTotal*menuCostGuestCount).toFixed(2)} MXN</span>
           </div>
