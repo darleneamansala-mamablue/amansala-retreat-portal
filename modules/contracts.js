@@ -65,13 +65,14 @@ function saveContractTmpl(t){
 function applyTmplVars(text,vars){
   return(text||'').replace(/\{depositAmount\}/g,vars.depositAmount||'$2,500').replace(/\{cancellationFee\}/g,vars.cancellationFee||'$750').replace(/\{acFee\}/g,vars.acFee||'$25');
 }
-function ctBuildRatesEditorHtml(rates,season){
+function ctBuildRatesEditorHtml(rates,season,markFn){
   const isHigh=season==='high';
   const bg=isHigh?'#fef9ec':'#f0fdf4';
   const brd=isHigh?'#fde68a':'#d1fae5';
+  const onInput=markFn?` oninput="${markFn}('${season}')"`:'';
   let h=`<table style="width:100%;border-collapse:collapse"><thead><tr style="background:${bg}"><th style="text-align:left;padding:6px 8px;font-size:11.5px;border:1px solid ${brd}">Room Type</th><th style="padding:6px 8px;font-size:11.5px;border:1px solid ${brd};text-align:center">Solo / Night</th><th style="padding:6px 8px;font-size:11.5px;border:1px solid ${brd};text-align:center">Sharing pp / Night</th></tr></thead><tbody>`;
   rates.forEach((r,i)=>{
-    h+=`<tr${i%2?' style="background:#fafafa"':''}><td style="padding:4px 8px;border:1px solid #e5e7eb;font-size:12px;font-weight:600">${r.room}</td><td style="padding:3px 6px;border:1px solid #e5e7eb;text-align:center"><input data-s="${season}" data-i="${i}" data-f="solo" value="${(r.solo||'').replace(/"/g,'&quot;')}" style="width:80px;padding:4px 6px;border:1px solid #d1d5db;border-radius:5px;text-align:center;font-family:'Jost',sans-serif;font-size:12px;box-sizing:border-box"></td><td style="padding:3px 6px;border:1px solid #e5e7eb;text-align:center"><input data-s="${season}" data-i="${i}" data-f="sharing" value="${(r.sharing||'').replace(/"/g,'&quot;')}" style="width:90px;padding:4px 6px;border:1px solid #d1d5db;border-radius:5px;text-align:center;font-family:'Jost',sans-serif;font-size:12px;box-sizing:border-box"></td></tr>`;
+    h+=`<tr${i%2?' style="background:#fafafa"':''}><td style="padding:4px 8px;border:1px solid #e5e7eb;font-size:12px;font-weight:600">${r.room}</td><td style="padding:3px 6px;border:1px solid #e5e7eb;text-align:center"><input data-s="${season}" data-i="${i}" data-f="solo" value="${(r.solo||'').replace(/"/g,'&quot;')}"${onInput} style="width:80px;padding:4px 6px;border:1px solid #d1d5db;border-radius:5px;text-align:center;font-family:'Jost',sans-serif;font-size:12px;box-sizing:border-box"></td><td style="padding:3px 6px;border:1px solid #e5e7eb;text-align:center"><input data-s="${season}" data-i="${i}" data-f="sharing" value="${(r.sharing||'').replace(/"/g,'&quot;')}"${onInput} style="width:90px;padding:4px 6px;border:1px solid #d1d5db;border-radius:5px;text-align:center;font-family:'Jost',sans-serif;font-size:12px;box-sizing:border-box"></td></tr>`;
   });
   h+='</tbody></table>';
   return h;
@@ -212,12 +213,25 @@ function contractSectionText(bk,key,isLow,tmpl){
   const ov=bk.contractOverrides&&bk.contractOverrides[key];
   return typeof ov==='string'?ov:contractTemplateSectionText(key,isLow,tmpl||loadContractTmpl());
 }
+// Jorge's ask 2026-10-01: "editar rates para retiros en especifico" -- rates
+// used to only ever come from the shared template (openContractTemplateEditor()),
+// with no way to change them for just one retreat. Same per-retreat override
+// pattern as contractSectionText() above, just for the highRates/lowRates
+// arrays instead of a text section.
+function contractRatesForBk(bk,season,tmpl){
+  const key=season+'Rates';
+  const ov=bk.contractOverrides&&bk.contractOverrides[key];
+  return Array.isArray(ov)?ov:(tmpl||loadContractTmpl())[key];
+}
 function contractEditedLabels(bk){
-  return CONTRACT_EDIT_SECTIONS.filter(s=>typeof bk.contractOverrides?.[s.key]==='string').map(s=>s.label);
+  const labels=CONTRACT_EDIT_SECTIONS.filter(s=>typeof bk.contractOverrides?.[s.key]==='string').map(s=>s.label);
+  if(Array.isArray(bk.contractOverrides?.highRates))labels.push('High Season Rates');
+  if(Array.isArray(bk.contractOverrides?.lowRates))labels.push('Low Season Rates');
+  return labels;
 }
 function _contractEditBanner(bk){
   const labels=contractEditedLabels(bk);
-  return labels.length?`<div style="max-width:720px;margin:0 auto 18px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:9px 14px;font-size:12px;color:#92400e">&#9998; Custom wording for this retreat only: <strong>${escHtml(labels.join(', '))}</strong></div>`:'';
+  return labels.length?`<div style="max-width:720px;margin:0 auto 18px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:9px 14px;font-size:12px;color:#92400e">&#9998; Custom for this retreat only: <strong>${escHtml(labels.join(', '))}</strong></div>`:'';
 }
 function contractRenderPreview(bk){
   const isLow=isLowSeasonContract(bk.startDate);
@@ -234,6 +248,18 @@ function contractOpenEditor(){
       Editing the contract for <strong>${escHtml(bk.leaderName||bk.retreatName||'')}</strong> only &mdash; the template for other retreats doesn't change.
       Leave a blank line between paragraphs.
       ${bk.contractSignedAt?'<br><strong style="color:#92400e">This contract is already signed — saving will void the signature and the teacher will need to sign again.</strong>':''}</div>
+    ${['high','low'].map(season=>{
+      const label=season==='high'?'High Season Rates':'Low Season Rates';
+      const custom=Array.isArray(bk.contractOverrides?.[season+'Rates']);
+      const wrapId=season==='high'?'cteHighRatesWrap':'cteLowRatesWrap';
+      return `<div style="margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a">${label}</span>
+          <span id="cteRatesChip-${season}" style="font-size:10px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:8px;padding:1px 7px;${custom?'':'display:none'}">Custom</span>
+          <button type="button" onclick="contractRatesEditorReset('${season}')" style="margin-left:auto;font-size:11px;border:none;background:none;color:#0369a1;cursor:pointer;font-family:'Jost',sans-serif">Reset to template</button>
+        </div>
+        <div id="${wrapId}">${ctBuildRatesEditorHtml(contractRatesForBk(bk,season,tmpl),season,'contractRatesEditorMark')}</div>
+      </div>`;}).join('')}
     ${CONTRACT_EDIT_SECTIONS.map(sct=>{
       const custom=typeof bk.contractOverrides?.[sct.key]==='string';
       return `<div style="margin-bottom:18px">
@@ -262,6 +288,27 @@ function contractEditorReset(key){
   document.getElementById('ctEdit-'+key).value=contractTemplateSectionText(key,isLowSeasonContract(bk.startDate),loadContractTmpl());
   contractEditorMark(key);
 }
+function _cteRatesWrapId(season){return season==='high'?'cteHighRatesWrap':'cteLowRatesWrap';}
+function contractRatesEditorMark(season){
+  const tmpl=loadContractTmpl();
+  const tmplRates=tmpl[season+'Rates'];
+  const wrap=document.getElementById(_cteRatesWrapId(season));
+  const chip=document.getElementById('cteRatesChip-'+season);
+  if(!wrap||!chip)return;
+  const cur=[];
+  wrap.querySelectorAll(`input[data-s="${season}"]`).forEach(inp=>{
+    const i=parseInt(inp.dataset.i),f=inp.dataset.f;
+    if(!cur[i])cur[i]={};
+    cur[i][f]=inp.value;
+  });
+  const differs=tmplRates.some((r,i)=>(cur[i]?.solo||'').trim()!==(r.solo||'').trim()||(cur[i]?.sharing||'').trim()!==(r.sharing||'').trim());
+  chip.style.display=differs?'':'none';
+}
+function contractRatesEditorReset(season){
+  const tmpl=loadContractTmpl();
+  document.getElementById(_cteRatesWrapId(season)).innerHTML=ctBuildRatesEditorHtml(tmpl[season+'Rates'],season,'contractRatesEditorMark');
+  contractRatesEditorMark(season);
+}
 function contractCloseEditor(){
   const bk=AppData.bookings.find(b=>b.id===_contractBkId);if(bk)contractRenderPreview(bk);
 }
@@ -279,6 +326,17 @@ function contractSaveEditor(){
   CONTRACT_EDIT_SECTIONS.forEach(sct=>{
     const v=(document.getElementById('ctEdit-'+sct.key)?.value||'').replace(/\r/g,'').trim();
     if(v&&v!==contractTemplateSectionText(sct.key,isLow,tmpl).trim())ov[sct.key]=v;
+  });
+  ['high','low'].forEach(season=>{
+    const wrap=document.getElementById(_cteRatesWrapId(season));if(!wrap)return;
+    const tmplRates=tmpl[season+'Rates'];
+    const rows=tmplRates.map(r=>({room:r.room,solo:'',sharing:''}));
+    wrap.querySelectorAll(`input[data-s="${season}"]`).forEach(inp=>{
+      const i=parseInt(inp.dataset.i),f=inp.dataset.f;
+      if(rows[i])rows[i][f]=inp.value.trim();
+    });
+    const differs=tmplRates.some((r,i)=>(rows[i]?.solo||'')!==(r.solo||'')||(rows[i]?.sharing||'')!==(r.sharing||''));
+    if(differs)ov[season+'Rates']=rows;
   });
   bk.contractOverrides=Object.keys(ov).length?ov:null;
   if(wasSigned){
@@ -330,8 +388,8 @@ function generateContractHTML(bk,isLow,signDate){
     t+='</table>';
     return t;
   }
-  const ratesHigh=buildRatesTable(tmpl.highRates,'high')+`<p style="font-size:11px;color:#92400e;margin-top:6px">${tmpl.highInclusions}</p>`;
-  const ratesLow=buildRatesTable(tmpl.lowRates,'low')+`<p style="font-size:11.5px;color:#15803d;margin-top:8px;line-height:1.7">${tmpl.lowInclusions}</p>`;
+  const ratesHigh=buildRatesTable(contractRatesForBk(bk,'high',tmpl),'high')+`<p style="font-size:11px;color:#92400e;margin-top:6px">${tmpl.highInclusions}</p>`;
+  const ratesLow=buildRatesTable(contractRatesForBk(bk,'low',tmpl),'low')+`<p style="font-size:11.5px;color:#15803d;margin-top:8px;line-height:1.7">${tmpl.lowInclusions}</p>`;
   return `<div style="max-width:720px;margin:0 auto">
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:#1a2332;letter-spacing:.5px">AMANSALA ECO-CHIC RESORT AND RETREAT</div>
