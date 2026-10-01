@@ -1198,16 +1198,24 @@ function getAutoFlags(bk){
     });
   });
 
-  // Sold out room types
-  AppData.roomTypes.forEach(rt=>{
-    const blocked=rt.rooms.filter(r=>blockedSet.has(r));
-    if(!blocked.length)return;
-    const filled=blocked.filter(room=>{
-      const reg=getRegForRoom(bk.id,room);
-      return reg&&(reg.guests||[]).some(g=>g.name&&!g.cancelled);
+  // Sold out room types -- skipped once the retreat is already finalized
+  // (Room List Sent, or Deposit Paid with balance at $0 i.e. Paid in Full):
+  // nothing is going to change the room assignments anymore at that point,
+  // so this flag stops being actionable. Jorge's report 2026-10-01: Carter
+  // Foxworth (Paid in Full) kept showing the same 11 sold-out flags with no
+  // way to act on or dismiss them.
+  const _finalized=bk.status==='room_list_sent'||(bk.status==='deposit_paid'&&typeof calcBkBalance==='function'&&calcBkBalance(bk).balance<=0);
+  if(!_finalized){
+    AppData.roomTypes.forEach(rt=>{
+      const blocked=rt.rooms.filter(r=>blockedSet.has(r));
+      if(!blocked.length)return;
+      const filled=blocked.filter(room=>{
+        const reg=getRegForRoom(bk.id,room);
+        return reg&&(reg.guests||[]).some(g=>g.name&&!g.cancelled);
+      });
+      if(filled.length===blocked.length)flags.push({type:'sold_out',severity:'orange',key:`sold_out_${rt.id}`,message:`${rt.name} — all ${blocked.length} blocked room${blocked.length>1?'s are':' is'} filled (sold out)`});
     });
-    if(filled.length===blocked.length)flags.push({type:'sold_out',severity:'orange',key:`sold_out_${rt.id}`,message:`${rt.name} — all ${blocked.length} blocked room${blocked.length>1?'s are':' is'} filled (sold out)`});
-  });
+  }
 
   // Lonely guest in a shared room — a bed-type room (bd1-bd4) with a named
   // guest in one bed but a sibling bed also blocked for this retreat that's
