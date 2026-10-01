@@ -1209,6 +1209,30 @@ function getAutoFlags(bk){
     if(filled.length===blocked.length)flags.push({type:'sold_out',severity:'orange',key:`sold_out_${rt.id}`,message:`${rt.name} — all ${blocked.length} blocked room${blocked.length>1?'s are':' is'} filled (sold out)`});
   });
 
+  // Lonely guest in a shared room — a bed-type room (bd1-bd4) with a named
+  // guest in one bed but a sibling bed also blocked for this retreat that's
+  // still empty. The "Sold out" check above only fires at 100% full, so a
+  // half-empty shared room (revenue still unsold, or a guest who may not know
+  // they're about to get a roommate) was silently missed (Darlene's report
+  // 2026-09-28 — Tootsie Olan, one guest in a shared Beachview double, the
+  // second bed empty and unflagged).
+  const _bedTypeIds=new Set(['bd1','bd2','bd3','bd4']);
+  const _seenBase=new Set();
+  AppData.roomTypes.filter(rt=>_bedTypeIds.has(rt.id)).forEach(rt=>{
+    rt.rooms.filter(r=>blockedSet.has(r)).forEach(room=>{
+      const sp=splitDoubleHalf(room);if(!sp)return;
+      const baseKey=rt.id+'_'+sp.base.toLowerCase();
+      if(_seenBase.has(baseKey))return;_seenBase.add(baseKey);
+      const siblings=[room,...(typeof _getSharedBeds==='function'?_getSharedBeds(room):[])].filter(r=>blockedSet.has(r));
+      const filled=siblings.filter(r=>{const reg=getRegForRoom(bk.id,r);return reg&&(reg.guests||[]).some(g=>g.name&&!g.cancelled);});
+      const empty=siblings.filter(r=>!filled.includes(r));
+      if(filled.length>0&&empty.length>0){
+        flags.push({type:'partial_shared',severity:'orange',key:`partial_${rt.id}_${sp.base}`,
+          message:`${rt.name} (room ${sp.base}) — ${filled.length} filled, ${empty.length} bed${empty.length>1?'s':''} still empty & unsold`});
+      }
+    });
+  });
+
   return flags;
 }
 
@@ -3535,9 +3559,12 @@ const TS_MEAL_PLANS={
   full:['lightBreakfast','lunch','dinner'],
   bld:['breakfast','lunch','dinner'],
   blsd:['breakfast','lunch','snack','dinner'],
+  // Matches the Room Only form's "Breakfast Only" option (value="breakfast"),
+  // which had no entry here either — same bug as MEAL_PLANS in menu.js.
+  breakfast:['breakfast'],
   weTravel:['lightBreakfast','breakfast','brunch','lunch','snack','dinner'],
 };
-const TS_MEAL_PLAN_LABELS={standard:'Light Breakfast · Brunch · Snack · Dinner',bld:'Breakfast · Lunch · Dinner',blsd:'Breakfast · Lunch · Snack · Dinner',full:'Light Breakfast · Lunch · Dinner'};
+const TS_MEAL_PLAN_LABELS={standard:'Light Breakfast · Brunch · Snack · Dinner',bld:'Breakfast · Lunch · Dinner',blsd:'Breakfast · Lunch · Snack · Dinner',full:'Light Breakfast · Lunch · Dinner',breakfast:'Breakfast Only'};
 function tsApplyMealPlan(bk,rows,dayIdx,nights){
   const plan=new Set(TS_MEAL_PLANS[bk.mealPlan]||TS_MEAL_PLANS.standard);
   if(!bk.mealPlan||bk.mealPlan==='standard'||bk.mealPlan==='weTravel')return rows;
@@ -4929,7 +4956,10 @@ function openPrintSchedule(bkId){
         const ws=(sr.workshops||[]).find(w=>w.enabled&&w.date===dateStr);
         if(ws){
           const wsEnd=fmtT(addMin(ws.start,ws.dur||90));
-          rows.push({time:fmtT(ws.start)+' – '+wsEnd,desc:'Mid-Afternoon Class'+(ws.notes?' — '+ws.notes:''),shala:shalaName(ws.shala1),cls:'shala',sk:ws.start||'16:00'});
+          // ws.notes is internal staff shorthand (e.g. shala-logistics reasoning), not
+          // guest-facing info — deliberately left off this printed sheet (Darlene's ask
+          // 2026-09-29, after it showed up glued onto the title in Spanish).
+          rows.push({time:fmtT(ws.start)+' – '+wsEnd,desc:'Mid-Afternoon Class',shala:shalaName(ws.shala1),cls:'shala',sk:ws.start||'16:00'});
         }
       }
       const _pDayAfSlot=_pAftOv?_pAftOv.start:(sr?.afternoonSlot||sr?.afternoonStart);
@@ -4954,7 +4984,7 @@ function openPrintSchedule(bkId){
       const dur=ACTS_DUR[a.aoId]||90;
       const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
       const desc=a.prepaid?(ao.name+(a.requestedTime?' (requested this time)':'')):('Optional '+ao.name+(ao.price?' — $'+ao.price+' USD per person':''));
-      rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99'});
+      rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99',isExtra:true});
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
     rows.sort((a,b)=>(a.sk||'99:99').localeCompare(b.sk||'99:99'));
@@ -4990,10 +5020,10 @@ function renderSchedulePrint(bk,days){
             <div class="sched-item-editable" contenteditable="true" onblur="schedEdit(${di},${ri},'time',this.textContent.trim())" style="font-size:12px;line-height:1.35;color:#6b7280;font-weight:600;font-family:'Jost',sans-serif;white-space:normal;overflow-wrap:break-word">${escHtml(r.time)}</div>
           </span>
           <span style="flex:1">
-            <input class="sched-item-editable" value="${r.desc}" placeholder="Activity" onchange="schedEdit(${di},${ri},'desc',this.value)" style="width:100%;font-size:14px;color:#1a2332;font-family:'Cormorant Garamond',Georgia,serif">
+            <input class="sched-item-editable" value="${r.desc}" placeholder="Activity" onchange="schedEdit(${di},${ri},'desc',this.value)" style="width:100%;font-size:${r.isExtra?'11.5px':'14px'};color:${r.isExtra?'#6b7280':'#1a2332'};font-family:'Cormorant Garamond',Georgia,serif">
           </span>
           <span style="flex-shrink:0;margin-left:8px">
-            <input class="sched-item-editable" value="${r.shala||''}" placeholder="" onchange="schedEdit(${di},${ri},'shala',this.value)" style="width:${r.shala?'90px':'0px'};font-size:14px;color:#4a7070;font-style:italic;font-family:'Cormorant Garamond',Georgia,serif">
+            <input class="sched-item-editable" value="${r.shala||''}" placeholder="" onchange="schedEdit(${di},${ri},'shala',this.value)" style="width:${r.shala?'90px':'0px'};font-size:${r.isExtra?'11.5px':'14px'};color:#4a7070;font-style:italic;font-family:'Cormorant Garamond',Georgia,serif">
           </span>
         </div>`).join('')}
     </div>`;
