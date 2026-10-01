@@ -149,7 +149,11 @@ function _openContractModalRender(bkId){
   if(isLow){badge.textContent='Low Season';badge.style.cssText='font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#dcfce7;color:#15803d';note.textContent='Rates and inclusions reflect low season (May – Sep)';}
   else{badge.textContent='High Season';badge.style.cssText='font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#fef3c7;color:#92400e';note.textContent='Rates and inclusions reflect high season (Oct – Apr)';}
   contractRenderPreview(bk);
-  const editBtn=document.getElementById('contractEditBtn');if(editBtn)editBtn.style.display=bk.contractSignedAt?'none':'';
+  // Jorge's ask 2026-10-01: editing a signed contract must stay possible --
+  // saving now auto-voids the signature (see contractSaveEditor()) instead
+  // of this button just being hidden until someone used Void Signature
+  // separately first.
+  const editBtn=document.getElementById('contractEditBtn');if(editBtn)editBtn.style.display='';
   const notesInput=document.getElementById('contractNotesInput');if(notesInput)notesInput.value=bk.contractNotes||'';
   // Buttons
   const alreadyMarkedSent=['contract_sent','contract_signed','deposit_paid','room_list_sent'].includes(bk.status);
@@ -222,14 +226,14 @@ function contractRenderPreview(bk){
 }
 function contractOpenEditor(){
   const bk=AppData.bookings.find(b=>b.id===_contractBkId);if(!bk)return;
-  if(bk.contractSignedAt){showToast('This contract is already signed — void the signature first to change it.');return;}
   const isLow=isLowSeasonContract(bk.startDate);
   const tmpl=loadContractTmpl();
   const el=document.getElementById('contractPreview');
   el.innerHTML=`<div style="max-width:720px;margin:0 auto">
     <div style="font-size:13px;color:#374151;margin-bottom:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px">
       Editing the contract for <strong>${escHtml(bk.leaderName||bk.retreatName||'')}</strong> only &mdash; the template for other retreats doesn't change.
-      Leave a blank line between paragraphs.</div>
+      Leave a blank line between paragraphs.
+      ${bk.contractSignedAt?'<br><strong style="color:#92400e">This contract is already signed — saving will void the signature and the teacher will need to sign again.</strong>':''}</div>
     ${CONTRACT_EDIT_SECTIONS.map(sct=>{
       const custom=typeof bk.contractOverrides?.[sct.key]==='string';
       return `<div style="margin-bottom:18px">
@@ -263,7 +267,12 @@ function contractCloseEditor(){
 }
 function contractSaveEditor(){
   const bk=AppData.bookings.find(b=>b.id===_contractBkId);if(!bk)return;
-  if(bk.contractSignedAt){showToast('This contract is already signed — void the signature first to change it.');return;}
+  // Jorge's ask 2026-10-01: "quiero que se pueda editar y despues aparezca
+  // que no ha sido firmado hasta firme de nuevo" -- editing a signed
+  // contract no longer just refuses; it saves the wording AND auto-voids
+  // the signature (same fields voidContractSignature() clears), so it goes
+  // back to "Contract Sent" and the teacher must sign the updated version.
+  const wasSigned=!!bk.contractSignedAt;
   const isLow=isLowSeasonContract(bk.startDate);
   const tmpl=loadContractTmpl();
   const ov={};
@@ -272,10 +281,25 @@ function contractSaveEditor(){
     if(v&&v!==contractTemplateSectionText(sct.key,isLow,tmpl).trim())ov[sct.key]=v;
   });
   bk.contractOverrides=Object.keys(ov).length?ov:null;
+  if(wasSigned){
+    delete bk.contractSignedAt;
+    delete bk.contractSignature;
+    delete bk.contractSignatureImage;
+    delete bk.contractAuditUserAgent;
+    delete bk.addOnsConfirmedAt;
+    if(bk._contractSignedByPipeline)delete bk._contractSignedByPipeline;
+    bk.status='contract_sent';
+    bk.statusChangedAt=new Date().toISOString();
+  }
   saveAll();
-  logActivity('Contract wording edited',Object.keys(ov).length?`Custom: ${contractEditedLabels(bk).join(', ')}`:'Reset to template',bk.id);
-  contractRenderPreview(bk);
-  showToast(Object.keys(ov).length?'Contract saved for this retreat ✓':'Contract back to the template ✓');
+  logActivity('Contract wording edited',(Object.keys(ov).length?`Custom: ${contractEditedLabels(bk).join(', ')}`:'Reset to template')+(wasSigned?' — signature voided, must re-sign':''),bk.id);
+  showToast(wasSigned?'Contract updated — signature voided, teacher must sign again ✓':(Object.keys(ov).length?'Contract saved for this retreat ✓':'Contract back to the template ✓'));
+  if(wasSigned){
+    _openContractModalRender(bk.id);
+    buildDashboard();venBuild();
+  }else{
+    contractRenderPreview(bk);
+  }
 }
 
 function isLowSeasonContract(dateStr){if(!dateStr)return false;const m=pd(dateStr).getMonth()+1;return m>=5&&m<=9;}
