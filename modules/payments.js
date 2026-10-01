@@ -1555,29 +1555,39 @@ async function openBulkChargeModal() {
 
   openModal('bulkChargeModal');
 
-  // Load items into dropdown
+  // Load items into dropdown -- from the portal's own Items catalog, not
+  // Cloudbeds. Used to query Cloudbeds directly (CLOUDBEDS_PROXY?action=
+  // getItems), which only ever lists CB-synced items -- a "Manual" item
+  // (created in the portal with no cb_item_id, e.g. Jorge's report
+  // 2026-10-01: "Tour Atik Cenote" never showed up) could never appear.
+  // Posting still pushes to Cloudbeds too when the item has a cb_item_id
+  // AND the guest has a CB reservation (see bcPostCharges()).
   const sel = document.getElementById('bcItemSel');
   sel.innerHTML = '<option value="">Loading items…</option>';
   sel.disabled = true;
   try {
-    const resp = await fetch(CLOUDBEDS_PROXY + '?action=getItems', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-    const data = await resp.json();
+    const { data: items, error } = await db.from('items').select('*').eq('active', true).order('category').order('name');
+    if (error) throw error;
     sel.innerHTML = '<option value="">— Select item —</option>';
-    if (data.items && data.items.length > 0) {
-      // Group by categoryName
+    if (items && items.length > 0) {
       const groups = {};
-      for (const item of data.items) {
-        const cat = item.categoryName || 'Other';
+      for (const item of items) {
+        const cat = item.category || 'Other';
         if (!groups[cat]) groups[cat] = [];
         groups[cat].push(item);
       }
-      for (const [cat, items] of Object.entries(groups)) {
+      for (const [cat, catItems] of Object.entries(groups)) {
         const grp = document.createElement('optgroup');
         grp.label = cat;
-        for (const item of items) {
+        for (const item of catItems) {
           const opt = document.createElement('option');
-          opt.value = item.itemID;
-          opt.textContent = (item.itemName || item.name || '(unnamed)') + ' — $' + (parseFloat(item.itemPrice || item.price || 0).toFixed(2));
+          opt.value = item.id;
+          opt.dataset.cbid = item.cb_item_id || '';
+          opt.dataset.name = item.name || '(unnamed)';
+          opt.dataset.price = Number(item.price || 0).toFixed(2);
+          opt.dataset.tax = Number(item.tax_rate || 0);
+          opt.dataset.category = item.category || '';
+          opt.textContent = (item.name || '(unnamed)') + ' — $' + Number(item.price || 0).toFixed(2) + (item.cb_item_id ? '' : ' (solo portal)');
           grp.appendChild(opt);
         }
         sel.appendChild(grp);
@@ -1587,7 +1597,7 @@ async function openBulkChargeModal() {
     }
   } catch (e) {
     sel.innerHTML = '<option value="">Error loading items</option>';
-    console.error('[BulkCharge] getItems error:', e);
+    console.error('[BulkCharge] items load error:', e);
   }
   sel.disabled = false;
 
@@ -1628,6 +1638,10 @@ function bcBuildGuestList() {
   const cbIds = bk.cbReservationIds || {};
   const bkRegs = AppData.regs.filter(r => r.bookingId === bk.id);
 
+  // Jorge's ask 2026-10-01: Bulk Charge always posts the portal folio charge,
+  // Cloudbeds is a best-effort extra on top of that (only when the item has
+  // a cb_item_id AND the guest has a CB reservation) -- so a guest with no
+  // CB reservation is no longer disabled, just flagged as portal-only.
   let html = '';
   for (const reg of bkRegs) {
     const room = reg.room;
@@ -1635,26 +1649,18 @@ function bcBuildGuestList() {
     if (guests.length === 0) continue; // skip rooms with no named guests
     const cbResId = cbIds[room] || null;
     for (const g of guests) {
-      if (!cbResId) {
-        // Show greyed out with note
-        html += `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:#f9fafb;border:1px solid var(--border);opacity:.5">
-          <input type="checkbox" disabled style="width:15px;height:15px;flex-shrink:0">
-          <span style="font-size:13px;color:var(--muted);flex:1"><b>${escHtml(g.name)}</b> — ${escHtml(room)}</span>
-          <span style="font-size:11px;color:#9ca3af;font-style:italic">No CB reservation</span>
-        </div>`;
-      } else {
-        html += `<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:#fff;border:1px solid var(--border);cursor:pointer" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='#fff'">
-          <input type="checkbox" class="bc-guest-chk" onchange="bcUpdateCount()"
-            data-room="${escHtml(room)}" data-guest="${escHtml(g.name)}" data-cbresid="${escHtml(cbResId)}"
-            style="width:15px;height:15px;flex-shrink:0;cursor:pointer">
-          <span style="font-size:13px;color:var(--dark);flex:1"><b>${escHtml(g.name)}</b> — <span style="color:var(--muted)">${escHtml(room)}</span></span>
-          <span class="bc-row-result" style="font-size:12px"></span>
-        </label>`;
-      }
+      html += `<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:#fff;border:1px solid var(--border);cursor:pointer" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='#fff'">
+        <input type="checkbox" class="bc-guest-chk" onchange="bcUpdateCount()"
+          data-room="${escHtml(room)}" data-guest="${escHtml(g.name)}" data-regid="${escHtml(reg.id)}" data-cbresid="${escHtml(cbResId || '')}"
+          style="width:15px;height:15px;flex-shrink:0;cursor:pointer">
+        <span style="font-size:13px;color:var(--dark);flex:1"><b>${escHtml(g.name)}</b> — <span style="color:var(--muted)">${escHtml(room)}</span></span>
+        ${cbResId ? '' : '<span style="font-size:11px;color:#9ca3af;font-style:italic;margin-right:6px">solo folio (sin reservación CB)</span>'}
+        <span class="bc-row-result" style="font-size:12px"></span>
+      </label>`;
     }
   }
   if (!html) {
-    html = '<div style="font-size:13px;color:var(--muted);padding:8px 0">No guests with Cloudbeds reservations found in this retreat.</div>';
+    html = '<div style="font-size:13px;color:var(--muted);padding:8px 0">No guests found in this retreat.</div>';
   }
   listEl.innerHTML = html;
   bcUpdateCount();
@@ -1671,6 +1677,13 @@ function bcSelectAll(state) {
   bcUpdateCount();
 }
 
+// Jorge's ask 2026-10-01: Bulk Charge must ALWAYS post the charge into the
+// guest's own portal folio (it never did -- it only ever pushed to
+// Cloudbeds), and additionally push to Cloudbeds whenever the item has a
+// cb_item_id AND the guest has a CB reservation. A "solo portal" item or a
+// guest with no CB reservation just skips the CB half, portal charge still
+// goes through. Mirrors the folio-charge shape Booking Detail's own
+// "+ Add manually" uses (modules/booking-detail.js bdAddItem()).
 async function bcPostCharges() {
   const itemSel = document.getElementById('bcItemSel');
   const qtyInput = document.getElementById('bcQty');
@@ -1678,10 +1691,15 @@ async function bcPostCharges() {
   const resultsEl = document.getElementById('bcResults');
   const resultsListEl = document.getElementById('bcResultsList');
 
-  const itemID = itemSel ? itemSel.value : '';
+  const opt = itemSel && itemSel.selectedIndex >= 0 ? itemSel.options[itemSel.selectedIndex] : null;
+  const itemId = itemSel ? itemSel.value : '';
+  if (!itemId) { alert('Please select an item first.'); return; }
+  const cbItemId = opt?.dataset.cbid || '';
+  const itemName = opt?.dataset.name || '';
+  const itemPrice = parseFloat(opt?.dataset.price) || 0;
+  const itemTax = parseFloat(opt?.dataset.tax) || 0;
+  const itemCategory = opt?.dataset.category || null;
   const itemQuantity = parseInt((qtyInput ? qtyInput.value : '') || '1', 10) || 1;
-
-  if (!itemID) { alert('Please select an item first.'); return; }
 
   const checked = Array.from(document.querySelectorAll('#bcGuestList .bc-guest-chk:checked'));
   if (checked.length === 0) { alert('Please select at least one guest.'); return; }
@@ -1694,30 +1712,48 @@ async function bcPostCharges() {
   for (const chk of checked) {
     const guestName = chk.dataset.guest;
     const room = chk.dataset.room;
+    const regId = chk.dataset.regid;
     const cbResId = chk.dataset.cbresid;
     const rowResult = chk.closest('label') ? chk.closest('label').querySelector('.bc-row-result') : null;
-
     if (rowResult) rowResult.textContent = '…';
 
     try {
-      const resp = await fetch(CLOUDBEDS_PROXY + '?action=postItem', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reservationID: cbResId, itemID, itemQuantity }),
-      });
-      const data = await resp.json();
-      if (data.success) {
-        if (rowResult) { rowResult.textContent = '✓'; rowResult.style.color = '#16a34a'; }
-        resultsListEl.innerHTML += `<div style="color:#16a34a">✓ <b>${escHtml(guestName)}</b> (${escHtml(room)})</div>`;
-      } else {
-        const msg = data.message || data.error || 'Unknown error';
-        if (rowResult) { rowResult.textContent = '✗'; rowResult.style.color = '#dc2626'; }
-        resultsListEl.innerHTML += `<div style="color:#dc2626">✗ <b>${escHtml(guestName)}</b> (${escHtml(room)}) — ${escHtml(msg)}</div>`;
+      let { data: folios, error: fErr } = await db.from('folios').select('*').eq('registration_id', regId).eq('guest_name', guestName);
+      if (fErr) throw fErr;
+      let folio = (folios || [])[0];
+      if (!folio) {
+        const token = uid().replace(/[^a-z0-9]/gi, '');
+        const { data: created, error: cErr } = await db.from('folios').insert({ registration_id: regId, guest_name: guestName, name: guestName, payment_token: token, status: 'open' }).select().single();
+        if (cErr) throw cErr;
+        folio = created;
       }
+      const { error: fiErr } = await db.from('folio_items').insert({ folio_id: folio.id, description: itemName, qty: itemQuantity, unit_price: itemPrice, tax_rate: itemTax, category: itemCategory, staff_name: getCurrentSession()?.name || null });
+      if (fiErr) throw fiErr;
     } catch (e) {
       if (rowResult) { rowResult.textContent = '✗'; rowResult.style.color = '#dc2626'; }
-      resultsListEl.innerHTML += `<div style="color:#dc2626">✗ <b>${escHtml(guestName)}</b> (${escHtml(room)}) — ${escHtml(e.message)}</div>`;
+      resultsListEl.innerHTML += `<div style="color:#dc2626">✗ <b>${escHtml(guestName)}</b> (${escHtml(room)}) — folio: ${escHtml(e.message)}</div>`;
+      continue;
     }
+
+    let cbNote = '';
+    if (cbItemId && cbResId) {
+      try {
+        const resp = await fetch(CLOUDBEDS_PROXY + '?action=postItem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reservationID: cbResId, itemID: cbItemId, itemQuantity }),
+        });
+        const data = await resp.json();
+        cbNote = data.success ? ' · CB ✓' : ` · CB ✗ (${escHtml(data.message || data.error || 'Unknown error')})`;
+      } catch (e) { cbNote = ` · CB ✗ (${escHtml(e.message)})`; }
+    } else if (!cbItemId) {
+      cbNote = ' · solo portal (item sin CB)';
+    } else if (!cbResId) {
+      cbNote = ' · solo portal (sin reservación CB)';
+    }
+
+    if (rowResult) { rowResult.textContent = '✓'; rowResult.style.color = '#16a34a'; }
+    resultsListEl.innerHTML += `<div style="color:#16a34a">✓ <b>${escHtml(guestName)}</b> (${escHtml(room)}) — folio ✓${cbNote}</div>`;
   }
 
   confirmBtn.disabled = false;
