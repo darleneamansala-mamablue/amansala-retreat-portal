@@ -974,13 +974,20 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
     .rw-group-row{font-size:9pt;color:#6b7280}
     .rw-footer{text-align:center;margin-top:10px;font-size:8.5pt;color:#b8ab9e;letter-spacing:.3px}
     @media print{body{background:#fff}.rw-page{margin:0}}
+    /* Kitchen copy only — staff asked for 2pt larger text to read more easily
+       off the printed sheet (Darlene's ask 2026-10-01). Guest copy unchanged. */
+    body.kitchen-print .rw-meal-hdr{font-size:14pt}
+    body.kitchen-print .rw-item{font-size:13pt}
+    body.kitchen-print .rw-item-desc{font-size:11pt}
+    body.kitchen-print .rw-dessert{font-size:11.5pt}
+    body.kitchen-print .rw-group-row{font-size:11pt}
   </style>
   <script>
     function rwFit(){var H=7.6*96-4;document.querySelectorAll('.rw-page').forEach(function(p){p.style.zoom=1;var h=p.getBoundingClientRect().height;if(h>H)p.style.zoom=(H/h).toFixed(3);});}
     window.addEventListener('load',rwFit);window.addEventListener('beforeprint',rwFit);
     if(document.fonts&&document.fonts.ready)document.fonts.ready.then(rwFit);
   </script></head>
-  <body>${pagesHtml}
+  <body class="${isKitchen?'kitchen-print':''}">${pagesHtml}
   <div class="rw-print-actions" style="text-align:center;padding:16px 0" data-no-print="1">
     <button onclick="window.print()" style="padding:9px 22px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Print / Save PDF</button>
   </div>
