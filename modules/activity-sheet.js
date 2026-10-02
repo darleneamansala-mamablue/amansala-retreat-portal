@@ -480,7 +480,7 @@ function actByRetreatPrint(bkId) {
          stacked, so the header (which now repeats on every page -- see the
          thead) takes up less vertical space, leaving more room for guest
          rows per page (Darlene's ask 2026-10-02). */
-      .hdr-row{display:flex;align-items:center;gap:20px;margin-bottom:14px}
+      .hdr-row{display:flex;align-items:center;justify-content:center;gap:20px;margin-bottom:14px}
       .logo-mark{height:90px;flex-shrink:0}
       .title{font-family:'Cormorant Garamond',serif;font-size:28pt;font-weight:700;color:#1a2332;margin:0;letter-spacing:.3px}
       .sub{font-size:12pt;letter-spacing:2px;color:#a89a86;text-transform:uppercase;margin-top:4px}
