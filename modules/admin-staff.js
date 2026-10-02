@@ -28,16 +28,28 @@ let currentSession=null;
 // js/data/staff.js already uses, so accounts created there also work here.
 const _STAFF_COLUMNS=['id','name','username','password_hash','role','active','permissions'];
 function sqlStaffToApp(row){const s={};for(const col in row) s[_s2c(col)]=row[col];return s;}
-function appStaffToSqlRow(s){const row={};_STAFF_COLUMNS.forEach(col=>{const field=_s2c(col);row[col]=s[field]!==undefined?s[field]:null;});return row;}
+// Security fix 2026-10-02: never null out an existing password_hash just
+// because THIS browser doesn't have it loaded (refreshStaffFromSql() below no
+// longer fetches it at all) -- omit the column from the upsert entirely
+// unless this account's hash was actually just set (new account, or admin
+// just changed this person's password in saveStaffMember()).
+function appStaffToSqlRow(s){const row={};_STAFF_COLUMNS.forEach(col=>{const field=_s2c(col);if(col==='password_hash'&&s[field]===undefined)return;row[col]=s[field]!==undefined?s[field]:null;});return row;}
 async function hashPassword(password){
   const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(password));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 // Refresh staffAccounts from the SQL table in the background (non-blocking) so the
-// Manage Staff list and login both see every real account, not just a stale cache.
+// Manage Staff list sees every real account, not just a stale cache.
+// Security fix 2026-10-02: used to `select('*')`, which pulled every staff
+// member's password_hash into the browser on every page load (readable by
+// anyone with the public anon key, since no table here has Row Level
+// Security). Login verification has moved server-side (staffLoginSubmit()
+// now calls netlify/functions/staff-login.js) -- this list only needs to
+// drive the Manage Staff screen and name/role lookups elsewhere, never the
+// hash.
 async function refreshStaffFromSql(){
   try{
-    const{data,error}=await db.from('staff').select('*');
+    const{data,error}=await db.from('staff').select('id,name,username,role,active,permissions');
     if(error||!data||!data.length)return;
     const fresh=data.map(sqlStaffToApp);
     const seen=new Map();
@@ -65,9 +77,15 @@ function saveStaff(){
   localStorage.setItem('amansala_staff',JSON.stringify(staffAccounts));
   (async()=>{
     try{
-      // Only push rows that already have a real hash — skips DEF_STAFF/MASTER-shaped
-      // fallback entries that were never seeded with a passwordHash.
-      const rows=staffAccounts.filter(s=>s.passwordHash).map(appStaffToSqlRow);
+      // Skip DEF_STAFF/MASTER-shaped fallback entries (plaintext `.password`,
+      // never real accounts) -- NOT "has a cached passwordHash" (security fix
+      // 2026-10-02: refreshStaffFromSql() no longer loads that field at all,
+      // so a real existing account edited here -- e.g. toggling active --
+      // would otherwise get silently excluded from the sync every time).
+      // appStaffToSqlRow() already omits password_hash when unset, so this
+      // never nulls out an existing hash just because this browser doesn't
+      // have it cached.
+      const rows=staffAccounts.filter(s=>!s.password).map(appStaffToSqlRow);
       if(rows.length)await db.from('staff').upsert(rows);
     }catch(e){console.warn('Staff sync failed:',e);}
   })();
@@ -96,45 +114,30 @@ function applySession(session){
   document.querySelectorAll('.tab-btn').forEach(b=>b.style.pointerEvents='');
 }
 
+// Security fix 2026-10-02: login verification now happens server-side
+// (netlify/functions/staff-login.js, using the Supabase service key) instead
+// of the browser downloading every account's password_hash and comparing
+// locally -- with no Row Level Security on any table, that hash was
+// previously readable by anyone with the public anon key (visible in this
+// page's own source), no login required.
 async function staffLoginSubmit(){
   const username=document.getElementById('staffLoginUser').value.trim().toLowerCase();
   const password=document.getElementById('staffLoginPass').value;
   const errEl=document.getElementById('staffLoginErr');
   errEl.textContent='';
   if(!username||!password){errEl.textContent='Please enter your username and password.';return;}
-  const MASTER=[
-    {id:'staff_001',name:'Darlene',username:'darlene',password:'amansala2024',role:'admin'},
-    {id:'staff_002',name:'Front Desk',username:'frontdesk',password:'welcome1',role:'staff'},
-  ];
-  const passwordHash=await hashPassword(password);
-  function tryLogin(){
-    let account=staffAccounts.find(s=>s.active&&s.username.toLowerCase()===username&&s.passwordHash===passwordHash);
-    if(!account){account=MASTER.find(s=>s.username===username&&s.password===password)||null;}
-    return account;
-  }
-  let account=tryLogin();
-  if(!account){
-    // Not found locally — pull latest from the real staff SQL table then retry once
-    errEl.textContent='Checking credentials…';
-    try{await refreshStaffFromSql();}catch(e){}
-    account=tryLogin();
-    if(!account){errEl.textContent='Incorrect username or password.';return;}
-    errEl.textContent='';
-    staffLoginComplete(account,MASTER);
-    return;
-  }
-  staffLoginComplete(account,MASTER);
+  errEl.textContent='Checking credentials…';
+  let data;
+  try{
+    const resp=await fetch('/.netlify/functions/staff-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    data=await resp.json();
+  }catch(e){errEl.textContent='Network error — please try again.';return;}
+  if(!data||!data.success){errEl.textContent='Incorrect username or password.';return;}
+  errEl.textContent='';
+  staffLoginComplete(data.session);
 }
 
-function staffLoginComplete(account,MASTER){
-  // Ensure master accounts always have correct role
-  const masterMatch=MASTER.find(s=>s.username===account.username.toLowerCase());
-  if(masterMatch&&account.role!==masterMatch.role){
-    account={...account,role:masterMatch.role};
-    const idx=staffAccounts.findIndex(s=>s.username.toLowerCase()===account.username.toLowerCase());
-    if(idx>=0){staffAccounts[idx].role=masterMatch.role;saveStaff();}
-  }
-  const session={id:account.id,name:account.name,role:account.role};
+function staffLoginComplete(session){
   sessionStorage.setItem('amansala_staff_session',JSON.stringify(session));
   localStorage.setItem('ama_admin_device','1');
   localStorage.removeItem('ama_teacher_persist');
