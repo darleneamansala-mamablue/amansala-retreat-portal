@@ -824,17 +824,18 @@ function menuPrintDay(dateStr){
     .menu-poster-dessert{margin-top:10px;font-size:17px;font-style:italic;color:#8a7e74;text-align:center}
     .menu-poster-footer{text-align:center;margin-top:50px;font-size:13px;color:#b8ab9e;letter-spacing:.4px;line-height:1.7}
     .menu-poster-page2{page-break-before:always;padding-top:40px}
-    @media print{body{padding:170px 40px 20px}.menu-poster-page2{padding-top:140px}}
+    @media print{body{padding:70px 40px 20px}.menu-poster-page2{padding-top:60px}}
   </style></head>
   <body>
-    <div class="menu-poster-brand"><img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:64px"></div>
+    <div class="menu-poster-brand"><img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:110px"></div>
     <div class="menu-poster-day">${dayName}</div>
     <div class="menu-poster-date">${dateFmt}</div>
     <div class="menu-poster-divider"></div>
+    ${section('Fruit, Coffee &amp; Tea',mData.lightBreakfast)}
     ${section('Brunch',mData.brunch)}
     ${section('Afternoon Snack',mData.snack)}
     ${dinnerHtml?`<div class="menu-poster-page2">
-      <div class="menu-poster-brand"><img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:64px"></div>
+      <div class="menu-poster-brand"><img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:110px"></div>
       <div class="menu-poster-day">${dayName}</div>
       <div class="menu-poster-date">${dateFmt}</div>
       <div class="menu-poster-divider"></div>
@@ -928,7 +929,7 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
 
   const pagesHtml=pages.map((pageDays,pi)=>`<div class="rw-page${pi>0?' rw-page-break':''}">
     <div class="rw-hdr">
-      <div class="rw-brand">${isKitchen?'Amansala':'<img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:50px">'}</div>
+      <div class="rw-brand">${isKitchen?'Amansala':'<img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:85px">'}</div>
       <div class="rw-title">${isKitchen?'Kitchen · ':''}Weekly Menu</div>
       <div class="rw-range">${rangeLbl}</div>
     </div>
@@ -1051,10 +1052,11 @@ function menuPrintDailyRange(fromVal,toVal,isKitchen){
       ${groupHtml(ds,'dinner')}
     </div>`:'';
     return `<div class="${i>0?'menu-poster-page2':''}" style="${i>0?'':''}">
-      <div class="menu-poster-brand">${isKitchen?'Amansala · Kitchen':'<img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:64px">'}</div>
+      <div class="menu-poster-brand">${isKitchen?'Amansala · Kitchen':'<img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:110px">'}</div>
       <div class="menu-poster-day">${dayName}</div>
       <div class="menu-poster-date">${dateFmt}</div>
       <div class="menu-poster-divider"></div>
+      ${section('Fruit, Coffee &amp; Tea',mData.lightBreakfast,ds,'lightBreakfast')}
       ${section('Brunch',mData.brunch,ds,'brunch')}
       ${section('Afternoon Snack',mData.snack,ds,'snack')}
       ${dinnerHtml}
@@ -1079,7 +1081,7 @@ function menuPrintDailyRange(fromVal,toVal,isKitchen){
     .menu-poster-item-desc{font-size:18px;color:#9a8f83;text-align:center;font-style:italic;line-height:1.55;max-width:560px;margin:2px auto 0}
     .menu-poster-dessert{margin-top:10px;font-size:17px;font-style:italic;color:#8a7e74;text-align:center}
     .menu-poster-page2{page-break-before:always;padding-top:40px}
-    @media print{body{padding:170px 40px 20px}.menu-poster-page2{padding-top:140px}}
+    @media print{body{padding:70px 40px 20px}.menu-poster-page2{padding-top:60px}}
     .dm-actions{text-align:center;padding:16px 0}
     @media print{.dm-actions{display:none}}
   </style></head>
