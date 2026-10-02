@@ -4706,19 +4706,26 @@ async function syncToSupabase(){
       // deletedBookingIds/deletedRegIds/deletedPaymentIds are excluded from the staleness
       // guard below — loadFromSupabase() already merges them additively (union, never
       // replaces), so a stale tab can only ever grow these sets, not shrink them back.
-      // The content blobs (venRows/programBlocks/specialEvents/staffAccounts/
-      // teacher_messages) get the same guard as bookings/registrations/room_types: a
+      // The content blobs (venRows/programBlocks/specialEvents/teacher_messages)
+      // get the same guard as bookings/registrations/room_types: a
       // stale tab's full-object overwrite shouldn't win over a more recent edit from
       // elsewhere. Content keys are rare enough to edit concurrently that a plain fetch
       // of their current updated_at right before upserting is cheap and worth doing.
-      const _contentKeys=['venRows','programBlocks','specialEvents','staffAccounts','teacher_messages'];
+      // Security fix 2026-10-02: 'staffAccounts' used to be synced here like any
+      // other content blob -- but it carries each account's password_hash, and
+      // with no Row Level Security on any table, that made every staff
+      // member's hash readable by anyone with the public anon key (which this
+      // page's own source necessarily exposes), no login required. The real
+      // system of record is the `staff` SQL table now anyway (see
+      // admin-staff.js) -- this legacy key is just abandoned going forward,
+      // never read or written here again.
+      const _contentKeys=['venRows','programBlocks','specialEvents','teacher_messages'];
       const {data:freshRows}=await db.from('app_store').select('key,updated_at').in('key',_contentKeys);
       const freshMap=new Map((freshRows||[]).map(r=>[r.key,r.updated_at]));
       const _candidates=[
         {key:'venRows',          value:AppData.venRows},
         {key:'programBlocks',    value:AppData.programBlocks},
         {key:'specialEvents',    value:AppData.specialEvents},
-        {key:'staffAccounts',    value:staffAccounts},
         {key:'teacher_messages', value:AppData.teacherMessages},
       ];
       const _staleKeys=[];
@@ -4918,17 +4925,14 @@ async function loadFromSupabase(){
     if(store.programBlocks !==undefined) AppData.programBlocks =store.programBlocks;
     if(store.specialEvents !==undefined) AppData.specialEvents =store.specialEvents;
     if(store.menuSchedule  !==undefined&&typeof store.menuSchedule==='object'&&!Array.isArray(store.menuSchedule)) menuSchedule=store.menuSchedule;
-    if(store.staffAccounts&&Array.isArray(store.staffAccounts)&&store.staffAccounts.length){
-      // Merge: Supabase data first, then preserve any locally-added accounts not yet synced
-      const seen=new Map();
-      store.staffAccounts.forEach(s=>s.username&&seen.set(s.username.toLowerCase(),s));
-      staffAccounts.forEach(s=>{if(s.username&&!seen.has(s.username.toLowerCase()))seen.set(s.username.toLowerCase(),s);});
-      staffAccounts=[...seen.values()];
-      staffAccounts.forEach(s=>{if(s.active===undefined)s.active=true;});
-      if(!staffAccounts.length)staffAccounts=DEF_STAFF.map(s=>({...s}));
-      localStorage.setItem('amansala_staff',JSON.stringify(staffAccounts));
-      (async()=>{try{await db.from('app_store').upsert({key:'staffAccounts',value:staffAccounts,updated_at:new Date().toISOString()});}catch(e){}})();
-    }
+    // Security fix 2026-10-02: this used to merge store.staffAccounts (a legacy
+    // app_store blob carrying every account's password_hash) into the live
+    // staffAccounts array and immediately write it right back -- on every
+    // single page load. With no Row Level Security on any table, that hash
+    // was readable by anyone with the public anon key, no login required.
+    // refreshStaffFromSql() (admin-staff.js) is the real account source now
+    // (and only ever fetches the non-sensitive columns) -- this legacy key is
+    // abandoned, never read or written here again.
     // Mirror to localStorage for offline use
     localStorage.setItem('amansala_venue_bookings',  JSON.stringify(AppData.bookings));
     localStorage.setItem('amansala_regs',            JSON.stringify(AppData.regs));
@@ -5480,7 +5484,7 @@ function loadAll(){
 // after, could undo the first move if the poll happened to fire in between.
 let _lastLocalSaveAt=0;
 // Per-key updated_at this tab last saw for each app_store blob (venRows, programBlocks,
-// specialEvents, staffAccounts, teacher_messages) — populated in loadFromSupabase(),
+// specialEvents, teacher_messages) — populated in loadFromSupabase(),
 // used by syncToSupabase()'s _blobSync to skip overwriting a key someone else has changed
 // more recently than this tab knows about (same guard as bookings/registrations/room_types).
 let _appStoreUpdatedAt={};
@@ -6304,7 +6308,7 @@ function switchTab(id,btn){
 // ===== PAYMENT RECORDING — moved to modules/payments.js =====
 // ===== PIPELINE STEPS — moved to modules/payments.js (loaded above) =====
 </script>
-<script src="modules/admin-staff.js?v=20260929a"></script>
+<script src="modules/admin-staff.js?v=20261002a"></script>
 <script>
 // ===== ADMIN DONE TASKS — moved to modules/admin-staff.js =====
 </script>
