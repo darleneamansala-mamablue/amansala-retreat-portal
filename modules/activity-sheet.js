@@ -475,14 +475,14 @@ function actByRetreatPrint(bkId) {
       *{box-sizing:border-box}
       body{font-family:'Jost',sans-serif;margin:0;padding:44px 48px;color:#2d2520;background:#fdfbf7;font-size:14pt;line-height:1.5}
       .print-btn{padding:9px 20px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;font-size:13pt;font-weight:600;float:right;margin-bottom:18px}
-      .hdr{text-align:center;margin-bottom:8px}
+      .hdr{text-align:left;margin-bottom:8px}
       .logo-mark{height:160px;margin-bottom:8px}
       .title{font-family:'Cormorant Garamond',serif;font-size:32pt;font-weight:700;color:#1a2332;margin-bottom:6px;clear:both;letter-spacing:.3px}
       .sub{font-size:12.5pt;letter-spacing:2px;color:#a89a86;text-transform:uppercase;margin-bottom:20px}
-      .divider{width:54px;height:1px;background:#c9a876;margin:0 auto 22px;position:relative}
-      .divider::before{content:'';position:absolute;left:50%;top:-3px;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:#c9a876}
-      .instr{font-size:13.5pt;font-weight:500;font-style:italic;color:#6b5f52;margin-bottom:14px}
-      .meta-row{display:flex;justify-content:center;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+      .divider{width:54px;height:1px;background:#c9a876;margin:0 0 22px;position:relative}
+      .divider::before{content:'';position:absolute;left:0;top:-3px;width:5px;height:5px;border-radius:50%;background:#c9a876}
+      .instr{font-size:11pt;font-weight:500;font-style:italic;color:#6b5f52;margin-bottom:14px}
+      .meta-row{display:flex;justify-content:flex-start;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px}
       .warn-pill{display:inline-block;font-size:11.5pt;font-weight:600;letter-spacing:.3px;color:#a05a35;background:transparent;border:1px solid #d9b696;border-radius:99px;padding:5px 18px}
       .pax-pill{display:inline-block;font-size:11.5pt;font-weight:600;letter-spacing:.3px;color:#1e4f4f;background:transparent;border:1px solid #9cc9c2;border-radius:99px;padding:5px 18px}
       table{width:100%;border-collapse:collapse;font-size:14pt;margin-top:30px}
@@ -490,8 +490,8 @@ function actByRetreatPrint(bkId) {
       th:first-child{background:#efe8d8}
       .col-day{font-size:9pt;text-transform:uppercase;letter-spacing:1px;color:#a89a86;font-weight:600}
       .col-date{font-size:12pt;font-family:'Cormorant Garamond',serif;font-weight:700;color:#1a2332}
-      .col-name{margin-top:6px;font-weight:600;font-size:11pt;line-height:1.35;color:#2d6a6a}
-      .col-optional-tag{display:block;font-size:8.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#a89a86}
+      .col-name{margin-top:6px;font-weight:600;font-size:9.5pt;line-height:1.35;color:#2d6a6a}
+      .col-optional-tag{display:block;font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#a89a86}
       .col-time{margin-top:4px;font-size:9.5pt;color:#8a7e74;white-space:nowrap}
       .col-price{margin-top:4px;font-size:10.5pt;color:#8a7e74}
       .col-price{color:#a05a35;font-weight:600}
