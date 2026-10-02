@@ -824,30 +824,27 @@ function menuPrintDay(dateStr){
     .menu-poster-dessert{margin-top:10px;font-size:17px;font-style:italic;color:#8a7e74;text-align:center}
     .menu-poster-footer{text-align:center;margin-top:50px;font-size:13px;color:#b8ab9e;letter-spacing:.4px;line-height:1.7}
     .menu-poster-page2{page-break-before:always}
-    /* Each day's two pages (Light Breakfast + Brunch on one, Afternoon Snack +
-       Dinner on the other) center vertically as a block, instead of sitting
-       stuck at the top with empty space below (Darlene's ask 2026-10-02). */
-    .menu-poster-pg{min-height:calc(100vh - 140px);display:flex;flex-direction:column;justify-content:center}
-    @media print{body{padding:70px 40px 20px}.menu-poster-pg{min-height:calc(100vh - 90px)}}
+    /* Each meal gets its own standalone page (Darlene's ask 2026-10-02: Light
+       Breakfast separate from Brunch, Snack separate from Dinner), centered
+       vertically as a block instead of sitting stuck at the top with empty
+       space below. */
+    .menu-poster-pg{min-height:calc(100vh - 60px);display:flex;flex-direction:column;justify-content:center}
+    @media print{body{padding:30px 40px 20px}.menu-poster-pg{min-height:calc(100vh - 40px)}}
   </style></head>
   <body>
-    <div class="menu-poster-pg">
-      <div class="menu-poster-brand"><img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:150px"></div>
+    ${[
+      {label:'Fruit, Coffee &amp; Tea',html:section('Fruit, Coffee &amp; Tea',mData.lightBreakfast)},
+      {label:'Brunch',html:section('Brunch',mData.brunch)},
+      {label:'Afternoon Snack',html:section('Afternoon Snack',mData.snack)},
+      {label:'Dinner',html:dinnerHtml},
+    ].filter(p=>p.html).map((p,i)=>`<div class="menu-poster-pg${i>0?' menu-poster-page2':''}">
+      <div class="menu-poster-brand"><img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:170px"></div>
       <div class="menu-poster-day">${dayName}</div>
       <div class="menu-poster-date">${dateFmt}</div>
       <div class="menu-poster-divider"></div>
-      ${section('Fruit, Coffee &amp; Tea',mData.lightBreakfast)}
-      ${section('Brunch',mData.brunch)}
-    </div>
-    <div class="menu-poster-page2 menu-poster-pg">
-      <div class="menu-poster-brand"><img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:150px"></div>
-      <div class="menu-poster-day">${dayName}</div>
-      <div class="menu-poster-date">${dateFmt}</div>
-      <div class="menu-poster-divider"></div>
-      ${section('Afternoon Snack',mData.snack)}
-      ${dinnerHtml}
+      ${p.html}
       <div class="menu-poster-footer">Please let the front desk know if you'll be dining off-site tonight.<br>For specific requests, please see your waiter. Please confirm any severe allergies with your host.</div>
-    </div>
+    </div>`).join('')}
   </body></html>`;
 
   const w=window.open('','_blank');
