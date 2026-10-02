@@ -476,9 +476,14 @@ function actByRetreatPrint(bkId) {
       body{font-family:'Jost',sans-serif;margin:0;padding:44px 48px;color:#2d2520;background:#fdfbf7;font-size:14pt;line-height:1.5}
       .print-btn{padding:9px 20px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;font-size:13pt;font-weight:600;float:right;margin-bottom:18px}
       .hdr{text-align:left;margin-bottom:8px}
-      .logo-mark{height:160px;margin-bottom:8px}
-      .title{font-family:'Cormorant Garamond',serif;font-size:32pt;font-weight:700;color:#1a2332;margin-bottom:6px;clear:both;letter-spacing:.3px}
-      .sub{font-size:12.5pt;letter-spacing:2px;color:#a89a86;text-transform:uppercase;margin-bottom:20px}
+      /* Logo and teacher name/dates sit side by side on one line instead of
+         stacked, so the header (which now repeats on every page -- see the
+         thead) takes up less vertical space, leaving more room for guest
+         rows per page (Darlene's ask 2026-10-02). */
+      .hdr-row{display:flex;align-items:center;gap:20px;margin-bottom:14px}
+      .logo-mark{height:90px;flex-shrink:0}
+      .title{font-family:'Cormorant Garamond',serif;font-size:28pt;font-weight:700;color:#1a2332;margin:0;letter-spacing:.3px}
+      .sub{font-size:12pt;letter-spacing:2px;color:#a89a86;text-transform:uppercase;margin-top:4px}
       .divider{width:54px;height:1px;background:#c9a876;margin:0 0 22px;position:relative}
       .divider::before{content:'';position:absolute;left:0;top:-3px;width:5px;height:5px;border-radius:50%;background:#c9a876}
       .instr{font-size:11pt;font-weight:500;font-style:italic;color:#6b5f52;margin-bottom:14px}
@@ -519,9 +524,13 @@ function actByRetreatPrint(bkId) {
       <thead>
         <tr><td colspan="${entries.length+1}" style="padding:0;border:none">
           <div class="hdr">
-            <img class="logo-mark" src="/logo-amansala-retreats-black.png" alt="Amansala Retreats">
-            <div class="title">${retreatName}</div>
-            <div class="sub">${dateRangeLbl}</div>
+            <div class="hdr-row">
+              <img class="logo-mark" src="/logo-amansala-retreats-black.png" alt="Amansala Retreats">
+              <div>
+                <div class="title">${retreatName}</div>
+                <div class="sub">${dateRangeLbl}</div>
+              </div>
+            </div>
             <div class="divider"></div>
             <div class="instr">Please put a check ✓ or an X in the box by your name for each activity you would like to join</div>
             <div class="meta-row">
