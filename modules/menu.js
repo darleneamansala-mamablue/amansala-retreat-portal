@@ -724,7 +724,7 @@ const MENU_DETAIL={
   'Pan de Frances con Coco':{name:'Coconut French Bread',desc:'French bread, coconut.'},
   'Pollo con Ajo Asado':{name:'Grilled Chicken',desc:'Chicken breast.'},
   'Fruta':{name:'Fresh Fruit',desc:'Seasonal fruit.'},
-  'Protein Balls con Fruta Fresca':{name:'Cacao Energy Bites',desc:'Mixed nuts, raw cacao, dates, coconut & Mayan honey.'},
+  'Protein Balls con Fruta Fresca':{name:'Cacao Energy Bites',desc:'Mixed nuts, raw cacao, dates, coconut & Mayan honey, with fresh seasonal fruit.'},
   'Huevos Revueltos':{name:'Scrambled Eggs',desc:'Eggs.'},
   'Pan de Frances':{name:'French Bread',desc:'French bread.'},
 
