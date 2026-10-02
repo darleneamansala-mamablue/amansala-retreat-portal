@@ -515,20 +515,26 @@ function actByRetreatPrint(bkId) {
     </style>
   </head><body>
     <button class="print-btn no-print" onclick="window.print()">Print</button>
-    <div class="hdr">
-      <img class="logo-mark" src="/logo-amansala-retreats-black.png" alt="Amansala Retreats">
-      <div class="title">${retreatName}</div>
-      <div class="sub">${dateRangeLbl}</div>
-      <div class="divider"></div>
-      <div class="instr">Please put a check ✓ or an X in the box by your name for each activity you would like to join</div>
-      <div class="meta-row">
-        <span class="warn-pill">Minimum of 6 people required</span>
-        <span class="pax-pill">${roster.length} guests total</span>
-      </div>
-    </div>
     <table>
-      <tr><th style="text-align:left">Name</th>${colHeaders}</tr>
-      ${guestRows||`<tr><td class="name-cell" colspan="${entries.length+1}" style="text-align:center;font-style:italic">No guests on the room list yet.</td></tr>`}
+      <thead>
+        <tr><td colspan="${entries.length+1}" style="padding:0;border:none">
+          <div class="hdr">
+            <img class="logo-mark" src="/logo-amansala-retreats-black.png" alt="Amansala Retreats">
+            <div class="title">${retreatName}</div>
+            <div class="sub">${dateRangeLbl}</div>
+            <div class="divider"></div>
+            <div class="instr">Please put a check ✓ or an X in the box by your name for each activity you would like to join</div>
+            <div class="meta-row">
+              <span class="warn-pill">Minimum of 6 people required</span>
+              <span class="pax-pill">${roster.length} guests total</span>
+            </div>
+          </div>
+        </td></tr>
+        <tr><th style="text-align:left">Name</th>${colHeaders}</tr>
+      </thead>
+      <tbody>
+        ${guestRows||`<tr><td class="name-cell" colspan="${entries.length+1}" style="text-align:center;font-style:italic">No guests on the room list yet.</td></tr>`}
+      </tbody>
     </table>
     ${opsPanel}
     <div class="footer">
