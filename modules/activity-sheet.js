@@ -476,7 +476,7 @@ function actByRetreatPrint(bkId) {
       body{font-family:'Jost',sans-serif;margin:0;padding:44px 48px;color:#2d2520;background:#fdfbf7;font-size:14pt;line-height:1.5}
       .print-btn{padding:9px 20px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;font-size:13pt;font-weight:600;float:right;margin-bottom:18px}
       .hdr{text-align:center;margin-bottom:8px}
-      .logo-mark{height:56px;margin-bottom:8px}
+      .logo-mark{height:100px;margin-bottom:8px}
       .title{font-family:'Cormorant Garamond',serif;font-size:32pt;font-weight:700;color:#1a2332;margin-bottom:6px;clear:both;letter-spacing:.3px}
       .sub{font-size:12.5pt;letter-spacing:2px;color:#a89a86;text-transform:uppercase;margin-bottom:20px}
       .divider{width:54px;height:1px;background:#c9a876;margin:0 auto 22px;position:relative}
@@ -516,7 +516,7 @@ function actByRetreatPrint(bkId) {
   </head><body>
     <button class="print-btn no-print" onclick="window.print()">Print</button>
     <div class="hdr">
-      <img class="logo-mark" src="/logo-amansala.png" alt="Amansala">
+      <img class="logo-mark" src="/logo-amansala-retreats-black.png" alt="Amansala Retreats">
       <div class="title">${retreatName}</div>
       <div class="sub">${dateRangeLbl}</div>
       <div class="divider"></div>

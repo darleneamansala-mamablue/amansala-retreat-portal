@@ -827,14 +827,14 @@ function menuPrintDay(dateStr){
     @media print{body{padding:170px 40px 20px}.menu-poster-page2{padding-top:140px}}
   </style></head>
   <body>
-    <div class="menu-poster-brand">Amansala</div>
+    <div class="menu-poster-brand"><img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:64px"></div>
     <div class="menu-poster-day">${dayName}</div>
     <div class="menu-poster-date">${dateFmt}</div>
     <div class="menu-poster-divider"></div>
     ${section('Brunch',mData.brunch)}
     ${section('Afternoon Snack',mData.snack)}
     ${dinnerHtml?`<div class="menu-poster-page2">
-      <div class="menu-poster-brand">Amansala</div>
+      <div class="menu-poster-brand"><img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:64px"></div>
       <div class="menu-poster-day">${dayName}</div>
       <div class="menu-poster-date">${dateFmt}</div>
       <div class="menu-poster-divider"></div>
@@ -928,7 +928,7 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
 
   const pagesHtml=pages.map((pageDays,pi)=>`<div class="rw-page${pi>0?' rw-page-break':''}">
     <div class="rw-hdr">
-      <div class="rw-brand">Amansala</div>
+      <div class="rw-brand">${isKitchen?'Amansala':'<img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:50px">'}</div>
       <div class="rw-title">${isKitchen?'Kitchen · ':''}Weekly Menu</div>
       <div class="rw-range">${rangeLbl}</div>
     </div>
@@ -943,15 +943,22 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
   <title>Amansala-Weekly-Menu-${fromVal}-to-${toVal}</title>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    @page{size:letter landscape;margin:0.45in}
+    @page{size:legal landscape;margin:0.45in}
     *{box-sizing:border-box}
     body{font-family:'Jost',sans-serif;margin:0;color:#2d2520;background:#fdfbf7}
-    /* Each half-week must fit one landscape letter page (11in − 0.9in margins
-       = 10.1in wide, 8.5in − 0.9in = 7.6in tall). A fixed page width lets
+    /* Kitchen staff print this straight from the browser dialog, which used to
+       default to Letter even though the kitchen printer is loaded with Legal
+       — meaning someone had to manually switch the paper size (and re-check
+       scaling) every single time before printing (Darlene's ask 2026-10-02).
+       @page here sets the browser's default paper size to Legal landscape, so
+       it just prints correctly without that extra step.
+       Each half-week must still fit one landscape page (14in legal − 0.9in
+       margins = 13.1in wide, same 8.5in − 0.9in = 7.6in tall as before — legal
+       vs letter only changes width, not height). A fixed page width lets
        rwFit() below measure the real printed height and shrink just that
        page to fit, instead of the browser pushing the day columns onto the
        next sheet and leaving a near-blank first page (Darlene 2026-09-26). */
-    .rw-page{padding:6px 4px 10px;width:10.1in;margin:0 auto}
+    .rw-page{padding:6px 4px 10px;width:13.1in;margin:0 auto}
     .rw-page-break{page-break-before:always}
     .rw-hdr{text-align:center;margin-bottom:14px}
     .rw-brand{font-family:'Cormorant Garamond',serif;font-size:13px;letter-spacing:3px;text-transform:uppercase;color:#8a7e74}
@@ -1044,7 +1051,7 @@ function menuPrintDailyRange(fromVal,toVal,isKitchen){
       ${groupHtml(ds,'dinner')}
     </div>`:'';
     return `<div class="${i>0?'menu-poster-page2':''}" style="${i>0?'':''}">
-      <div class="menu-poster-brand">Amansala${isKitchen?' · Kitchen':''}</div>
+      <div class="menu-poster-brand">${isKitchen?'Amansala · Kitchen':'<img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:64px">'}</div>
       <div class="menu-poster-day">${dayName}</div>
       <div class="menu-poster-date">${dateFmt}</div>
       <div class="menu-poster-divider"></div>

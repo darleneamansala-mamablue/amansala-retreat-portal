@@ -392,7 +392,8 @@ function generateContractHTML(bk,isLow,signDate){
   const ratesLow=buildRatesTable(contractRatesForBk(bk,'low',tmpl),'low')+`<p style="font-size:11.5px;color:#15803d;margin-top:8px;line-height:1.7">${tmpl.lowInclusions}</p>`;
   return `<div style="max-width:720px;margin:0 auto">
     <div style="text-align:center;margin-bottom:24px">
-      <div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:#1a2332;letter-spacing:.5px">AMANSALA ECO-CHIC RESORT AND RETREAT</div>
+      <img src="/logo-amansala.png" alt="Amansala" style="height:42px;margin-bottom:6px">
+      <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7f8c9a">Eco-Chic Resort and Retreat</div>
       <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#7f8c9a;margin-top:4px">Retreat Agreement</div>
       <div style="margin-top:8px">${isLow?'<span style="background:#dcfce7;color:#15803d;font-size:11px;font-weight:700;padding:3px 12px;border-radius:99px">LOW SEASON RATES</span>':'<span style="background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;padding:3px 12px;border-radius:99px">HIGH SEASON RATES</span>'}</div>
     </div>
