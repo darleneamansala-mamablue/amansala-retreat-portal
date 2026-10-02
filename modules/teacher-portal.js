@@ -4013,13 +4013,29 @@ With love & gratitude,
 
 For resort questions: retreats@amansala.com`;
 }
-function renderPlanningGuide(){
+function renderPlanningGuide(bk){
   const body=document.getElementById('tdPlanningBody');if(!body)return;
+  // Pull the figures that actually vary by contract (gratuity, teacher comp-room
+  // policy, meal inclusions) straight from the same data the real signed
+  // contract uses, instead of restating generic numbers here that can silently
+  // drift out of sync with a retreat-specific contract edit (Darlene's report
+  // 2026-10-02 — Jen Russell's contract has custom teacher-policy and gratuity
+  // terms that the Planning Guide didn't reflect). Works the same for every
+  // teacher: shows the template default when nothing's been customized, or
+  // the exact override text/number when it has.
+  const hasContractData=bk&&typeof loadContractTmpl==='function';
+  const isLow=hasContractData?isLowSeasonContract(bk.startDate):false;
+  const tmpl=hasContractData?loadContractTmpl():null;
+  const teacherPolicyHtml=hasContractData
+    ?contractSectionText(bk,'teacherPolicy',isLow,tmpl).split('\n\n').map(p=>`<li>${escHtml(p).replace(/\n/g,'<br>')}</li>`).join('')
+    :`<li><b>15 paying guests</b> = one complimentary room in the most basic category (10 paying guests during low season, starting June 1st). 20 guests = two teacher rooms complimentary.</li>
+      <li>Fewer than 15 guests (10 during low season) = <b>$20 USD credit per guest per day</b> toward your own room &amp; board.</li>`;
+  const inclusionsLine=hasContractData?(isLow?tmpl.lowInclusions:tmpl.highInclusions):'';
+  const tip=hasContractData?getTip(bk):30;
   const sections=[
     {title:'Your Room List',content:`<ul>
       <li>Place each guest in the room type they reserved.</li>
-      <li><b>15 paying guests</b> = one complimentary room in the most basic category (10 paying guests during low season, starting June 1st). 20 guests = two teacher rooms complimentary.</li>
-      <li>Fewer than 15 guests (10 during low season) = <b>$20 USD credit per guest per day</b> toward your own room & board.</li>
+      ${teacherPolicyHtml}
       <li>Add guests by clicking the <b>+</b> sign — enter name, phone & email.</li>
       <li>Adjustments are allowed until the <b>6-week deadline</b>.</li>
       <li>Rooms must be filled to capacity. If a shared room guest has no roommate, they pay the private rate difference.</li>
@@ -4033,11 +4049,12 @@ function renderPlanningGuide(){
       <li>Recommended flow: <b>Fruit, Coffee &amp; Tea → Brunch → Afternoon Snack → Dinner</b>.</li>
       <li>Plan Brunch ~15 min after morning class; Dinner 30–60 min after evening class.</li>
       <li>Dietary restrictions must be communicated in advance.</li>
+      ${inclusionsLine?`<li>${escHtml(inclusionsLine)}</li>`:''}
       <li>Off-site dinner option: <b>Gitano Tulum</b> — $75/person + 15% tip + $15 transport.</li>
       <li>Stay on-site dinner option: <b>$40 USD per person</b>.</li>
     </ul>`},
     {title:'Gratuity & Payments',content:`<ul>
-      <li>Mandatory <b>$30 USD/person/day yoga gratuity</b> covers restaurant & kitchen staff.</li>
+      <li>${tip>0?`<b>$${tip} USD/person/day yoga gratuity</b> covers restaurant & kitchen staff.`:`Tip is not included for this retreat. A recommended gratuity is a minimum of <b>$150 USD per person</b> for the duration of your stay.`}</li>
       <li>Housekeeping, bellboys, guides & spa therapists are tipped separately.</li>
       <li><b>Final payment: bank wire only</b> — no credit cards.</li>
       <li>Cancellations within 3 weeks of start: <b>no refund</b>.</li>
@@ -4650,7 +4667,7 @@ function enterTeacherView(bkId){
       renderChecklist(bkId);
       tdRenderTransportReminder(bkId);
       renderYogiLetter(bkr);
-      renderPlanningGuide();
+      renderPlanningGuide(bkr);
       loadWhatsappField(bkr);
       // Show red dot on Contract tab if contract is pending signature
       const contractBtn=document.getElementById('tnBtnContract');
