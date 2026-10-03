@@ -772,6 +772,27 @@ async function _bdUpsertCommission(fid,itemId,staffId,baseAmount,taxRate,commiss
   }catch(e){console.warn('[commission] upsert failed:',e.message);showToast('Cargo guardado, pero la comisión no se pudo registrar: '+e.message);}
 }
 
+// Jorge's report 2026-10-03: Michele's upgrade commissions (created from
+// transport.js's tr2ConfirmUpgrade, category 'Upgrade' not 'Comisión') kept
+// showing the ORIGINAL estimated upgrade price even after staff corrected
+// the actual folio charge afterward -- nothing re-synced the linked
+// commissions row. _bdUpsertCommission() above already keeps a 'Comisión'-
+// category charge's OWN commission in sync; this covers every OTHER
+// category, for whatever already has a commissions.folio_item_id link
+// (upgrades/reservations from transport.js/venues.js) -- a no-op if this
+// charge was never linked to a commission at all.
+async function _bdSyncLinkedCommission(itemId,qty,unitPrice,taxRate){
+  try{
+    const{data:existing}=await db.from('commissions').select('id,commission_rate').eq('folio_item_id',itemId).maybeSingle();
+    if(!existing)return;
+    const pretax=+(Number(qty)*Number(unitPrice)).toFixed(2);
+    const total=+(pretax*(1+(Number(taxRate)||0)/100)).toFixed(2);
+    const rate=Number(existing.commission_rate)||0.05;
+    const commissionAmount=+(pretax*rate).toFixed(2);
+    await db.from('commissions').update({upgrade_pretax:pretax,upgrade_total:total,commission_amount:commissionAmount}).eq('id',existing.id);
+  }catch(e){console.warn('[commission] linked sync failed:',e.message);}
+}
+
 async function bdAddItem(fid){
   const descEl=document.getElementById(`bdc-desc-${fid}`);
   const desc=descEl?.value.trim();
@@ -817,9 +838,11 @@ async function bdSaveEditItem(fid,itemId){
     if(!staffId){showToast('Selecciona el staff de la comisión');return;}
   }
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
+  const origItem=_bdFolios.find(x=>x.folio.id===fid)?.items.find(x=>x.id===itemId);
   const {error}=await db.from('folio_items').update({description:desc,unit_price:price,tax_rate:tax,category}).eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
   if(isComm&&staffId)await _bdUpsertCommission(fid,itemId,staffId,price,tax,+(price*0.05).toFixed(2),desc);
+  else await _bdSyncLinkedCommission(itemId,origItem?.qty??1,price,tax);
   delete _bdEditOpen[itemId];
   await _bdLoadFolios();
 }
@@ -829,6 +852,9 @@ async function bdDeleteItem(fid,itemId){
   const f=_bdFolios.find(x=>x.folio.id===fid);
   const {error}=await db.from('folio_items').delete().eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
+  // A commission linked to this charge (commissions.folio_item_id) has
+  // nothing left to commission once the charge itself is gone.
+  db.from('commissions').delete().eq('folio_item_id',itemId).then(({error})=>{if(error)console.warn('[commission] delete-linked failed:',error.message);});
   await _bdLoadFolios();
 }
 

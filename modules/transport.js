@@ -1406,7 +1406,7 @@ async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, 
     if (rawId) { staffId = rawId; staffName = tr2StaffList.find(s => s.id === rawId)?.name || ''; }
   }
 
-  let folioOk = false;
+  let folioOk = false, folioItemId = null;
   if (pretaxTotal != null && pretaxTotal > 0) {
     const upgradeTotal = +(pretaxTotal * 1.16).toFixed(2);
     const commissionAmount = +(pretaxTotal * 0.05).toFixed(2);
@@ -1418,13 +1418,23 @@ async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, 
       });
       const fcJson = await fcRes.json().catch(() => ({}));
       if (!fcRes.ok) showToast('Error folio (' + fcRes.status + '): ' + (fcJson.error || JSON.stringify(fcJson)));
-      else folioOk = true;
+      else { folioOk = true; folioItemId = fcJson?.data?.id || null; }
     } catch (e) { showToast('Error folio (red): ' + e.message); }
 
     if (staffId) {
       try {
+        // Jorge's report 2026-10-03: Michele's commissions for Leah Simpson/
+        // Chelsea Roussey still showed the ORIGINAL estimated upgrade price
+        // ($220/night, the destination room type's list rate) even after
+        // staff corrected the actual folio charge down to a negotiated
+        // $120/night and $78.57/night -- nothing ever linked the commission
+        // back to the folio charge it came from, so editing the charge later
+        // (Booking Detail's "Edit") left the commission stale. folio_item_id
+        // is that link -- bdSaveEditItem()/bdDeleteItem() (booking-detail.js)
+        // now keep any commission row linked this way in sync automatically.
         await db.from('commissions').insert({
           staff_id: staffId, staff_name: staffName, type: 'upgrade', guest_name: entry.guest, booking_id: entry.retreatId,
+          folio_item_id: folioItemId,
           room_from: entry.room, room_to: newRoom, upgrade_pretax: pretaxTotal, upgrade_total: upgradeTotal,
           commission_rate: 0.05, commission_amount: commissionAmount, date: entry.date, status: 'pending',
         });

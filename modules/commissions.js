@@ -93,12 +93,16 @@ function commissionsRenderBody(){
   html+=`<div style="background:#fff;border:1.5px solid var(--border);border-radius:10px;overflow:hidden">
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="background:#f8fafc">
-        ${['Fecha','Staff','Huésped','Detalle','Pretax','IVA 16%','Total huésped','Comisión','Status',''].map(h=>
+        ${['Fecha','Staff','Huésped','Detalle','Pretax','IVA','Total huésped','Comisión','Status',''].map(h=>
           `<th style="padding:9px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);text-align:left;border-bottom:2px solid var(--border)">${h}</th>`
         ).join('')}
       </tr></thead><tbody>`;
   filtered.forEach(c=>{
-    const iva=(Number(c.upgrade_pretax)*0.16).toFixed(2);
+    // Jorge's report 2026-10-03: this column was hardcoded at 16% regardless
+    // of the charge's real tax rate (e.g. a 21% folio charge still showed
+    // IVA as if it were 16%) -- derive it from the two amounts already
+    // stored correctly per row instead of re-guessing the rate.
+    const iva=(Number(c.upgrade_total)-Number(c.upgrade_pretax)).toFixed(2);
     const isPaid=c.status==='paid';
     const detailTxt=c.type==='reservation'
       ?`Reserva nueva · ${escHtml(c.room_to||'')}`
