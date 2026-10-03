@@ -12,6 +12,30 @@
 // (if only partially filtered) make the totals not match the visible rows.
 
 let _rptYear='all',_rptShowCanc=false,_rptRows=[],_rptActiveTab='financial';
+// Jorge's ask 2026-10-03: a manually-set MXN exchange rate for the Gratuity
+// Retreats tab -- once someone sets it, a new MXN column shows up next to
+// Total Gratuity (USD). Cached in localStorage for instant reload, synced to
+// app_store so it's the same rate on every device/admin.
+let _rptMxnRate=parseFloat(localStorage.getItem('amansala_mxn_rate'))||0;
+let _rptMxnRateLoaded=false;
+async function _rptLoadMxnRate(){
+  if(_rptMxnRateLoaded)return;
+  _rptMxnRateLoaded=true;
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','mxnExchangeRate').maybeSingle();
+    if(data&&data.value!=null){
+      const n=Number(data.value)||0;
+      if(n!==_rptMxnRate){_rptMxnRate=n;localStorage.setItem('amansala_mxn_rate',n);if(_rptActiveTab==='gratuity')_rptRenderGratuity();}
+    }
+  }catch(e){}
+}
+function _rptSetMxnRate(v){
+  const n=parseFloat(v)||0;
+  _rptMxnRate=n;
+  localStorage.setItem('amansala_mxn_rate',n);
+  _rptRenderGratuity();
+  db.from('app_store').upsert({key:'mxnExchangeRate',value:n,updated_at:new Date().toISOString()}).catch(()=>{});
+}
 
 const _RPT_METHOD_LABELS={wire:'Wire Transfer',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',cash:'Cash',cheque:'Cheque',paypal:'Paypal',clip:'Clip',other:'Other'};
 const _RPT_METHOD_COLORS={wire:'#dbeafe:#1d4ed8',zelle:'#fce7f3:#9d174d',venmo:'#ede9fe:#5b21b6',card:'#dcfce7:#15803d',cash:'#fef9c3:#854d0e',cheque:'#f3f4f6:#374151',paypal:'#e0f2fe:#0369a1',clip:'#fdf4ff:#7e22ce',other:'#f3f4f6:#374151'};
@@ -568,6 +592,7 @@ function _rptExportDailyCsv(){
 function _rptRenderGratuity(){
   const el=document.getElementById('reportsContent');
   if(!el)return;
+  _rptLoadMxnRate();
   const rows=_rptFiltered();
   const totalGuests=rows.reduce((s,r)=>s+r.guests,0);
   const totalTip=rows.reduce((s,r)=>s+r.tipTotal,0);
@@ -606,6 +631,10 @@ function _rptRenderGratuity(){
         <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked);_rptRenderGratuity()">
         Show cancelled
       </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280">
+        Tipo de cambio MXN
+        <input type="number" step="0.01" min="0" value="${_rptMxnRate||''}" placeholder="e.g. 18.50" onchange="_rptSetMxnRate(this.value)" style="width:76px;padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:'Jost',sans-serif;color:#374151">
+      </label>
       <button onclick="_rptExportGratuityCsv()" style="padding:6px 14px;background:#0e5a5a;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">
         ↓ Export CSV
       </button>
@@ -626,12 +655,13 @@ function _rptRenderGratuity(){
             <th style="${_rptTh('center')}">Guests</th>
             <th style="${_rptTh('right')}">Tip / Night</th>
             <th style="${_rptTh('right')}">Total Gratuity</th>
+            ${_rptMxnRate>0?`<th style="${_rptTh('right')}">MXN</th>`:''}
             <th style="${_rptTh('center')}">Status</th>
           </tr>
         </thead>
         <tbody>
           ${rows.length===0
-            ?`<tr><td colspan="6" style="padding:60px;text-align:center;color:#9ca3af">No retreats found for this filter</td></tr>`
+            ?`<tr><td colspan="${_rptMxnRate>0?7:6}" style="padding:60px;text-align:center;color:#9ca3af">No retreats found for this filter</td></tr>`
             :rows.slice().sort((a,b)=>(a.bk.startDate||'').localeCompare(b.bk.startDate||'')).map(_rptGratuityRowHtml).join('')}
         </tbody>
       </table>
@@ -689,13 +719,15 @@ function _rptGratuityRowHtml(r){
     <td style="${_rptTd('center')};font-size:13px;font-weight:700;color:#374151">${r.guests||'—'}</td>
     <td style="${_rptTd('right')};font-size:13px;font-weight:600;color:#6b7280">${r.tipRate>0?fmt$(r.tipRate):'—'}</td>
     <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#0e5a5a">${r.tipTotal>0?fmt$(r.tipTotal):'—'}</td>
+    ${_rptMxnRate>0?`<td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#7c3aed">${r.tipTotal>0?'$'+(r.tipTotal*_rptMxnRate).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' MXN':'—'}</td>`:''}
     <td style="${_rptTd('center')}">${statusBadge}</td>
   </tr>`;
 }
 
 function _rptExportGratuityCsv(){
   const rows=_rptFiltered().slice().sort((a,b)=>(b.bk.startDate||'').localeCompare(a.bk.startDate||''));
-  const header=['Retreat','Teacher','Start Date','End Date','Nights','Guests','Tip Per Night','Total Gratuity','Status'];
+  const hasMxn=_rptMxnRate>0;
+  const header=['Retreat','Teacher','Start Date','End Date','Nights','Guests','Tip Per Night','Total Gratuity',...(hasMxn?['Total Gratuity (MXN)']:[]),'Status'];
   const lines=[header,...rows.map(r=>[
     r.bk.retreatName||r.bk.leaderName||'',
     r.bk.leaderName||'',
@@ -703,6 +735,7 @@ function _rptExportGratuityCsv(){
     r.bk.endDate||'',
     r.nights,r.guests,
     r.tipRate.toFixed(2),r.tipTotal.toFixed(2),
+    ...(hasMxn?[(r.tipTotal*_rptMxnRate).toFixed(2)]:[]),
     r.bk.status||'',
   ])].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([lines],{type:'text/csv'});
