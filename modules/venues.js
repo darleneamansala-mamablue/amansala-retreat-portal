@@ -144,10 +144,10 @@ function venBuild(){
         :isRoomOnly&&bk.status==='deposit_paid'
         ?roomOnlyBadge
         // Deposit Paid / Paid in Full show the balance under the name instead of
-        // the status word (the bar's color already says which): "$0 balance" when
+        // the status word (the bar's color already says which): "Paid in Full" when
         // settled, the amount owed otherwise (Darlene 2026-10-03).
         :bk.status==='deposit_paid'
-        ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;opacity:.9">${isPaidInFull?'$0 balance':fmt$(Math.max(0,calcBkBalance(bk).balance))+' balance'}</span>${roomOnlyBadge}`
+        ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;opacity:.9">${isPaidInFull?'Paid in Full':fmt$(Math.max(0,calcBkBalance(bk).balance))+' balance'}</span>${roomOnlyBadge}`
         :`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;opacity:.85">${st.label}</span>${roomOnlyBadge}`;
       const finBadge=bk.finalPaymentRequested?`<span title="Final payment requested" style="font-size:9.5px;background:rgba(0,0,0,.15);border-radius:3px;padding:1px 5px;margin-left:3px;font-weight:700">$</span>`:'';
       const bkTd=!bk.teacherDiscountDisabled?calcTeacherDiscount(bk,AppData.regs.filter(r=>r.bookingId===bk.id)):null;
