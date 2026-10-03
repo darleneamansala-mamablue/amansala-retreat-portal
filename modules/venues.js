@@ -149,11 +149,8 @@ function venBuild(){
         ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#e5e7eb;color:#6b7280;border-radius:3px;padding:1px 5px;margin-left:6px">Inquiry</span>`
         :isRoomOnly&&bk.status==='deposit_paid'
         ?roomOnlyBadge
-        // Deposit Paid / Paid in Full show the balance under the name instead of
-        // the status word (the bar's color already says which): "Paid in Full" when
-        // settled, the amount owed otherwise (Darlene 2026-10-03).
-        :bk.status==='deposit_paid'
-        ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;opacity:.9">${isPaidInFull?'Paid in Full':calcBkBalance(bk).balance>0?fmt$(calcBkBalance(bk).balance)+' balance':'Deposit Paid'}</span>${roomOnlyBadge}`
+        // Under the name: whatever stage staff marked (Contract Sent, Contract Signed,
+        // Deposit Paid, Room List Sent...); Paid in Full only via the 6-week override.
         :`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;opacity:.85">${st.label}</span>${roomOnlyBadge}`;
       const finBadge=bk.finalPaymentRequested?`<span title="Final payment requested" style="font-size:9.5px;background:rgba(0,0,0,.15);border-radius:3px;padding:1px 5px;margin-left:3px;font-weight:700">$</span>`:'';
       const bkTd=!bk.teacherDiscountDisabled?calcTeacherDiscount(bk,AppData.regs.filter(r=>r.bookingId===bk.id)):null;
