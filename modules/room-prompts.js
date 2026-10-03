@@ -199,8 +199,10 @@ function rpRenderTeacher(){
     });
   }
 
-  // 3. request more of a full room type
-  rpMoreRoomOptions(bk).forEach(o=>{
+  // 3. request more of a full room type — from the moment the type sells out
+  // until 10 weeks before arrival (Darlene 2026-10-03: Marcia, 15 days out,
+  // wrongly saw it). Inside 10 weeks the shared-room notices take over.
+  if(days>RP_NOTICE_DAYS)rpMoreRoomOptions(bk).forEach(o=>{
     const sent=rpReqFor(bk.id,r=>r.kind==='more_rooms'&&r.typeId===o.typeId&&r.status==='pending');
     html+=card('#f9fafb','#e5e7eb',`${escHtml(o.typeName)} is full`,
       sent?`Your request for ${sent.qty} more ${escHtml(o.typeName)} is with our team.`
