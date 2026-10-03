@@ -672,9 +672,9 @@ function showTip(e,bk,regCount,hideFinancials){
   const bedsTotal=_bedList.length;
   const bedsFilled=_bedList.filter(b=>{const r=getRegForRoom(bk.id,b);return (r?.guests||[]).some(g=>g.name&&!g.cancelled);}).length;
   const bedsLeft=bedsTotal-bedsFilled;
-  const bedsHtml=bedsTotal
-    ?`<div style="font-size:10.5px;color:rgba(255,255,255,.7);margin-top:3px">Beds filled: <b style="color:#fff">${bedsFilled}/${bedsTotal}</b> · <b style="color:${bedsLeft>0?'#fde68a':'#6ee7b7'}">${bedsLeft>0?bedsLeft+' left to sell':'sold out'}</b></div>`
-    :(rc?`<div style="font-size:10.5px;color:rgba(255,255,255,.7);margin-top:3px">Registered: <b style="color:#fff">${rc}</b> · no rooms blocked yet</div>`:'');
+  // Head count, not beds (Darlene 2026-10-03): 57 guests in 48 rooms reads 57.
+  const _heads=typeof venueGuestCount==='function'?venueGuestCount(bk.id):rc;
+  const bedsHtml=_heads?`<div style="font-size:10.5px;color:rgba(255,255,255,.7);margin-top:3px">Guests: <b style="color:#fff">${_heads}</b></div>`:'';
   const flags=getOpenAutoFlags(bk).concat((bk.flags||[]).filter(f=>!f.resolved));
   // Financial totals — skipped entirely for the "Happening Now" strip (Jorge's ask
   // 2026-09-18: that quick-glance strip shouldn't show Total/Paid/Owing, unlike the
