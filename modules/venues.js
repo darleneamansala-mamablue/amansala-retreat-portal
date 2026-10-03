@@ -1107,6 +1107,24 @@ function rmDeleteBooking(){
   saveAll();rmClose();venBuild();rcBuild();
   showToast('Reservation deleted.');
 }
+// Jorge's report 2026-10-03: an 'upgrade'/'reservation' commission froze its
+// amount at save time and never updated again even if the underlying charge
+// changed later. Upgrades (transport.js) now link via commissions.
+// folio_item_id -- a Room Only reservation has no folio_items row to link to
+// (its "charge" is this booking's own roomRateTotal), so this keys off
+// booking_id+type instead, called whenever an existing Room Only booking's
+// rate is edited below.
+async function _rmSyncReservationCommission(bookingId,roomRateTotal){
+  try{
+    const{data}=await db.from('commissions').select('id,commission_rate').eq('booking_id',bookingId).eq('type','reservation').order('created_at',{ascending:false}).limit(1);
+    const existing=data&&data[0];
+    if(!existing)return;
+    const rate=Number(existing.commission_rate)||0.05;
+    const total=+(roomRateTotal*1.16).toFixed(2);
+    const commissionAmount=+(roomRateTotal*rate).toFixed(2);
+    await db.from('commissions').update({upgrade_pretax:roomRateTotal,upgrade_total:total,commission_amount:commissionAmount}).eq('id',existing.id);
+  }catch(e){console.warn('[commission] reservation sync failed:',e.message);}
+}
 function rmSaveNewBooking(){
   const room=_rmRoom,rtId=_rmRtId;
   const start=document.getElementById('rm-start').value,end=document.getElementById('rm-end').value;
@@ -1139,6 +1157,7 @@ function rmSaveNewBooking(){
     else{reg.room=room;reg.roomTypeId=rtId;if(reg.guests&&reg.guests[0]){reg.guests[0].name=leader;reg.guests[0].email=leaderEmail||'';}}
     saveAll();rmClose();venBuild();rcBuild();
     logActivity('Room-only booking updated',`${leader} · ${room} · ${fmtDate(start)} – ${fmtDate(end)}`,_rmEditId);
+    _rmSyncReservationCommission(_rmEditId,roomRateTotal);
     showToast('Reservation updated ✓');
     return;
   }
