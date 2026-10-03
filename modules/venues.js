@@ -114,7 +114,13 @@ function venBuild(){
       // Purely a display override -- bk.status itself stays 'deposit_paid'
       // (that's still the real pipeline stage), so nothing else that reads
       // status is affected.
-      const isPaidInFull=!isInquiry&&!isRoomOnly&&bk.status==='deposit_paid'&&calcBkBalance(bk).balance<=0;
+      // Paid in Full only once the second installment is due (6 weeks before
+      // arrival) AND there are real charges to have paid. A retreat with no guests
+      // yet has a $0 balance too, but that isn't "paid in full" -- it just stays
+      // Deposit Paid (Darlene 2026-10-03).
+      const _pifBal=(!isInquiry&&!isRoomOnly&&bk.status==='deposit_paid')?calcBkBalance(bk):null;
+      const _pifDays=Math.round((new Date((bk.startDate||'').slice(0,10)+'T00:00:00')-new Date(new Date().toDateString()))/86400000);
+      const isPaidInFull=!!_pifBal&&_pifDays<=42&&_pifBal.charged>0&&_pifBal.balance<=0;
       const st=isInquiry
         ?{label:'Inquiry',bg:'#f3f4f6',border:'#9ca3af',text:'#6b7280',dash:false}
         :isRoomOnly
@@ -147,7 +153,7 @@ function venBuild(){
         // the status word (the bar's color already says which): "Paid in Full" when
         // settled, the amount owed otherwise (Darlene 2026-10-03).
         :bk.status==='deposit_paid'
-        ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;opacity:.9">${isPaidInFull?'Paid in Full':fmt$(Math.max(0,calcBkBalance(bk).balance))+' balance'}</span>${roomOnlyBadge}`
+        ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;opacity:.9">${isPaidInFull?'Paid in Full':calcBkBalance(bk).balance>0?fmt$(calcBkBalance(bk).balance)+' balance':'Deposit Paid'}</span>${roomOnlyBadge}`
         :`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;opacity:.85">${st.label}</span>${roomOnlyBadge}`;
       const finBadge=bk.finalPaymentRequested?`<span title="Final payment requested" style="font-size:9.5px;background:rgba(0,0,0,.15);border-radius:3px;padding:1px 5px;margin-left:3px;font-weight:700">$</span>`:'';
       const bkTd=!bk.teacherDiscountDisabled?calcTeacherDiscount(bk,AppData.regs.filter(r=>r.bookingId===bk.id)):null;
