@@ -675,7 +675,7 @@ function showTip(e,bk,regCount,hideFinancials){
   const bedsHtml=bedsTotal
     ?`<div style="font-size:10.5px;color:rgba(255,255,255,.7);margin-top:3px">Beds filled: <b style="color:#fff">${bedsFilled}/${bedsTotal}</b> · <b style="color:${bedsLeft>0?'#fde68a':'#6ee7b7'}">${bedsLeft>0?bedsLeft+' left to sell':'sold out'}</b></div>`
     :(rc?`<div style="font-size:10.5px;color:rgba(255,255,255,.7);margin-top:3px">Registered: <b style="color:#fff">${rc}</b> · no rooms blocked yet</div>`:'');
-  const flags=getAutoFlags(bk).concat((bk.flags||[]).filter(f=>!f.resolved));
+  const flags=getOpenAutoFlags(bk).concat((bk.flags||[]).filter(f=>!f.resolved));
   // Financial totals — skipped entirely for the "Happening Now" strip (Jorge's ask
   // 2026-09-18: that quick-glance strip shouldn't show Total/Paid/Owing, unlike the
   // main Venues Gantt bars which still should).

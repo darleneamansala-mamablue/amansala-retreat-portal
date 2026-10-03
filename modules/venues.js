@@ -122,8 +122,8 @@ function venBuild(){
         :isPaidInFull
         ?STATUS.paid_in_full
         :(STATUS[bk.status]||STATUS.requested);
-      const regCount=registeredCount(bk.id);
-      const autoFlags=getAutoFlags(bk);
+      const regCount=venueGuestCount(bk.id);
+      const autoFlags=getOpenAutoFlags(bk);
       const manualFlags=(bk.flags||[]).filter(f=>!f.resolved);
       const hasFlags=autoFlags.length>0||manualFlags.length>0;
       const bl=document.createElement('div');bl.className='bk'+(isInquiry?' inquiry':st.dash?' dashed':'');
@@ -1570,7 +1570,7 @@ function openOvCalModal(bkId){
       const li=Math.floor((new Date(rb.startDate)-winS)/DAY_MS);
       const wi=Math.max(1,Math.floor((new Date(rb.endDate)-new Date(rb.startDate))/DAY_MS));
       const isCur=rb.id===bkId;
-      const regCnt=registeredCount(rb.id);
+      const regCnt=venueGuestCount(rb.id);
       const cntHtml=rb.pax?`<span class="bk-count">${regCnt}/${rb.pax}</span>`:'';
       const stBadge=`<span style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;opacity:.75;margin-left:5px">${st.label}</span>`;
       const curOutline=isCur?`outline:2px solid ${st.border};outline-offset:2px;`:'';
@@ -2671,7 +2671,7 @@ function _rcRenderTodayLegend(){
     const lane=bkLane.get(bk.id)||0;
     const pc=bkPaletteColor(bk);
     const name=bk.leaderName||bk.retreatName||'—';
-    const regCount=registeredCount(bk.id);
+    const regCount=venueGuestCount(bk.id);
     const roomOnlyOutline=bk.bookingType==='room_only'?`outline:1.5px dashed ${pc.border};outline-offset:-2px;`:'';
     const roomOnlyIcon=bk.bookingType==='room_only'?'🏨 ':'';
     return `<span class="rtl-pill" data-bk-id="${bk.id}" onclick="_bdGoToRegistration('${bk.id}')" style="position:absolute;display:flex;align-items:center;left:${li*36+1}px;width:${wi*36-2}px;top:${lane*LANE_H+1}px;height:${LANE_H-3}px;background:${pc.bg};border-color:${pc.border};color:${pc.text};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;justify-content:flex-start;box-sizing:border-box;${roomOnlyOutline}">${roomOnlyIcon}${escHtml(name)}<span style="margin-left:5px;font-size:9.5px;font-weight:800;opacity:.7;flex-shrink:0">${regCount}</span></span>`;
@@ -3179,3 +3179,15 @@ function rcOnStart(){const v=document.getElementById('rcStartInput').value;if(v)
 function rcGoToMonth(m){const y=rcStart.getFullYear();rcStart=new Date(y,m,1);rcStart.setHours(0,0,0,0);rcBuild();}
 function rcOnShow(){rcShowDays=parseInt(document.getElementById('rcShowSel').value);rcBuild();}
 
+
+
+// Guests shown on the Venues calendar bars: everyone signed up in the retreat's
+// rooms, teacher room included, so it matches the Room List's guest total
+// (Darlene 2026-10-03: Carter 35 signed up, Lillian 20). Over the estimated pax
+// is fine and is shown as-is. Display only -- registeredCount() (billing,
+// contracts, Menu) still leaves the teacher room out.
+function venueGuestCount(bkId){
+  const bk=AppData.bookings.find(b=>b.id===bkId);
+  const blockedSet=bk?new Set(bk.blockedRooms||[]):null;
+  return AppData.regs.filter(r=>r.bookingId===bkId&&(!blockedSet||blockedSet.has(r.room))).reduce((s,r)=>s+new Set((r.guests||[]).filter(g=>g.name).map(g=>g.name.trim())).size,0);
+}

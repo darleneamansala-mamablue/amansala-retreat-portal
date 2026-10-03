@@ -1205,7 +1205,12 @@ function getAutoFlags(bk){
   // Foxworth (Paid in Full) kept showing the same 11 sold-out flags with no
   // way to act on or dismiss them.
   const _finalized=bk.status==='room_list_sent'||(bk.status==='deposit_paid'&&typeof calcBkBalance==='function'&&calcBkBalance(bk).balance<=0);
-  if(!_finalized){
+  // Rooms are released 6 weeks before arrival, so inside 6 weeks "sold out" /
+  // "bed still unsold" is the normal state, not something to alert on
+  // (Darlene 2026-10-03: first 4 weeks, then changed to 6). Applies to both
+  // inventory flags below.
+  const _inventoryFlagsOn=daysUntil>42;
+  if(!_finalized&&_inventoryFlagsOn){
     AppData.roomTypes.forEach(rt=>{
       const blocked=rt.rooms.filter(r=>blockedSet.has(r));
       if(!blocked.length)return;
@@ -1226,7 +1231,7 @@ function getAutoFlags(bk){
   // second bed empty and unflagged).
   const _bedTypeIds=new Set(['bd1','bd2','bd3','bd4']);
   const _seenBase=new Set();
-  AppData.roomTypes.filter(rt=>_bedTypeIds.has(rt.id)).forEach(rt=>{
+  if(_inventoryFlagsOn)AppData.roomTypes.filter(rt=>_bedTypeIds.has(rt.id)).forEach(rt=>{
     rt.rooms.filter(r=>blockedSet.has(r)).forEach(room=>{
       const sp=splitDoubleHalf(room);if(!sp)return;
       const baseKey=rt.id+'_'+sp.base.toLowerCase();
@@ -1255,6 +1260,14 @@ function openFlagsModal(bkId){
   openModal('flagsModal');
 }
 
+// Auto flags that haven't been marked Done / Recognized / Couple in the Flags &
+// Notes window. The Venues badge + tooltip count these, so marking an issue
+// handled actually clears it from the calendar (Darlene 2026-10-03: Lillian's
+// four flags were all marked Done but the badge still said 4).
+function getOpenAutoFlags(bk){
+  const acks=getIssueAcks();
+  return getAutoFlags(bk).filter(f=>!acks[bk.id+'__'+f.key]);
+}
 function getIssueAcks(){return JSON.parse(localStorage.getItem('amansala_issue_acks')||'{}');}
 function saveIssueAcks(acks){localStorage.setItem('amansala_issue_acks',JSON.stringify(acks));}
 function ackIssue(bkId,key,status){
@@ -1264,10 +1277,12 @@ function ackIssue(bkId,key,status){
   if(!ak.note)ak.note='';
   acks[bkId+'__'+key]=ak;saveIssueAcks(acks);
   const bk=AppData.bookings.find(b=>b.id===bkId);if(bk)renderFlagsModal(bk);
+  if(typeof venBuild==='function')venBuild();
 }
 function clearIssueAck(bkId,key){
   const acks=getIssueAcks();delete acks[bkId+'__'+key];saveIssueAcks(acks);
   const bk=AppData.bookings.find(b=>b.id===bkId);if(bk)renderFlagsModal(bk);
+  if(typeof venBuild==='function')venBuild();
 }
 function saveIssueNote(bkId,key){
   const el=document.getElementById('iack_note_'+bkId+'__'+key);if(!el)return;
