@@ -143,17 +143,17 @@ function venBuild(){
         ?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#e5e7eb;color:#6b7280;border-radius:3px;padding:1px 5px;margin-left:6px">Inquiry</span>`
         :bk.status==='deposit_paid'&&!isPaidInFull
         ?roomOnlyBadge
-        :`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;opacity:.85">${st.label}${isPaidInFull?' · $0 balance':''}</span>${roomOnlyBadge}`;
+        :`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;opacity:.85">${st.label}${isPaidInFull?' · $0 bal.':''}</span>${roomOnlyBadge}`;
       const finBadge=bk.finalPaymentRequested?`<span title="Final payment requested" style="font-size:9.5px;background:rgba(0,0,0,.15);border-radius:3px;padding:1px 5px;margin-left:3px;font-weight:700">$</span>`:'';
       const bkTd=!bk.teacherDiscountDisabled?calcTeacherDiscount(bk,AppData.regs.filter(r=>r.bookingId===bk.id)):null;
-      const discBadge=bkTd&&bkTd.tiers.some(t=>t.earned)?`<span title="Teacher discount earned — $${bkTd.totalCredit.toLocaleString()} credit" style="font-size:9px;font-weight:700;background:#16a34a;color:#fff;border-radius:3px;padding:1px 5px;margin-left:3px">★ DISC</span>`:'';
+      const discBadge=bkTd&&bkTd.tiers.some(t=>t.earned)?`<span title="Teacher discount earned — $${bkTd.totalCredit.toLocaleString()} credit" style="font-size:9px;font-weight:700;background:#16a34a;color:#fff;border-radius:3px;padding:1px 5px;margin-left:3px">★</span>`:'';
       // Don't repeat the name as its own subtitle — many solo/room-only
       // bookings never got a separate retreat name, so retreatName just
       // defaults to the same value as leaderName (real report 2026-09-19:
       // bars showing e.g. "Shirlee Williams Shirlee Williams").
       const subName=(bk.retreatName&&bk.leaderName&&bk.retreatName!==bk.leaderName)?bk.retreatName:'';
       // Status word sits under the name (Darlene 2026-10-03) so the bar has room for the numbers.
-      bl.innerHTML=`<div style="display:flex;flex-direction:column;justify-content:center;min-width:0;line-height:1.2"><span style="display:flex;align-items:baseline"><span class="bk-n">${bk.leaderName||bk.retreatName}</span><span class="bk-s">${subName}</span></span>${stBadge?`<span style="display:flex;align-items:center">${stBadge}</span>`:''}</div>${countHtml}${transportHtml}${finBadge}${discBadge}<span style="flex:1"></span>${flagHtml}`;
+      bl.innerHTML=`<div style="display:flex;flex-direction:column;justify-content:center;flex:0 1 auto;min-width:0;overflow:hidden;line-height:1.2"><span style="display:flex;align-items:baseline;min-width:0;overflow:hidden"><span class="bk-n">${bk.leaderName||bk.retreatName}</span><span class="bk-s">${subName}</span></span>${stBadge?`<span style="display:flex;align-items:center;min-width:0;overflow:hidden;text-overflow:ellipsis">${stBadge}</span>`:''}</div>${(countHtml||transportHtml)?`<div class="bk-stack">${countHtml}${transportHtml}</div>`:''}${finBadge}${discBadge}<span style="flex:1"></span>${flagHtml}`;
       if(bk.pax&&fillPct>0){const bar=document.createElement('div');bar.style.cssText=`position:absolute;bottom:0;left:0;height:3px;width:${fillPct}%;background:${st.border};opacity:.6;border-radius:0 0 4px 4px;`;bl.appendChild(bar);}
       // roomLocked only protects a reservation from the automated
       // Straightline optimizer, never from a staff member manually
