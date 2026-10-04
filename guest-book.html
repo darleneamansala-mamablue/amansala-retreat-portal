@@ -86,13 +86,34 @@
   .item .panel{
     max-height:0;overflow:hidden;transition:max-height .28s ease;
   }
-  .item.open .panel{max-height:800px}
+  .item.open .panel{max-height:4000px}
   .item .panel-inner{
     padding:0 18px 18px 50px;font-size:13.5px;line-height:1.75;color:#4b443c;
   }
   .item .panel-inner p+p{margin-top:10px}
   .item .panel-inner .placeholder{
     color:var(--muted);font-style:italic;font-size:13px;
+  }
+  .item .panel-inner ul{margin:6px 0 2px;padding-left:20px}
+  .item .panel-inner li{margin-bottom:5px}
+  .item .panel-inner h4{
+    font-size:13px;font-weight:700;text-decoration:underline;
+    text-underline-offset:3px;margin:16px 0 4px;color:var(--ink);
+  }
+  .item .panel-inner h4:first-child{margin-top:4px}
+  .tour-photo{
+    position:relative;margin:14px -18px 10px -50px;overflow:hidden;
+    height:170px;
+  }
+  .tour-photo img{width:100%;height:100%;object-fit:cover;display:block}
+  .tour-photo::after{
+    content:'';position:absolute;inset:0;
+    background:linear-gradient(180deg,rgba(0,0,0,0) 45%,rgba(0,0,0,.45) 100%);
+  }
+  .tour-photo span{
+    position:absolute;left:0;right:0;bottom:12px;text-align:center;
+    font-weight:700;font-size:16px;color:#fff;z-index:1;
+    text-shadow:0 1px 8px rgba(0,0,0,.4);
   }
 
   /* ── CONTACT US ───────────────────────────────── */
@@ -163,7 +184,40 @@ const GB_SECTIONS = [
     <p>Air conditioning is from 9 pm to 8 am, however, if you would like it 24 hours a day, it is available for a fee of US$25 and can be ordered by chatting with one of our team.</p>
   ` },
   { title:'Housekeeping', html:`<p>Housekeeping is included and is every other day.</p>` },
-  { title:'Adventures', html:`<p class="placeholder">Content coming soon.</p>` },
+  { title:'Adventures', html:`
+    <p><b>Tours We Offer</b><br>Enjoy the locale of Tulum, a truly unique destination rich in archaeological sites, natural wonders and vibrant experiences.</p>
+
+    <div class="tour-photo"><img src="images/tours/mayan-ruins.jpg" alt="Tulum Mayan Ruins"><span>Mayan Ruins</span></div>
+    <h4>Advice for Mayan Ruins</h4>
+    <ul>
+      <li>Comfortable clothing and walking shoes.</li>
+      <li>Hat to protect you from the sun</li>
+      <li>Water Bottle</li>
+    </ul>
+
+    <div class="tour-photo"><img src="images/tours/grand-cenote.jpg" alt="Grand Cenote"><span>Grand Cenote</span></div>
+    <h4>Advice for Grand Cenotes</h4>
+    <ul>
+      <li>Wear a bathing suit under your clothes</li>
+      <li>A change of clothes if you don't want to be wet going back</li>
+      <li>Wear comfortable walking shoes</li>
+      <li>Towel</li>
+    </ul>
+    <p>Please be aware you will be asked to rinse off any sunscreen prior to swimming, to protect the local ecosystem.</p>
+
+    <div class="tour-photo"><img src="images/tours/mangrove.jpg" alt="Magical Mayan Mangrove"><span>Magical Mayan Mangrove</span></div>
+    <h4>Advice Magical Mayan Mangrove</h4>
+    <ul>
+      <li>Wear a bathing suit under your clothes</li>
+      <li>Maybe a change of clothes if you don't want to be wet going back</li>
+      <li>Wear comfortable walking shoes</li>
+    </ul>
+    <p>Please be aware you will be asked to rinse off any sunscreen prior to swimming, to protect the local ecosystem.</p>
+
+    <div class="tour-photo"><img src="images/tours/muyil-lagoon.jpg" alt="Muyil Lagoon Float"><span>Muyil Lagoon Float</span></div>
+
+    <div class="tour-photo"><img src="images/tours/padel-tulum.jpg" alt="Padel Tulum"><span>Padel Tulum</span></div>
+  ` },
   { title:'Spa and Rituals', html:`<p class="placeholder">Content coming soon.</p>` },
   { title:'Onsite Cancellation Policy', html:`<p class="placeholder">Content coming soon.</p>` },
   { title:'Room Service', html:`<p class="placeholder">Content coming soon.</p>` },
