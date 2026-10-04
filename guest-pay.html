@@ -125,6 +125,58 @@
     .btn-pay:hover:not(:disabled) { background: #0f766e; }
     .btn-pay:disabled { background: #9ca3af; cursor: not-allowed; }
 
+    .btn-tip {
+      display: block;
+      width: 100%;
+      background: #fff;
+      color: #0d9488;
+      border: 1.5px solid #0d9488;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: 'Jost', sans-serif;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .btn-tip:hover { background: #f0fdfa; }
+
+    .tip-form { padding: 16px 20px; }
+    .tip-form label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #374151;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tip-form input {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 9px;
+      font-size: 14px;
+      font-family: 'Jost', sans-serif;
+      margin-bottom: 14px;
+    }
+    .tip-form .tip-btn-row { display: flex; gap: 10px; }
+    .tip-form .tip-btn-row .btn-pay { margin-top: 0; }
+    .btn-tip-cancel {
+      display: block;
+      width: 100%;
+      background: #fff;
+      color: #6b7280;
+      border: 1.5px solid #e5e7eb;
+      padding: 14px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'Jost', sans-serif;
+      cursor: pointer;
+    }
+    .btn-tip-cancel:hover { background: #f9fafb; }
+
     .error-msg {
       color: #dc2626;
       font-size: 12.5px;
@@ -189,12 +241,14 @@ let _booking = null;
 let _total   = 0;
 let _stripe  = null;
 let _stripeElems = null;
+let _token   = null;
 
 // ─── INIT ─────────────────────────────────────────────────────
 (async function init() {
   const params = new URLSearchParams(location.search);
   const token  = params.get('token');
   if (!token) { showError('No payment token in URL.'); return; }
+  _token = token;
 
   try {
     const res  = await fetch(`/.netlify/functions/get-folio?token=${encodeURIComponent(token)}`);
@@ -284,7 +338,13 @@ function renderFolio(token) {
            <div style="font-size:14px;font-weight:700;color:#15803d">This folio has already been paid.</div>
            <div style="font-size:12.5px;color:#6b7280;margin-top:6px">Thank you! Questions? <a href="mailto:reservations@amansala.com" style="color:#0d9488">reservations@amansala.com</a></div>
          </div>`
-      : `<div class="card">
+      : `<div class="card" id="tip-card">
+           <div id="tip-area">
+             <button type="button" class="btn-tip" id="btn-add-tip" onclick="showTipForm()">+ Add Tip</button>
+           </div>
+         </div>
+
+         <div class="card">
            <div class="payment-section">
              <div id="stripe-container" style="display:none">
                <div class="payment-label">Payment Details</div>
@@ -395,6 +455,65 @@ async function handlePay(token) {
 }
 let _amountDue = 0;
 let _folioIdForConfirm = null;
+
+// ─── ADD TIP ──────────────────────────────────────────────────
+function showTipForm() {
+  const area = document.getElementById('tip-area');
+  if (!area) return;
+  area.innerHTML = `
+    <div class="tip-form">
+      <label>Tip Amount (USD)</label>
+      <input type="number" id="tip-amount" min="0.01" step="0.01" inputmode="decimal" placeholder="20.00">
+      <label>What's this for? (optional)</label>
+      <input type="text" id="tip-desc" placeholder="e.g. housekeeping, front desk">
+      <div id="tip-err" class="error-msg" style="margin:0 0 10px"></div>
+      <div class="tip-btn-row">
+        <button type="button" class="btn-tip-cancel" onclick="hideTipForm()">Cancel</button>
+        <button type="button" class="btn-pay" id="btn-tip-submit" onclick="submitTip()">Add Tip</button>
+      </div>
+    </div>`;
+  document.getElementById('tip-amount')?.focus();
+}
+
+function hideTipForm() {
+  const area = document.getElementById('tip-area');
+  if (area) area.innerHTML = `<button type="button" class="btn-tip" id="btn-add-tip" onclick="showTipForm()">+ Add Tip</button>`;
+}
+
+async function submitTip() {
+  const amountEl = document.getElementById('tip-amount');
+  const descEl   = document.getElementById('tip-desc');
+  const errEl    = document.getElementById('tip-err');
+  const btn      = document.getElementById('btn-tip-submit');
+  const amount   = parseFloat(amountEl.value);
+  if (!amount || amount <= 0) { errEl.textContent = 'Enter a valid amount.'; return; }
+
+  btn.disabled = true; btn.textContent = 'Adding…';
+  try {
+    const res  = await fetch('/.netlify/functions/add-folio-tip', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ token: _token, amount, description: descEl.value }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error ?? 'Could not add tip');
+
+    _items = data.items ?? _items;
+    _total = data.total ?? _total;
+
+    // The total just changed -- discard any in-progress Stripe payment so
+    // "Pay Now" starts a fresh PaymentIntent for the updated amount.
+    _payInitiated = false;
+    _stripe       = null;
+    _stripeElems  = null;
+    _amountDue    = 0;
+
+    renderFolio(_token);
+  } catch (e) {
+    errEl.textContent = e.message;
+    btn.disabled = false; btn.textContent = 'Add Tip';
+  }
+}
 
 function showSuccess() {
   const main = document.getElementById('main');
