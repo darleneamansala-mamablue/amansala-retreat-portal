@@ -130,6 +130,11 @@
     box-shadow:0 6px 18px rgba(37,211,102,.35);
   }
   .wa-btn svg{width:20px;height:20px;flex-shrink:0}
+  .gb-link-btn{
+    display:inline-block;margin-top:4px;
+    background:var(--gold);color:#fff;text-decoration:none;
+    padding:10px 22px;border-radius:999px;font-size:13.5px;font-weight:600;
+  }
   footer.pagefoot{
     text-align:center;padding:26px 20px 0;font-size:11px;color:var(--muted);
   }
@@ -254,9 +259,22 @@ const GB_SECTIONS = [
     <p>Please note that spa services, rituals, transportation and tours are required to be cancelled 24 hours prior to booking or you will be charged in full for your service.</p>
     <p>Thank you and have a great stay!</p>
   ` },
-  { title:'Room Service', html:`<p class="placeholder">Content coming soon.</p>` },
-  { title:'Wifi Info', html:`<p class="placeholder">Content coming soon.</p>` },
-  { title:'Leave us a Google Review', html:`<p class="placeholder">Content coming soon.</p>` },
+  { title:'Room Service', html:`
+    <div class="tour-photo"><img src="images/guest-book/room-service.jpg" alt="Room service plated dish"></div>
+    <p>Room service is available from 11am-9:30pm. If you'd like to order to your room, please chat us "I would like to order room service" so we can send your our menu.</p>
+    <p><i>Please note there's a minimum order of US$20 with a 20% gratuity added to your bill.</i></p>
+  ` },
+  { title:'Wifi Info', html:`
+    <div class="tour-photo"><img src="images/guest-book/wifi-sunset.jpg" alt="Sunset at Amansala beach"></div>
+    <h4>At Amansala Grande</h4>
+    <p>Network: Amansala<br>Password: Amansala2026</p>
+    <h4>At Amansala Chica</h4>
+    <p>Network: Amansala<br>Password: Amansala2026</p>
+  ` },
+  { title:'Leave us a Google Review', html:`
+    <p>Enjoyed your stay? We'd love to hear about it — a review helps us so much!</p>
+    <p><a class="gb-link-btn" href="https://www.google.com/maps/place/Amansala+Resort+Hotel/@20.1664039,-87.4540104,17z/data=!3m1!4b1!4m9!3m8!1s0x8f4fd150ce758a5f:0x90d498c37730bb9b!5m2!4m1!1i2!8m2!3d20.1664039!4d-87.4514355!16s%2Fg%2F1s04czr1c?entry=ttu&g_ep=EgoyMDI2MDkzMC4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener">★ Leave a Google Review</a></p>
+  ` },
   { title:'Our Activity Schedule | Classes, Tours, Rituals', html:`<p class="placeholder">Content coming soon.</p>` },
 ];
 
