@@ -882,8 +882,13 @@ async function beDeleteItem(id) {
 }
 
 // ─── EMAILS TAB ──────────────────────────────────────────────
+// Jorge's ask 2026-10-04: thank-you copy with dates/room type in plain
+// language, a Guest Book link, and a Contact Us/WhatsApp footer -- same
+// copy mirrored in netlify/functions/stripe-webhook.js's defaultGuestBody
+// (that inline copy is what actually sends; this one is just what the
+// Emails tab shows/edits before anyone customizes it — keep both in sync).
 const BE_DEFAULT_GUEST_SUBJECT = 'Your Amansala reservation – {{roomType}}';
-const BE_DEFAULT_GUEST_BODY = `<p>Hi {{firstName}},</p>\n<p>Your reservation at <strong>Amansala Tulum</strong> is confirmed!</p>\n<p><strong>Room type:</strong> {{roomType}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Amount paid:</strong> {{amount}}</p>\n<p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
+const BE_DEFAULT_GUEST_BODY = `<p>Hi {{firstName}},</p>\n<p>Thank you for your booking. We are looking forward to hosting you {{dateRange}} in a {{roomType}} room.</p>\n<p>Should you need anything prior to arrival we are here to assist you, and in the meantime please take a look at our <a href="{{guestBookUrl}}">guest book</a> with helpful info.</p>\n<hr>\n<p><strong>Contact Us</strong><br><a href="{{whatsappUrl}}">💬 Message us on WhatsApp</a><br>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
 // Jorge's ask 2026-09-29: split the one shared guest-confirmation template
 // into three independent ones by booking source — this one is Escape's
 // (book.html), kept as the fallback/default in stripe-webhook.js so nothing
@@ -915,7 +920,7 @@ const BE_DEFAULT_CHECKOUT_BODY = `<p>Hi {{firstName}},</p>\n<p>Today is your che
 // beSaveEmailSettings() reads — the visual div's innerHTML is synced into it
 // on every edit and before toggling views, so nothing about how templates
 // are stored/saved changes, only how they're edited.
-const BE_MERGE_VARS = ['firstName', 'lastName', 'roomType', 'checkIn', 'checkOut', 'nights', 'amount', 'email', 'phone'];
+const BE_MERGE_VARS = ['firstName', 'lastName', 'roomType', 'checkIn', 'checkOut', 'dateRange', 'nights', 'amount', 'email', 'phone', 'guestBookUrl', 'whatsappUrl'];
 // Pre-Arrival Groups fires before any room/rate is assigned to a specific
 // guest, so it has no roomType/amount — retreatName/pax/season instead.
 const BE_GROUP_MERGE_VARS = ['firstName', 'lastName', 'retreatName', 'checkIn', 'checkOut', 'nights', 'pax', 'season', 'email', 'phone'];
