@@ -2,6 +2,27 @@
 const crypto = require('crypto');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
+const VISITO_API = 'https://platform-api.visitoai.com/m2m/v1';
+const GUEST_BOOK_URL = 'https://amansalaportal.com/guest-book.html';
+const WHATSAPP_CONTACT_URL = 'https://wa.me/529848795999';
+
+// Plain-language date range for the guest confirmation (email + WhatsApp),
+// e.g. "from November 5 to 10th" (same month) or "from November 28 to
+// December 2nd" (crossing months) -- Jorge's ask 2026-10-04.
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function ordinal(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return n + 'th';
+  switch (n % 10) { case 1: return n + 'st'; case 2: return n + 'nd'; case 3: return n + 'rd'; default: return n + 'th'; }
+}
+function fmtDateRange(checkInStr, checkOutStr) {
+  const a = new Date(checkInStr + 'T00:00:00');
+  const b = new Date(checkOutStr + 'T00:00:00');
+  const sameMonth = a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+  const fromPart = `${MONTH_NAMES[a.getMonth()]} ${a.getDate()}`;
+  const toPart = sameMonth ? ordinal(b.getDate()) : `${MONTH_NAMES[b.getMonth()]} ${ordinal(b.getDate())}`;
+  return `from ${fromPart} to ${toPart}`;
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -159,19 +180,29 @@ exports.handler = async (event) => {
           roomType:  meta.roomTypeName || '',
           checkIn:   meta.checkIn     || '',
           checkOut:  meta.checkOut    || '',
+          dateRange: fmtDateRange(meta.checkIn, meta.checkOut),
           nights:    String(nights),
           amount,
           email:     meta.email       || '',
           phone:     meta.phone       || '',
+          guestBookUrl: GUEST_BOOK_URL,
+          whatsappUrl:  WHATSAPP_CONTACT_URL,
         };
         const applyVars = (tpl, v) => tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => v[k] ?? '');
 
         const defaultGuestSubject = isExtraNight
           ? `Your Amansala extra night is confirmed – ${vars.roomType}`
           : `Your Amansala reservation – ${vars.roomType}`;
+        // Jorge's ask 2026-10-04 (Escape/book.html only -- Extra Night's
+        // template is intentionally left as it was): thank-you copy in
+        // plain language with the dates/room type, a Guest Book link, and a
+        // Contact Us/WhatsApp footer. Mirrored in BE_DEFAULT_GUEST_BODY
+        // (modules/booking-engine-admin.js) -- that copy is just what the
+        // Emails tab shows before anyone customizes it, this is what
+        // actually sends.
         const defaultGuestBody    = isExtraNight
           ? `<p>Hi ${vars.firstName},</p><p>Your extra night at <strong>Amansala Tulum</strong> is confirmed!</p><p><strong>Room type:</strong> ${vars.roomType}<br><strong>Check-in:</strong> ${vars.checkIn}<br><strong>Check-out:</strong> ${vars.checkOut}<br><strong>Nights:</strong> ${vars.nights}<br><strong>Amount paid:</strong> ${vars.amount}</p><p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`
-          : `<p>Hi ${vars.firstName},</p><p>Your reservation at <strong>Amansala Tulum</strong> is confirmed!</p><p><strong>Room type:</strong> ${vars.roomType}<br><strong>Check-in:</strong> ${vars.checkIn}<br><strong>Check-out:</strong> ${vars.checkOut}<br><strong>Nights:</strong> ${vars.nights}<br><strong>Amount paid:</strong> ${vars.amount}</p><p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
+          : `<p>Hi ${vars.firstName},</p><p>Thank you for your booking. We are looking forward to hosting you ${vars.dateRange} in a ${vars.roomType} room.</p><p>Should you need anything prior to arrival we are here to assist you, and in the meantime please take a look at our <a href="${vars.guestBookUrl}">guest book</a> with helpful info.</p><hr><p><strong>Contact Us</strong><br><a href="${vars.whatsappUrl}">💬 Message us on WhatsApp</a><br>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
         const defaultStaffSubject = `New booking: ${vars.firstName} ${vars.lastName} – ${vars.roomType}`;
         const defaultStaffBody    = `<p><strong>New booking received!</strong></p><p><strong>Guest:</strong> ${vars.firstName} ${vars.lastName}<br><strong>Email:</strong> ${vars.email}<br><strong>Phone:</strong> ${vars.phone}<br><strong>Room type:</strong> ${vars.roomType}<br><strong>Check-in:</strong> ${vars.checkIn}<br><strong>Check-out:</strong> ${vars.checkOut}<br><strong>Nights:</strong> ${vars.nights}<br><strong>Amount paid:</strong> ${vars.amount}</p>`;
 
@@ -188,6 +219,52 @@ exports.handler = async (event) => {
           const gr   = await sendResend(meta.email, subj, body);
           if (!gr.ok) console.warn('[stripe-webhook] Guest email failed:', await gr.text());
           else        console.log('[stripe-webhook] Guest email sent to', meta.email, '(source:', meta.source || 'Escape', ')');
+        }
+
+        // WhatsApp booking confirmation (Escape/book.html only, per Jorge's
+        // ask 2026-10-04) -- sent as a Meta-approved template ("booking_
+        // confirmation", submitted 2026-10-04, pending review at the time
+        // of writing) so it reaches the guest even outside WhatsApp's 24h
+        // reply window, same as send-checkout-payment-links.js's pattern.
+        // Gated behind ESCAPE_WA_CONFIRM_ENABLED so nothing sends until
+        // Jorge confirms the template is approved and flips it on --
+        // VISITO_M2M_KEY/VISITO_WA_CHANNEL_ID are already configured in
+        // Netlify for the checkout-links function.
+        if (!isExtraNight && process.env.ESCAPE_WA_CONFIRM_ENABLED === 'true') {
+          const visitoKey = process.env.VISITO_M2M_KEY;
+          const channelId = process.env.VISITO_WA_CHANNEL_ID;
+          const templateName = process.env.VISITO_BOOKING_CONFIRM_TEMPLATE || 'booking_confirmation';
+          const templateLang = process.env.VISITO_BOOKING_CONFIRM_TEMPLATE_LANG || 'en_US';
+          const toPhone = (meta.phone || '').trim();
+          if (visitoKey && channelId && toPhone) {
+            try {
+              const waRes = await fetch(`${VISITO_API}/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json',
+                  'Idempotency-Key': `escape-confirm-${pi.id}`,
+                },
+                body: JSON.stringify({
+                  to: toPhone,
+                  template: {
+                    name: templateName,
+                    language: { code: templateLang },
+                    components: [{ type: 'body', parameters: [
+                      { type: 'text', text: vars.firstName || 'there' },
+                      { type: 'text', text: vars.dateRange },
+                      { type: 'text', text: vars.roomType },
+                      { type: 'text', text: vars.guestBookUrl },
+                    ] }],
+                  },
+                }),
+              });
+              const waBody = await waRes.json().catch(() => ({}));
+              if (!waRes.ok || waBody.accepted === false) console.warn('[stripe-webhook] WhatsApp confirmation failed:', waRes.status, JSON.stringify(waBody).slice(0, 300));
+              else console.log('[stripe-webhook] WhatsApp confirmation sent to', toPhone);
+            } catch (waErr) {
+              console.warn('[stripe-webhook] WhatsApp confirmation error (non-fatal):', waErr.message);
+            }
+          }
         }
 
         // Staff notification
