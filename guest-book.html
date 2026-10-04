@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700;800&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
     --sand:#f8f5ee;
@@ -157,8 +158,8 @@
 <div class="wrap">
 
   <div class="hero">
-    <img src="shala-images/beachfront.jpg" alt="Amansala shala overlooking the Caribbean Sea">
-    <h1>Welcome to Amansala</h1>
+    <img id="gbHeroImg" src="shala-images/beachfront.jpg" alt="Amansala shala overlooking the Caribbean Sea">
+    <h1 id="gbHeroTitle">Welcome to Amansala</h1>
   </div>
 
   <h2 class="section-title">Helpful information for your stay</h2>
@@ -178,13 +179,18 @@
 <footer class="pagefoot">Amansala Eco-Chic Resort + Spa &middot; Tulum, Mexico</footer>
 
 <script>
-// ===== Jorge: pega el número de WhatsApp aquí (formato: 52XXXXXXXXXX, sin + ni espacios) =====
-const WHATSAPP_NUMBER = ''; // TODO
+// ===== Guest Book content now lives in Supabase (app_store key
+// 'guestBookConfig'), editable from the portal: Booking Engine → Guest Book.
+// Staff can edit text/photos/WhatsApp number there without a code deploy.
+// Everything below (GB_DEFAULT_*) is only the FALLBACK shown if that row is
+// ever missing or Supabase can't be reached -- so this page never breaks.
+const SUPA_URL='https://vnttlpqkssihbmcynxvo.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
+const db=supabase.createClient(SUPA_URL,SUPA_KEY);
 
-// ===== Secciones del Guest Book =====
-// Cada una: { title, html }. "html" se puede dejar como placeholder hasta
-// que Jorge mande el contenido real de cada apartado.
-const GB_SECTIONS = [
+const GB_DEFAULT_WHATSAPP = ''; // TODO: set from Booking Engine → Guest Book once Jorge gives the number
+const GB_DEFAULT_HERO = { title:'Welcome to Amansala', image:'shala-images/beachfront.jpg' };
+const GB_DEFAULT_SECTIONS = [
   { title:'Room Info', html:`
     <p><b>Drinking Water:</b> We've made sure you have access to drinking water in your room for your convenience. If you require more, you can simply take one from the restaurant area and sign the sheet. Please note, there is a $10 fee to replace the 5-liter bottle. Tap water is not potable but may be used to brush your teeth.</p>
     <p><b>Toilet Paper:</b> Do not flush toilet paper down the toilet; use the waste paper basket.</p>
@@ -356,9 +362,9 @@ function gbToggle(i){
   if(!wasOpen)item.classList.add('open');
 }
 
-function gbRender(){
+function gbRenderSections(sections){
   const el=document.getElementById('gbAccordion');
-  el.innerHTML=GB_SECTIONS.map((s,i)=>`
+  el.innerHTML=sections.map((s,i)=>`
     <div class="item" id="gb-item-${i}">
       <button class="row" onclick="gbToggle(${i})">
         <span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
@@ -369,15 +375,32 @@ function gbRender(){
     </div>
   `).join('');
 }
-gbRender();
-
-const waBtn=document.getElementById('gbWaBtn');
-if(WHATSAPP_NUMBER){
-  waBtn.href='https://wa.me/'+WHATSAPP_NUMBER;
-}else{
-  waBtn.style.opacity='.5';
-  waBtn.style.pointerEvents='none';
+function gbApplyConfig(cfg){
+  const hero=cfg.hero||GB_DEFAULT_HERO;
+  document.getElementById('gbHeroTitle').textContent=hero.title||GB_DEFAULT_HERO.title;
+  document.getElementById('gbHeroImg').src=hero.image||GB_DEFAULT_HERO.image;
+  gbRenderSections(Array.isArray(cfg.sections)&&cfg.sections.length?cfg.sections:GB_DEFAULT_SECTIONS);
+  const waBtn=document.getElementById('gbWaBtn');
+  const waNumber=cfg.whatsappNumber||GB_DEFAULT_WHATSAPP;
+  if(waNumber){
+    waBtn.href='https://wa.me/'+waNumber;
+    waBtn.style.opacity='';
+    waBtn.style.pointerEvents='';
+  }else{
+    waBtn.style.opacity='.5';
+    waBtn.style.pointerEvents='none';
+  }
 }
+
+// Render the fallback immediately (instant, no flash of empty content),
+// then swap in the live-edited version from Supabase if it loads.
+gbApplyConfig({hero:GB_DEFAULT_HERO,sections:GB_DEFAULT_SECTIONS,whatsappNumber:GB_DEFAULT_WHATSAPP});
+db.from('app_store').select('value').eq('key','guestBookConfig').maybeSingle()
+  .then(({data,error})=>{
+    if(error||!data||!data.value)return;
+    gbApplyConfig(data.value);
+  })
+  .catch(e=>console.warn('[guest-book] load failed, showing built-in content',e));
 </script>
 </body>
 </html>

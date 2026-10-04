@@ -15,6 +15,7 @@ let beRatesList = [];
 let beDiscounts = [];
 let beRequests = [];
 let beItems = [];
+let beGuestBook = null;
 let beEditRtId = null;
 let beEditPhotos = [];
 let beLoaded = false;
@@ -135,6 +136,7 @@ function beRenderShell() {
           ${beTabBtn('discounts','Discounts')}
           ${beTabBtn('items','Items')}
           ${beTabBtn('emails','Emails')}
+          ${beTabBtn('guestbook','Guest Book')}
         </div>
       </div>
       <div id="beBody" style="flex:1;overflow-y:auto;padding:20px"></div>
@@ -160,6 +162,7 @@ function beRenderBody() {
   else if (beTab === 'discounts') beRenderDiscounts();
   else if (beTab === 'items')     beRenderItems();
   else if (beTab === 'emails')    beRenderEmails();
+  else if (beTab === 'guestbook') beRenderGuestBook();
 }
 
 function beCopyLink(url) { navigator.clipboard.writeText(url).then(() => showToast('Link copied!')); }
@@ -1094,6 +1097,192 @@ async function beSaveEmailSettings() {
   if (!ok) return;
   beSettings = { ...beSettings, ...fields };
   showToast('Email settings saved ✓');
+}
+
+// ─── GUEST BOOK TAB ──────────────────────────────────────────
+// Jorge's ask 2026-10-04: staff had no way to edit guest-book.html (Room
+// Info / Housekeeping / Adventures / etc.) without a code deploy. Content
+// now lives in app_store key 'guestBookConfig' (same beDbGet/beDbSet
+// helpers every other simple-config tab here already uses) -- guest-
+// book.html fetches that same row at load time, falling back to its own
+// built-in defaults if the row is ever missing. Images upload through
+// netlify/functions/upload-image.js (Supabase Storage, service key) so
+// non-technical staff can pick a file instead of needing an already-hosted
+// URL.
+async function beLoadGuestBook() {
+  if (beGuestBook) return;
+  const cfg = await beDbGet('guestBookConfig');
+  beGuestBook = (cfg && typeof cfg === 'object') ? cfg : {};
+  if (!beGuestBook.hero) beGuestBook.hero = { title: 'Welcome to Amansala', image: '' };
+  if (!Array.isArray(beGuestBook.sections)) beGuestBook.sections = [];
+}
+function beRenderGuestBook() {
+  const el = document.getElementById('beBody');
+  if (!beGuestBook) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>`;
+    beLoadGuestBook().then(beRenderGuestBook);
+    return;
+  }
+  const hero = beGuestBook.hero || {};
+  el.innerHTML = `
+    <div style="max-width:820px;margin:0 auto">
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 16px;margin-bottom:20px;font-size:12px;color:#0369a1;display:flex;align-items:center;gap:10px">
+        <span>Lo que edites aquí aparece directo en guest-book.html en cuanto le des "Guardar todo".</span>
+        <a href="/guest-book.html" target="_blank" style="margin-left:auto;${beBtnS('#0369a1','#fff')};text-decoration:none;padding:5px 12px;font-size:11.5px">Ver página ↗</a>
+      </div>
+
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
+        <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0 0 14px">Encabezado (Hero)</h3>
+        <div class="fg" style="margin-bottom:14px"><label>Título</label><input id="gb-hero-title" type="text" value="${escHtml(hero.title||'')}"></div>
+        <label style="font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px">Foto</label>
+        <div style="display:flex;align-items:center;gap:12px">
+          <img id="gb-hero-preview" src="${escHtml(hero.image||'')}" style="width:120px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:var(--sand)" onerror="this.style.opacity='0'">
+          <button onclick="document.getElementById('gb-hero-file').click()" style="${beBtnS('#f1f5f9','#374151')}">Cambiar foto</button>
+          <input id="gb-hero-file" type="file" accept="image/*" style="display:none" onchange="beGbUploadHero(this)">
+        </div>
+      </div>
+
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
+        <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0 0 14px">WhatsApp (Contact Us)</h3>
+        <div class="fg"><label>Número (formato 52XXXXXXXXXX, sin + ni espacios)</label><input id="gb-wa-number" type="text" value="${escHtml(beGuestBook.whatsappNumber||'')}" placeholder="5219981234567"></div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0">Secciones</h3>
+        <button onclick="beGbAddSection()" style="${beBtnS('#2d6a6a','#fff')}">+ Agregar sección</button>
+      </div>
+      <div id="gb-sections-list">${beGuestBook.sections.map((s,i)=>beGbSectionHtml(s,i)).join('')}</div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:4px;position:sticky;bottom:0;background:linear-gradient(transparent,var(--sand) 40%);padding:16px 0 4px">
+        <button onclick="beGbSaveAll()" style="${beBtnS('#111827','#fff')};font-size:14px;padding:10px 26px">Guardar todo</button>
+      </div>
+    </div>`;
+  // Same reason as beRenderEmails() above -- populate each contenteditable
+  // pane from its hidden textarea's value now that both exist in the DOM,
+  // instead of embedding raw saved HTML straight into the template string.
+  beGuestBook.sections.forEach((s, i) => {
+    const idPrefix = `gb-sec-${i}`;
+    const ta = document.getElementById(`be-${idPrefix}-body`);
+    const visual = document.getElementById(`be-${idPrefix}-visual`);
+    if (ta && visual) visual.innerHTML = ta.value;
+  });
+}
+function beGbSectionHtml(s, i) {
+  return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <input id="gb-sec-${i}-title" type="text" value="${escHtml(s.title||'')}" placeholder="Título de la sección" style="flex:1;font-size:14px;font-weight:700;border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-family:'Jost',sans-serif;color:var(--dark)">
+      <button onclick="beGbMoveSection(${i},-1)" title="Subir" style="${beBtnS('#f1f5f9','#374151')};padding:6px 10px">↑</button>
+      <button onclick="beGbMoveSection(${i},1)" title="Bajar" style="${beBtnS('#f1f5f9','#374151')};padding:6px 10px">↓</button>
+      <button onclick="beGbDeleteSection(${i})" style="${beBtnS('#fee2e2','#dc2626')}">Eliminar</button>
+    </div>
+    ${beGbRichBody(i, s.html||'')}
+  </div>`;
+}
+// Near-identical to beRichBody() (used by the Emails tab), plus a "🖼 Image"
+// toolbar button -- kept as its own copy instead of extending the shared one
+// so Guest Book's image-upload addition can never affect the Email editors.
+function beGbRichBody(i, html) {
+  const idPrefix = `gb-sec-${i}`;
+  return `<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:4px;padding:6px 8px;background:#f8fafc;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <button type="button" onclick="beRte('${idPrefix}','bold')" style="${beRteBtnS()}font-weight:700">B</button>
+      <button type="button" onclick="beRte('${idPrefix}','italic')" style="${beRteBtnS()}font-style:italic">I</button>
+      <button type="button" onclick="beRte('${idPrefix}','underline')" style="${beRteBtnS()}text-decoration:underline">U</button>
+      <button type="button" onclick="beRte('${idPrefix}','insertUnorderedList')" style="${beRteBtnS()}">• List</button>
+      <button type="button" onclick="beRteLink('${idPrefix}')" style="${beRteBtnS()}">🔗 Link</button>
+      <button type="button" onclick="beGbInsertImage('${idPrefix}')" style="${beRteBtnS()}">🖼 Image</button>
+      <button type="button" onclick="beRteToggleHtml('${idPrefix}')" id="be-${idPrefix}-htmlbtn" style="${beRteBtnS()}margin-left:auto">&lt;/&gt; HTML</button>
+    </div>
+    <div id="be-${idPrefix}-visual" contenteditable="true" oninput="beRteSync('${idPrefix}')" style="min-height:140px;max-height:420px;overflow-y:auto;padding:12px 14px;font-size:13px;line-height:1.6;color:var(--dark)"></div>
+    <textarea id="be-${idPrefix}-body" rows="9" style="display:none;width:100%;border:none;border-top:1px solid var(--border);font-family:monospace;font-size:12px;padding:12px 14px;box-sizing:border-box">${escHtml(html)}</textarea>
+  </div>`;
+}
+async function beGbUploadFile(file, folder) {
+  const dataBase64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const resp = await fetch('/.netlify/functions/upload-image', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: file.name, contentType: file.type, dataBase64, folder }),
+  });
+  const json = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(json.error || 'upload failed');
+  return json.url;
+}
+async function beGbUploadHero(input) {
+  const file = input.files[0]; if (!file) return;
+  showToast('Subiendo imagen…');
+  try {
+    const url = await beGbUploadFile(file, 'guest-book');
+    beGuestBook.hero = beGuestBook.hero || {};
+    beGuestBook.hero.image = url;
+    const preview = document.getElementById('gb-hero-preview');
+    if (preview) { preview.src = url; preview.style.opacity = ''; }
+    showToast('Foto actualizada — dale "Guardar todo" para publicarla ✓');
+  } catch (e) { showToast('Error subiendo imagen: ' + e.message); }
+}
+function beGbInsertImage(idPrefix) {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*';
+  input.onchange = async () => {
+    const file = input.files[0]; if (!file) return;
+    showToast('Subiendo imagen…');
+    try {
+      const url = await beGbUploadFile(file, 'guest-book');
+      const visual = document.getElementById(`be-${idPrefix}-visual`);
+      visual.focus();
+      document.execCommand('insertHTML', false, `<div class="tour-photo"><img src="${url}" alt=""></div><p><br></p>`);
+      beRteSync(idPrefix);
+      showToast('Imagen agregada ✓');
+    } catch (e) { showToast('Error subiendo imagen: ' + e.message); }
+  };
+  input.click();
+}
+// Captures whatever's currently in the form fields (title inputs, each
+// section's rich editor) back into beGuestBook, before any action that
+// re-renders the whole list (add/move/delete section) or saves -- otherwise
+// in-progress edits elsewhere on the page would be lost.
+function beGbSyncFromDom() {
+  if (!beGuestBook) return;
+  const heroTitleEl = document.getElementById('gb-hero-title');
+  if (heroTitleEl) { beGuestBook.hero = beGuestBook.hero || {}; beGuestBook.hero.title = heroTitleEl.value.trim(); }
+  const waEl = document.getElementById('gb-wa-number');
+  if (waEl) beGuestBook.whatsappNumber = waEl.value.trim();
+  beGuestBook.sections.forEach((s, i) => {
+    const idPrefix = `gb-sec-${i}`;
+    const titleEl = document.getElementById(`gb-sec-${i}-title`);
+    if (titleEl) s.title = titleEl.value.trim();
+    const ta = document.getElementById(`be-${idPrefix}-body`);
+    if (ta && ta.style.display === 'none') beRteSync(idPrefix); // visual mode -> sync textarea first
+    if (ta) s.html = ta.value;
+  });
+}
+function beGbAddSection() {
+  beGbSyncFromDom();
+  beGuestBook.sections.push({ id: 'sec_' + Date.now(), title: 'Nueva sección', html: '<p></p>' });
+  beRenderGuestBook();
+}
+function beGbDeleteSection(i) {
+  if (!confirm('¿Eliminar esta sección? Esto no se puede deshacer una vez que guardes.')) return;
+  beGbSyncFromDom();
+  beGuestBook.sections.splice(i, 1);
+  beRenderGuestBook();
+}
+function beGbMoveSection(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= beGuestBook.sections.length) return;
+  beGbSyncFromDom();
+  const [sec] = beGuestBook.sections.splice(i, 1);
+  beGuestBook.sections.splice(j, 0, sec);
+  beRenderGuestBook();
+}
+async function beGbSaveAll() {
+  beGbSyncFromDom();
+  const ok = await beDbSet('guestBookConfig', beGuestBook);
+  if (ok) showToast('Guest Book guardado ✓ — ya está en vivo');
 }
 
 // ─── SHARED HELPERS ────────────────────────────────────────────
