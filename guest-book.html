@@ -130,6 +130,13 @@
     box-shadow:0 6px 18px rgba(37,211,102,.35);
   }
   .wa-btn svg{width:20px;height:20px;flex-shrink:0}
+  .sched-day{margin-top:16px}
+  .sched-day h5{
+    font-size:13px;font-weight:700;color:var(--gold);
+    text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;
+  }
+  .sched-row{display:flex;gap:10px;font-size:13px;padding:3px 0}
+  .sched-row .t{flex-shrink:0;width:92px;color:var(--muted);font-weight:500}
   .gb-link-btn{
     display:inline-block;margin-top:4px;
     background:var(--gold);color:#fff;text-decoration:none;
@@ -275,7 +282,71 @@ const GB_SECTIONS = [
     <p>Enjoyed your stay? We'd love to hear about it — a review helps us so much!</p>
     <p><a class="gb-link-btn" href="https://www.google.com/maps/place/Amansala+Resort+Hotel/@20.1664039,-87.4540104,17z/data=!3m1!4b1!4m9!3m8!1s0x8f4fd150ce758a5f:0x90d498c37730bb9b!5m2!4m1!1i2!8m2!3d20.1664039!4d-87.4514355!16s%2Fg%2F1s04czr1c?entry=ttu&g_ep=EgoyMDI2MDkzMC4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener">★ Leave a Google Review</a></p>
   ` },
-  { title:'Our Activity Schedule | Classes, Tours, Rituals', html:`<p class="placeholder">Content coming soon.</p>` },
+  { title:'Our Activity Schedule | Classes, Tours, Rituals', html:`
+    <div class="tour-photo"><img src="images/schedule/fitness-beachfront.jpg" alt="Fitness class on the beachfront deck"></div>
+    <p>A sample week at Amansala — yoga, movement classes, tours and rituals woven into each day. Your retreat leader or the front desk can confirm this week's exact schedule, since it can shift slightly from group to group.</p>
+
+    <div class="sched-day">
+      <h5>Sunday · Arrival Day</h5>
+      <div class="sched-row"><span class="t">8:30–9:30</span><span>Yoga</span></div>
+      <div class="sched-row"><span class="t">2:30</span><span>Lunch</span></div>
+      <div class="sched-row"><span class="t">4:45–5:45</span><span>Pilates</span></div>
+      <div class="sched-row"><span class="t">5:45–6:45</span><span>Gentle Yoga</span></div>
+      <div class="sched-row"><span class="t">6:45–7:15</span><span>Open Circle</span></div>
+      <div class="sched-row"><span class="t">7:30</span><span>Dinner</span></div>
+      <div class="sched-row"><span class="t">Evening</span><span>Bedtime Journaling</span></div>
+    </div>
+
+    <div class="sched-day">
+      <h5>Monday</h5>
+      <div class="sched-row"><span class="t">7:00</span><span>Coffee · Tea · Morning Pages</span></div>
+      <div class="sched-row"><span class="t">7:15–7:30</span><span>Grand Rising Meditation</span></div>
+      <div class="sched-row"><span class="t">7:30–8:15</span><span>Beach Walk</span></div>
+      <div class="sched-row"><span class="t">8:30–9:30</span><span>Yoga</span></div>
+      <div class="sched-row"><span class="t">9:30</span><span>Breakfast</span></div>
+      <div class="sched-row"><span class="t">10:45–11:30</span><span>Circuit Training</span></div>
+      <div class="sched-row"><span class="t">1:30</span><span>Lunch</span></div>
+      <div class="sched-row"><span class="t">4:00–4:45</span><span>Boxing Fit</span></div>
+      <div class="sched-row"><span class="t">4:45–5:30</span><span>Pilates Fusion</span></div>
+      <div class="sched-row"><span class="t">5:45–6:45</span><span>Gentle Yoga</span></div>
+      <div class="sched-row"><span class="t">7:30</span><span>Dinner</span></div>
+      <div class="sched-row"><span class="t">8:15–9:45</span><span>Cacao Ceremony ($65 USD)</span></div>
+    </div>
+
+    <div class="sched-day">
+      <h5>Tuesday</h5>
+      <div class="sched-row"><span class="t">7:00</span><span>Coffee · Tea · Morning Pages</span></div>
+      <div class="sched-row"><span class="t">7:15–7:30</span><span>Grand Rising Breathwork</span></div>
+      <div class="sched-row"><span class="t">7:30–8:15</span><span>Beach Walk</span></div>
+      <div class="sched-row"><span class="t">8:30–9:30</span><span>Yoga</span></div>
+      <div class="sched-row"><span class="t">9:30</span><span>Breakfast</span></div>
+      <div class="sched-row"><span class="t">10:45–1:00</span><span>Tulum Jungle Gym</span></div>
+      <div class="sched-row"><span class="t">1:30</span><span>Lunch</span></div>
+      <div class="sched-row"><span class="t">4:00–4:45</span><span>Latin Grooves</span></div>
+      <div class="sched-row"><span class="t">4:45–5:45</span><span>Pilates</span></div>
+      <div class="sched-row"><span class="t">5:45–6:45</span><span>Gentle Yoga</span></div>
+      <div class="sched-row"><span class="t">7:30</span><span>Dinner</span></div>
+    </div>
+
+    <div class="sched-day">
+      <h5>Wednesday</h5>
+      <div class="sched-row"><span class="t">7:00</span><span>Coffee · Tea · Morning Pages</span></div>
+      <div class="sched-row"><span class="t">8:15–8:30</span><span>Grand Rising Meditation</span></div>
+      <div class="sched-row"><span class="t">8:30–9:15</span><span>Beach Walk</span></div>
+      <div class="sched-row"><span class="t">9:30–10:30</span><span>Yoga</span></div>
+      <div class="sched-row"><span class="t">10:30</span><span>Breakfast</span></div>
+      <div class="sched-row"><span class="t">11:45–12:15</span><span>Circuit Training</span></div>
+      <div class="sched-row"><span class="t">12:30–3:00</span><span>Tulum Ruins Tour</span></div>
+      <div class="sched-row"><span class="t">3:00</span><span>Lunch</span></div>
+      <div class="sched-row"><span class="t">5:00–5:45</span><span>Sculpt &amp; Tone</span></div>
+      <div class="sched-row"><span class="t">5:45–6:45</span><span>Yin Yoga</span></div>
+      <div class="sched-row"><span class="t">7:15</span><span>Temazcal</span></div>
+      <div class="sched-row"><span class="t">7:30</span><span>Dinner</span></div>
+    </div>
+
+    <div class="tour-photo" style="margin-top:18px"><img src="images/schedule/beach-dining.jpg" alt="Group beach dining at Amansala"></div>
+    <p>Private yoga, fitness training, wellness ceremonies, sound healing, cacao rituals and other customized experiences are also available year-round — just ask the front desk.</p>
+  ` },
 ];
 
 function gbToggle(i){
