@@ -13,6 +13,6 @@
 # Short teacher-view links (one per event) now live in the _redirects file.
 
 # Evening-before-checkout WhatsApp with the folio payment link (via Visito).
-# 23:00 UTC = 6pm in Tulum. Dry run until CHECKOUT_LINKS_ENABLED=true.
+# 22:00 UTC = 5pm in Tulum (Quintana Roo is UTC-5 fixed, no DST).
 [functions."send-checkout-payment-links"]
-  schedule = "0 23 * * *"
+  schedule = "0 22 * * *"
