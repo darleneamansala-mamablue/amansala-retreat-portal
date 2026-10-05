@@ -969,6 +969,7 @@ function rmOpenNewBooking(room,rtId,startDate){
   document.getElementById('rm-type').value='Walk-in';
   document.getElementById('rm-leader').value='';
   document.getElementById('rm-email').value='';
+  document.getElementById('rm-phone').value='';
   document.getElementById('rm-notes').value='';
   document.getElementById('rm-mealplan').value='breakfast';
   document.getElementById('rm-adults').value='1';
@@ -1000,6 +1001,7 @@ function rmOpenEditBooking(id){
   document.getElementById('rm-type').value=bk.retreatName||'Walk-in';
   document.getElementById('rm-leader').value=bk.leaderName||'';
   document.getElementById('rm-email').value=bk.leaderEmail||'';
+  document.getElementById('rm-phone').value=bk.leaderPhone||'';
   document.getElementById('rm-notes').value=bk.notes||'';
   document.getElementById('rm-mealplan').value=bk.mealPlan||'none';
   document.getElementById('rm-adults').value=bk.pax||1;
@@ -1131,6 +1133,7 @@ function rmSaveNewBooking(){
   const type=document.getElementById('rm-type').value;
   const leader=document.getElementById('rm-leader').value.trim();
   const leaderEmail=document.getElementById('rm-email').value.trim();
+  const leaderPhone=document.getElementById('rm-phone').value.trim();
   const notes=document.getElementById('rm-notes').value.trim();
   const mealPlan=document.getElementById('rm-mealplan').value;
   const rate=parseFloat(document.getElementById('rm-rate').value)||0;
@@ -1147,14 +1150,14 @@ function rmSaveNewBooking(){
   if(conflict){errEl.textContent=`Room ${room} is already booked for part of these dates.`;errEl.style.display='block';return;}
   if(_rmEditId){
     const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
-    Object.assign(bk,{leaderName:leader,leaderEmail,notes,mealPlan,retreatName:type,startDate:start,endDate:end,pax:adults,status,roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights});
+    Object.assign(bk,{leaderName:leader,leaderEmail,leaderPhone,notes,mealPlan,retreatName:type,startDate:start,endDate:end,pax:adults,status,roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights});
     // Keep the matching registration (the one that unlocks the rich Booking
     // Detail/Folio view — Jorge's ask 2026-09-23) in sync with the leader
     // name/email/room shown here. Create it if this booking predates the fix
     // below and never got one.
     let reg=getRegForRoom(_rmEditId,room);
-    if(!reg){reg={id:uid(),bookingId:_rmEditId,room,roomTypeId:rtId,guests:[{name:leader,email:leaderEmail||'',phone:'',notes:''}],charges:[],notes:''};AppData.regs.push(reg);}
-    else{reg.room=room;reg.roomTypeId=rtId;if(reg.guests&&reg.guests[0]){reg.guests[0].name=leader;reg.guests[0].email=leaderEmail||'';}}
+    if(!reg){reg={id:uid(),bookingId:_rmEditId,room,roomTypeId:rtId,guests:[{name:leader,email:leaderEmail||'',phone:leaderPhone||'',notes:''}],charges:[],notes:''};AppData.regs.push(reg);}
+    else{reg.room=room;reg.roomTypeId=rtId;if(reg.guests&&reg.guests[0]){reg.guests[0].name=leader;reg.guests[0].email=leaderEmail||'';reg.guests[0].phone=leaderPhone||'';}}
     saveAll();rmClose();venBuild();rcBuild();
     logActivity('Room-only booking updated',`${leader} · ${room} · ${fmtDate(start)} – ${fmtDate(end)}`,_rmEditId);
     _rmSyncReservationCommission(_rmEditId,roomRateTotal);
@@ -1163,16 +1166,28 @@ function rmSaveNewBooking(){
   }
   const bestRow=findAvailableRow(start,end,null);
   const newId=uid();
-  AppData.bookings.push({id:newId,bookingType:'room_only',leaderName:leader,leaderEmail,notes,mealPlan,retreatName:type,startDate:start,endDate:end,row:bestRow,pax:adults,status,docLink:'',roomAssignments:[],roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights,charges:[],payments:[]});
+  AppData.bookings.push({id:newId,bookingType:'room_only',leaderName:leader,leaderEmail,leaderPhone,notes,mealPlan,retreatName:type,startDate:start,endDate:end,row:bestRow,pax:adults,status,docLink:'',roomAssignments:[],roomTypeId:rtId,blockedRooms:[room],roomRateTotal,roomRateNights:nights,charges:[],payments:[]});
   // A registration row (even though Room Only has just the one guest — the
   // leader) is what unlocks the rich Booking Detail/Folio view on the Rooms
   // tab, same as any retreat guest (Jorge's ask 2026-09-23 — Room Only should
   // look and work the same as every other reservation, not the bare-bones
   // charges modal). getRegForRoom()/venues.js's click handler already prefer
   // a matching reg when one exists — no routing change needed, just this.
-  AppData.regs.push({id:uid(),bookingId:newId,room,roomTypeId:rtId,guests:[{name:leader,email:leaderEmail||'',phone:'',notes:''}],charges:[],notes:''});
+  AppData.regs.push({id:uid(),bookingId:newId,room,roomTypeId:rtId,guests:[{name:leader,email:leaderEmail||'',phone:leaderPhone||'',notes:''}],charges:[],notes:''});
   saveAll();rmClose();venBuild();rcBuild();
   logActivity('Room-only booking created',`${leader} · ${room} · ${type} · ${fmtDate(start)} – ${fmtDate(end)}${rate?' · '+fmt$(rate)+'/night':''}`,newId);
+  // Guest confirmation (email + WhatsApp) — same message Escape/Lana guests
+  // get, since a staff-created Rooms reservation is just a third way the
+  // same reservation comes in (Jorge's ask 2026-10-05). Fire-and-forget,
+  // never blocks the save.
+  if(leaderEmail||leaderPhone){
+    const rt=AppData.roomTypes.find(r=>r.id===rtId);
+    fetch('/.netlify/functions/send-booking-confirmation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      firstName:leader.split(' ')[0]||'',lastName:leader.split(' ').slice(1).join(' ')||'',
+      email:leaderEmail||'',phone:leaderPhone||'',checkIn:start,checkOut:end,
+      roomType:rt?.name||type,bookingId:newId,
+    })}).catch(e=>console.warn('[rmSaveNewBooking] confirmation send failed',e.message));
+  }
   // Optional staff commission on the sale — same 5%-of-pretax convention as
   // room upgrades (tr2ConfirmUpgrade in modules/transport.js). Jorge's ask
   // 2026-09-26: staff who books a reservation directly can commission it too.
