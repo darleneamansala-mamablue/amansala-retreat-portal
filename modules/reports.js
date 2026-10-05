@@ -218,6 +218,23 @@ function _rptFiltered(){
   });
 }
 
+// Financial Summary's own filter -- Jorge's ask 2026-10-05: a From/To date
+// range instead of the year dropdown every other Reports tab still uses
+// (scoped to just this tab, not shared _rptYear/_rptFiltered).
+let _rptFinFrom='',_rptFinTo='';
+function _rptFinFiltered(){
+  return _rptRows.filter(r=>{
+    if(!_rptShowCanc&&r.bk.status==='cancelled')return false;
+    const d=r.bk.startDate||'';
+    if(_rptFinFrom&&d<_rptFinFrom)return false;
+    if(_rptFinTo&&d>_rptFinTo)return false;
+    return true;
+  });
+}
+function _rptSetFinFrom(v){_rptFinFrom=v;_rptRenderBody();}
+function _rptSetFinTo(v){_rptFinTo=v;_rptRenderBody();}
+function _rptClearFinRange(){_rptFinFrom='';_rptFinTo='';_rptRenderBody();}
+
 function reportsRender(){
   const el=document.getElementById('reportsContent');
   if(!el)return;
@@ -233,13 +250,15 @@ function reportsRender(){
 function _rptRenderBody(){
   const el=document.getElementById('reportsContent');
   if(!el)return;
-  const rows=_rptFiltered();
+  const rows=_rptFinFiltered();
   const totalRev=rows.reduce((s,r)=>s+r.revenue,0);
   const totalPaid=rows.reduce((s,r)=>s+r.collected,0);
   const totalBal=rows.reduce((s,r)=>s+r.balance,0);
   const active=rows.filter(r=>r.bk.status!=='cancelled').length;
 
-  const years=[...new Set(_rptRows.map(r=>(r.bk.startDate||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  const rangeLabel=(!_rptFinFrom&&!_rptFinTo)?'All time':
+    (_rptFinFrom&&_rptFinTo)?`${fmtDate(_rptFinFrom)} – ${fmtDate(_rptFinTo)}`:
+    _rptFinFrom?`From ${fmtDate(_rptFinFrom)}`:`Until ${fmtDate(_rptFinTo)}`;
 
   const visibleBkIds=new Set(rows.map(r=>r.bk.id));
   const byMethod={};
@@ -267,7 +286,7 @@ function _rptRenderBody(){
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
       <div>
         <h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">Financial Summary</h2>
-        <div style="font-size:12px;color:#9ca3af;margin-top:2px">${active} retreat${active!==1?'s':''} · ${_rptYear==='all'?'All time':_rptYear}</div>
+        <div style="font-size:12px;color:#9ca3af;margin-top:2px">${active} retreat${active!==1?'s':''} · ${rangeLabel}</div>
       </div>
       <div style="display:flex;gap:6px">
         ${_rptTabBtn('financial','Financial Summary',true)}
@@ -278,10 +297,9 @@ function _rptRenderBody(){
         ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
-      <select onchange="_rptSetYear(this.value)" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff;cursor:pointer">
-        <option value="all" ${_rptYear==='all'?'selected':''}>All years</option>
-        ${years.map(y=>`<option value="${y}" ${_rptYear===y?'selected':''}>${y}</option>`).join('')}
-      </select>
+      <input type="date" value="${_rptFinFrom}" onchange="_rptSetFinFrom(this.value)" title="From" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff">
+      <input type="date" value="${_rptFinTo}" onchange="_rptSetFinTo(this.value)" title="To" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff">
+      ${(_rptFinFrom||_rptFinTo)?`<button onclick="_rptClearFinRange()" style="padding:6px 10px;background:#f3f4f6;color:#374151;border:1.5px solid var(--border);border-radius:8px;font-size:12px;cursor:pointer;font-family:'Jost',sans-serif" title="Clear date range">✕</button>`:''}
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;cursor:pointer">
         <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked)">
         Show cancelled
@@ -438,7 +456,7 @@ function _rptSetYear(y){_rptYear=y;_rptRerenderActiveTab();}
 function _rptToggleCanc(v){_rptShowCanc=v;_rptRerenderActiveTab();}
 
 function _rptExportCsv(){
-  const rows=_rptFiltered().slice().sort((a,b)=>(b.bk.startDate||'').localeCompare(a.bk.startDate||''));
+  const rows=_rptFinFiltered().slice().sort((a,b)=>(b.bk.startDate||'').localeCompare(a.bk.startDate||''));
   const header=['Retreat','Teacher','Start Date','End Date','Nights','Rooms','Occupied','Guests','Revenue','Collected','Balance','Status'];
   const lines=[header,...rows.map(r=>[
     r.bk.retreatName||r.bk.leaderName||'',
@@ -451,7 +469,8 @@ function _rptExportCsv(){
   ])].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([lines],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
-  const a=Object.assign(document.createElement('a'),{href:url,download:`amansala-report-${_rptYear}.csv`});
+  const suffix=(_rptFinFrom||_rptFinTo)?`${_rptFinFrom||'start'}_to_${_rptFinTo||'now'}`:'all';
+  const a=Object.assign(document.createElement('a'),{href:url,download:`amansala-report-${suffix}.csv`});
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
