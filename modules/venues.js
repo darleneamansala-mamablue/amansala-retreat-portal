@@ -331,9 +331,14 @@ function venPopYearSel(){
   const sel=document.getElementById('venYearSel');if(!sel)return;
   const cur=new Date().getFullYear();
   const years=[];
-  for(let y=cur-1;y<=cur+5;y++)years.push(y);
-  // also include any year already in bookings
-  AppData.bookings.forEach(b=>{const y=parseInt((b.startDate||'').slice(0,4));if(y&&!years.includes(y))years.push(y);});
+  // Jorge's ask 2026-10-05: don't show past years here (e.g. 2025 once
+  // we're into 2026) -- this view is for planning upcoming retreats, not
+  // browsing history. Starts at the current year, not the year before.
+  for(let y=cur;y<=cur+5;y++)years.push(y);
+  // also include any FUTURE year already in bookings (e.g. a retreat
+  // already booked for cur+6) -- but never re-add a past year just
+  // because an old booking happens to be dated there.
+  AppData.bookings.forEach(b=>{const y=parseInt((b.startDate||'').slice(0,4));if(y>=cur&&!years.includes(y))years.push(y);});
   years.sort((a,b)=>a-b);
   sel.innerHTML=years.map(y=>`<option value="${y}"${y===venYear?' selected':''}>${y}</option>`).join('');
 }
