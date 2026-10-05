@@ -177,15 +177,32 @@
       padding: 9px 0;
       margin-bottom: 0;
       border-bottom: 1px solid #f3f4f6;
+      flex-wrap: wrap;
+    }
+    .tip-form .tip-recipient-row:last-child { border-bottom: none; }
+    .tip-form .tip-recipient-row > label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 140px;
       text-transform: none;
       font-weight: 500;
       font-size: 14px;
       color: #374151;
       letter-spacing: normal;
       cursor: pointer;
+      margin-bottom: 0;
     }
-    .tip-form .tip-recipient-row:last-child { border-bottom: none; }
     .tip-recipient-row input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; margin: 0; accent-color: #0d9488; }
+    .tip-form .tip-recipient-row input.tip-recipient-name,
+    .tip-form .tip-recipient-row input.tip-recipient-amount {
+      width: 90px;
+      flex: 0 0 auto;
+      margin-bottom: 0;
+      padding: 7px 8px;
+    }
+    .tip-form .tip-recipient-row input.tip-recipient-name { width: 120px; }
     .btn-tip-cancel {
       display: block;
       width: 100%;
@@ -484,81 +501,76 @@ let _folioIdForConfirm = null;
 // Jorge's ask 2026-10-05: replace the free-text "what's this for" with a
 // pick-list of departments (plus a "write a name" option for a specific
 // person) so tips are easy to route, instead of relying on guests to type
-// something staff can actually match to a department. Follow-up same day:
-// a guest leaving $100 may want to split it between several of them --
-// checkboxes instead of a single dropdown, split evenly (by cents, any
-// odd penny goes to the first recipients) across however many are
-// checked, one folio_items row per recipient so each shows its own amount.
+// something staff can actually match to a department. Follow-up same day,
+// twice: a guest may want to split one tip between several of them --
+// first built as an even auto-split, then Jorge asked for a manual amount
+// per recipient instead (no more auto-calculating) -- checking a recipient
+// reveals its OWN amount field, and the overall total is just whatever
+// those add up to, shown live, no separate "Tip Amount" entry at all.
 const TIP_RECIPIENT_OPTIONS = [
   'General Staff', 'Kitchen', 'Housekeeping', 'Waiters', 'Yoga Cleaners', 'Front Desk',
 ];
+function tipRecipientRowHtml(value, label, isCustom) {
+  return `<div class="tip-recipient-row">
+    <label>
+      <input type="checkbox" class="tip-recipient-check" value="${escTip(value)}" data-custom="${isCustom ? '1' : ''}" onchange="tipRecipientToggle(this)">
+      <span>${label}</span>
+    </label>
+    ${isCustom ? `<input type="text" class="tip-recipient-name" placeholder="Name" style="display:none" oninput="tipUpdateTotal()">` : ''}
+    <input type="number" class="tip-recipient-amount" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" style="display:none" oninput="tipUpdateTotal()">
+  </div>`;
+}
+function escTip(s) { return String(s).replace(/"/g, '&quot;'); }
 function showTipForm() {
   const area = document.getElementById('tip-area');
   if (!area) return;
   area.innerHTML = `
     <div class="tip-form">
-      <label>Tip Amount (USD)</label>
-      <input type="number" id="tip-amount" min="0.01" step="0.01" inputmode="decimal" placeholder="20.00" oninput="tipUpdateSplitHint()">
       <label>Would you like to leave this for general staff, or split it between specific people?</label>
       <div class="tip-recipients">
-        ${TIP_RECIPIENT_OPTIONS.map((o, i) => `
-          <label class="tip-recipient-row">
-            <input type="checkbox" class="tip-recipient-check" value="${o}" onchange="tipUpdateSplitHint()" ${i === 0 ? 'checked' : ''}>
-            <span>${o}</span>
-          </label>`).join('')}
-        <label class="tip-recipient-row">
-          <input type="checkbox" id="tip-custom-check" onchange="tipCustomToggle()">
-          <span>Someone specific</span>
-        </label>
+        ${TIP_RECIPIENT_OPTIONS.map(o => tipRecipientRowHtml(o, o, false)).join('')}
+        ${tipRecipientRowHtml('__custom__', 'Someone specific', true)}
       </div>
-      <input type="text" id="tip-name" placeholder="Enter a name" style="display:none" oninput="tipUpdateSplitHint()">
-      <div id="tip-split-hint" style="font-size:12px;color:#0d9488;margin:-6px 0 12px;min-height:16px"></div>
+      <div id="tip-total-hint" style="font-size:14px;font-weight:700;color:#0d9488;margin:12px 0">Total: $0.00</div>
       <div id="tip-err" class="error-msg" style="margin:0 0 10px"></div>
       <div class="tip-btn-row">
         <button type="button" class="btn-tip-cancel" onclick="hideTipForm()">Cancel</button>
         <button type="button" class="btn-pay" id="btn-tip-submit" onclick="submitTip()">Add Tip</button>
       </div>
     </div>`;
-  document.getElementById('tip-amount')?.focus();
-  tipUpdateSplitHint();
 }
 
-function tipCustomToggle() {
-  const check = document.getElementById('tip-custom-check');
-  const nameEl = document.getElementById('tip-name');
-  if (!check || !nameEl) return;
-  nameEl.style.display = check.checked ? 'block' : 'none';
-  if (check.checked) nameEl.focus();
-  tipUpdateSplitHint();
+function tipRecipientToggle(checkbox) {
+  const row = checkbox.closest('.tip-recipient-row');
+  const amountEl = row.querySelector('.tip-recipient-amount');
+  const nameEl = row.querySelector('.tip-recipient-name');
+  amountEl.style.display = checkbox.checked ? 'block' : 'none';
+  if (nameEl) nameEl.style.display = checkbox.checked ? 'block' : 'none';
+  if (!checkbox.checked) { amountEl.value = ''; if (nameEl) nameEl.value = ''; }
+  else (nameEl || amountEl).focus();
+  tipUpdateTotal();
 }
 
-function tipSelectedRecipients() {
-  const names = [...document.querySelectorAll('.tip-recipient-check:checked')].map(el => el.value);
-  const customCheck = document.getElementById('tip-custom-check');
-  const customName = document.getElementById('tip-name')?.value.trim();
-  if (customCheck?.checked && customName) names.push(customName);
-  return names;
+// Reads every checked recipient row's own typed amount -- no auto-split,
+// just whatever the guest wrote for each one.
+function tipCollectRecipients() {
+  const out = [];
+  document.querySelectorAll('.tip-recipient-row').forEach(row => {
+    const check = row.querySelector('.tip-recipient-check');
+    if (!check.checked) return;
+    const isCustom = check.dataset.custom === '1';
+    const name = isCustom ? row.querySelector('.tip-recipient-name').value.trim() : check.value;
+    const amount = parseFloat(row.querySelector('.tip-recipient-amount').value);
+    out.push({ name, amount, isCustom });
+  });
+  return out;
 }
 
-// Splits `total` dollars evenly across `n` recipients, in cents, so the
-// parts always add back up exactly (any leftover penny goes to the first
-// few recipients rather than getting lost to rounding).
-function tipSplitAmount(total, n) {
-  const cents = Math.round(total * 100);
-  const base = Math.floor(cents / n);
-  const remainder = cents - base * n;
-  return Array.from({ length: n }, (_, i) => (base + (i < remainder ? 1 : 0)) / 100);
-}
-
-function tipUpdateSplitHint() {
-  const hintEl = document.getElementById('tip-split-hint');
+function tipUpdateTotal() {
+  const hintEl = document.getElementById('tip-total-hint');
   if (!hintEl) return;
-  const amount = parseFloat(document.getElementById('tip-amount')?.value);
-  const names = tipSelectedRecipients();
-  if (!amount || amount <= 0 || names.length === 0) { hintEl.textContent = ''; return; }
-  if (names.length === 1) { hintEl.textContent = ''; return; }
-  const parts = tipSplitAmount(amount, names.length);
-  hintEl.textContent = 'Split: ' + names.map((n, i) => `${n} $${parts[i].toFixed(2)}`).join(' · ');
+  const total = tipCollectRecipients().reduce((s, r) => s + (Number.isFinite(r.amount) ? r.amount : 0), 0);
+  hintEl.textContent = `Total: $${total.toFixed(2)}`;
 }
 
 function hideTipForm() {
@@ -567,27 +579,23 @@ function hideTipForm() {
 }
 
 async function submitTip() {
-  const amountEl = document.getElementById('tip-amount');
-  const errEl    = document.getElementById('tip-err');
-  const btn      = document.getElementById('btn-tip-submit');
-  const amount   = parseFloat(amountEl.value);
-  if (!amount || amount <= 0) { errEl.textContent = 'Enter a valid amount.'; return; }
-  const customCheck = document.getElementById('tip-custom-check');
-  if (customCheck?.checked && !document.getElementById('tip-name').value.trim()) {
-    errEl.textContent = 'Please enter a name.'; return;
+  const errEl = document.getElementById('tip-err');
+  const btn   = document.getElementById('btn-tip-submit');
+  const recipients = tipCollectRecipients();
+  if (recipients.length === 0) { errEl.textContent = 'Choose at least one recipient.'; return; }
+  for (const r of recipients) {
+    if (r.isCustom && !r.name) { errEl.textContent = 'Please enter a name for "Someone specific".'; return; }
+    if (!r.amount || r.amount <= 0) { errEl.textContent = `Enter a valid amount for ${r.name || 'the recipient'}.`; return; }
   }
-  const names = tipSelectedRecipients();
-  if (names.length === 0) { errEl.textContent = 'Choose at least one recipient.'; return; }
-  const parts = tipSplitAmount(amount, names.length);
 
   btn.disabled = true; btn.textContent = 'Adding…';
   try {
     let data;
-    for (let i = 0; i < names.length; i++) {
+    for (const r of recipients) {
       const res = await fetch('/.netlify/functions/add-folio-tip', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ token: _token, amount: parts[i], description: names[i] }),
+        body:    JSON.stringify({ token: _token, amount: r.amount, description: r.name }),
       });
       data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? 'Could not add tip');
