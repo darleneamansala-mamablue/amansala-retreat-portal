@@ -99,6 +99,80 @@ function _gsRowCalc(r){
   return{gratuityDls,propinaPesos,extraUsd,extraMxn,totalCobrado};
 }
 
+// Area/Propina 100% side table (J/K columns in the Sheet) -- a department
+// tip-pool split, entered by hand per month (Semanal $/department), with
+// the Sheet's own formulas for the rest: Mensual = Semanal x4 per
+// department, and Diferencia = that month's Total Cobrado - Mensual total.
+// The Semanal figures themselves aren't derived from retreat data at all
+// (they differ month to month in the Sheet with no visible formula behind
+// them), so they stay a manual per-month input here too -- same app_store
+// pattern as the rest of this tab.
+const _GS_DEPTS=[['cocina','Cocina'],['meseros','Meseros'],['camaristas','Camaristas'],['caja','Caja'],['mantto','Mantto'],['seguridad','Seguridad']];
+let _gsDeptSplits={};
+let _gsDeptSplitsLoaded=false;
+async function _gsLoadDeptSplits(){
+  if(_gsDeptSplitsLoaded)return;
+  _gsDeptSplitsLoaded=true;
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','gratuityDeptSplits').maybeSingle();
+    if(data&&data.value&&typeof data.value==='object'){
+      _gsDeptSplits=data.value;
+      if(_rptActiveTab==='gratuitysheet')_rptRenderGratuitySheet();
+    }
+  }catch(e){}
+}
+function _gsSetDeptSplit(monthKey,dept,v){
+  const n=parseFloat(v)||0;
+  const cur=_gsDeptSplits[monthKey]||{};
+  cur[dept]=n;
+  _gsDeptSplits[monthKey]=cur;
+  db.from('app_store').upsert({key:'gratuityDeptSplits',value:_gsDeptSplits,updated_at:new Date().toISOString()}).catch(()=>{});
+  _rptRenderGratuitySheet();
+}
+// Area/Propina 100% panel for one month -- same formulas as the Sheet's J/K
+// columns: Mensual = Semanal x4 per department, Diferencia = that month's
+// Total Cobrado minus the Mensual total.
+function _gsDeptPanelHtml(monthKey,mTotalCobrado){
+  const split=_gsDeptSplits[monthKey]||{};
+  const weeklyTotal=_GS_DEPTS.reduce((s,[k])=>s+(Number(split[k])||0),0);
+  const monthlyTotal=weeklyTotal*4;
+  const diferencia=mTotalCobrado-monthlyTotal;
+  const inputStyle='width:64px;padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:\'Jost\',sans-serif;text-align:right';
+  const rows=_GS_DEPTS.map(([k,label])=>{
+    const weekly=Number(split[k])||0;
+    return`<tr style="border-bottom:1px solid #f3f4f6">
+      <td style="padding:5px 8px;font-size:12px;color:#374151">${label}</td>
+      <td style="padding:5px 8px;text-align:right">
+        <input type="number" step="0.01" min="0" value="${weekly||''}" placeholder="0" style="${inputStyle}" onchange="_gsSetDeptSplit('${monthKey}','${k}',this.value)">
+      </td>
+      <td style="padding:5px 8px;text-align:right;font-size:12px;color:#6b7280">$${(weekly*4).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    </tr>`;
+  }).join('');
+  return`<div style="width:300px;flex-shrink:0;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse">
+      <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
+        <tr>
+          <th style="padding:7px 8px;text-align:left;font-size:10.5px;font-weight:700;color:#9ca3af;text-transform:uppercase">Area</th>
+          <th style="padding:7px 8px;text-align:right;font-size:10.5px;font-weight:700;color:#9ca3af;text-transform:uppercase">Semanal</th>
+          <th style="padding:7px 8px;text-align:right;font-size:10.5px;font-weight:700;color:#9ca3af;text-transform:uppercase">Mensual</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr style="background:#f8fafc;border-top:2px solid var(--border)">
+          <td style="padding:6px 8px;font-size:12px;font-weight:800;color:#111827">Total</td>
+          <td style="padding:6px 8px;text-align:right;font-size:12px;font-weight:800;color:#111827">$${weeklyTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+          <td style="padding:6px 8px;text-align:right;font-size:12px;font-weight:800;color:#111827">$${monthlyTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        </tr>
+        <tr style="background:#fef9c3">
+          <td colspan="2" style="padding:6px 8px;font-size:12px;font-weight:800;color:#854d0e">Diferencia</td>
+          <td style="padding:6px 8px;text-align:right;font-size:12px;font-weight:800;color:${diferencia<0?'#dc2626':'#854d0e'}">${diferencia<0?'−':''}$${Math.abs(diferencia).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>`;
+}
+
 const _RPT_METHOD_LABELS={wire:'Wire Transfer',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',cash:'Cash',cheque:'Cheque',paypal:'Paypal',clip:'Clip',other:'Other'};
 const _RPT_METHOD_COLORS={wire:'#dbeafe:#1d4ed8',zelle:'#fce7f3:#9d174d',venmo:'#ede9fe:#5b21b6',card:'#dcfce7:#15803d',cash:'#fef9c3:#854d0e',cheque:'#f3f4f6:#374151',paypal:'#e0f2fe:#0369a1',clip:'#fdf4ff:#7e22ce',other:'#f3f4f6:#374151'};
 const _rptFmtMonth=d=>d?pd(d+'-01').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'—';
@@ -817,6 +891,7 @@ function _rptRenderGratuitySheet(){
   if(!el)return;
   _gsLoadSettings();
   _gsLoadExtraTips();
+  _gsLoadDeptSplits();
   const rows=_rptFiltered();
   const years=[...new Set(_rptRows.map(r=>(r.bk.startDate||'').slice(0,4)).filter(Boolean))].sort().reverse();
 
@@ -861,32 +936,35 @@ function _rptRenderGratuitySheet(){
 
     return`<div style="margin-bottom:22px">
       <div style="font-size:13px;font-weight:700;color:#111827;margin-bottom:8px">${_rptFmtMonth(m.key)}</div>
-      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
-        <table style="width:100%;border-collapse:collapse">
-          <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
-            <tr>
-              <th style="${_rptTh()}">Retreat</th>
-              <th style="${_rptTh()}">Fechas</th>
-              <th style="${_rptTh('center')}">Noches</th>
-              <th style="${_rptTh('center')}">Pax</th>
-              <th style="${_rptTh('right')}">Gratuity Dls</th>
-              <th style="${_rptTh('right')}">Propina Pesos</th>
-              <th style="${_rptTh('right')}">Extra Tips USD</th>
-              <th style="${_rptTh('right')}">Extra Tips Pesos</th>
-              <th style="${_rptTh('right')}">Total Cobrado</th>
-            </tr>
-          </thead>
-          <tbody>${rowsHtml||`<tr><td colspan="9" style="padding:20px;text-align:center;color:#9ca3af;font-size:12px">No retreats this month</td></tr>`}</tbody>
-          <tfoot>
-            <tr style="background:#f8fafc;border-top:2px solid var(--border)">
-              <td colspan="5" style="${_rptTd()};font-weight:800;font-size:12.5px">TOTAL ${_rptFmtMonth(m.key)}</td>
-              <td style="${_rptTd('right')};font-weight:800;font-size:12.5px;color:#0e5a5a">$${mPropina.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-              <td style="${_rptTd('right')};font-weight:800;font-size:12.5px">${mExtraUsd?fmt$(mExtraUsd):'—'}</td>
-              <td style="${_rptTd('right')};font-weight:800;font-size:12.5px">${mExtraMxn?'$'+mExtraMxn.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}</td>
-              <td style="${_rptTd('right')};font-weight:800;font-size:12.5px;color:#7c3aed">$${mTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-            </tr>
-          </tfoot>
-        </table>
+      <div style="display:flex;gap:16px;align-items:flex-start">
+        <div style="flex:1;min-width:0;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse">
+            <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
+              <tr>
+                <th style="${_rptTh()}">Retreat</th>
+                <th style="${_rptTh()}">Fechas</th>
+                <th style="${_rptTh('center')}">Noches</th>
+                <th style="${_rptTh('center')}">Pax</th>
+                <th style="${_rptTh('right')}">Gratuity Dls</th>
+                <th style="${_rptTh('right')}">Propina Pesos</th>
+                <th style="${_rptTh('right')}">Extra Tips USD</th>
+                <th style="${_rptTh('right')}">Extra Tips Pesos</th>
+                <th style="${_rptTh('right')}">Total Cobrado</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml||`<tr><td colspan="9" style="padding:20px;text-align:center;color:#9ca3af;font-size:12px">No retreats this month</td></tr>`}</tbody>
+            <tfoot>
+              <tr style="background:#f8fafc;border-top:2px solid var(--border)">
+                <td colspan="5" style="${_rptTd()};font-weight:800;font-size:12.5px">TOTAL ${_rptFmtMonth(m.key)}</td>
+                <td style="${_rptTd('right')};font-weight:800;font-size:12.5px;color:#0e5a5a">$${mPropina.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                <td style="${_rptTd('right')};font-weight:800;font-size:12.5px">${mExtraUsd?fmt$(mExtraUsd):'—'}</td>
+                <td style="${_rptTd('right')};font-weight:800;font-size:12.5px">${mExtraMxn?'$'+mExtraMxn.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}</td>
+                <td style="${_rptTd('right')};font-weight:800;font-size:12.5px;color:#7c3aed">$${mTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        ${_gsDeptPanelHtml(m.key,mTotal)}
       </div>
     </div>`;
   }).join('');
