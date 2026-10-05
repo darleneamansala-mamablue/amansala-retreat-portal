@@ -2366,6 +2366,38 @@ function openCopyModal(){
 
 
 // ===== ROOM CALENDAR =====
+// Greedy graph-coloring over every retreat whose dates fall in/near
+// [winStartMs,winEndMs): sorted by start date, each one gets the first
+// palette index not already taken by any other retreat whose own date range
+// (also padded) intersects its own -- so two retreats that are merely close
+// in time (not just literally overlapping) never land on the same color.
+// Populates the shared _rcColorAssignments map getRetreatColorIdx() reads.
+function _rcAssignColors(winStartMs,winEndMs){
+  const candidates=AppData.bookings.filter(bk=>
+    bk.status!=='cancelled'&&bk.bookingType!=='room_only'&&bk.source!=='wetravel'&&
+    bk.startDate&&bk.endDate&&pd(bk.startDate).getTime()<winEndMs&&pd(bk.endDate).getTime()>winStartMs
+  ).sort((a,b)=>a.startDate.localeCompare(b.startDate));
+  // Padded by a few days on each side before testing intersection -- two
+  // retreats back-to-back the same week (never literally overlapping) still
+  // count as a conflict, matching Jorge's own example.
+  const CONFLICT_PAD_MS=4*DAY_MS;
+  const assigned=[]; // {startMs,endMs,idx} (already padded)
+  const map=new Map();
+  candidates.forEach(bk=>{
+    const override=bk.packageCustomPrices?.__cfg__?.colorIdx;
+    const s=pd(bk.startDate).getTime()-CONFLICT_PAD_MS,e=pd(bk.endDate).getTime()+CONFLICT_PAD_MS;
+    let idx;
+    if(override!=null&&override>=0&&override<RETREAT_PALETTE.length){
+      idx=override;
+    }else{
+      const taken=new Set(assigned.filter(o=>s<o.endMs&&e>o.startMs).map(o=>o.idx));
+      idx=0;while(taken.has(idx)&&idx<RETREAT_PALETTE.length-1)idx++;
+    }
+    assigned.push({startMs:s,endMs:e,idx});
+    map.set(bk.id,idx);
+  });
+  _rcColorAssignments=map;
+}
 function _joinNames(names){
   if(names.length<=1)return names[0]||'';
   if(names.length===2)return `${names[0]} & ${names[1]}`;
@@ -2424,6 +2456,12 @@ function rcBuild(){
   body.appendChild(hdr);
 
   const W=rcShowDays*36,startMs=rcStart.getTime();
+  // Buffered by a week on each side of the visible window so a retreat that
+  // starts just before/after the scrolled-to range still counts as a
+  // potential color conflict with what's shown (Jorge's example: back-to-
+  // back weekly turnovers, never literally overlapping, still confusingly
+  // same-colored).
+  _rcAssignColors(startMs-7*DAY_MS,startMs+rcShowDays*DAY_MS+7*DAY_MS);
   let totalRooms=0;
   const occupied=new Array(rcShowDays).fill(0);
 
