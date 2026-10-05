@@ -37,6 +37,38 @@ function _rptSetMxnRate(v){
   db.from('app_store').upsert({key:'mxnExchangeRate',value:n,updated_at:new Date().toISOString()}).catch(()=>{});
 }
 
+// Jorge's ask 2026-10-05: replace the manual "Gratuity Retreats" Google Sheet
+// (Extra Tips USD/Pesos + Total Cobrado columns, filled in by hand every
+// month) with the same fields right here, per retreat -- one shared blob in
+// app_store (same pattern as mxnExchangeRate/guestBookConfig) rather than a
+// new SQL column, since this is config/data entered by staff, not something
+// the booking engine itself computes.
+let _rptExtraTips={};
+let _rptExtraTipsLoaded=false;
+async function _rptLoadExtraTips(){
+  if(_rptExtraTipsLoaded)return;
+  _rptExtraTipsLoaded=true;
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','gratuityExtraTips').maybeSingle();
+    if(data&&data.value&&typeof data.value==='object'){
+      _rptExtraTips=data.value;
+      if(_rptActiveTab==='gratuity')_rptRenderGratuity();
+    }
+  }catch(e){}
+}
+function _rptSetExtraTip(bkId,field,v){
+  const n=parseFloat(v)||0;
+  const cur=_rptExtraTips[bkId]||{usd:0,mxn:0};
+  cur[field]=n;
+  _rptExtraTips[bkId]=cur;
+  db.from('app_store').upsert({key:'gratuityExtraTips',value:_rptExtraTips,updated_at:new Date().toISOString()}).catch(()=>{});
+  _rptRenderGratuity();
+}
+function _rptTotalCobrado(bk,tipTotal){
+  const et=_rptExtraTips[bk.id]||{usd:0,mxn:0};
+  return (tipTotal*_rptMxnRate)+((Number(et.usd)||0)*_rptMxnRate)+(Number(et.mxn)||0);
+}
+
 const _RPT_METHOD_LABELS={wire:'Wire Transfer',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',cash:'Cash',cheque:'Cheque',paypal:'Paypal',clip:'Clip',other:'Other'};
 const _RPT_METHOD_COLORS={wire:'#dbeafe:#1d4ed8',zelle:'#fce7f3:#9d174d',venmo:'#ede9fe:#5b21b6',card:'#dcfce7:#15803d',cash:'#fef9c3:#854d0e',cheque:'#f3f4f6:#374151',paypal:'#e0f2fe:#0369a1',clip:'#fdf4ff:#7e22ce',other:'#f3f4f6:#374151'};
 const _rptFmtMonth=d=>d?pd(d+'-01').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'—';
@@ -593,6 +625,7 @@ function _rptRenderGratuity(){
   const el=document.getElementById('reportsContent');
   if(!el)return;
   _rptLoadMxnRate();
+  _rptLoadExtraTips();
   const rows=_rptFiltered();
   const totalGuests=rows.reduce((s,r)=>s+r.guests,0);
   const totalTip=rows.reduce((s,r)=>s+r.tipTotal,0);
@@ -655,13 +688,15 @@ function _rptRenderGratuity(){
             <th style="${_rptTh('center')}">Guests</th>
             <th style="${_rptTh('right')}">Tip / Night</th>
             <th style="${_rptTh('right')}">Total Gratuity</th>
-            ${_rptMxnRate>0?`<th style="${_rptTh('right')}">MXN</th>`:''}
+            <th style="${_rptTh('right')}">Extra Tip (USD)</th>
+            <th style="${_rptTh('right')}">Extra Tip (MXN)</th>
+            ${_rptMxnRate>0?`<th style="${_rptTh('right')}">Total Cobrado (MXN)</th>`:''}
             <th style="${_rptTh('center')}">Status</th>
           </tr>
         </thead>
         <tbody>
           ${rows.length===0
-            ?`<tr><td colspan="${_rptMxnRate>0?7:6}" style="padding:60px;text-align:center;color:#9ca3af">No retreats found for this filter</td></tr>`
+            ?`<tr><td colspan="${_rptMxnRate>0?8:7}" style="padding:60px;text-align:center;color:#9ca3af">No retreats found for this filter</td></tr>`
             :rows.slice().sort((a,b)=>(a.bk.startDate||'').localeCompare(b.bk.startDate||'')).map(_rptGratuityRowHtml).join('')}
         </tbody>
       </table>
@@ -707,6 +742,9 @@ function _rptGratuityRowHtml(r){
   const statusBadge=canc
     ?`<span style="background:#fee2e2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px">Cancelled</span>`
     :`<span style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px">Active</span>`;
+  const et=_rptExtraTips[bk.id]||{usd:0,mxn:0};
+  const totalCobrado=_rptTotalCobrado(bk,r.tipTotal);
+  const inputStyle='width:70px;padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:\'Jost\',sans-serif;text-align:right';
   return`<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer;${canc?'opacity:.55':''}" onclick="switchTab('teacherreg',document.getElementById('teacherregTabBtn'));regInitSel();regSelectRetreat('${bk.id}')">
     <td style="${_rptTd()}">
       <div style="font-weight:700;font-size:13px;color:#111827">${escHtml(bk.retreatName||bk.leaderName||'—')}</div>
@@ -719,7 +757,13 @@ function _rptGratuityRowHtml(r){
     <td style="${_rptTd('center')};font-size:13px;font-weight:700;color:#374151">${r.guests||'—'}</td>
     <td style="${_rptTd('right')};font-size:13px;font-weight:600;color:#6b7280">${r.tipRate>0?fmt$(r.tipRate):'—'}</td>
     <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#0e5a5a">${r.tipTotal>0?fmt$(r.tipTotal):'—'}</td>
-    ${_rptMxnRate>0?`<td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#7c3aed">${r.tipTotal>0?'$'+(r.tipTotal*_rptMxnRate).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' MXN':'—'}</td>`:''}
+    <td style="${_rptTd('right')}" onclick="event.stopPropagation()">
+      <input type="number" step="0.01" min="0" value="${et.usd||''}" placeholder="0" style="${inputStyle}" onchange="_rptSetExtraTip('${bk.id}','usd',this.value)">
+    </td>
+    <td style="${_rptTd('right')}" onclick="event.stopPropagation()">
+      <input type="number" step="0.01" min="0" value="${et.mxn||''}" placeholder="0" style="${inputStyle}" onchange="_rptSetExtraTip('${bk.id}','mxn',this.value)">
+    </td>
+    ${_rptMxnRate>0?`<td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#7c3aed">${totalCobrado>0?'$'+totalCobrado.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' MXN':'—'}</td>`:''}
     <td style="${_rptTd('center')}">${statusBadge}</td>
   </tr>`;
 }
@@ -727,17 +771,20 @@ function _rptGratuityRowHtml(r){
 function _rptExportGratuityCsv(){
   const rows=_rptFiltered().slice().sort((a,b)=>(b.bk.startDate||'').localeCompare(a.bk.startDate||''));
   const hasMxn=_rptMxnRate>0;
-  const header=['Retreat','Teacher','Start Date','End Date','Nights','Guests','Tip Per Night','Total Gratuity',...(hasMxn?['Total Gratuity (MXN)']:[]),'Status'];
-  const lines=[header,...rows.map(r=>[
+  const header=['Retreat','Teacher','Start Date','End Date','Nights','Guests','Tip Per Night','Total Gratuity','Extra Tip (USD)','Extra Tip (MXN)',...(hasMxn?['Total Cobrado (MXN)']:[]),'Status'];
+  const lines=[header,...rows.map(r=>{
+    const et=_rptExtraTips[r.bk.id]||{usd:0,mxn:0};
+    return[
     r.bk.retreatName||r.bk.leaderName||'',
     r.bk.leaderName||'',
     r.bk.startDate||'',
     r.bk.endDate||'',
     r.nights,r.guests,
     r.tipRate.toFixed(2),r.tipTotal.toFixed(2),
-    ...(hasMxn?[(r.tipTotal*_rptMxnRate).toFixed(2)]:[]),
+    (Number(et.usd)||0).toFixed(2),(Number(et.mxn)||0).toFixed(2),
+    ...(hasMxn?[_rptTotalCobrado(r.bk,r.tipTotal).toFixed(2)]:[]),
     r.bk.status||'',
-  ])].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  ];})].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([lines],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
   const a=Object.assign(document.createElement('a'),{href:url,download:`amansala-gratuity-${_rptYear}.csv`});
