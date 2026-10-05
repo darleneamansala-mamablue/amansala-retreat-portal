@@ -1,5 +1,17 @@
 'use strict';
 
+// Collects payment from an OFFSITE (day-spa, not staying at the hotel)
+// guest BEFORE their appointment is written -- this function already
+// existed (ported from staging) but was never actually wired up to
+// spa-booking.html, which until now created the appointment immediately
+// with status 'PAYMENT_PENDING' and called the guest later to collect
+// payment by phone, even though the page already said "Advance payment is
+// required" (Jorge's report 2026-10-05). Hotel guests are unaffected --
+// their service is still auto-charged to their room folio at confirm time.
+// Price is computed authoritatively here from the real spa_data catalog,
+// never trusted from the client -- only the optional tip add-on is
+// client-supplied (sanitized, not validated against anything, since it's
+// the guest's own discretionary choice).
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API   = 'https://api.stripe.com/v1';
 
@@ -19,6 +31,11 @@ exports.handler = async (event) => {
   catch { return jsonErr(400, 'Invalid JSON'); }
 
   const { serviceId, guestCount, email, firstName, lastName } = body;
+  // Optional discretionary tip, added on top of the authoritative service
+  // price below -- unlike the service price, there's nothing to validate
+  // against a catalog (it's the guest's own choice), just sanitize it to a
+  // sane non-negative amount.
+  const tipAmount = Math.max(0, Math.min(500, Number(body.tipAmount) || 0));
   if (!serviceId || !email || !firstName || !lastName) return jsonErr(400, 'Missing required fields');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonErr(400, 'Invalid email');
 
@@ -56,7 +73,8 @@ exports.handler = async (event) => {
 
   if (!priceUSD || priceUSD <= 0) return jsonErr(400, 'Service price not set');
 
-  const amountCents = Math.round(priceUSD * 100);
+  const totalUSD = +(priceUSD + tipAmount).toFixed(2);
+  const amountCents = Math.round(totalUSD * 100);
   if (amountCents < 50) return jsonErr(400, 'Amount too small');
 
   const desc = `Amansala Spa · ${svc.name}${svc.groupPricing ? ` (${guestCount || 1} guests)` : ''}`;
@@ -72,6 +90,7 @@ exports.handler = async (event) => {
     'metadata[lastName]':    String(lastName).slice(0, 100),
     'metadata[email]':       email.slice(0, 200),
     'metadata[guestCount]':  String(guestCount || 1),
+    'metadata[tipAmount]':   String(tipAmount),
     'metadata[source]':      'spa_booking',
   });
 
@@ -94,7 +113,9 @@ exports.handler = async (event) => {
       clientSecret:    pi.client_secret,
       paymentIntentId: pi.id,
       publishableKey:  pubKey,
-      amount:          priceUSD,
+      amount:          totalUSD,
+      servicePrice:    priceUSD,
+      tipAmount,
     }),
   };
 };
