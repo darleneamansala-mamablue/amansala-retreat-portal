@@ -2610,8 +2610,12 @@ function rcBuild(){
         // code (6a/6b/6c) is already its own separately-booked bed/guest.
         const _ONE_BED_RT_IDS=['rt1','rt2','rt3','rt4','rt5'];
         const displayName=hasGuest?(guestNames.length>1&&_ONE_BED_RT_IDS.includes(rt.id)?_joinNames(guestNames):guestNames[0]):null;
+        // Teacher Room star — same marker/title Teachers/Registration already
+        // uses (teacher-portal.js's _teacherStar/_bdTeacherStar), just missing
+        // here on the physical Room Calendar grid (Jorge's report 2026-10-05).
+        const teacherStar=regEntry?.isTeacherRoom?`<span style="color:#b45309;font-size:12px;margin-right:2px" title="Teacher Room">★</span>`:'';
         bl.innerHTML=`<span class="bk-lock" title="${bk.roomLocked?'Locked — the Straightline optimizer will never move this (click to unlock). You can still drag it yourself.':'Click to lock — protects this from the Straightline optimizer, not from you dragging it'}" onclick="event.stopPropagation();bkToggleLock('${bk.id}')" style="cursor:pointer;margin-right:4px;opacity:${bk.roomLocked?'1':'.35'}">${bk.roomLocked?'🔒':'🔓'}</span>`
-          +(hasGuest?`<span class="bk-n">${roomOnlyIcon}${displayName}</span>`:`<span class="bk-n">${roomOnlyIcon}${bk.leaderName||bk.retreatName}</span><span class="bk-s" style="opacity:.5;font-style:italic">blocked</span>`);
+          +(hasGuest?`<span class="bk-n">${teacherStar}${roomOnlyIcon}${displayName}</span>`:`<span class="bk-n">${teacherStar}${roomOnlyIcon}${bk.leaderName||bk.retreatName}</span><span class="bk-s" style="opacity:.5;font-style:italic">blocked</span>`);
         bl.addEventListener('dragstart',e=>{
           rcDragData={bkId:bk.id,fromRoom:room,rtId:rt.id};
           e.dataTransfer.effectAllowed='move';
