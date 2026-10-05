@@ -5024,6 +5024,14 @@ const RETREAT_PALETTE=[
   {bg:'#fee2e2',border:'#dc2626',text:'#7f1d1d'},  // red
   {bg:'#e0e7ff',border:'#4f46e5',text:'#312e81'},  // indigo
 ];
+// Room Calendar recomputes this once per rcBuild() -- bkId -> paletteIdx for
+// every retreat visible in (or near) the current view window, assigned so no
+// two retreats close together in time ever land on the same color (Jorge's
+// report 2026-10-05: the old pure-hash color could coincidentally repeat on
+// two back-to-back or overlapping retreats, confusing at a glance). Both the
+// room grid bars and the "Active in this view" strip read from this same map
+// so they stay visually consistent with each other.
+let _rcColorAssignments=new Map();
 // Accepts a booking object (preferred — checks for an admin-set color override
 // first) or a bare id string (back-compat — always hashes, no override possible).
 function getRetreatColorIdx(bkOrId){
@@ -5031,6 +5039,7 @@ function getRetreatColorIdx(bkOrId){
   const override=bk?.packageCustomPrices?.__cfg__?.colorIdx;
   if(override!=null&&override>=0&&override<RETREAT_PALETTE.length)return override;
   const bkId=bk?bk.id:bkOrId;
+  if(_rcColorAssignments.has(bkId))return _rcColorAssignments.get(bkId);
   let h=0;for(let i=0;i<(bkId||'').length;i++)h=(h*31+bkId.charCodeAt(i))%RETREAT_PALETTE.length;
   return h;
 }
@@ -6254,7 +6263,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20261003f"></script>
+<script src="modules/venues.js?v=20261005a"></script>
 <script src="modules/room-optimizer.js?v=20260921b"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js?v=20261004b"></script>
