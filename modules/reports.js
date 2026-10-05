@@ -37,36 +37,66 @@ function _rptSetMxnRate(v){
   db.from('app_store').upsert({key:'mxnExchangeRate',value:n,updated_at:new Date().toISOString()}).catch(()=>{});
 }
 
-// Jorge's ask 2026-10-05: replace the manual "Gratuity Retreats" Google Sheet
-// (Extra Tips USD/Pesos + Total Cobrado columns, filled in by hand every
-// month) with the same fields right here, per retreat -- one shared blob in
-// app_store (same pattern as mxnExchangeRate/guestBookConfig) rather than a
-// new SQL column, since this is config/data entered by staff, not something
-// the booking engine itself computes.
-let _rptExtraTips={};
-let _rptExtraTipsLoaded=false;
-async function _rptLoadExtraTips(){
-  if(_rptExtraTipsLoaded)return;
-  _rptExtraTipsLoaded=true;
+// ─── GRATUITY SHEET (mirrors Jorge's "Gratuity Retreats" Google Sheet) ───
+// Jorge's ask 2026-10-05: a separate tab, grouped by month like the Sheet's
+// month tabs (Enero26, Febrero26, ...), with the SAME formulas the Sheet
+// uses -- not the booking's own configured tip_per_night (that's what the
+// Gratuity Retreats tab already shows): Gratuity Dls = Pax x rate/night x
+// Noches (rate editable, default $25 -- the flat rate every row in the Sheet
+// uses regardless of what tip_per_night the retreat actually has set), and
+// Propina Pesos = Gratuity Dls x tipo de cambio (editable, default 17).
+// Extra Tips USD/Pesos are per-retreat staff-entered values (one shared
+// blob in app_store, same pattern as mxnExchangeRate/guestBookConfig --
+// this is data staff enters, not something the booking engine computes),
+// and Total Cobrado = Propina Pesos + (Extra Tips USD x tipo de cambio) +
+// Extra Tips Pesos, matching the Sheet's own footer formula.
+let _gsRate=25,_gsFx=17,_gsSettingsLoaded=false;
+let _gsExtraTips={};
+let _gsExtraTipsLoaded=false;
+async function _gsLoadSettings(){
+  if(_gsSettingsLoaded)return;
+  _gsSettingsLoaded=true;
   try{
-    const{data}=await db.from('app_store').select('value').eq('key','gratuityExtraTips').maybeSingle();
-    if(data&&data.value&&typeof data.value==='object'){
-      _rptExtraTips=data.value;
-      if(_rptActiveTab==='gratuity')_rptRenderGratuity();
+    const{data}=await db.from('app_store').select('value').eq('key','gratuitySheetSettings').maybeSingle();
+    if(data&&data.value){
+      _gsRate=Number(data.value.rate)||25;
+      _gsFx=Number(data.value.fx)||17;
+      if(_rptActiveTab==='gratuitysheet')_rptRenderGratuitySheet();
     }
   }catch(e){}
 }
-function _rptSetExtraTip(bkId,field,v){
+function _gsSetSettings(field,v){
   const n=parseFloat(v)||0;
-  const cur=_rptExtraTips[bkId]||{usd:0,mxn:0};
-  cur[field]=n;
-  _rptExtraTips[bkId]=cur;
-  db.from('app_store').upsert({key:'gratuityExtraTips',value:_rptExtraTips,updated_at:new Date().toISOString()}).catch(()=>{});
-  _rptRenderGratuity();
+  if(field==='rate')_gsRate=n;else _gsFx=n;
+  db.from('app_store').upsert({key:'gratuitySheetSettings',value:{rate:_gsRate,fx:_gsFx},updated_at:new Date().toISOString()}).catch(()=>{});
+  _rptRenderGratuitySheet();
 }
-function _rptTotalCobrado(bk,tipTotal){
-  const et=_rptExtraTips[bk.id]||{usd:0,mxn:0};
-  return (tipTotal*_rptMxnRate)+((Number(et.usd)||0)*_rptMxnRate)+(Number(et.mxn)||0);
+async function _gsLoadExtraTips(){
+  if(_gsExtraTipsLoaded)return;
+  _gsExtraTipsLoaded=true;
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','gratuityExtraTips').maybeSingle();
+    if(data&&data.value&&typeof data.value==='object'){
+      _gsExtraTips=data.value;
+      if(_rptActiveTab==='gratuitysheet')_rptRenderGratuitySheet();
+    }
+  }catch(e){}
+}
+function _gsSetExtraTip(bkId,field,v){
+  const n=parseFloat(v)||0;
+  const cur=_gsExtraTips[bkId]||{usd:0,mxn:0};
+  cur[field]=n;
+  _gsExtraTips[bkId]=cur;
+  db.from('app_store').upsert({key:'gratuityExtraTips',value:_gsExtraTips,updated_at:new Date().toISOString()}).catch(()=>{});
+  _rptRenderGratuitySheet();
+}
+function _gsRowCalc(r){
+  const et=_gsExtraTips[r.bk.id]||{usd:0,mxn:0};
+  const gratuityDls=r.guests*_gsRate*r.nights;
+  const propinaPesos=gratuityDls*_gsFx;
+  const extraUsd=Number(et.usd)||0,extraMxn=Number(et.mxn)||0;
+  const totalCobrado=propinaPesos+(extraUsd*_gsFx)+extraMxn;
+  return{gratuityDls,propinaPesos,extraUsd,extraMxn,totalCobrado};
 }
 
 const _RPT_METHOD_LABELS={wire:'Wire Transfer',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',cash:'Cash',cheque:'Cheque',paypal:'Paypal',clip:'Clip',other:'Other'};
@@ -78,6 +108,7 @@ function _rptSetTab(tab){
   _rptActiveTab=tab;
   if(tab==='daily')_rptRenderDaily();
   else if(tab==='gratuity')_rptRenderGratuity();
+  else if(tab==='gratuitysheet')_rptRenderGratuitySheet();
   else if(tab==='status')_rptRenderStatus();
   else _rptRenderBody();
 }
@@ -118,6 +149,7 @@ function reportsRender(){
   _rptRows=_rptBuildRows();
   if(_rptActiveTab==='daily')_rptRenderDaily();
   else if(_rptActiveTab==='gratuity')_rptRenderGratuity();
+  else if(_rptActiveTab==='gratuitysheet')_rptRenderGratuitySheet();
   else if(_rptActiveTab==='status')_rptRenderStatus();
   else _rptRenderBody();
 }
@@ -165,6 +197,7 @@ function _rptRenderBody(){
         ${_rptTabBtn('financial','Financial Summary',true)}
         ${_rptTabBtn('daily','Daily Report',false)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
+        ${_rptTabBtn('gratuitysheet','Gratuity Sheet',false)}
         ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
@@ -448,6 +481,7 @@ function _rptRenderDailyView(){
         ${_rptTabBtn('financial','Financial Summary',false)}
         ${_rptTabBtn('daily','Daily Report',true)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
+        ${_rptTabBtn('gratuitysheet','Gratuity Sheet',false)}
         ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
@@ -625,7 +659,6 @@ function _rptRenderGratuity(){
   const el=document.getElementById('reportsContent');
   if(!el)return;
   _rptLoadMxnRate();
-  _rptLoadExtraTips();
   const rows=_rptFiltered();
   const totalGuests=rows.reduce((s,r)=>s+r.guests,0);
   const totalTip=rows.reduce((s,r)=>s+r.tipTotal,0);
@@ -653,6 +686,7 @@ function _rptRenderGratuity(){
         ${_rptTabBtn('financial','Financial Summary',false)}
         ${_rptTabBtn('daily','Daily Report',false)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',true)}
+        ${_rptTabBtn('gratuitysheet','Gratuity Sheet',false)}
         ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
@@ -688,15 +722,13 @@ function _rptRenderGratuity(){
             <th style="${_rptTh('center')}">Guests</th>
             <th style="${_rptTh('right')}">Tip / Night</th>
             <th style="${_rptTh('right')}">Total Gratuity</th>
-            <th style="${_rptTh('right')}">Extra Tip (USD)</th>
-            <th style="${_rptTh('right')}">Extra Tip (MXN)</th>
-            ${_rptMxnRate>0?`<th style="${_rptTh('right')}">Total Cobrado (MXN)</th>`:''}
+            ${_rptMxnRate>0?`<th style="${_rptTh('right')}">MXN</th>`:''}
             <th style="${_rptTh('center')}">Status</th>
           </tr>
         </thead>
         <tbody>
           ${rows.length===0
-            ?`<tr><td colspan="${_rptMxnRate>0?8:7}" style="padding:60px;text-align:center;color:#9ca3af">No retreats found for this filter</td></tr>`
+            ?`<tr><td colspan="${_rptMxnRate>0?7:6}" style="padding:60px;text-align:center;color:#9ca3af">No retreats found for this filter</td></tr>`
             :rows.slice().sort((a,b)=>(a.bk.startDate||'').localeCompare(b.bk.startDate||'')).map(_rptGratuityRowHtml).join('')}
         </tbody>
       </table>
@@ -742,9 +774,6 @@ function _rptGratuityRowHtml(r){
   const statusBadge=canc
     ?`<span style="background:#fee2e2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px">Cancelled</span>`
     :`<span style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px">Active</span>`;
-  const et=_rptExtraTips[bk.id]||{usd:0,mxn:0};
-  const totalCobrado=_rptTotalCobrado(bk,r.tipTotal);
-  const inputStyle='width:70px;padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:\'Jost\',sans-serif;text-align:right';
   return`<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer;${canc?'opacity:.55':''}" onclick="switchTab('teacherreg',document.getElementById('teacherregTabBtn'));regInitSel();regSelectRetreat('${bk.id}')">
     <td style="${_rptTd()}">
       <div style="font-weight:700;font-size:13px;color:#111827">${escHtml(bk.retreatName||bk.leaderName||'—')}</div>
@@ -757,13 +786,7 @@ function _rptGratuityRowHtml(r){
     <td style="${_rptTd('center')};font-size:13px;font-weight:700;color:#374151">${r.guests||'—'}</td>
     <td style="${_rptTd('right')};font-size:13px;font-weight:600;color:#6b7280">${r.tipRate>0?fmt$(r.tipRate):'—'}</td>
     <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#0e5a5a">${r.tipTotal>0?fmt$(r.tipTotal):'—'}</td>
-    <td style="${_rptTd('right')}" onclick="event.stopPropagation()">
-      <input type="number" step="0.01" min="0" value="${et.usd||''}" placeholder="0" style="${inputStyle}" onchange="_rptSetExtraTip('${bk.id}','usd',this.value)">
-    </td>
-    <td style="${_rptTd('right')}" onclick="event.stopPropagation()">
-      <input type="number" step="0.01" min="0" value="${et.mxn||''}" placeholder="0" style="${inputStyle}" onchange="_rptSetExtraTip('${bk.id}','mxn',this.value)">
-    </td>
-    ${_rptMxnRate>0?`<td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#7c3aed">${totalCobrado>0?'$'+totalCobrado.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' MXN':'—'}</td>`:''}
+    ${_rptMxnRate>0?`<td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#7c3aed">${r.tipTotal>0?'$'+(r.tipTotal*_rptMxnRate).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' MXN':'—'}</td>`:''}
     <td style="${_rptTd('center')}">${statusBadge}</td>
   </tr>`;
 }
@@ -771,23 +794,168 @@ function _rptGratuityRowHtml(r){
 function _rptExportGratuityCsv(){
   const rows=_rptFiltered().slice().sort((a,b)=>(b.bk.startDate||'').localeCompare(a.bk.startDate||''));
   const hasMxn=_rptMxnRate>0;
-  const header=['Retreat','Teacher','Start Date','End Date','Nights','Guests','Tip Per Night','Total Gratuity','Extra Tip (USD)','Extra Tip (MXN)',...(hasMxn?['Total Cobrado (MXN)']:[]),'Status'];
-  const lines=[header,...rows.map(r=>{
-    const et=_rptExtraTips[r.bk.id]||{usd:0,mxn:0};
-    return[
+  const header=['Retreat','Teacher','Start Date','End Date','Nights','Guests','Tip Per Night','Total Gratuity',...(hasMxn?['Total Gratuity (MXN)']:[]),'Status'];
+  const lines=[header,...rows.map(r=>[
     r.bk.retreatName||r.bk.leaderName||'',
     r.bk.leaderName||'',
     r.bk.startDate||'',
     r.bk.endDate||'',
     r.nights,r.guests,
     r.tipRate.toFixed(2),r.tipTotal.toFixed(2),
-    (Number(et.usd)||0).toFixed(2),(Number(et.mxn)||0).toFixed(2),
-    ...(hasMxn?[_rptTotalCobrado(r.bk,r.tipTotal).toFixed(2)]:[]),
+    ...(hasMxn?[(r.tipTotal*_rptMxnRate).toFixed(2)]:[]),
     r.bk.status||'',
-  ];})].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  ])].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([lines],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
   const a=Object.assign(document.createElement('a'),{href:url,download:`amansala-gratuity-${_rptYear}.csv`});
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function _rptRenderGratuitySheet(){
+  const el=document.getElementById('reportsContent');
+  if(!el)return;
+  _gsLoadSettings();
+  _gsLoadExtraTips();
+  const rows=_rptFiltered();
+  const years=[...new Set(_rptRows.map(r=>(r.bk.startDate||'').slice(0,4)).filter(Boolean))].sort().reverse();
+
+  const monthMap=new Map();
+  rows.forEach(r=>{
+    const key=(r.bk.startDate||'').slice(0,7)||'?';
+    const m=monthMap.get(key)||{key,rows:[]};
+    m.rows.push(r);
+    monthMap.set(key,m);
+  });
+  const months=[...monthMap.values()].sort((a,b)=>a.key.localeCompare(b.key));
+
+  let grandPropina=0,grandExtraUsd=0,grandExtraMxn=0,grandTotal=0;
+
+  const monthSectionsHtml=months.map(m=>{
+    const sorted=m.rows.slice().sort((a,b)=>(a.bk.startDate||'').localeCompare(b.bk.startDate||''));
+    let mPropina=0,mExtraUsd=0,mExtraMxn=0,mTotal=0;
+    const rowsHtml=sorted.map(r=>{
+      const c=_gsRowCalc(r);
+      mPropina+=c.propinaPesos;mExtraUsd+=c.extraUsd;mExtraMxn+=c.extraMxn;mTotal+=c.totalCobrado;
+      const canc=r.bk.status==='cancelled';
+      const inputStyle='width:72px;padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:\'Jost\',sans-serif;text-align:right';
+      return`<tr style="border-bottom:1px solid #f3f4f6;${canc?'opacity:.5':''}">
+        <td style="${_rptTd()};cursor:pointer" onclick="switchTab('teacherreg',document.getElementById('teacherregTabBtn'));regInitSel();regSelectRetreat('${r.bk.id}')">
+          <div style="font-weight:700;font-size:13px;color:#111827">${escHtml(r.bk.retreatName||r.bk.leaderName||'—')}</div>
+        </td>
+        <td style="${_rptTd()};white-space:nowrap;font-size:12px;color:#6b7280">${fmtDate(r.bk.startDate)} – ${fmtDate(r.bk.endDate)}</td>
+        <td style="${_rptTd('center')};font-size:13px;color:#374151">${r.nights}</td>
+        <td style="${_rptTd('center')};font-size:13px;font-weight:700;color:#374151">${r.guests||'—'}</td>
+        <td style="${_rptTd('right')};font-size:13px;font-weight:600;color:#6b7280">${fmt$(c.gratuityDls)}</td>
+        <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#0e5a5a">$${c.propinaPesos.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td style="${_rptTd('right')}">
+          <input type="number" step="0.01" min="0" value="${c.extraUsd||''}" placeholder="0" style="${inputStyle}" onchange="_gsSetExtraTip('${r.bk.id}','usd',this.value)">
+        </td>
+        <td style="${_rptTd('right')}">
+          <input type="number" step="0.01" min="0" value="${c.extraMxn||''}" placeholder="0" style="${inputStyle}" onchange="_gsSetExtraTip('${r.bk.id}','mxn',this.value)">
+        </td>
+        <td style="${_rptTd('right')};font-size:13px;font-weight:800;color:#7c3aed">$${c.totalCobrado.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      </tr>`;
+    }).join('');
+    grandPropina+=mPropina;grandExtraUsd+=mExtraUsd;grandExtraMxn+=mExtraMxn;grandTotal+=mTotal;
+
+    return`<div style="margin-bottom:22px">
+      <div style="font-size:13px;font-weight:700;color:#111827;margin-bottom:8px">${_rptFmtMonth(m.key)}</div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse">
+          <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
+            <tr>
+              <th style="${_rptTh()}">Retreat</th>
+              <th style="${_rptTh()}">Fechas</th>
+              <th style="${_rptTh('center')}">Noches</th>
+              <th style="${_rptTh('center')}">Pax</th>
+              <th style="${_rptTh('right')}">Gratuity Dls</th>
+              <th style="${_rptTh('right')}">Propina Pesos</th>
+              <th style="${_rptTh('right')}">Extra Tips USD</th>
+              <th style="${_rptTh('right')}">Extra Tips Pesos</th>
+              <th style="${_rptTh('right')}">Total Cobrado</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml||`<tr><td colspan="9" style="padding:20px;text-align:center;color:#9ca3af;font-size:12px">No retreats this month</td></tr>`}</tbody>
+          <tfoot>
+            <tr style="background:#f8fafc;border-top:2px solid var(--border)">
+              <td colspan="5" style="${_rptTd()};font-weight:800;font-size:12.5px">TOTAL ${_rptFmtMonth(m.key)}</td>
+              <td style="${_rptTd('right')};font-weight:800;font-size:12.5px;color:#0e5a5a">$${mPropina.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+              <td style="${_rptTd('right')};font-weight:800;font-size:12.5px">${mExtraUsd?fmt$(mExtraUsd):'—'}</td>
+              <td style="${_rptTd('right')};font-weight:800;font-size:12.5px">${mExtraMxn?'$'+mExtraMxn.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}</td>
+              <td style="${_rptTd('right')};font-weight:800;font-size:12.5px;color:#7c3aed">$${mTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML=`
+  <div style="padding:24px 28px;font-family:'Jost',sans-serif;overflow-y:auto;height:100%;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      <div>
+        <h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">Gratuity Sheet</h2>
+        <div style="font-size:12px;color:#9ca3af;margin-top:2px">Mismo formato y fórmulas que el Google Sheet · ${_rptYear==='all'?'All time':_rptYear}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        ${_rptTabBtn('financial','Financial Summary',false)}
+        ${_rptTabBtn('daily','Daily Report',false)}
+        ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
+        ${_rptTabBtn('gratuitysheet','Gratuity Sheet',true)}
+        ${_rptTabBtn('status','Contract & Portal',false)}
+      </div>
+      <div style="flex:1"></div>
+      <select onchange="_rptSetYear(this.value)" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff;cursor:pointer">
+        <option value="all" ${_rptYear==='all'?'selected':''}>All years</option>
+        ${years.map(y=>`<option value="${y}" ${_rptYear===y?'selected':''}>${y}</option>`).join('')}
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;cursor:pointer">
+        <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked);_rptRenderGratuitySheet()">
+        Show cancelled
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280">
+        $/noche
+        <input type="number" step="1" min="0" value="${_gsRate}" onchange="_gsSetSettings('rate',this.value)" style="width:56px;padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:'Jost',sans-serif;color:#374151">
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280">
+        Tipo de cambio
+        <input type="number" step="0.01" min="0" value="${_gsFx}" onchange="_gsSetSettings('fx',this.value)" style="width:64px;padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:'Jost',sans-serif;color:#374151">
+      </label>
+      <button onclick="_gsExportCsv()" style="padding:6px 14px;background:#0e5a5a;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">
+        ↓ Export CSV
+      </button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
+      ${_rptCard('Propina Pesos',`$${grandPropina.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`,'#f0fdf9','#0e5a5a')}
+      ${_rptCard('Extra Tips USD',fmt$(grandExtraUsd),'#f0f9ff','#0369a1')}
+      ${_rptCard('Extra Tips Pesos',`$${grandExtraMxn.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`,'#fefce8','#854d0e')}
+      ${_rptCard('Total Cobrado',`$${grandTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`,'#faf5ff','#7c3aed')}
+    </div>
+
+    ${months.length===0?`<div style="padding:60px;text-align:center;color:#9ca3af">No retreats found for this filter</div>`:monthSectionsHtml}
+  </div>`;
+}
+
+function _gsExportCsv(){
+  const rows=_rptFiltered().slice().sort((a,b)=>(a.bk.startDate||'').localeCompare(b.bk.startDate||''));
+  const header=['Retreat','Fechas','Noches','Pax','Gratuity Dls','Propina Pesos','Extra Tips USD','Extra Tips Pesos','Total Cobrado','Status'];
+  const lines=[header,...rows.map(r=>{
+    const c=_gsRowCalc(r);
+    return[
+      r.bk.retreatName||r.bk.leaderName||'',
+      `${fmtDate(r.bk.startDate)} – ${fmtDate(r.bk.endDate)}`,
+      r.nights,r.guests,
+      c.gratuityDls.toFixed(2),c.propinaPesos.toFixed(2),
+      c.extraUsd.toFixed(2),c.extraMxn.toFixed(2),
+      c.totalCobrado.toFixed(2),
+      r.bk.status||'',
+    ];
+  })].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([lines],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=Object.assign(document.createElement('a'),{href:url,download:`amansala-gratuity-sheet-${_rptYear}.csv`});
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
@@ -851,6 +1019,7 @@ function _rptRenderStatus(){
         ${_rptTabBtn('financial','Financial Summary',false)}
         ${_rptTabBtn('daily','Daily Report',false)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
+        ${_rptTabBtn('gratuitysheet','Gratuity Sheet',false)}
         ${_rptTabBtn('status','Contract & Portal',true)}
       </div>
       <div style="flex:1"></div>
