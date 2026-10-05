@@ -737,6 +737,16 @@ async function _rptRenderCategory(){
   }
   _rptRenderCategoryView();
 }
+// Jorge's ask 2026-10-05: clicking a category shows its breakdown (every
+// individual charge in it), same fields Daily Report's own Folio Charges
+// table shows. Expand state persists across re-renders (date/user filter
+// changes) within the session, not saved anywhere -- purely a UI toggle.
+let _rptCategoryExpanded=new Set();
+function _rptToggleCategory(cat){
+  if(_rptCategoryExpanded.has(cat))_rptCategoryExpanded.delete(cat);
+  else _rptCategoryExpanded.add(cat);
+  _rptRenderCategoryView();
+}
 function _rptCategoryGroups(){
   const charges=_rptDailyFolioCharges();
   const groups=new Map();
@@ -806,13 +816,17 @@ function _rptRenderCategoryView(){
         <tbody>
           ${groups.length===0
             ?`<tr><td colspan="4" style="padding:60px;text-align:center;color:#9ca3af">No folio charges in this range</td></tr>`
-            :groups.map(g=>`
-            <tr style="border-bottom:1px solid #f3f4f6">
-              <td style="${_rptTd()};font-weight:700;font-size:13px;color:#111827">${escHtml(g.category)}</td>
+            :groups.map(g=>{
+              const open=_rptCategoryExpanded.has(g.category);
+              const catJs=g.category.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+              return`
+            <tr style="border-bottom:1px solid #f3f4f6;cursor:pointer" onclick="_rptToggleCategory('${catJs}')">
+              <td style="${_rptTd()};font-weight:700;font-size:13px;color:#111827"><span style="display:inline-block;width:14px;color:#9ca3af">${open?'▾':'▸'}</span>${escHtml(g.category)}</td>
               <td style="${_rptTd('center')};font-size:13px;color:#6b7280">${g.count}</td>
               <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#7e22ce">${fmt$(g.total)}</td>
               <td style="${_rptTd('right')};font-size:12px;color:#9ca3af">${grandTotal>0?(g.total/grandTotal*100).toFixed(1):'0.0'}%</td>
-            </tr>`).join('')}
+            </tr>${open?_rptCategoryDetailHtml(g.category):''}`;
+            }).join('')}
         </tbody>
         ${groups.length>0?`<tfoot>
           <tr style="background:#f8fafc;border-top:2px solid var(--border)">
@@ -825,6 +839,34 @@ function _rptRenderCategoryView(){
       </table>
     </div>
   </div>`;
+}
+function _rptCategoryDetailHtml(cat){
+  const rows=_rptDailyFolioCharges().filter(i=>(i.category||'Sin categoría')===cat);
+  return`<tr>
+    <td colspan="4" style="padding:0;background:#fafafa;border-bottom:1px solid #f3f4f6">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr><th style="${_rptTh()};padding-left:40px">Date / Time</th><th style="${_rptTh()}">User</th><th style="${_rptTh()}">Guest</th><th style="${_rptTh()}">Description</th><th style="${_rptTh('right')}">Amount</th></tr>
+        </thead>
+        <tbody>
+          ${rows.map(r=>{
+            const d=new Date(r.created_at);
+            const ds=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+            const ts=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+            const retreat=r.bk?.retreatName||r.bk?.leaderName||null;
+            const guestLine=[r.guestName,retreat].filter(Boolean).join(' · ')||'—';
+            return`<tr style="border-bottom:1px solid #f0f0f0">
+              <td style="${_rptTd()};padding-left:40px;white-space:nowrap;font-size:12px"><div style="font-weight:600;color:#111827">${ds}</div><div style="color:#9ca3af">${ts}</div></td>
+              <td style="${_rptTd()};font-size:12px;color:${r.staff_name?'#374151':'#d1d5db'}">${r.staff_name?escHtml(r.staff_name):'—'}</td>
+              <td style="${_rptTd()};font-size:12px;color:#374151;max-width:200px">${escHtml(guestLine)}</td>
+              <td style="${_rptTd()};font-size:12px;color:#374151;max-width:260px">${escHtml(r.description||'—')}</td>
+              <td style="${_rptTd('right')};font-size:12.5px;font-weight:700;color:#7e22ce">${fmt$(r.amount)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </td>
+  </tr>`;
 }
 function _rptExportCategoryCsv(){
   const groups=_rptCategoryGroups();
