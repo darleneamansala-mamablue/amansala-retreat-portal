@@ -183,6 +183,7 @@ function _rptSetTab(tab){
   if(tab==='daily')_rptRenderDaily();
   else if(tab==='gratuity')_rptRenderGratuity();
   else if(tab==='gratuitysheet')_rptRenderGratuitySheet();
+  else if(tab==='category')_rptRenderCategory();
   else if(tab==='status')_rptRenderStatus();
   else _rptRenderBody();
 }
@@ -224,6 +225,7 @@ function reportsRender(){
   if(_rptActiveTab==='daily')_rptRenderDaily();
   else if(_rptActiveTab==='gratuity')_rptRenderGratuity();
   else if(_rptActiveTab==='gratuitysheet')_rptRenderGratuitySheet();
+  else if(_rptActiveTab==='category')_rptRenderCategory();
   else if(_rptActiveTab==='status')_rptRenderStatus();
   else _rptRenderBody();
 }
@@ -272,6 +274,7 @@ function _rptRenderBody(){
         ${_rptTabBtn('daily','Daily Report',false)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
         ${_rptTabBtn('gratuitysheet','Gratuity Sheet',false)}
+        ${_rptTabBtn('category','Category Report',false)}
         ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
@@ -427,6 +430,7 @@ function _rptRerenderActiveTab(){
   if(_rptActiveTab==='daily')_rptRenderDaily();
   else if(_rptActiveTab==='gratuity')_rptRenderGratuity();
   else if(_rptActiveTab==='gratuitysheet')_rptRenderGratuitySheet();
+  else if(_rptActiveTab==='category')_rptRenderCategory();
   else if(_rptActiveTab==='status')_rptRenderStatus();
   else _rptRenderBody();
 }
@@ -567,6 +571,7 @@ function _rptRenderDailyView(){
         ${_rptTabBtn('daily','Daily Report',true)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
         ${_rptTabBtn('gratuitysheet','Gratuity Sheet',false)}
+        ${_rptTabBtn('category','Category Report',false)}
         ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
@@ -703,10 +708,138 @@ function _rptRenderDailyView(){
   </div>`;
 }
 
-function _rptSetDailyFrom(v){_dailyFrom=v;if(_dailyFrom>_dailyTo)_dailyTo=_dailyFrom;_rptLoadDaily().then(_rptRenderDailyView);}
-function _rptSetDailyTo(v){_dailyTo=v;if(_dailyTo<_dailyFrom)_dailyFrom=_dailyTo;_rptLoadDaily().then(_rptRenderDailyView);}
-function _rptSetDailyUser(u){_dailyUser=u;_rptRenderDailyView();}
-async function _rptRefreshDaily(){_dailyLoaded=false;await _rptRenderDaily();}
+// Category Report (added 2026-10-05) is just a different grouping of this
+// same _dailyFolioItems data, shown on its own tab with the same date-range/
+// user controls -- these four setters now re-render whichever of the two
+// tabs is actually open instead of always Daily Report's own view.
+function _rptRenderDailyOrCategoryView(){
+  if(_rptActiveTab==='category')_rptRenderCategoryView();
+  else _rptRenderDailyView();
+}
+function _rptSetDailyFrom(v){_dailyFrom=v;if(_dailyFrom>_dailyTo)_dailyTo=_dailyFrom;_rptLoadDaily().then(_rptRenderDailyOrCategoryView);}
+function _rptSetDailyTo(v){_dailyTo=v;if(_dailyTo<_dailyFrom)_dailyFrom=_dailyTo;_rptLoadDaily().then(_rptRenderDailyOrCategoryView);}
+function _rptSetDailyUser(u){_dailyUser=u;_rptRenderDailyOrCategoryView();}
+async function _rptRefreshDaily(){_dailyLoaded=false;if(_rptActiveTab==='category')await _rptRenderCategory();else await _rptRenderDaily();}
+
+// ─── CATEGORY REPORT ──────────────────────────────────────────────
+// Jorge's ask 2026-10-05: a report grouping folio charges by category
+// instead of listing them one by one -- same underlying data Daily Report
+// already loads (_dailyFolioItems/_rptLoadDaily), same date-range/user
+// controls, just a different aggregation. Only charges (positive amounts),
+// same as Daily Report's own "Folio Charges" section -- payments aren't a
+// spending category.
+async function _rptRenderCategory(){
+  const el=document.getElementById('reportsContent');
+  if(!el)return;
+  if(!_dailyLoaded){
+    el.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#9ca3af;font-size:13px">Loading…</div>`;
+    await _rptLoadDaily();
+  }
+  _rptRenderCategoryView();
+}
+function _rptCategoryGroups(){
+  const charges=_rptDailyFolioCharges();
+  const groups=new Map();
+  charges.forEach(i=>{
+    const cat=i.category||'Sin categoría';
+    const g=groups.get(cat)||{category:cat,count:0,total:0};
+    g.count++;g.total+=i.amount;
+    groups.set(cat,g);
+  });
+  return[...groups.values()].sort((a,b)=>b.total-a.total);
+}
+function _rptRenderCategoryView(){
+  const el=document.getElementById('reportsContent');
+  if(!el)return;
+  const groups=_rptCategoryGroups();
+  const grandTotal=groups.reduce((s,g)=>s+g.total,0);
+  const grandCount=groups.reduce((s,g)=>s+g.count,0);
+
+  const isSameDay=_dailyFrom===_dailyTo;
+  const rangeLabel=isSameDay?fmtDate(_dailyFrom):`${fmtDate(_dailyFrom)} – ${fmtDate(_dailyTo)}`;
+  const inputS=`padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff;cursor:pointer`;
+
+  el.innerHTML=`
+  <div style="padding:24px 28px;font-family:'Jost',sans-serif;overflow-y:auto;height:100%;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      <div>
+        <h2 style="font-size:18px;font-weight:700;color:#111827;margin:0">Category Report</h2>
+        <div style="font-size:12px;color:#9ca3af;margin-top:2px">${rangeLabel}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        ${_rptTabBtn('financial','Financial Summary',false)}
+        ${_rptTabBtn('daily','Daily Report',false)}
+        ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
+        ${_rptTabBtn('gratuitysheet','Gratuity Sheet',false)}
+        ${_rptTabBtn('category','Category Report',true)}
+        ${_rptTabBtn('status','Contract & Portal',false)}
+      </div>
+      <div style="flex:1"></div>
+      <input type="date" value="${_dailyFrom}" onchange="_rptSetDailyFrom(this.value)" style="${inputS}" title="From">
+      <input type="date" value="${_dailyTo}" onchange="_rptSetDailyTo(this.value)" style="${inputS}" title="To">
+      <select onchange="_rptSetDailyUser(this.value)" style="${inputS}">
+        <option value="all" ${_dailyUser==='all'?'selected':''}>All users</option>
+        ${_dailyStaffNames.map(u=>`<option value="${escHtml(u)}" ${_dailyUser===u?'selected':''}>${escHtml(u)}</option>`).join('')}
+      </select>
+      <button onclick="_rptRefreshDaily()" style="padding:6px 10px;background:#f3f4f6;color:#374151;border:1.5px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-family:'Jost',sans-serif" title="Reload data">↺</button>
+      <button onclick="_rptExportCategoryCsv()" style="padding:6px 14px;background:#0e5a5a;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">↓ Export CSV</button>
+    </div>
+
+    ${_dailyError?`<div style="font-size:12px;color:#dc2626;margin-bottom:14px;padding:8px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">⚠ ${escHtml(_dailyError)}</div>`:''}
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">
+      ${_rptCard('Total Charges',fmt$(grandTotal),'#fdf4ff','#7e22ce')}
+      ${_rptCard('Categories',String(groups.length),'#f8fafc','#374151')}
+      ${_rptCard('Range',rangeLabel,'#f0f9ff','#0369a1')}
+    </div>
+
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse">
+        <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
+          <tr>
+            <th style="${_rptTh()}">Category</th>
+            <th style="${_rptTh('center')}">Charges</th>
+            <th style="${_rptTh('right')}">Total</th>
+            <th style="${_rptTh('right')}">% of Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${groups.length===0
+            ?`<tr><td colspan="4" style="padding:60px;text-align:center;color:#9ca3af">No folio charges in this range</td></tr>`
+            :groups.map(g=>`
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="${_rptTd()};font-weight:700;font-size:13px;color:#111827">${escHtml(g.category)}</td>
+              <td style="${_rptTd('center')};font-size:13px;color:#6b7280">${g.count}</td>
+              <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#7e22ce">${fmt$(g.total)}</td>
+              <td style="${_rptTd('right')};font-size:12px;color:#9ca3af">${grandTotal>0?(g.total/grandTotal*100).toFixed(1):'0.0'}%</td>
+            </tr>`).join('')}
+        </tbody>
+        ${groups.length>0?`<tfoot>
+          <tr style="background:#f8fafc;border-top:2px solid var(--border)">
+            <td style="${_rptTd()};font-weight:800;font-size:13px">TOTAL</td>
+            <td style="${_rptTd('center')};font-weight:700">${grandCount}</td>
+            <td style="${_rptTd('right')};font-weight:800;font-size:13px;color:#7e22ce">${fmt$(grandTotal)}</td>
+            <td style="${_rptTd('right')}"></td>
+          </tr>
+        </tfoot>`:''}
+      </table>
+    </div>
+  </div>`;
+}
+function _rptExportCategoryCsv(){
+  const groups=_rptCategoryGroups();
+  const grandTotal=groups.reduce((s,g)=>s+g.total,0);
+  const header=['Category','Charges','Total','% of Total'];
+  const lines=[header,...groups.map(g=>[
+    g.category,g.count,g.total.toFixed(2),
+    grandTotal>0?(g.total/grandTotal*100).toFixed(1):'0.0',
+  ])].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([lines],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=Object.assign(document.createElement('a'),{href:url,download:`category-report-${_dailyFrom}${_dailyFrom!==_dailyTo?'_to_'+_dailyTo:''}.csv`});
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 function _rptExportDailyCsv(){
   const payEntries=_rptDailyPayEntries();
@@ -772,6 +905,7 @@ function _rptRenderGratuity(){
         ${_rptTabBtn('daily','Daily Report',false)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',true)}
         ${_rptTabBtn('gratuitysheet','Gratuity Sheet',false)}
+        ${_rptTabBtn('category','Category Report',false)}
         ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
@@ -996,6 +1130,7 @@ function _rptRenderGratuitySheet(){
         ${_rptTabBtn('daily','Daily Report',false)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
         ${_rptTabBtn('gratuitysheet','Gratuity Sheet',true)}
+        ${_rptTabBtn('category','Category Report',false)}
         ${_rptTabBtn('status','Contract & Portal',false)}
       </div>
       <div style="flex:1"></div>
@@ -1113,6 +1248,7 @@ function _rptRenderStatus(){
         ${_rptTabBtn('daily','Daily Report',false)}
         ${_rptTabBtn('gratuity','Gratuity Retreats',false)}
         ${_rptTabBtn('gratuitysheet','Gratuity Sheet',false)}
+        ${_rptTabBtn('category','Category Report',false)}
         ${_rptTabBtn('status','Contract & Portal',true)}
       </div>
       <div style="flex:1"></div>
