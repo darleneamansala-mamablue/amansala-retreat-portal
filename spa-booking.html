@@ -6,6 +6,7 @@
 <title>Book a Spa Treatment · Amansala</title>
 <link href="https://fonts.googleapis.com/css2?family=Italiana&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://js.stripe.com/v3/"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:#faf7f0;color:#2d2520;min-height:100vh}
@@ -652,8 +653,14 @@ function renderStep7_Confirm(el){
         <label class="form-label">Add a Tip for ${esc(ther.firstName)} (optional)</label>
         <input class="form-input" type="number" min="0" step="1" id="sbTipInput" placeholder="e.g. 10" value="${SB.tipAmount||''}" oninput="SB.tipAmount=parseFloat(this.value)||0">
       </div>
+      ${SB.guestType!=='hotel'?`<div id="sbStripeContainer" style="display:none;margin-top:14px">
+        <label class="form-label">Card Details</label>
+        <div id="sbStripeElement" style="border:1.5px solid #e8dfd4;border-radius:10px;padding:12px;background:#fff"></div>
+      </div>`:''}
+      <div id="sbPayErr" style="color:#b91c1c;font-size:12.5px;margin-top:8px;min-height:16px"></div>
       <button class="btn-primary" style="margin-top:8px" id="sbConfirmBtn" onclick="sbFinalConfirm()">${SB.guestType==='hotel'?'Confirm Booking':'Reserve — Payment Required'}</button>
     </div>`;
+  _sbPayInitiated=false;_sbStripe=null;_sbStripeElems=null;
 }
 
 // ── CONFIRMATION / CANCELLATION EMAILS ───────────────────────────────────
@@ -770,8 +777,79 @@ async function sbSendTherapistCancelEmail(appt,svc,ther){
   }catch(e){}
 }
 
+// Offsite (day-spa) guests now pay BEFORE the appointment is written —
+// Jorge's ask 2026-10-05, see create-spa-payment.js. Hotel guests are
+// unaffected: sbFinalConfirm() routes straight to sbWriteAppointment(null),
+// same behavior as before (auto-charged to the room folio once written).
+let _sbPayInitiated=false,_sbStripe=null,_sbStripeElems=null,_sbPayAmount=0,_sbConfirmedPaymentIntentId=null;
 async function sbFinalConfirm(){
+  // Edge case: payment already succeeded and was verified, but writing the
+  // appointment itself then failed (e.g. a network blip) -- retry the write
+  // alone with the already-confirmed paymentIntentId, never re-run Stripe
+  // payment on an already-captured PaymentIntent.
+  if(_sbConfirmedPaymentIntentId)return sbWriteAppointment(_sbConfirmedPaymentIntentId);
+  if(SB.guestType!=='hotel')return sbHandleOffsitePayment();
+  return sbWriteAppointment(null);
+}
+async function sbHandleOffsitePayment(){
   const btn=document.getElementById('sbConfirmBtn');
+  const errEl=document.getElementById('sbPayErr');
+  errEl.textContent='';
+  const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  // Just for the button label while loading -- the real, authoritative
+  // total (service price computed server-side from the catalog + this tip)
+  // comes back from create-spa-payment.js as `data.amount`.
+  const estPrice=(svc.groupPricing?SB.groupTotalPrice:svc.price)+(SB.tipAmount||0);
+
+  if(!_sbPayInitiated){
+    btn.disabled=true;btn.textContent='Loading…';
+    try{
+      const res=await fetch('/.netlify/functions/create-spa-payment',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({serviceId:SB.serviceId,guestCount:svc.groupPricing?SB.guestCount:undefined,tipAmount:SB.tipAmount||0,email:SB.email,firstName:SB.firstName,lastName:SB.lastName}),
+      });
+      const data=await res.json();
+      if(!res.ok||data.error)throw new Error(data.error??'Could not start payment');
+      _sbStripe=Stripe(data.publishableKey);
+      _sbStripeElems=_sbStripe.elements({clientSecret:data.clientSecret,appearance:{theme:'stripe',variables:{fontFamily:"'DM Sans',sans-serif",borderRadius:'10px',colorPrimary:'#3AB7AE'}}});
+      const payEl=_sbStripeElems.create('payment');
+      const container=document.getElementById('sbStripeContainer');
+      if(container)container.style.display='block';
+      payEl.mount('#sbStripeElement');
+      _sbPayAmount=Number(data.amount??estPrice);
+      btn.textContent=`Pay $${_sbPayAmount.toFixed(2)} and Reserve`;
+      btn.disabled=false;
+      _sbPayInitiated=true;
+      SB.paymentIntentId=data.paymentIntentId;
+    }catch(e){
+      errEl.textContent=e.message;
+      btn.disabled=false;btn.textContent='Reserve — Payment Required';
+    }
+    return;
+  }
+
+  btn.disabled=true;btn.textContent='Processing…';
+  try{
+    const{error,paymentIntent}=await _sbStripe.confirmPayment({elements:_sbStripeElems,redirect:'if_required'});
+    if(error){
+      errEl.textContent=error.message;
+      btn.disabled=false;btn.textContent=`Pay $${_sbPayAmount.toFixed(2)} and Reserve`;
+      return;
+    }
+    const vres=await fetch('/.netlify/functions/confirm-spa-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentIntentId:paymentIntent.id})});
+    const vdata=await vres.json();
+    if(!vres.ok||vdata.error)throw new Error(vdata.error??'Could not verify payment');
+    _sbConfirmedPaymentIntentId=paymentIntent.id;
+    await sbWriteAppointment(paymentIntent.id);
+  }catch(e){
+    errEl.textContent=e.message;
+    btn.disabled=false;btn.textContent=`Pay $${_sbPayAmount.toFixed(2)} and Reserve`;
+  }
+}
+async function sbWriteAppointment(paymentIntentId){
+  const btn=document.getElementById('sbConfirmBtn');
+  const isPaid=!!paymentIntentId;
+  const isHotel=SB.guestType==='hotel';
   btn.disabled=true;btn.textContent='Confirming…';
   try{
     // Revalidate against the latest data right before writing — someone else
@@ -789,8 +867,16 @@ async function sbFinalConfirm(){
       return start<aEnd && end>aStart;
     });
     if(conflict){
-      showToast('That time was just booked by someone else — please pick another.');
-      btn.disabled=false;btn.textContent='Confirm Booking';
+      // The slot was taken in the time it took to pay — refund immediately
+      // rather than leave an offsite guest charged with no appointment.
+      if(isPaid){
+        try{await fetch('/.netlify/functions/refund-spa-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentIntentId})});}catch(e){}
+        showToast('That time was just booked by someone else — you have NOT been charged (refunded automatically). Please pick another time.');
+      }else{
+        showToast('That time was just booked by someone else — please pick another.');
+      }
+      btn.disabled=false;btn.textContent=SB.guestType==='hotel'?'Confirm Booking':'Reserve — Payment Required';
+      _sbPayInitiated=false;_sbStripe=null;_sbStripeElems=null;_sbConfirmedPaymentIntentId=null;
       SpaAppointments=latest;
       setStep(6);
       return;
@@ -808,7 +894,6 @@ async function sbFinalConfirm(){
       }
     }
     const svc=SpaData.services.find(s=>s.id===SB.serviceId);
-    const isHotel=SB.guestType==='hotel';
     const appt={
       id:'ap_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
       clientName:SB.firstName+' '+SB.lastName,
@@ -828,8 +913,14 @@ async function sbFinalConfirm(){
       // male/female preference the system matched.
       serviceId:SB.serviceId, therapistId:SB.therapistId, roomId:SB.roomId||null,
       date:SB.date, start:SB.start, duration:svc.duration,
-      status:isHotel?'CONFIRMED':'PAYMENT_PENDING',
-      paymentStatus:isHotel?'NOT_REQUIRED':'PENDING',
+      // Offsite guests now pay before this ever runs (sbHandleOffsitePayment)
+      // -- isPaid is only ever false here for the hotel-guest path, since
+      // sbWriteAppointment(null) is the only way to reach this without a
+      // paymentIntentId (Jorge's ask 2026-10-05: no more PAYMENT_PENDING
+      // appointments created with nothing actually collected).
+      status:(isHotel||isPaid)?'CONFIRMED':'PAYMENT_PENDING',
+      paymentStatus:isHotel?'NOT_REQUIRED':(isPaid?'PAID':'PENDING'),
+      paymentIntentId:paymentIntentId||null,
       folioStatus:isHotel?'PENDING':'NOT_REQUIRED',
       therapistPreference:{type:SB.prefType,requestedTherapistId:SB.requestedTherapistId||null},
       cancellationPolicyAcceptedAt:SB.policyAcceptedAt||null,
@@ -866,7 +957,7 @@ async function sbFinalConfirm(){
           const price=svc.groupPricing?SB.groupTotalPrice:svc.price;
           if(price!=null){
             const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-            const category=/massage/i.test(svc.name)?'Massage':'Spa';
+            const category='Spa'; // Jorge's call 2026-10-05: always 'Spa', matching every other spa-charge path
             // Post to the guest's OWN folio (folios/folio_items) — the account the
             // portal's Booking Detail, Card on File and check-out use — instead of
             // the legacy reg.charges list, which only rolls up to the retreat
@@ -904,7 +995,7 @@ async function sbFinalConfirm(){
             const price=svc.groupPricing?SB.groupTotalPrice:svc.price;
             if(price!=null){
               const chargeId='chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-              const category=/massage/i.test(svc.name)?'Massage':'Spa';
+              const category='Spa'; // Jorge's call 2026-10-05: always 'Spa', matching every other spa-charge path
               const newCharges=[...(bkMatch.bk.charges||[]),{id:chargeId,date:appt.date,category,description:svc.name,amount:price,guestName:bkMatch.bk.leaderName,therapistName:chargeTherName,therapistId:appt.therapistId,addedAt:new Date().toISOString(),addedBy:'Spa Booking (auto)',source:'spa'},...(tipCharge?[{...tipCharge,guestName:bkMatch.bk.leaderName}]:[])];
               const {error:chErr}=await db.from('bookings').update({charges:newCharges}).eq('id',bkMatch.bk.id);
               if(!chErr){
@@ -939,13 +1030,13 @@ async function sbFinalConfirm(){
     }else{
       el.innerHTML=`<div class="msg">
         <div class="msg-icon">🌴</div>
-        <div class="msg-title">Almost There!</div>
-        <div class="msg-sub">Your <b>${esc(svc.name)}</b> is reserved for ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>Our team will reach out to <b>${esc(SB.email)}</b> shortly to collect payment and confirm your appointment.${viewConfirmationLink}</div>
+        <div class="msg-title">You're Booked!</div>
+        <div class="msg-sub">Your <b>${esc(svc.name)}</b> is confirmed for ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}. Payment received — see you then! We've sent the details — including your meeting location and a cancellation link — to ${esc(appt.email)}.${viewConfirmationLink}</div>
       </div>`;
     }
   }catch(e){
     showToast('Something went wrong — please try again.');
-    btn.disabled=false;btn.textContent='Confirm Booking';
+    btn.disabled=false;btn.textContent=isHotel?'Confirm Booking':(_sbPayInitiated?'Try Again':'Reserve — Payment Required');
   }
 }
 
