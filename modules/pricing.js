@@ -128,7 +128,7 @@ function renderEstQuote(lblId,bodyId){
         <span>ISH hab. (${roomTaxRate===0?'0%':'16%'})</span><span>${fmt$(r.roomTax)}</span>
         ${r.pTax>0?`<span>IVA extras (${Math.round(pkgTaxRate*100)}%)</span><span>${fmt$(r.pTax)}</span>`:''}
         <span>Gratuity ($${tipPer}×${r.gc}×${r.regNights}nt)</span><span>${fmt$(r.tip)}</span>
-        ${r.cao>0?`<span>Custom add-ons (tax incl.)</span><span>${fmt$(r.cao)}</span>`:''}
+        ${r.cao>0?`<span>${escHtml((regSelBk.packageCustomPrices?.__custom__||[]).map(c=>c.name).join(', ')||'Custom add-ons')} (tax incl.)</span><span>${fmt$(r.cao)}</span>`:''}
         ${r.credit>0?`<span style="color:#dc2626">💳 Credit</span><span style="color:#dc2626">−${fmt$(r.credit)}</span>`:''}
       </div>
       ${r.cancelledGuests.length?`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #fde68a;font-size:11px;color:#dc2626">${r.cancelledGuests.map(g=>`🚫 ${escHtml(g.name)} cancelled — fee ${fmt$(g.cancellationFee||0)}`).join('<br>')}</div>`:''}
@@ -159,7 +159,7 @@ function renderEstQuote(lblId,bodyId){
     <div class="eq-card-title" style="color:#92400e">Estimated Grand Total</div>
     <div class="eq-row"><span>🏠 Room rates (base)</span><span>${fmt$(+totalRoomBase.toFixed(2))}</span></div>
     ${totalPkg>0?`<div class="eq-row"><span>📦 Packages</span><span>${fmt$(+totalPkg.toFixed(2))}</span></div>`:''}
-    ${totalCao>0?`<div class="eq-row"><span>🎁 Custom add-ons (tax incl.)</span><span>${fmt$(+totalCao.toFixed(2))}</span></div>`:''}
+    ${totalCao>0?`<div class="eq-row"><span>🎁 ${escHtml((regSelBk.packageCustomPrices?.__custom__||[]).map(c=>c.name).join(', ')||'Custom add-ons')} (tax incl.)</span><span>${fmt$(+totalCao.toFixed(2))}</span></div>`:''}
     <div class="eq-row" style="color:#0891b2"><span>🤝 Gratuity ($${tipPer}/guest/night)</span><span>${fmt$(+totalTip.toFixed(2))}</span></div>
     ${totalRoomTax>0?`<div class="eq-row" style="color:#7c3aed"><span>🏛 ISH hab. (16%)</span><span>${fmt$(+totalRoomTax.toFixed(2))}</span></div>`:''}
     ${totalPkgTax>0?`<div class="eq-row" style="color:#7c3aed"><span>🏛 IVA extras (${Math.round(pkgTaxRate*100)}%)</span><span>${fmt$(+totalPkgTax.toFixed(2))}</span></div>`:''}
