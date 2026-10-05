@@ -190,7 +190,21 @@ function _rptSetTab(tab){
 
 function _rptBuildRows(){
   return AppData.bookings.filter(bk=>bk.bookingType!=='room_only').map(bk=>{
-    const {charged,totalPaid,balance}=calcBkBalance(bk);
+    // Financial Summary's Revenue/Collected/Balance is deliberately
+    // Room/Package vs group-level payments ONLY -- NOT calcBkBalance()
+    // (which also folds in reg.charges incidentals, e.g. a guest's spa
+    // charge). Individual guest folios (spa/restaurant/tips paid by card
+    // via guest-pay/Rate and Folios) are their own separate ledger and
+    // must never surface here either (Jorge's call 2026-10-05: a retreat
+    // showing a "balance" that was really just one guest's unrelated
+    // incidental charge, or someone else's folio card payment never
+    // reflected in the group total, read as wrong/confusing). This is
+    // scoped to Financial Summary only -- Venues/Payments/Teacher Portal
+    // still use the shared calcBkBalance() with incidentals included,
+    // since those views intentionally show the fuller group picture.
+    const charged=_calcRoomRevenue(bk);
+    const totalPaid=(bk.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
+    const balance=+(charged-totalPaid).toFixed(2);
     const regs=getRegsForBk(bk.id);
     const guestNames=new Set();
     regs.forEach(r=>(r.guests||[]).forEach(g=>{if(g.name&&g.name.trim())guestNames.add(g.name.trim().toLowerCase());}));
