@@ -151,7 +151,7 @@
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
-    .tip-form input {
+    .tip-form input, .tip-form select {
       width: 100%;
       padding: 11px 12px;
       border: 1.5px solid #e5e7eb;
@@ -159,6 +159,8 @@
       font-size: 14px;
       font-family: 'Jost', sans-serif;
       margin-bottom: 14px;
+      background: #fff;
+      color: #111827;
     }
     .tip-form .tip-btn-row { display: flex; gap: 10px; }
     .tip-form .tip-btn-row .btn-pay { margin-top: 0; }
@@ -457,6 +459,13 @@ let _amountDue = 0;
 let _folioIdForConfirm = null;
 
 // ─── ADD TIP ──────────────────────────────────────────────────
+// Jorge's ask 2026-10-05: replace the free-text "what's this for" with a
+// pick-list of departments (plus a "write a name" option for a specific
+// person) so tips are easy to route, instead of relying on guests to type
+// something staff can actually match to a department.
+const TIP_RECIPIENT_OPTIONS = [
+  'General Staff', 'Kitchen', 'Housekeeping', 'Waiters', 'Yoga Cleaners', 'Front Desk',
+];
 function showTipForm() {
   const area = document.getElementById('tip-area');
   if (!area) return;
@@ -464,8 +473,12 @@ function showTipForm() {
     <div class="tip-form">
       <label>Tip Amount (USD)</label>
       <input type="number" id="tip-amount" min="0.01" step="0.01" inputmode="decimal" placeholder="20.00">
-      <label>What's this for? (optional)</label>
-      <input type="text" id="tip-desc" placeholder="e.g. housekeeping, front desk">
+      <label>Would you like to leave this for general staff, or for someone specific?</label>
+      <select id="tip-recipient" onchange="tipRecipientChanged()">
+        ${TIP_RECIPIENT_OPTIONS.map(o => `<option value="${o}">${o}</option>`).join('')}
+        <option value="__custom__">Write a name…</option>
+      </select>
+      <input type="text" id="tip-name" placeholder="Enter a name" style="display:none;margin-top:10px">
       <div id="tip-err" class="error-msg" style="margin:0 0 10px"></div>
       <div class="tip-btn-row">
         <button type="button" class="btn-tip-cancel" onclick="hideTipForm()">Cancel</button>
@@ -475,6 +488,15 @@ function showTipForm() {
   document.getElementById('tip-amount')?.focus();
 }
 
+function tipRecipientChanged() {
+  const sel = document.getElementById('tip-recipient');
+  const nameEl = document.getElementById('tip-name');
+  if (!sel || !nameEl) return;
+  const isCustom = sel.value === '__custom__';
+  nameEl.style.display = isCustom ? 'block' : 'none';
+  if (isCustom) nameEl.focus();
+}
+
 function hideTipForm() {
   const area = document.getElementById('tip-area');
   if (area) area.innerHTML = `<button type="button" class="btn-tip" id="btn-add-tip" onclick="showTipForm()">+ Add Tip</button>`;
@@ -482,18 +504,22 @@ function hideTipForm() {
 
 async function submitTip() {
   const amountEl = document.getElementById('tip-amount');
-  const descEl   = document.getElementById('tip-desc');
+  const recipientEl = document.getElementById('tip-recipient');
+  const nameEl   = document.getElementById('tip-name');
   const errEl    = document.getElementById('tip-err');
   const btn      = document.getElementById('btn-tip-submit');
   const amount   = parseFloat(amountEl.value);
   if (!amount || amount <= 0) { errEl.textContent = 'Enter a valid amount.'; return; }
+  const isCustom = recipientEl.value === '__custom__';
+  if (isCustom && !nameEl.value.trim()) { errEl.textContent = 'Please enter a name.'; return; }
+  const description = isCustom ? nameEl.value.trim() : recipientEl.value;
 
   btn.disabled = true; btn.textContent = 'Adding…';
   try {
     const res  = await fetch('/.netlify/functions/add-folio-tip', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ token: _token, amount, description: descEl.value }),
+      body:    JSON.stringify({ token: _token, amount, description }),
     });
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error ?? 'Could not add tip');
