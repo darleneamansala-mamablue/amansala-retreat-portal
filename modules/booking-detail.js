@@ -635,7 +635,7 @@ async function _bdLoadCatalogItems(){
 // has, so the "+ Add manually" Category dropdown always covers both. Jorge's
 // ask 2026-09-30: make Category an actual pick-list (not free text), and add
 // "Tip Tarjeta" and "Comisión" to it.
-const BD_EXTRA_CATEGORIES=['Payment','Transport','Restaurant','Upgrade','Room','Tip','Tip Tarjeta','Comisión','Gym'];
+const BD_EXTRA_CATEGORIES=['Payment','Transport','Restaurant','Upgrade','Room','Tip','Tip Tarjeta','Comisión','Gym','Boutique'];
 function _bdCategoryOptionsHtml(selected){
   const cats=new Set(BD_EXTRA_CATEGORIES);
   _bdCatalogItems.forEach(it=>{if(it.category)cats.add(it.category);});
