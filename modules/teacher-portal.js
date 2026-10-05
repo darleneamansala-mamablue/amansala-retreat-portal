@@ -713,8 +713,14 @@ function regRender(){
             const bd1=calcBD(rt,_bdGc,_bdNights,_bdEffCI,regSelBk,_bdRegCalc);
             const nRate1=_bdExtraRate!=null?_bdExtraRate:(bedReg?.customRateOverride!=null?bedReg.customRateOverride:getRoomRate(rt,_bdGc,_bdEffCI,_bdNights));
             const pkgLine1=bd1.pkg>0?`<div class="pb-row addon"><span>Add-ons</span><span>${fmt$(bd1.pkg)}</span></div>`:'';
+            // One-off custom add-ons (packageCustomPrices.__custom__) are booking-wide,
+            // not per-reg — same list applies to every room, so the label is just
+            // their own name(s), same convention as pkgLine above (Jorge's report
+            // 2026-10-05: showed nowhere here, and the quote's generic "Custom
+            // add-ons" label should say the actual name he gave it instead).
+            const caoLine1=bd1.cao>0?`<div class="pb-row addon"><span>${escHtml((regSelBk.packageCustomPrices?.__custom__||[]).map(c=>c.name).join(', ')||'Custom add-ons')}</span><span>${fmt$(bd1.cao)}</span></div>`:'';
             const rateCell1=IS_TEACHER_MODE?`$${nRate1}`:`$<input type="number" class="rate-inline-input" value="${nRate1}" title="Override nightly rate" onclick="event.stopPropagation()" onchange="regSaveRateOverride('${bedReg.id}',this.value)" style="width:46px;padding:0 3px;border:1px solid var(--border);border-radius:3px;font-size:11px;text-align:right;font-family:inherit;">`;
-            priceTd.innerHTML=`<details class="price-details"><summary><span class="price-summary-total">${fmt$(bd1.total)}</span><span class="price-toggle-arrow">&#9658;</span></summary><div class="price-breakdown-rows"><div class="pb-row"><span>Room (${rateCell1}/nt)</span><span>${fmt$(bd1.base)}</span></div>${pkgLine1}<div class="pb-row"><span>Tax (16%)</span><span>${fmt$(bd1.tax)}</span></div><div class="pb-row"><span>Tip ($30×${_bdNights}nt)</span><span>${fmt$(bd1.dip)}</span></div></div></details>`;
+            priceTd.innerHTML=`<details class="price-details"><summary><span class="price-summary-total">${fmt$(bd1.total)}</span><span class="price-toggle-arrow">&#9658;</span></summary><div class="price-breakdown-rows"><div class="pb-row"><span>Room (${rateCell1}/nt)</span><span>${fmt$(bd1.base)}</span></div>${pkgLine1}${caoLine1}<div class="pb-row"><span>Tax (16%)</span><span>${fmt$(bd1.tax)}</span></div><div class="pb-row"><span>Tip ($30×${_bdNights}nt)</span><span>${fmt$(bd1.dip)}</span></div></div></details>`;
             tr.appendChild(priceTd);
             const notesTd=document.createElement('td');notesTd.className='r-notes';
             const _bdRoomNoteHtml=bedReg?.notes?`<div style="font-size:9px;color:#b45309;font-style:italic;line-height:1.3;margin-bottom:2px">${bedReg.notes.replace(/</g,'&lt;')}</div>`:'';
@@ -849,6 +855,13 @@ function regRender(){
           const gTipNights=gShare?gShare.tipNights:_regNights;
           const tipRateDisp=reg.customTipRateOverride!=null?reg.customTipRateOverride:getTip(regSelBk);
           const pkgLine=perPkg>0?`<div class="pb-row addon"><span>Add-ons (${pkgItems.map(p=>p.name).join(', ')})</span><span>${fmt$(perPkg)}</span></div>`:'';
+          // One-off custom add-ons (packageCustomPrices.__custom__) are booking-wide,
+          // not per-reg — same list applies to every room, so the label is just
+          // their own name(s), same convention as pkgLine above (Jorge's report
+          // 2026-10-05: showed nowhere here, and the quote's generic "Custom
+          // add-ons" label should say the actual name he gave it instead).
+          const perCao=gShare?gShare.cao:+(bd.cao/gc).toFixed(2);
+          const caoLine=perCao>0?`<div class="pb-row addon"><span>${escHtml((regSelBk.packageCustomPrices?.__custom__||[]).map(c=>c.name).join(', ')||'Custom add-ons')}</span><span>${fmt$(perCao)}</span></div>`:'';
           const perCredit=gShare?.credit||0;
           const creditLine=perCredit>0?`<div class="pb-row"><span>Credit</span><span style="color:#dc2626">−${fmt$(perCredit)}</span></div>`:'';
           // The inline-editable rate input writes to reg.customRateOverride (the whole
@@ -868,6 +881,7 @@ function regRender(){
             <div class="price-breakdown-rows">
               ${roomLine}
               ${pkgLine}
+              ${caoLine}
               <div class="pb-row"><span>Tax (${bd.pkg>0&&getBkTaxRate(regSelBk)!==0.16?`16% rm / ${getBkTaxRate(regSelBk)===0?'0%':Math.round(getBkTaxRate(regSelBk)*100)+'%'} ext`:'16%'})</span><span>${fmt$(perTax)}</span></div>
               <div class="pb-row"><span>Tip ($${tipRateDisp}×${gTipNights}nt)</span><span>${fmt$(perTip)}</span></div>
               ${creditLine}
