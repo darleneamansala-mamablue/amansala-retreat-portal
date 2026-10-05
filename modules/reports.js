@@ -419,8 +419,19 @@ function _rptRowHtml(r){
 function _rptTh(align='left'){return`padding:9px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;text-align:${align}`;}
 function _rptTd(align='left'){return`padding:10px 14px;vertical-align:middle;text-align:${align}`;}
 
-function _rptSetYear(y){_rptYear=y;_rptRenderBody();}
-function _rptToggleCanc(v){_rptShowCanc=v;_rptRenderBody();}
+// Re-renders whichever tab is actually open, not always Financial Summary --
+// the year/show-cancelled controls appear on every tab's own header, and
+// every tab but Financial Summary used to silently switch the user back to
+// it on change (Jorge's report 2026-10-05, from Gratuity Sheet).
+function _rptRerenderActiveTab(){
+  if(_rptActiveTab==='daily')_rptRenderDaily();
+  else if(_rptActiveTab==='gratuity')_rptRenderGratuity();
+  else if(_rptActiveTab==='gratuitysheet')_rptRenderGratuitySheet();
+  else if(_rptActiveTab==='status')_rptRenderStatus();
+  else _rptRenderBody();
+}
+function _rptSetYear(y){_rptYear=y;_rptRerenderActiveTab();}
+function _rptToggleCanc(v){_rptShowCanc=v;_rptRerenderActiveTab();}
 
 function _rptExportCsv(){
   const rows=_rptFiltered().slice().sort((a,b)=>(b.bk.startDate||'').localeCompare(a.bk.startDate||''));
@@ -769,7 +780,7 @@ function _rptRenderGratuity(){
         ${years.map(y=>`<option value="${y}" ${_rptYear===y?'selected':''}>${y}</option>`).join('')}
       </select>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;cursor:pointer">
-        <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked);_rptRenderGratuity()">
+        <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked)">
         Show cancelled
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280">
@@ -993,7 +1004,7 @@ function _rptRenderGratuitySheet(){
         ${years.map(y=>`<option value="${y}" ${_rptYear===y?'selected':''}>${y}</option>`).join('')}
       </select>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;cursor:pointer">
-        <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked);_rptRenderGratuitySheet()">
+        <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked)">
         Show cancelled
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280">
@@ -1105,12 +1116,12 @@ function _rptRenderStatus(){
         ${_rptTabBtn('status','Contract & Portal',true)}
       </div>
       <div style="flex:1"></div>
-      <select onchange="_rptSetYear(this.value);_rptRenderStatus()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff;cursor:pointer">
+      <select onchange="_rptSetYear(this.value)" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;color:#374151;background:#fff;cursor:pointer">
         <option value="all" ${_rptYear==='all'?'selected':''}>All years</option>
         ${years.map(y=>`<option value="${y}" ${_rptYear===y?'selected':''}>${y}</option>`).join('')}
       </select>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;cursor:pointer">
-        <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked);_rptRenderStatus()">
+        <input type="checkbox" ${_rptShowCanc?'checked':''} onchange="_rptToggleCanc(this.checked)">
         Show cancelled
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280;cursor:pointer">
