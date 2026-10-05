@@ -892,7 +892,11 @@ function _rptRenderGratuitySheet(){
   _gsLoadSettings();
   _gsLoadExtraTips();
   _gsLoadDeptSplits();
-  const rows=_rptFiltered();
+  // We Travel bookings (bk.source==='wetravel') aren't real gratuity-tracked
+  // retreats -- they're priced/settled entirely on WeTravel's own platform,
+  // same reason Contract & Portal already excludes them (Jorge's report
+  // 2026-10-05: "nada de we travel debe de salir").
+  const rows=_rptFiltered().filter(r=>r.bk.source!=='wetravel');
   const years=[...new Set(_rptRows.map(r=>(r.bk.startDate||'').slice(0,4)).filter(Boolean))].sort().reverse();
 
   const monthMap=new Map();
@@ -1017,7 +1021,7 @@ function _rptRenderGratuitySheet(){
 }
 
 function _gsExportCsv(){
-  const rows=_rptFiltered().slice().sort((a,b)=>(a.bk.startDate||'').localeCompare(b.bk.startDate||''));
+  const rows=_rptFiltered().filter(r=>r.bk.source!=='wetravel').slice().sort((a,b)=>(a.bk.startDate||'').localeCompare(b.bk.startDate||''));
   const header=['Retreat','Fechas','Noches','Pax','Gratuity Dls','Propina Pesos','Extra Tips USD','Extra Tips Pesos','Total Cobrado','Status'];
   const lines=[header,...rows.map(r=>{
     const c=_gsRowCalc(r);
