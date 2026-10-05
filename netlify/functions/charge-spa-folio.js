@@ -94,7 +94,12 @@ exports.handler = async (event) => {
   }
 
   // ── 5. Insert folio_item ───────────────────────────────────────────────────
-  const category = /massage/i.test(svcName) ? 'Massage' : 'Spa';
+  // Jorge's call 2026-10-05: always 'Spa', matching manually-added spa/
+  // massage charges from the Items catalog -- auto-splitting massages into
+  // their own 'Massage' category here just made Category Report show the
+  // same kind of charge under two different categories depending on which
+  // path charged it.
+  const category = 'Spa';
   const itemRes = await fetch(`${SUPABASE_URL}/rest/v1/folio_items`, {
     method:  'POST',
     headers: { ...h, 'Prefer': 'return=representation' },

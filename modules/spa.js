@@ -675,7 +675,12 @@ async function spaChargeApptToRoom(apptId, opts) {
   const name = svc?.name || 'Spa Service';
   const price = svc?.groupPricing ? (a.groupTotalPriceUSD ?? svc.price) : svc?.price;
   if (price == null) { if (!opts.silent) showToast('This service has no price set — add one in Services first.'); return; }
-  const category = /massage/i.test(name) ? 'Massage' : 'Spa';
+  // Jorge's call 2026-10-05: manually-added spa/massage charges (Items
+  // catalog) only ever use category 'Spa' -- auto-splitting massages into
+  // their own 'Massage' category here just made Category Report show the
+  // same kind of charge under two different categories depending on which
+  // path charged it.
+  const category='Spa';
   const guestLabel = match ? match.guest.name : bkMatch.bk.leaderName;
   if (!opts.silent && !confirm(`Charge ${guestLabel}'s room folio ${fmt$(price)} for "${name}"?`)) return;
   const chargeId = uid();
