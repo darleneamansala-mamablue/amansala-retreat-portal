@@ -445,8 +445,11 @@ function trVehicleType(size){
 }
 
 // ── Ride sharing ─────────────────────────────────────────────────────────
-// Two subs auto-group within a time window of each other (30 min in Teacher
-// Portal, 20 min in the admin Transport board / driver-view.html). Staff can
+// Two subs auto-group within a 20-minute window of each other -- same
+// window in the admin Transport board, driver-view.html, AND Teacher Portal
+// (_trAssignRideGroups was still using 30 min until Jorge's report
+// 2026-10-06 that the two views showed different groupings/pricing for the
+// same retreat). Staff can
 // also manually drag-and-drop entries together in the admin board — that
 // override lives in settings.transport_groups (tr2UserGroupMap / tr2Drop /
 // tr2SaveGroupSetting) keyed by `${arrival|departure}|${transport.id}`, shared
