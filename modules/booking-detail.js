@@ -1011,29 +1011,29 @@ async function bdSyncCloudbeds(){
   const resv=cbData?.reservations||[];
   const nameParts=(subj.guestName||'').toLowerCase().split(/\s+/).filter(p=>p.length>2);
   const ownRt=AppData.roomTypes.find(rt=>rt.id===reg.roomTypeId);
-  const candidates=resv.filter(r=>{
+  const portalNights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
+  const nameMatches=resv.filter(r=>{
     if(r.status==='cancelled')return false;
     const gn=(r.guestName||'').toLowerCase();
     return nameParts.length&&nameParts.every(p=>gn.includes(p));
   });
-  // Prefer a candidate whose actual room belongs to the same portal room type
-  // as this registration -- "si el nombre hace match con el tipo de cuarto".
-  const match=candidates.find(c=>(c.rooms||[]).some(rn=>ownRt?.rooms?.includes(rn)))||candidates[0];
-  if(match){
-    const realRoom=(match.rooms||[])[0]||reg.room;
-    const realCheckIn=match.startDate||subj.checkIn,realCheckOut=match.endDate||subj.checkOut;
-    // Cloudbeds' real reservation can run longer than what the portal has on
-    // file (Jorge's report 2026-10-06: Gina Levett has an extra night in
-    // Cloudbeds -- Jan 29, not just Jan 30 -- that this registration never
-    // showed). Adopt Cloudbeds' real dates here too, not just the room --
-    // same rate-freeze rule as bdSaveDetails/rcMoveRoom applies (dates
-    // changing must never silently move the tarifa).
+  // A name match alone isn't enough to prove it's the SAME reservation --
+  // Jorge's correction 2026-10-06: a Cloudbeds reservation under the same
+  // name but a SHORTER (or longer) stay can just as easily be a separate
+  // extra-night booking or an unrelated stay, not this one. Only auto-link
+  // when both the duration (exact night count) AND the room type match --
+  // anything else needs a human to look at it, not a guess.
+  const sameDuration=c=>Math.max(1,Math.round((pd(c.endDate)-pd(c.startDate))/DAY_MS))===portalNights;
+  const exactMatch=nameMatches.find(c=>sameDuration(c)&&(c.rooms||[]).some(rn=>ownRt?.rooms?.includes(rn)));
+  if(exactMatch){
+    const realRoom=(exactMatch.rooms||[])[0]||reg.room;
+    const realCheckIn=exactMatch.startDate||subj.checkIn,realCheckOut=exactMatch.endDate||subj.checkOut;
     const datesChanged=realCheckIn!==subj.checkIn||realCheckOut!==subj.checkOut;
     if(reg.customRateOverride==null&&datesChanged){
       reg.customRateOverride=subj.rate;
     }
     if(!bk.cbReservationIds)bk.cbReservationIds={};
-    bk.cbReservationIds[realRoom]=match.reservationID;
+    bk.cbReservationIds[realRoom]=exactMatch.reservationID;
     if(realRoom!==reg.room){
       reg.room=realRoom;
       const newRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(realRoom));
@@ -1046,8 +1046,17 @@ async function bdSyncCloudbeds(){
         db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id),
       ]);
     }catch(e){showToast('Error guardando el enlace: '+e.message);return;}
-    showToast(`Vinculado con la reserva de Cloudbeds "${match.guestName}" en ${realRoom}${datesChanged?` (fechas ajustadas: ${fmtDate(realCheckIn)} — ${fmtDate(realCheckOut)})`:''} ✓`);
+    showToast(`Vinculado con la reserva de Cloudbeds "${exactMatch.guestName}" en ${realRoom}${datesChanged?` (fechas ajustadas: ${fmtDate(realCheckIn)} — ${fmtDate(realCheckOut)})`:''} ✓`);
     _bdRender();
+    return;
+  }
+  // Name showed up in Cloudbeds but never with the same duration+room type --
+  // don't silently link the wrong reservation, and don't create a duplicate
+  // next to a real one either. Surface it and stop.
+  if(nameMatches.length){
+    const other=nameMatches[0];
+    const otherNights=Math.max(1,Math.round((pd(other.endDate)-pd(other.startDate))/DAY_MS));
+    showToast(`Encontré "${other.guestName}" en Cloudbeds (${otherNights} noche${otherNights!==1?'s':''}, ${fmtDate(other.startDate)}–${fmtDate(other.endDate)}) pero no coincide con esta reserva (${portalNights} noche${portalNights!==1?'s':''}) — revísalo manualmente antes de vincular o crear.`);
     return;
   }
   if(!confirm(`No encontré a "${subj.guestName}" en Cloudbeds para estas fechas. ¿Crear una reserva nueva en Cloudbeds (cuarto ${reg.room})?`))return;
