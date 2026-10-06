@@ -111,7 +111,14 @@ exports.handler = async (event) => {
       }
 
       case "checkReservation": {
-        const res = await cbGet(tok, "/getReservation", { reservationID: body.reservationId }).catch(() => null);
+        // Distinguish "Cloudbeds confirmed this ID is gone/cancelled" from "we
+        // couldn't reach Cloudbeds to check" -- a network/auth error must never
+        // read the same as a real not-found, or a Re-sync feature built on this
+        // could clear a perfectly good link just because of a timeout.
+        let res, errored = false;
+        try { res = await cbGet(tok, "/getReservation", { reservationID: body.reservationId }); }
+        catch (e) { errored = true; console.warn("[CB checkReservation] request failed:", e.message); }
+        if (errored) return ok(h, { active: null, status: "", errored: true });
         const status = (res?.data?.status || res?.data?.reservationStatus || "").toLowerCase();
         // checked_out and closed are COMPLETED stays — keep them as valid (not stale)
         const inactiveStatuses = ["canceled","cancelled","no_show","void","deleted"];

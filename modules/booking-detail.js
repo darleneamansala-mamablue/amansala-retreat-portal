@@ -361,10 +361,13 @@ function _bdRender(){
   // Booking/Guest panel below into an inline edit form.
   if(!subj.cancelled) headerBtns+=`<button onclick="bdToggleDetailEdit()" style="${hBtnS}">${_bdDetailEditMode?'✕ Cancel Edit':'✏️ Edit'}</button>`;
   // "Sync Cloudbeds" -- Jorge's ask 2026-10-06: some reservations (We Travel
-  // guests especially) never get pushed to Cloudbeds at all. Only offered
-  // when THIS room has no cb_reservation_id yet -- once linked, the button
-  // disappears (nothing left to sync from here).
-  if(_bdKind==='reg'&&!subj.cancelled&&_bdBk&&!(_bdBk.cbReservationIds||{})[subj.room]) headerBtns+=`<button onclick="bdSyncCloudbeds()" style="${hBtnS}">☁️ Sync Cloudbeds</button>`;
+  // guests especially) never get pushed to Cloudbeds at all. Always offered
+  // (not just when unlinked) -- Jorge's follow-up ask the same day: a room
+  // CAN already be linked to a reservation that was since deleted directly in
+  // Cloudbeds (real case: Gina Levett's CH2), and there was no way to re-check
+  // that from here. bdSyncCloudbeds() itself re-verifies an existing link
+  // first before doing anything else.
+  if(_bdKind==='reg'&&!subj.cancelled&&_bdBk) headerBtns+=`<button onclick="bdSyncCloudbeds()" style="${hBtnS}">${(_bdBk.cbReservationIds||{})[subj.room]?'🔄 Re-sync Cloudbeds':'☁️ Sync Cloudbeds'}</button>`;
   headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Delete</button>`;
 
   document.getElementById('bdHdr').innerHTML=`
@@ -1018,6 +1021,29 @@ async function bdSyncCloudbeds(){
   const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return;
   const subj=_bdSubject();if(!subj)return;
+  // Re-sync -- Jorge's ask 2026-10-06: a room can already be linked to a
+  // reservation that was since deleted directly in Cloudbeds (real case:
+  // Gina Levett's CH2). Verify an existing link BEFORE doing anything else --
+  // confirmed gone -> clear it and fall through to the normal find-or-create
+  // flow below; confirmed still active -> nothing to do, stop; couldn't even
+  // reach Cloudbeds to check -> stop and say so, never guess and clear a
+  // perfectly good link over a network hiccup.
+  const existingId=(bk.cbReservationIds||{})[reg.room];
+  if(existingId){
+    showToast('Verificando enlace actual…');
+    let checkData;
+    try{
+      const res=await fetch(`${CLOUDBEDS_PROXY}?action=checkReservation`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reservationId:existingId})});
+      checkData=await res.json();
+    }catch(e){bdStickyAlert('No pude conectar con Cloudbeds para verificar el enlace actual: '+e.message+'. Intenta de nuevo en un momento.','error');return;}
+    if(checkData.errored){bdStickyAlert('No pude confirmar el estado de la reserva enlazada en Cloudbeds ahorita (puede ser temporal) — intenta de nuevo en un momento antes de asumir que ya no existe.','warn');return;}
+    if(checkData.active){bdStickyAlert(`Ya está enlazado a una reserva activa en Cloudbeds (estado: ${checkData.status}) — todo en orden, no hace falta hacer nada.`,'success');return;}
+    // Confirmed gone/cancelled -- clear the stale link and fall through to search-or-create.
+    delete bk.cbReservationIds[reg.room];
+    try{await db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id);}
+    catch(e){bdStickyAlert('Error limpiando el enlace viejo: '+e.message,'error');return;}
+    bdStickyAlert(`La reserva enlazada (${existingId}) ya no existe en Cloudbeds (estado: ${checkData.status||'no encontrada'}) — buscando una reserva real para reemplazarla…`,'warn');
+  }
   showToast('Buscando en Cloudbeds…');
   let cbData;
   try{
