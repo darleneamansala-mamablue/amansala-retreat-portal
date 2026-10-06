@@ -1021,6 +1021,17 @@ async function bdSyncCloudbeds(){
   const match=candidates.find(c=>(c.rooms||[]).some(rn=>ownRt?.rooms?.includes(rn)))||candidates[0];
   if(match){
     const realRoom=(match.rooms||[])[0]||reg.room;
+    const realCheckIn=match.startDate||subj.checkIn,realCheckOut=match.endDate||subj.checkOut;
+    // Cloudbeds' real reservation can run longer than what the portal has on
+    // file (Jorge's report 2026-10-06: Gina Levett has an extra night in
+    // Cloudbeds -- Jan 29, not just Jan 30 -- that this registration never
+    // showed). Adopt Cloudbeds' real dates here too, not just the room --
+    // same rate-freeze rule as bdSaveDetails/rcMoveRoom applies (dates
+    // changing must never silently move the tarifa).
+    const datesChanged=realCheckIn!==subj.checkIn||realCheckOut!==subj.checkOut;
+    if(reg.customRateOverride==null&&datesChanged){
+      reg.customRateOverride=subj.rate;
+    }
     if(!bk.cbReservationIds)bk.cbReservationIds={};
     bk.cbReservationIds[realRoom]=match.reservationID;
     if(realRoom!==reg.room){
@@ -1028,13 +1039,14 @@ async function bdSyncCloudbeds(){
       const newRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(realRoom));
       if(newRt)reg.roomTypeId=newRt.id;
     }
+    reg.checkIn=realCheckIn;reg.checkOut=realCheckOut;
     try{
       await Promise.all([
-        db.from('registrations').update({room:reg.room,room_type_id:reg.roomTypeId}).eq('id',reg.id),
+        db.from('registrations').update({room:reg.room,room_type_id:reg.roomTypeId,check_in:reg.checkIn,check_out:reg.checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id),
         db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id),
       ]);
     }catch(e){showToast('Error guardando el enlace: '+e.message);return;}
-    showToast(`Vinculado con la reserva de Cloudbeds "${match.guestName}" en ${realRoom} ✓`);
+    showToast(`Vinculado con la reserva de Cloudbeds "${match.guestName}" en ${realRoom}${datesChanged?` (fechas ajustadas: ${fmtDate(realCheckIn)} — ${fmtDate(realCheckOut)})`:''} ✓`);
     _bdRender();
     return;
   }
