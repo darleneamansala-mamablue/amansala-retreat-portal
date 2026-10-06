@@ -3832,8 +3832,12 @@ function computeShortSlug(bkId){
     const items=groups[base].slice().sort((a,b)=>
       (a.startDate||'').localeCompare(b.startDate||'')||a.id.localeCompare(b.id));
     if(items.length===1){if(items[0].id===bkId)return base;continue;}
-    const seenHere=new Set(),final={};
-    items.forEach(b=>{
+    // Soonest-starting event keeps the plain slug, later same-name event(s)
+    // get a date suffix -- must match shortlink.js's disambiguation exactly
+    // (Jorge's ask 2026-10-06).
+    const final={[base]:items[0]};
+    const seenHere=new Set([base]);
+    items.slice(1).forEach(b=>{
       let s=`${base}-${_slDateSuffix(b.startDate)}`;
       if(seenHere.has(s)||final[s])s=`${s}-${_slIdSuffix(b.id)}`;
       seenHere.add(s);final[s]=b;

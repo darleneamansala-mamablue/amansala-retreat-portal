@@ -6,9 +6,10 @@
 // Computed live from Supabase on every request instead of a static list, so
 // a brand-new event gets a working short link immediately — nothing to
 // regenerate. Slug = the leader's name, lowercased, letters/digits only.
-// When two active events share a leader, month+year is appended
-// (e.g. /heatherrex-feb27); if that still collides (same month), a 4-char
-// id suffix is added on top — same scheme used everywhere else in the app.
+// When two active events share a leader, the soonest-starting one keeps the
+// plain slug and the later one(s) get month+year appended (e.g.
+// /heatherrex-feb27); if that still collides (same month), a 4-char id
+// suffix is added on top — same scheme used everywhere else in the app.
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
@@ -65,8 +66,15 @@ exports.handler = async (event) => {
     const items = groups[base].slice().sort((a, b) =>
       (a.start_date || '').localeCompare(b.start_date || '') || a.id.localeCompare(b.id));
     if (items.length === 1) { final[base] = items[0]; return; }
-    const seenHere = new Set();
-    items.forEach(b => {
+    // Two+ active events share this leader's name (e.g. the same recurring
+    // retreat booked again a year later) -- the soonest-starting one keeps
+    // the plain slug, only the later one(s) get a date suffix (Jorge's ask
+    // 2026-10-06: /shanecarling should mean the 2026 Shane Carling, not force
+    // a -mar26 suffix on it just because a real 2027 Shane Carling also
+    // exists).
+    final[base] = items[0];
+    const seenHere = new Set([base]);
+    items.slice(1).forEach(b => {
       let s = `${base}-${dateSuffix(b.start_date)}`;
       if (seenHere.has(s) || final[s]) s = `${s}-${idSuffix(b.id)}`;
       seenHere.add(s);
