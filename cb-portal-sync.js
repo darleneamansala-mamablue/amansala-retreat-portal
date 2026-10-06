@@ -531,7 +531,15 @@ async function cbSyncNamesForBooking(bkId){
     const existingId=cbIds[roomName];if(!existingId)continue;
     const reg=AppData.regs.find(r=>r.bookingId===bk.id&&r.room===roomName);
     const guestNames=(reg?.guests||[]).filter(g=>g.name).map(g=>g.name.trim());
-    if(!guestNames.length){skipped++;continue;}
+    // An empty room (guest removed/checked out, nobody currently assigned)
+    // used to be skipped entirely here -- Jorge's report 2026-10-06: Cloudbeds
+    // kept showing whoever was there LAST as the guest name forever, since
+    // nothing ever renamed it once the room emptied out. Now it still gets
+    // renamed -- to the retreat/leader's own name, the same placeholder every
+    // other "blocked but no guest yet" room already shows elsewhere in the
+    // portal -- instead of leaving a stale departed guest's name in Cloudbeds.
+    const displayName=guestNames.length?guestNames.join(' & '):(bk.leaderName||bk.retreatName||'');
+    if(!displayName){skipped++;continue;}
     try{
       // skipRecreateFallback: a plain rename only — never cancel+recreate the reservation
       // here. Real incident: a room's linked reservation turned out to be a stale
@@ -543,8 +551,8 @@ async function cbSyncNamesForBooking(bkId){
       // a genuine rename can still be retried by hand once whatever's blocking it is fixed.
       const r=await fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({reservationId:existingId,roomName,startDate:bk.startDate,endDate:bk.endDate,
-          guestFirstName:guestNames.join(' & '),groupName:bk.retreatName||bk.row||'',
-          leaderName:bk.leaderName||'',adults:guestNames.length,dailyRate:0,skipRecreateFallback:true})});
+          guestFirstName:displayName,groupName:bk.retreatName||bk.row||'',
+          leaderName:bk.leaderName||'',adults:Math.max(1,guestNames.length),dailyRate:0,skipRecreateFallback:true})});
       const d=await r.json();
       if(d.reservationId&&d.reservationId!==existingId){
         bk.cbReservationIds[roomName]=d.reservationId;
@@ -559,7 +567,7 @@ async function cbSyncNamesForBooking(bkId){
         // since only "did we get a new reservationId back" was checked. Real incident:
         // Marcia's retreat showed "names synced" with no error, but Cloudbeds never
         // updated. Now only a genuine success (replaced OR updated===true) counts.
-        failed++;failedRooms.push(`${roomName} (${guestNames.join(' & ')})${d.error?': '+d.error:''}`);
+        failed++;failedRooms.push(`${roomName} (${displayName})${d.error?': '+d.error:''}`);
         console.warn('[CB sync names] update rejected for',roomName,d);
       }
     }catch(e){failed++;failedRooms.push(`${roomName}: ${e.message}`);console.warn('[CB sync names]',roomName,e);}
@@ -667,15 +675,19 @@ async function cbSyncAllNames(){
       const existingId=cbIds[roomName];if(!existingId)continue;
       const reg=AppData.regs.find(r=>r.bookingId===bk.id&&r.room===roomName);
       const guestNames=(reg?.guests||[]).filter(g=>g.name).map(g=>g.name.trim());
-      if(!guestNames.length)continue;
+      // Same fix as cbSyncNamesForBooking (Jorge's ask 2026-10-06) — an empty
+      // room gets renamed to the retreat/leader's own name instead of being
+      // skipped, so a departed guest's name doesn't stay stuck in Cloudbeds.
+      const displayName=guestNames.length?guestNames.join(' & '):(bk.leaderName||bk.retreatName||'');
+      if(!displayName)continue;
       try{
         // See cbSyncNamesForBooking — updateReservationGuest can fall back server-side
         // to cancel+recreate, returning a NEW reservationId. Must capture it or the
         // next sync creates a duplicate reservation for this room.
         const r=await fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({reservationId:existingId,roomName,startDate:bk.startDate,endDate:bk.endDate,
-            guestFirstName:guestNames.join(' & '),groupName:bk.retreatName||bk.row||'',
-            leaderName:bk.leaderName||'',adults:guestNames.length,dailyRate:0})});
+            guestFirstName:displayName,groupName:bk.retreatName||bk.row||'',
+            leaderName:bk.leaderName||'',adults:Math.max(1,guestNames.length),dailyRate:0})});
         const d=await r.json();
         if(d.reservationId&&d.reservationId!==existingId){
           bk.cbReservationIds[roomName]=d.reservationId;
@@ -683,7 +695,7 @@ async function cbSyncAllNames(){
           _cbSyncLog((bk.retreatName||bk.id)+' › '+roomName+' — reservation replaced ('+existingId+' → '+d.reservationId+')');
         }
         roomsDone++;synced++;
-        _cbSyncLog((bk.retreatName||bk.id)+' › '+roomName+' → '+guestNames.join(' & '));
+        _cbSyncLog((bk.retreatName||bk.id)+' › '+roomName+' → '+displayName);
       }catch(e){_cbSyncLog('ERROR '+roomName+': '+e.message);}
     }
     if(rowEl)rowEl.textContent=roomsDone?roomsDone+' updated':'no guests';
