@@ -140,12 +140,17 @@ function _wtRegRow(bk,reg,indent){
     `<span onclick="event.stopPropagation();openBookingDetailForReg('${reg.id}','${escHtml(g.name).replace(/'/g,"\\'")}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(g.name)}</span>`
   );
   const paid=reg.amountPaid||0;
-  // A WeTravel registration's customRateOverride IS the guest's real, final,
-  // tax-inclusive total (set from what they actually paid/owe on WeTravel) --
-  // same assumption the pricing engine already makes for We Travel bookings
-  // elsewhere in the app. Falls back to "nothing owed beyond what's paid" in
-  // the rare case it's missing, rather than guessing at a number.
-  const charged=reg.customRateOverride!=null?Number(reg.customRateOverride):paid;
+  // customRateOverride is a PER-NIGHT rate, not a total -- the We Travel webhook
+  // sets it as (regChargeTotal / tripNights) (netlify/functions/wetravel-webhook.js),
+  // same convention customRateOverride has everywhere else in the app (pricing.js,
+  // booking-detail.js, teacher-portal.js all multiply it by nights). Using it
+  // directly as the total here (Jorge's report 2026-10-06: BBC's deposit-only
+  // orders showed "Paid in Full" with balance $0) silently divided the real
+  // charge by the trip's night count, making every deposit order look fully paid.
+  const _ci=reg.checkIn||bk.startDate,_co=reg.checkOut||bk.endDate;
+  const _nightsRaw=Math.max(1,Math.round((pd(_co)-pd(_ci))/DAY_MS));
+  const nights=reg.customNightsOverride!=null?Number(reg.customNightsOverride):_nightsRaw;
+  const charged=reg.customRateOverride!=null?+(Number(reg.customRateOverride)*nights).toFixed(2):paid;
   const balance=+(charged-paid).toFixed(2);
   const st=_wtStatusBadge(bk);
   return {paid,balance,html:`<tr style="border-top:1px solid var(--border)">
