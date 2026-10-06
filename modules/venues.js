@@ -3203,16 +3203,21 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
     if(bk.cbAdjustmentIds){bk.cbAdjustmentIds[toRoom]=bk.cbAdjustmentIds[fromRoom]||null;delete bk.cbAdjustmentIds[fromRoom];}
     if(bk.cbGuestIds){bk.cbGuestIds[toRoom]=bk.cbGuestIds[fromRoom]||null;delete bk.cbGuestIds[fromRoom];}
     if(bk.cbNoteIds){bk.cbNoteIds[toRoom]=bk.cbNoteIds[fromRoom]||null;delete bk.cbNoteIds[fromRoom];}
+    // Send the room NAME, not just a client-cached id -- the server resolves
+    // it fresh (resolveCbRoomId, netlify/functions/cloudbeds.js) the same
+    // resilient way createReservation already does. Real incident 2026-10-06:
+    // Jorge dragged Gina Levett's extra night onto CH2 and the Cloudbeds move
+    // silently failed because the browser's own cbRoomLookup cache didn't
+    // have the room yet -- sending the id alone has no fallback when that
+    // cache is stale/empty, but the name always resolves against the
+    // server's own (always-fresh) room list.
     const _cbCfgMv=JSON.parse(localStorage.getItem('ama_cb_config')||'{}');
-    const _cbMappingMv=_cbCfgMv.mapping||[];
-    const _mappedMv=_cbMappingMv.find(m=>m.portalRoom===toRoom);
-    let _newCbRoomId=_mappedMv?.cbId||cbRoomLookup[toRoom]||null;
-    if(!_newCbRoomId){const norm=s=>s.toLowerCase().replace(/\s*-\s*/g,'-');const cbKey=Object.keys(cbRoomLookup).find(k=>norm(k)===norm(toRoom));if(cbKey)_newCbRoomId=cbRoomLookup[cbKey];}
+    const _mappedMv=(_cbCfgMv.mapping||[]).find(m=>m.portalRoom===toRoom);
     fetch(`${CLOUDBEDS_PROXY}?action=moveReservationRoom`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({reservationId:_cbResId,newCbRoomId:_newCbRoomId,startDate:bk.startDate,endDate:bk.endDate})
+      body:JSON.stringify({reservationId:_cbResId,newRoomName:toRoom,newCbRoomId:_mappedMv?.cbId||null,startDate:bk.startDate,endDate:bk.endDate})
     }).then(r=>r.json()).then(d=>{
-      console.log('[CB rcMove]',toRoom,_newCbRoomId,JSON.stringify(d).slice(0,200));
-      if(!d?.success)showToast(`⚠ Cuarto movido en portal — verifica Cloudbeds para ${toRoom}`);
+      console.log('[CB rcMove]',toRoom,JSON.stringify(d).slice(0,200));
+      if(!d?.success)bdStickyAlert(`⚠ ${fromRoom} → ${toRoom} se movió en el portal, pero NO en Cloudbeds: ${d?.error||'error desconocido'}. Verifica Cloudbeds manualmente.`,'warn');
       else{
         // Update guest name on the reservation now in toRoom
         const movedReg=getRegForRoom(bk.id,toRoom);

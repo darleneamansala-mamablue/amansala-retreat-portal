@@ -127,11 +127,16 @@ exports.handler = async (event) => {
         return ok(h, await updateReservationNotes(tok, body));
 
       case "moveReservationRoom": {
-        const { reservationId: mvResId, newCbRoomId: _rawCbId, newRoomName } = body;
-        if (Object.keys(_roomLookup).length === 0) await getRooms(tok);
-        const newCbRoomId = _rawCbId ?? (newRoomName ? _roomLookup[newRoomName] : null);
-        if (!mvResId || !newCbRoomId) return ok(h, { error: "reservationId and newCbRoomId (or newRoomName) required" }, 400);
-        if (Object.keys(_roomIdToTypeLookup).length === 0) await getRooms(tok);
+        const { reservationId: mvResId, newCbRoomId: _rawCbId, newRoomName, cbRoomTypeId: mvCbRoomTypeId } = body;
+        if (!mvResId) return ok(h, { error: "reservationId is required" }, 400);
+        // Always resolve fresh against getRooms (1h server cache), the same
+        // resilient name-based lookup createReservation already uses -- never
+        // trust a client-cached ID alone (real incident 2026-10-06: a Room
+        // Calendar drag silently failed because the browser's own room
+        // lookup wasn't populated yet when the drag happened).
+        await getRooms(tok);
+        const newCbRoomId = newRoomName ? resolveCbRoomId(newRoomName, _rawCbId, mvCbRoomTypeId) : (_rawCbId || null);
+        if (!newCbRoomId) return ok(h, { error: `Room not found: ${newRoomName || _rawCbId || "(no room given)"}` }, 400);
         const mvRoomTypeId = _roomIdToTypeLookup[newCbRoomId];
         if (!mvRoomTypeId) return ok(h, { success: false, error: `Room not found: ${newCbRoomId}` });
         const mvRes = await cbGet(tok, "/getReservation", { reservationID: mvResId }).catch(() => null);
@@ -751,6 +756,60 @@ async function createReservationByType(tok, body) {
   });
 }
 
+// Resolves a portal room NAME to Cloudbeds' internal room ID, with several
+// fallback strategies (exact match, spaced/dash variants, sub-bed suffixes,
+// and a cbRoomTypeId-scoped fallback) -- relying on a client-cached ID
+// (cbRoomId) alone breaks the moment that cache is stale or empty (real
+// incident 2026-10-06: Jorge dragged a reservation in the Room Calendar and
+// the move silently failed because the browser's cached room lookup didn't
+// have the target room yet). Resolving by name here, fresh against whatever
+// getRooms() already cached server-side, means a move/create never depends
+// on the browser having the right data cached. Shared by createReservation
+// and moveReservationRoom so both get the same resilience.
+function resolveCbRoomId(roomName, cbRoomId, cbRoomTypeId) {
+  // Only use cbRoomId from the caller if it's a known Cloudbeds room ID --
+  // stale/wrong data (e.g. old "668000-3" format) falls through to name lookup.
+  const validatedCbRoomId = (cbRoomId && _roomIdToTypeLookup[cbRoomId]) ? cbRoomId : null;
+  // Normalize variants: "4B-a"→"4B -a" (Cloudbeds uses space before dash), strip suffix "4B-a"→"4B"
+  // Also handles no-dash sub-bed rooms like "26a"→"26 -a" (digit directly followed by letter).
+  // NOTE: dash is required in _roomBase so "5B" stays "5B" (B = Beachfront), not stripped to "5"
+  const _roomSpaced = roomName.replace(/-([a-d])$/i, ' -$1');
+  const _roomBase = roomName.replace(/ ?-[a-d]$/i, '');
+  const _roomNoDashSpaced = roomName.replace(/^(.*\d)([a-d])$/, '$1 -$2');
+  const _roomNoDashBase = roomName.replace(/^(.*\d)[a-d]$/, '$1');
+  const _hasNoDashSuffix = _roomNoDashBase !== roomName && /\d[a-d]$/.test(roomName);
+  // Case-insensitive fallbacks are intentionally NOT used here -- "5B" (Beachfront
+  // single) and "5b" (shared bed) are DIFFERENT rooms in Cloudbeds. If exact name
+  // fails, rely on the cbRoomTypeId type-scoped fallback below instead.
+  let roomId = validatedCbRoomId
+    || _roomLookup[roomName]
+    || _roomLookup[_roomSpaced]
+    || (_roomBase !== roomName && _roomLookup[_roomBase])
+    || (_hasNoDashSuffix && _roomLookup[_roomNoDashSpaced])
+    // Only fall back to parent room when cbRoomTypeId is NOT set — prevents CH3a mapping
+    // to parent CH3 (already reserved) instead of using the type-fallback to find CH3a in CB
+    || (_hasNoDashSuffix && !cbRoomTypeId && _roomLookup[_roomNoDashBase]);
+  // Fallback by cbRoomTypeId — covers sub-bed rooms (dash suffix) AND named rooms with case
+  // mismatches (e.g. "Casa King Downstairs" vs CB "Casa king Downstairs"). Safe because the
+  // lookup is already scoped to the correct type; normalized comparison handles casing.
+  if (!roomId && cbRoomTypeId) {
+    const roomsOfType = _roomTypeToRooms[String(cbRoomTypeId)] || [];
+    const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normRoom = norm(roomName);
+    let selected = roomsOfType.find(r => norm(r.name) === normRoom);
+    if (!selected && roomsOfType.length > 1) {
+      const dashSuffix = roomName.match(/-([a-d])$/i) || roomName.match(/\d([a-d])$/);
+      if (dashSuffix) {
+        const lastCh = dashSuffix[1].toUpperCase();
+        selected = roomsOfType.find(r => r.name.trim().toUpperCase().endsWith(lastCh));
+      }
+    }
+    if (!selected && roomsOfType.length === 1) selected = roomsOfType[0];
+    if (selected) roomId = selected.id;
+  }
+  return roomId || null;
+}
+
 async function createReservation(tok, body) {
   const { roomName, startDate, endDate, groupName, leaderName, adults,
           guestFullName, guestEmail: gEmail, guestPhone, dailyRate, bookingId,
@@ -762,63 +821,7 @@ async function createReservation(tok, body) {
   // but ensures stale warm-instance data never causes wrong room lookups.
   await getRooms(tok);
 
-  // Only use cbRoomId from portal mapping if it's a known Cloudbeds room ID.
-  // If it's stale/wrong data (e.g. old "668000-3" format), fall through to name lookup.
-  const rawCbRoomId = body.cbRoomId || null;
-  const cbRoomId = (rawCbRoomId && _roomIdToTypeLookup[rawCbRoomId]) ? rawCbRoomId : null;
-  if (rawCbRoomId && !cbRoomId) {
-    console.warn(`[CB createRes] cbRoomId "${rawCbRoomId}" not in known rooms — falling back to name lookup`);
-  }
-
-  // Room ID: validated cbRoomId first, then name-based lookup
-  // Normalize variants: "4B-a"→"4B -a" (Cloudbeds uses space before dash), strip suffix "4B-a"→"4B"
-  // Also handles no-dash sub-bed rooms like "26a"→"26 -a" (digit directly followed by letter).
-  // NOTE: dash is required in _roomBase so "5B" stays "5B" (B = Beachfront), not stripped to "5"
-  const _roomSpaced    = roomName.replace(/-([a-d])$/i, ' -$1');   // "4B-a" → "4B -a"
-  const _roomBase      = roomName.replace(/ ?-[a-d]$/i, '');        // "4B-a" or "4B -a" → "4B" (dash required)
-  // No-dash sub-bed: "26a" (digit+lowercase letter, no dash) → "26 -a" / "26"
-  // Only lowercase a-d qualifies; uppercase like "4B" or "19B" are room designators, not sub-beds.
-  const _roomNoDashSpaced = roomName.replace(/^(.*\d)([a-d])$/, '$1 -$2'); // "26a"→"26 -a"
-  const _roomNoDashBase   = roomName.replace(/^(.*\d)[a-d]$/, '$1');        // "26a"→"26"
-  const _hasNoDashSuffix  = _roomNoDashBase !== roomName && /\d[a-d]$/.test(roomName);
-  // Case-insensitive fallbacks are intentionally NOT used here.
-  // "5B" (Beachfront single) and "5b" (shared bed) are DIFFERENT rooms in Cloudbeds —
-  // lowercase/uppercase variants must NOT be confused. If exact name fails, rely on
-  // the cbRoomTypeId type-scoped fallback below, which searches only within the correct type.
-  let roomId = cbRoomId
-    || _roomLookup[roomName]
-    || _roomLookup[_roomSpaced]                                       // "4B-a" → "4B -a"
-    || (_roomBase !== roomName && _roomLookup[_roomBase])             // "4B -a" → "4B"
-    || (_hasNoDashSuffix && _roomLookup[_roomNoDashSpaced])           // "26a" → "26 -a"
-    // Only fall back to parent room when cbRoomTypeId is NOT set — prevents CH3a mapping
-    // to parent CH3 (already reserved) instead of using the type-fallback to find CH3a in CB
-    || (_hasNoDashSuffix && !body.cbRoomTypeId && _roomLookup[_roomNoDashBase]);  // "26a" → "26"
-  // Fallback by cbRoomTypeId — covers sub-bed rooms (dash suffix) AND named rooms with case
-  // mismatches (e.g. "Casa King Downstairs" vs CB "Casa king Downstairs"). Safe because the
-  // lookup is already scoped to the correct type; normalized comparison handles casing.
-  const _hasDashSuffix = (_roomBase !== roomName) || _hasNoDashSuffix;
-  if (!roomId && body.cbRoomTypeId) {
-    const roomsOfType = _roomTypeToRooms[String(body.cbRoomTypeId)] || [];
-    console.log(`[CB type-fallback] roomName="${roomName}" cbRoomTypeId=${body.cbRoomTypeId} → ${roomsOfType.length} rooms: [${roomsOfType.map(r => `"${r.name}"`).join(', ')}]`);
-    const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const normRoom = norm(roomName);
-    // 1. Exact normalized match
-    let selected = roomsOfType.find(r => norm(r.name) === normRoom);
-    // 2. Suffix match — for sub-room letter (a/b/c/d) with or without dash separator
-    if (!selected && roomsOfType.length > 1) {
-      const dashSuffix = roomName.match(/-([a-d])$/i) || roomName.match(/\d([a-d])$/);
-      if (dashSuffix) {
-        const lastCh = dashSuffix[1].toUpperCase();
-        selected = roomsOfType.find(r => r.name.trim().toUpperCase().endsWith(lastCh));
-      }
-    }
-    // 3. Single room in type — use it directly
-    if (!selected && roomsOfType.length === 1) selected = roomsOfType[0];
-    if (selected) {
-      console.log(`[CB createRes] type-fallback: "${roomName}" → CB "${selected.name}" (${selected.id}) via cbRoomTypeId=${body.cbRoomTypeId}`);
-      roomId = selected.id;
-    }
-  }
+  const roomId = resolveCbRoomId(roomName, body.cbRoomId, body.cbRoomTypeId);
   if (!roomId) {
     // Log rooms known under the requested type for diagnosis
     const typeRooms = body.cbRoomTypeId ? (_roomTypeToRooms[String(body.cbRoomTypeId)] || []).map(r => r.name).join(', ') : 'no cbRoomTypeId sent';
