@@ -992,6 +992,22 @@ async function bdSaveNotes(){
   showToast('Notes saved ✓');
 }
 
+// Jorge's ask 2026-10-06: the regular showToast() auto-hides in 2.5s -- too
+// fast to read a Cloudbeds sync result (which can be a long message he needs
+// to actually act on, like a duration mismatch warning). This stays on
+// screen until he clicks the ✕. Only used for Sync Cloudbeds outcomes, not a
+// general replacement for showToast() elsewhere.
+function bdStickyAlert(msg,type){
+  const colors={success:'#166534',error:'#991b1b',warn:'#92400e',info:'#1a2332'};
+  const bg=colors[type]||colors.info;
+  document.getElementById('bdStickyAlert')?.remove();
+  const el=document.createElement('div');
+  el.id='bdStickyAlert';
+  el.style.cssText=`position:fixed;top:28px;left:50%;transform:translateX(-50%);background:${bg};color:#fff;padding:14px 42px 14px 18px;border-radius:10px;font-size:13px;line-height:1.5;z-index:9999;max-width:min(560px,90vw);box-shadow:0 6px 20px rgba(0,0,0,.3)`;
+  el.innerHTML=`<span>${escHtml(msg)}</span><button onclick="document.getElementById('bdStickyAlert')?.remove()" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#fff;font-size:16px;cursor:pointer;line-height:1;opacity:.85">✕</button>`;
+  document.body.appendChild(el);
+}
+
 // "Sync Cloudbeds" -- Jorge's ask 2026-10-06: first check Cloudbeds' own
 // reservations for this date window for a name+room-type match (a guest like
 // Gina Levett can already have a REAL Cloudbeds reservation entered directly,
@@ -1007,7 +1023,7 @@ async function bdSyncCloudbeds(){
   try{
     const res=await fetch(`${CLOUDBEDS_PROXY}?action=getExternalReservations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startDate:subj.checkIn,endDate:subj.checkOut})});
     cbData=await res.json();
-  }catch(e){showToast('Error buscando en Cloudbeds: '+e.message);return;}
+  }catch(e){bdStickyAlert('Error buscando en Cloudbeds: '+e.message,'error');return;}
   const resv=cbData?.reservations||[];
   const nameParts=(subj.guestName||'').toLowerCase().split(/\s+/).filter(p=>p.length>2);
   const ownRt=AppData.roomTypes.find(rt=>rt.id===reg.roomTypeId);
@@ -1045,8 +1061,8 @@ async function bdSyncCloudbeds(){
         db.from('registrations').update({room:reg.room,room_type_id:reg.roomTypeId,check_in:reg.checkIn,check_out:reg.checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id),
         db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id),
       ]);
-    }catch(e){showToast('Error guardando el enlace: '+e.message);return;}
-    showToast(`Vinculado con la reserva de Cloudbeds "${exactMatch.guestName}" en ${realRoom}${datesChanged?` (fechas ajustadas: ${fmtDate(realCheckIn)} — ${fmtDate(realCheckOut)})`:''} ✓`);
+    }catch(e){bdStickyAlert('Error guardando el enlace: '+e.message,'error');return;}
+    bdStickyAlert(`Vinculado con la reserva de Cloudbeds "${exactMatch.guestName}" en ${realRoom}${datesChanged?` (fechas ajustadas: ${fmtDate(realCheckIn)} — ${fmtDate(realCheckOut)})`:''} ✓`,'success');
     _bdRender();
     return;
   }
@@ -1056,7 +1072,7 @@ async function bdSyncCloudbeds(){
   if(nameMatches.length){
     const other=nameMatches[0];
     const otherNights=Math.max(1,Math.round((pd(other.endDate)-pd(other.startDate))/DAY_MS));
-    showToast(`Encontré "${other.guestName}" en Cloudbeds (${otherNights} noche${otherNights!==1?'s':''}, ${fmtDate(other.startDate)}–${fmtDate(other.endDate)}) pero no coincide con esta reserva (${portalNights} noche${portalNights!==1?'s':''}) — revísalo manualmente antes de vincular o crear.`);
+    bdStickyAlert(`Encontré "${other.guestName}" en Cloudbeds (${otherNights} noche${otherNights!==1?'s':''}, ${fmtDate(other.startDate)}–${fmtDate(other.endDate)}) pero no coincide con esta reserva (${portalNights} noche${portalNights!==1?'s':''}) — revísalo manualmente antes de vincular o crear.`,'warn');
     return;
   }
   if(!confirm(`No encontré a "${subj.guestName}" en Cloudbeds para estas fechas. ¿Crear una reserva nueva en Cloudbeds (cuarto ${reg.room})?`))return;
@@ -1068,14 +1084,14 @@ async function bdSyncCloudbeds(){
       adults:subj.adults,dailyRate:0,bookingId:bk.id,
     })});
     const createData=await createRes.json();
-    if(!createData.reservationId){showToast('No se pudo crear la reserva en Cloudbeds: '+(createData.error||'error desconocido'));return;}
+    if(!createData.reservationId){bdStickyAlert('No se pudo crear la reserva en Cloudbeds: '+(createData.error||'error desconocido'),'error');return;}
     if(!bk.cbReservationIds)bk.cbReservationIds={};
     bk.cbReservationIds[reg.room]=createData.reservationId;
     if(createData.guestId){if(!bk.cbGuestIds)bk.cbGuestIds={};bk.cbGuestIds[reg.room]=createData.guestId;}
     await db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds,cb_guest_ids:bk.cbGuestIds||{}}).eq('id',bk.id);
-    showToast('Reserva creada en Cloudbeds ✓');
+    bdStickyAlert('Reserva creada en Cloudbeds ✓','success');
     _bdRender();
-  }catch(e){showToast('Error creando la reserva en Cloudbeds: '+e.message);}
+  }catch(e){bdStickyAlert('Error creando la reserva en Cloudbeds: '+e.message,'error');}
 }
 
 function bdToggleDetailEdit(){
