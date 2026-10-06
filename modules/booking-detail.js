@@ -1067,15 +1067,19 @@ async function bdSyncCloudbeds(){
     return;
   }
   // Name showed up in Cloudbeds but never with the same duration+room type --
-  // don't silently link the wrong reservation, and don't create a duplicate
-  // next to a real one either. Surface it and stop.
+  // Jorge's call 2026-10-06: that's not proof of a duplicate, it's usually a
+  // genuinely DIFFERENT reservation under the same name (e.g. a 1-night extra
+  // night booked separately from the main stay) -- don't silently link the
+  // wrong one, but DO still offer to create this stay's own reservation,
+  // just with a heads-up about what else is already there under that name.
+  let confirmMsg=`No encontré a "${subj.guestName}" en Cloudbeds para estas fechas. ¿Crear una reserva nueva en Cloudbeds (cuarto ${reg.room})?`;
   if(nameMatches.length){
     const other=nameMatches[0];
     const otherNights=Math.max(1,Math.round((pd(other.endDate)-pd(other.startDate))/DAY_MS));
-    bdStickyAlert(`Encontré "${other.guestName}" en Cloudbeds (${otherNights} noche${otherNights!==1?'s':''}, ${fmtDate(other.startDate)}–${fmtDate(other.endDate)}) pero no coincide con esta reserva (${portalNights} noche${portalNights!==1?'s':''}) — revísalo manualmente antes de vincular o crear.`,'warn');
-    return;
+    bdStickyAlert(`Encontré "${other.guestName}" en Cloudbeds (${otherNights} noche${otherNights!==1?'s':''}, ${fmtDate(other.startDate)}–${fmtDate(other.endDate)}) pero no coincide con esta reserva (${portalNights} noche${portalNights!==1?'s':''}) — parece una reserva distinta (ej. una noche extra), no un duplicado. Se puede crear la de esta estancia por separado.`,'warn');
+    confirmMsg=`"${subj.guestName}" ya tiene en Cloudbeds una reserva distinta (${other.guestName}, ${otherNights} noche${otherNights!==1?'s':''}, ${fmtDate(other.startDate)}–${fmtDate(other.endDate)}), que no es la misma estancia. ¿Crear de todas formas una reserva nueva para ESTA estancia (${portalNights} noches, cuarto ${reg.room})?`;
   }
-  if(!confirm(`No encontré a "${subj.guestName}" en Cloudbeds para estas fechas. ¿Crear una reserva nueva en Cloudbeds (cuarto ${reg.room})?`))return;
+  if(!confirm(confirmMsg))return;
   try{
     const createRes=await fetch(`${CLOUDBEDS_PROXY}?action=createReservation`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       roomName:reg.room,startDate:subj.checkIn,endDate:subj.checkOut,
