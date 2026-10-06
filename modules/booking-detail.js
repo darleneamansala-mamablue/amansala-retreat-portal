@@ -360,6 +360,11 @@ function _bdRender(){
   // this screen at all (Notes was the only editable field here). Toggles the
   // Booking/Guest panel below into an inline edit form.
   if(!subj.cancelled) headerBtns+=`<button onclick="bdToggleDetailEdit()" style="${hBtnS}">${_bdDetailEditMode?'✕ Cancel Edit':'✏️ Edit'}</button>`;
+  // "Sync Cloudbeds" -- Jorge's ask 2026-10-06: some reservations (We Travel
+  // guests especially) never get pushed to Cloudbeds at all. Only offered
+  // when THIS room has no cb_reservation_id yet -- once linked, the button
+  // disappears (nothing left to sync from here).
+  if(_bdKind==='reg'&&!subj.cancelled&&_bdBk&&!(_bdBk.cbReservationIds||{})[subj.room]) headerBtns+=`<button onclick="bdSyncCloudbeds()" style="${hBtnS}">☁️ Sync Cloudbeds</button>`;
   headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Delete</button>`;
 
   document.getElementById('bdHdr').innerHTML=`
@@ -985,6 +990,71 @@ async function bdSaveNotes(){
     reg.notes=notes;
   }
   showToast('Notes saved ✓');
+}
+
+// "Sync Cloudbeds" -- Jorge's ask 2026-10-06: first check Cloudbeds' own
+// reservations for this date window for a name+room-type match (a guest like
+// Gina Levett can already have a REAL Cloudbeds reservation entered directly,
+// separate from this portal registration -- creating a new one would just
+// duplicate her) -- link to it and adopt its real room if found, otherwise
+// create a fresh reservation in Cloudbeds for this room.
+async function bdSyncCloudbeds(){
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+  const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return;
+  const subj=_bdSubject();if(!subj)return;
+  showToast('Buscando en Cloudbeds…');
+  let cbData;
+  try{
+    const res=await fetch(`${CLOUDBEDS_PROXY}?action=getExternalReservations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startDate:subj.checkIn,endDate:subj.checkOut})});
+    cbData=await res.json();
+  }catch(e){showToast('Error buscando en Cloudbeds: '+e.message);return;}
+  const resv=cbData?.reservations||[];
+  const nameParts=(subj.guestName||'').toLowerCase().split(/\s+/).filter(p=>p.length>2);
+  const ownRt=AppData.roomTypes.find(rt=>rt.id===reg.roomTypeId);
+  const candidates=resv.filter(r=>{
+    if(r.status==='cancelled')return false;
+    const gn=(r.guestName||'').toLowerCase();
+    return nameParts.length&&nameParts.every(p=>gn.includes(p));
+  });
+  // Prefer a candidate whose actual room belongs to the same portal room type
+  // as this registration -- "si el nombre hace match con el tipo de cuarto".
+  const match=candidates.find(c=>(c.rooms||[]).some(rn=>ownRt?.rooms?.includes(rn)))||candidates[0];
+  if(match){
+    const realRoom=(match.rooms||[])[0]||reg.room;
+    if(!bk.cbReservationIds)bk.cbReservationIds={};
+    bk.cbReservationIds[realRoom]=match.reservationID;
+    if(realRoom!==reg.room){
+      reg.room=realRoom;
+      const newRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(realRoom));
+      if(newRt)reg.roomTypeId=newRt.id;
+    }
+    try{
+      await Promise.all([
+        db.from('registrations').update({room:reg.room,room_type_id:reg.roomTypeId}).eq('id',reg.id),
+        db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id),
+      ]);
+    }catch(e){showToast('Error guardando el enlace: '+e.message);return;}
+    showToast(`Vinculado con la reserva de Cloudbeds "${match.guestName}" en ${realRoom} ✓`);
+    _bdRender();
+    return;
+  }
+  if(!confirm(`No encontré a "${subj.guestName}" en Cloudbeds para estas fechas. ¿Crear una reserva nueva en Cloudbeds (cuarto ${reg.room})?`))return;
+  try{
+    const createRes=await fetch(`${CLOUDBEDS_PROXY}?action=createReservation`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      roomName:reg.room,startDate:subj.checkIn,endDate:subj.checkOut,
+      groupName:bk.retreatName||bk.leaderName||'',leaderName:bk.leaderName||'',
+      guestFullName:subj.guestName,guestEmail:subj.guestEmail||'',guestPhone:subj.allGuests[0]?.phone||'',
+      adults:subj.adults,dailyRate:0,bookingId:bk.id,
+    })});
+    const createData=await createRes.json();
+    if(!createData.reservationId){showToast('No se pudo crear la reserva en Cloudbeds: '+(createData.error||'error desconocido'));return;}
+    if(!bk.cbReservationIds)bk.cbReservationIds={};
+    bk.cbReservationIds[reg.room]=createData.reservationId;
+    if(createData.guestId){if(!bk.cbGuestIds)bk.cbGuestIds={};bk.cbGuestIds[reg.room]=createData.guestId;}
+    await db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds,cb_guest_ids:bk.cbGuestIds||{}}).eq('id',bk.id);
+    showToast('Reserva creada en Cloudbeds ✓');
+    _bdRender();
+  }catch(e){showToast('Error creando la reserva en Cloudbeds: '+e.message);}
 }
 
 function bdToggleDetailEdit(){
