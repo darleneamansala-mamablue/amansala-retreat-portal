@@ -126,24 +126,33 @@ function _wtToggleDateGroup(date){
   if(_wtCollapsedDates.has(date))_wtCollapsedDates.delete(date);else _wtCollapsedDates.add(date);
   _wtRenderReservations();
 }
-function _wtBookingRow(bk,indent){
-  const regs=getRegsForBk(bk.id);
-  // Each guest opens their own Rooms/folio view (booking-detail.js) — the same
-  // accurate view booking-detail already gets right (Room Total, Source, real
-  // folios) — not the Teachers/Registration retreat-management screen, which
-  // doesn't apply to an individually-booked We Travel guest.
-  const guestLinks=regs.flatMap(r=>(r.guests||[]).filter(g=>g.name).map(g=>
-    `<span onclick="event.stopPropagation();openBookingDetailForReg('${r.id}','${escHtml(g.name).replace(/'/g,"\\'")}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(g.name)}</span>`
-  ));
-  const rooms=regs.map(r=>r.room).filter(Boolean);
-  const paid=regs.reduce((s,r)=>s+(r.amountPaid||0),0);
-  const {balance}=calcBkBalance(bk);
+// One row per REGISTRATION (room), not one combined row per WeTravel trip --
+// Jorge's ask 2026-10-06: a trip with several separately-booked rooms (e.g.
+// "We Travel BBC" with Nicholas's room, Jessica's room, and Tali+Katie's
+// shared room) was showing as a single merged row with every guest's name
+// mashed together, instead of one row per room/order like trips with only
+// one registration already showed. Two guests who genuinely booked and paid
+// for ONE shared room together (same WeTravel order) still share a row --
+// that's one real reservation -- but different rooms/orders under the same
+// trip now get their own rows.
+function _wtRegRow(bk,reg,indent){
+  const guestLinks=(reg.guests||[]).filter(g=>g.name).map(g=>
+    `<span onclick="event.stopPropagation();openBookingDetailForReg('${reg.id}','${escHtml(g.name).replace(/'/g,"\\'")}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(g.name)}</span>`
+  );
+  const paid=reg.amountPaid||0;
+  // A WeTravel registration's customRateOverride IS the guest's real, final,
+  // tax-inclusive total (set from what they actually paid/owe on WeTravel) --
+  // same assumption the pricing engine already makes for We Travel bookings
+  // elsewhere in the app. Falls back to "nothing owed beyond what's paid" in
+  // the rare case it's missing, rather than guessing at a number.
+  const charged=reg.customRateOverride!=null?Number(reg.customRateOverride):paid;
+  const balance=+(charged-paid).toFixed(2);
   const st=_wtStatusBadge(bk);
   return {paid,balance,html:`<tr style="border-top:1px solid var(--border)">
     <td style="padding:8px 14px 8px ${indent?'34px':'14px'};font-size:12.5px;font-weight:700">${escHtml(bk.leaderName||bk.retreatName||'')}</td>
     <td style="padding:8px 14px;font-size:12px;color:var(--muted);white-space:nowrap">${fmtDate(bk.startDate)} → ${fmtDate(bk.endDate)}</td>
     <td style="padding:8px 14px;font-size:12px">${guestLinks.join(', ')||'—'}</td>
-    <td style="padding:8px 14px;font-size:12px">${escHtml(rooms.join(', ')||'—')}</td>
+    <td style="padding:8px 14px;font-size:12px">${escHtml(reg.room||'—')}</td>
     <td style="padding:8px 14px;font-size:12.5px;text-align:right;font-weight:700;color:#059669">${fmt$(paid)}</td>
     <td style="padding:8px 14px;font-size:12.5px;text-align:right;font-weight:700;color:${balance>0?'#dc2626':'#059669'}">${balance>0?fmt$(balance):'Paid in Full'}</td>
     <td style="padding:8px 14px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${st.bg};color:${st.fg}">${st.label}</span></td>
@@ -154,19 +163,32 @@ function _wtRenderReservations(){
   const bks=AppData.bookings.filter(b=>b.source==='wetravel').sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
   if(!bks.length){el.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);font-size:12.5px">Sin reservas de We Travel todavía.</div>';return;}
 
+  // Flatten to one (bk,reg) entry per real reservation (room/order) BEFORE
+  // grouping by date, so the "N reservas" count and same-day grouping both
+  // reflect actual reservations, not trips.
+  const entries=[];
+  bks.forEach(bk=>{
+    const regs=getRegsForBk(bk.id);
+    if(!regs.length){entries.push({bk,reg:null});return;}
+    regs.forEach(reg=>entries.push({bk,reg}));
+  });
+
   const groups=[];
   const groupByDate=new Map();
-  bks.forEach(bk=>{
-    const d=bk.startDate||'';
-    if(!groupByDate.has(d)){const g={date:d,bks:[]};groupByDate.set(d,g);groups.push(g);}
-    groupByDate.get(d).bks.push(bk);
+  entries.forEach(e=>{
+    const d=e.bk.startDate||'';
+    if(!groupByDate.has(d)){const g={date:d,entries:[]};groupByDate.set(d,g);groups.push(g);}
+    groupByDate.get(d).entries.push(e);
   });
 
   const bodyHtml=groups.map(g=>{
-    // Solo arrivals on a date don't need a group wrapper — just the plain row,
-    // same as before this feature existed.
-    if(g.bks.length===1)return _wtBookingRow(g.bks[0],false).html;
-    const rows=g.bks.map(bk=>_wtBookingRow(bk,true));
+    // A single reservation on a date doesn't need a group wrapper — just the
+    // plain row, same as before this feature existed.
+    if(g.entries.length===1){
+      const e=g.entries[0];
+      return e.reg?_wtRegRow(e.bk,e.reg,false).html:'';
+    }
+    const rows=g.entries.filter(e=>e.reg).map(e=>_wtRegRow(e.bk,e.reg,true));
     const groupPaid=rows.reduce((s,r)=>s+r.paid,0);
     const groupBalance=rows.reduce((s,r)=>s+r.balance,0);
     const groupTotal=groupPaid+groupBalance;
@@ -176,7 +198,7 @@ function _wtRenderReservations(){
         <div style="display:flex;align-items:center;gap:12px;font-size:12px">
           <span style="width:12px;color:var(--muted)">${collapsed?'▸':'▾'}</span>
           <span style="font-weight:700;color:var(--dark)">${fmtDate(g.date)}</span>
-          <span style="color:var(--muted)">${g.bks.length} reservas</span>
+          <span style="color:var(--muted)">${rows.length} reservas</span>
           <span style="margin-left:auto;color:var(--muted)">Pagado <b style="color:#059669">${fmt$(groupPaid)}</b> · Pendiente <b style="color:${groupBalance>0?'#dc2626':'#059669'}">${groupBalance>0?fmt$(groupBalance):'$0'}</b></span>
           <span style="font-weight:800;color:var(--dark)">Total ${fmt$(groupTotal)}</span>
         </div>
