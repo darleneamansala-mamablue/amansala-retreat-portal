@@ -1008,19 +1008,30 @@ async function bdSaveDetails(){
   }else{
     const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
     // Rate (when not already pinned by a customRateOverride) is computed live
-    // from room type + occupancy + check-in date (isLowSeason/getRoomRate) --
-    // moving the dates here could silently shift it into a different season
-    // bucket. Jorge's ask 2026-10-06: "al cambiar fechas no debe de cambiar la
-    // tarifa" -- capture whatever the rate was BEFORE this edit and pin it as
-    // an override whenever dates actually change, so editing dates here never
-    // moves the price. A room change still re-prices normally (different room
-    // = legitimately different rate), only the date fields are guarded.
+    // from room type + occupancy + check-in date -- moving either the dates OR
+    // the room here could silently change it (a season-bucket shift, or a
+    // different room type's base price). Jorge's call 2026-10-06: in Rooms,
+    // editing a reservation and moving dates OR room must never move the
+    // tarifa either -- same rule the Room Calendar's drag-and-drop (rcMoveRoom,
+    // modules/venues.js) already follows for a cross-category room move:
+    // freeze the PRE-move rate instead of recalculating. Capture the rate as
+    // it was right before this edit and pin it whenever room or dates change.
     const subjBefore=_bdSubject();
     const room=(document.getElementById('bdEditRoom')?.value||'').trim();
     const checkIn=document.getElementById('bdEditCheckIn')?.value||null;
     const checkOut=document.getElementById('bdEditCheckOut')?.value||null;
-    if(reg.customRateOverride==null&&(checkIn!==(subjBefore.checkIn||null)||checkOut!==(subjBefore.checkOut||null))){
+    const roomChanged=room!==(subjBefore.room||'');
+    const datesChanged=checkIn!==(subjBefore.checkIn||null)||checkOut!==(subjBefore.checkOut||null);
+    if(reg.customRateOverride==null&&(roomChanged||datesChanged)){
       reg.customRateOverride=subjBefore.rate;
+    }
+    // Room field can point at a different physical room than before -- keep
+    // roomTypeId in sync with whichever room type actually contains it (same
+    // as rcMoveRoom does), so category-based views (Room Calendar, pricing
+    // lookups elsewhere) don't keep treating it as the old type.
+    if(roomChanged){
+      const newRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(room));
+      if(newRt)reg.roomTypeId=newRt.id;
     }
     // filter() returns the SAME guest object references as reg.guests -- editing
     // namedGuests[gi] here mutates reg.guests in place, no re-merge needed.
@@ -1032,7 +1043,7 @@ async function bdSaveDetails(){
       namedGuests[gi].email=(document.getElementById(`bdEditEmail-${gi}`)?.value||'').trim();
       namedGuests[gi].phone=(document.getElementById(`bdEditPhone-${gi}`)?.value||'').trim();
     }
-    const {error}=await db.from('registrations').update({guests:reg.guests,room,check_in:checkIn,check_out:checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id);
+    const {error}=await db.from('registrations').update({guests:reg.guests,room,room_type_id:reg.roomTypeId,check_in:checkIn,check_out:checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id);
     if(error){showToast('Error: '+error.message);return;}
     reg.room=room;reg.checkIn=checkIn;reg.checkOut=checkOut;
   }
