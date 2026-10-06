@@ -169,7 +169,8 @@ function renderEstQuote(lblId,bodyId){
     ${IS_TEACHER_MODE?(eqDiscountAmt>0?`<div class="eq-row" style="color:#dc2626"><span>🏷 Discount</span><span style="color:#dc2626;font-weight:700">−${fmt$(eqDiscountAmt)}</span></div>`:''):`<div class="eq-row" style="color:#dc2626"><span style="display:flex;align-items:center;gap:6px">🏷 Discount $<input id="eqDiscountInput" type="number" min="0" step="0.01" value="${eqDiscountAmt||''}" placeholder="0" style="width:75px;padding:1px 5px;font-size:11px;border:1px solid #fca5a5;border-radius:4px;text-align:right;color:#dc2626;font-weight:700" onchange="setEqDiscountAmt(this.value)"></span><span style="color:#dc2626;font-weight:700">${eqDiscountAmt>0?`−${fmt$(eqDiscountAmt)}`:''}</span></div>`}
     <div style="border-top:2px solid #fcd34d;margin:8px 0"></div>
     <div class="eq-total" style="font-size:16px"><span>Est. Total Revenue</span><span style="color:var(--teal)">${fmt$(grandEstAfterDisc)}</span></div>
-    ${totalPaid>0?`<div class="eq-row" style="color:#16a34a"><span>✅ Paid</span><span>−${fmt$(totalPaid)}</span></div>
+    ${totalPaid>0?`<div class="eq-row" style="font-weight:700;color:#16a34a;border-top:1px dashed #fcd34d;margin-top:4px;padding-top:6px"><span>✅ Paid</span><span>−${fmt$(totalPaid)}</span></div>
+    ${(regSelBk.payments||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(p=>`<div class="eq-row" style="color:#16a34a;font-size:11px;padding-left:10px"><span>${escHtml(p.note||p.method||'Payment')}${p.date?` · ${fmtDate(p.date)}`:''}</span><span>−${fmt$(p.amount||0)}</span></div>`).join('')}
     <div class="eq-total" style="font-size:15px;border-top:1px dashed #fcd34d;padding-top:6px"><span>Est. Balance Due</span><span style="color:${estBalance>0?'#dc2626':'#16a34a'}">${fmt$(estBalance)}</span></div>`:''}
   </div></div>`;
 
