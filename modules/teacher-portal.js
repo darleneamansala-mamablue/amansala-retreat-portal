@@ -4341,7 +4341,12 @@ function _trAssignRideGroups(guests,type,allTr){
     for(let gi=0;gi<groups.length;gi++){
       const grp=groups[gi];
       if(grp.userGroup||grp.ap!==e.ap||grp.date!==e.date)continue;
-      if(grp.idxs.some(mi=>Math.abs(info[mi].mins-e.mins)<=30)){
+      // 20-minute window -- matches the admin Transport board and
+      // driver-view.html exactly (Jorge's report 2026-10-06: Marcia's
+      // Oct 18 retreat showed different ride groupings/pricing between
+      // Teacher view and admin, because this window was still 30 here
+      // despite the comment above already claiming parity with admin).
+      if(grp.idxs.some(mi=>Math.abs(info[mi].mins-e.mins)<=20)){
         grp.idxs.push(e.idx);grp.minMins=Math.min(grp.minMins,e.mins);groupOf[e.idx]=gi;joined=true;break;
       }
     }
