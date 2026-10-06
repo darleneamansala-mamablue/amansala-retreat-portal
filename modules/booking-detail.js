@@ -15,6 +15,12 @@
 // one seam that normalizes the two into a common shape for everything else
 // (header, check-in/out, notes, delete).
 let _bdKind='reg',_bdId=null,_bdReqCache=null,_bdFolios=[],_bdAddOpen={},_bdEditOpen={},_bdCommissionStaffByItem={};
+// Edit mode for the Booking/Guest panel (name, phone, room, dates) -- Jorge's
+// ask 2026-10-06: "no tenemos un boton editar que nos permita editar nombre,
+// numero de telefono, cuarto, fechas". Separate from _bdEditOpen above (which
+// toggles one folio line item at a time) -- this is one on/off switch for the
+// whole panel, reset whenever the modal opens a new subject.
+let _bdDetailEditMode=false;
 
 function _bdReqSqlToApp(row){const o={};for(const k in row)o[_s2c(k)]=row[k];return o;}
 
@@ -99,7 +105,7 @@ function _bdGoToRegistration(bkId){
 async function openBookingDetailForReg(regId,guestName){
   const reg=AppData.regs.find(r=>r.id===regId);if(!reg)return;
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return;
-  _bdKind='reg';_bdId=regId;_bdReqCache=null;_bdAddOpen={};_bdEditOpen={};
+  _bdKind='reg';_bdId=regId;_bdReqCache=null;_bdAddOpen={};_bdEditOpen={};_bdDetailEditMode=false;
   _bdGuestNameOverride=guestName||(reg.guests||[]).find(g=>g.name)?.name||'Guest';
   document.getElementById('bdBody').innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px">Loading folio…</div>';
   openModal('bookingDetailModal');
@@ -111,7 +117,7 @@ async function openBookingDetailForReg(regId,guestName){
 // modules/reservations.js's Arrivals/In House/Departures/Search tabs.
 let _bdGuestNameOverride=null;
 async function openBookingDetailForRequest(requestId){
-  _bdKind='req';_bdId=requestId;_bdGuestNameOverride=null;_bdAddOpen={};_bdEditOpen={};
+  _bdKind='req';_bdId=requestId;_bdGuestNameOverride=null;_bdAddOpen={};_bdEditOpen={};_bdDetailEditMode=false;
   document.getElementById('bdBody').innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px">Loading folio…</div>';
   openModal('bookingDetailModal');
   try{
@@ -349,6 +355,11 @@ function _bdRender(){
   // cancelled state, always visible (not just for kind='reg' -- no
   // booking-level log exists for an individual Booking Engine reservation).
   if(_bdKind==='reg') headerBtns+=`<button onclick="showBookingLogModal('${_bdBk.id}')" style="${hBtnS}">📋 Log</button>`;
+  // Edit name/phone/room/dates directly -- Jorge's ask 2026-10-06: there was no
+  // way to fix a typo'd name or move a guest to a different room/date from
+  // this screen at all (Notes was the only editable field here). Toggles the
+  // Booking/Guest panel below into an inline edit form.
+  if(!subj.cancelled) headerBtns+=`<button onclick="bdToggleDetailEdit()" style="${hBtnS}">${_bdDetailEditMode?'✕ Cancel Edit':'✏️ Edit'}</button>`;
   headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Delete</button>`;
 
   document.getElementById('bdHdr').innerHTML=`
@@ -366,11 +377,11 @@ function _bdRender(){
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">📅 Booking</div>
         <table style="width:100%;font-size:13px">
-          <tr><td style="color:var(--muted);padding:5px 0;width:90px">Period</td><td style="padding:5px 0">${fmtDate(subj.checkIn)} — ${fmtDate(subj.checkOut)} <span style="color:var(--muted)">(${nights} night${nights!==1?'s':''})</span></td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0;width:90px">Period</td><td style="padding:5px 0">${_bdDetailEditMode?`<input id="bdEditCheckIn" type="date" value="${subj.checkIn||''}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px"> — <input id="bdEditCheckOut" type="date" value="${subj.checkOut||''}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px">`:`${fmtDate(subj.checkIn)} — ${fmtDate(subj.checkOut)} <span style="color:var(--muted)">(${nights} night${nights!==1?'s':''})</span>`}</td></tr>
           ${_fullStay?`<tr><td style="color:var(--muted);padding:5px 0">Full Stay</td><td style="padding:5px 0">${fmtDate(_fullStay.checkIn)} — ${fmtDate(_fullStay.checkOut)} <span style="color:var(--muted)">(${_fullStay.nights} night${_fullStay.nights!==1?'s':''} total, across ${_splitChain.length} rooms)</span></td></tr>`:''}
           ${subj.retreatLabel!=null?`<tr><td style="color:var(--muted);padding:5px 0">Retreat</td><td style="padding:5px 0"><span onclick="_bdGoToRegistration('${subj.retreatBkId}')" title="Open this retreat's Registration tab" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(subj.retreatLabel)}</span></td></tr>`:''}
           ${subj.sourceLabel?`<tr><td style="color:var(--muted);padding:5px 0">Source</td><td style="padding:5px 0;color:#1d4ed8;font-weight:600">${escHtml(subj.sourceLabel)}</td></tr>`:''}
-          <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${escHtml(subj.room||'—')}</td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${_bdDetailEditMode?`<input id="bdEditRoom" type="text" value="${escHtml(subj.room||'')}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;width:90px">`:escHtml(subj.room||'—')}</td></tr>
           ${_splitLineage?`<tr><td style="color:var(--muted);padding:5px 0">Split Stay</td><td style="padding:5px 0;font-size:12px">${_splitLineage.prev?`<span onclick="openBookingDetailForReg('${_splitLineage.prev.id}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">Room ${escHtml(_splitLineage.prev.room)}</span> until ${fmtDate(subj.checkIn)} → `:''}<strong>this room</strong>${_splitLineage.next?` → <span onclick="openBookingDetailForReg('${_splitLineage.next.id}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">Room ${escHtml(_splitLineage.next.room)}</span> from ${fmtDate(subj.checkOut)}`:''}</td></tr>`:''}
           <tr><td style="color:var(--muted);padding:5px 0">Rate</td><td style="padding:5px 0;color:#059669;font-weight:700">${subj.rate!=null?fmt$(subj.rate)+'/night':'—'}</td></tr>
         </table>
@@ -385,11 +396,19 @@ function _bdRender(){
         <table style="width:100%;font-size:13px">
           <tr><td style="color:var(--muted);padding:5px 0;width:110px">Adults</td><td style="padding:5px 0">${subj.adults}</td></tr>
         </table>
-        ${subj.allGuests.map((g,gi)=>`<table style="width:100%;font-size:13px;${gi>0?'margin-top:10px;border-top:1px solid var(--border);padding-top:10px':''}">
-          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Name</td><td style="padding:5px 0;font-weight:700">${escHtml(g.name)}</td></tr>
-          ${g.email?`<tr><td style="color:var(--muted);padding:5px 0">Email</td><td style="padding:5px 0">${escHtml(g.email)}</td></tr>`:''}
-          ${g.phone?`<tr><td style="color:var(--muted);padding:5px 0">Phone</td><td style="padding:5px 0">${escHtml(g.phone)}</td></tr>`:''}
+        ${_bdDetailEditMode&&_bdKind==='req'?`<table style="width:100%;font-size:13px">
+          <tr><td style="color:var(--muted);padding:5px 0;width:110px">First Name</td><td style="padding:5px 0"><input id="bdEditFirstName" type="text" value="${escHtml(_bdReqCache.firstName||'')}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;width:100%"></td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0">Last Name</td><td style="padding:5px 0"><input id="bdEditLastName" type="text" value="${escHtml(_bdReqCache.lastName||'')}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;width:100%"></td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0">Phone</td><td style="padding:5px 0"><input id="bdEditPhone-0" type="text" value="${escHtml(subj.allGuests[0]?.phone||'')}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;width:100%"></td></tr>
+        </table>`:subj.allGuests.map((g,gi)=>`<table style="width:100%;font-size:13px;${gi>0?'margin-top:10px;border-top:1px solid var(--border);padding-top:10px':''}">
+          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Name</td><td style="padding:5px 0;font-weight:700">${_bdDetailEditMode?`<input id="bdEditName-${gi}" type="text" value="${escHtml(g.name)}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;width:100%">`:escHtml(g.name)}</td></tr>
+          ${(g.email||_bdDetailEditMode)?`<tr><td style="color:var(--muted);padding:5px 0">Email</td><td style="padding:5px 0">${_bdDetailEditMode?`<input id="bdEditEmail-${gi}" type="text" value="${escHtml(g.email||'')}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;width:100%">`:escHtml(g.email)}</td></tr>`:''}
+          ${(g.phone||_bdDetailEditMode)?`<tr><td style="color:var(--muted);padding:5px 0">Phone</td><td style="padding:5px 0">${_bdDetailEditMode?`<input id="bdEditPhone-${gi}" type="text" value="${escHtml(g.phone||'')}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;width:100%">`:escHtml(g.phone)}</td></tr>`:''}
         </table>`).join('')}
+        ${_bdDetailEditMode?`<div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="bdSaveDetails()">Save Changes</button>
+          <button class="btn btn-secondary btn-sm" onclick="bdToggleDetailEdit()">Cancel</button>
+        </div>`:''}
         <div style="margin-top:14px;padding:12px 14px;background:#fef2f2;border-radius:10px">
           <div style="font-size:11px;color:var(--muted);font-weight:600">Balance Due</div>
           <div style="font-size:22px;font-weight:800;color:${balanceDue>0?'#dc2626':'#059669'}">${fmt$(balanceDue)}</div>
@@ -966,6 +985,48 @@ async function bdSaveNotes(){
     reg.notes=notes;
   }
   showToast('Notes saved ✓');
+}
+
+function bdToggleDetailEdit(){
+  _bdDetailEditMode=!_bdDetailEditMode;
+  _bdRender();
+}
+
+async function bdSaveDetails(){
+  if(_bdKind==='req'){
+    const firstName=(document.getElementById('bdEditFirstName')?.value||'').trim();
+    const lastName=(document.getElementById('bdEditLastName')?.value||'').trim();
+    const phone=(document.getElementById('bdEditPhone-0')?.value||'').trim();
+    const room=(document.getElementById('bdEditRoom')?.value||'').trim();
+    const checkIn=document.getElementById('bdEditCheckIn')?.value||null;
+    const checkOut=document.getElementById('bdEditCheckOut')?.value||null;
+    if(!firstName){showToast('El nombre no puede quedar vacío');return;}
+    const {error}=await db.from('booking_requests').update({first_name:firstName,last_name:lastName,phone,room,check_in:checkIn,check_out:checkOut}).eq('id',_bdId);
+    if(error){showToast('Error: '+error.message);return;}
+    if(_bdReqCache)Object.assign(_bdReqCache,{firstName,lastName,phone,room,checkIn,checkOut});
+    _bdNotifyReqChanged();
+  }else{
+    const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+    const room=(document.getElementById('bdEditRoom')?.value||'').trim();
+    const checkIn=document.getElementById('bdEditCheckIn')?.value||null;
+    const checkOut=document.getElementById('bdEditCheckOut')?.value||null;
+    // filter() returns the SAME guest object references as reg.guests -- editing
+    // namedGuests[gi] here mutates reg.guests in place, no re-merge needed.
+    const namedGuests=(reg.guests||[]).filter(g=>g.name&&!g.cancelled);
+    for(let gi=0;gi<namedGuests.length;gi++){
+      const name=(document.getElementById(`bdEditName-${gi}`)?.value||'').trim();
+      if(!name){showToast('El nombre no puede quedar vacío');return;}
+      namedGuests[gi].name=name;
+      namedGuests[gi].email=(document.getElementById(`bdEditEmail-${gi}`)?.value||'').trim();
+      namedGuests[gi].phone=(document.getElementById(`bdEditPhone-${gi}`)?.value||'').trim();
+    }
+    const {error}=await db.from('registrations').update({guests:reg.guests,room,check_in:checkIn,check_out:checkOut}).eq('id',reg.id);
+    if(error){showToast('Error: '+error.message);return;}
+    reg.room=room;reg.checkIn=checkIn;reg.checkOut=checkOut;
+  }
+  _bdDetailEditMode=false;
+  showToast('Guardado ✓');
+  _bdRender();
 }
 
 async function bdCheckIn(){
