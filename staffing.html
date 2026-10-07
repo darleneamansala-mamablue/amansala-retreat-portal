@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Amansala Staffing - Kitchen Week</title>
+<link rel="icon" href="favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#f5f1eb;font-family:'Jost',sans-serif}#tab-staffing-body{padding:20px}#st-msg{padding:20px;color:#1a2332;font-size:15px}</style>
+</head>
+<body>
+<div id="tab-staffing-body"><div id="st-msg">Loading the week...</div></div>
+<script>
+const SB='https://vnttlpqkssihbmcynxvo.supabase.co',KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
+const camel=s=>s.replace(/_([a-z])/g,(m,c)=>c.toUpperCase());
+const cv=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[camel(k),v]));
+window.AppData={bookings:[],regs:[]};
+async function pull(table,cols){
+  let out=[];
+  for(let from=0;;from+=1000){
+    const r=await fetch(SB+'/rest/v1/'+table+'?select='+cols+'&order=id',{headers:{apikey:KEY,Authorization:'Bearer '+KEY,Range:from+'-'+(from+999)}});
+    const j=await r.json();if(!Array.isArray(j))throw new Error('load failed');
+    out=out.concat(j);if(j.length<1000)break;
+  }
+  return out.map(cv);
+}
+async function load(first){
+  try{
+    const [b,r]=await Promise.all([
+      pull('bookings','id,leader_name,retreat_name,start_date,end_date,pax,status,booking_type,cancelled_at,meal_plan,schedule_request'),
+      pull('registrations','id,booking_id,guests,check_in,check_out,cancelled')]);
+    AppData.bookings=b;AppData.regs=r;
+    if(first)kwNav(0);else kwRefresh();
+  }catch(e){if(first)document.getElementById('st-msg').textContent=kwText('loadErr');}
+}
+</script>
+<script src="modules/kitchen-week.js?v=20261003h"></script>
+<script>
+document.documentElement.lang=kwGetLang();document.getElementById('st-msg').textContent=kwText('loading');
+load(true);
+setInterval(()=>{if(!document.hidden)load(false)},300000);
+</script>
+</body>
+</html>
