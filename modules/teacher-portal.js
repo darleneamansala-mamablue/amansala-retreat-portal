@@ -3067,7 +3067,7 @@ function openScheduleViewer(bkId){
   html+=`<div style="margin-bottom:10px;padding:10px 14px;background:#f5f3ee;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <b>🍽 Meals:</b>
     <select onchange="svSetMealPlan('${bkId}',this.value)" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">
-      ${['standard','bld','blsd'].concat(bk.mealPlan==='full'?['full']:[]).map(k=>`<option value="${k}"${(bk.mealPlan||'standard')===k?' selected':''}>${TS_MEAL_PLAN_LABELS[k]}</option>`).join('')}
+      ${['standard','bld','blsd','lbbld'].concat(bk.mealPlan==='full'?['full']:[]).map(k=>`<option value="${k}"${(bk.mealPlan||'standard')===k?' selected':''}>${TS_MEAL_PLAN_LABELS[k]}</option>`).join('')}
     </select>
     <span style="font-size:11.5px;color:var(--muted)">Shows on the teacher's schedule, the printed schedule and the kitchen Menu.</span>
   </div>`;
@@ -3596,12 +3596,13 @@ const TS_MEAL_PLANS={
   full:['lightBreakfast','lunch','dinner'],
   bld:['breakfast','lunch','dinner'],
   blsd:['breakfast','lunch','snack','dinner'],
+  lbbld:['lightBreakfast','breakfast','lunch','dinner'],
   // Matches the Room Only form's "Breakfast Only" option (value="breakfast"),
   // which had no entry here either — same bug as MEAL_PLANS in menu.js.
   breakfast:['breakfast'],
   weTravel:['lightBreakfast','breakfast','brunch','lunch','snack','dinner'],
 };
-const TS_MEAL_PLAN_LABELS={standard:'Light Breakfast · Brunch · Snack · Dinner',bld:'Breakfast · Lunch · Dinner',blsd:'Breakfast · Lunch · Snack · Dinner',full:'Light Breakfast · Lunch · Dinner',breakfast:'Breakfast Only'};
+const TS_MEAL_PLAN_LABELS={standard:'Light Breakfast · Brunch · Snack · Dinner',bld:'Breakfast · Lunch · Dinner',blsd:'Breakfast · Lunch · Snack · Dinner',lbbld:'Light Breakfast · Breakfast · Lunch · Dinner',full:'Light Breakfast · Lunch · Dinner',breakfast:'Breakfast Only'};
 function tsApplyMealPlan(bk,rows,dayIdx,nights){
   const plan=new Set(TS_MEAL_PLANS[bk.mealPlan]||TS_MEAL_PLANS.standard);
   if(!bk.mealPlan||bk.mealPlan==='standard'||bk.mealPlan==='weTravel')return rows;
