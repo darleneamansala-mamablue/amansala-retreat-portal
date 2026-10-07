@@ -64,6 +64,8 @@ https://amansala-portal.netlify.app/*  https://amansalaportal.com/:splat  301!
 # Guest booking page link -- /retreat-booking.html/<name> (name set in We Take Payment). Must sit above the catch-alls below.
 /retreat-booking.html/:slug  /.netlify/functions/shortlink/:slug  200!
 
+# Staffing view (no login) — must stay above the /:slug catch-all.
+/staffing  /staffing.html  200
 /:slug  /.netlify/functions/shortlink/:slug  200
 
 # Section links for a teacher -- /nombredellider/dashboard, /schedule, /roomlist,
