@@ -3067,7 +3067,7 @@ function openScheduleViewer(bkId){
   html+=`<div style="margin-bottom:10px;padding:10px 14px;background:#f5f3ee;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <b>🍽 Meals:</b>
     <select onchange="svSetMealPlan('${bkId}',this.value)" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">
-      ${['standard','bld','blsd'].concat(bk.mealPlan==='full'?['full']:[]).concat(bk.mealPlan==='lbbld'?['lbbld']:[]).map(k=>`<option value="${k}"${(bk.mealPlan||'standard')===k?' selected':''}>${TS_MEAL_PLAN_LABELS[k]}</option>`).join('')}
+      ${['standard','bld','blsd','lbbld'].concat(bk.mealPlan==='full'?['full']:[]).map(k=>`<option value="${k}"${(bk.mealPlan||'standard')===k?' selected':''}>${TS_MEAL_PLAN_LABELS[k]}</option>`).join('')}
     </select>
     <span style="font-size:11.5px;color:var(--muted)">Shows on the teacher's schedule, the printed schedule and the kitchen Menu.</span>
   </div>`;
