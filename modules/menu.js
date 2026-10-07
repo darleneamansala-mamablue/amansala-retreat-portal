@@ -457,6 +457,8 @@ function menuPopulateFromRetreats(silent=false){
     full:['lightBreakfast','lunch','dinner'],
     bld:['breakfast','lunch','dinner'],
     blsd:['breakfast','lunch','snack','dinner'],
+    // Light Breakfast + Breakfast + Lunch + Dinner (no brunch/snack) — added 2026-10-07 for Lillian So.
+    lbbld:['lightBreakfast','breakfast','lunch','dinner'],
     // "Breakfast Only" has been an option in the Room Only form's dropdown
     // (value="breakfast") with no matching entry here — MEAL_PLANS[bk.mealPlan]
     // fell through to MEAL_PLANS.standard, silently giving a breakfast-only
