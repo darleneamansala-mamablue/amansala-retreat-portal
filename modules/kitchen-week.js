@@ -13,6 +13,7 @@ const KW_PLANS={
   full:['lightBreakfast','lunch','dinner'],
   bld:['breakfast','lunch','dinner'],
   blsd:['breakfast','lunch','snack','dinner'],
+  lbbld:['lightBreakfast','breakfast','lunch','dinner'],
   breakfast:['breakfast'],
   weTravel:['lightBreakfast','breakfast','brunch','lunch','snack','dinner']
 };
