@@ -53,26 +53,34 @@ exports.handler = async () => {
   const today = localDate(0);
   const occupied = new Set();
 
-  // Individual Room Only / Booking Engine stays covering tonight.
-  // Excludes only cancelled/declined -- a pending-payment walk-in is still
-  // physically in the room, so it still counts as occupied.
-  const reqs = await get(`/rest/v1/booking_requests?select=room&room=not.is.null&check_in=lte.${today}&check_out=gt.${today}&status=not.in.(cancelled,declined)`);
+  // Jorge's ask 2026-10-08: "solo in house" -- a reservation whose dates
+  // merely cover tonight isn't enough, staff has to have actually clicked
+  // Check In (and not yet Checked Out). Mirrors _resBuildInHotelView's exact
+  // filter (modules/reservations.js:356-357), the same one the admin's own
+  // "In House" tab uses -- checked_in_at/checked_out_at are staff-driven
+  // only (set by resCheckIn/resCheckOut, bdCheckIn/bdCheckOut), never
+  // auto-flipped by date, so this is the sole reliable "who's really here
+  // right now" signal.
+
+  // Individual Room Only / Booking Engine stays, checked in and not yet out.
+  const reqs = await get(`/rest/v1/booking_requests?select=room&room=not.is.null&check_in=lte.${today}&check_out=gt.${today}&checked_in_at=not.is.null&status=neq.checked_out`);
   reqs.forEach(r => r.room && occupied.add(r.room));
 
-  // Retreat/group bookings covering tonight -- union blocked_rooms AND each
-  // booking's own `registrations` rows (same "orphaned registration" guard
-  // rsComputeAvailability/hkOccupancyToday already use in modules/venues.js
-  // and modules/housekeeping.js: a room can have a real, named registered
-  // guest whose room code was never added to blocked_rooms, so blocked_rooms
-  // alone under-counts -- confirmed real incidents there, e.g. Katherine
-  // McClelland's CH3a/CH3b). Matching that logic exactly here is why only
-  // bookings.blocked_rooms wasn't enough.
-  const bks = await get(`/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lte.${today}&end_date=gt.${today}`);
-  bks.forEach(b => (b.blocked_rooms ?? []).forEach(r => occupied.add(r)));
-  if (bks.length) {
-    const regs = await get(`/rest/v1/registrations?select=room,cancelled,guests,booking_id&booking_id=in.(${bks.map(b => b.id).join(',')})`);
+  // Retreat/group guests, checked in and not yet out -- cross-checked
+  // against their booking (not cancelled, effective dates cover tonight).
+  const regs = await get(`/rest/v1/registrations?select=room,cancelled,guests,check_in,check_out,booking_id&checked_in_at=not.is.null&checked_out_at=is.null`);
+  if (regs.length) {
+    const bkIds = [...new Set(regs.map(r => r.booking_id).filter(Boolean))];
+    const bks = await get(`/rest/v1/bookings?select=id,status,start_date,end_date&id=in.(${bkIds.join(',')})`);
+    const bkById = Object.fromEntries(bks.map(b => [b.id, b]));
     regs.forEach(r => {
-      if (r.room && !r.cancelled && (r.guests || []).some(g => g.name && !g.cancelled)) occupied.add(r.room);
+      if (r.cancelled || !r.room) return;
+      const bk = bkById[r.booking_id];
+      if (!bk || bk.status === 'cancelled') return;
+      if (!(r.guests || []).some(g => g.name && !g.cancelled)) return;
+      const ci = r.check_in || bk.start_date, co = r.check_out || bk.end_date;
+      if (!(ci <= today && co > today)) return;
+      occupied.add(r.room);
     });
   }
 
@@ -85,7 +93,7 @@ exports.handler = async () => {
   }
 
   const dateStr  = fmtDateEsLong(today);
-  const roomsStr = roomList.join(', ');
+  const roomsStr = roomList.map(r => `• ${r}`).join('\n');
 
   if (!enabled) {
     console.log(`[climas-report] would send to ${numbers.length} numbers: ${roomsStr}`);
