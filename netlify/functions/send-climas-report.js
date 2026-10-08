@@ -19,6 +19,7 @@
 //   CLIMAS_REPORT_ENABLED   must be "true" to actually send
 
 const SUPABASE_URL  = 'https://vnttlpqkssihbmcynxvo.supabase.co';
+const PORTAL_URL    = 'https://amansalaportal.com';
 const VISITO_API    = 'https://platform-api.visitoai.com/m2m/v1';
 const CHANNEL_ID    = '6abd2154f6a6b5cd69232824'; // WhatsApp +52 1 984 879 5999, tenant amansala-2
 const TEMPLATE_NAME = 'amansala_climas_reporte';
@@ -82,6 +83,30 @@ exports.handler = async () => {
       if (!(ci <= today && co > today)) return;
       occupied.add(r.room);
     });
+  }
+
+  // A room booked directly in Cloudbeds, with no portal booking/registration
+  // record at all, is still genuinely occupied -- Jorge's report 2026-10-08:
+  // room 9 (Rose Guillemette) came from Cloudbeds only. Same raw-Cloudbeds
+  // union rsComputeAvailability (modules/venues.js) already uses for
+  // availability, via getExternalReservations -- but scoped here to CB's own
+  // "checked_in" status (not just "confirmed"/not-yet-arrived), matching the
+  // in-house-only rule above. Non-fatal: a Cloudbeds hiccup should never
+  // block the rest of the report from going out.
+  try {
+    const extRes = await fetch(`${PORTAL_URL}/.netlify/functions/cloudbeds?action=getExternalReservations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startDate: today, endDate: localDate(1) }),
+    });
+    const extData = await extRes.json();
+    (extData.reservations || []).forEach(r => {
+      if ((r.status || '').toLowerCase() !== 'checked_in') return;
+      if (!(r.startDate <= today && r.endDate > today)) return;
+      (r.rooms || []).forEach(room => occupied.add(room));
+    });
+  } catch (e) {
+    console.warn('[climas-report] Cloudbeds fetch failed (non-fatal):', e.message);
   }
 
   const roomList = [...occupied].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
