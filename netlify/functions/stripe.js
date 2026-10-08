@@ -67,9 +67,7 @@ exports.handler = async (event) => {
   // sees on the room card matches what they're actually charged. Extra Night has
   // its OWN separately-adjustable rate (be_price_single_extra_night), falling back
   // to the Escape rate when not explicitly set — "derived from Escape" until
-  // someone overrides it (Jorge's ask 2026-09-23). Extra Night pricing used to be
-  // static (no seasonal/weekend swings, per Darlene 2026-09-03) — Jorge later asked
-  // for the same seasonal/weekend adjustment as Escape, just on its own base rate.
+  // someone overrides it (Jorge's ask 2026-09-23).
   const isExtraNight = source === 'Extra Night';
   const baseRate = (isExtraNight ? rt.be_price_single_extra_night ?? rt.be_price_single : rt.be_price_single)
     ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
@@ -80,7 +78,13 @@ exports.handler = async (event) => {
   const isWeekend = dow === 0 || dow === 5 || dow === 6;
   const seasonalPct = Number(seasonalAdj[String(month)] ?? 0);
   const weekendMult = isWeekend && weekendPremium ? (1 + weekendPremium / 100) : 1;
-  const rate        = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
+  // Extra Night is a flat rate, no seasonal/weekend surcharge — Jorge's call
+  // 2026-10-08: those adjustments are an Escape-only thing. Extra Night pricing
+  // used to be static (per Darlene 2026-09-03), briefly got the same dynamic
+  // adjustment as Escape (Jorge's 2026-09-23 ask), and is reverted to static
+  // here — real case: Elizabeth Wirick quoted $470.69 for one Simple n Small
+  // night that should've been the plain $295 + tax.
+  const rate        = isExtraNight ? Math.round(baseRate) : Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
   const subtotal    = rate * nights;
 
   // Validate and apply discount code server-side

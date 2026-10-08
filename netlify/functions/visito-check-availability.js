@@ -137,7 +137,12 @@ exports.handler = async (event) => {
         // back to the Escape rate when not explicitly set.
         const baseRate = (isExtraNight ? rt.be_price_single_extra_night ?? rt.be_price_single : rt.be_price_single)
           ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
-        const rate = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
+        // Extra Night is a flat rate, no seasonal/weekend surcharge — Jorge's
+        // call 2026-10-08: those adjustments are an Escape-only thing. (Briefly
+        // applied to Extra Night too per his 2026-09-23 ask; reverted here —
+        // real case: Elizabeth Wirick quoted $470.69 for one Simple n Small
+        // night that should've been the plain $295 + tax.)
+        const rate = isExtraNight ? Math.round(baseRate) : Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
         const subtotal = rate * nights;
         const discountAmount = dc ? (dc.type === 'pct' ? Math.round(subtotal * dc.value) / 100 : Math.min(dc.value, subtotal)) : 0;
         const tax = Math.round((subtotal - discountAmount) * taxPct) / 100;
