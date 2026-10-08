@@ -855,7 +855,11 @@ async function createReservation(tok, body) {
     || _roomTypeLookup[roomName]
     || body.cbRoomTypeId
     || roomId;
-  const maxGuests  = _maxOcc[roomName] || _maxOcc[_roomSpaced] || 2;
+  // "4B-a" -> "4B -a" (Cloudbeds uses a space before the dash) -- same spaced
+  // variant resolveCbRoomId() computes internally; recomputed here since that
+  // helper only returns the resolved room id, not its intermediate variants.
+  const _roomSpacedForOcc = roomName.replace(/-([a-d])$/i, ' -$1');
+  const maxGuests  = _maxOcc[roomName] || _maxOcc[_roomSpacedForOcc] || 2;
   // Normally min 2 adults so postGuest doesn't fail ("Max guests exceeded" with adults=1).
   // singlePax:true bypasses that minimum — used when recreating a reservation for exactly 1 pax.
   const adultMin   = body.singlePax ? 1 : 2;
