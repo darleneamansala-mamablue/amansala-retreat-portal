@@ -931,11 +931,17 @@ function _actvNotifRowHtml(n){
       ${dismissBtn}</div>`;
   }
   if(n.type==='wetravel_payment'){
-    const label=n.kind==='created'?'We Travel booking paid':n.kind==='deposit'?'We Travel deposit received':n.kind==='paid_in_full'?'We Travel — paid in full':'We Travel payment received';
+    // "failed" (Jorge's ask 2026-10-08: alert, don't just log) gets its own
+    // alarming red styling instead of the neutral gray/amber every other
+    // wetravel_payment kind uses -- a failed charge needs to stand out, not
+    // blend into "deposit received"/"paid in full" good-news rows.
+    const isFailed=n.kind==='failed';
+    const label=n.kind==='created'?'We Travel booking paid':n.kind==='deposit'?'We Travel deposit received':n.kind==='paid_in_full'?'We Travel — paid in full':isFailed?'We Travel — PAGO FALLIDO':'We Travel payment received';
     const amt=n.amount>0?` — <strong>${fmt$(n.amount)}</strong>`:'';
-    return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
-      <span style="font-size:14px;flex-shrink:0">🧳</span>
-      <span style="cursor:pointer" onclick="openWeTravelNotif('${n.bookingId}','${escHtml(n.guestName||'').replace(/'/g,"\\'")}')"><strong>${label}</strong>${n.guestName?' — '+escHtml(n.guestName):''}${amt}</span>
+    const rowBg=isFailed?'background:#fef2f2;border-left:3px solid #dc2626':bg;
+    return `<div style="${rowBg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">${isFailed?'⚠️':'🧳'}</span>
+      <span style="cursor:pointer" onclick="openWeTravelNotif('${n.bookingId}','${escHtml(n.guestName||'').replace(/'/g,"\\'")}')"><strong${isFailed?' style="color:#dc2626"':''}>${label}</strong>${n.guestName?' — '+escHtml(n.guestName):''}${amt}</span>
       ${newBadge}${n.ts?`<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>`:''}
       ${dismissBtn}</div>`;
   }
