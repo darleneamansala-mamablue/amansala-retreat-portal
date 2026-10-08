@@ -8,6 +8,21 @@ function isLow(dateStr) {
   return m >= 5 && m <= 9;
 }
 
+// Extra Night only -- Jorge's call 2026-10-08: no one can book an extra
+// night overlapping the Dec 20 – Jan 15 holiday window, same as retreats
+// never book then. Checks both possible blackout instances touching checkIn's
+// year (the stay itself is always short, so this always covers the real
+// window even when checkIn falls in January, i.e. the PRIOR December's
+// blackout).
+function inExtraNightBlackout(checkIn, checkOut) {
+  const ciYear = new Date(checkIn + 'T12:00:00').getFullYear();
+  return [ciYear - 1, ciYear].some(y => {
+    const blackoutStart = `${y}-12-20`;
+    const blackoutEnd   = `${y + 1}-01-15`;
+    return checkIn < blackoutEnd && checkOut > blackoutStart;
+  });
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: '' };
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
@@ -32,6 +47,9 @@ exports.handler = async (event) => {
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonErr(400, 'Invalid email');
   if (checkIn >= checkOut) return jsonErr(400, 'Check-out must be after check-in');
+  if (source === 'Extra Night' && inExtraNightBlackout(checkIn, checkOut)) {
+    return jsonErr(400, 'Extra Night is not available Dec 20 – Jan 15 — the property doesn\'t book during that window.');
+  }
 
   const supaHdrs = {
     'apikey':        supaKey,
@@ -41,7 +59,7 @@ exports.handler = async (event) => {
 
   // Fetch room type + booking engine settings in parallel
   const [rtRes, settRes] = await Promise.all([
-    fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,be_price_single,be_price_single_extra_night,be_price_double,price_single_high,price_single_low,price_double_high`, { headers: supaHdrs }),
+    fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,be_price_single,be_price_single_extra_night,be_price_single_extra_night_low,be_price_double,price_single_high,price_single_low,price_double_high`, { headers: supaHdrs }),
     fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: supaHdrs }),
   ]);
 
@@ -67,9 +85,16 @@ exports.handler = async (event) => {
   // sees on the room card matches what they're actually charged. Extra Night has
   // its OWN separately-adjustable rate (be_price_single_extra_night), falling back
   // to the Escape rate when not explicitly set — "derived from Escape" until
-  // someone overrides it (Jorge's ask 2026-09-23).
+  // someone overrides it (Jorge's ask 2026-09-23). Extra Night also gets its own
+  // May–Sep LOW season rate (be_price_single_extra_night_low) — same low-season
+  // window retreats use (isLow/isLowSeason, May 1 – Sep 30) — Jorge's call
+  // 2026-10-08, falling back to the regular (high-season) Extra Night rate when
+  // not set.
   const isExtraNight = source === 'Extra Night';
-  const baseRate = (isExtraNight ? rt.be_price_single_extra_night ?? rt.be_price_single : rt.be_price_single)
+  const extraNightRate = isLow(checkIn)
+    ? (rt.be_price_single_extra_night_low ?? rt.be_price_single_extra_night ?? rt.be_price_single)
+    : (rt.be_price_single_extra_night ?? rt.be_price_single);
+  const baseRate = (isExtraNight ? extraNightRate : rt.be_price_single)
     ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
 
   const ciDate    = new Date(checkIn + 'T12:00:00');

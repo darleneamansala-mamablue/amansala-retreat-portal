@@ -2,6 +2,18 @@
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 
+// Extra Night only -- Jorge's call 2026-10-08: no one can book an extra
+// night overlapping the Dec 20 – Jan 15 holiday window, same as retreats
+// never book then. Same logic as stripe.js's inExtraNightBlackout.
+function inExtraNightBlackout(checkIn, checkOut) {
+  const ciYear = new Date(checkIn + 'T12:00:00').getFullYear();
+  return [ciYear - 1, ciYear].some(y => {
+    const blackoutStart = `${y}-12-20`;
+    const blackoutEnd   = `${y + 1}-01-15`;
+    return checkIn < blackoutEnd && checkOut > blackoutStart;
+  });
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: cors(), body: '' };
@@ -17,6 +29,13 @@ exports.handler = async (event) => {
   try { ({ checkIn, checkOut, listAll, source } = JSON.parse(event.body || '{}')); }
   catch { return jsonErr(400, 'Invalid JSON'); }
   if (!listAll && (!checkIn || !checkOut)) return jsonErr(400, 'Missing checkIn or checkOut');
+  if (!listAll && source === 'extra_nights' && inExtraNightBlackout(checkIn, checkOut)) {
+    return {
+      statusCode: 200,
+      headers: { ...cors(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ available: [], settings: {}, blackout: true }),
+    };
+  }
 
   const hdrs = {
     'apikey': supaKey,
@@ -24,7 +43,7 @@ exports.handler = async (event) => {
     'Content-Type': 'application/json',
   };
 
-  const RT_FIELDS = 'id,name,rooms,max_occ,price_single_high,price_single_low,price_double_high,price_double_low,be_price_single,be_price_single_extra_night,be_price_double,be_photos,be_description,be_amenities,color';
+  const RT_FIELDS = 'id,name,rooms,max_occ,price_single_high,price_single_low,price_double_high,price_double_low,be_price_single,be_price_single_extra_night,be_price_single_extra_night_low,be_price_double,be_photos,be_description,be_amenities,color';
   const rtFilter  = source === 'extra_nights' ? 'be_extra_nights=eq.true' : 'be_enabled=eq.true';
 
   try {
