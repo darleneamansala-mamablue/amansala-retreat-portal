@@ -41,7 +41,7 @@ exports.handler = async (event) => {
   if (folio.registration_id) {
     // Registration folio — fetch registration joined with booking
     const regRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/registrations?id=eq.${encodeURIComponent(folio.registration_id)}&select=id,room,check_in,check_out,guests,booking_id,bookings(retreat_name,start_date,end_date)&limit=1`,
+      `${SUPABASE_URL}/rest/v1/registrations?id=eq.${encodeURIComponent(folio.registration_id)}&select=id,room,check_in,check_out,guests,booking_id,bookings(retreat_name,start_date,end_date,booking_type,source)&limit=1`,
       { headers: supaHdrs }
     );
     if (regRes.ok) {
@@ -57,6 +57,16 @@ exports.handler = async (event) => {
           room_type_name: reg.room      || null,
           adults:         1,
           retreat_name:   regBk.retreat_name || null,
+          // A manually-created admin "Walk-in" booking (venues.js's
+          // rmSaveNewBooking) is the same Escape/Extra Night-style individual
+          // stay as an online checkout, just entered by staff instead of the
+          // guest -- booking_type/source aren't a Stripe 'source' value here
+          // (that field only exists on booking_requests), so booking_type
+          // 'room_only' is the signal guest-pay.html checks instead (Jorge's
+          // report 2026-10-08: Elizabeth Wirick's manually-created reservation
+          // wasn't showing the included-breakfast message).
+          booking_type:   regBk.booking_type || null,
+          source:         regBk.source || null,
         };
       }
     }

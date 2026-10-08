@@ -346,7 +346,7 @@ function renderFolio(token) {
       <div style="font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Guest Payment</div>
       <div style="font-size:18px;font-weight:800;color:#111827">${guestName || 'Guest'}</div>
       ${roomLine ? `<div style="font-size:12.5px;color:#6b7280;margin-top:4px">${roomLine}</div>` : ''}
-      ${(_booking?.source === 'Escape' || _booking?.source === 'Extra Night') ? `<div style="font-size:12.5px;color:#0d9488;margin-top:6px;font-weight:600">Your reservation included breakfast</div>` : ''}
+      ${(_booking?.source === 'Escape' || _booking?.source === 'Extra Night' || _booking?.booking_type === 'room_only') ? `<div style="font-size:12.5px;color:#0d9488;margin-top:6px;font-weight:600">Your reservation included breakfast</div>` : ''}
     </div>
 
     <div class="card">
