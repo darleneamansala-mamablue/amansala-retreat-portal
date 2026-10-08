@@ -63,7 +63,7 @@ exports.handler = async (event) => {
   } else if (folio.booking_request_id) {
     // Individual booking request folio — existing logic
     const bkRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/booking_requests?id=eq.${encodeURIComponent(folio.booking_request_id)}&select=first_name,last_name,check_in,check_out,room_type_name,adults&limit=1`,
+      `${SUPABASE_URL}/rest/v1/booking_requests?id=eq.${encodeURIComponent(folio.booking_request_id)}&select=first_name,last_name,check_in,check_out,room_type_name,adults,source&limit=1`,
       { headers: supaHdrs }
     );
     if (bkRes.ok) {
