@@ -118,12 +118,13 @@ exports.handler = async () => {
   }
 
   const dateStr  = fmtDateEsLong(today);
-  // A real "\n" (U+000A) in a template PARAMETER is rejected by Meta with a
-  // bare 500 -- confirmed empirically 2026-10-08. The Unicode LINE SEPARATOR
-  // (U+2028) is accepted AND renders as a real line break in WhatsApp,
-  // confirmed by an actual test send Jorge received with each room on its
-  // own line.
-  const roomsStr = roomList.join(' ');
+  // Neither a real "\n" (U+000A, rejected by Meta with a bare 500) nor the
+  // Unicode LINE SEPARATOR (U+2028, accepted by Meta but rendered as a
+  // mojibake replacement character on Jorge's actual WhatsApp client --
+  // confirmed 2026-10-08) survive as a real line break inside a template
+  // PARAMETER. A comma-separated single line is the one format confirmed to
+  // render correctly everywhere.
+  const roomsStr = roomList.join(', ');
 
   if (!enabled) {
     console.log(`[climas-report] would send to ${numbers.length} numbers: ${roomsStr}`);
