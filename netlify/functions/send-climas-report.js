@@ -118,7 +118,11 @@ exports.handler = async () => {
   }
 
   const dateStr  = fmtDateEsLong(today);
-  const roomsStr = roomList.map(r => `• ${r}`).join('\n');
+  // A real newline in a template PARAMETER (unlike the template's own static
+  // body text) is rejected by Meta with a bare 500 -- confirmed empirically
+  // 2026-10-08, several failed test sends. Visual bullets on one line is the
+  // closest a parameter can get to a real list.
+  const roomsStr = roomList.map(r => `• ${r}`).join('   ');
 
   if (!enabled) {
     console.log(`[climas-report] would send to ${numbers.length} numbers: ${roomsStr}`);
