@@ -124,7 +124,7 @@ exports.handler = async () => {
   // confirmed 2026-10-08) survive as a real line break inside a template
   // PARAMETER. A comma-separated single line is the one format confirmed to
   // render correctly everywhere.
-  const roomsStr = roomList.join(', ');
+  const roomsStr = roomList.map(r => `Habitación ${r}`).join(', ');
 
   if (!enabled) {
     console.log(`[climas-report] would send to ${numbers.length} numbers: ${roomsStr}`);
