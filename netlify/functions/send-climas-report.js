@@ -53,13 +53,28 @@ exports.handler = async () => {
   const today = localDate(0);
   const occupied = new Set();
 
-  // Individual Room Only / Booking Engine stays covering tonight
-  const reqs = await get(`/rest/v1/booking_requests?select=room&room=not.is.null&check_in=lte.${today}&check_out=gt.${today}&status=in.(paid,in_house,confirmed)`);
+  // Individual Room Only / Booking Engine stays covering tonight.
+  // Excludes only cancelled/declined -- a pending-payment walk-in is still
+  // physically in the room, so it still counts as occupied.
+  const reqs = await get(`/rest/v1/booking_requests?select=room&room=not.is.null&check_in=lte.${today}&check_out=gt.${today}&status=not.in.(cancelled,declined)`);
   reqs.forEach(r => r.room && occupied.add(r.room));
 
-  // Retreat/group bookings covering tonight
-  const bks = await get(`/rest/v1/bookings?select=blocked_rooms&status=neq.cancelled&start_date=lte.${today}&end_date=gt.${today}`);
+  // Retreat/group bookings covering tonight -- union blocked_rooms AND each
+  // booking's own `registrations` rows (same "orphaned registration" guard
+  // rsComputeAvailability/hkOccupancyToday already use in modules/venues.js
+  // and modules/housekeeping.js: a room can have a real, named registered
+  // guest whose room code was never added to blocked_rooms, so blocked_rooms
+  // alone under-counts -- confirmed real incidents there, e.g. Katherine
+  // McClelland's CH3a/CH3b). Matching that logic exactly here is why only
+  // bookings.blocked_rooms wasn't enough.
+  const bks = await get(`/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lte.${today}&end_date=gt.${today}`);
   bks.forEach(b => (b.blocked_rooms ?? []).forEach(r => occupied.add(r)));
+  if (bks.length) {
+    const regs = await get(`/rest/v1/registrations?select=room,cancelled,guests,booking_id&booking_id=in.(${bks.map(b => b.id).join(',')})`);
+    regs.forEach(r => {
+      if (r.room && !r.cancelled && (r.guests || []).some(g => g.name && !g.cancelled)) occupied.add(r.room);
+    });
+  }
 
   const roomList = [...occupied].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
   console.log(`[climas-report] ${enabled ? 'SENDING' : 'DRY RUN'} for ${today} -- ${roomList.length} rooms: ${roomList.join(', ')}`);
