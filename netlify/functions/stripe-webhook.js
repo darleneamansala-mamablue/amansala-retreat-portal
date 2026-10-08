@@ -1,5 +1,6 @@
 'use strict';
 const crypto = require('crypto');
+const { sendPaymentNotification } = require('./notify-payment');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const VISITO_API = 'https://platform-api.visitoai.com/m2m/v1';
@@ -106,6 +107,17 @@ exports.handler = async (event) => {
       }
     } catch (err) {
       console.error('[stripe-webhook] Fetch error:', err.message);
+    }
+
+    // WhatsApp alert to Jorge -- see notify-payment.js (Jorge's ask 2026-10-08)
+    if (insertedId) {
+      sendPaymentNotification({
+        status:    'recibido',
+        guestName: `${meta.firstName || ''} ${meta.lastName || ''}`.trim(),
+        source:    meta.source === 'Extra Night' ? 'Extra Night' : 'Booking Engine',
+        dates:     fmtDateRange(meta.checkIn, meta.checkOut),
+        amount:    `$${(pi.amount / 100).toFixed(2)}`,
+      }).catch(e => console.warn('[stripe-webhook] WhatsApp notify failed:', e.message));
     }
 
     // Auto-assign physical room

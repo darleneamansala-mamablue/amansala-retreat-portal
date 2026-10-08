@@ -90,6 +90,27 @@ function _bdSourceLabel(source){
   return KNOWN[source]||source;
 }
 
+// Jorge's ask 2026-10-08: a WhatsApp alert (via notify-payment.js's Meta
+// template) for every payment anywhere in the system, including a manually
+// recorded Cash/Zelle/etc. payment here in Rate & Folios -- fire-and-forget,
+// never blocks the actual payment recording that already succeeded.
+function _bdDateRangeEs(start,end){
+  if(!start||!end)return'—';
+  const opts={day:'numeric',month:'short'};
+  const a=new Date(start+'T00:00:00'),b=new Date(end+'T00:00:00');
+  return`${a.toLocaleDateString('es-MX',opts)} – ${b.toLocaleDateString('es-MX',{...opts,year:'numeric'})}`;
+}
+function _bdNotifyPayment(amount){
+  const subj=_bdSubject();if(!subj)return;
+  fetch('/.netlify/functions/notify-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    status:'recibido',
+    guestName:_bdKind==='reg'?(_bdGuestNameOverride||subj.guestName):subj.guestName,
+    source:'Folio',
+    dates:_bdDateRangeEs(subj.checkIn,subj.checkOut),
+    amount:`$${Number(amount).toFixed(2)}`,
+  })}).catch(e=>console.warn('[booking-detail] payment notify failed:',e.message));
+}
+
 // Clicking the retreat name opens the ADMIN's own Registration tab (full room-list
 // management for staff), not the teacher-facing preview, in a NEW tab so this booking
 // detail stays open behind it. ama_admin_return_bk is the same flag exitTeacherModeFully()
@@ -490,6 +511,7 @@ async function bdRecordTotalPayment(){
   const {error}=await db.from('folio_items').insert({folio_id:target.folio.id,description,qty:1,unit_price:-amount,tax_rate:0,category:'Payment',staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error recording payment: '+error.message);return;}
   showToast('Payment recorded ✓');
+  _bdNotifyPayment(amount);
   await _bdLoadFolios();
 }
 function bdChargeCardOnFileTotal(){
@@ -894,6 +916,7 @@ async function bdRecordPayment(fid){
   const {error}=await db.from('folio_items').insert({folio_id:fid,description,qty:1,unit_price:-amount,tax_rate:0,category:'Payment',staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error recording payment: '+error.message);return;}
   showToast('Payment recorded ✓');
+  _bdNotifyPayment(amount);
   const f=_bdFolios.find(x=>x.folio.id===fid);
   await _bdLoadFolios();
 }

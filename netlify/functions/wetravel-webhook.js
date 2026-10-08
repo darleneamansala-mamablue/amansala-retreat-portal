@@ -19,6 +19,7 @@
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const WT_BASE = 'https://api.wetravel.com/v2';
 const crypto = require('crypto');
+const { sendPaymentNotification } = require('./notify-payment');
 
 // ─── Supabase (service-role) ───────────────────────────────────────────────
 async function supa(key, path, method, body) {
@@ -94,12 +95,27 @@ function verifySvixSignature(headers, rawBody) {
   return { ok: match, reason: match ? null : 'signature mismatch' };
 }
 
+function fmtDateRangeEs(start, end) {
+  if (!start) return '—';
+  const opts = { day: 'numeric', month: 'short' };
+  const s = new Date(start + 'T12:00:00');
+  const e = end ? new Date(end + 'T12:00:00') : null;
+  const sStr = s.toLocaleDateString('es-MX', opts);
+  if (!e) return `${sStr} ${s.getFullYear()}`;
+  return `${sStr} – ${e.toLocaleDateString('es-MX', opts)} ${e.getFullYear()}`;
+}
+
 // ─── Dashboard "We Travel" activity notifications ──────────────────────────
 // Stored in app_store (key='weTravelPaymentLog') as a small append-only log —
 // booking-hub.html's notification loader reads this the same way it already
 // reads bot_log/booking_requests, and computeActivityNotifs() in
 // retreat-builder.js turns each entry into a dismissible Dashboard notification.
 // Deduped by id (the Svix delivery id when available) so retries don't double up.
+// Also fires the WhatsApp payment-notification template to Jorge (his ask
+// 2026-10-08: every payment anywhere -- We Travel, Booking Engine, or a guest
+// folio -- should reach him by WhatsApp too, not just this Dashboard feed, so
+// nothing slips by). entry.dates is a pre-formatted display string (see
+// fmtDateRangeEs above); best-effort, never blocks/throws on failure.
 async function logWeTravelNotif(key, entry) {
   try {
     const rows = await supa(key, `app_store?select=value&key=eq.weTravelPaymentLog`, 'GET');
@@ -107,6 +123,13 @@ async function logWeTravelNotif(key, entry) {
     if (log.some(e => e.id === entry.id)) return;
     log = [...log, entry].slice(-200);
     await supa(key, 'app_store', 'POST', [{ key: 'weTravelPaymentLog', value: log, updated_at: new Date().toISOString() }]);
+    sendPaymentNotification({
+      status: entry.kind === 'failed' ? 'FALLIDO' : 'recibido',
+      guestName: entry.guestName,
+      source: 'We Travel',
+      dates: entry.dates,
+      amount: entry.amount ? `$${Number(entry.amount).toFixed(2)}` : null,
+    }).catch(e => console.warn('[wetravel-webhook] WhatsApp notify failed:', e.message));
   } catch (e) {
     console.warn('[wetravel-webhook] could not log dashboard notification:', e.message);
   }
@@ -165,11 +188,12 @@ async function handleWeTravelBookingUpdate(key, tripUuid, orderId, d, eventType,
 
     if (isFailedPaymentEvent(eventType, d)) {
       // Don't touch amount_paid/folios on a failure -- nothing was actually
-      // paid. Just alert: Dashboard notification (always) + WhatsApp to Jorge
-      // (best-effort; may fail if outside the 24h free-form window -- see
-      // send-message.js -- not fatal to the webhook either way).
+      // paid. logWeTravelNotif handles both the Dashboard notification AND
+      // the WhatsApp alert to Jorge (best-effort either way).
       const failedAmount = (d.amount ?? d.payment_amount ?? 0) / 100;
       const guestName = (d.buyer && (d.buyer.full_name || [d.buyer.first_name, d.buyer.last_name].filter(Boolean).join(' '))) || '';
+      const bkRows = await supa(key, `bookings?select=start_date,end_date&id=eq.${bkId}`, 'GET').catch(() => []);
+      const bk0 = bkRows[0] || {};
       await logWeTravelNotif(key, {
         id: svixId || `payment_failed_${orderId || tripUuid}_${Date.now()}`,
         ts: new Date().toISOString(),
@@ -177,29 +201,17 @@ async function handleWeTravelBookingUpdate(key, tripUuid, orderId, d, eventType,
         bookingId: bkId,
         guestName,
         amount: failedAmount,
+        dates: fmtDateRangeEs(bk0.start_date, bk0.end_date),
       });
-      try {
-        const jorgePhone = process.env.JORGE_WHATSAPP_NUMBER;
-        if (jorgePhone) {
-          await fetch(`${process.env.URL || ''}/.netlify/functions/send-message`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              to: jorgePhone, channel: 'whatsapp',
-              body: `⚠️ We Travel: pago FALLIDO — ${guestName || 'huésped sin nombre'}${failedAmount ? ` — $${failedAmount.toFixed(2)}` : ''}. Revisa el Dashboard.`,
-            }),
-          });
-        }
-      } catch (e) {
-        console.warn('[wetravel-webhook] failed-payment WhatsApp alert could not be sent:', e.message);
-      }
       console.log(`[wetravel-webhook] logged failed payment for ${bkId}`);
       return;
     }
 
+    let trip = { title: null, start_date: null, end_date: null };
     try {
       const tok = await wtToken();
       const tripResult = await wtGetTrip(tok, tripUuid).catch(() => null);
-      const trip = tripResult || {
+      trip = tripResult || {
         title: d.trip_title || null,
         start_date: d.departure_date || null,
         end_date: d.trip_end_date || null,
@@ -247,6 +259,7 @@ async function handleWeTravelBookingUpdate(key, tripUuid, orderId, d, eventType,
       bookingId: bkId,
       guestName: (d.buyer && (d.buyer.full_name || [d.buyer.first_name, d.buyer.last_name].filter(Boolean).join(' '))) || '',
       amount: totalPaidAmount != null ? totalPaidAmount : (d.amount ?? d.paid_amount ?? 0) / 100,
+      dates: fmtDateRangeEs(trip.start_date, trip.end_date),
     });
     console.log(`[wetravel-webhook] refreshed booking ${bkId} from event type ${eventType}`);
   } catch (e) {
@@ -565,6 +578,7 @@ exports.handler = async (event) => {
         ts: new Date().toISOString(),
         kind: isFullyPaid ? 'created' : 'deposit',
         bookingId: bkId,
+        dates: fmtDateRangeEs(trip.start_date, trip.end_date),
         guestName: guestList.map(g => g.name).filter(Boolean).join(', '),
         amount: totalPaidAmount,
       });
