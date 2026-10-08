@@ -16,3 +16,8 @@
 # 22:00 UTC = 5pm in Tulum (Quintana Roo is UTC-5 fixed, no DST).
 [functions."send-checkout-payment-links"]
   schedule = "0 22 * * *"
+
+# Daily 7pm occupied-rooms report to maintenance/security (via Visito).
+# 00:00 UTC = 7pm in Tulum (Quintana Roo is UTC-5 fixed, no DST).
+[functions."send-climas-report"]
+  schedule = "0 0 * * *"
