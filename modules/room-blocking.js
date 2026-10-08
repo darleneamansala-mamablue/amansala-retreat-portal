@@ -727,15 +727,10 @@ function gOpenEdit(room,rtId){
   const _tRowE=document.getElementById('gm-teacher-row');if(_tRowE)_tRowE.style.display=IS_TEACHER_MODE?'none':'block';
   const _tChkE=document.getElementById('g-teacher-check');if(_tChkE)_tChkE.checked=gIsTeacherRoom;
   const last=(reg.guests||[]).reduce((a,g,i)=>g.name?i:a,-1);
-  // gSetupTabs/gSwitchTab only show as many tabs as gExtraGuestMode/gRoleMaxOcc allow —
-  // fine the first time an extra guest is added via the "+1" button (which sets
-  // gExtraGuestMode itself), but re-opening that SAME registration afterward through
-  // the plain Edit button left gExtraGuestMode false, so maxOcc collapsed back to 1
-  // and gSwitchTab(1) (jumping to the last named guest) hid EVERY panel — neither
-  // guest showed at all (Jorge's report 2026-09-21). A registration that already has
-  // 2+ named guests always needs at least that many tabs, regardless of how it was
-  // opened.
-  if((reg.guests||[]).filter(g=>g.name).length>=2)gExtraGuestMode=true;
+  // gSetupTabs/gSwitchTab (via gEffectiveMaxOcc) already guarantee at least as
+  // many tabs as this registration has named guests, regardless of how the
+  // modal was opened or whether gExtraGuestMode is set — no need to force it
+  // true here anymore (Jorge's reports 2026-09-21 and 2026-10-08).
   gSetupTabs(rt);gSwitchTab(Math.max(0,last));gUpdatePrice();openModal('guestModal');
 }
 // Room types where the true occupancy (rt.maxOcc) includes an extra guest slot that
@@ -748,8 +743,24 @@ function gRoleMaxOcc(rt){
   if(IS_TEACHER_MODE&&rt&&TEACHER_OCC_CAP[rt.id]!=null)return Math.min(TEACHER_OCC_CAP[rt.id],trueMax);
   return trueMax;
 }
+// How many guest tabs the modal actually needs -- gExtraGuestMode used to
+// hardcode this to exactly 2 whenever true, silently capping every room type
+// at 2 guests regardless of its real maxOcc. A 3-guest room type (e.g. Casa
+// King Downstairs, "Up to 3 guests") that already had all 3 slots filled
+// (Avery Mellor, Carter retreat, 2026-10-08) only ever showed Guest 1/Guest 2
+// tabs -- the 3rd guest existed in the data but had no tab to edit at all.
+// Scales to the room's true capacity, never fewer tabs than guests already
+// named, and never more than the hard 4-tab UI limit.
+function gEffectiveMaxOcc(rt){
+  const reg=gEditRegId?AppData.regs.find(r=>r.id===gEditRegId):null;
+  const namedCount=(reg?.guests||[]).filter(g=>g.name).length;
+  const roleMax=gRoleMaxOcc(rt);
+  const trueMax=rt?rt.maxOcc:1;
+  const needed=Math.max(gExtraGuestMode?roleMax+1:roleMax,namedCount);
+  return Math.min(needed,trueMax,4);
+}
 function gSetupTabs(rt){
-  const maxOcc=gExtraGuestMode?2:gRoleMaxOcc(rt);
+  const maxOcc=gEffectiveMaxOcc(rt);
   const tabsEl=document.getElementById('gTabs');
   if(maxOcc>=2){tabsEl.style.display='flex';[0,1,2,3].forEach(i=>{const t=document.getElementById('gtab'+i);if(t)t.style.display=i<maxOcc?'':'none';});}
   else tabsEl.style.display='none';
@@ -763,7 +774,7 @@ function gSwitchTab(idx){
   // with max_occ > 4 (whole-villa types like Casa Shanti/Casa Master/Casita 4, or a
   // bad data value) must never drive this loop past that, or getElementById('gp4')
   // returns null and .style throws, crashing the whole "Add Guest" modal.
-  const maxOcc=Math.min(gExtraGuestMode?2:gRoleMaxOcc(rt),4);
+  const maxOcc=gEffectiveMaxOcc(rt);
   for(let i=0;i<maxOcc;i++){document.getElementById('gtab'+i)?.classList.toggle('active',i===idx);const p=document.getElementById('gp'+i);if(p)p.style.display=i===idx?'block':'none';}
   gUpdatePrice();
 }
