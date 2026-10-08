@@ -402,25 +402,36 @@ function beRenderRates() {
     ${rateWarnHtml}
     <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
       <h3 style="font-size:14px;font-weight:700;color:var(--dark);margin:0 0 4px">Base Rates</h3>
-      <p style="font-size:12px;color:var(--muted);margin:0 0 16px">Escape rate per room type. "Pricing Rules" below adjusts on top of these. Extra Night defaults to the Escape rate — set it only for rooms where it should differ.</p>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 16px">Escape rate per room type. "Pricing Rules" below adjusts on top of these. Extra Night defaults to the Escape rate — set it only for rooms where it should differ. Extra Night High applies Oct–Apr, Extra Night Low applies May–Sep — same low/high season window retreats use (Jorge's call 2026-10-08) — neither gets the Escape weekend/monthly surcharge.</p>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <thead><tr style="border-bottom:2px solid #f3f4f6">
             <th style="text-align:left;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Room</th>
             <th style="text-align:center;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Single</th>
             <th style="text-align:center;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Double (pp)</th>
-            <th style="text-align:center;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Extra Night</th>
+            <th style="text-align:center;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Extra Night High</th>
+            <th style="text-align:center;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Extra Night Low</th>
             <th style="text-align:center;padding:6px 8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Max occ.</th>
           </tr></thead>
           <tbody>
-            ${rows.map(rt => `
+            ${rows.map(rt => {
+              // Read the snake_case column too -- sqlRoomTypeToApp's _ROOMTYPE_COL_MAP
+              // maps these be_* columns to themselves (not camelCase), so a value
+              // loaded fresh from Supabase lives at rt.be_price_single_extra_night(_low),
+              // not rt.bePriceSingleExtraNight(Low) -- only present once this session's
+              // own Save has run. Reading both means the field shows the real saved
+              // value on first load instead of going blank until the next edit.
+              const extraHigh = rt.bePriceSingleExtraNight ?? rt.be_price_single_extra_night ?? '';
+              const extraLow = rt.bePriceSingleExtraNightLow ?? rt.be_price_single_extra_night_low ?? '';
+              return `
             <tr style="border-bottom:1px solid #f9fafb">
               <td style="padding:8px;color:var(--dark);font-weight:600">${escHtml(rt.name)}</td>
               <td style="padding:8px;text-align:center"><input type="number" id="br-single-${rt.id}" value="${rt.be_price_single ?? ''}" placeholder="—" min="0" step="any" style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;text-align:center"></td>
               <td style="padding:8px;text-align:center"><input type="number" id="br-double-${rt.id}" value="${rt.be_price_double ?? ''}" placeholder="= single" min="0" step="any" style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;text-align:center"></td>
-              <td style="padding:8px;text-align:center"><input type="number" id="br-extranight-${rt.id}" value="${rt.bePriceSingleExtraNight ?? ''}" placeholder="= escape" min="0" step="any" style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;text-align:center"></td>
+              <td style="padding:8px;text-align:center"><input type="number" id="br-extranight-${rt.id}" value="${extraHigh}" placeholder="= escape" min="0" step="any" style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;text-align:center"></td>
+              <td style="padding:8px;text-align:center"><input type="number" id="br-extranightlow-${rt.id}" value="${extraLow}" placeholder="= high" min="0" step="any" style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;text-align:center"></td>
               <td style="padding:8px;text-align:center"><input type="number" id="br-maxocc-${rt.id}" value="${rt.maxOcc ?? ''}" placeholder="—" min="1" max="20" step="1" style="width:65px;padding:6px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:'Jost',sans-serif;text-align:center"></td>
-            </tr>`).join('')}
+            </tr>`;}).join('')}
           </tbody>
         </table>
       </div>
@@ -466,16 +477,22 @@ async function beSaveBaseRates() {
     const sVal = sEl.value.trim();
     const dVal = document.getElementById(`br-double-${rt.id}`)?.value.trim() ?? '';
     const enVal = document.getElementById(`br-extranight-${rt.id}`)?.value.trim() ?? '';
+    const enLowVal = document.getElementById(`br-extranightlow-${rt.id}`)?.value.trim() ?? '';
     const mVal = document.getElementById(`br-maxocc-${rt.id}`)?.value.trim() ?? '';
     const priceSingle = sVal !== '' ? parseFloat(sVal) : null;
     const priceDouble = dVal !== '' ? parseFloat(dVal) : null;
     const priceExtraNight = enVal !== '' ? parseFloat(enVal) : null;
+    const priceExtraNightLow = enLowVal !== '' ? parseFloat(enLowVal) : null;
     const maxOcc = mVal !== '' ? parseInt(mVal) : (rt.maxOcc ?? null);
+    const prevExtraNight = rt.bePriceSingleExtraNight ?? rt.be_price_single_extra_night ?? null;
+    const prevExtraNightLow = rt.bePriceSingleExtraNightLow ?? rt.be_price_single_extra_night_low ?? null;
     if (priceSingle === (rt.be_price_single ?? null) && priceDouble === (rt.be_price_double ?? null)
-        && priceExtraNight === (rt.bePriceSingleExtraNight ?? null) && maxOcc === (rt.maxOcc ?? null)) continue;
+        && priceExtraNight === prevExtraNight && priceExtraNightLow === prevExtraNightLow
+        && maxOcc === (rt.maxOcc ?? null)) continue;
     rt.be_price_single = priceSingle;
     rt.be_price_double = priceDouble;
     rt.bePriceSingleExtraNight = priceExtraNight;
+    rt.bePriceSingleExtraNightLow = priceExtraNightLow;
     rt.maxOcc = maxOcc;
     dirty.push(rt);
   }
@@ -484,7 +501,8 @@ async function beSaveBaseRates() {
   const results = await Promise.all(dirty.map(rt =>
     db.from('room_types').update({
       be_price_single: rt.be_price_single, be_price_double: rt.be_price_double,
-      be_price_single_extra_night: rt.bePriceSingleExtraNight, max_occ: rt.maxOcc,
+      be_price_single_extra_night: rt.bePriceSingleExtraNight,
+      be_price_single_extra_night_low: rt.bePriceSingleExtraNightLow, max_occ: rt.maxOcc,
     }).eq('id', rt.id)
   ));
   const failed = results.filter(r => r.error);
