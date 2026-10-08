@@ -1,0 +1,106 @@
+'use strict';
+
+// Scheduled (netlify.toml: every day 00:00 UTC = 7pm in Tulum) -- Jorge's ask
+// 2026-10-08: a daily WhatsApp report of tonight's occupied rooms to
+// maintenance + security so they can raise the A/C before 9pm. WhatsApp
+// Business has no concept of "group" messaging at the API level (confirmed
+// with Jorge), so this sends the SAME message individually to every number
+// in CLIMAS_REPORT_NUMBERS (comma-separated E.164), covering both teams.
+//
+// Template "amansala_climas_reporte" (es_MX, UTILITY) submitted via Visito's
+// API 2026-10-08, PENDING Meta approval as of this writing -- sends are a
+// no-op (dry run, logged only) until CLIMAS_REPORT_ENABLED=true, same
+// pattern as send-checkout-payment-links.js's CHECKOUT_LINKS_ENABLED.
+//
+// Env:
+//   SUPABASE_SERVICE_KEY
+//   VISITO_M2M_KEY
+//   CLIMAS_REPORT_NUMBERS   comma-separated E.164 numbers (maintenance + security)
+//   CLIMAS_REPORT_ENABLED   must be "true" to actually send
+
+const SUPABASE_URL  = 'https://vnttlpqkssihbmcynxvo.supabase.co';
+const VISITO_API    = 'https://platform-api.visitoai.com/m2m/v1';
+const CHANNEL_ID    = '6abd2154f6a6b5cd69232824'; // WhatsApp +52 1 984 879 5999, tenant amansala-2
+const TEMPLATE_NAME = 'amansala_climas_reporte';
+const TEMPLATE_LANG = 'es_MX';
+
+// Hotel-local date (Tulum, UTC-5)
+function localDate(offsetDays = 0) {
+  return new Date(Date.now() + offsetDays * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Cancun' });
+}
+function fmtDateEsLong(dateStr) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+exports.handler = async () => {
+  const supaKey = process.env.SUPABASE_SERVICE_KEY;
+  if (!supaKey) { console.error('[climas-report] SUPABASE_SERVICE_KEY missing'); return { statusCode: 500 }; }
+  const enabled = process.env.CLIMAS_REPORT_ENABLED === 'true';
+  const m2mKey  = process.env.VISITO_M2M_KEY;
+  const numbers = (process.env.CLIMAS_REPORT_NUMBERS || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (enabled && (!m2mKey || !numbers.length)) {
+    console.error('[climas-report] enabled but VISITO_M2M_KEY / CLIMAS_REPORT_NUMBERS missing');
+    return { statusCode: 500 };
+  }
+
+  const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json' };
+  const get = async path => {
+    const r = await fetch(SUPABASE_URL + path, { headers: hdrs });
+    if (!r.ok) throw new Error(`${path.split('?')[0]} ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    return r.json();
+  };
+
+  const today = localDate(0);
+  const occupied = new Set();
+
+  // Individual Room Only / Booking Engine stays covering tonight
+  const reqs = await get(`/rest/v1/booking_requests?select=room&room=not.is.null&check_in=lte.${today}&check_out=gt.${today}&status=in.(paid,in_house,confirmed)`);
+  reqs.forEach(r => r.room && occupied.add(r.room));
+
+  // Retreat/group bookings covering tonight
+  const bks = await get(`/rest/v1/bookings?select=blocked_rooms&status=neq.cancelled&start_date=lte.${today}&end_date=gt.${today}`);
+  bks.forEach(b => (b.blocked_rooms ?? []).forEach(r => occupied.add(r)));
+
+  const roomList = [...occupied].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  console.log(`[climas-report] ${enabled ? 'SENDING' : 'DRY RUN'} for ${today} -- ${roomList.length} rooms: ${roomList.join(', ')}`);
+
+  if (!roomList.length) {
+    console.log('[climas-report] no occupied rooms tonight, skipping send');
+    return { statusCode: 200, body: JSON.stringify({ date: today, rooms: 0 }) };
+  }
+
+  const dateStr  = fmtDateEsLong(today);
+  const roomsStr = roomList.join(', ');
+
+  if (!enabled) {
+    console.log(`[climas-report] would send to ${numbers.length} numbers: ${roomsStr}`);
+    return { statusCode: 200, body: JSON.stringify({ date: today, rooms: roomList.length, dryRun: true }) };
+  }
+
+  const results = { sent: 0, failed: 0 };
+  for (const to of numbers) {
+    try {
+      const r = await fetch(`${VISITO_API}/whatsapp-templates/${CHANNEL_ID}/send`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${m2mKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `climas-${today}-${to}` },
+        body: JSON.stringify({
+          to,
+          template: {
+            name: TEMPLATE_NAME,
+            language: { code: TEMPLATE_LANG },
+            components: [{ type: 'body', parameters: [{ type: 'text', text: dateStr }, { type: 'text', text: roomsStr }] }],
+          },
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`${r.status} ${JSON.stringify(data).slice(0, 200)}`);
+      results.sent++;
+    } catch (e) {
+      results.failed++;
+      console.error(`[climas-report] send failed for ${to}: ${e.message}`);
+    }
+  }
+
+  console.log(`[climas-report] ${today} -- ${JSON.stringify(results)}`);
+  return { statusCode: 200, body: JSON.stringify({ date: today, rooms: roomList.length, ...results }) };
+};
