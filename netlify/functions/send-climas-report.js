@@ -118,11 +118,12 @@ exports.handler = async () => {
   }
 
   const dateStr  = fmtDateEsLong(today);
-  // A real newline in a template PARAMETER (unlike the template's own static
-  // body text) is rejected by Meta with a bare 500 -- confirmed empirically
-  // 2026-10-08, several failed test sends. Visual bullets on one line is the
-  // closest a parameter can get to a real list.
-  const roomsStr = roomList.map(r => `• ${r}`).join('   ');
+  // A real "\n" (U+000A) in a template PARAMETER is rejected by Meta with a
+  // bare 500 -- confirmed empirically 2026-10-08. The Unicode LINE SEPARATOR
+  // (U+2028) is accepted AND renders as a real line break in WhatsApp,
+  // confirmed by an actual test send Jorge received with each room on its
+  // own line.
+  const roomsStr = roomList.join(' ');
 
   if (!enabled) {
     console.log(`[climas-report] would send to ${numbers.length} numbers: ${roomsStr}`);
