@@ -6,6 +6,7 @@
 // payment link. Records the payment as a negative-priced folio_items row,
 // same representation every other folio payment (Cash/Zelle/Stripe link/etc.)
 // already uses.
+const { sendPaymentNotification } = require('./notify-payment');
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
 
@@ -92,6 +93,8 @@ exports.handler = async (event) => {
     return jsonErr(500, 'Charged but could not save to the folio: ' + err.message);
   }
 
+  notifyCardOnFilePayment(hdrs, regId, pi.amount_received / 100).catch(e => console.warn('[charge-card-on-file] notify failed:', e.message));
+
   return {
     statusCode: 200,
     headers: { ...cors(), 'Content-Type': 'application/json' },
@@ -101,3 +104,19 @@ exports.handler = async (event) => {
 
 function cors() { return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' }; }
 function jsonErr(code, msg) { return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify({ error: msg }) }; }
+
+function fmtDateRangeEs(start, end) {
+  if (!start || !end) return '—';
+  const opts = { day: 'numeric', month: 'short' };
+  const a = new Date(start + 'T00:00:00'), b = new Date(end + 'T00:00:00');
+  return `${a.toLocaleDateString('es-MX', opts)} – ${b.toLocaleDateString('es-MX', { ...opts, year: 'numeric' })}`;
+}
+
+async function notifyCardOnFilePayment(hdrs, regId, amount) {
+  const regRes = await fetch(`${SUPABASE_URL}/rest/v1/registrations?id=eq.${encodeURIComponent(regId)}&select=room,check_in,check_out,guests,bookings(start_date,end_date)&limit=1`, { headers: hdrs });
+  const [reg] = regRes.ok ? await regRes.json() : [];
+  if (!reg) return;
+  const guestName = (reg.guests || []).find(g => g.name)?.name || 'Huésped';
+  const dates = fmtDateRangeEs(reg.check_in || reg.bookings?.start_date, reg.check_out || reg.bookings?.end_date);
+  await sendPaymentNotification({ status: 'recibido', guestName, source: 'Folio', dates, amount: `$${amount.toFixed(2)}` });
+}

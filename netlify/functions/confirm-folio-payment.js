@@ -8,6 +8,7 @@
 // same representation every other folio payment (Cash/Zelle/etc.) already
 // uses, so existing balance/Rate-and-Folios logic picks it up automatically.
 // Used by both guest-pay.html (guest self-pay) and the admin "Charge Card" flow.
+const { sendPaymentNotification } = require('./notify-payment');
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
 
@@ -79,6 +80,8 @@ exports.handler = async (event) => {
       return jsonErr(500, 'Payment charged but could not save: ' + errBody);
     }
 
+    notifyFolioPayment(hdrs, folioId, amount).catch(e => console.warn('[confirm-folio-payment] notify failed:', e.message));
+
     return {
       statusCode: 200,
       headers: { ...cors(), 'Content-Type': 'application/json' },
@@ -94,4 +97,39 @@ function cors() {
 }
 function jsonErr(code, msg) {
   return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify({ error: msg }) };
+}
+
+function fmtDateRangeEs(start, end) {
+  if (!start || !end) return '—';
+  const opts = { day: 'numeric', month: 'short' };
+  const a = new Date(start + 'T00:00:00'), b = new Date(end + 'T00:00:00');
+  return `${a.toLocaleDateString('es-MX', opts)} – ${b.toLocaleDateString('es-MX', { ...opts, year: 'numeric' })}`;
+}
+
+// Looks up the guest name + dates for the Jorge WhatsApp alert -- works
+// whether this PaymentIntent came from folio-payment.js (guest self-pay,
+// rich metadata) or create-payment-intent.js (admin "Charge Card", bare
+// amount/folioId only) since it re-derives everything from the folio itself
+// rather than trusting whichever metadata the caller happened to attach.
+async function notifyFolioPayment(hdrs, folioId, amount) {
+  const folioRes = await fetch(`${SUPABASE_URL}/rest/v1/folios?id=eq.${encodeURIComponent(folioId)}&select=id,name,guest_name,booking_request_id,registration_id&limit=1`, { headers: hdrs });
+  const [folio] = folioRes.ok ? await folioRes.json() : [];
+  if (!folio) return;
+
+  let guestName = folio.guest_name || folio.name || 'Huésped';
+  let dates = '—';
+  if (folio.registration_id) {
+    const regRes = await fetch(`${SUPABASE_URL}/rest/v1/registrations?id=eq.${encodeURIComponent(folio.registration_id)}&select=check_in,check_out,bookings(start_date,end_date)&limit=1`, { headers: hdrs });
+    const [reg] = regRes.ok ? await regRes.json() : [];
+    if (reg) dates = fmtDateRangeEs(reg.check_in || reg.bookings?.start_date, reg.check_out || reg.bookings?.end_date);
+  } else if (folio.booking_request_id) {
+    const bkRes = await fetch(`${SUPABASE_URL}/rest/v1/booking_requests?id=eq.${encodeURIComponent(folio.booking_request_id)}&select=first_name,last_name,check_in,check_out&limit=1`, { headers: hdrs });
+    const [bk] = bkRes.ok ? await bkRes.json() : [];
+    if (bk) {
+      if (!folio.guest_name) guestName = `${bk.first_name || ''} ${bk.last_name || ''}`.trim() || guestName;
+      dates = fmtDateRangeEs(bk.check_in, bk.check_out);
+    }
+  }
+
+  await sendPaymentNotification({ status: 'recibido', guestName, source: 'Folio', dates, amount: `$${amount.toFixed(2)}` });
 }
