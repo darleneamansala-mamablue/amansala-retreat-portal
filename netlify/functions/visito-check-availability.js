@@ -22,6 +22,18 @@ function isLow(dateStr) {
   return m >= 5 && m <= 9;
 }
 
+// Extra Night only -- Jorge's call 2026-10-08: no one can book an extra
+// night overlapping the Dec 20 – Jan 15 holiday window, same as retreats
+// never book then. Same logic as stripe.js's inExtraNightBlackout.
+function inExtraNightBlackout(checkIn, checkOut) {
+  const ciYear = new Date(checkIn + 'T12:00:00').getFullYear();
+  return [ciYear - 1, ciYear].some(y => {
+    const blackoutStart = `${y}-12-20`;
+    const blackoutEnd   = `${y + 1}-01-15`;
+    return checkIn < blackoutEnd && checkOut > blackoutStart;
+  });
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return jsonErr(405, 'Method Not Allowed');
 
@@ -52,12 +64,13 @@ exports.handler = async (event) => {
   // "escape" = the general Book a Stay page (book.html); "extra_night" = a
   // night added right before/after an existing group retreat (extra-nights.html).
   // Different room-type pool (be_extra_nights, not be_enabled) AND its own
-  // separately-adjustable rate (be_price_single_extra_night, falling back to
-  // the Escape rate) — same seasonal/weekend adjustment as Escape applies to
-  // both now (Jorge's ask 2026-09-23: originally Extra Night was static/no
-  // adjustment at all; he then asked for the same dynamic pricing as Escape,
-  // just on its own rate).
+  // separately-adjustable rate (be_price_single_extra_night / _low) — a flat
+  // rate, no Escape seasonal/weekend surcharge (Jorge's call 2026-10-08,
+  // reverting his own 2026-09-23 ask for parity with Escape's dynamic pricing).
   const isExtraNight = stayType === 'extra_night';
+  if (isExtraNight && inExtraNightBlackout(checkIn, checkOut)) {
+    return ok({ success: false, message: 'Extra Night no está disponible del 20 de diciembre al 15 de enero — la propiedad no reserva noches extra en esa ventana.' });
+  }
 
   const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}` };
 
@@ -65,7 +78,7 @@ exports.handler = async (event) => {
     const rtFilter = isExtraNight ? 'be_extra_nights=eq.true' : 'be_enabled=eq.true';
     const [bkRes, rtRes, settingsRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: hdrs }),
-      fetch(`${SUPABASE_URL}/rest/v1/room_types?${rtFilter}&select=id,name,rooms,max_occ,be_price_single,be_price_single_extra_night,be_price_double,price_single_high,price_single_low,be_description`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/room_types?${rtFilter}&select=id,name,rooms,max_occ,be_price_single,be_price_single_extra_night,be_price_single_extra_night_low,be_price_double,price_single_high,price_single_low,be_description`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: hdrs }),
     ]);
     if (!bkRes.ok || !rtRes.ok) throw new Error('availability fetch failed');
@@ -134,8 +147,13 @@ exports.handler = async (event) => {
         // book.html exactly (confirmed real incident 2026-09-22: using be_price_double
         // here made create_reservation compute $0 for any room type where it was null).
         // Extra Night prefers its own rate (be_price_single_extra_night), falling
-        // back to the Escape rate when not explicitly set.
-        const baseRate = (isExtraNight ? rt.be_price_single_extra_night ?? rt.be_price_single : rt.be_price_single)
+        // back to the Escape rate when not explicitly set — and its own May–Sep
+        // LOW season rate (be_price_single_extra_night_low), same low-season
+        // window retreats use (Jorge's call 2026-10-08).
+        const extraNightRate = isLow(checkIn)
+          ? (rt.be_price_single_extra_night_low ?? rt.be_price_single_extra_night ?? rt.be_price_single)
+          : (rt.be_price_single_extra_night ?? rt.be_price_single);
+        const baseRate = (isExtraNight ? extraNightRate : rt.be_price_single)
           ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
         // Extra Night is a flat rate, no seasonal/weekend surcharge — Jorge's
         // call 2026-10-08: those adjustments are an Escape-only thing. (Briefly
