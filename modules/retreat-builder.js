@@ -833,6 +833,14 @@ function computeActivityNotifs(){
       amount:p.amount||0,kind:p.kind||'created'});
   });
 
+  notifClimasConfirms.forEach(c=>{
+    if(dismissed.has(c.id))return;
+    const ts=c.ts?new Date(c.ts):null;
+    if(ts&&ts<cutoff)return;
+    const isNew=!seenDate||(ts&&ts>seenDate);
+    notifs.push({id:c.id,type:'climas_confirmed',ts,isNew,name:c.name||c.phone||'',rooms:c.rooms||''});
+  });
+
   notifFlightAlerts.forEach(a=>{
     if(dismissed.has(a.id))return;
     if(a.dismissed)return;
@@ -945,6 +953,13 @@ function _actvNotifRowHtml(n){
       ${newBadge}${n.ts?`<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>`:''}
       ${dismissBtn}</div>`;
   }
+  if(n.type==='climas_confirmed'){
+    return `<div style="${bg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">🌡️</span>
+      <span><strong>Climas confirmado</strong> — ${escHtml(n.name)}${n.rooms?' · '+escHtml(n.rooms):''}</span>
+      ${newBadge}${n.ts?`<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>`:''}
+      ${dismissBtn}</div>`;
+  }
   if(n.type==='flight_alert'){
     const isCancelled=n.label==='CANCELLED';
     const rowBg=isCancelled?'background:#fef2f2;border-left:3px solid #dc2626':bg;
@@ -966,6 +981,7 @@ const ACTV_NOTIF_SECTIONS=[
   {id:'contracts',label:'Contracts',icon:'📝',types:['contract_signed','deposit_email']},
   {id:'payments',label:'Payments',icon:'💳',types:['payment_received']},
   {id:'wetravel',label:'We Travel',icon:'🧳',types:['wetravel_payment']},
+  {id:'climas',label:'Climas',icon:'🌡️',types:['climas_confirmed']},
 ];
 function renderActvNotifPanel(notifs){
   if(!notifs.length)return'';
