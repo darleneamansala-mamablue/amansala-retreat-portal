@@ -144,9 +144,57 @@ async function recordUnmappedPackage(key, pkgName, tripUuid, orderId) {
 // Naturally idempotent against Svix retries: re-processing the same event
 // recomputes the same delta as 0 once amount_paid already matches, and the
 // name/dates PATCH is a no-op once they already match.
+// payment.updated fires when a payment's status changes (pending -> successful
+// or FAILED; successful -> refunded/disputed) -- Jorge's ask 2026-10-08: alert
+// on a failed payment instead of silently re-syncing like every other event.
+// The exact field WeTravel puts this status under hasn't been confirmed
+// against a real event yet (only booking.created has ever actually arrived
+// live) -- check every plausible field name defensively, same spirit as the
+// eventType extraction above. If a real payment.updated event comes in and
+// this misses it, the full payload is still in the Netlify function log
+// (see the console.log right after JSON.parse below) to refine this from.
+function isFailedPaymentEvent(eventType, d) {
+  if (eventType !== 'payment.updated') return false;
+  const status = (d.status || d.payment_status || d.transaction_status || d.state || '').toLowerCase();
+  return status.includes('fail') || status.includes('declin');
+}
+
 async function handleWeTravelBookingUpdate(key, tripUuid, orderId, d, eventType, svixId) {
   try {
     const bkId = `wt_${tripUuid}`;
+
+    if (isFailedPaymentEvent(eventType, d)) {
+      // Don't touch amount_paid/folios on a failure -- nothing was actually
+      // paid. Just alert: Dashboard notification (always) + WhatsApp to Jorge
+      // (best-effort; may fail if outside the 24h free-form window -- see
+      // send-message.js -- not fatal to the webhook either way).
+      const failedAmount = (d.amount ?? d.payment_amount ?? 0) / 100;
+      const guestName = (d.buyer && (d.buyer.full_name || [d.buyer.first_name, d.buyer.last_name].filter(Boolean).join(' '))) || '';
+      await logWeTravelNotif(key, {
+        id: svixId || `payment_failed_${orderId || tripUuid}_${Date.now()}`,
+        ts: new Date().toISOString(),
+        kind: 'failed',
+        bookingId: bkId,
+        guestName,
+        amount: failedAmount,
+      });
+      try {
+        const jorgePhone = process.env.JORGE_WHATSAPP_NUMBER;
+        if (jorgePhone) {
+          await fetch(`${process.env.URL || ''}/.netlify/functions/send-message`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: jorgePhone, channel: 'whatsapp',
+              body: `⚠️ We Travel: pago FALLIDO — ${guestName || 'huésped sin nombre'}${failedAmount ? ` — $${failedAmount.toFixed(2)}` : ''}. Revisa el Dashboard.`,
+            }),
+          });
+        }
+      } catch (e) {
+        console.warn('[wetravel-webhook] failed-payment WhatsApp alert could not be sent:', e.message);
+      }
+      console.log(`[wetravel-webhook] logged failed payment for ${bkId}`);
+      return;
+    }
 
     try {
       const tok = await wtToken();
