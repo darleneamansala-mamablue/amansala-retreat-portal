@@ -2086,7 +2086,10 @@
           <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#92400e">Estimated Quote</span>
           <span style="font-size:11.5px;color:#b45309;margin-left:10px" id="estQuoteLbl"></span>
         </div>
-        <span style="font-size:11px;color:#b45309;font-style:italic">Loose estimate — actual bill builds as guests are added above</span>
+        <span style="display:flex;align-items:center;gap:14px">
+          <span style="font-size:11px;color:#b45309;font-style:italic">Loose estimate — actual bill builds as guests are added above</span>
+          <button class="btn btn-secondary btn-sm" onclick="estQuoteDownloadPdf()" style="display:flex;gap:5px">📄 Download PDF</button>
+        </span>
       </div>
       <div id="estQuoteBody" style="display:grid;grid-template-columns:1fr 1fr;gap:20px"></div>
     </div>
@@ -6290,7 +6293,7 @@ function switchTab(id,btn){
 // ===== AUTO FLAGS — moved to modules/teacher-portal.js (loaded above) =====
 // ===== FLAGS MODAL — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/pricing.js?v=20261006a"></script>
+<script src="modules/pricing.js?v=20261009a"></script>
 <script src="modules/teacher-pricelist.js"></script>
 <script>
 // ===== ESTIMATED QUOTE — moved to modules/pricing.js =====

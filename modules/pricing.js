@@ -24,6 +24,21 @@ function toggleEstQuote(){
   document.getElementById('estQuoteBtn').style.borderColor=estQuoteOpen?'#fcd34d':'';
 }
 
+// Jorge's ask 2026-10-09: a way to save the Est. Quote as a PDF so it can be
+// sent to the retreat leader -- same client-side html2pdf.js snapshot
+// pattern teacher-portal.js's scheduleDownloadPdf() already uses for the
+// schedule, applied to the #estQuotePanel markup instead.
+function _estQuoteFilename(bk){return(bk.leaderName||bk.retreatName||'retreat').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'')+'-estimate.pdf';}
+async function estQuoteDownloadPdf(){
+  if(!regSelBk)return;
+  const el=document.getElementById('estQuotePanel');if(!el)return;
+  if(typeof html2pdf==='undefined'){showToast('PDF library failed to load — check your connection and try again.');return;}
+  showToast('Generating PDF…');
+  try{
+    await html2pdf().set({margin:10,filename:_estQuoteFilename(regSelBk),image:{type:'jpeg',quality:.95},html2canvas:{scale:2},jsPDF:{unit:'mm',format:'letter',orientation:'portrait'}}).from(el).save();
+  }catch(e){showToast('Could not generate PDF: '+e.message);}
+}
+
 function renderEstQuote(lblId,bodyId){
   lblId=lblId||'estQuoteLbl';bodyId=bodyId||'estQuoteBody';
   if(!regSelBk)return;
