@@ -1203,8 +1203,18 @@ function getAutoFlags(bk){
     });
   }
 
-  // Two apparent females sharing a king bed
-  AppData.roomTypes.filter(rt=>rt.name.toLowerCase().includes('king')).forEach(rt=>{
+  // Two apparent females sharing a king bed. Matching on rt.name containing "king"
+  // (old version) missed every single-bed-for-two room type whose name doesn't
+  // literally say "king" -- Superior, Garden Plus, Garden, and Casa Grande 2 Queen
+  // Downstairs ("admin can add a 2nd guest to share it") are all genuinely one bed
+  // shared by up to 2 guests, same as Beachfront King/Shanti King/Casa Grande Up King
+  // -- confirmed 2026-10-10 against live room_types data (every maxOcc:2 type). The
+  // real fix is maxOcc===2 (a true single shared bed), excluding SHARED_ROOM_TYPE_IDS
+  // (rt6/rt7/rt8/rt9/csh2 -- TWO separate beds sold whole-or-split, not one shared
+  // bed; a woman in each of those is normal, not this flag). Jorge's report: the
+  // old name-based filter meant retreats using mostly Superior/Garden/Garden Plus
+  // rooms never triggered this flag at all.
+  AppData.roomTypes.filter(rt=>rt.maxOcc===2&&!SHARED_ROOM_TYPE_IDS.has(rt.id)).forEach(rt=>{
     rt.rooms.filter(r=>blockedSet.has(r)).forEach(room=>{
       const key=`king_females_${room}`;
       const ack=acks[bk.id+'__'+key];
@@ -1290,8 +1300,15 @@ function getOpenAutoFlags(bk){
   const acks=getIssueAcks();
   return getAutoFlags(bk).filter(f=>!acks[bk.id+'__'+f.key]);
 }
-function getIssueAcks(){return JSON.parse(localStorage.getItem('amansala_issue_acks')||'{}');}
-function saveIssueAcks(acks){localStorage.setItem('amansala_issue_acks',JSON.stringify(acks));}
+// Shared via the `app_store` table (key 'issueAcks', loaded into the global `issueAcks`
+// object at startup -- see booking-hub.html's loadFromSupabase) instead of localStorage,
+// which was per-browser/per-device: Jorge's report 2026-10-10 that confirming a flag
+// (e.g. "♥ Confirmed Couple") on one computer never showed as confirmed anywhere else.
+function getIssueAcks(){return issueAcks||{};}
+function saveIssueAcks(acks){
+  issueAcks=acks;
+  db.from('app_store').upsert({key:'issueAcks',value:acks,updated_at:new Date().toISOString()},{onConflict:'key'}).catch(e=>console.warn('[issueAcks] save failed:',e.message));
+}
 function ackIssue(bkId,key,status){
   const acks=getIssueAcks();
   const ak=acks[bkId+'__'+key]||{};
