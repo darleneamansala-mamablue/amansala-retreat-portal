@@ -597,8 +597,27 @@ function beRequestsTableHtml(title, icon, rows) {
   </div>`;
 }
 
+// Jorge's ask 2026-10-10: don't make staff click "Assign room" for every
+// clean match -- auto-assign it the moment the Reservations tab renders.
+// Only same-category matches auto-assign; a categoryMismatch still needs a
+// human decision (manual room field), same reasoning as hiding its Assign
+// button. beAutoAssigned tracks ids already tried this page load so a
+// failed PATCH doesn't retry forever on every re-render, and so the
+// beAssignRoom()-triggered re-render this causes doesn't loop.
+const beAutoAssigned = new Set();
+function beAutoAssignMatches(paid) {
+  paid.forEach(r => {
+    if (r.room || beAutoAssigned.has(r.id)) return;
+    const match = beFindRoomMatch(r);
+    if (!match || match.categoryMismatch) return;
+    beAutoAssigned.add(r.id);
+    beAssignRoom(r.id, match.room);
+  });
+}
+
 function beRenderRequests() {
   const paid = beRequests.filter(r => r.status === 'paid');
+  beAutoAssignMatches(paid);
   const totalRevenue = paid.reduce((s, r) => s + (r.amountPaid ?? 0), 0);
   const withDiscount = paid.filter(r => r.discountCode).length;
   const extraNight = paid.filter(r => r.source === 'Extra Night');
