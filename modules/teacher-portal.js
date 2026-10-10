@@ -1217,8 +1217,14 @@ function getAutoFlags(bk){
   AppData.roomTypes.filter(rt=>rt.maxOcc===2&&!SHARED_ROOM_TYPE_IDS.has(rt.id)).forEach(rt=>{
     rt.rooms.filter(r=>blockedSet.has(r)).forEach(room=>{
       const key=`king_females_${room}`;
-      const ack=acks[bk.id+'__'+key];
-      if(ack&&(ack.status==='couple'||ack.status==='done'))return; // dismissed
+      // Unlike every other flag type here, this one used to vanish from
+      // getAutoFlags() entirely once acked -- Jorge's ask 2026-10-10: once he's
+      // confirmed it's fine for the two of them to share the one bed, he wants
+      // it to keep showing (green, resolved) in the Flags & Notes modal, not
+      // disappear as if it had never been raised. getOpenAutoFlags() below still
+      // drops it from the 🚩 badge/tooltip count once acked -- same as every
+      // other flag type -- only the raw list here (used by renderFlagsModal) no
+      // longer dismisses it.
       const reg=getRegForRoom(bk.id,room);
       if(!reg)return;
       const namedGuests=(reg.guests||[]).filter(g=>g.name);
@@ -1344,20 +1350,25 @@ function renderFlagsModal(bk){
   if(autoFlags.length){
     autoHtml+=`<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#dc2626;margin-bottom:8px">Auto-Detected Issues</div>`;
     autoFlags.forEach(f=>{
-      const col=f.severity==='red'?'#fee2e2':'#fff7ed';
-      const border=f.severity==='red'?'#fca5a5':'#fed7aa';
-      const dotClr=f.severity==='red'?'#dc2626':'#f97316';
       const ackId=bk.id+'__'+f.key;
       const ack=acks[ackId];
+      // Confirmed king_two_females stays in this list forever (see getAutoFlags) and
+      // turns green instead of keeping the orange "needs attention" look -- Jorge's
+      // ask 2026-10-10: once confirmed it's fine to share the one bed, the card itself
+      // should read as resolved, not just carry a small badge on an otherwise-urgent card.
+      const _confirmedOneBed=f.type==='king_two_females'&&ack&&ack.status==='couple';
+      const col=_confirmedOneBed?'#f0fdf4':f.severity==='red'?'#fee2e2':'#fff7ed';
+      const border=_confirmedOneBed?'#86efac':f.severity==='red'?'#fca5a5':'#fed7aa';
+      const dotClr=_confirmedOneBed?'#16a34a':f.severity==='red'?'#dc2626':'#f97316';
       const statusBadge=ack?(ack.status==='couple'
-        ?`<span style="background:#fdf4ff;border:1px solid #e9d5ff;color:#7e22ce;border-radius:99px;font-size:10px;font-weight:700;padding:2px 9px;flex-shrink:0">♥ Couple confirmed</span>`
+        ?`<span style="background:#f0fdf4;border:1px solid #86efac;color:#15803d;border-radius:99px;font-size:10px;font-weight:700;padding:2px 9px;flex-shrink:0">✓ One bed confirmed</span>`
         :ack.status==='done'
         ?`<span style="background:#f0fdf4;border:1px solid #86efac;color:#15803d;border-radius:99px;font-size:10px;font-weight:700;padding:2px 9px;flex-shrink:0">✓ Done</span>`
         :`<span style="background:#f8fafc;border:1px solid #cbd5e1;color:#64748b;border-radius:99px;font-size:10px;font-weight:700;padding:2px 9px;flex-shrink:0">~ Recognized</span>`):'';
       const meta=f.type==='unpartnered'?'Action needed: find roommate, reassign, or add another guest'
-        :f.type==='king_two_females'?'Confirm if they are a couple sharing the bed — or reassign to a double room'
+        :f.type==='king_two_females'?(_confirmedOneBed?'Confirmed — sharing one bed is intentional':'Confirm it\'s OK for them to share the one bed — or reassign to a double room')
         :'Info: category fully booked';
-      const coupleBtn=f.type==='king_two_females'?`<button class="btn btn-secondary btn-sm" style="${ack&&ack.status==='couple'?'background:#fdf4ff;border-color:#e9d5ff;color:#7e22ce;':''}" onclick="ackIssue('${bk.id}','${f.key}','couple')">♥ Confirmed Couple</button>`:'';
+      const coupleBtn=f.type==='king_two_females'?`<button class="btn btn-secondary btn-sm" style="${_confirmedOneBed?'background:#f0fdf4;border-color:#86efac;color:#15803d;':''}" onclick="ackIssue('${bk.id}','${f.key}','couple')">✓ Confirm One Bed</button>`:'';
       autoHtml+=`<div class="flag-item flag-open" style="background:${col};border-color:${border};cursor:pointer;flex-direction:column;padding:0" onclick="toggleIssueDetail('${ackId}')">
         <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;width:100%;box-sizing:border-box">
           <div class="flag-dot" style="background:${dotClr};margin-top:4px;flex-shrink:0"></div>
@@ -1367,7 +1378,7 @@ function renderFlagsModal(bk){
               ${statusBadge}
               <span style="font-size:11px;color:${dotClr};font-weight:600;flex-shrink:0">▾</span>
             </div>
-            <div class="flag-meta" style="margin-top:2px">${meta}${ack&&ack.date?` · ${ack.status==='couple'?'Couple confirmed':ack.status==='done'?'Done':'Recognized'} ${ack.date}`:''}${ack&&ack.note?` · "${ack.note}"`:''}  — click to ${ack?'update':'respond'}</div>
+            <div class="flag-meta" style="margin-top:2px">${meta}${ack&&ack.date?` · ${ack.status==='couple'?'One bed confirmed':ack.status==='done'?'Done':'Recognized'} ${ack.date}`:''}${ack&&ack.note?` · "${ack.note}"`:''}  — click to ${ack?'update':'respond'}</div>
           </div>
         </div>
         <div id="idet_${ackId}" style="display:none;border-top:1px solid ${border};padding:10px 12px;background:rgba(255,255,255,.6);width:100%;box-sizing:border-box" onclick="event.stopPropagation()">
