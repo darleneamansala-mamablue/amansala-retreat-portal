@@ -454,7 +454,7 @@ function _calcRoomRevenue(bk){
     if(!prev){regByRoom[r.room]=r;return;}
     if((r.guests||[]).filter(g=>g.name).length>(prev.guests||[]).filter(g=>g.name).length)regByRoom[r.room]=r;
   });
-  const tipPer=getTip(bk),pkgTaxRate=getBkTaxRate(bk),roomTaxRate=pkgTaxRate===0?0:0.16;
+  const tipPer=getTip(bk),pkgTaxRate=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(bk):getBkTaxRate(bk)),roomTaxRate=getBkTaxRate(bk)===0?0:0.16;
   const addOnItems=calcPkgItems(bk);
   let total=0;
   Array.from(blockedSet).forEach(room=>{

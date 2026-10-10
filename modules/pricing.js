@@ -46,8 +46,8 @@ function renderEstQuote(lblId,bodyId){
   const blockedSet=new Set(regSelBk.blockedRooms||[]);
   const estPax=regSelBk.pax||10;
   const tipPer=getTip(regSelBk);
-  const pkgTaxRate=getBkTaxRate(regSelBk);
-  const roomTaxRate=pkgTaxRate===0?0:0.16;
+  const pkgTaxRate=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk));   // tax on the package (can differ from room tax)
+  const roomTaxRate=getBkTaxRate(regSelBk)===0?0:0.16;
 
   // Add-ons — use calcPkgCost for correct bundle/custom pricing
   const addOnItems=calcPkgItems(regSelBk);
@@ -245,7 +245,7 @@ function showRtTooltip(e,rtId){
   const nights=regSelBk?getNights(regSelBk):1;
   const _ls=regSelBk&&isLowSeason(regSelBk.startDate,nights);
   const _tip=getTip(regSelBk);
-  const pkgTaxRate=getBkTaxRate(regSelBk);
+  const pkgTaxRate=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk));
   const season=_ls?'Low Season (May–Sep)':'High Season (Oct–Apr)';
   let html=`<div class="price-tip-hdr">${rt.name} · ${nights} night${nights!==1?'s':''} · ${season}</div>`;
   const maxShow=rt.maxOcc===1?1:Math.min(rt.maxOcc,2);

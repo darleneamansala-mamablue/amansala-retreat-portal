@@ -6,6 +6,8 @@
 let menuSchedule = {};       // { 'YYYY-MM-DD': { lightBreakfast:[{time,group,pax}], brunch:[], snack:[], dinner:[] } }
 let menuCurrentMonday = null;
 
+// 2026-10-09: breakfast/brunch/lunch/snack entered exactly from Darlene's handwritten weekly menu (Oct 7 photos);
+// light breakfast and dinners unchanged. Desayuno on the sheet = the Breakfast row.
 const WEEKLY_MENU = {
   // Re-ordered 2026-09-26 (Darlene): whole brunch/lunch and dinner menus moved
   // between days — no dish changed except Tinga de Pollo → Estofado de
@@ -14,51 +16,58 @@ const WEEKLY_MENU = {
   // snack stay on their original day. See modules/menu-variety.js.
   1: { // Lunes (Monday) — Day 1 · brunch/lunch from old Wed · dinner from old Wed
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
-    brunch: ['Chilaquiles','Huevos Verdes','Pan de Frances','Blackened Tacos ★','Ensalada Mexicana'],
-    lunch:  ['Blackened Tacos ★','Ensalada Mexicana'],
-    snack:  ['Summer Rolls con Gazpacho'],
-    dinner: {protein:'Pollo',dishes:['Ensalada Verde','Risotto de Espinaca'],dessert:'Flan de Cafe'}
+    breakfast: ['Fruta','Yogurt','Granola','Avocado Toast c/Poche','Omelet Mixto','Hot Cakes Veganos'],
+    brunch: ['Avocado Toast c/Poche','Omelet Mixto','Hot Cakes Veganos','Poke Bowl Salmon ★','Fruta Fresca'],
+    lunch:  ['Avocado Toast','Poke Bowl Salmon ★','Ensalada Edamame','Brocoli Horneado c/Salsa de Tahini','Fruta Fresca'],
+    snack:  ['Guacamole Vegetales y Chips'],
+    dinner: {protein:'Pollo',dishes:['Sopa de Zanahoria','Ensalada Verde','Risotto de Espinaca'],dessert:'Flan de Cafe'}
   },
   2: { // Martes (Tuesday) — Day 2 · brunch/lunch from old Tue · dinner from old Sat
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
-    brunch: ['Huevos Rancheros','Avocado Toast','Pan de Platano','Salmon con Miel y Ajo ★','Ensalada Edamame','Poke Bowl'],
-    lunch:  ['Salmon con Miel y Ajo ★','Ensalada Edamame','Poke Bowl'],
-    snack:  ['Guacamole con Veggies y Chips'],
-    dinner: {protein:'Pescado en Hoja de Platano',dishes:['Ensalada de Pepino','Spinach con Ajo'],dessert:'Brownie'}
+    breakfast: ['Fruta','Yogurt','Granola','H. Rancheros','H. Revueltos','Pan Frances'],
+    brunch: ['H. Rancheros','H. Revueltos','Pan Frances','Bang Bang Pollo ★','Fruta Fresca'],
+    lunch:  ['Bang Bang c/Pollo ★','Caprese Toast','Zanahoria y Betabel Horneados','Fruta Fresca'],
+    snack:  ['Hummus c/Vegetales y Chips'],
+    dinner: {protein:'Pescado en Hoja de Platano',dishes:['Sopa de Coliflor','Ensalada de Pepino','Spinach con Ajo'],dessert:'Brownie'}
   },
   3: { // Miércoles (Wednesday) — Day 3 · brunch/lunch from old Sat · dinner from old Fri
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
-    brunch: ['Huevos Rancheros','Huevos Revueltos','Protein Pancakes','Bang Bang Chicken ★','Crispy Rice Salad'],
-    lunch:  ['Bang Bang Chicken ★','Crispy Rice Salad'],
-    snack:  ['Hummus con Veggies y Chips'],
-    dinner: {protein:'Salmon',dishes:['Cabbage Steak con Tahini','Camote al Horno'],dessert:'Pie de Manzana'}
+    breakfast: ['Fruta','Yogurt','Granola','Chilaquiles','Huevos Duros','Pan de Platano'],
+    brunch: ['Chilaquiles','H. Duros','Pan de Platano','Kebabs Pollo/Tofu ★','Ensalada Griega','Fruta Fresca'],
+    lunch:  ['Kebabs Pollo/Tofu ★','Ensalada Griega','Babaganoush Tostada','Fruta Fresca'],
+    snack:  ['Ensalada Mediterranea','Fruta'],
+    dinner: {protein:'Salmon',dishes:['Sopa de Betabel','Cabbage Steak con Tahini','Camote al Horno'],dessert:'Pie de Manzana'}
   },
   4: { // Jueves (Thursday) — Day 4 · brunch/lunch from old Thu · dinner from old Thu
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Platano'],
-    brunch: ['Chilaquiles','Huevos Duros','Pan de Platano','Pescado Congelado ★','Ensalada Mexicana'],
-    lunch:  ['Pescado Congelado ★','Ensalada Mexicana'],
-    snack:  ['Protein Balls con Fruta Fresca'],
-    dinner: {protein:'Pollo',dishes:['Corn Ribs','Sopa de Tortilla','Tostada Bar'],dessert:'Pay de Manzana · Brownie'}
+    breakfast: ['Fruta','Yogurt','Granola','Omelet Espinaca/Queso','H. Revueltos','Pan Frances'],
+    brunch: ['Omelet Espinaca/Queso','H. Revueltos','Pan Frances','Estofado de Garbanzos ★','Tostada Bar','Ensalada Amansala','Fruta Fresca'],
+    lunch:  ['Estofado de Garbanzos ★','Tostada Bar','Ensalada Amansala','Fruta Fresca','Tinga de Pollo ★'],
+    snack:  ['Quesadillas c/Brocoli, Calabaza, Espinaca','Fruta'],
+    dinner: {protein:'Pollo',dishes:['Corn Ribs','Sopa de Tortilla','Tostada Bar'],dessert:'Brownie'}
   },
   5: { // Viernes (Friday) — Day 5 · brunch/lunch from old Fri · dinner from old Mon
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
-    brunch: ['Huevos Rancheros','Omelette de Espinaca','Protein Pancakes','Kebabs Pollo/Tofu ★','Ensalada Griega','Babaganoush Tostada'],
-    lunch:  ['Kebabs Pollo/Tofu ★','Ensalada Griega','Babaganoush Tostada'],
-    snack:  ['Quesadillas con Brócoli y Queso'],
+    breakfast: ['Fruta','Yogurt','Granola','Huevos Poche c/Salsa Roja','H. Blancos c/Brocoli','Hot Cakes'],
+    brunch: ['Huevos Poche c/Salsa Roja','H. Blancos c/Brocoli','Hot Cakes','Salmon c/Tereyaki Miel ★','Crispy Rice Salad','Fruta Fresca'],
+    lunch:  ['Salmon c/Tereyaki Miel ★','Crispy Rice Salad','Quinoa Verde','Brusqueta','Fruta Fresca'],
+    snack:  ['Spring Rolls','Fruta'],
     dinner: {protein:'Pescado',dishes:['Sopa de Calabaza','Quinoa Verduras'],dessert:'Vegan Choco Mousse'}
   },
   6: { // Sábado (Saturday) — Day 6 · brunch/lunch from old Mon · dinner from old Tue
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
-    brunch: ['Chilaquiles','Omelette de Espinaca','Protein Pancakes','Estofado de Garbanzos ★','Ensalada Amansala','Tostada Bar'],
-    lunch:  ['Estofado de Garbanzos ★','Ensalada Amansala'],
-    snack:  ['Guacamole con Veggies y Chips'],
-    dinner: {protein:'Grilled Lemon Kebabs Pollo',dishes:['Grilled Eggplant con Tahini'],dessert:'Deconstructed Cheesecake'}
+    breakfast: ['Frutas','Yogurt','Granola','H. Rancheros','Fritata','Pan Frances'],
+    brunch: ['H. Rancheros','Fritata','Pan Frances','Poke Bowl c/Pollo ★','Fruta'],
+    lunch:  ['Poke Bowl c/Pollo ★','Ensalada de Sandia, Feta y Citricos','Spring Rolls','Fruta Fresca'],
+    snack:  ['Bolitas de Energia','Fruta Fresca'],
+    dinner: {protein:'Grilled Lemon Kebabs Pollo',dishes:['Sopa de Champiñones','Grilled Eggplant con Tahini'],dessert:'Deconstructed Cheesecake'}
   },
   7: { // Domingo (Sunday) — Day 7 · brunch/lunch from old Sun · dinner from old Sun
     lightBreakfast: ['Fruta · Granola · Chia · Pan de Zucchini'],
-    brunch: ['Huevos Rancheros','Fritatta','Pan de Frances con Coco','Pollo con Ajo Asado ★','Chicken Teriyaki Poke Bowl','Fruta'],
-    lunch:  ['Pollo con Ajo Asado ★','Chicken Teriyaki Poke Bowl','Fruta'],
-    snack:  ['Protein Balls con Fruta Fresca'],
+    breakfast: ['Frutas','Yogurt','Granola','Chilaquiles','Huevos Verdes','Pan de Platano'],
+    brunch: ['Chilaquiles','Huevos Verdes','Pan de Platano','Tacos Negros de Pez ★','Ensalada Mexicana','Fruta Fresca'],
+    lunch:  ['Tacos Negros Pez ★','Tacos Negros Tofu','Rajas Poblanas','Ensalada Mexicana','Fruta Fresca'],
+    snack:  ['Summer Rolls','Gaspacho'],
     dinner: {protein:'Plant Based Night — Phad Thai',dishes:['Thai Slaw'],dessert:'Coconut Ice Cream'}
   }
 };
@@ -194,7 +203,7 @@ function menuRenderWeek(){
   const maxDishLines={};
   meals.forEach(meal=>{
     maxDishLines[meal]=Math.max(0,...days.map(ds=>{
-      const mData=WEEKLY_MENU[menuDayIndex(ds)]||{};
+      const mData=menuDataFor(ds);
       if(meal==='dinner')return dinnerLineCount(mData.dinner);
       if(meal==='lunch'&&(menuSchedule[ds]?.lunch||[]).length===0)return 0;
       return (mData[meal]||[]).length;
@@ -204,7 +213,7 @@ function menuRenderWeek(){
   meals.forEach(meal=>{
     days.forEach(ds=>{
       const mi=menuDayIndex(ds);
-      const mData=WEEKLY_MENU[mi]||{};
+      const mData=menuDataFor(ds);
       const sData=menuSchedule[ds]||{};
       // For lunch: only show dishes on days that actually have lunch scheduled
       const dayHasLunch=meal==='lunch'&&(sData.lunch||[]).length===0;
@@ -221,7 +230,7 @@ function menuRenderWeek(){
 
 function menuRenderDay(dateStr,today){
   const mi=menuDayIndex(dateStr);
-  const menu=WEEKLY_MENU[mi]||{};
+  const menu=menuDataFor(dateStr);
   const sched=menuSchedule[dateStr]||{};
   const d=new Date(dateStr+'T12:00:00');
   const dayName=d.toLocaleDateString('en-US',{weekday:'long'});
@@ -359,7 +368,8 @@ function menuMealTime(bk,meal,dateStr){
   // after the morning class.
   if(meal==='breakfast') meal='brunch';
   // Fruit, Coffee &amp; Tea: always 7:00 AM
-  if(meal==='lightBreakfast') return '07:00';
+  // (a retreat can have its own time — see modules/meal-times.js)
+  if(meal==='lightBreakfast') return (bk.packageCustomPrices&&bk.packageCustomPrices.__cfg__&&bk.packageCustomPrices.__cfg__.lightBreakfastTime)||'07:00';
 
   // Brunch: 15 min after morning class ends
   // Uses departure-day class if applicable; arrival day has no morning class → fall through to '09:30'
@@ -457,13 +467,14 @@ function menuPopulateFromRetreats(silent=false){
     full:['lightBreakfast','lunch','dinner'],
     bld:['breakfast','lunch','dinner'],
     blsd:['breakfast','lunch','snack','dinner'],
+    lbbld:['lightBreakfast','breakfast','lunch','dinner'],
     // "Breakfast Only" has been an option in the Room Only form's dropdown
     // (value="breakfast") with no matching entry here — MEAL_PLANS[bk.mealPlan]
     // fell through to MEAL_PLANS.standard, silently giving a breakfast-only
     // guest the full Brunch/Snack/Dinner plan too (found alongside the
     // Cloudbeds-import menu bug, 2026-10-01).
     breakfast:['breakfast'],
-    weTravel:['lightBreakfast','breakfast','brunch','lunch','snack','dinner']
+    weTravel:['breakfast','lunch','dinner'] // Bikini Bootcamp / WeTravel = Breakfast · Lunch · Dinner (Darlene 2026-10-09)
   };
   // Brunch ≤ 11:45; 12:15–14:30 → lunch
   const routeMeal=(meal,t)=>{
@@ -601,7 +612,7 @@ function menuPrint(){
     const cfg=mealCfg[meal];
     days.forEach(ds=>{
       const mi=menuDayIndex(ds);
-      const mData=WEEKLY_MENU[mi]||{};
+      const mData=menuDataFor(ds);
       const sData=menuSchedule[ds]||{};
       const rows=sData[meal]||[];
       const total=rows.reduce((n,r)=>n+(parseInt(r.pax)||0),0);
@@ -669,7 +680,51 @@ const MENU_EN={
   'Ensalada Mexicana':'Mexican Salad',
   'Hummus con Veggies y Chips':'Hummus with Veggies & Chips',
   'Pescado':'Fish',
+  'Yogurt':'Yogurt',
+  'Granola':'Granola',
+  'Avocado Toast c/Poche':'Avocado Toast with Poached Eggs',
+  'Omelet Mixto':'Mixed Omelet',
+  'Hot Cakes Veganos':'Vegan Pancakes',
+  'Poke Bowl Salmon':'Salmon Poke Bowl',
+  'Fruta Fresca':'Fresh Fruit',
+  'Brocoli Horneado c/Salsa de Tahini':'Roasted Broccoli with Tahini Sauce',
+  'Guacamole Vegetales y Chips':'Guacamole with Veggies & Chips',
+  'H. Rancheros':'Huevos Rancheros',
+  'H. Revueltos':'Scrambled Eggs',
+  'Pan Frances':'French Toast',
+  'Bang Bang Pollo':'Bang Bang Chicken',
+  'Bang Bang c/Pollo':'Bang Bang Chicken',
+  'Caprese Toast':'Caprese Toast',
+  'Zanahoria y Betabel Horneados':'Roasted Carrots & Beets',
+  'Hummus c/Vegetales y Chips':'Hummus with Veggies & Chips',
+  'H. Duros':'Hard-Boiled Eggs',
+  'Ensalada Mediterranea':'Mediterranean Salad',
+  'Omelet Espinaca/Queso':'Spinach & Cheese Omelet',
+  'Quesadillas c/Brocoli, Calabaza, Espinaca':'Quesadillas with Broccoli, Squash & Spinach',
+  'Huevos Poche c/Salsa Roja':'Poached Eggs with Red Salsa',
+  'H. Blancos c/Brocoli':'Egg Whites with Broccoli',
+  'Hot Cakes':'Pancakes',
+  'Salmon c/Tereyaki Miel':'Teriyaki Honey Salmon',
+  'Crispy Rice Salad':'Crispy Rice Salad',
+  'Quinoa Verde':'Green Quinoa',
+  'Brusqueta':'Bruschetta',
+  'Spring Rolls':'Spring Rolls',
+  'Frutas':'Fresh Fruit',
+  'Fritata':'Frittata',
+  'Poke Bowl c/Pollo':'Chicken Poke Bowl',
+  'Ensalada de Sandia, Feta y Citricos':'Watermelon, Feta & Citrus Salad',
+  'Bolitas de Energia':'Energy Bites',
+  'Tacos Negros de Pez':'Blackened Fish Tacos',
+  'Tacos Negros Pez':'Blackened Fish Tacos',
+  'Tacos Negros Tofu':'Blackened Tofu Tacos',
+  'Rajas Poblanas':'Poblano Pepper Strips',
+  'Summer Rolls':'Summer Rolls',
+  'Gaspacho':'Gazpacho',
   'Sopa de Calabaza':'Pumpkin Soup',
+  'Sopa de Zanahoria':'Carrot Soup',
+  'Sopa de Coliflor':'Cauliflower Soup',
+  'Sopa de Betabel':'Beet Soup',
+  'Sopa de Champiñones':'Mushroom Soup',
   'Quinoa Verduras':'Quinoa with Vegetables',
   'Vegan Choco Mouse':'Vegan Chocolate Mousse',
   'Kebabs Pollo/Tofu':'Chicken/Tofu Kebabs',
@@ -737,6 +792,10 @@ const MENU_DETAIL={
   'Flan de Cafe':{name:'Coffee Flan',desc:'Silky coffee-infused flan with a rich caramel finish.'},
 
   'Sopa de Calabaza':{name:'Pumpkin Soup',desc:'Creamy roasted pumpkin soup with a hint of warm spices.'},
+  'Sopa de Zanahoria':{name:'Carrot Soup',desc:'Smooth, velvety carrot soup.'},
+  'Sopa de Coliflor':{name:'Cauliflower Soup',desc:'Creamy cauliflower soup.'},
+  'Sopa de Betabel':{name:'Beet Soup',desc:'Vibrant, earthy beet soup.'},
+  'Sopa de Champiñones':{name:'Mushroom Soup',desc:'Rich, savory mushroom soup.'},
   'Quinoa Verduras':{name:'Quinoa with Seasonal Vegetables',desc:'Nutritious quinoa tossed with fresh seasonal vegetables for a wholesome, colorful side.'},
   'Vegan Choco Mouse':{name:'Vegan Chocolate Mousse',desc:'Cocoa, avocado, and coconut milk mousse — rich and creamy, naturally dairy-free.'},
 
@@ -774,7 +833,7 @@ function menuItemDetail(s,isKitchen){
 
 function menuPrintDay(dateStr){
   const mi=menuDayIndex(dateStr);
-  const mData=WEEKLY_MENU[mi]||{};
+  const mData=menuDataFor(dateStr);
   const d=new Date(dateStr+'T12:00:00');
   const dayName=d.toLocaleDateString('en-US',{weekday:'long'});
   const dateFmt=d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
@@ -899,7 +958,7 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
   };
   const dayColumn=(ds)=>{
     const mi=menuDayIndex(ds);
-    const mData=WEEKLY_MENU[mi]||{};
+    const mData=menuDataFor(ds);
     const isToday=ds===fmtISO(new Date());
     const mealBlock=(meal)=>{
       if(meal==='dinner'){
@@ -1040,7 +1099,7 @@ function menuPrintDailyRange(fromVal,toVal,isKitchen){
   };
   const pagesHtml=days.map((ds,i)=>{
     const mi=menuDayIndex(ds);
-    const mData=WEEKLY_MENU[mi]||{};
+    const mData=menuDataFor(ds);
     const dd=new Date(ds+'T12:00:00');
     const dayName=dd.toLocaleDateString('en-US',{weekday:'long'});
     const dateFmt=dd.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
@@ -1558,8 +1617,8 @@ function menuRenderCostPanel(){
   let wkPredicted=0,wkActual=0,wkActualCount=0;
   const usageRows=[];
   const dayRows=[1,2,3,4,5,6,7].map(di=>{
-    const day=WEEKLY_MENU[di]||{};
-    const assign=menuProteinAssign[di]||{};
+    const day=menuDataForIdx(di);
+    const assign=menuAssignForIdx(di);
     const middayCost=assign.midday?menuProteinCost(assign.midday):null;
     const dinnerCost=assign.dinner?menuProteinCost(assign.dinner):null;
 

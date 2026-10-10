@@ -9,7 +9,7 @@ function renderTeacherPriceList(){
   const nights=getNights(regSelBk);
   const blockedSet=new Set(regSelBk.blockedRooms||[]);
   const tipR=getTip(regSelBk);
-  const pkgTr=getBkTaxRate(regSelBk);
+  const pkgTr=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk));
   const pkgItems=calcPkgItems(regSelBk);
 
   let html=`<table class="pl-table"><thead><tr><th>Room</th><th>Nightly Rate</th><th>Room Subtotal</th><th>Package</th><th>Tax</th><th>Tip</th><th>Total</th></tr></thead><tbody>`;

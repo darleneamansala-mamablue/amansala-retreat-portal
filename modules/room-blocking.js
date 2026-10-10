@@ -801,7 +801,7 @@ function gDraftRegOverrides(){
     guests.push({name:n,checkIn:ci,checkOut:co,customRateOverride:!isNaN(crParsed)?crParsed:undefined,extraNightRate:!isNaN(xrParsed)?xrParsed:undefined,cancelled:cancelled||undefined,cancellationFee:cancelled&&!isNaN(feeParsed)?feeParsed:undefined});
   }
   return{
-    customRateOverride:!isNaN(rateOv)?rateOv:null,
+    customRateOverride:(typeof grResolveRate==='function'?grResolveRate(regSelBk,gEditRtId,gCountGuests(),!isNaN(rateOv)?rateOv:null):(!isNaN(rateOv)?rateOv:null)),
     customPkgPrice:!isNaN(pkgOv)?pkgOv:null,
     customNightsOverride:!isNaN(nightsOv)?nightsOv:null,
     customTipNightsOverride:!isNaN(tipNightsOv)?tipNightsOv:null,
@@ -835,20 +835,40 @@ function gUpdatePrice(){
   const paid=parseFloat(document.getElementById('gm-paid')?.value)||0;
   const bal=final-paid;
   const season=isLowSeason(_effStart,bd.nights)?'Low Season (May – Sep)':'High Season (Oct – Apr)';
-  const _pkgTr=getBkTaxRate(regSelBk);
+  const _pkgTr=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk));
   document.getElementById('pbSeasonLbl').textContent=`Pricing — ${season} · +16% room tax · +$30/night tip`;
   document.getElementById('pbc-type').textContent=`${rt.name} · ${gc} guest${gc>1?'s':''} · ${bd.nights} night${bd.nights!==1?'s':''}`;
   document.getElementById('pbc-rate').textContent=draft.customRateOverride!==null?`${fmt$(bd.rate)}/person/night (override)`:`${fmt$(bd.rate)}/person/night`;
   document.getElementById('pbc-base').textContent=fmt$(bd.base);
   const pkgEl=document.getElementById('pbc-pkg-row');
-  if(pkgEl){const pkgs=calcPkgItems(regSelBk);if(pkgs.length||draft.customPkgPrice!==null){pkgEl.style.display='';document.getElementById('pbc-pkg-lbl').textContent=pkgs.length?`Packages (${pkgs.map(p=>p.name).join(', ')})`:'Package';document.getElementById('pbc-pkg').textContent=draft.customPkgPrice!==null?`${fmt$(bd.pkg)} (override)`:`${fmt$(bd.pkg)}`;}else{pkgEl.style.display='none';}}
+  // Admins (including admin previewing the teacher portal) can type the package price right in the pricing box
+  const _canEditPkg=!IS_TEACHER_MODE||sessionStorage.getItem('ama_admin_viewing')==='1';
+  if(pkgEl){
+    const pkgs=calcPkgItems(regSelBk);
+    if(pkgs.length||draft.customPkgPrice!==null||_canEditPkg){
+      pkgEl.style.display='';
+      document.getElementById('pbc-pkg-lbl').textContent=pkgs.length?`Packages (${pkgs.map(p=>p.name).join(', ')})`:'Package';
+      const _pkgTxt=document.getElementById('pbc-pkg'),_pkgIn=document.getElementById('pbc-pkg-input');
+      if(_canEditPkg&&_pkgIn){
+        _pkgIn.style.display='';
+        _pkgIn.placeholder=draft.customPkgPrice!==null?'':fmt$(bd.pkg);
+        if(document.activeElement!==_pkgIn)_pkgIn.value=draft.customPkgPrice!==null?draft.customPkgPrice:'';
+        _pkgTxt.textContent=draft.customPkgPrice!==null?'(override)':(bd.pkg>0?'(default)':'');
+      }else{
+        if(_pkgIn)_pkgIn.style.display='none';
+        _pkgTxt.textContent=draft.customPkgPrice!==null?`${fmt$(bd.pkg)} (override)`:`${fmt$(bd.pkg)}`;
+      }
+    }else{pkgEl.style.display='none';}
+  }
   document.getElementById('pbc-tax-lbl').textContent=`Tax (${bd.pkg>0&&_pkgTr!==0.16?`16% rm / ${_pkgTr===0?'0%':Math.round(_pkgTr*100)+'%'} ext`:'16%'})`;
   document.getElementById('pbc-tax').textContent=fmt$(bd.tax);
   document.getElementById('pbc-dip-lbl').textContent=`Tip fee ($${draft.customTipRateOverride!==null?draft.customTipRateOverride:getTip(regSelBk)}×${gc} guest${gc>1?'s':''}×${bd.tipNights} night${bd.tipNights!==1?'s':''})`;
   document.getElementById('pbc-dip').textContent=fmt$(bd.dip);
   document.getElementById('pbc-total').textContent=fmt$(final);
   const balEl=document.getElementById('gm-balance');balEl.value=fmt$(bal);balEl.style.color=bal>0?'#dc2626':'#059669';
+  if(typeof grAdjustPriceBox==='function')grAdjustPriceBox(regSelBk,gc,bd);
 }
+function gPkgInline(v){const f=document.getElementById('gm-pkg-price');if(f)f.value=v;gUpdatePrice();}
 function gToggleGuestCancelled(i){
   const wrap=document.getElementById('g'+i+'-cancel-fee-wrap');if(!wrap)return;
   const checked=document.getElementById('g'+i+'-cancelled')?.checked;
@@ -868,7 +888,7 @@ function gSave(){
   const customPkgPrice=!isNaN(_pkgPriceSaved)?_pkgPriceSaved:null;
   const _rateOvVal=document.getElementById('gm-rate-override')?.value;
   const _rateOvSaved=(_rateOvVal!=null&&_rateOvVal!=='')?parseFloat(_rateOvVal):NaN;
-  const customRateOverride=!isNaN(_rateOvSaved)?_rateOvSaved:null;
+  const customRateOverride=(typeof grResolveRate==='function'?grResolveRate(regSelBk,gEditRtId,gCountGuests(),!isNaN(_rateOvSaved)?_rateOvSaved:null):(!isNaN(_rateOvSaved)?_rateOvSaved:null));
   const _nightsOvVal=document.getElementById('gm-nights-override')?.value;
   const _nightsOvSaved=(_nightsOvVal!=null&&_nightsOvVal!=='')?parseInt(_nightsOvVal):NaN;
   const customNightsOverride=!isNaN(_nightsOvSaved)?_nightsOvSaved:null;
