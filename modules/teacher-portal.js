@@ -294,7 +294,7 @@ function regRender(){
   // Bill well past what was actually charged. Real (non-WeTravel) retreats keep
   // the normal tax behavior untouched.
   const _isWeTravel=regSelBk.source==='wetravel';
-  const _pkgTxR=getBkTaxRate(regSelBk),_rmTxR=_isWeTravel?0:(_pkgTxR===0?0:0.16),_tipPer=getTip(regSelBk);
+  const _pkgTxR=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk)),_rmTxR=_isWeTravel?0:(getBkTaxRate(regSelBk)===0?0:0.16),_tipPer=getTip(regSelBk);
   const _billAddOns=calcPkgItems(regSelBk);
   Array.from(_blockedSetEarly).forEach(room=>{
     const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
@@ -359,7 +359,11 @@ function regRender(){
     :(regSelBk.payments||[]).reduce((s,p)=>s+(p.amount||0),0);
   // Packages bar
   const pkgBar=document.getElementById('pkgBar');
-  if(pkgBar&&_isWeTravel){
+  // Special package pricing (global-rate.js): the package already includes the activities, so the teacher view
+  // hides the add-on chips (admin still gets the bar, which holds the package-price editor)
+  if(pkgBar&&IS_TEACHER_MODE&&typeof bkGlobalRate==='function'&&bkGlobalRate(regSelBk)){
+    pkgBar.style.display='none';
+  }else if(pkgBar&&_isWeTravel){
     // Add-ons don't apply here — whatever the guest bought is already fully covered
     // by their WeTravel package price, not something staff configures per retreat.
     pkgBar.style.display='none';
@@ -520,6 +524,7 @@ function regRender(){
 
   const panel=document.getElementById('regPanel');
   panel.innerHTML='';
+  if(typeof grBannerHtml==='function'){const _grB=grBannerHtml(regSelBk);if(_grB)panel.insertAdjacentHTML('beforeend',_grB);}
 
   if(!IS_TEACHER_MODE){
     const _selectedNotes=new Set(regSelBk.packageCustomPrices?.__cfg__?.roomNotes||[]);
@@ -589,7 +594,8 @@ function regRender(){
     const badgeText=occ===uiEntries.length?'Full':occ>0?`${occ}/${uiEntries.length}`:'Vacant';
     const card=document.createElement('div');card.className='rt-card';
     const _ls=isLowSeason(regSelBk?.startDate,nights);const _p1=_ls?(rt.price1_low||rt.price1):rt.price1;const _p2=_ls?(rt.price2_low||rt.price2):rt.price2;
-    const priceTag=rt.maxOcc===1
+    const _grT=(typeof grPriceTag==='function')?grPriceTag(regSelBk,rt):null;
+    const priceTag=_grT?_grT:rt.maxOcc===1
       ?`Private: <b>${fmt$(_p1)}/night</b>`
       :`Solo: <b>${fmt$(_p1)}/night</b> &nbsp;·&nbsp; Sharing: <b>${fmt$(_p2)}/person/night</b>`;
     card.innerHTML=`
@@ -598,7 +604,7 @@ function regRender(){
         <span class="rt-card-name" ${IS_TEACHER_MODE?`onmouseenter="showRtTooltip(event,'${rt.id}')" onmouseleave="hideRtTooltip()" style="cursor:help"`:''}>${rt.name}</span>
         <span class="rt-card-occ">${rt.maxOcc===1?(/^Bed in a /i.test(rt.name)?'Shared room':'Private only'):`Up to ${rt.maxOcc} guests`} · ${nights} nights</span>
         <span class="occ-badge ${badge}" style="margin-left:4px">${badgeText}</span>
-        <span class="rt-card-price">${priceTag} &nbsp;<span style="color:#aaa;font-size:10.5px">+16% tax +$30/night tip</span></span>
+        <span class="rt-card-price">${priceTag} &nbsp;<span style="color:#aaa;font-size:10.5px">${_grT?'all-inclusive package price':'+16% tax +$30/night tip'}</span></span>
         <button class="rt-info-btn" onclick="showPriceTip(event,'${rt.id}')" title="View pricing breakdown">ℹ</button>
       </div>
       <table class="reg-table">
@@ -873,7 +879,9 @@ function regRender(){
           // gShare.extraNights>0 means this guest has their own extraNightRate applied to
           // nights outside the retreat's dates — show the split instead of one flat line
           // so the room total isn't a mystery when it doesn't equal rate×nights.
-          const roomLine=(gShare&&gShare.extraNights>0)
+          const roomLine=(typeof bkGlobalRate==='function'&&bkGlobalRate(regSelBk))
+            ?`<div class="pb-row"><span>${bkGlobalRate(regSelBk).label} (inclusive)</span><span>${fmt$(perBase)}</span></div>`
+            :(gShare&&gShare.extraNights>0)
             ?`<div class="pb-row"><span>Room (${rateCell}/nt×${gShare.overlapNights}nt retreat)</span><span>${fmt$(+(gShare.overlapRate*gShare.overlapNights).toFixed(2))}</span></div><div class="pb-row"><span>Room ($${gShare.extraRate}/nt×${gShare.extraNights}nt extra)</span><span>${fmt$(+(gShare.extraRate*gShare.extraNights).toFixed(2))}</span></div>`
             :`<div class="pb-row"><span>Room (${rateCell}/nt×${gNights}nt)</span><span>${fmt$(perBase)}</span></div>`;
           priceTd.innerHTML=`<details class="price-details">
@@ -882,8 +890,8 @@ function regRender(){
               ${roomLine}
               ${pkgLine}
               ${caoLine}
-              <div class="pb-row"><span>Tax (${bd.pkg>0&&getBkTaxRate(regSelBk)!==0.16?`16% rm / ${getBkTaxRate(regSelBk)===0?'0%':Math.round(getBkTaxRate(regSelBk)*100)+'%'} ext`:'16%'})</span><span>${fmt$(perTax)}</span></div>
-              <div class="pb-row"><span>Tip ($${tipRateDisp}×${gTipNights}nt)</span><span>${fmt$(perTip)}</span></div>
+              ${(typeof bkGlobalRate==='function'&&bkGlobalRate(regSelBk))?'':`<div class="pb-row"><span>Tax (${bd.pkg>0&&(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk))!==0.16?`16% rm / ${(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk))===0?'0%':Math.round((typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk))*100)+'%'} ext`:'16%'})</span><span>${fmt$(perTax)}</span></div>
+              <div class="pb-row"><span>Tip ($${tipRateDisp}×${gTipNights}nt)</span><span>${fmt$(perTip)}</span></div>`}
               ${creditLine}
             </div>
           </details>`;
@@ -3067,7 +3075,7 @@ function openScheduleViewer(bkId){
   html+=`<div style="margin-bottom:10px;padding:10px 14px;background:#f5f3ee;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <b>🍽 Meals:</b>
     <select onchange="svSetMealPlan('${bkId}',this.value)" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">
-      ${['standard','bld','blsd'].concat(bk.mealPlan==='full'?['full']:[]).map(k=>`<option value="${k}"${(bk.mealPlan||'standard')===k?' selected':''}>${TS_MEAL_PLAN_LABELS[k]}</option>`).join('')}
+      ${['standard','lbbld','bld','blsd'].concat(bk.mealPlan==='full'?['full']:[]).concat(bk.mealPlan==='weTravel'?['weTravel']:[]).map(k=>`<option value="${k}"${(bk.mealPlan||'standard')===k?' selected':''}>${TS_MEAL_PLAN_LABELS[k]}</option>`).join('')}
     </select>
     <span style="font-size:11.5px;color:var(--muted)">Shows on the teacher's schedule, the printed schedule and the kitchen Menu.</span>
   </div>`;
@@ -3596,12 +3604,13 @@ const TS_MEAL_PLANS={
   full:['lightBreakfast','lunch','dinner'],
   bld:['breakfast','lunch','dinner'],
   blsd:['breakfast','lunch','snack','dinner'],
+  lbbld:['lightBreakfast','breakfast','lunch','dinner'],
   // Matches the Room Only form's "Breakfast Only" option (value="breakfast"),
   // which had no entry here either — same bug as MEAL_PLANS in menu.js.
   breakfast:['breakfast'],
-  weTravel:['lightBreakfast','breakfast','brunch','lunch','snack','dinner'],
+  weTravel:['breakfast','lunch','dinner'],
 };
-const TS_MEAL_PLAN_LABELS={standard:'Light Breakfast · Brunch · Snack · Dinner',bld:'Breakfast · Lunch · Dinner',blsd:'Breakfast · Lunch · Snack · Dinner',full:'Light Breakfast · Lunch · Dinner',breakfast:'Breakfast Only'};
+const TS_MEAL_PLAN_LABELS={standard:'Light Breakfast · Brunch · Snack · Dinner',bld:'Breakfast · Lunch · Dinner',blsd:'Breakfast · Lunch · Snack · Dinner',lbbld:'Light Breakfast · Breakfast · Lunch · Dinner',weTravel:'Breakfast · Lunch · Dinner',full:'Light Breakfast · Lunch · Dinner',breakfast:'Breakfast Only'};
 function tsApplyMealPlan(bk,rows,dayIdx,nights){
   const plan=new Set(TS_MEAL_PLANS[bk.mealPlan]||TS_MEAL_PLANS.standard);
   if(!bk.mealPlan||bk.mealPlan==='standard'||bk.mealPlan==='weTravel')return rows;

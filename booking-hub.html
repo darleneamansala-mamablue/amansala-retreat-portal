@@ -973,6 +973,8 @@
   <button class="tab-btn" id="activityTabBtn" onclick="switchTab('activity',this)" style="display:none"></button>
   <button class="tab-btn" id="itemsTabBtn" onclick="switchTab('items',this)" style="display:none"></button>
   <button class="tab-btn" id="commissionsTabBtn" onclick="switchTab('commissions',this)" style="display:none"></button>
+  <button class="tab-btn" id="contractLibTabBtn" onclick="switchTab('contractlib',this)" style="display:none"></button>
+  <button class="tab-btn" id="menuEditorTabBtn" onclick="switchTab('menueditor',this)" style="display:none"></button>
   <button class="tab-btn" id="reportsTabBtn" onclick="switchTab('reports',this)" style="display:none"></button>
   <button class="tab-btn" id="botLogAdminTabBtn" onclick="switchTab('botlogadmin',this)" style="display:none"></button>
   <button class="tab-btn" id="transportTabBtn" onclick="switchTab('transport',this)">
@@ -1047,6 +1049,14 @@
     <button class="tab-btn tab-btn-sub" onclick="switchTab('items',document.getElementById('itemsTabBtn'));document.getElementById('itemsTabBtn').style.display='flex'" style="color:#f59e0b">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
       <span class="tab-label">Items</span>
+    </button>
+    <button class="tab-btn tab-btn-sub" onclick="switchTab('menueditor',document.getElementById('menuEditorTabBtn'));document.getElementById('menuEditorTabBtn').style.display='flex'" style="color:#f97316">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+      <span class="tab-label">Menu Editor</span>
+    </button>
+    <button class="tab-btn tab-btn-sub" onclick="switchTab('contractlib',document.getElementById('contractLibTabBtn'));document.getElementById('contractLibTabBtn').style.display='flex'" style="color:#0ea5e9">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+      <span class="tab-label">Contract Templates</span>
     </button>
     <button class="tab-btn tab-btn-sub" onclick="switchTab('commissions',document.getElementById('commissionsTabBtn'));document.getElementById('commissionsTabBtn').style.display='flex'" style="color:#34d399">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
@@ -2350,7 +2360,7 @@
         <span style="font-size:13px;font-weight:600;color:#1a4a4a">📅 View Room Calendar — see what's booked around these dates</span>
         <span style="font-size:13px;font-weight:700;color:#0e9494;white-space:nowrap">Open →</span>
       </div>
-      <div class="frow"><div class="fg"><label>Venue Row</label><select id="vm-row"></select></div><div class="fg"><label>Pax</label><input type="number" id="vm-pax" min="0" placeholder="0"></div><div class="fg"><label>Meal Plan</label><select id="vm-mealplan"><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option><option value="bld">Breakfast · Lunch · Dinner</option><option value="blsd">Breakfast · Lunch · Snack · Dinner</option><option value="weTravel">WeTravel — LB · Breakfast · Brunch · Lunch · Snack · Dinner</option></select></div></div>
+      <div class="frow"><div class="fg"><label>Venue Row</label><select id="vm-row"></select></div><div class="fg"><label>Pax</label><input type="number" id="vm-pax" min="0" placeholder="0"></div><div class="fg"><label>Meal Plan</label><select id="vm-mealplan"><option value="standard">Retreats — Light Breakfast · Brunch · Snack · Dinner</option><option value="lbbld">Retreats — Light Breakfast · Breakfast · Lunch · Dinner</option><option value="bld">Bikini Bootcamp / WeTravel — Breakfast · Lunch · Dinner</option><option value="full">Older plan — Light Breakfast · Lunch · Dinner</option><option value="blsd">Older plan — Breakfast · Lunch · Snack · Dinner</option><option value="weTravel">WeTravel (existing setting) — Breakfast · Lunch · Dinner</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Status</label><select id="vm-status"><option value="requested">Soft Hold</option><option value="contract_sent">Contract Sent</option><option value="contract_signed">Contract Signed</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Room List Sent</option><option value="cancelled">Cancelled</option></select></div></div>
       <div id="vm-payment-widget" style="display:none;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:4px 0 8px"></div>
       <div id="vm-charges-widget" style="display:none;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:4px 0 8px"></div>
@@ -2390,7 +2400,7 @@
         <div id="rm-rate-hint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
       </div></div>
       <div class="frow"><div class="fg"><label>Guests</label><input type="number" id="rm-adults" min="1" max="20" value="1" onchange="rmAutoRate()"></div><div class="fg"><label>Status</label><select id="rm-status"><option value="requested">Soft Hold</option><option value="deposit_paid">Deposit Paid</option><option value="room_list_sent">Confirmed</option></select></div></div>
-      <div class="frow full"><div class="fg"><label>Meals Included</label><select id="rm-mealplan"><option value="breakfast">Breakfast Only</option><option value="none">None</option><option value="standard">Standard — LB · Brunch · Snack · Dinner</option><option value="full">Full — LB · Lunch · Dinner</option><option value="bld">Breakfast · Lunch · Dinner</option><option value="blsd">Breakfast · Lunch · Snack · Dinner</option><option value="weTravel">WeTravel — LB · Breakfast · Brunch · Lunch · Snack · Dinner</option></select></div></div>
+      <div class="frow full"><div class="fg"><label>Meals Included</label><select id="rm-mealplan"><option value="breakfast">Breakfast Only</option><option value="none">None</option><option value="standard">Retreats — Light Breakfast · Brunch · Snack · Dinner</option><option value="lbbld">Retreats — Light Breakfast · Breakfast · Lunch · Dinner</option><option value="bld">Bikini Bootcamp / WeTravel — Breakfast · Lunch · Dinner</option><option value="full">Older plan — Light Breakfast · Lunch · Dinner</option><option value="blsd">Older plan — Breakfast · Lunch · Snack · Dinner</option><option value="weTravel">WeTravel (existing setting) — Breakfast · Lunch · Dinner</option></select></div></div>
       <div class="frow full" id="rm-staff-row"><div class="fg"><label>Staff (comisión 5% antes de impuestos)</label><select id="rm-staff"><option value="">— Sin comisión —</option></select></div></div>
       <div class="frow full"><div class="fg"><label>Notes</label><textarea id="rm-notes" placeholder="Internal notes..."></textarea></div></div>
       <div id="rm-err" style="display:none;color:#dc2626;font-size:12px;margin-top:4px"></div>
@@ -2587,7 +2597,7 @@
         <div class="pb-lbl" id="pbSeasonLbl">Pricing · +16% tax · +$30 tip/person/night</div>
         <div class="pb-row"><span id="pbc-type">—</span><span id="pbc-rate"></span></div>
         <div class="pb-row"><span>Room subtotal</span><span id="pbc-base">$0</span></div>
-        <div class="pb-row" id="pbc-pkg-row" style="display:none"><span id="pbc-pkg-lbl">Packages</span><span id="pbc-pkg" style="font-size:11px;color:#9ca3af"></span></div>
+        <div class="pb-row" id="pbc-pkg-row" style="display:none"><span id="pbc-pkg-lbl">Packages</span><span style="display:flex;align-items:center;gap:6px"><span id="pbc-pkg" style="font-size:11px;color:#9ca3af"></span><input type="number" id="pbc-pkg-input" min="0" step="0.01" style="display:none;width:96px;text-align:right;padding:4px 8px;border:1.5px solid #d6cdb8;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px" title="Type a package price for this room (0 = free). Leave blank for the default." oninput="gPkgInline(this.value)"></span></div>
         <div class="pb-row"><span id="pbc-tax-lbl">Tax</span><span id="pbc-tax">$0</span></div>
         <div class="pb-row"><span id="pbc-dip-lbl">Tip fee</span><span id="pbc-dip">$0</span></div>
         <div class="pb-row" id="pbc-credit-row" style="display:none"><span>Credit</span><span id="pbc-credit" style="color:#dc2626"></span></div>
@@ -3159,6 +3169,16 @@
 <!-- ===== ITEMS (admin) — ported from staging's new modular app ===== -->
 <div class="tab-panel" id="tab-items" style="flex-direction:column">
   <div id="itemsContent" style="flex:1;overflow-y:auto;background:#f0ece4"></div>
+</div>
+
+<!-- ===== MENU EDITOR ===== -->
+<div class="tab-panel" id="tab-menueditor" style="flex-direction:column">
+  <div id="menuEditorContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column"></div>
+</div>
+
+<!-- ===== CONTRACT TEMPLATES (library) ===== -->
+<div class="tab-panel" id="tab-contractlib" style="flex-direction:column">
+  <div id="contractLibContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column"></div>
 </div>
 
 <!-- ===== COMMISSIONS (admin) — ported from staging's new modular app ===== -->
@@ -5708,7 +5728,7 @@ function getBkTaxRate(bk){
   const r=bk?.taxRate??bk?.packageCustomPrices?.__cfg__?.taxRate;
   return(r===0||r===0.13||r===0.16)?r:0.16;
 }
-function calcPrice(rt,gc,nights,dateStr,bk,reg){if(!rt||!nights)return 0;const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,nights);const base=rate*gc*nights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const _raw=+(base*1.16+pkg*(1+pkgTr)+getTip(bk)*gc*nights+calcCustomAoCost(bk,gc,reg)).toFixed(2);return applyCancellationAdjustment(reg,_raw);}
+function calcPrice(rt,gc,nights,dateStr,bk,reg){if(!rt||!nights)return 0;const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,nights);const base=rate*gc*nights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(bk):getBkTaxRate(bk));const _raw=+(base*1.16+pkg*(1+pkgTr)+getTip(bk)*gc*nights+calcCustomAoCost(bk,gc,reg)).toFixed(2);return applyCancellationAdjustment(reg,_raw);}
 function calcTeacherDiscount(bk,bkRegs){
   const nights=getNights(bk);
   // Count named guests only — exclude teacher's own room (isTeacherRoom) to avoid double-counting
@@ -5847,8 +5867,8 @@ function calcBD(rt,gc,nights,dateStr,bk,reg){
   // A We Travel booking's customRateOverride already IS the guest's real, final,
   // tax-inclusive total (derived from what they actually paid on WeTravel) — the
   // usual 16% room tax would double-tax it. Real retreats are unaffected.
-  const rmTax=bk?.source==='wetravel'?0:0.16;
-  const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=getBkTaxRate(bk);const tax=+(base*rmTax+pkg*pkgTr).toFixed(2);const dip=tipRate*tipNightsSum;const cao=calcCustomAoCost(bk,gc,reg);
+  const rmTax=(bk?.source==='wetravel'||(typeof bkGlobalRate==='function'&&bkGlobalRate(bk)))?0:0.16;
+  const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(bk):getBkTaxRate(bk));const tax=+(base*rmTax+pkg*pkgTr).toFixed(2);const dip=tipRate*tipNightsSum;const cao=calcCustomAoCost(bk,gc,reg);
   // Per-guest share: each named guest pays for their OWN room nights (guestNightsSplit,
   // including any extraNightRate discount for nights outside the retreat) and their own
   // tip nights. Packages and custom add-ons aren't night-based, so they still split
@@ -5929,6 +5949,7 @@ function _customAoSectionHtml(bk){
   const rows=list.map((c,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fff;border:1.5px solid #e8dfd4;border-radius:8px;margin-bottom:6px">
       <div style="flex:1;font-size:13px;font-weight:600;color:#2d2520">${(c.name||'').replace(/</g,'&lt;')}</div>
       <div style="font-size:12px;color:#8a7e74;white-space:nowrap">$${c.price}/nt × ${c.nights||1}nt${c.taxRate?` +${Math.round(c.taxRate*100)}%`:''} = $${(Number(c.price||0)*Number(c.nights||1)*(1+Number(c.taxRate||0))).toFixed(2)}/guest</div>
+      ${typeof grCustomAoTaxSelect==='function'?grCustomAoTaxSelect(bk,i,c):''}
       <button onclick="removeCustomAddon(${i})" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:16px;padding:0;line-height:1" title="Quitar">×</button>
     </div>`).join('');
   return`<div style="background:#fff;border:1.5px solid #d97706;border-radius:10px;padding:14px 16px;margin-bottom:14px">
@@ -5981,7 +6002,7 @@ function pkgTogglePriceEditor(){
   const selPkgs=regSelBk.packages||[];
   const customPrices=regSelBk.packageCustomPrices||{};
   const items=[...ADD_ONS,...(regSelBk.extraPackages||[])].filter(a=>selPkgs.includes(a.id)&&a.price>=0);
-  if(!items.length){el.innerHTML=_customAoSectionHtml(regSelBk)+`<div style="padding:10px 2px;font-size:12.5px;color:#8a7e74">No add-on packages selected — bundle/individual pricing needs at least one selected package first.</div>`;el.style.display='block';setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'nearest'}),60);return;}
+  if(!items.length){el.innerHTML=(typeof globalRatePanelHtml==='function'?globalRatePanelHtml(regSelBk):'')+_customAoSectionHtml(regSelBk)+`<div style="padding:10px 2px;font-size:12.5px;color:#8a7e74">No add-on packages selected — bundle/individual pricing needs at least one selected package first.</div>`;el.style.display='block';setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'nearest'}),60);return;}
   // Bundle price is persisted at packageCustomPrices.__cfg__.bundle (the real, synced
   // column staging also writes to) — regSelBk.pkgBundle/pkgBundlePrice are legacy
   // in-memory-only fields that were never in the bookings table and never survived
@@ -6002,6 +6023,8 @@ function pkgTogglePriceEditor(){
         <input type="radio" name="pkgTaxRate" value="${val}" ${String(curTax)===val?'checked':''} style="accent-color:#0e9494;width:14px;height:14px"> ${lbl}
       </label>`).join('')}
     </div>
+
+    ${typeof globalRatePanelHtml==='function'?globalRatePanelHtml(regSelBk):''}
 
     <!-- Save buttons at top so they're always reachable -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
@@ -6118,9 +6141,10 @@ async function clearPkgCustomPrices(){
   if(pcp){
     const _custom=pcp.__custom__;
     const _whatsapp=pcp.__cfg__?.whatsapp;
+    const _globalRate=pcp.__cfg__?.globalRate;
     regSelBk.packageCustomPrices={};
     if(_custom)regSelBk.packageCustomPrices.__custom__=_custom;
-    if(_whatsapp)regSelBk.packageCustomPrices.__cfg__={whatsapp:_whatsapp};
+    if(_whatsapp||_globalRate){regSelBk.packageCustomPrices.__cfg__={};if(_whatsapp)regSelBk.packageCustomPrices.__cfg__.whatsapp=_whatsapp;if(_globalRate)regSelBk.packageCustomPrices.__cfg__.globalRate=_globalRate;}
     if(!Object.keys(regSelBk.packageCustomPrices).length)delete regSelBk.packageCustomPrices;
   }
   saveAll();regRender();
@@ -6254,6 +6278,8 @@ function switchTab(id,btn){
   if(id==='activity')  buildActivityLog();
   if(id==='items')     adminItemsRender();
   if(id==='commissions') commissionsRender();
+  if(id==='contractlib') contractLibRender();
+  if(id==='menueditor') menuEditorRender();
   if(id==='reports') reportsRender();
   if(id==='botlogadmin') adminBotLogRender();
   if(id==='actsheet')  actSheetInit().catch(()=>actSheetRenderWeek());
@@ -6284,9 +6310,10 @@ function switchTab(id,btn){
 </script>
 <script src="modules/admin-items.js"></script>
 <script src="modules/commissions.js?v=20261003a"></script>
+<script src="modules/contract-library.js?v=20261009a"></script>
 <script src="modules/reports.js?v=20261005i"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20261006b"></script>
+<script src="modules/teacher-portal.js?v=20261009g"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
 // ===== TEACHER REGISTRATION — moved to modules/teacher-portal.js =====
@@ -6303,7 +6330,7 @@ function switchTab(id,btn){
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20261008a"></script>
+<script src="modules/room-blocking.js?v=20261009f"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====
@@ -6315,12 +6342,13 @@ function switchTab(id,btn){
 // ===== DASHBOARD — moved to modules/retreat-builder.js (loaded above) =====
 </script>
 <script src="modules/contracts.js?v=20261001b"></script>
+<script src="modules/global-rate.js?v=20261009m"></script>
 <script>
 // ===== CONTRACT TEMPLATE — moved to modules/contracts.js =====
 // ===== CONTRACT GENERATOR — moved to modules/contracts.js (loaded above) =====
 // ===== SIGNATURE PAD — moved to modules/contracts.js (loaded above) =====
 </script>
-<script src="modules/payments.js?v=20261001a"></script>
+<script src="modules/payments.js?v=20261009a"></script>
 <script src="modules/room-activities.js"></script>
 <script src="modules/tour-picker.js?v=20260930a"></script>
 <script src="modules/booking-detail.js?v=20261008b"></script>
@@ -6523,7 +6551,10 @@ if(location.protocol!=='file:'){
 // ===== SPECIAL EVENTS — moved to modules/special-events.js =====
 // ===== TEACHER DASHBOARD — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/menu.js?v=20260930g"></script>
+<script src="modules/menu.js?v=20261009e"></script>
+<script src="modules/menu-variants.js?v=20261009b"></script>
+<script src="modules/menu-editor.js?v=20261009b"></script>
+<script src="modules/meal-times.js?v=20261009a"></script>
 <script src="modules/menu-variety.js?v=20260926b"></script>
 <script>
 // ===== MENU TAB — moved to modules/menu.js =====
