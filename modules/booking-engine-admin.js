@@ -664,13 +664,16 @@ function beRequestRow(r) {
   // -- just already correctly resolved, so treat it as such automatically.
   const _assignedRt = r.room ? AppData.roomTypes.find(rt => (rt.rooms || []).includes(r.room)) : null;
   const roomedInOwnCategory = !!(match?.categoryMismatch && _assignedRt && r.roomTypeId && _assignedRt.id === r.roomTypeId);
-  // Jorge's ask 2026-10-10: staff manually putting the guest in the EXACT same
-  // physical room as the retreat (alreadyAssigned) despite a categoryMismatch
-  // is a deliberate free upgrade, not an unresolved problem -- give it its own
-  // one-click confirmation instead of leaving it stuck red forever. Persisted
-  // on the booking_request itself (free_upgrade_confirmed_at) since it's a
-  // one-off per-reservation decision, not a shared/generic ack.
-  const isFreeUpgradeCandidate = !!(match?.categoryMismatch && alreadyAssigned && !roomedInOwnCategory);
+  // Jorge's ask 2026-10-10: offer "Free Upgrade" for ANY categoryMismatch, not
+  // only once staff has already manually moved the guest into the retreat's
+  // room -- staff should be able to decide to upgrade them into it directly
+  // from here (even if they're already correctly roomed in their own paid
+  // category elsewhere, per Jorge's follow-up: "if we want to give free
+  // upgrade to the same category we need also the button"). One click both
+  // assigns match.room AND confirms, persisted on the booking_request
+  // (free_upgrade_confirmed_at) since it's a one-off per-reservation decision,
+  // not a shared/generic ack.
+  const isFreeUpgradeCandidate = !!(match?.categoryMismatch);
   const freeUpgradeConfirmed = !!r.freeUpgradeConfirmedAt;
   const resolved = freeUpgradeConfirmed || roomedInOwnCategory;
   // A match whose room type/category differs from the retreat room's gets its
@@ -700,8 +703,8 @@ function beRequestRow(r) {
           <span style="font-weight:700;font-size:11.5px;color:${labelColor}">${label}</span>
           <span style="font-size:11.5px;color:var(--text)">${roomedInOwnCategory ? `→ already roomed in <strong>${escHtml(r.room)}</strong> (own category) · retreat room is <strong>${escHtml(match.room)}</strong>` : `→ room <strong>${escHtml(match.room)}</strong>`}</span>
           <span style="font-size:11px;color:var(--muted)">${match.adjBefore ? 'night before' : 'night after'} ${escHtml(match.bk.leaderName || match.bk.retreatName || '')}'s retreat · ${fmtDate(match.bk.startDate)} – ${fmtDate(match.bk.endDate)}</span>
-          ${match.categoryMismatch && !roomedInOwnCategory ? `<span style="background:${freeUpgradeConfirmed ? '#dcfce7' : '#fecaca'};color:${freeUpgradeConfirmed ? '#166534' : '#991b1b'};font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px">Retreat room is ${escHtml(match.retreatRoomTypeName || 'a different category')}</span>` : ''}
-          ${isFreeUpgradeCandidate && !freeUpgradeConfirmed ? `<button onclick="event.stopPropagation();beConfirmFreeUpgrade('${escHtml(r.id)}')" style="background:#dcfce7;border:1px solid #86efac;color:#15803d;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">✓ Free Upgrade</button>` : ''}
+          ${match.categoryMismatch ? `<span style="background:${resolved ? '#dcfce7' : '#fecaca'};color:${resolved ? '#166534' : '#991b1b'};font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px">Retreat room is ${escHtml(match.retreatRoomTypeName || 'a different category')}</span>` : ''}
+          ${isFreeUpgradeCandidate && !freeUpgradeConfirmed ? `<button onclick="event.stopPropagation();beConfirmFreeUpgrade('${escHtml(r.id)}','${escHtml(match.room)}')" style="background:#dcfce7;border:1px solid #86efac;color:#15803d;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">✓ Free Upgrade</button>` : ''}
           ${alreadyAssigned || match.categoryMismatch ? '' : `<button onclick="event.stopPropagation();beAssignRoom('${escHtml(r.id)}','${escHtml(match.room)}')" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Assign room</button>`}
         </div>
       </td>
@@ -815,16 +818,26 @@ async function beAssignRoomManual(id) {
 // own room number despite the category mismatch -- a free upgrade, not an
 // unresolved problem. One click turns the banner green instead of leaving it
 // stuck red. requires `booking_requests.free_upgrade_confirmed_at` column.
-async function beConfirmFreeUpgrade(id) {
+// Jorge's follow-up 2026-10-10: offered even when the guest is already
+// correctly roomed in their own paid category elsewhere -- staff may still
+// want to actively move them into the (nicer) retreat room as a deliberate
+// upgrade, not just confirm a room they already manually set. One click does
+// both: assigns `room` (the retreat's room) if it isn't already set, and
+// marks the upgrade confirmed.
+async function beConfirmFreeUpgrade(id, room) {
   const r = beRequests.find(x => x.id === id); if (!r) return;
   const now = new Date().toISOString();
-  const prev = r.freeUpgradeConfirmedAt; r.freeUpgradeConfirmedAt = now;
+  const prevRoom = r.room, prevConfirmed = r.freeUpgradeConfirmedAt;
+  const patch = { free_upgrade_confirmed_at: now };
+  if (room && r.room !== room) patch.room = room;
+  r.freeUpgradeConfirmedAt = now;
+  if (patch.room) r.room = patch.room;
   try {
-    const { error } = await db.from('booking_requests').update({ free_upgrade_confirmed_at: now }).eq('id', id);
+    const { error } = await db.from('booking_requests').update(patch).eq('id', id);
     if (error) throw error;
-    showToast('Free upgrade confirmed ✓');
+    showToast(patch.room ? `Room ${room} assigned as free upgrade ✓` : 'Free upgrade confirmed ✓');
     beRenderRequests();
-  } catch (e) { r.freeUpgradeConfirmedAt = prev; showToast('Error: ' + e.message); }
+  } catch (e) { r.room = prevRoom; r.freeUpgradeConfirmedAt = prevConfirmed; showToast('Error: ' + e.message); }
 }
 
 // ─── DISCOUNTS TAB ───────────────────────────────────────────
