@@ -5238,6 +5238,15 @@ function roomListIncludes(list,room){return(list||[]).some(r=>roomCodesEqual(r,r
 // matching on string pattern alone would wrongly link them.
 const ROOM_PARENT_TO_BED={rt6:'bd1',rt7:'bd2',rt8:'bd3',rt9:'bd4'};
 const ROOM_BED_TO_PARENT={bd1:'rt6',bd2:'rt7',bd3:'rt8',bd4:'rt9'};
+// A second, different kind of derived relationship (Jorge's confirmation
+// 2026-10-10): "Casa Master" (cm1) and "Casa Shanti" (csh3) are each a
+// single whole-villa room type that, when rented exclusively, encompasses
+// SEVERAL OTHER, otherwise-independent room types (not a same-room
+// bed-split) -- Casa Master = Casa King Downstairs (cg1) + Casa Grande Up
+// King (cg2) + Casa Grande 2 Queen Downstairs (cg3) + Casa Grande Upstairs
+// Individual (cg4) + Casa Grande Up Shared 2 Queen (cg5); Casa Shanti =
+// Shanti King (csh1) + Shanti 2 Bed (csh2).
+const VILLA_TO_SUBTYPES={cm1:['cg1','cg2','cg3','cg4','cg5'],csh3:['csh1','csh2']};
 function getRoomCounterparts(room){
   const ownerRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(room));
   if(!ownerRt)return[];
@@ -5256,6 +5265,20 @@ function getRoomCounterparts(room){
       if(s&&s.base.toLowerCase()===split.base.toLowerCase())counterparts.push(r);
     });
     return counterparts;
+  }
+  if(VILLA_TO_SUBTYPES[ownerRt.id]){
+    const counterparts=[];
+    VILLA_TO_SUBTYPES[ownerRt.id].forEach(subId=>{
+      const subRt=AppData.roomTypes.find(rt=>rt.id===subId);
+      (subRt?.rooms||[]).forEach(r=>counterparts.push(r));
+    });
+    return counterparts;
+  }
+  for(const[villaId,subIds]of Object.entries(VILLA_TO_SUBTYPES)){
+    if(subIds.includes(ownerRt.id)){
+      const villaRt=AppData.roomTypes.find(rt=>rt.id===villaId);
+      return villaRt?.rooms||[];
+    }
   }
   return[];
 }
@@ -6331,7 +6354,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20261006d"></script>
+<script src="modules/venues.js?v=20261010a"></script>
 <script src="modules/room-optimizer.js?v=20260921b"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js?v=20261010g"></script>

@@ -1323,11 +1323,18 @@ function rsComputeAvailability(checkIn,checkOut,extReservations){
   // occupied (real report 2026-09-16: Double/Beachview rooms showing
   // available while 100% booked). Propagate every block to its parent room
   // and/or sibling beds before computing per-type availability.
+  //
+  // Rewritten 2026-10-10 to call getRoomCounterparts() instead of the old
+  // direct splitDoubleHalf(room)+_getSharedBeds(room) combo -- that combo
+  // had its own bug (calling splitDoubleHalf on a PARENT code like "19B"
+  // matched Pattern 1 and returned a bogus base "19", which has nothing to
+  // do with "19B"'s real siblings) and never covered Casa Master/Casa
+  // Shanti's whole-villa<->sub-room-types relationship (Jorge's
+  // confirmation 2026-10-10). getRoomCounterparts() already gates on which
+  // room TYPE owns the code first and handles both relationships correctly.
   [...blockedBy.keys()].forEach(room=>{
     const info=blockedBy.get(room);
-    const sp=splitDoubleHalf(room);
-    if(sp&&sp.base&&!blockedBy.has(sp.base))blockedBy.set(sp.base,info);
-    (typeof _getSharedBeds==='function'?_getSharedBeds(room)||[]:[]).forEach(sib=>{if(!blockedBy.has(sib))blockedBy.set(sib,info);});
+    (typeof getRoomCounterparts==='function'?getRoomCounterparts(room)||[]:[]).forEach(cp=>{if(!blockedBy.has(cp))blockedBy.set(cp,info);});
   });
   return AppData.roomTypes.filter(rt=>!DUPLICATE_ROOM_ENTRY_IDS.has(rt.id)).map(rt=>{
     const rooms=rt.rooms||[];
