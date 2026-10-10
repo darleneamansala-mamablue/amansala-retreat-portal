@@ -49,6 +49,16 @@ function inExtraNightBlackout(checkIn, checkOut) {
 // 2026-10-10. Matching on string pattern alone would wrongly link them.
 const ROOM_PARENT_TO_BED = { rt6: 'bd1', rt7: 'bd2', rt8: 'bd3', rt9: 'bd4' };
 const ROOM_BED_TO_PARENT = { bd1: 'rt6', bd2: 'rt7', bd3: 'rt8', bd4: 'rt9' };
+// A second, different kind of derived relationship (Jorge's confirmation
+// 2026-10-10): "Casa Master" and "Casa Shanti" are each a single whole-villa
+// room type that, when rented exclusively, encompasses SEVERAL OTHER,
+// otherwise-independent room types (not a same-room bed-split) -- Casa
+// Master = Casa King Downstairs + Casa Grande Up King + Casa Grande 2 Queen
+// Downstairs + Casa Grande Upstairs Individual + Casa Grande Up Shared 2
+// Queen; Casa Shanti = Shanti King + Shanti 2 Bed. Booking the whole villa
+// must block every room in every listed sub-type, and booking any room in
+// any sub-type must block the whole-villa option for those dates.
+const VILLA_TO_SUBTYPES = { cm1: ['cg1', 'cg2', 'cg3', 'cg4', 'cg5'], csh3: ['csh1', 'csh2'] };
 function splitDoubleHalf(room) {
   const r = String(room || '').trim();
   let m = r.match(/^(\d+)([a-d])$/i);
@@ -82,6 +92,13 @@ function propagateSiblingBlocks(blockedSet, roomTypes) {
         const s = splitDoubleHalf(r);
         if (s && s.base.toLowerCase() === split.base.toLowerCase()) toAdd.add(r);
       });
+    }
+    if (VILLA_TO_SUBTYPES[typeId]) {
+      VILLA_TO_SUBTYPES[typeId].forEach(subId => (roomsById.get(subId) || []).forEach(r => toAdd.add(r)));
+    } else {
+      for (const [villaId, subIds] of Object.entries(VILLA_TO_SUBTYPES)) {
+        if (subIds.includes(typeId)) (roomsById.get(villaId) || []).forEach(r => toAdd.add(r));
+      }
     }
   });
   toAdd.forEach(r => blockedSet.add(r));
