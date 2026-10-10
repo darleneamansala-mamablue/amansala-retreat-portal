@@ -653,25 +653,38 @@ function beRequestRow(r) {
   const received = r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   const match = beFindRoomMatch(r);
   const alreadyAssigned = match && r.room && r.room === match.room;
+  // categoryMismatch only ever compares the RETREAT'S suggested room's category
+  // against what the guest paid for -- it has no idea staff already put them in
+  // a DIFFERENT room that happens to match their own paid category exactly.
+  // Real cases 2026-10-10 (Olivia McKenna/CH7, DeAnna Davis/GV24): both were
+  // correctly roomed in their own paid "Superior" category, just not in the
+  // retreat's specific suggested room -- yet the banner still read "Different
+  // category" forever with no way to resolve it, because it was comparing
+  // against the wrong room. Not a free upgrade (nothing was actually upgraded)
+  // -- just already correctly resolved, so treat it as such automatically.
+  const _assignedRt = r.room ? AppData.roomTypes.find(rt => (rt.rooms || []).includes(r.room)) : null;
+  const roomedInOwnCategory = !!(match?.categoryMismatch && _assignedRt && r.roomTypeId && _assignedRt.id === r.roomTypeId);
   // Jorge's ask 2026-10-10: staff manually putting the guest in the EXACT same
   // physical room as the retreat (alreadyAssigned) despite a categoryMismatch
   // is a deliberate free upgrade, not an unresolved problem -- give it its own
   // one-click confirmation instead of leaving it stuck red forever. Persisted
   // on the booking_request itself (free_upgrade_confirmed_at) since it's a
   // one-off per-reservation decision, not a shared/generic ack.
-  const isFreeUpgradeCandidate = !!(match?.categoryMismatch && alreadyAssigned);
+  const isFreeUpgradeCandidate = !!(match?.categoryMismatch && alreadyAssigned && !roomedInOwnCategory);
   const freeUpgradeConfirmed = !!r.freeUpgradeConfirmedAt;
+  const resolved = freeUpgradeConfirmed || roomedInOwnCategory;
   // A match whose room type/category differs from the retreat room's gets its
   // own pastel-red treatment instead of the normal green (assigned)/amber
   // (match found) colors, so staff notice before assigning the guest into a
-  // room they didn't actually pay for -- UNLESS it's a confirmed free upgrade,
-  // which reads as resolved (green) like everything else that's handled.
-  const rowBg     = freeUpgradeConfirmed ? '#f0fdf4' : match?.categoryMismatch ? '#fef2f2' : alreadyAssigned ? '#f0fdf4' : '#fffbeb';
-  const rowBorder = freeUpgradeConfirmed ? '#bbf7d0' : match?.categoryMismatch ? '#fecaca' : alreadyAssigned ? '#bbf7d0' : '#fde68a';
-  const labelColor = freeUpgradeConfirmed ? '#15803d' : match?.categoryMismatch ? '#b91c1c' : alreadyAssigned ? '#15803d' : '#92400e';
-  const icon = freeUpgradeConfirmed ? '🎁' : match?.categoryMismatch ? '⚠️' : alreadyAssigned ? '✅' : '🔗';
-  const label = freeUpgradeConfirmed ? 'Free upgrade confirmed' : match?.categoryMismatch ? 'Different category' : alreadyAssigned ? 'Room assigned' : 'Match found';
-  if (match?.categoryMismatch && !beMismatchLogged.has(r.id)) {
+  // room they didn't actually pay for -- UNLESS it's resolved (a confirmed
+  // free upgrade, or already correctly roomed elsewhere), which reads as
+  // resolved (green) like everything else that's handled.
+  const rowBg     = resolved ? '#f0fdf4' : match?.categoryMismatch ? '#fef2f2' : alreadyAssigned ? '#f0fdf4' : '#fffbeb';
+  const rowBorder = resolved ? '#bbf7d0' : match?.categoryMismatch ? '#fecaca' : alreadyAssigned ? '#bbf7d0' : '#fde68a';
+  const labelColor = resolved ? '#15803d' : match?.categoryMismatch ? '#b91c1c' : alreadyAssigned ? '#15803d' : '#92400e';
+  const icon = freeUpgradeConfirmed ? '🎁' : roomedInOwnCategory ? '✅' : match?.categoryMismatch ? '⚠️' : alreadyAssigned ? '✅' : '🔗';
+  const label = freeUpgradeConfirmed ? 'Free upgrade confirmed' : roomedInOwnCategory ? 'Room assigned (own category)' : match?.categoryMismatch ? 'Different category' : alreadyAssigned ? 'Room assigned' : 'Match found';
+  if (match?.categoryMismatch && !roomedInOwnCategory && !beMismatchLogged.has(r.id)) {
     beMismatchLogged.add(r.id);
     beLogMatchNotif({
       id: `extra_night_mismatch_${r.id}`, kind: 'mismatch', ts: new Date().toISOString(),
@@ -685,9 +698,9 @@ function beRequestRow(r) {
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span>${icon}</span>
           <span style="font-weight:700;font-size:11.5px;color:${labelColor}">${label}</span>
-          <span style="font-size:11.5px;color:var(--text)">→ room <strong>${escHtml(match.room)}</strong></span>
+          <span style="font-size:11.5px;color:var(--text)">${roomedInOwnCategory ? `→ already roomed in <strong>${escHtml(r.room)}</strong> (own category) · retreat room is <strong>${escHtml(match.room)}</strong>` : `→ room <strong>${escHtml(match.room)}</strong>`}</span>
           <span style="font-size:11px;color:var(--muted)">${match.adjBefore ? 'night before' : 'night after'} ${escHtml(match.bk.leaderName || match.bk.retreatName || '')}'s retreat · ${fmtDate(match.bk.startDate)} – ${fmtDate(match.bk.endDate)}</span>
-          ${match.categoryMismatch ? `<span style="background:${freeUpgradeConfirmed ? '#dcfce7' : '#fecaca'};color:${freeUpgradeConfirmed ? '#166534' : '#991b1b'};font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px">Retreat room is ${escHtml(match.retreatRoomTypeName || 'a different category')}</span>` : ''}
+          ${match.categoryMismatch && !roomedInOwnCategory ? `<span style="background:${freeUpgradeConfirmed ? '#dcfce7' : '#fecaca'};color:${freeUpgradeConfirmed ? '#166534' : '#991b1b'};font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px">Retreat room is ${escHtml(match.retreatRoomTypeName || 'a different category')}</span>` : ''}
           ${isFreeUpgradeCandidate && !freeUpgradeConfirmed ? `<button onclick="event.stopPropagation();beConfirmFreeUpgrade('${escHtml(r.id)}')" style="background:#dcfce7;border:1px solid #86efac;color:#15803d;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">✓ Free Upgrade</button>` : ''}
           ${alreadyAssigned || match.categoryMismatch ? '' : `<button onclick="event.stopPropagation();beAssignRoom('${escHtml(r.id)}','${escHtml(match.room)}')" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Assign room</button>`}
         </div>
