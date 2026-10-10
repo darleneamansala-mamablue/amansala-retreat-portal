@@ -132,7 +132,7 @@ function beRenderShell() {
         <div style="display:flex;gap:2px;margin-top:12px">
           ${beTabBtn('settings','Settings')}
           ${beTabBtn('rates','Rates')}
-          ${beTabBtn('requests',`Requests${paidCount ? ` <span style="background:#16a34a;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">${paidCount}</span>` : ''}`)}
+          ${beTabBtn('requests',`Reservations${paidCount ? ` <span style="background:#16a34a;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">${paidCount}</span>` : ''}`)}
           ${beTabBtn('discounts','Discounts')}
           ${beTabBtn('items','Items')}
           ${beTabBtn('emails','Emails')}
@@ -561,10 +561,37 @@ function beFindRoomMatch(r) {
   return null;
 }
 
+// Jorge's ask 2026-10-10: these are real, paid reservations (not pending
+// requests) coming from two separate guest-facing flows -- book.html
+// (Escape) and extra-nights.html (Extra Night) -- so they get their own
+// section each, instead of one flat mixed list. Anything with source other
+// than 'Extra Night' is bucketed under Escape (covers the 'Escape' source
+// itself and any legacy/unlabeled row, e.g. the old 'online' test booking).
+function beRequestsTableHtml(title, icon, rows) {
+  if (!rows.length) return '';
+  return `<div style="margin-bottom:24px">
+    <div style="font-size:13px;font-weight:800;color:var(--dark);margin-bottom:8px">${icon} ${escHtml(title)} <span style="color:var(--muted);font-weight:600">(${rows.length})</span></div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--sand);border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted)">GUEST</th>
+          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted)">ROOM TYPE</th>
+          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted)">DATES</th>
+          <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted)">PAID</th>
+          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted)">ROOM</th>
+        </tr></thead>
+        <tbody>${rows.slice().reverse().map(beRequestRow).join('')}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
 function beRenderRequests() {
   const paid = beRequests.filter(r => r.status === 'paid');
   const totalRevenue = paid.reduce((s, r) => s + (r.amountPaid ?? 0), 0);
   const withDiscount = paid.filter(r => r.discountCode).length;
+  const extraNight = paid.filter(r => r.source === 'Extra Night');
+  const escape = paid.filter(r => r.source !== 'Extra Night');
 
   let html = `<div style="max-width:1000px;margin:0 auto">`;
 
@@ -581,18 +608,8 @@ function beRenderRequests() {
       ${beStatCard('With discount', withDiscount, '#fef3c7', '#92400e')}
     </div>`;
 
-    html += `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr style="background:var(--sand);border-bottom:1px solid var(--border)">
-          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted)">GUEST</th>
-          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted)">ROOM TYPE</th>
-          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted)">DATES</th>
-          <th style="text-align:right;padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted)">PAID</th>
-          <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted)">ROOM</th>
-        </tr></thead>
-        <tbody>${paid.slice().reverse().map(beRequestRow).join('')}</tbody>
-      </table>
-    </div>`;
+    html += beRequestsTableHtml('Escape', '🏝️', escape);
+    html += beRequestsTableHtml('Extra Night', '🌙', extraNight);
   }
 
   html += `</div>`;
@@ -612,12 +629,12 @@ function beRequestRow(r) {
           <span style="font-weight:700;font-size:11.5px;color:${alreadyAssigned ? '#15803d' : '#92400e'}">${alreadyAssigned ? 'Room assigned' : 'Match found'}</span>
           <span style="font-size:11.5px;color:var(--text)">→ room <strong>${escHtml(match.room)}</strong></span>
           <span style="font-size:11px;color:var(--muted)">${match.adjBefore ? 'night before' : 'night after'} ${escHtml(match.bk.leaderName || match.bk.retreatName || '')}'s retreat · ${fmtDate(match.bk.startDate)} – ${fmtDate(match.bk.endDate)}</span>
-          ${alreadyAssigned ? '' : `<button onclick="beAssignRoom('${escHtml(r.id)}','${escHtml(match.room)}')" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Assign room</button>`}
+          ${alreadyAssigned ? '' : `<button onclick="event.stopPropagation();beAssignRoom('${escHtml(r.id)}','${escHtml(match.room)}')" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Assign room</button>`}
         </div>
       </td>
     </tr>` : '';
   return `
-    <tr style="border-bottom:${match ? '0' : '1px solid #f3f4f6'}">
+    <tr onclick="openBookingDetailForRequest('${escHtml(r.id)}')" style="cursor:pointer;border-bottom:${match ? '0' : '1px solid #f3f4f6'}">
       <td style="padding:10px 14px">
         <div style="font-size:13px;font-weight:600;color:var(--dark)">${escHtml(r.firstName)} ${escHtml(r.lastName)}</div>
         <div style="font-size:11px;color:var(--muted)">${escHtml(r.email)}${r.phone ? ' · ' + escHtml(r.phone) : ''}</div>
@@ -635,7 +652,7 @@ function beRequestRow(r) {
       <td style="padding:10px 14px">
         ${r.room
           ? `<span style="font-size:11px;font-weight:700;color:#065f46">${escHtml(r.room)}</span>`
-          : `<div style="display:flex;gap:4px;align-items:center">
+          : `<div onclick="event.stopPropagation()" style="display:flex;gap:4px;align-items:center">
                <input type="text" id="be-room-manual-${escHtml(r.id)}" placeholder="e.g. 22" style="width:70px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:'Jost',sans-serif">
                <button onclick="beAssignRoomManual('${escHtml(r.id)}')" style="${beBtnS('#f1f5f9','#374151')};padding:4px 9px;font-size:11px">Set</button>
              </div>`}
