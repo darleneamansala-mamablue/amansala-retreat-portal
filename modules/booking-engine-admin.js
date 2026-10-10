@@ -707,7 +707,48 @@ function beRequestRow(r) {
                <button onclick="beAssignRoomManual('${escHtml(r.id)}')" style="${beBtnS('#f1f5f9','#374151')};padding:4px 9px;font-size:11px">Set</button>
              </div>`}
       </td>
-    </tr>${matchRow}`;
+    </tr>${matchRow}
+    <tr style="border-bottom:1px solid #f3f4f6">
+      <td colspan="5" onclick="event.stopPropagation()" style="padding:6px 14px 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        ${r.checkedByStaffName
+          ? `<span onclick="beToggleChecked('${escHtml(r.id)}')" title="Click to un-check" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;padding:3px 10px;border-radius:14px;font-size:11px;font-weight:700;white-space:nowrap">✅ Checked by ${escHtml(r.checkedByStaffName)} · ${r.checkedByStaffAt ? new Date(r.checkedByStaffAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span>`
+          : `<button onclick="beToggleChecked('${escHtml(r.id)}')" style="${beBtnS('#f1f5f9', '#374151')};white-space:nowrap">☐ Mark as checked</button>`}
+        <input type="text" id="be-notes-${escHtml(r.id)}" value="${escHtml(r.notes || '')}" placeholder="Internal notes..." style="flex:1;min-width:200px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:'Jost',sans-serif">
+        <button onclick="beSaveNotes('${escHtml(r.id)}')" style="${beBtnS('#f1f5f9', '#374151')}">Save</button>
+      </td>
+    </tr>`;
+}
+
+// Jorge's ask 2026-10-10: a way to mark a reservation as reviewed, recording
+// who and when -- toggle (click again to un-check, e.g. a mis-click).
+async function beToggleChecked(id) {
+  const r = beRequests.find(x => x.id === id); if (!r) return;
+  const wasChecked = !!r.checkedByStaffName;
+  const patch = wasChecked
+    ? { checked_by_staff_name: null, checked_by_staff_at: null }
+    : { checked_by_staff_name: getCurrentSession()?.name || 'Staff', checked_by_staff_at: new Date().toISOString() };
+  const { error } = await db.from('booking_requests').update(patch).eq('id', id);
+  if (error) { showToast('Error: ' + error.message); return; }
+  r.checkedByStaffName = patch.checked_by_staff_name;
+  r.checkedByStaffAt = patch.checked_by_staff_at;
+  showToast(wasChecked ? 'Unchecked' : 'Marked as checked ✓');
+  if (typeof resRefresh === 'function') resRefresh();
+  beRenderRequests();
+}
+
+// Jorge's ask 2026-10-10: Internal Notes shared with Booking Detail's own
+// Notes field -- both read/write the same booking_requests.notes column
+// (bdSaveNotes() in booking-detail.js), so editing either one shows up in
+// the other automatically, no separate sync needed.
+async function beSaveNotes(id) {
+  const input = document.getElementById(`be-notes-${id}`);
+  const notes = input?.value ?? '';
+  const r = beRequests.find(x => x.id === id); if (!r) return;
+  const { error } = await db.from('booking_requests').update({ notes }).eq('id', id);
+  if (error) { showToast('Error: ' + error.message); return; }
+  r.notes = notes;
+  showToast('Notes saved ✓');
+  if (typeof resRefresh === 'function') resRefresh();
 }
 
 // Jorge's ask 2026-10-10: a Dashboard notification confirming a room really
