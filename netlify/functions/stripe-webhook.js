@@ -119,6 +119,7 @@ exports.handler = async (event) => {
       discount_code:     meta.discountCode   || null,
       discount_amount:   parseFloat(meta.discountAmount) || null,
       source:            meta.source         || null,
+      daily_rate:        meta.rate != null ? parseFloat(meta.rate) : null,
     };
 
     let insertedId = null;

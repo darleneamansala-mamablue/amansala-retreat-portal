@@ -167,6 +167,7 @@ exports.handler = async (event) => {
     'metadata[discountCode]':    (validatedCode || '').slice(0, 50),
     'metadata[discountAmount]':  String(discountAmount),
     'metadata[source]':          (source || 'Escape').slice(0, 50),
+    'metadata[rate]':            String(rate),
   });
 
   const piRes = await fetch(`${STRIPE_API}/payment_intents`, {
