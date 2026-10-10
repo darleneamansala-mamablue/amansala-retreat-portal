@@ -810,7 +810,13 @@ function regRender(){
         const _isCancelled=g.cancelled||reg.cancelled;
         const _cancelledBadge=_isCancelled?` <span style="font-size:10px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:5px;padding:1px 6px;margin-left:4px">Cancelled</span>`:'';
         const _cancelledNameStyle=_isCancelled?'text-decoration:line-through;color:#9ca3af;':'';
-        nameTd.innerHTML=`<div class="r-gname" style="${_teacherStyle}${_cancelledNameStyle}cursor:pointer" title="Click to open ${escHtml(g.name)}'s folio" onclick="event.stopPropagation();openGuestFolio('${g._reg.id}',${g._guestIdx})">${_teacherStar}${g.name}${entry.merged&&entry.physical.length>1?` <span style="font-size:10px;color:#8a7e74">(${g._physical})</span>`:''}${_cancelledBadge}</div>`;
+        // Jorge's ask 2026-10-10: the "Confirmed 1 bed" marker (written to
+        // reg.notes by ackIssue's king_two_females handling) was easy to miss
+        // buried in the small italic notes line -- he wants it right next to
+        // the guest's own name instead, in green, same visual weight as the
+        // Cancelled badge above.
+        const _confirmedOneBedBadge=(reg.notes||'').includes('Confirmed 1 bed')?` <span style="font-size:10px;font-weight:700;color:#15803d;background:#f0fdf4;border:1px solid #86efac;border-radius:5px;padding:1px 6px;margin-left:4px">✓ Confirmed 1 bed</span>`:'';
+        nameTd.innerHTML=`<div class="r-gname" style="${_teacherStyle}${_cancelledNameStyle}cursor:pointer" title="Click to open ${escHtml(g.name)}'s folio" onclick="event.stopPropagation();openGuestFolio('${g._reg.id}',${g._guestIdx})">${_teacherStar}${g.name}${entry.merged&&entry.physical.length>1?` <span style="font-size:10px;color:#8a7e74">(${g._physical})</span>`:''}${_cancelledBadge}${_confirmedOneBedBadge}</div>`;
         tr.appendChild(nameTd);
 
         const retTd=document.createElement('td');
