@@ -5156,8 +5156,13 @@ function splitDoubleHalf(room){
   // Pattern 1: numeric + A/B case-insensitive (rt6/rt7 and simple bed rooms): "4A","4B","2a","4b"
   let m=r.match(/^(\d+)([AB])$/i);
   if(m)return{base:m[1],half:m[2].toUpperCase(),physical:room};
-  // Pattern 2: base + dash + a-d (bed rooms e.g. "4B-a","19B-b","14B-c")
-  m=r.match(/^(.+)-([a-d])$/);
+  // Pattern 2: base + dash + a-d (bed rooms e.g. "4B-a","19B-b","14B-c") --
+  // real codes have a SPACE before the dash ("19B -a"), which the old greedy
+  // `(.+)` swallowed into base (producing "19B " with a trailing space, which
+  // never matches the real parent room "19B") -- confirmed real gap 2026-10-10:
+  // "19B"/"19B -a"/"19B -b" and the same-shaped "4B"/"14B" pairs never
+  // protected each other from a double-booking. Non-greedy + \s* fixes it.
+  m=r.match(/^(.+?)\s*-([a-d])$/);
   if(m)return{base:m[1],half:m[2],physical:room};
   // Pattern 3: alphanumeric ending in digit + lowercase a-d (e.g. "CH02a","GV13b","6c","11d")
   m=r.match(/^(.+\d)([a-d])$/);
@@ -5204,26 +5209,55 @@ function roomCodesEqual(a,b){
   return !_roomCodeCollisionSet().has(la);
 }
 function roomListIncludes(list,room){return(list||[]).some(r=>roomCodesEqual(r,room));}
-// The same physical room is sold two ways — whole (rt6/rt7) or as separate
-// shared beds (bd1/bd2) — but blocking one side never conflicted with the
-// other, so the same physical room could be (and was: real incident, room 4,
-// 2026-09-17) double-booked whole for one retreat while its beds were
-// already blocked separately for another. Given either a whole-room code or
-// a bed code, returns the other side(s) representing that same space.
-// bd3/bd4 (Triple/Quad) are excluded — those beds are always used standalone,
-// the whole-room parent is never itself blockable, so there's nothing to link.
+// The same physical room is sold two ways — whole (rt6/rt7/rt8/rt9) or as
+// separate shared beds (bd1/bd2/bd3/bd4) — but blocking one side never
+// conflicted with the other, so the same physical room could be (and was:
+// real incident, room 4, 2026-09-17) double-booked whole for one retreat
+// while its beds were already blocked separately for another. Given either
+// a whole-room code or a bed code, returns the other side(s) representing
+// that same space.
+//
+// Rewritten 2026-10-10 (Jorge's report: "esto pasa con todos los cuartos
+// derivados") -- the old version called splitDoubleHalf(room) on the input
+// FIRST to decide if it was a bed, which broke for parent codes that
+// happen to also match the digit+letter pattern (e.g. "19B", "4B", "14B" --
+// splitDoubleHalf("19B") matched Pattern 1 and returned base "19", so this
+// never found "19B -a"/"19B -b" at all). It also only checked bd1/bd2,
+// missing the SAME real parent+bed structure that exists for bd3/bd4 too
+// (rt8's "6"/"32"/"14B" and rt9's "11"/"14" are genuine blockable parents
+// with real bd3/bd4 siblings, confirmed via live room_types data -- the old
+// comment claiming "the whole-room parent is never itself blockable" for
+// Triple/Quad no longer matches reality, if it ever did).
+//
+// Fix: gate on which ROOM TYPE actually owns the room code first (not on
+// pattern-matching the code itself), then only compare base strings within
+// that specific parent<->bed pair. This also avoids a real false-positive:
+// "13B"/"5B"/"2B"/"3B" are standalone single rooms in UNRELATED room types
+// (rt1/rt2/rt3/rt4) that happen to share a numeric prefix with a completely
+// different physical room's bed pair ("13"/"13a"/"13b" in rt7/bd2) --
+// matching on string pattern alone would wrongly link them.
+const ROOM_PARENT_TO_BED={rt6:'bd1',rt7:'bd2',rt8:'bd3',rt9:'bd4'};
+const ROOM_BED_TO_PARENT={bd1:'rt6',bd2:'rt7',bd3:'rt8',bd4:'rt9'};
 function getRoomCounterparts(room){
-  const split=splitDoubleHalf(room);
-  if(split)return[split.base];
-  const counterparts=[];
-  AppData.roomTypes.forEach(rt=>{
-    if(rt.id!=='bd1'&&rt.id!=='bd2')return;
-    (rt.rooms||[]).forEach(r=>{
+  const ownerRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(room));
+  if(!ownerRt)return[];
+  if(ROOM_PARENT_TO_BED[ownerRt.id]){
+    const bedRt=AppData.roomTypes.find(rt=>rt.id===ROOM_PARENT_TO_BED[ownerRt.id]);
+    return(bedRt?.rooms||[]).filter(r=>{const s=splitDoubleHalf(r);return s&&s.base.toLowerCase()===room.toLowerCase();});
+  }
+  if(ROOM_BED_TO_PARENT[ownerRt.id]){
+    const split=splitDoubleHalf(room);if(!split)return[];
+    const parentRt=AppData.roomTypes.find(rt=>rt.id===ROOM_BED_TO_PARENT[ownerRt.id]);
+    const counterparts=[];
+    if(parentRt&&(parentRt.rooms||[]).includes(split.base))counterparts.push(split.base);
+    (ownerRt.rooms||[]).forEach(r=>{
+      if(r===room)return;
       const s=splitDoubleHalf(r);
-      if(s&&s.base===room)counterparts.push(r);
+      if(s&&s.base.toLowerCase()===split.base.toLowerCase())counterparts.push(r);
     });
-  });
-  return counterparts;
+    return counterparts;
+  }
+  return[];
 }
 function buildUiRoomEntries(rt){
   if(!rt||!isDoubleRoomType(rt))return(rt.rooms||[]).map(r=>({display:r,physical:[r],merged:false}));
@@ -6559,7 +6593,7 @@ if(location.protocol!=='file:'){
 <script>
 // ===== MENU TAB — moved to modules/menu.js =====
 </script>
-<script src="modules/import-export.js"></script>
+<script src="modules/import-export.js?v=20261010a"></script>
 <script>
 // ===== CSV IMPORT — moved to modules/import-export.js =====
 // ===== RETREAT GURU IMPORT — moved to modules/import-export.js (loaded above) =====
