@@ -831,6 +831,9 @@ function menuItemDetail(s,isKitchen){
   return MENU_DETAIL[s]||{name:menuTrEn(s),desc:''};
 }
 
+// true when at least one retreat that day has this meal on its plan (rows in the menu schedule)
+function _posterHas(dateStr,meal){return ((menuSchedule[dateStr]||{})[meal]||[]).length>0;}
+
 function menuPrintDay(dateStr){
   const mi=menuDayIndex(dateStr);
   const mData=menuDataFor(dateStr);
@@ -893,7 +896,11 @@ function menuPrintDay(dateStr){
   <body>
     ${[
       {label:'Fruit, Coffee &amp; Tea',html:section('Fruit, Coffee &amp; Tea',mData.lightBreakfast)},
-      {label:'Brunch',html:section('Brunch',mData.brunch)},
+      // Breakfast / Lunch print when a group that day has them on its meal plan (same rule as the weekly view);
+      // Brunch is hidden only when the day has Breakfast/Lunch groups and nobody on a Brunch plan.
+      {label:'Breakfast',html:_posterHas(dateStr,'breakfast')?section('Breakfast',mData.breakfast):''},
+      {label:'Brunch',html:_posterHas(dateStr,'brunch')||!(_posterHas(dateStr,'breakfast')||_posterHas(dateStr,'lunch'))?section('Brunch',mData.brunch):''},
+      {label:'Lunch',html:_posterHas(dateStr,'lunch')?section('Lunch',mData.lunch):''},
       {label:'Afternoon Snack',html:section('Afternoon Snack',mData.snack)},
       {label:'Dinner',html:dinnerHtml},
     ].filter(p=>p.html).map((p,i)=>`<div class="menu-poster-pg${i>0?' menu-poster-page2':''}">
@@ -1118,7 +1125,9 @@ function menuPrintDailyRange(fromVal,toVal,isKitchen){
       <div class="menu-poster-date">${dateFmt}</div>
       <div class="menu-poster-divider"></div>
       ${section('Fruit, Coffee &amp; Tea',mData.lightBreakfast,ds,'lightBreakfast')}
-      ${section('Brunch',mData.brunch,ds,'brunch')}
+      ${_posterHas(ds,'breakfast')?section('Breakfast',mData.breakfast,ds,'breakfast'):''}
+      ${(_posterHas(ds,'brunch')||!(_posterHas(ds,'breakfast')||_posterHas(ds,'lunch')))?section('Brunch',mData.brunch,ds,'brunch'):''}
+      ${_posterHas(ds,'lunch')?section('Lunch',mData.lunch,ds,'lunch'):''}
       ${section('Afternoon Snack',mData.snack,ds,'snack')}
       ${dinnerHtml}
     </div>`;
