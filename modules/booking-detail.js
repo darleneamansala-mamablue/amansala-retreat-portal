@@ -406,7 +406,12 @@ function _bdRender(){
   // that from here. bdSyncCloudbeds() itself re-verifies an existing link
   // first before doing anything else.
   if(_bdKind==='reg'&&!subj.cancelled&&_bdBk) headerBtns+=`<button onclick="bdSyncCloudbeds()" style="${hBtnS}">${(_bdBk.cbReservationIds||{})[subj.room]?'🔄 Re-sync Cloudbeds':'☁️ Sync Cloudbeds'}</button>`;
-  headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">Delete</button>`;
+  // For _bdKind==='req' (Booking Engine/Extra Night reservations, no separate
+  // registration row to delete), this button already only sets status:'declined'
+  // -- a soft cancel, same as "Cancel" does for a retreat registration -- never
+  // a hard delete. Labeling it "Delete" here hid the one way to cancel this kind
+  // of reservation entirely (Jorge's report 2026-10-10: "no veo el boton cancelar").
+  headerBtns+=`<button onclick="bdDeleteReservation()" style="${hBtnS};border-color:rgba(239,68,68,.6);color:#fca5a5">${_bdKind==='req'?'Cancel':'Delete'}</button>`;
 
   document.getElementById('bdHdr').innerHTML=`
     <div style="display:flex;align-items:center;gap:14px">
