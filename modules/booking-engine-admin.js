@@ -537,13 +537,20 @@ function beFmtUSD(n) { return '$' + Number(n ?? 0).toLocaleString('en-US', { min
 // booking sits immediately before/after the request's dates — i.e. "this Extra Night
 // belongs right next to an existing retreat guest's room." Mirrors the reference tool's
 // matcher, adapted to AppData.regs/AppData.bookings.
+// Jorge's ask 2026-10-10: widen the adjacency window from exactly 1 night to
+// up to 2 days before/after the retreat (some guests' extra night doesn't
+// land on the exact boundary day), and STOP silently skipping a match whose
+// room type/category differs from the retreat room's -- surface it instead
+// (categoryMismatch, flagged red in beRequestRow) so staff can decide
+// whether to move the guest into the retreat room's own category.
+const BE_MATCH_WINDOW_DAYS = 2;
 function beFindRoomMatch(r) {
   if (!r.checkIn || !r.checkOut) return null;
   const nameNorm = `${r.firstName ?? ''} ${r.lastName ?? ''}`.toLowerCase().trim();
   const emailNorm = (r.email ?? '').toLowerCase().trim();
+  const candidates = [];
   for (const reg of AppData.regs) {
     if (!reg.room) continue;
-    if (r.roomTypeId && reg.roomTypeId && reg.roomTypeId !== r.roomTypeId) continue;
     const hasMatch = (reg.guests ?? []).some(g => {
       if (!g.name) return false;
       const gName = g.name.toLowerCase().trim();
@@ -553,12 +560,16 @@ function beFindRoomMatch(r) {
     if (!hasMatch) continue;
     const bk = AppData.bookings.find(b => b.id === reg.bookingId);
     if (!bk?.startDate || !bk?.endDate) continue;
-    const adjBefore = r.checkOut === bk.startDate;
-    const adjAfter  = r.checkIn  === bk.endDate;
+    const gapBefore = Math.round((pd(bk.startDate) - pd(r.checkOut)) / DAY_MS);
+    const gapAfter  = Math.round((pd(r.checkIn) - pd(bk.endDate)) / DAY_MS);
+    const adjBefore = gapBefore >= 0 && gapBefore <= BE_MATCH_WINDOW_DAYS;
+    const adjAfter  = gapAfter  >= 0 && gapAfter  <= BE_MATCH_WINDOW_DAYS;
     if (!adjBefore && !adjAfter) continue;
-    return { bk, room: reg.room, adjBefore };
+    const categoryMismatch = !!(r.roomTypeId && reg.roomTypeId && reg.roomTypeId !== r.roomTypeId);
+    candidates.push({ bk, room: reg.room, adjBefore, categoryMismatch });
   }
-  return null;
+  // Prefer a same-category match over a different-category one when both exist.
+  return candidates.find(c => !c.categoryMismatch) || candidates[0] || null;
 }
 
 // Jorge's ask 2026-10-10: these are real, paid reservations (not pending
@@ -621,15 +632,25 @@ function beRequestRow(r) {
   const received = r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   const match = beFindRoomMatch(r);
   const alreadyAssigned = match && r.room && r.room === match.room;
+  // Jorge's ask 2026-10-10: a match whose room type/category differs from the
+  // retreat room's gets its own pastel-red treatment instead of the normal
+  // green (assigned)/amber (match found) colors, so staff notice before
+  // assigning the guest into a room they didn't actually pay for.
+  const rowBg     = match?.categoryMismatch ? '#fef2f2' : alreadyAssigned ? '#f0fdf4' : '#fffbeb';
+  const rowBorder = match?.categoryMismatch ? '#fecaca' : alreadyAssigned ? '#bbf7d0' : '#fde68a';
+  const labelColor = match?.categoryMismatch ? '#b91c1c' : alreadyAssigned ? '#15803d' : '#92400e';
+  const icon = match?.categoryMismatch ? '⚠️' : alreadyAssigned ? '✅' : '🔗';
+  const label = match?.categoryMismatch ? 'Different category' : alreadyAssigned ? 'Room assigned' : 'Match found';
   const matchRow = match ? `
-    <tr style="background:${alreadyAssigned ? '#f0fdf4' : '#fffbeb'};border-bottom:2px solid ${alreadyAssigned ? '#bbf7d0' : '#fde68a'}">
+    <tr style="background:${rowBg};border-bottom:2px solid ${rowBorder}">
       <td colspan="5" style="padding:5px 14px 9px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span>${alreadyAssigned ? '✅' : '🔗'}</span>
-          <span style="font-weight:700;font-size:11.5px;color:${alreadyAssigned ? '#15803d' : '#92400e'}">${alreadyAssigned ? 'Room assigned' : 'Match found'}</span>
+          <span>${icon}</span>
+          <span style="font-weight:700;font-size:11.5px;color:${labelColor}">${label}</span>
           <span style="font-size:11.5px;color:var(--text)">→ room <strong>${escHtml(match.room)}</strong></span>
           <span style="font-size:11px;color:var(--muted)">${match.adjBefore ? 'night before' : 'night after'} ${escHtml(match.bk.leaderName || match.bk.retreatName || '')}'s retreat · ${fmtDate(match.bk.startDate)} – ${fmtDate(match.bk.endDate)}</span>
-          ${alreadyAssigned ? '' : `<button onclick="event.stopPropagation();beAssignRoom('${escHtml(r.id)}','${escHtml(match.room)}')" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Assign room</button>`}
+          ${match.categoryMismatch ? `<span style="background:#fecaca;color:#991b1b;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px">Retreat room different category</span>` : ''}
+          ${alreadyAssigned || match.categoryMismatch ? '' : `<button onclick="event.stopPropagation();beAssignRoom('${escHtml(r.id)}','${escHtml(match.room)}')" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Assign room</button>`}
         </div>
       </td>
     </tr>` : '';
