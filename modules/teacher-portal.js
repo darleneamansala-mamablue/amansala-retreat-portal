@@ -2685,7 +2685,12 @@ function tsSubmitSchedule(){
   bk.scheduleTimeOverrides=[...keepOvs,...newOvs];
   bk.scheduleSkips=[...keepSkips,...newSkips];
   const{dailyMorning,dailyAfternoon,...srWithoutDaily}=_ts;
-  bk.scheduleRequest={...srWithoutDaily,submittedAt:new Date().toISOString(),adminStatus:'pending',adminNote:bk.scheduleRequest?.adminNote||''};
+  // A schedule the admin already confirmed STAYS confirmed (and in the scheduler) when the teacher edits and re-submits
+  // it; it is flagged for review instead of dropping back to Pending (which removed it from the scheduler —
+  // Lillian So, Oct 10 2026). Admin confirming again clears the flag.
+  const _wasConfirmed=bk.scheduleRequest?.adminStatus==='confirmed';
+  bk.scheduleRequest={...srWithoutDaily,submittedAt:new Date().toISOString(),adminStatus:_wasConfirmed?'confirmed':'pending',adminNote:bk.scheduleRequest?.adminNote||''};
+  if(_wasConfirmed)bk.scheduleRequest.reviewNeeded=true;else delete bk.scheduleRequest.reviewNeeded;
   saveAll();
   // Auto-populate tours & ceremonies on first submission only
   if(!bk.retreatActivities||!bk.retreatActivities.length){
@@ -3272,6 +3277,7 @@ function openScheduleViewer(bkId){
 function tsAdminStatus(bkId,status){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.scheduleRequest)return;
   bk.scheduleRequest.adminStatus=status;
+  delete bk.scheduleRequest.reviewNeeded;
   bk.scheduleRequest.adminNote=document.getElementById('tsAdminNoteInput')?.value||'';
   // Auto-assign tours & ceremonies when schedule is confirmed — unless the
   // admin chose "Do Not Assign" or "Custom" (manual editor) for this retreat.
@@ -5204,6 +5210,7 @@ function buildRetreatSchedulesPanel(){
   const hasSched=AppData.bookings.filter(b=>b.scheduleRequest?.submittedAt);
   hasSched.sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
   const el=document.getElementById('rspContent');
+  const reviewFlag=sr=>(sr&&sr.reviewNeeded&&sr.adminStatus==='confirmed')?`<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:700;background:#ffedd5;color:#c2410c;margin-left:6px" title="The teacher edited this schedule after you confirmed it. It is still in the scheduler — open it and confirm again once you've checked the changes.">Teacher updated — review</span>`:'';
   const statusBadge=s=>{
     const cfg={pending:{bg:'#fef3c7',c:'#92400e',lbl:'Pending'},confirmed:{bg:'#dcfce7',c:'#15803d',lbl:'Confirmed'},changes:{bg:'#fee2e2',c:'#dc2626',lbl:'Changes Requested'}};
     const r=cfg[s]||cfg.pending;
@@ -5223,7 +5230,7 @@ function buildRetreatSchedulesPanel(){
       <td style="padding:8px 12px;border-bottom:1px solid #eee2d4;font-weight:600;color:${submitted?'var(--dark)':'#dc2626'}"><span onclick="openTeacherPortal('${b.id}')" style="cursor:pointer;text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color .15s" onmouseover="this.style.textDecorationColor='currentColor'" onmouseout="this.style.textDecorationColor='transparent'" title="Open ${escHtml(label)}'s teacher portal">${label}</span></td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee2d4;color:var(--muted);white-space:nowrap">${fmtDate(b.startDate)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee2d4">${submitted
-        ?`<span style="color:#15803d;font-weight:700;font-size:12.5px">✓ Submitted</span> ${statusBadge(b.scheduleRequest.adminStatus||'pending')}`
+        ?`<span style="color:#15803d;font-weight:700;font-size:12.5px">✓ Submitted</span> ${statusBadge(b.scheduleRequest.adminStatus||'pending')}${reviewFlag(b.scheduleRequest)}`
         :`<span style="color:#dc2626;font-weight:700;font-size:12.5px">✗ Not Filled Out</span>`}</td>
     </tr>`;
   }).join('');
@@ -5304,7 +5311,7 @@ function buildRetreatSchedulesPanel(){
           <div style="font-size:12px;color:var(--muted);margin-top:2px">${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)} · ${nights} night${nights!==1?'s':''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-          ${statusBadge(st)}
+          ${statusBadge(st)}${reviewFlag(sr)}
           ${(st==='pending'||st==='changes')?`<button class="btn btn-primary" style="font-size:11.5px;padding:6px 14px;white-space:nowrap;background:#059669;border-color:#059669" onclick="event.stopPropagation();openScheduleViewer('${bk.id}')">Review &amp; Confirm</button>`:''}
           ${st==='confirmed'?`<button class="btn btn-secondary" style="font-size:11.5px;padding:6px 12px;white-space:nowrap;color:#059669;border-color:#6ee7b7" onclick="event.stopPropagation();openScheduleViewer('${bk.id}')">View Confirmed</button>`:''}
           <button class="btn btn-secondary" style="font-size:11.5px;padding:6px 12px;white-space:nowrap" onclick="event.stopPropagation();openPrintSchedule('${bk.id}')">
