@@ -4973,19 +4973,34 @@ async function loadFromSupabase(){
     // this fails, never blocks the main bookings/registrations load above.
     try{
       const _notifCutoff=new Date(Date.now()-60*24*60*60*1000).toISOString();
-      const [botRes,paidRes,setRes,wtRes,climasRes,extraNightRes]=await Promise.all([
+      const [botRes,paidRes,setRes,wtRes,climasRes,extraNightRes,issueAcksRes]=await Promise.all([
         db.from('bot_log').select('id,booking_id,tool_name,tool_result,created_at').in('tool_name',['add_room_by_type','remove_room_by_type']).gte('created_at',_notifCutoff).order('created_at',{ascending:false}).limit(200),
         db.from('booking_requests').select('id,first_name,last_name,room_type_name,amount_paid,created_at').eq('status','paid').gte('created_at',_notifCutoff).order('created_at',{ascending:false}),
         db.from('settings').select('key,value').in('key',['notif_dismissed','notif_seen_at','flight_alerts']),
         db.from('app_store').select('value').eq('key','weTravelPaymentLog'),
         db.from('app_store').select('value').eq('key','climasConfirmLog'),
         db.from('app_store').select('value').eq('key','extraNightMatchLog'),
+        db.from('app_store').select('value').eq('key','issueAcks'),
       ]);
       notifBotLog=(botRes.data||[]).filter(r=>r.tool_result?.success!==false);
       notifPaidRequests=paidRes.data||[];
       notifWeTravelPayments=(wtRes.data&&wtRes.data[0]&&Array.isArray(wtRes.data[0].value))?wtRes.data[0].value:[];
       notifClimasConfirms=(climasRes.data&&climasRes.data[0]&&Array.isArray(climasRes.data[0].value))?climasRes.data[0].value:[];
       notifExtraNightMatches=(extraNightRes.data&&extraNightRes.data[0]&&Array.isArray(extraNightRes.data[0].value))?extraNightRes.data[0].value:[];
+      issueAcks=(issueAcksRes.data&&issueAcksRes.data[0]&&issueAcksRes.data[0].value&&typeof issueAcksRes.data[0].value==='object')?issueAcksRes.data[0].value:{};
+      // One-time migration: this device may still hold confirmations from before
+      // issueAcks moved off localStorage (2026-10-10) — merge them in (shared wins
+      // on conflict) so this device's prior "Confirmed Couple"/"Mark Done" clicks
+      // aren't silently lost, then persist the merge so every device sees them.
+      try{
+        const _lsAcks=JSON.parse(localStorage.getItem('amansala_issue_acks')||'{}');
+        const _lsKeys=Object.keys(_lsAcks).filter(k=>!(k in issueAcks));
+        if(_lsKeys.length){
+          _lsKeys.forEach(k=>issueAcks[k]=_lsAcks[k]);
+          db.from('app_store').upsert({key:'issueAcks',value:issueAcks,updated_at:new Date().toISOString()},{onConflict:'key'}).catch(()=>{});
+        }
+        localStorage.removeItem('amansala_issue_acks');
+      }catch(e){}
       const _setMap={};(setRes.data||[]).forEach(r=>_setMap[r.key]=r.value);
       // Merge in any pre-existing per-device dismissals from before this was shared —
       // same one-time migration staging's own settings.js load does.
@@ -5366,6 +5381,11 @@ let deletedPaymentIds=new Set();
 // js/data/settings.js reads/writes), so dismissing a notification here also
 // dismisses it in staging and vice versa.
 let notifBotLog=[],notifPaidRequests=[],notifDismissed=new Set(),notifSeenAt=null,notifFlightAlerts=[],notifWeTravelPayments=[],notifClimasConfirms=[],notifExtraNightMatches=[];
+// Shared across every staff device (was localStorage, per-device only, before 2026-10-10 —
+// Jorge's report: confirming a "2 women sharing a king bed" flag as a known couple on one
+// computer never showed as confirmed on anyone else's). Keyed exactly like the old
+// localStorage blob was: `${bookingId}__${flagKey}` -> {status, date, note}.
+let issueAcks={};
 let externalReservations=[];
 let venYear=new Date().getFullYear();
 let rcStart=new Date(2026,4,1), rcShowDays=30;
@@ -6370,7 +6390,7 @@ function switchTab(id,btn){
 <script src="modules/contract-library.js?v=20261009a"></script>
 <script src="modules/reports.js?v=20261005i"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20261010a"></script>
+<script src="modules/teacher-portal.js?v=20261010c"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
 // ===== TEACHER REGISTRATION — moved to modules/teacher-portal.js =====
