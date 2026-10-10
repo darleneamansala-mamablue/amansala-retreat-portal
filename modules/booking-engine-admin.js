@@ -566,7 +566,8 @@ function beFindRoomMatch(r) {
     const adjAfter  = gapAfter  >= 0 && gapAfter  <= BE_MATCH_WINDOW_DAYS;
     if (!adjBefore && !adjAfter) continue;
     const categoryMismatch = !!(r.roomTypeId && reg.roomTypeId && reg.roomTypeId !== r.roomTypeId);
-    candidates.push({ bk, room: reg.room, adjBefore, categoryMismatch });
+    const retreatRoomTypeName = categoryMismatch ? (AppData.roomTypes.find(rt => rt.id === reg.roomTypeId)?.name || '') : '';
+    candidates.push({ bk, room: reg.room, adjBefore, categoryMismatch, retreatRoomTypeName });
   }
   // Prefer a same-category match over a different-category one when both exist.
   return candidates.find(c => !c.categoryMismatch) || candidates[0] || null;
@@ -666,7 +667,7 @@ function beRequestRow(r) {
     beLogMatchNotif({
       id: `extra_night_mismatch_${r.id}`, kind: 'mismatch', ts: new Date().toISOString(),
       guestName: `${r.firstName || ''} ${r.lastName || ''}`.trim(), room: match.room,
-      retreatName: match.bk.leaderName || match.bk.retreatName || '',
+      retreatName: match.bk.leaderName || match.bk.retreatName || '', retreatRoomTypeName: match.retreatRoomTypeName || '',
     }).catch(() => {});
   }
   const matchRow = match ? `
@@ -677,7 +678,7 @@ function beRequestRow(r) {
           <span style="font-weight:700;font-size:11.5px;color:${labelColor}">${label}</span>
           <span style="font-size:11.5px;color:var(--text)">→ room <strong>${escHtml(match.room)}</strong></span>
           <span style="font-size:11px;color:var(--muted)">${match.adjBefore ? 'night before' : 'night after'} ${escHtml(match.bk.leaderName || match.bk.retreatName || '')}'s retreat · ${fmtDate(match.bk.startDate)} – ${fmtDate(match.bk.endDate)}</span>
-          ${match.categoryMismatch ? `<span style="background:#fecaca;color:#991b1b;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px">Retreat room different category</span>` : ''}
+          ${match.categoryMismatch ? `<span style="background:#fecaca;color:#991b1b;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px">Retreat room is ${escHtml(match.retreatRoomTypeName || 'a different category')}</span>` : ''}
           ${alreadyAssigned || match.categoryMismatch ? '' : `<button onclick="event.stopPropagation();beAssignRoom('${escHtml(r.id)}','${escHtml(match.room)}')" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Assign room</button>`}
         </div>
       </td>
