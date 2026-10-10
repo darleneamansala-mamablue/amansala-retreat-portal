@@ -653,15 +653,24 @@ function beRequestRow(r) {
   const received = r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   const match = beFindRoomMatch(r);
   const alreadyAssigned = match && r.room && r.room === match.room;
-  // Jorge's ask 2026-10-10: a match whose room type/category differs from the
-  // retreat room's gets its own pastel-red treatment instead of the normal
-  // green (assigned)/amber (match found) colors, so staff notice before
-  // assigning the guest into a room they didn't actually pay for.
-  const rowBg     = match?.categoryMismatch ? '#fef2f2' : alreadyAssigned ? '#f0fdf4' : '#fffbeb';
-  const rowBorder = match?.categoryMismatch ? '#fecaca' : alreadyAssigned ? '#bbf7d0' : '#fde68a';
-  const labelColor = match?.categoryMismatch ? '#b91c1c' : alreadyAssigned ? '#15803d' : '#92400e';
-  const icon = match?.categoryMismatch ? '⚠️' : alreadyAssigned ? '✅' : '🔗';
-  const label = match?.categoryMismatch ? 'Different category' : alreadyAssigned ? 'Room assigned' : 'Match found';
+  // Jorge's ask 2026-10-10: staff manually putting the guest in the EXACT same
+  // physical room as the retreat (alreadyAssigned) despite a categoryMismatch
+  // is a deliberate free upgrade, not an unresolved problem -- give it its own
+  // one-click confirmation instead of leaving it stuck red forever. Persisted
+  // on the booking_request itself (free_upgrade_confirmed_at) since it's a
+  // one-off per-reservation decision, not a shared/generic ack.
+  const isFreeUpgradeCandidate = !!(match?.categoryMismatch && alreadyAssigned);
+  const freeUpgradeConfirmed = !!r.freeUpgradeConfirmedAt;
+  // A match whose room type/category differs from the retreat room's gets its
+  // own pastel-red treatment instead of the normal green (assigned)/amber
+  // (match found) colors, so staff notice before assigning the guest into a
+  // room they didn't actually pay for -- UNLESS it's a confirmed free upgrade,
+  // which reads as resolved (green) like everything else that's handled.
+  const rowBg     = freeUpgradeConfirmed ? '#f0fdf4' : match?.categoryMismatch ? '#fef2f2' : alreadyAssigned ? '#f0fdf4' : '#fffbeb';
+  const rowBorder = freeUpgradeConfirmed ? '#bbf7d0' : match?.categoryMismatch ? '#fecaca' : alreadyAssigned ? '#bbf7d0' : '#fde68a';
+  const labelColor = freeUpgradeConfirmed ? '#15803d' : match?.categoryMismatch ? '#b91c1c' : alreadyAssigned ? '#15803d' : '#92400e';
+  const icon = freeUpgradeConfirmed ? '🎁' : match?.categoryMismatch ? '⚠️' : alreadyAssigned ? '✅' : '🔗';
+  const label = freeUpgradeConfirmed ? 'Free upgrade confirmed' : match?.categoryMismatch ? 'Different category' : alreadyAssigned ? 'Room assigned' : 'Match found';
   if (match?.categoryMismatch && !beMismatchLogged.has(r.id)) {
     beMismatchLogged.add(r.id);
     beLogMatchNotif({
@@ -678,7 +687,8 @@ function beRequestRow(r) {
           <span style="font-weight:700;font-size:11.5px;color:${labelColor}">${label}</span>
           <span style="font-size:11.5px;color:var(--text)">→ room <strong>${escHtml(match.room)}</strong></span>
           <span style="font-size:11px;color:var(--muted)">${match.adjBefore ? 'night before' : 'night after'} ${escHtml(match.bk.leaderName || match.bk.retreatName || '')}'s retreat · ${fmtDate(match.bk.startDate)} – ${fmtDate(match.bk.endDate)}</span>
-          ${match.categoryMismatch ? `<span style="background:#fecaca;color:#991b1b;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px">Retreat room is ${escHtml(match.retreatRoomTypeName || 'a different category')}</span>` : ''}
+          ${match.categoryMismatch ? `<span style="background:${freeUpgradeConfirmed ? '#dcfce7' : '#fecaca'};color:${freeUpgradeConfirmed ? '#166534' : '#991b1b'};font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px">Retreat room is ${escHtml(match.retreatRoomTypeName || 'a different category')}</span>` : ''}
+          ${isFreeUpgradeCandidate && !freeUpgradeConfirmed ? `<button onclick="event.stopPropagation();beConfirmFreeUpgrade('${escHtml(r.id)}')" style="background:#dcfce7;border:1px solid #86efac;color:#15803d;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">✓ Free Upgrade</button>` : ''}
           ${alreadyAssigned || match.categoryMismatch ? '' : `<button onclick="event.stopPropagation();beAssignRoom('${escHtml(r.id)}','${escHtml(match.room)}')" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:2px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Assign room</button>`}
         </div>
       </td>
@@ -787,6 +797,21 @@ async function beAssignRoomManual(id) {
   const room = input?.value.trim();
   if (!room) { showToast('Enter a room number first'); return; }
   await beAssignRoom(id, room);
+}
+// Jorge's ask 2026-10-10: staff deliberately put the guest in the retreat's
+// own room number despite the category mismatch -- a free upgrade, not an
+// unresolved problem. One click turns the banner green instead of leaving it
+// stuck red. requires `booking_requests.free_upgrade_confirmed_at` column.
+async function beConfirmFreeUpgrade(id) {
+  const r = beRequests.find(x => x.id === id); if (!r) return;
+  const now = new Date().toISOString();
+  const prev = r.freeUpgradeConfirmedAt; r.freeUpgradeConfirmedAt = now;
+  try {
+    const { error } = await db.from('booking_requests').update({ free_upgrade_confirmed_at: now }).eq('id', id);
+    if (error) throw error;
+    showToast('Free upgrade confirmed ✓');
+    beRenderRequests();
+  } catch (e) { r.freeUpgradeConfirmedAt = prev; showToast('Error: ' + e.message); }
 }
 
 // ─── DISCOUNTS TAB ───────────────────────────────────────────
