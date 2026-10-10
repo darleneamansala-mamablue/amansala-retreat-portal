@@ -35,7 +35,7 @@ function _bdSubject(){
       id:r.id,guestName:`${r.firstName||''} ${r.lastName||''}`.trim()||'Guest',guestEmail:r.email||'',
       allGuests:[{name:`${r.firstName||''} ${r.lastName||''}`.trim()||'Guest',email:r.email||'',phone:r.phone||''}],
       room:r.room||r.roomTypeName||'—',
-      checkIn:r.checkIn,checkOut:r.checkOut,notes:r.notes||r.dietary||'',
+      checkIn:r.checkIn,checkOut:r.checkOut,notes:r.notes||r.dietary||'',internalNotes:r.internalNotes||'',
       checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
       rate:r.dailyRate!=null?Number(r.dailyRate):null,adults:r.adults||1,
       sourceLabel:r.source||null,retreatLabel:null,retreatBkId:null,
@@ -432,10 +432,15 @@ function _bdRender(){
           <tr><td style="color:var(--muted);padding:5px 0">Rate</td><td style="padding:5px 0;color:#059669;font-weight:700">${subj.rate!=null?fmt$(subj.rate)+'/night':'—'}</td></tr>
         </table>
         <div style="margin-top:10px">
-          <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px">Notes</label>
-          <textarea id="bdNotes" placeholder="Internal notes..." style="width:100%;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;resize:vertical">${escHtml(subj.notes||'')}</textarea>
+          <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px">${_bdKind==='req'?'Guest Notes':'Notes'}</label>
+          <textarea id="bdNotes" placeholder="${_bdKind==='req'?'Notes the guest submitted...':'Internal notes...'}" style="width:100%;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;resize:vertical">${escHtml(subj.notes||'')}</textarea>
           <button class="btn btn-secondary btn-sm" onclick="bdSaveNotes()" style="margin-top:6px">Save</button>
         </div>
+        ${_bdKind==='req'?`<div style="margin-top:14px">
+          <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px">Internal Notes</label>
+          <textarea id="bdInternalNotes" placeholder="Staff-only notes..." style="width:100%;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;resize:vertical">${escHtml(subj.internalNotes||'')}</textarea>
+          <button class="btn btn-secondary btn-sm" onclick="bdSaveInternalNotes()" style="margin-top:6px">Save</button>
+        </div>`:''}
       </div>
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">👤 Guest${subj.allGuests.length>1?'s':''}</div>
@@ -1033,6 +1038,21 @@ async function bdSaveNotes(){
     reg.notes=notes;
   }
   showToast('Notes saved ✓');
+}
+
+// Jorge's correction 2026-10-10: a SEPARATE field from the guest's own Notes
+// above -- req-kind (Booking Engine reservations) only. Shares
+// booking_requests.internal_notes with the Reservations tab's own Internal
+// Notes input (beSaveNotes() in booking-engine-admin.js, same column), so
+// editing either one shows up in the other.
+async function bdSaveInternalNotes(){
+  if(_bdKind!=='req')return;
+  const internalNotes=document.getElementById('bdInternalNotes')?.value||'';
+  const {error}=await db.from('booking_requests').update({internal_notes:internalNotes}).eq('id',_bdId);
+  if(error){showToast('Error: '+error.message);return;}
+  if(_bdReqCache)_bdReqCache.internalNotes=internalNotes;
+  _bdNotifyReqChanged();
+  showToast('Internal notes saved ✓');
 }
 
 // Jorge's ask 2026-10-06: the regular showToast() auto-hides in 2.5s -- too
