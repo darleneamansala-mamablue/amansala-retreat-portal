@@ -1230,7 +1230,8 @@ function getAutoFlags(bk){
       const namedGuests=(reg.guests||[]).filter(g=>g.name);
       if(namedGuests.length!==2)return;
       if(namedGuests.every(g=>likelyFemale(g.name))){
-        flags.push({type:'king_two_females',severity:'orange',key,
+        flags.push({type:'king_two_females',severity:'orange',key,room,
+          guests:namedGuests.map(g=>({name:g.name,email:(g.email||'').trim()})),
           message:`Room ${room} (${rt.name}): ${namedGuests.map(g=>g.name).join(' & ')} — 2 women sharing a king bed`});
       }
     });
@@ -1343,6 +1344,30 @@ function clearIssueAck(bkId,key){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(bk)renderFlagsModal(bk);
   if(typeof venBuild==='function')venBuild();
 }
+// Jorge's ask 2026-10-10: one click on the king_two_females flag emails both
+// guests asking whether they need 1 or 2 beds, instead of staff tracking each
+// email down manually. Each guest gets their OWN email (never cc'd together,
+// so neither sees the other's address) -- same /.netlify/functions/send-email
+// endpoint every other guest email in this app already goes through.
+async function emailConfirmBedCount(bkId,flagKey){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  const f=getAutoFlags(bk).find(x=>x.key===flagKey&&x.type==='king_two_females');
+  if(!f){showToast('Flag not found — try reopening this window');return;}
+  const toSend=(f.guests||[]).filter(g=>g.email);
+  if(!toSend.length){showToast('No email on file for either guest');return;}
+  const retreatName=bk.retreatName||bk.leaderName||'your retreat';
+  showToast(`Sending to ${toSend.length} guest${toSend.length>1?'s':''}…`);
+  let sent=0,failed=0;
+  for(const g of toSend){
+    const firstName=(g.name||'').trim().split(/\s+/)[0]||'there';
+    const html=`<p>Hi ${escHtml(firstName)},</p><p>Could you please confirm if you need 1 or 2 beds for Room ${escHtml(f.room)} during ${escHtml(retreatName)}?</p><p>Thank you!</p><p>— Amansala</p>`;
+    try{
+      const res=await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:g.email,subject:'Quick question: 1 or 2 beds?',html})});
+      if(res.ok)sent++;else failed++;
+    }catch(e){failed++;}
+  }
+  showToast(failed?`Sent ${sent}, ${failed} failed`:`Email sent to ${sent} guest${sent>1?'s':''} ✓`);
+}
 function saveIssueNote(bkId,key){
   const el=document.getElementById('iack_note_'+bkId+'__'+key);if(!el)return;
   const acks=getIssueAcks();
@@ -1383,6 +1408,16 @@ function renderFlagsModal(bk){
         :f.type==='king_two_females'?(_confirmedOneBed?'Confirmed — sharing one bed is intentional':'Confirm it\'s OK for them to share the one bed — or reassign to a double room')
         :'Info: category fully booked';
       const coupleBtn=f.type==='king_two_females'?`<button class="btn btn-secondary btn-sm" style="${_confirmedOneBed?'background:#f0fdf4;border-color:#86efac;color:#15803d;':''}" onclick="ackIssue('${bk.id}','${f.key}','couple')">✓ Confirm One Bed</button>`:'';
+      // Jorge's ask 2026-10-10: a one-click way to ask the two guests themselves
+      // whether they need 1 or 2 beds, instead of staff having to track down
+      // each email manually. Only enabled when at least one of the two has an
+      // email on file -- each gets their own email (never the other's address).
+      const _emailableGuests=f.type==='king_two_females'?(f.guests||[]).filter(g=>g.email):[];
+      const emailBtn=f.type==='king_two_females'
+        ?(_emailableGuests.length
+          ?`<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();emailConfirmBedCount('${bk.id}','${f.key}')">✉️ Ask: 1 or 2 Beds?</button>`
+          :`<button class="btn btn-secondary btn-sm" disabled title="No email on file for either guest" style="opacity:.5;cursor:not-allowed">✉️ Ask: 1 or 2 Beds?</button>`)
+        :'';
       autoHtml+=`<div class="flag-item flag-open" style="background:${col};border-color:${border};cursor:pointer;flex-direction:column;padding:0" onclick="toggleIssueDetail('${ackId}')">
         <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;width:100%;box-sizing:border-box">
           <div class="flag-dot" style="background:${dotClr};margin-top:4px;flex-shrink:0"></div>
@@ -1398,6 +1433,7 @@ function renderFlagsModal(bk){
         <div id="idet_${ackId}" style="display:none;border-top:1px solid ${border};padding:10px 12px;background:rgba(255,255,255,.6);width:100%;box-sizing:border-box" onclick="event.stopPropagation()">
           <div style="display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap">
             ${coupleBtn}
+            ${emailBtn}
             <button class="btn btn-secondary btn-sm" style="${ack&&ack.status==='done'?'background:#f0fdf4;border-color:#86efac;color:#15803d;':''}" onclick="ackIssue('${bk.id}','${f.key}','done')">✓ Mark Done</button>
             <button class="btn btn-secondary btn-sm" style="${ack&&ack.status==='recognized'?'background:#f8fafc;border-color:#cbd5e1;color:#64748b;':''}" onclick="ackIssue('${bk.id}','${f.key}','recognized')">~ Recognized</button>
             ${ack?`<button class="btn btn-secondary btn-sm" style="color:#dc2626;border-color:#fca5a5" onclick="clearIssueAck('${bk.id}','${f.key}')">× Clear</button>`:''}
