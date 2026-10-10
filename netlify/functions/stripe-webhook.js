@@ -25,6 +25,42 @@ function fmtDateRange(checkInStr, checkOutStr) {
   return `from ${fromPart} to ${toPart}`;
 }
 
+function randomToken() {
+  return Array.from({ length: 24 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
+}
+
+// Jorge's report 2026-10-10: a paid Escape/Extra Night booking_request's
+// folio showed up totally empty ("No charges yet", $0 balance) despite the
+// guest having really paid -- confirmed a long-standing structural gap
+// (booking_requests never auto-created a folio at all, same as the Walk-in
+// rmSaveNewBooking() gap), not a regression. Creates the folio AND seeds it
+// with a Room charge + matching Payment row (net $0, since this was already
+// paid in full at checkout) so staff see the real transaction immediately
+// instead of a blank folio that looks unpaid.
+async function createInitialFolio(supaKey, bookingRequestId, meta, pi) {
+  const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json' };
+  const guestName = `${meta.firstName || ''} ${meta.lastName || ''}`.trim() || 'Guest';
+  const folioRes = await fetch(`${SUPABASE_URL}/rest/v1/folios`, {
+    method: 'POST',
+    headers: { ...hdrs, Prefer: 'return=representation' },
+    body: JSON.stringify({ booking_request_id: bookingRequestId, guest_name: guestName, name: guestName, payment_token: randomToken(), status: 'open' }),
+  });
+  if (!folioRes.ok) throw new Error('folio insert failed: ' + (await folioRes.text()).slice(0, 300));
+  const [folio] = await folioRes.json();
+
+  const amount = pi.amount / 100;
+  const label = meta.source === 'Extra Night' ? 'Extra Night' : 'Escape';
+  const itemsRes = await fetch(`${SUPABASE_URL}/rest/v1/folio_items`, {
+    method: 'POST',
+    headers: { ...hdrs, Prefer: 'return=minimal' },
+    body: JSON.stringify([
+      { folio_id: folio.id, description: `Room charge — ${label} (${meta.roomTypeName || ''})`.trim(), qty: 1, unit_price: amount, tax_rate: 0, category: 'Room' },
+      { folio_id: folio.id, description: `Payment — Credit Card (Stripe) (${pi.id})`, qty: 1, unit_price: -amount, tax_rate: 0, category: 'Payment' },
+    ]),
+  });
+  if (!itemsRes.ok) throw new Error('folio_items insert failed: ' + (await itemsRes.text()).slice(0, 300));
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -107,6 +143,14 @@ exports.handler = async (event) => {
       }
     } catch (err) {
       console.error('[stripe-webhook] Fetch error:', err.message);
+    }
+
+    if (insertedId) {
+      try {
+        await createInitialFolio(supaKey, insertedId, meta, pi);
+      } catch (err) {
+        console.error('[stripe-webhook] Could not seed folio (non-fatal):', err.message);
+      }
     }
 
     // WhatsApp alert to Jorge -- see notify-payment.js (Jorge's ask 2026-10-08)
