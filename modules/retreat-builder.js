@@ -846,7 +846,7 @@ function computeActivityNotifs(){
     const ts=m.ts?new Date(m.ts):null;
     if(ts&&ts<cutoff)return;
     const isNew=!seenDate||(ts&&ts>seenDate);
-    notifs.push({id:m.id,type:'extra_night_match',ts,isNew,kind:m.kind||'assigned',guestName:m.guestName||'',room:m.room||'',retreatName:m.retreatName||''});
+    notifs.push({id:m.id,type:'extra_night_match',ts,isNew,kind:m.kind||'assigned',guestName:m.guestName||'',room:m.room||'',retreatName:m.retreatName||'',retreatRoomTypeName:m.retreatRoomTypeName||''});
   });
 
   notifFlightAlerts.forEach(a=>{
@@ -971,7 +971,7 @@ function _actvNotifRowHtml(n){
   if(n.type==='extra_night_match'){
     const isMismatch=n.kind==='mismatch';
     const rowBg=isMismatch?'background:#fef2f2;border-left:3px solid #dc2626':bg;
-    const label=isMismatch?'Different category — needs manual room':'Room assigned';
+    const label=isMismatch?`Retreat room is ${n.retreatRoomTypeName||'a different category'}`:'Room assigned';
     return `<div style="${rowBg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
       <span style="font-size:14px;flex-shrink:0">${isMismatch?'⚠️':'🌙'}</span>
       <span><strong${isMismatch?' style="color:#dc2626"':''}>${label}</strong> — ${escHtml(n.guestName)}${n.room?' · room '+escHtml(n.room):''}${n.retreatName?' · '+escHtml(n.retreatName):''}</span>
