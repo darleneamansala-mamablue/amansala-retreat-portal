@@ -1330,14 +1330,32 @@ async function saveIssueAcks(acks){
     await db.from('app_store').upsert({key:'issueAcks',value:acks,updated_at:new Date().toISOString()},{onConflict:'key'});
   }catch(e){console.warn('[issueAcks] save failed:',e.message);}
 }
+const KING_FEMALES_KEY_PREFIX='king_females_';
 function ackIssue(bkId,key,status){
   const acks=getIssueAcks();
   const ak=acks[bkId+'__'+key]||{};
   ak.status=status;ak.date=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   if(!ak.note)ak.note='';
   acks[bkId+'__'+key]=ak;saveIssueAcks(acks);
+  // Jorge's ask 2026-10-10: confirming "1 bed" here should also show up as a
+  // note on the room itself -- same Room List both admin (Teachers tab) and
+  // the teacher's own portal already render (reg.notes, the orange line above
+  // each guest's own note) -- so it's visible without reopening this modal.
+  if(status==='couple'&&key.startsWith(KING_FEMALES_KEY_PREFIX)){
+    _noteConfirmedOneBed(bkId,key.slice(KING_FEMALES_KEY_PREFIX.length));
+  }
   const bk=AppData.bookings.find(b=>b.id===bkId);if(bk)renderFlagsModal(bk);
   if(typeof venBuild==='function')venBuild();
+}
+async function _noteConfirmedOneBed(bkId,room){
+  const reg=typeof getRegForRoom==='function'?getRegForRoom(bkId,room):null;
+  if(!reg)return;
+  const marker='Confirmed 1 bed';
+  if((reg.notes||'').includes(marker))return; // already noted, don't duplicate on repeat clicks
+  const newNotes=reg.notes?`${reg.notes} — ${marker}`:marker;
+  reg.notes=newNotes; // reflect immediately in any already-rendered Room List
+  try{await db.from('registrations').update({notes:newNotes}).eq('id',reg.id);}
+  catch(e){console.warn('[confirmOneBed] note save failed:',e.message);}
 }
 function clearIssueAck(bkId,key){
   const acks=getIssueAcks();delete acks[bkId+'__'+key];saveIssueAcks(acks);
