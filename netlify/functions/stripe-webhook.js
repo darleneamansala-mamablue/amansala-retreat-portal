@@ -101,6 +101,24 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ received: true }) };
     }
 
+    // Idempotency: Stripe retries a failed delivery for days, and staff may
+    // also manually "Resend" a past event from the Dashboard (Jorge's case
+    // 2026-10-10, recovering from the STRIPE_WEBHOOK_SECRET outage) -- never
+    // create a second booking_requests row for the same PaymentIntent.
+    try {
+      const dupRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/booking_requests?payment_intent_id=eq.${encodeURIComponent(pi.id)}&select=id`,
+        { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } }
+      );
+      const dupRows = dupRes.ok ? await dupRes.json() : [];
+      if (dupRows.length) {
+        console.log('[stripe-webhook] duplicate delivery, already recorded:', pi.id, dupRows[0].id);
+        return { statusCode: 200, body: JSON.stringify({ received: true, duplicate: true }) };
+      }
+    } catch (err) {
+      console.warn('[stripe-webhook] duplicate check failed (continuing):', err.message);
+    }
+
     const record = {
       room_type_id:      meta.roomTypeId  || null,
       room_type_name:    meta.roomTypeName || null,
