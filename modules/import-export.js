@@ -79,25 +79,26 @@ function _findCanonicalRoom(roomStr){
 // Only expands BED room types (bd1/bd2/bd3/bd4); single-occupancy rooms ending in B (e.g. "5B","13B") return [].
 function _getSharedBeds(canonRoom){
   const PARENT_TO_BED={'rt6':'bd1','rt7':'bd2','rt8':'bd3','rt9':'bd4'};
-  // Fixed bed count per type — drives expansion regardless of what's in localStorage
-  const BED_COUNT={'bd1':2,'bd2':2,'bd3':3,'bd4':4};
-  const SUFFIXES=['a','b','c','d'];
   function _mergedRt(id){
     const s=AppData.roomTypes.find(rt=>rt.id===id),d=DEF_ROOM_TYPES.find(rt=>rt.id===id);
     return{...(s||d||{}),id,rooms:[...new Set([...((s&&s.rooms)||[]),...((d&&d.rooms)||[])])]};
   }
-  // Generate all bed names for a given base + type, using naming format from existing rooms
+  // Data-driven: return whichever bed codes for this base ACTUALLY exist in
+  // the room list, instead of generating guessed strings (e.g. "19B-a" with
+  // no space) that never matched the real code ("19B -a") -- confirmed real
+  // gap 2026-10-10, same incident as the splitDoubleHalf fix above.
   function _expandBase(bedTypeId,base,excludeRoom){
-    const suf=SUFFIXES.slice(0,BED_COUNT[bedTypeId]||2);
     const merged=_mergedRt(bedTypeId);
-    const existing=merged.rooms.filter(r=>{const sp=splitDoubleHalf(r);return sp&&sp.base.toLowerCase()===base.toLowerCase();});
-    const usesDash=existing.some(r=>/-[a-d]$/i.test(r));
-    return suf.map(s=>usesDash?base+'-'+s:base+s).filter(r=>r!==excludeRoom);
+    return merged.rooms.filter(r=>{
+      if(r===excludeRoom)return false;
+      const sp=splitDoubleHalf(r);
+      return sp&&sp.base.toLowerCase()===base.toLowerCase();
+    });
   }
-  // Case 1: input is already a bed room — generate all siblings from BED_COUNT
+  // Case 1: input is already a bed room — find all siblings sharing its base
   const canonRt=[...BED_RT_IDS].map(_mergedRt).find(rt=>rt.rooms.some(r=>r===canonRoom));
   if(canonRt){const sp=splitDoubleHalf(canonRoom);if(!sp)return[];return _expandBase(canonRt.id,sp.base,canonRoom);}
-  // Case 2: input is a parent room (rt6/rt7/rt8/rt9) — generate all beds in the paired bed type
+  // Case 2: input is a parent room (rt6/rt7/rt8/rt9) — find all beds in the paired bed type
   const parentRt=Object.keys(PARENT_TO_BED).map(_mergedRt).find(rt=>rt.rooms.some(r=>r===canonRoom));
   if(!parentRt)return[];
   return _expandBase(PARENT_TO_BED[parentRt.id],canonRoom,null).filter(r=>r!==canonRoom);

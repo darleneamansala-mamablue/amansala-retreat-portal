@@ -14,6 +14,62 @@ function inExtraNightBlackout(checkIn, checkOut) {
   });
 }
 
+// A room sold whole (e.g. "19B") and as individual shared beds ("19B -a",
+// "19B -b") is the SAME physical space -- blocking one must block the
+// other(s). The admin Room Calendar already does this (rsComputeAvailability
+// in modules/venues.js); this public endpoint never did, a real
+// double-booking gap confirmed 2026-10-10 (Jorge's report): a guest could
+// pay online for a room whose sibling bed/parent was already occupied by a
+// retreat.
+//
+// Sibling resolution is constrained to the known parent-type <-> bed-type
+// pairs (rt6<->bd1, rt7<->bd2, rt8<->bd3, rt9<->bd4) -- NOT a blind
+// same-leading-digits match. Rooms like "13B"/"5B"/"2B"/"3B" are standalone
+// single rooms in UNRELATED room types (rt1/rt2/rt3/rt4) that happen to
+// share a numeric prefix with a completely different physical room's bed
+// pair ("13"/"13a"/"13b" in rt7/bd2) -- confirmed via live room_types data
+// 2026-10-10. Matching on string pattern alone (without the type-pair
+// check) would have wrongly linked them.
+const ROOM_PARENT_TO_BED = { rt6: 'bd1', rt7: 'bd2', rt8: 'bd3', rt9: 'bd4' };
+const ROOM_BED_TO_PARENT = { bd1: 'rt6', bd2: 'rt7', bd3: 'rt8', bd4: 'rt9' };
+function splitDoubleHalf(room) {
+  const r = String(room || '').trim();
+  let m = r.match(/^(\d+)([a-d])$/i);
+  if (m) return { base: m[1] };
+  m = r.match(/^(.+?)\s*-([a-d])$/i);
+  if (m) return { base: m[1] };
+  m = r.match(/^(.+\d)([a-d])$/i);
+  if (m) return { base: m[1] };
+  return null;
+}
+// roomTypes: [{id, rooms}] for every room type, unfiltered.
+function propagateSiblingBlocks(blockedSet, roomTypes) {
+  const roomToType = new Map();
+  roomTypes.forEach(rt => (rt.rooms || []).forEach(r => roomToType.set(r, rt.id)));
+  const roomsById = new Map(roomTypes.map(rt => [rt.id, rt.rooms || []]));
+  const toAdd = new Set();
+  [...blockedSet].forEach(room => {
+    const typeId = roomToType.get(room);
+    if (!typeId) return;
+    if (ROOM_PARENT_TO_BED[typeId]) {
+      (roomsById.get(ROOM_PARENT_TO_BED[typeId]) || []).forEach(r => {
+        const s = splitDoubleHalf(r);
+        if (s && s.base.toLowerCase() === room.toLowerCase()) toAdd.add(r);
+      });
+    } else if (ROOM_BED_TO_PARENT[typeId]) {
+      const split = splitDoubleHalf(room);
+      if (!split) return;
+      const parentRooms = roomsById.get(ROOM_BED_TO_PARENT[typeId]) || [];
+      if (parentRooms.includes(split.base)) toAdd.add(split.base);
+      (roomsById.get(typeId) || []).forEach(r => {
+        const s = splitDoubleHalf(r);
+        if (s && s.base.toLowerCase() === split.base.toLowerCase()) toAdd.add(r);
+      });
+    }
+  });
+  toAdd.forEach(r => blockedSet.add(r));
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: cors(), body: '' };
@@ -96,6 +152,14 @@ exports.handler = async (event) => {
         });
       }
     }
+
+    // Propagate each blocked room to its whole-room/sub-bed siblings (see
+    // splitDoubleHalf above) -- needs the FULL room list across every room
+    // type, not just the ones matching rtFilter, since a sibling can live in
+    // a differently-enabled room type.
+    const allTypesRes = await fetch(`${SUPABASE_URL}/rest/v1/room_types?select=id,rooms`, { headers: hdrs });
+    const allTypes = allTypesRes.ok ? await allTypesRes.json() : [];
+    propagateSiblingBlocks(blockedRooms, allTypes);
 
     const available = (roomTypes ?? []).map(rt => {
       const rooms = rt.rooms ?? [];
