@@ -132,13 +132,25 @@ function venBuild(){
       const autoFlags=getOpenAutoFlags(bk);
       const manualFlags=(bk.flags||[]).filter(f=>!f.resolved);
       const hasFlags=autoFlags.length>0||manualFlags.length>0;
+      // Once every open issue is confirmed/done, the 🚩 badge used to vanish
+      // entirely -- leaving no way back into Flags & Notes at all (Jorge's
+      // report 2026-10-10: "ahora como ingreso para confirmar?" after
+      // confirming Shannon Jamail's last open flag). getAutoFlags() (not
+      // getOpenAutoFlags) includes resolved ones too (king_two_females stays
+      // listed forever once confirmed -- see teacher-portal.js), so use that
+      // to decide whether to keep a quiet, resolved-styled entry point.
+      const hasAnyFlagHistory=hasFlags||(typeof getAutoFlags==='function'&&getAutoFlags(bk).length>0)||(bk.flags||[]).length>0;
       const bl=document.createElement('div');bl.className='bk'+(isInquiry?' inquiry':st.dash?' dashed':'');
       bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:${8+lane*LANE_H}px;height:40px;background:${st.bg};border-color:${st.border};color:${st.text};position:absolute;`;
       const fillPct=bk.pax>0?Math.min(100,Math.round(regCount/bk.pax*100)):0;
       const countHtml=!isInquiry&&!isRoomOnly&&bk.pax?`<span class="bk-count" style="font-size:10.5px;font-weight:700;background:rgba(0,0,0,.12);border-radius:4px;padding:1px 5px;margin-left:4px">${regCount}/${bk.pax}</span>`:'';
       const transRoster=!isInquiry&&!isRoomOnly&&typeof getTransportRoster==='function'?getTransportRoster(bk.id):null;
       const transportHtml=transRoster&&transRoster.roster.length>0?`<span class="bk-transport" title="Transportation: ${transRoster.submittedCount}/${transRoster.roster.length} submitted — ${trCompletionLabel(transRoster.submittedCount,transRoster.roster.length)}" style="font-size:10.5px;font-weight:700;background:rgba(0,0,0,.12);border-radius:4px;padding:1px 5px;margin-left:4px;color:${trCompletionColor(transRoster.submittedCount,transRoster.roster.length)}">🚐 ${transRoster.submittedCount}/${transRoster.roster.length}</span>`:'';
-      const flagHtml=hasFlags?`<span class="bk-flag" title="${autoFlags.length+manualFlags.length} flag(s)" onclick="event.stopPropagation();openFlagsModal('${bk.id}')">🚩</span>`:'';
+      const flagHtml=hasFlags
+        ?`<span class="bk-flag" title="${autoFlags.length+manualFlags.length} flag(s)" onclick="event.stopPropagation();openFlagsModal('${bk.id}')">🚩</span>`
+        :hasAnyFlagHistory
+        ?`<span class="bk-flag" title="All flags resolved — click to review" style="filter:grayscale(1) opacity(.6)" onclick="event.stopPropagation();openFlagsModal('${bk.id}')">🚩</span>`
+        :'';
       const roomOnlyBadge=isRoomOnly?`<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:#a855f7;color:#fff;border-radius:3px;padding:1px 5px;margin-left:6px">🏨 Room Only</span>`:'';
       // Deposit Paid already has its own dedicated color in the legend (green)
       // — showing the word too was redundant (Darlene's call 2026-09-15).
