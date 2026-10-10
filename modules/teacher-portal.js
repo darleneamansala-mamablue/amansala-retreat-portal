@@ -1311,7 +1311,7 @@ function getOpenAutoFlags(bk){
 // which was per-browser/per-device: Jorge's report 2026-10-10 that confirming a flag
 // (e.g. "♥ Confirmed Couple") on one computer never showed as confirmed anywhere else.
 function getIssueAcks(){return issueAcks||{};}
-function saveIssueAcks(acks){
+async function saveIssueAcks(acks){
   issueAcks=acks;
   // Without this, the realtime listener on app_store (booking-hub.html's
   // _applyRemoteSync) sees this very write echo back almost immediately and
@@ -1321,7 +1321,13 @@ function saveIssueAcks(acks){
   // _lastLocalSaveAt (real incident 2026-10-10: Jorge's report that clicking
   // "Confirm One Bed" "marca un error no lo guarda").
   if(typeof _lastLocalSaveAt!=='undefined')_lastLocalSaveAt=Date.now();
-  db.from('app_store').upsert({key:'issueAcks',value:acks,updated_at:new Date().toISOString()},{onConflict:'key'}).catch(e=>console.warn('[issueAcks] save failed:',e.message));
+  // db.from(...).upsert(...) here isn't a real Promise (no .catch method) --
+  // chaining .catch() directly on it threw "upsert(...).catch is not a
+  // function" the instant this ran (real incident 2026-10-10, Jorge's console).
+  // await works with any thenable, so wrap the failure path in try/catch instead.
+  try{
+    await db.from('app_store').upsert({key:'issueAcks',value:acks,updated_at:new Date().toISOString()},{onConflict:'key'});
+  }catch(e){console.warn('[issueAcks] save failed:',e.message);}
 }
 function ackIssue(bkId,key,status){
   const acks=getIssueAcks();
