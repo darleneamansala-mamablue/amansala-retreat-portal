@@ -841,6 +841,14 @@ function computeActivityNotifs(){
     notifs.push({id:c.id,type:'climas_confirmed',ts,isNew,name:c.name||c.phone||'',rooms:c.rooms||''});
   });
 
+  notifExtraNightMatches.forEach(m=>{
+    if(dismissed.has(m.id))return;
+    const ts=m.ts?new Date(m.ts):null;
+    if(ts&&ts<cutoff)return;
+    const isNew=!seenDate||(ts&&ts>seenDate);
+    notifs.push({id:m.id,type:'extra_night_match',ts,isNew,kind:m.kind||'assigned',guestName:m.guestName||'',room:m.room||'',retreatName:m.retreatName||''});
+  });
+
   notifFlightAlerts.forEach(a=>{
     if(dismissed.has(a.id))return;
     if(a.dismissed)return;
@@ -960,6 +968,16 @@ function _actvNotifRowHtml(n){
       ${newBadge}${n.ts?`<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>`:''}
       ${dismissBtn}</div>`;
   }
+  if(n.type==='extra_night_match'){
+    const isMismatch=n.kind==='mismatch';
+    const rowBg=isMismatch?'background:#fef2f2;border-left:3px solid #dc2626':bg;
+    const label=isMismatch?'Different category — needs manual room':'Room assigned';
+    return `<div style="${rowBg};padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px">
+      <span style="font-size:14px;flex-shrink:0">${isMismatch?'⚠️':'🌙'}</span>
+      <span><strong${isMismatch?' style="color:#dc2626"':''}>${label}</strong> — ${escHtml(n.guestName)}${n.room?' · room '+escHtml(n.room):''}${n.retreatName?' · '+escHtml(n.retreatName):''}</span>
+      ${newBadge}${n.ts?`<span style="color:#9ca3af;font-size:11px;white-space:nowrap">${_timeAgo(n.ts.getTime())}</span>`:''}
+      ${dismissBtn}</div>`;
+  }
   if(n.type==='flight_alert'){
     const isCancelled=n.label==='CANCELLED';
     const rowBg=isCancelled?'background:#fef2f2;border-left:3px solid #dc2626':bg;
@@ -982,6 +1000,7 @@ const ACTV_NOTIF_SECTIONS=[
   {id:'payments',label:'Payments',icon:'💳',types:['payment_received']},
   {id:'wetravel',label:'We Travel',icon:'🧳',types:['wetravel_payment']},
   {id:'climas',label:'Climas',icon:'🌡️',types:['climas_confirmed']},
+  {id:'extranight',label:'Extra Night',icon:'🌙',types:['extra_night_match']},
 ];
 function renderActvNotifPanel(notifs){
   if(!notifs.length)return'';

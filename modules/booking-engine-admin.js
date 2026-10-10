@@ -605,6 +605,7 @@ function beRequestsTableHtml(title, icon, rows) {
 // failed PATCH doesn't retry forever on every re-render, and so the
 // beAssignRoom()-triggered re-render this causes doesn't loop.
 const beAutoAssigned = new Set();
+const beMismatchLogged = new Set();
 function beAutoAssignMatches(paid) {
   paid.forEach(r => {
     if (r.room || beAutoAssigned.has(r.id)) return;
@@ -660,6 +661,14 @@ function beRequestRow(r) {
   const labelColor = match?.categoryMismatch ? '#b91c1c' : alreadyAssigned ? '#15803d' : '#92400e';
   const icon = match?.categoryMismatch ? '⚠️' : alreadyAssigned ? '✅' : '🔗';
   const label = match?.categoryMismatch ? 'Different category' : alreadyAssigned ? 'Room assigned' : 'Match found';
+  if (match?.categoryMismatch && !beMismatchLogged.has(r.id)) {
+    beMismatchLogged.add(r.id);
+    beLogMatchNotif({
+      id: `extra_night_mismatch_${r.id}`, kind: 'mismatch', ts: new Date().toISOString(),
+      guestName: `${r.firstName || ''} ${r.lastName || ''}`.trim(), room: match.room,
+      retreatName: match.bk.leaderName || match.bk.retreatName || '',
+    }).catch(() => {});
+  }
   const matchRow = match ? `
     <tr style="background:${rowBg};border-bottom:2px solid ${rowBorder}">
       <td colspan="5" style="padding:5px 14px 9px">
@@ -700,6 +709,21 @@ function beRequestRow(r) {
     </tr>${matchRow}`;
 }
 
+// Jorge's ask 2026-10-10: a Dashboard notification confirming a room really
+// got assigned (success) or flagging that one couldn't be matched cleanly
+// (category mismatch) -- mirrors the wetravel_payment/climas_confirmed log
+// pattern (app_store-backed, deduped by id) so it shows up in the same
+// Notifications panel staff already check, not buried in this admin tab.
+async function beLogMatchNotif(entry) {
+  try {
+    const { data: rows } = await db.from('app_store').select('value').eq('key', 'extraNightMatchLog');
+    let log = (rows && rows[0] && rows[0].value) || [];
+    if (log.some(e => e.id === entry.id)) return;
+    log = [...log, entry].slice(-200);
+    await db.from('app_store').upsert({ key: 'extraNightMatchLog', value: log, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  } catch (e) { console.warn('[booking-engine-admin] match notif log failed:', e.message); }
+}
+
 async function beAssignRoom(id, room) {
   const r = beRequests.find(x => x.id === id); if (!r) return;
   const prev = r.room; r.room = room;
@@ -707,6 +731,10 @@ async function beAssignRoom(id, room) {
     const { error } = await db.from('booking_requests').update({ room }).eq('id', id);
     if (error) throw error;
     showToast(`Room ${room} assigned ✓`);
+    beLogMatchNotif({
+      id: `extra_night_assigned_${id}`, kind: 'assigned', ts: new Date().toISOString(),
+      guestName: `${r.firstName || ''} ${r.lastName || ''}`.trim(), room, source: r.source || '',
+    }).catch(() => {});
     beRenderRequests();
   } catch (e) { r.room = prev; showToast('Error: ' + e.message); }
 }
