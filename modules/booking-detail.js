@@ -90,6 +90,23 @@ function _bdSourceLabel(source){
   return KNOWN[source]||source;
 }
 
+// Jorge's ask 2026-10-10: the Edit form's Room field was a free-text box --
+// easy to typo a room that doesn't exist or is already occupied. Reuses
+// rsComputeAvailability (modules/venues.js, same Portal-only occupancy logic
+// as the Room Calendar) with no Cloudbeds layer (extReservations=[]) --
+// consistent with Jorge's call elsewhere this session that this kind of
+// check should read Amansala Portal data, not Cloudbeds. The room already
+// assigned to THIS subject is always included (and pre-selected) even
+// though it shows as "occupied" by itself.
+function _bdAvailableRoomsForEdit(checkIn,checkOut,currentRoom){
+  if(!checkIn||!checkOut||typeof rsComputeAvailability!=='function')return currentRoom?[currentRoom]:[];
+  const byType=rsComputeAvailability(checkIn,checkOut,[]);
+  const rooms=new Set();
+  byType.forEach(t=>(t.availableRooms||[]).forEach(r=>rooms.add(r)));
+  if(currentRoom)rooms.add(currentRoom);
+  return[...rooms].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
+}
+
 // Jorge's ask 2026-10-08: a WhatsApp alert (via notify-payment.js's Meta
 // template) for every payment anywhere in the system, including a manually
 // recorded Cash/Zelle/etc. payment here in Rate & Folios -- fire-and-forget,
@@ -410,7 +427,7 @@ function _bdRender(){
           ${_fullStay?`<tr><td style="color:var(--muted);padding:5px 0">Full Stay</td><td style="padding:5px 0">${fmtDate(_fullStay.checkIn)} — ${fmtDate(_fullStay.checkOut)} <span style="color:var(--muted)">(${_fullStay.nights} night${_fullStay.nights!==1?'s':''} total, across ${_splitChain.length} rooms)</span></td></tr>`:''}
           ${subj.retreatLabel!=null?`<tr><td style="color:var(--muted);padding:5px 0">Retreat</td><td style="padding:5px 0"><span onclick="_bdGoToRegistration('${subj.retreatBkId}')" title="Open this retreat's Registration tab" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(subj.retreatLabel)}</span></td></tr>`:''}
           ${subj.sourceLabel?`<tr><td style="color:var(--muted);padding:5px 0">Source</td><td style="padding:5px 0;color:#1d4ed8;font-weight:600">${escHtml(subj.sourceLabel)}</td></tr>`:''}
-          <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${_bdDetailEditMode?`<input id="bdEditRoom" type="text" value="${escHtml(subj.room||'')}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;width:90px">`:escHtml(subj.room||'—')}</td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${_bdDetailEditMode?`<select id="bdEditRoom" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px">${_bdAvailableRoomsForEdit(subj.checkIn,subj.checkOut,subj.room).map(r=>`<option value="${escHtml(r)}"${r===subj.room?' selected':''}>${escHtml(r)}</option>`).join('')}</select>`:escHtml(subj.room||'—')}</td></tr>
           ${_splitLineage?`<tr><td style="color:var(--muted);padding:5px 0">Split Stay</td><td style="padding:5px 0;font-size:12px">${_splitLineage.prev?`<span onclick="openBookingDetailForReg('${_splitLineage.prev.id}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">Room ${escHtml(_splitLineage.prev.room)}</span> until ${fmtDate(subj.checkIn)} → `:''}<strong>this room</strong>${_splitLineage.next?` → <span onclick="openBookingDetailForReg('${_splitLineage.next.id}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">Room ${escHtml(_splitLineage.next.room)}</span> from ${fmtDate(subj.checkOut)}`:''}</td></tr>`:''}
           <tr><td style="color:var(--muted);padding:5px 0">Rate</td><td style="padding:5px 0;color:#059669;font-weight:700">${subj.rate!=null?fmt$(subj.rate)+'/night':'—'}</td></tr>
         </table>
