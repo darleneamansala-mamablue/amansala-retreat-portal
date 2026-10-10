@@ -1384,7 +1384,25 @@ async function emailConfirmBedCount(bkId,flagKey){
       if(res.ok)sent++;else failed++;
     }catch(e){failed++;}
   }
-  showToast(failed?`Sent ${sent}, ${failed} failed`:`Email sent to ${sent} guest${sent>1?'s':''} ✓`);
+  showToast(failed?`⚠ Sent ${sent}, ${failed} FAILED — check their email addresses`:`Email sent to ${sent} guest${sent>1?'s':''} ✓`);
+  // A toast alone disappears in a few seconds -- leave a lasting, visible record
+  // on the room itself (same Room List note both admin and teacher views already
+  // show) of whether this actually went out, same precedent as "Confirmed 1 bed".
+  // Only written once at least one send succeeded -- a full failure leaves no
+  // note, so its absence plus the toast warning is itself the "it didn't send" signal.
+  if(sent>0){
+    const reg=typeof getRegForRoom==='function'?getRegForRoom(bkId,f.room):null;
+    if(reg){
+      const dateStr=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const marker=`Emailed — asked 1 or 2 beds (${dateStr})`;
+      const stripped=(reg.notes||'').replace(/\s*—\s*Emailed — asked 1 or 2 beds \([^)]+\)/,'').replace(/^Emailed — asked 1 or 2 beds \([^)]+\)\s*—?\s*/,'');
+      const newNotes=stripped?`${stripped} — ${marker}`:marker;
+      reg.notes=newNotes;
+      try{await db.from('registrations').update({notes:newNotes}).eq('id',reg.id);}
+      catch(e){console.warn('[emailConfirmBedCount] note save failed:',e.message);}
+      renderFlagsModal(bk); // show "✓ Sent" immediately instead of only after reopening
+    }
+  }
 }
 function saveIssueNote(bkId,key){
   const el=document.getElementById('iack_note_'+bkId+'__'+key);if(!el)return;
@@ -1431,10 +1449,19 @@ function renderFlagsModal(bk){
       // each email manually. Only enabled when at least one of the two has an
       // email on file -- each gets their own email (never the other's address).
       const _emailableGuests=f.type==='king_two_females'?(f.guests||[]).filter(g=>g.email):[];
+      // Whether it was sent before, and when -- a toast alone disappears in a
+      // few seconds, so "did we already ask them?" had no lasting answer
+      // (Jorge's follow-up 2026-10-10: how do we know it sent, or that it
+      // didn't). Reuses the same reg.notes marker pattern as "Confirmed 1 bed".
+      const _emailReg=f.type==='king_two_females'&&typeof getRegForRoom==='function'?getRegForRoom(bk.id,f.room):null;
+      const _emailSentMatch=_emailReg&&(_emailReg.notes||'').match(/Emailed — asked 1 or 2 beds \(([^)]+)\)/);
+      const emailStatusHtml=_emailSentMatch?`<span style="font-size:10.5px;color:#15803d;font-weight:600;margin-left:2px">✓ Sent ${_emailSentMatch[1]}</span>`
+        :f.type==='king_two_females'&&!_emailableGuests.length?`<span style="font-size:10.5px;color:#9ca3af;font-style:italic;margin-left:2px">no email on file</span>`
+        :'';
       const emailBtn=f.type==='king_two_females'
         ?(_emailableGuests.length
-          ?`<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();emailConfirmBedCount('${bk.id}','${f.key}')">✉️ Ask: 1 or 2 Beds?</button>`
-          :`<button class="btn btn-secondary btn-sm" disabled title="No email on file for either guest" style="opacity:.5;cursor:not-allowed">✉️ Ask: 1 or 2 Beds?</button>`)
+          ?`<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();emailConfirmBedCount('${bk.id}','${f.key}')">✉️ Ask: 1 or 2 Beds?</button>${emailStatusHtml}`
+          :`<button class="btn btn-secondary btn-sm" disabled title="No email on file for either guest" style="opacity:.5;cursor:not-allowed">✉️ Ask: 1 or 2 Beds?</button>${emailStatusHtml}`)
         :'';
       autoHtml+=`<div class="flag-item flag-open" style="background:${col};border-color:${border};cursor:pointer;flex-direction:column;padding:0" onclick="toggleIssueDetail('${ackId}')">
         <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;width:100%;box-sizing:border-box">
