@@ -1313,6 +1313,14 @@ function getOpenAutoFlags(bk){
 function getIssueAcks(){return issueAcks||{};}
 function saveIssueAcks(acks){
   issueAcks=acks;
+  // Without this, the realtime listener on app_store (booking-hub.html's
+  // _applyRemoteSync) sees this very write echo back almost immediately and
+  // kicks off a full loadFromSupabase()+rebuild of the whole page WHILE the
+  // Flags & Notes modal the user just clicked in is still open -- the same
+  // self-echo race every other local save already guards against via
+  // _lastLocalSaveAt (real incident 2026-10-10: Jorge's report that clicking
+  // "Confirm One Bed" "marca un error no lo guarda").
+  if(typeof _lastLocalSaveAt!=='undefined')_lastLocalSaveAt=Date.now();
   db.from('app_store').upsert({key:'issueAcks',value:acks,updated_at:new Date().toISOString()},{onConflict:'key'}).catch(e=>console.warn('[issueAcks] save failed:',e.message));
 }
 function ackIssue(bkId,key,status){
