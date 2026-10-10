@@ -2656,42 +2656,55 @@ function rcBuild(){
     });
   });
 
-  // Overlay soft-red blocks on physical room tracks when all beds are simultaneously occupied
-  const bedToPhysical=new Map();
-  AppData.roomTypes.forEach(rt=>{
-    if(!BED_RT_IDS.has(rt.id))return;
-    buildUiRoomEntries(rt).forEach(e=>{if(e.merged&&e.physical.length>1)bedToPhysical.set(e.display,e.physical);});
-  });
-  bedToPhysical.forEach((beds,displayName)=>{
+  // Overlay a red dashed indicator on a room's track whenever a DERIVED
+  // counterpart is occupied -- even though the room itself has no direct
+  // booking that day. Jorge's ask 2026-10-10: the calendar should visually
+  // show red for a room whose derivative is taken, matching the
+  // availability-blocking fix already applied to the public booking/API
+  // checks (get-availability.js etc.) -- otherwise staff look at an empty
+  // row and could double-book it by hand.
+  //
+  // Rewritten 2026-10-10 from the old bedToPhysical-only version (which (a)
+  // only fired when ALL beds of a pair were occupied by 2+ DIFFERENT
+  // bookings, never for just one sibling taken -- exactly Jorge's reported
+  // gap -- and (b) only covered the bd1-4 whole-room/bed-split pairs).
+  // Generalized to getRoomCounterparts(), which already correctly handles
+  // BOTH that relationship AND the whole-villa/sub-room-type one (Casa
+  // Master, Casa Shanti) -- one pass covers every derived room on the
+  // calendar instead of two separate mechanisms.
+  const allDisplayRooms=new Set();
+  AppData.roomTypes.forEach(rt=>buildUiRoomEntries(rt).forEach(e=>allDisplayRooms.add(e.display)));
+  allDisplayRooms.forEach(displayName=>{
+    const counterparts=getRoomCounterparts(displayName);
+    if(!counterparts.length)return;
     const physTrack=document.querySelector(`[data-room="${CSS.escape(displayName)}"]`);
     if(!physTrack)return;
-    const bedOccDays=new Map(); // iso -> Map(bed -> bkId)
-    AppData.bookings.filter(bk=>bk.status!=='cancelled').forEach(bk=>{
-      beds.forEach(bed=>{
-        if(!roomListIncludes(bk.blockedRooms,bed))return;
-        const bkS=pd(bk.startDate).getTime(),bkE=pd(bk.endDate).getTime();
-        days.forEach(d=>{const t=d.getTime();if(t>=bkS&&t<bkE){const iso=fmtISO(d);if(!bedOccDays.has(iso))bedOccDays.set(iso,new Map());bedOccDays.get(iso).set(bed,bk.id);}});
-      });
+    // Days this room ALREADY shows its own direct bar -- skip the overlay
+    // then, it'd just sit on top of (and visually clash with) that bar.
+    const ownOccDays=new Set();
+    AppData.bookings.filter(bk=>bk.status!=='cancelled'&&roomListIncludes(bk.blockedRooms,displayName)).forEach(bk=>{
+      const bkS=pd(bk.startDate).getTime(),bkE=pd(bk.endDate).getTime();
+      days.forEach(d=>{const t=d.getTime();if(t>=bkS&&t<bkE)ownOccDays.add(fmtISO(d));});
     });
-    let rs=-1;
+    const counterOccDays=new Map(); // iso -> label, whichever booking occupies a counterpart that day
+    AppData.bookings.filter(bk=>bk.status!=='cancelled'&&counterparts.some(cp=>roomListIncludes(bk.blockedRooms,cp))).forEach(bk=>{
+      const bkS=pd(bk.startDate).getTime(),bkE=pd(bk.endDate).getTime();
+      const label=bk.leaderName||bk.retreatName||'Blocked';
+      days.forEach(d=>{const t=d.getTime();if(t>=bkS&&t<bkE)counterOccDays.set(fmtISO(d),label);});
+    });
+    let rs=-1,curLabel=null;
     const flush=i=>{
       if(rs<0)return;
       const bl=document.createElement('div');
       bl.style.cssText=`position:absolute;left:${rs*36+2}px;width:${(i-rs)*36-4}px;top:5px;height:34px;background:rgba(220,38,38,0.10);border:1.5px dashed rgba(220,38,38,0.35);border-left:4px solid rgba(220,38,38,0.45);border-radius:4px;pointer-events:none;`;
-      bl.title=`Habitación completa (${beds.join(' + ')} ocupadas)`;
-      physTrack.appendChild(bl);rs=-1;
+      bl.title=`Ocupado por su derivado (${counterparts.join(' / ')}) — ${curLabel||''}`;
+      physTrack.appendChild(bl);rs=-1;curLabel=null;
     };
     days.forEach((d,i)=>{
       const iso=fmtISO(d);
-      const occ=bedOccDays.get(iso);
-      // Only flag "full" when the two bed halves belong to DIFFERENT
-      // bookings (a genuine split/roommate double) — a single retreat's own
-      // whole-room hold already shows its own named box at this room, so
-      // this overlay was just a redundant, unlabeled duplicate of it on top
-      // (Darlene's report 2026-09-17: reading as "blocked" with no
-      // explanation over rooms another retreat already legitimately has).
-      const full=occ&&occ.size>=beds.length&&new Set(occ.values()).size>1;
-      if(full&&rs<0)rs=i;else if(!full)flush(i);
+      const show=counterOccDays.has(iso)&&!ownOccDays.has(iso);
+      if(show&&rs<0){rs=i;curLabel=counterOccDays.get(iso);}
+      else if(!show)flush(i);
     });
     flush(days.length);
   });
