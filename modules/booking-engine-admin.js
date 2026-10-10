@@ -713,7 +713,7 @@ function beRequestRow(r) {
         ${r.checkedByStaffName
           ? `<span onclick="beToggleChecked('${escHtml(r.id)}')" title="Click to un-check" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;padding:3px 10px;border-radius:14px;font-size:11px;font-weight:700;white-space:nowrap">✅ Checked by ${escHtml(r.checkedByStaffName)} · ${r.checkedByStaffAt ? new Date(r.checkedByStaffAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span>`
           : `<button onclick="beToggleChecked('${escHtml(r.id)}')" style="${beBtnS('#f1f5f9', '#374151')};white-space:nowrap">☐ Mark as checked</button>`}
-        <input type="text" id="be-notes-${escHtml(r.id)}" value="${escHtml(r.notes || '')}" placeholder="Internal notes..." style="flex:1;min-width:200px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:'Jost',sans-serif">
+        <input type="text" id="be-notes-${escHtml(r.id)}" value="${escHtml(r.internalNotes || '')}" placeholder="Internal notes..." style="flex:1;min-width:200px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:'Jost',sans-serif">
         <button onclick="beSaveNotes('${escHtml(r.id)}')" style="${beBtnS('#f1f5f9', '#374151')}">Save</button>
       </td>
     </tr>`;
@@ -736,17 +736,19 @@ async function beToggleChecked(id) {
   beRenderRequests();
 }
 
-// Jorge's ask 2026-10-10: Internal Notes shared with Booking Detail's own
-// Notes field -- both read/write the same booking_requests.notes column
-// (bdSaveNotes() in booking-detail.js), so editing either one shows up in
-// the other automatically, no separate sync needed.
+// Jorge's correction 2026-10-10: this is its OWN field (booking_requests.
+// internal_notes, a new column -- distinct from `notes`, which is the
+// guest's own submitted note/dietary text and must stay untouched). Shared
+// with Booking Detail's separate "Internal Notes" box (bdSaveInternalNotes()
+// in booking-detail.js, same column) so editing either shows up in the
+// other, same pattern as the folio Notes field but on its own column.
 async function beSaveNotes(id) {
   const input = document.getElementById(`be-notes-${id}`);
-  const notes = input?.value ?? '';
+  const internalNotes = input?.value ?? '';
   const r = beRequests.find(x => x.id === id); if (!r) return;
-  const { error } = await db.from('booking_requests').update({ notes }).eq('id', id);
+  const { error } = await db.from('booking_requests').update({ internal_notes: internalNotes }).eq('id', id);
   if (error) { showToast('Error: ' + error.message); return; }
-  r.notes = notes;
+  r.internalNotes = internalNotes;
   showToast('Notes saved ✓');
   if (typeof resRefresh === 'function') resRefresh();
 }
