@@ -15,6 +15,14 @@ const TOUR_GUIDE_NAMES=['Marco','Yolanda','Sergio','Ryan'];
 const TOUR_DRIVER_NAMES=['Rubi','Rosy','Kike'];
 const TEMAZCAL_FIRE_KEEPER_NAMES=['Golloy','Francisco'];
 
+// A retreat can carry its own price for a tour (e.g. a small-group rate): bk.packageCustomPrices[aoId] — the same
+// per-package override billing uses. The sheets show that price for that retreat instead of the list price.
+function actMoney(p){p=Number(p)||0;return Number.isInteger(p)?String(p):p.toFixed(2);}
+function actAoFor(bk,ao){
+  const v=bk&&bk.packageCustomPrices&&ao&&bk.packageCustomPrices[ao.id];
+  return (typeof v==='number'&&v>=0&&v!==ao.price)?{...ao,price:v}:ao;
+}
+
 function actSummarySetFilter(field, val) {
   if (field === 'bkId') actSummaryFilterBkId = val;
   if (field === 'undated') actSummaryShowUndated = (val === true || val === 'true');
@@ -120,7 +128,7 @@ function actSheetRenderWeek() {
       if (ACT_SHEET_HIDDEN.has(act.aoId)) return;
       const ds=(act.date||'').slice(0,10);
       if(!ds||!dayActs[ds]) return;
-      const ao=aoMap[act.aoId]||{name:act.aoId,price:0,dur:0};
+      const ao=actAoFor(bk,aoMap[act.aoId]||{name:act.aoId,price:0,dur:0});
       // guests signed up for this activity
       const signedUp = sups.filter(s=>(s.activities||[]).includes(act.aoId))
         .map(s=>({first:s.firstName||'',last:s.lastName||''}))
@@ -218,7 +226,7 @@ function actSheetActCard(a, fmtT, fmtDur, isPrepaid) {
   return `<div style="border-left:3px solid ${border};background:${bg};padding:5px 7px;margin-bottom:5px;border-radius:0 5px 5px 0">
     ${a.time?`<div style="font-size:10px;font-weight:700;color:#374151">${fmtT(a.time)}${a.ao.dur?' · '+fmtDur(a.ao.dur):''}</div>`:''}
     <div style="font-size:11px;font-weight:700;color:#1a2332;line-height:1.3;margin:1px 0">${a.ao.name}</div>
-    <div style="font-size:10px;color:#6b7280">${a.bkName}${a.ao.price&&!isPrepaid?' · $'+a.ao.price+'/pp':''}</div>
+    <div style="font-size:10px;color:#6b7280">${a.bkName}${a.ao.price&&!isPrepaid?' · $'+actMoney(a.ao.price)+'/pp':''}</div>
     ${guests?`<div style="margin-top:4px;padding-top:4px;border-top:1px dotted ${border}40">
       <div style="font-size:9.5px;font-weight:700;color:${border};margin-bottom:2px">${guests} signed up</div>
       <div style="font-size:9.5px;color:#374151;line-height:1.5">${guestList}${more?'<br>'+more:''}</div>
@@ -287,7 +295,7 @@ function actByRetreatBuildEntries(bkId) {
     seen.add(key);
     return true;
   }).map(a=>{
-    const ao = aoMap[a.aoId]||{name:a.aoId,price:0};
+    const ao = actAoFor(bk,aoMap[a.aoId]||{name:a.aoId,price:0});
     // Every retreat guest — pulled straight from the room list — appears on
     // every activity's sheet. Prepaid activities mark everyone as attending;
     // optional ones mark only whoever already signed up online, leaving the
@@ -350,7 +358,7 @@ function actByRetreatRender() {
     const renderCard = e=>{
       const border = e.prepaid?'#059669':'#3b82f6';
       const bg = e.prepaid?'#f0fdf4':'#eff6ff';
-      const priceTxt = e.prepaid?'Included':(e.ao.price?'$'+e.ao.price+'/person':'');
+      const priceTxt = e.prepaid?'Included':(e.ao.price?'$'+actMoney(e.ao.price)+'/person':'');
       const signedCount = e.guests.filter(g=>g.signedUp).length;
       const guestList = e.guests.map((g,i)=>{
         const box = e.prepaid ? '' : `<span style="display:inline-block;width:13px;height:13px;border:1.5px solid ${g.signedUp?'#059669':'#c8bfb5'};border-radius:3px;background:${g.signedUp?'#059669':'#fff'};margin-right:7px;vertical-align:middle;text-align:center;line-height:12px;font-size:10px;color:#fff">${g.signedUp?'✓':''}</span>`;
@@ -424,7 +432,7 @@ function actByRetreatPrint(bkId) {
   // everywhere else in the app) stay as-is in ADD_ONS.
   const ACT_SHEET_SHORT_NAMES = {ao4:'Sound Healing', ao9:'Mayan Clay'};
   const colHeaders = entries.map(e=>{
-    const priceTxt = e.prepaid ? 'Included' : (e.ao.price?'$'+e.ao.price:'');
+    const priceTxt = e.prepaid ? 'Included' : (e.ao.price?'$'+actMoney(e.ao.price):'');
     const displayName = ACT_SHEET_SHORT_NAMES[e.ao.id] || e.ao.name;
     const nameTxt = e.prepaid ? displayName : `<span class="col-optional-tag">Optional</span>${displayName}`;
     const dur = (typeof ACTS_DUR!=='undefined'&&ACTS_DUR[e.ao.id])||90;
@@ -1256,7 +1264,7 @@ function actSheetPrint() {
       if (ACT_SHEET_HIDDEN.has(act.aoId)) return;
       const ds=(act.date||'').slice(0,10);
       if(!ds||ds<wFirst||ds>wLast) return;
-      const ao=aoMap[act.aoId]||{name:act.aoId,price:0,dur:0};
+      const ao=actAoFor(bk,aoMap[act.aoId]||{name:act.aoId,price:0,dur:0});
       const signedUp=sups.filter(s=>(s.activities||[]).includes(act.aoId))
         .map(s=>({first:s.firstName||'',last:s.lastName||''}))
         .sort((a,b)=>a.last.localeCompare(b.last)||a.first.localeCompare(b.first));
