@@ -431,6 +431,15 @@ function menuMealTime(bk,meal,dateStr){
 }
 
 
+// Kitchen headcount = everyone who eats: all registered guests in the retreat's rooms INCLUDING the teacher's room.
+// (registeredCount() deliberately leaves the teacher out — contract free-room thresholds count paying guests only —
+// so the kitchen must not use it.) Same room/name rules as registeredCount, minus the teacher-room exclusion.
+function menuHeadcount(bk){
+  const blockedSet=new Set(bk.blockedRooms||[]);
+  return AppData.regs.filter(r=>r.bookingId===bk.id&&(!blockedSet.size||blockedSet.has(r.room)))
+    .reduce((n,r)=>n+new Set((r.guests||[]).filter(g=>g.name).map(g=>g.name.trim())).size,0);
+}
+
 function menuPopulateFromRetreats(silent=false){
   if(!menuCurrentMonday)return;
   try{
@@ -515,7 +524,7 @@ function menuPopulateFromRetreats(silent=false){
       // (BBC/Restore & Renew/WeTravel) have no separate registration step —
       // bk.pax IS their actual guest count — so only retreat groups route
       // through registeredCount.
-      const px=String((bk.bookingType==='room_only'?bk.pax:registeredCount(bk.id))||'');
+      const px=String((bk.bookingType==='room_only'?bk.pax:menuHeadcount(bk))||'');
       // Meal plan "None" (e.g. Loco Luxury — room-only group, no meals
       // included) gets no kitchen rows at all; its old rows were already
       // cleared above since it's still in grpSet.
