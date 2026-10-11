@@ -2909,8 +2909,10 @@ function tsRenderCalSection(bk){
   const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const MON_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const snm=id=>id?(SHALAS.find(s=>s.id===id)?.name||id):'';
-  const mShala=snm(sr.morningShala1);
-  const aShala=snm(sr.afternoonShala1);
+  const _ovS=sr.adminOverride||{};
+  const _effMornId=_ovS.morningShala1||sr.morningShala1;
+  const mShala=snm(_effMornId);
+  const aShala=snm(_ovS.afternoonShala1||sr.afternoonShala1);
   const fmtT=t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);return`${h%12||12}:${String(m).padStart(2,'0')}`;};
   const addMin=(t,mins)=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const tot=h*60+m+mins;const hh=Math.floor(tot/60)%24;return`${String(hh).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
   const nights=Math.max(1,Math.round((pd(bk.endDate)-pd(bk.startDate))/DAY_MS));
@@ -2936,7 +2938,7 @@ function tsRenderCalSection(bk){
       const snackTime=tsArrivalSnackTime(bk);
       if(snackTime)rows.push({time:fmtT(snackTime),desc:'Welcome Snack',shala:'',cat:'meal',sk:snackTime});
       if(sr.hasArrivalClass&&sr.arrivalSlot){
-        const arShala=snm(sr.arrivalShala1||sr.morningShala1);
+        const arShala=snm(_ovS.arrivalShala1||sr.arrivalShala1||_effMornId);
         rows.push({time:fmtT(sr.arrivalSlot)+' – '+fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60)),desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:arShala,cat:'yoga',sk:sr.arrivalSlot});
       }
       const _arrDinnerT=svDinnerTimeFor(sr,dateStr,(sr.hasArrivalClass&&sr.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30');
@@ -2949,7 +2951,7 @@ function tsRenderCalSection(bk){
       // all, so a skip set here was silently ignored on this view.
       if(!(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='morn')){
         if(sr.hasDepartureClass&&sr.departureSlot){
-          const depShala=snm(sr.departureShala1||sr.morningShala1);
+          const depShala=snm(_ovS.departureShala1||sr.departureShala1||_effMornId);
           rows.push({time:fmtT(sr.departureSlot)+' – '+fmtT(addMin(sr.departureSlot,sr.departureDur||60)),desc:tsEffClassLabel(sr,'departure','Departure Morning Class'),shala:depShala,cat:'yoga',sk:sr.departureSlot});
         } else {
           const _usualMorn=tsUsualMorning(bk);
@@ -5079,8 +5081,15 @@ function openPrintSchedule(bkId){
   const MON_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   // Build confirmed shala names
   const shalaName=id=>id?(SHALAS.find(s=>s.id===id)?.name||id):'';
-  const mShala=sr?shalaName(sr.morningShala1):'';
-  const aShala=sr?shalaName(sr.afternoonShala1):'';
+  // Same location rules as the scheduler (skedGetRetreatEvents): per-day edit > admin override > what the teacher
+  // submitted; the arrival class uses the ARRIVAL location (not the morning one), departure uses the departure one.
+  const _pOvS=sr?.adminOverride||{};
+  const _effMornId=_pOvS.morningShala1||sr?.morningShala1;
+  const _effAftId=_pOvS.afternoonShala1||sr?.afternoonShala1||sr?.morningShala1;
+  const _effArrId=_pOvS.arrivalShala1||sr?.arrivalShala1||_effMornId;
+  const _effDepId=_pOvS.departureShala1||sr?.departureShala1||_effMornId;
+  const mShala=sr?shalaName(_effMornId):'';
+  const aShala=sr?shalaName(_effAftId):'';
   // Format time
   const fmtT=t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);return`${h%12||12}:${String(m).padStart(2,'0')}`;};
   const addMin=(t,mins)=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const tot=h*60+m+mins;const hh=Math.floor(tot/60)%24;return`${String(hh).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
@@ -5104,7 +5113,7 @@ function openPrintSchedule(bkId){
       if(snackTimeP)rows.push({time:fmtT(snackTimeP),desc:'Welcome Snack',shala:'',cls:'',sk:snackTimeP});
       if(sr?.hasArrivalClass&&sr?.arrivalSlot){
         const end=fmtT(addMin(sr.arrivalSlot,sr.arrivalDur||60));
-        rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:mShala,cls:'shala',sk:sr.arrivalSlot});
+        rows.push({time:fmtT(sr.arrivalSlot)+' – '+end,desc:tsEffClassLabel(sr,'arrival','Opening Class'),shala:shalaName(_effArrId),cls:'shala',sk:sr.arrivalSlot});
       }
       const _pArrDinnerT=svDinnerTimeFor(sr,dateStr,(sr?.hasArrivalClass&&sr?.arrivalSlot)?addMin(sr.arrivalSlot,(sr.arrivalDur||60)+45):'19:30');
       rows.push({time:fmtT(_pArrDinnerT),desc:'Dinner',shala:'',cls:'',sk:_pArrDinnerT});
@@ -5117,7 +5126,7 @@ function openPrintSchedule(bkId){
       const _depSkipped=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='morn');
       if(!_depSkipped){
         if(sr?.hasDepartureClass&&sr?.departureSlot){
-          const depShala=shalaName(sr.departureShala1||sr.morningShala1);
+          const depShala=shalaName(_effDepId);
           const end=fmtT(addMin(sr.departureSlot,sr.departureDur||60));
           rows.push({time:fmtT(sr.departureSlot)+' – '+end,desc:tsEffClassLabel(sr,'departure','Departure Morning Class'),shala:depShala,cls:'shala',sk:sr.departureSlot});
         } else {
@@ -5145,7 +5154,7 @@ function openPrintSchedule(bkId){
       const _pUsualMorn=tsUsualMorning(bk);
       const _pDayMornStart=_pMornOv?_pMornOv.start:_pUsualMorn.start;
       const _pDayMornDur=_pMornOv?(_pMornOv.dur||_pUsualMorn.dur||60):(_pUsualMorn.dur||60);
-      const _pDayMornShala=shalaName(_pMornOv?.shala1||sr?.morningShala1);
+      const _pDayMornShala=shalaName(_pMornOv?.shala1||_effMornId);
       // Same "No class this day" check as the departure-day branch above and
       // the teacher's own schedule view — middle days never had it here
       // either, so a skipped morning class still printed with a shala
@@ -5171,7 +5180,7 @@ function openPrintSchedule(bkId){
       }
       const _pDayAfSlot=_pAftOv?_pAftOv.start:(sr?.afternoonSlot||sr?.afternoonStart);
       const _pDayAfDur=_pAftOv?(_pAftOv.dur||sr?.afternoonDur||60):(sr?.afternoonDur||60);
-      const _pDayAfShala=shalaName(_pAftOv?.shala1||sr?.afternoonShala1);
+      const _pDayAfShala=shalaName(_pAftOv?.shala1||_effAftId);
       if(sr?.hasAfternoon&&_pDayAfSlot&&!_pAftSkipped){
         const aEnd=fmtT(addMin(_pDayAfSlot,_pDayAfDur));
         rows.push({time:fmtT(_pDayAfSlot)+' – '+aEnd,desc:tsEffClassLabelDay(sr,bk,dateStr,'aft','afternoon','Afternoon Class'),shala:_pDayAfShala,cls:'shala',sk:_pDayAfSlot||'16:30'});
@@ -5695,7 +5704,9 @@ function skedGetRetreatEvents(dateStr){
     }
     // Workshops — only shala1
     if(sr.hasWorkshop&&sr.workshops){
-      sr.workshops.filter(w=>w.enabled&&w.date===dateStr&&w.shala1).forEach(w=>{
+      // A mid-afternoon class on the ARRIVAL day that starts before the 3:00 PM check-in can't be real (guests
+      // haven't arrived) — ignore it instead of drawing a morning class that day (Lillian So, Oct 11 2026).
+      sr.workshops.filter(w=>w.enabled&&w.date===dateStr&&w.shala1&&!(dateStr===bk.startDate&&w.start&&w.start<'15:00')).forEach(w=>{
         const wDur=w.dur||90;
         const wEnd=w.start?skedMinToTime(skedTimeToMin(w.start)+wDur):'';
         evs.push({id:'ret_'+bk.id+'_ws_'+dateStr,resourceId:w.shala1,date:dateStr,startTime:w.start||'',endTime:wEnd,title,subtitle:'Mid-Afternoon Class'+(w.notes?' — '+w.notes.slice(0,24):''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
