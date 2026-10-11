@@ -3023,7 +3023,8 @@ function tsRenderCalSection(bk){
       if(a.prepaid){
         prepaidActs.push({time:timeRange,name:ao.name,cat,tag,shala:ACT_SHALA[a.aoId]||'',requestedTime:!!a.requestedTime});
       } else {
-        rows.push({time:timeRange,desc:ao.name+(ao.price?' — $'+ao.price+'/person':''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:'Optional',prepaid:false,sk:a.time||'99:99'});
+        const _aoP=tsAoFor(bk,ao),_sgN=tsSmallGroupN(bk);
+        rows.push({time:timeRange,desc:ao.name+(_aoP.price?' — $'+tsMoney(_aoP.price)+'/person'+(_sgN?' (based on all '+_sgN+' guests joining)':''):''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:'Optional',prepaid:false,sk:a.time||'99:99'});
       }
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
@@ -4390,7 +4391,7 @@ function renderTeacherActivities(bkId){
     const ao=ACTS_MAP[a.aoId]||{id:a.aoId,name:a.aoId,price:0};
     const dur=ACTS_DUR?.[a.aoId]||90;
     const timeStr=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'Time TBC';
-    rows.push({ao,date:a.date,timeStr,prepaid:a.prepaid||pkgIds.has(a.aoId)});
+    rows.push({ao:tsAoFor(bk,ao),date:a.date,timeStr,prepaid:a.prepaid||pkgIds.has(a.aoId)});
   });
   pkgIds.forEach(id=>{
     if(seen.has(id))return;
@@ -4415,7 +4416,8 @@ function renderTeacherActivities(bkId){
   }
   if(optional.length){
     html+=`<div style="font-size:10.5px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Optional Add-Ons</div>`;
-    html+=`<div style="display:flex;flex-direction:column;gap:10px">${optional.map(r=>card(r,r.ao.price?'$'+r.ao.price+'/person':'Optional','#dbeafe','#1d4ed8')).join('')}</div>`;
+    html+=`<div style="display:flex;flex-direction:column;gap:10px">${optional.map(r=>card(r,r.ao.price?'$'+tsMoney(r.ao.price)+'/person':'Optional','#dbeafe','#1d4ed8')).join('')}</div>`;
+    if(tsSmallGroupN(bk))html+=`<div style="font-size:12.5px;color:#8a7e74;margin-top:12px;line-height:1.5">These prices are based on all ${tsSmallGroupN(bk)} guests joining the tour.</div>`;
   }
   wrap.innerHTML=html;
 }
@@ -5199,7 +5201,8 @@ function openPrintSchedule(bkId){
       const ao=printActMap[a.aoId]||{name:a.aoId,price:0};
       const dur=ACTS_DUR[a.aoId]||90;
       const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
-      const desc=a.prepaid?(ao.name+(a.requestedTime?' (requested this time)':'')):('Optional '+ao.name+(ao.price?' — $'+ao.price+' USD per person':''));
+      const _aoP=tsAoFor(bk,ao);
+      const desc=a.prepaid?(ao.name+(a.requestedTime?' (requested this time)':'')):('Optional '+ao.name+(_aoP.price?' — $'+tsMoney(_aoP.price)+' USD per person'+(tsSmallGroupN(bk)?'*':''):''));
       rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99',isExtra:true});
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
@@ -5211,6 +5214,15 @@ function openPrintSchedule(bkId){
   renderSchedulePrint(bk,days);
   document.getElementById('printScheduleModal').style.display='block';
 }
+
+// A retreat can carry its own tour prices (small-group rates): bk.packageCustomPrices[aoId] — the same per-package
+// override billing uses — and, when it does, a "based on all N guests" note (bk.packageCustomPrices.__cfg__.smallGroupGuests).
+function tsAoFor(bk,ao){
+  const v=bk&&bk.packageCustomPrices&&ao&&bk.packageCustomPrices[ao.id];
+  return (typeof v==='number'&&v>=0&&v!==ao.price)?{...ao,price:v}:ao;
+}
+function tsSmallGroupN(bk){const n=Number(bk&&bk.packageCustomPrices&&bk.packageCustomPrices.__cfg__&&bk.packageCustomPrices.__cfg__.smallGroupGuests);return n>0?n:0;}
+function tsMoney(p){p=Number(p)||0;return Number.isInteger(p)?String(p):p.toFixed(2);}
 
 // Guests shown on the printed cover: everyone actually registered for the retreat (named guests in every
 // non-cancelled room, teacher's room included) — not the booking's saved "pax" estimate, which is often stale
@@ -5271,7 +5283,8 @@ function renderSchedulePrint(bk,days){
     <div class="sched-days-grid">
       <div>${left.map((d,i)=>renderDay(d,i)).join('')}</div>
       <div>${right.map((d,i)=>renderDay(d,i+half)).join('')}</div>
-    </div>`;
+    </div>
+    ${tsSmallGroupN(bk)?`<div style="margin-top:6px;padding-top:10px;border-top:1px solid #e0d8cc;font-family:'Jost',sans-serif;font-size:12.5px;color:#6b7280">* Optional activity prices are based on all ${tsSmallGroupN(bk)} guests joining the tour.</div>`:''}`;
 }
 
 function schedEdit(di,ri,field,val){

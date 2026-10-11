@@ -238,6 +238,7 @@ function grPkgAddRow(){
 }
 async function grPkgSave(){
   const bk=regSelBk;if(!bk||!grIsAdminView())return;
+  const _sgGuests=document.getElementById('grPkgOv')?.dataset.sgpGuests;   // set by "Use small-group prices"
   const out=[];
   for(const r of document.querySelectorAll('#grPkgRows [data-gr-row]')){
     const g=f=>r.querySelector(`[data-f="${f}"]`).value;
@@ -253,6 +254,7 @@ async function grPkgSave(){
     if(isNaN(v)||v<0||v===def)delete bk.packageCustomPrices[id];else bk.packageCustomPrices[id]=v;
   });
   if(out.length)bk.packageCustomPrices.__custom__=out;else delete bk.packageCustomPrices.__custom__;
+  if(_sgGuests!==undefined){const c={...(bk.packageCustomPrices.__cfg__||{})};if(Number(_sgGuests)>0)c.smallGroupGuests=Number(_sgGuests);else delete c.smallGroupGuests;bk.packageCustomPrices.__cfg__=c;}
   { const rs=[...new Set(out.map(o=>o.taxRate))]; if(rs.length===1)bk.packageCustomPrices.__cfg__={...(bk.packageCustomPrices.__cfg__||{}),pkgTaxRate:rs[0]}; }
   saveAll();
   document.getElementById('grPkgOv')?.remove();

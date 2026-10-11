@@ -150,6 +150,8 @@ async function sgpDecorateEditor(){
 }
 function sgpFillEditor(regular){
   const n=parseInt(document.getElementById('sgpFillN')?.value,10)||4;
+  // remembered on the window so Save package also stores "prices based on all N guests joining" (0 = regular prices)
+  const _ov=document.getElementById('grPkgOv');if(_ov)_ov.dataset.sgpGuests=regular?'0':String(n);
   let filled=0;
   document.querySelectorAll('#grPkgOv [data-gr-std]').forEach(r=>{
     const ao=(typeof ADD_ONS!=='undefined'?ADD_ONS:[]).find(a=>a.id===r.dataset.grStd);if(!ao)return;

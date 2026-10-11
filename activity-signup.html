@@ -110,7 +110,7 @@ async function init(){
     bk=bkRow?{
       id:bkRow.id,retreatName:bkRow.retreat_name,leaderName:bkRow.leader_name,
       startDate:bkRow.start_date,endDate:bkRow.end_date,
-      retreatActivities:bkRow.retreat_activities,packages:bkRow.packages,
+      retreatActivities:bkRow.retreat_activities,packages:bkRow.packages,customPrices:bkRow.package_custom_prices||{},
     }:null;
     if(!bk){el.innerHTML=`<div class="msg"><div class="msg-icon">🔍</div><div class="msg-title">Retreat Not Found</div><div class="msg-sub">We couldn't find this retreat. The link may be outdated. Please contact your retreat leader.</div></div>`;return;}
     // Load existing signups
@@ -122,6 +122,11 @@ async function init(){
     el.innerHTML=`<div class="msg"><div class="msg-icon">⚠️</div><div class="msg-title">Something went wrong</div><div class="msg-sub">Please try refreshing the page. If the issue persists, contact your retreat leader.</div></div>`;
   }
 }
+
+// A retreat can have its own tour prices (small-group rates) and a "based on all N guests" note — saved on the booking
+// as package_custom_prices[aoId] and package_custom_prices.__cfg__.smallGroupGuests.
+function priceFor(ao){const v=bk&&bk.customPrices&&bk.customPrices[ao.id];const p=(typeof v==='number'&&v>=0)?v:ao.price;return Number.isInteger(p)?String(p):Number(p).toFixed(2);}
+function smallGroupN(){const n=Number(bk&&bk.customPrices&&bk.customPrices.__cfg__&&bk.customPrices.__cfg__.smallGroupGuests);return n>0?n:0;}
 
 function render(signups){
   const el=document.getElementById('mainContent');
@@ -180,10 +185,11 @@ function render(signups){
               ${dateTxt?`<div class="act-date">${dateTxt}</div>`:''}
             </div>
           </div>
-          <span class="act-badge badge-price">$${ao.price}/person</span>
+          <span class="act-badge badge-price">$${priceFor(ao)}/person</span>
         </div>
       </div>`;
     });
+    if(smallGroupN())html+=`<div style="font-size:12.5px;color:#8a7e74;margin:6px 2px 0;line-height:1.5">These prices are based on all ${smallGroupN()} guests joining the tour.</div>`;
   }else{
     html+=`<div class="no-acts">No optional activities have been scheduled yet. Check back closer to your retreat date.</div>`;
   }
