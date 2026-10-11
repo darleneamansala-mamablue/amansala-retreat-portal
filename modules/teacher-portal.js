@@ -5704,7 +5704,9 @@ function skedGetRetreatEvents(dateStr){
     }
     // Workshops — only shala1
     if(sr.hasWorkshop&&sr.workshops){
-      sr.workshops.filter(w=>w.enabled&&w.date===dateStr&&w.shala1).forEach(w=>{
+      // A mid-afternoon class on the ARRIVAL day that starts before the 3:00 PM check-in can't be real (guests
+      // haven't arrived) — ignore it instead of drawing a morning class that day (Lillian So, Oct 11 2026).
+      sr.workshops.filter(w=>w.enabled&&w.date===dateStr&&w.shala1&&!(dateStr===bk.startDate&&w.start&&w.start<'15:00')).forEach(w=>{
         const wDur=w.dur||90;
         const wEnd=w.start?skedMinToTime(skedTimeToMin(w.start)+wDur):'';
         evs.push({id:'ret_'+bk.id+'_ws_'+dateStr,resourceId:w.shala1,date:dateStr,startTime:w.start||'',endTime:wEnd,title,subtitle:'Mid-Afternoon Class'+(w.notes?' — '+w.notes.slice(0,24):''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
