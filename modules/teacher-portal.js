@@ -5756,6 +5756,13 @@ function skedGetRetreatEvents(dateStr){
   return [...nonOpt,...mergedOpt];
 }
 
+// A short event (15-min Orientation with Amansala etc.) is only ~30px tall, so its subtitle is clipped and the card
+// read exactly like the class card under it ("Lauren B… Beachfront" twice). For short events put what it IS first.
+function skedShortTitle(ev,mins){
+  if(mins>20||!ev.subtitle)return ev.title;
+  const what=String(ev.subtitle).split(' — ')[0];
+  return what+' · '+ev.title;
+}
 function skedBuild(){
   try{
   const lbl=document.getElementById('skedDateLabelText');
@@ -5865,7 +5872,7 @@ function skedBuild(){
       const evId=ev.isRetreat?ev.bkId:ev.id;
       html+='<div class="sked-event" style="top:'+top+'px;height:'+height+'px;background:'+bgColor+';border-left:3px solid '+color+'" onclick="event.stopPropagation();skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+',\''+ev.date+'\')">';
       html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:3px;overflow:hidden">';
-      html+='<span style="font-size:11px;font-weight:700;color:'+textColor+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+escHtml(ev.title)+'</span>';
+      html+='<span style="font-size:11px;font-weight:700;color:'+textColor+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+escHtml(skedShortTitle(ev,endMin-startMin))+'</span>';
       if(shalaLabel)html+='<span style="font-size:11.5px;font-weight:800;color:'+textColor+';background:rgba(255,255,255,.55);border-radius:4px;padding:0 5px;flex-shrink:0;white-space:nowrap;letter-spacing:-.2px">'+escHtml(shalaLabel)+'</span>';
       html+='</div>';
       if(ev.subtitle)html+='<div style="font-size:10px;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(ev.subtitle)+'</div>';
@@ -5934,7 +5941,7 @@ function skedBuildWeek(weekStart,DAYS_SHORT,MONTHS_LONG){
           :!rsLabel?'<div style="font-size:9px;font-weight:700;color:#b45309;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">⚠ NO SHALA</div>':'')
         :'';
       h+='<div class="sked-event" style="top:'+top+'px;height:'+height+'px;background:'+bgColor+';border-left:3px solid '+color+'" onclick="event.stopPropagation();skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+',\''+ev.date+'\')">';
-      h+='<div style="font-size:10px;font-weight:700;color:'+color+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(ev.title)+'</div>';
+      h+='<div style="font-size:10px;font-weight:700;color:'+color+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(skedShortTitle(ev,ev.endTime?skedTimeToMin(ev.endTime)-skedTimeToMin(ev.startTime):60))+'</div>';
       h+='<div style="font-size:9px;color:#6b7280">'+skedFmtTime(ev.startTime)+'</div>';
       h+=shalaLine;
       h+='</div>';
