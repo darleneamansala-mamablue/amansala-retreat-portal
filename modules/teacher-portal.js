@@ -5212,8 +5212,19 @@ function openPrintSchedule(bkId){
   document.getElementById('printScheduleModal').style.display='block';
 }
 
+// Guests shown on the printed cover: everyone actually registered for the retreat (named guests in every
+// non-cancelled room, teacher's room included) — not the booking's saved "pax" estimate, which is often stale
+// (Lillian So printed 10 guests with 20 registered; Lauren Boggi 10 with 4). Falls back to bk.pax when nobody
+// is registered yet.
+function coverGuestCount(bk){
+  const names=new Set();
+  (AppData.regs||[]).filter(r=>r.bookingId===bk.id&&!r.cancelled).forEach(r=>{
+    (r.guests||[]).filter(g=>g&&g.name&&!g.cancelled).forEach(g=>names.add(g.name.trim().toLowerCase()));
+  });
+  return names.size;
+}
 function renderSchedulePrint(bk,days){
-  const pax=bk.pax||'';
+  const pax=coverGuestCount(bk)||bk.pax||'';
   const start=pd(bk.startDate);const end=pd(bk.endDate);
   const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const dateRange=`${MON[start.getMonth()]} ${start.getDate()} – ${MON[end.getMonth()]} ${end.getDate()}`;
