@@ -103,6 +103,7 @@ function rbsRender(orders,spa){
       <label style="font-size:12px;font-weight:600">Gratuity per person per night ($)<input id="rbsGrat" type="number" value="${c.gratuityPerNight}" style="${inp};width:100%;display:block"></label>
     </div>
     <div style="margin-bottom:12px;padding:10px 12px;background:#f5f3ee;border-radius:8px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+      <label style="font-size:12.5px;flex-basis:100%">When the teaching fee is NOT charged here, the page says it is paid separately via: <input id="rbsPayee" value="${rbsEsc(c.teachingFeePayee||'')}" placeholder="e.g. WE Immersion" style="${inp};width:220px"></label>
       <b style="font-size:13px">Teaching fee:</b>
       <label><input type="radio" name="rbsTf" id="rbsTfNo" ${c.teachingFee&&c.teachingFee.on?'':'checked'}> No teaching fee (billed separately)</label>
       <label><input type="radio" name="rbsTf" id="rbsTfYes" ${c.teachingFee&&c.teachingFee.on?'checked':''}> Teaching fee $<input id="rbsTfAmt" type="number" value="${(c.teachingFee&&c.teachingFee.amountPP)||0}" style="${inp};width:90px"> per person (added before the taxes &amp; fees)</label>
@@ -139,6 +140,7 @@ function rbsRender(orders,spa){
 }
 function rbsCollect(){
   const c=_rbsCfg,g=id=>document.getElementById(id);
+  c.teachingFeePayee=(g('rbsPayee').value||'').trim();
   c.slug=(g('rbsSlug').value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
   c.enabled=g('rbsEnabled').checked;c.lockRoomList=g('rbsLock').checked;c.title=g('rbsTitle').value.trim();c.bannerUrl=g('rbsBanner').value.trim();
   c.taxFeePct=Number(g('rbsTax').value)||0;c.gratuityPerNight=Number(g('rbsGrat').value)||0;

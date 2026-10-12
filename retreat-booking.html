@@ -162,10 +162,10 @@ footer p{opacity:.65;margin:0;font-size:12px}
   <nav class="jump"><a href="#rooms">Rooms</a><a href="#spa" id="spaJump">Pre-book spa services</a><a href="#policy">Cancellation policy</a></nav>
 
   <section class="pad">
-    <div class="section-heading"><div><p class="kicker">Retreat pricing</p></div><p>Prices are per person for the full stay. Taxes, fees and gratuity are already included in every price you see, so what you see is what you pay.</p></div>
+    <div class="section-heading"><div><p class="kicker">Retreat pricing · room and meals</p></div><p id="priceIntro">Prices are per person for the full stay. Taxes, fees and gratuity are already included in every price you see, so what you see is what you pay.</p></div>
     <div class="pricing">
       <div class="tblwrap"><table><thead><tr><th>Room</th><th>Two guests sharing</th><th>One guest</th></tr></thead><tbody id="chart"></tbody></table>
-        <p class="pricenote">All prices are per person for the full stay and <b>include taxes, fees and staff gratuity</b>. There is nothing more to add at checkout.</p>
+        <p class="pricenote">All prices are per person for the full stay and <b>include taxes, fees and staff gratuity</b>. There is nothing more to add at checkout.<span id="priceNoteTeach"></span></p>
         <p class="hint">King bed rooms are booked for two guests together and paid with one credit card. Rooms with separate beds are booked one bed at a time.</p></div>
       <aside class="incl"><h3>What's included</h3><ul id="inclList"></ul><div class="no" id="notIncl"></div></aside>
     </div>
@@ -271,6 +271,7 @@ function roomCalc(c){
 }
 function svcPrice(id){var s=INFO.services.filter(function(x){return x.id===id})[0],it=cart.svcs[id];var o=s.opts.filter(function(x){return x.m===it.m})[0];return o.p*it.q}
 function cartTotal(){var t=cart.room?roomCalc(cart.room).total:0;Object.keys(cart.svcs).forEach(function(k){t+=svcPrice(k)});return t}
+function teachNote(){if(INFO&&INFO.teachingFeeOn)return '';return 'This does not include the teaching fee, which will be paid separately'+(INFO&&INFO.teachingPayee?' via '+INFO.teachingPayee:'')+'.'}
 function minLabel(m){return m===60?'1 hour':m+' min'}
 
 function init(){
@@ -289,6 +290,8 @@ function init(){
     $('inclList').innerHTML=(INFO.includes||[]).map(function(i){return '<li>'+esc(i)+'</li>'}).join('');
     $('notIncl').textContent=INFO.notIncluded||'';$('notIncl').hidden=!INFO.notIncluded;
     $('policyTxt').innerHTML=esc(INFO.policy).replace(/\n/g,'<br>');$('policyTxt2').innerHTML=$('policyTxt').innerHTML;
+    var tn=teachNote();if(tn&&$('priceNoteTeach'))$('priceNoteTeach').innerHTML=' <b>'+esc(tn)+'</b>';
+    if(tn){$('priceIntro').innerHTML=esc($('priceIntro').textContent)+' <b>'+esc(tn)+'</b>'}
     if(!INFO.services.length){$('spa').hidden=true;$('spaJump').hidden=true}
     render();
   }).catch(function(){showClosed('We could not load this page. Please try again in a moment.')});
@@ -359,7 +362,7 @@ function showRoomPanel(){
   $('ms').textContent=r.kind==='twin'?(cur.beds===1?'One bed in a shared room':cur.beds+' beds · you and '+(cur.beds-1)+' friend'+(cur.beds>2?'s':'')):(r.kind==='king'&&cur.mode==='share'?'Two guests · one king bed':'One guest · just for you');
   $('cartlines').innerHTML='';
   var s='<div class="line"><span>'+money(c.per)+' per person, all in</span><span>'+(c.guests>1?'× '+c.guests:'')+'</span></div><div class="line total"><span>Total'+(c.guests>1?' for '+c.guests+' guests':' per person')+'</span><span>'+money(c.total)+'</span></div>';
-  s+='<div class="line" style="opacity:.6;font-size:12px"><span>Taxes, fees and gratuity are included.'+(INFO.teachingFeeOn?'':' The teaching fee is billed separately.')+'</span></div>';
+  s+='<div class="line" style="opacity:.6;font-size:12px"><span>Taxes, fees and gratuity are included.'+(teachNote()?' '+esc(teachNote()):'')+'</span></div>';
   $('sum').innerHTML=s;
   $('couple').hidden=!(r.kind==='king'&&cur.mode==='share');$('addbox').hidden=false;renderUpsell();
   if(isLeader()){$('sum').insertAdjacentHTML('beforeend','<div class="couple" style="margin:10px 0 0">'+leaderMsg(r,c.guests)+'</div>')}
