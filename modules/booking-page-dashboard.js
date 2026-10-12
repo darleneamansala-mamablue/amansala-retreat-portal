@@ -22,7 +22,8 @@ async function bpdLoad(){
     _bpd.orders=orders;_bpd.sched=sched;_bpd.cfg=cfg;_bpd.at=Date.now();_bpd.busy=false;return changed;
   }catch(e){_bpd.busy=false;_bpd.at=Date.now();return false;}
 }
-function bpdGuestLink(bkId){try{const slug=(typeof computeShortSlug==='function')?computeShortSlug(bkId):'';if(slug)return location.origin+'/'+slug+'/book';}catch(e){}return location.origin+'/retreat-booking.html?r='+encodeURIComponent(bkId);}
+function bpdGuestLink(bkId){try{const cs=(_bpd.cfg[bkId]||{}).slug;if(cs)return location.origin+'/'+cs;}catch(e){}
+  try{const slug=(typeof computeShortSlug==='function')?computeShortSlug(bkId):'';if(slug)return location.origin+'/'+slug+'/book';}catch(e){}return location.origin+'/retreat-booking.html?r='+encodeURIComponent(bkId);}
 function bpdReviewLink(bkId){return location.origin+'/retreat-booking.html?r='+encodeURIComponent(bkId)+'&preview=1';}
 function bpdCopy(txt,label){navigator.clipboard.writeText(txt).then(()=>showToast(label+' copied')).catch(()=>showToast(txt));}
 function bpdSetup(bkId){openBookingFromNotif(bkId);setTimeout(()=>{if(typeof rbsOpen==='function')rbsOpen();},900);}
