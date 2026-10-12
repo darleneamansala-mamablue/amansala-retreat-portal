@@ -17,8 +17,10 @@ exports.handler = async (event) => {
     const nights = L.nightsOf(bk);
     const av = await L.availability(key, bk, cfg);
     const rooms = (cfg.rooms || []).map((rm) => {
-      const free = (av[rm.rtId] || { free: [] }).free.length;
-      const base = { rtId: rm.rtId, kind: rm.kind, label: rm.label, desc: rm.desc || '', imageUrl: rm.imageUrl || '', tags: rm.tags || [], free };
+      const freeList = (av[rm.rtId] || { free: [] }).free;
+      const free = freeList.length;
+      const freeChica = freeList.filter(L.isChica).length;      // for guests who tick "I am a leader"
+      const base = { rtId: rm.rtId, kind: rm.kind, label: rm.label, desc: rm.desc || '', imageUrl: rm.imageUrl || '', tags: rm.tags || [], free, freeChica };
       if (rm.kind === 'king') {
         const share = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'share' } });
         const solo = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'solo' } });
