@@ -38,6 +38,7 @@ function idSuffix(id) {
 }
 
 exports.handler = async (event) => {
+  if (event.queryStringParameters && event.queryStringParameters.view === 'zzdebug') return { statusCode: 200, body: JSON.stringify({ path: event.path, q: event.queryStringParameters, raw: event.rawUrl }) };
   const fromQuery = (event.queryStringParameters && event.queryStringParameters.slug) || '';
   // event.path is /.netlify/functions/shortlink/<slug> when reached via the
   // /:slug -> /.netlify/functions/shortlink/:slug rewrite — fall back to the
