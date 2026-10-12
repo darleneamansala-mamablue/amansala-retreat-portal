@@ -205,3 +205,24 @@ function rbsCopy(){
       menu.insertAdjacentHTML('afterbegin',_regActionMenuItem('🌐 Guest booking page',"rbsOpen()"));
   };
 })();
+
+// Visible toolbar button in Teacher Reg (next to Room Calendar / Add More Rooms / Schedule): "🌐 We Take Payment". Opens this
+// retreat's guest booking page screen: on/off, rates, copy guest link, view the page, bookings and balances. Admin only.
+function rbsInjectToolbarButton(){
+  try{
+    if(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE&&!document.body.classList.contains('admin-preview'))return;
+    const anchor=document.querySelector('button[onclick="goToRetreatSchedule()"]');
+    if(!anchor||document.getElementById('rbsToolbarBtn'))return;
+    const b=document.createElement('button');b.id='rbsToolbarBtn';b.type='button';b.className='btn btn-secondary btn-sm';
+    b.style.cssText='display:flex;gap:5px;color:#2d6a6a;border-color:#2d6a6a;font-weight:700';
+    b.title='Set up and open the guest booking page where Amansala takes the payment for this group';
+    b.innerHTML='🌐 We Take Payment';
+    b.onclick=()=>rbsOpen();
+    anchor.insertAdjacentElement('afterend',b);
+  }catch(e){}
+}
+(function(){
+  const prev=regRender;
+  regRender=function(){const r=prev.apply(this,arguments);rbsInjectToolbarButton();return r;};
+  setTimeout(rbsInjectToolbarButton,1500);
+})();
