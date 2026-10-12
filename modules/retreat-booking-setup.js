@@ -26,13 +26,13 @@ const RBS_DEFAULTS={
     {rtId:'bd2',kind:'twin',label:'Double Room',shareRate:275,maxBeds:2,desc:'A bright room with two separate beds. Book one bed to be matched with another guest, or both beds to share with a friend.',imageUrl:'/images/rooms/garden-double.jpg',tags:['Two beds','Private bathroom','Garden side']},
     {rtId:'bd3',kind:'twin',label:'Triple Room',shareRate:235,maxBeds:3,desc:'A roomy room with three separate beds, ideal for a group of friends. Book one bed, two or all three.',imageUrl:'/images/rooms/family-room.jpg',tags:['Three beds','Private bathroom','Garden side']}
   ],
-  services:[
+  services:[   // rows to edit when spa is switched on; a new retreat starts with spa OFF (see rbsOpen)
     {id:'massage',name:'Massage',desc:'A restorative massage with one of our therapists. Choose one hour or ninety minutes.',opts:[{m:60,p:95},{m:90,p:145}]},
     {id:'mayan',name:'Mayan Healing Massage',desc:'A traditional Mayan healing massage using warm oils and ancestral technique.',opts:[{m:60,p:111},{m:90,p:165}]},
     {id:'tarot',name:'Tarot Card Reading',desc:'A one hour reading with Mama Blue to bring clarity to the questions you are carrying.',opts:[{m:60,p:95}]}
   ]
 };
-let _rbsBk=null,_rbsCfg=null,_rbsBal=[];
+let _rbsBk=null,_rbsCfg=null,_rbsBal=[],_rbsSpaWasOn=false;
 
 function rbsEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function rbsLink(bk){
@@ -61,6 +61,8 @@ async function rbsOpen(){
   const saved=all[bk.id];
   let tpl=null;try{const t=await db.from('app_store').select('value').eq('key',RBS_TEMPLATE).maybeSingle();tpl=t.data&&t.data.value;}catch(e){}
   _rbsCfg=saved?JSON.parse(JSON.stringify(saved)):Object.assign({enabled:false,policy:RBS_DEFAULT_POLICY},JSON.parse(JSON.stringify(RBS_DEFAULTS)),tpl?JSON.parse(JSON.stringify(tpl)):{},{enabled:false,title:bk.retreatName||bk.leaderName||'',bannerUrl:''});
+  _rbsSpaWasOn=!!(_rbsCfg.services&&_rbsCfg.services.length);
+  if(!_rbsSpaWasOn)_rbsCfg.services=JSON.parse(JSON.stringify(RBS_DEFAULTS.services));   // rows to edit if you switch it on
   let orders={},spa=[];
   try{
     const o=await db.from('app_store').select('value').eq('key',RBS_ORDERS).maybeSingle();orders=(o.data&&o.data.value)||{};
@@ -116,6 +118,7 @@ function rbsRender(orders,spa){
     </div>
     <b style="font-size:13px">Rooms and rates</b>
     <table style="width:100%;border-collapse:collapse;margin:4px 0 12px">${roomRows}</table>
+    <label style="display:block;font-weight:700;font-size:13px;margin-top:6px"><input type="checkbox" id="rbsSpaOn" ${_rbsSpaWasOn?'checked':''}> Offer spa services on the page (upgrades and pre-booking)</label>
     <b style="font-size:13px">Spa services (price per session)</b>
     <table style="width:100%;border-collapse:collapse;margin:4px 0 12px">${svcRows}</table>
     <label style="font-size:12px;font-weight:600">Cancellation policy (shown on the page and ticked before paying)<textarea id="rbsPolicy" rows="3" style="${inp};width:100%;display:block">${rbsEsc(c.policy||RBS_DEFAULT_POLICY)}</textarea></label>
@@ -152,7 +155,7 @@ function rbsCollect(){
     if(i.value!==''&&Number(i.value)>0)s.opts.push({m,p:Number(i.value)});
     s.opts.sort((a,b)=>a.m-b.m);
   });
-  c.services=c.services.filter(s=>s.opts.length);
+  c.services=g('rbsSpaOn').checked?c.services.filter(s=>s.opts.length):[];
   c.policy=g('rbsPolicy').value.trim()||RBS_DEFAULT_POLICY;
   c.includes=g('rbsIncl').value.split('\n').map(x=>x.trim()).filter(Boolean);
   c.notIncluded=g('rbsNot').value.trim();c.notifyEmail=g('rbsNotify').value.trim();

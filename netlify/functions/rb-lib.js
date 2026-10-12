@@ -26,11 +26,7 @@ const DEFAULT_CFG = {
     { rtId: 'bd2', kind: 'twin', label: 'Double Room', shareRate: 275, maxBeds: 2, desc: 'A bright room with two separate beds. Book one bed to be matched with another guest, or both beds to share with a friend.', imageUrl: '/images/rooms/garden-double.jpg', tags: ['Two beds', 'Private bathroom', 'Garden side'] },
     { rtId: 'bd3', kind: 'twin', label: 'Triple Room', shareRate: 235, maxBeds: 3, desc: 'A roomy room with three separate beds, ideal for a group of friends. Book one bed, two or all three.', imageUrl: '/images/rooms/family-room.jpg', tags: ['Three beds', 'Private bathroom', 'Garden side'] },
   ],
-  services: [
-    { id: 'massage', name: 'Massage', desc: 'A restorative massage with one of our therapists. Choose one hour or ninety minutes.', opts: [{ m: 60, p: 95 }, { m: 90, p: 145 }] },
-    { id: 'mayan', name: 'Mayan Healing Massage', desc: 'A traditional Mayan healing massage using warm oils and ancestral technique.', opts: [{ m: 60, p: 111 }, { m: 90, p: 165 }] },
-    { id: 'tarot', name: 'Tarot Card Reading', desc: 'A one hour reading with Mama Blue to bring clarity to the questions you are carrying.', opts: [{ m: 60, p: 95 }] },
-  ],
+  services: [],   // spa pre-booking is off by default; turn it on per retreat in Teacher Reg > We Take Payment
 };
 
 const DEFAULT_POLICY =
