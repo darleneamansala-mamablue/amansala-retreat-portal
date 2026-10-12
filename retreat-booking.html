@@ -81,6 +81,12 @@ td.p span{letter-spacing:.1em;text-transform:uppercase;opacity:.6;font-size:10px
 .stepper{display:inline-flex;align-items:center;gap:10px;border:1px solid var(--ink);padding:3px 8px}
 .stepper button{background:none;border:0;font-size:18px;cursor:pointer;line-height:1;padding:2px 6px}
 .stepper b{min-width:18px;text-align:center}
+.plan{margin:0 0 16px}
+.plan-opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);background:var(--paper);padding:14px;margin-bottom:8px;cursor:pointer;font-size:14px;line-height:1.5}
+.plan-opt:has(input:checked){border-color:var(--moss);box-shadow:0 0 0 2px #3f51471f}
+.plan-opt input{margin-top:4px;accent-color:var(--moss);width:17px;height:17px;flex:none}
+.plan-opt em{display:block;font-style:normal;font-family:var(--display);font-size:24px;margin-top:2px}
+.plan-opt small{display:block;font-size:12px;opacity:.75;margin-top:2px}
 .kingnote{font-size:12.5px;line-height:1.65;margin:12px 0 4px;padding:12px 14px;background:var(--paper);border:1px solid var(--line)}
 .select{border:1px solid var(--ink);letter-spacing:.14em;text-transform:uppercase;cursor:pointer;background:transparent;display:flex;justify-content:space-between;align-items:center;width:100%;padding:16px 18px;font-size:11px;margin-top:12px;transition:background .2s,color .2s}
 .select:hover:not(:disabled){background:var(--ink);color:var(--sand-light)}
@@ -195,6 +201,12 @@ footer p{opacity:.65;margin:0;font-size:12px}
       <label>Email<input id="fEmail" type="email" autocomplete="email" placeholder="you@example.com"></label>
       <label>Phone number<input id="fPhone" type="tel" autocomplete="tel" placeholder="+1 555 123 4567"></label>
       <div id="others"></div>
+    </div>
+    <div class="plan" id="planBox" hidden>
+      <p class="kicker" style="margin-bottom:8px">How would you like to pay?</p>
+      <label class="plan-opt"><input type="radio" name="plan" value="full" checked><span><b>Pay in full today</b><em id="planFull"></em></span></label>
+      <label class="plan-opt"><input type="radio" name="plan" value="deposit"><span><b>Pay 50% today</b><em id="planNow"></em><small id="planLater"></small></span></label>
+      <label class="agree" id="authBox" hidden style="margin:10px 0 0"><input type="checkbox" id="balanceAuth"><span id="authTxt"></span></label>
     </div>
     <div class="policy"><p class="kicker" style="margin-bottom:8px">Cancellation policy</p><p class="ptxt" id="policyTxt2"></p>
       <label class="agree" style="margin:12px 0 0;background:var(--paper);border-color:var(--line)"><input type="checkbox" id="cancelOk"><span>I have read and agree to the cancellation policy.</span></label></div>
@@ -355,10 +367,28 @@ function showCart(){
   [].forEach.call(document.querySelectorAll('.oth'),function(i,k){if(_oldOth[k])i.value=_oldOth[k]});
   $('err').textContent='';renderUpsell();upd();
 }
+function planInfo(){
+  var d=INFO&&INFO.deposit;if(!d||!d.on||!d.eligible||!cart.room)return null;
+  var room=roomCalc(cart.room).total, svc=0;Object.keys(cart.svcs).forEach(function(k){svc+=svcPrice(k)});
+  var roomNow=Math.round(room*d.pct)/100, later=Math.round((room-roomNow)*100)/100;
+  return {pct:d.pct,date:d.balanceDate,total:room+svc,now:Math.round((roomNow+svc)*100)/100,later:later};
+}
+function planChoice(){var r=document.querySelector('input[name=plan]:checked');return r?r.value:'full'}
+function renderPlan(){
+  var pi=planInfo(),box=$('planBox');if(!box)return;
+  if(!pi){box.hidden=true;var rf=document.querySelector('input[name=plan][value=full]');if(rf)rf.checked=true;return}
+  box.hidden=false;
+  $('planFull').textContent=money2(pi.total);
+  $('planNow').textContent=money2(pi.now);
+  $('planLater').textContent='Then '+money2(pi.later)+' is charged automatically to the same card on '+fmtD(pi.date)+'. Spa services are paid in full today.';
+  $('authTxt').textContent='I authorize Amansala to charge the remaining balance of '+money2(pi.later)+' to this card on '+fmtD(pi.date)+'.';
+  $('authBox').hidden=planChoice()!=='deposit';
+}
 function upd(){
-  var ok=$('cancelOk').checked, hasRoom=!!cart.room;
-  $('go').disabled=!(ok&&hasRoom);
-  $('hint').textContent=!hasRoom?'Please add a room to your cart to continue.':(!ok?'Please read and tick the cancellation policy to continue.':(cart.room&&roomCalc(cart.room).guests>1?'One credit card pays for all beds in your cart.':''));
+  renderPlan();
+  var ok=$('cancelOk').checked, hasRoom=!!cart.room, dep=planChoice()==='deposit', authOk=!dep||$('balanceAuth').checked;
+  $('go').disabled=!(ok&&hasRoom&&authOk);
+  $('hint').textContent=!hasRoom?'Please add a room to your cart to continue.':(!ok?'Please read and tick the cancellation policy to continue.':(!authOk?'Please authorize the remaining balance to continue.':(cart.room&&roomCalc(cart.room).guests>1?'One credit card pays for all beds in your cart.':'')));
 }
 function details(){
   var n=$('fName').value.trim(),e=$('fEmail').value.trim(),p=$('fPhone').value.trim();
@@ -376,7 +406,8 @@ function startPayment(){
   var c=roomCalc(cart.room);
   var body={bookingId:BK,cart:{room:{rtId:cart.room.rtId,mode:cart.room.mode,beds:cart.room.beds},services:Object.keys(cart.svcs).map(function(k){return {id:k,m:cart.svcs[k].m,q:cart.svcs[k].q}})},
     guest:{name:$('fName').value.trim(),email:$('fEmail').value.trim(),phone:$('fPhone').value.trim(),others:others()},
-    acks:{cancellation:$('cancelOk').checked,roommate:ackRoommate,leader:$('leaderOk').checked}};
+    plan:planChoice(),
+    acks:{cancellation:$('cancelOk').checked,roommate:ackRoommate,leader:$('leaderOk').checked,balanceAuth:planChoice()==='deposit'&&$('balanceAuth').checked}};
   $('go').disabled=true;$('err').textContent='';
   fetch('/.netlify/functions/retreat-booking-intent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j,s:r.status}})})
@@ -387,7 +418,7 @@ function startPayment(){
      $('stripe-element').innerHTML='';elements.create('payment').mount('#stripe-element');
      $('payAmt').textContent=money2(x.j.amount);
      $('checkout').hidden=true;$('paybox').hidden=false;$('mt').textContent='Payment';
-     window._rbAmount=x.j.amount;window._rbLeaderMsg=(x.j.leaderPlacement?leaderMsg(roomOf(cart.room.rtId),roomCalc(cart.room).guests):'');
+     window._rbAmount=x.j.amount;window._rbBalance=x.j.plan==='deposit'?{amt:x.j.balance,date:x.j.balanceDate}:null;window._rbLeaderMsg=(x.j.leaderPlacement?leaderMsg(roomOf(cart.room.rtId),roomCalc(cart.room).guests):'');
    }).catch(function(){$('err').textContent='Connection problem. Please try again.';$('go').disabled=false});
 }
 function init2(){ // refresh availability after a "just taken" message
@@ -399,7 +430,7 @@ function confirmPay(){
     if(res.error){$('payerr').textContent=res.error.message;$('pay').disabled=false;return}
     var total=window._rbAmount, nm=$('fName').value.trim().split(/\s+/)[0], em=$('fEmail').value.trim();
     resetPanels();$('cartlines').innerHTML='';$('sum').innerHTML='';document.querySelector('.lock').hidden=true;$('sum').hidden=true;$('mt').textContent='Booked';$('ms').textContent='';
-    $('donetxt').innerHTML='Thank you, '+esc(nm)+'. Your payment of <b>'+money2(total)+'</b> was received and your booking for '+esc($('datesTxt').textContent)+' is confirmed.<br>A confirmation was sent to <b>'+esc(em)+'</b>. We will be in touch before you arrive.'+(window._rbLeaderMsg?'<br><br>'+window._rbLeaderMsg:'');
+    $('donetxt').innerHTML='Thank you, '+esc(nm)+'. Your payment of <b>'+money2(total)+'</b> was received and your booking for '+esc($('datesTxt').textContent)+' is confirmed.<br>A confirmation was sent to <b>'+esc(em)+'</b>. We will be in touch before you arrive.'+(window._rbBalance?'<br><br>The remaining balance of <b>'+money2(window._rbBalance.amt)+'</b> will be charged automatically to the same card on <b>'+esc(fmtD(window._rbBalance.date))+'</b>. We will email you when it is charged.':'')+(window._rbLeaderMsg?'<br><br>'+window._rbLeaderMsg:'');
     $('done').hidden=false;cart={room:null,svcs:{}};cartbar();say('Thank you for your booking');
   });
 }
@@ -425,7 +456,7 @@ document.addEventListener('click',function(e){
 });
 document.addEventListener('change',function(e){
   if(e.target.id==='understand')$('popgo').disabled=!e.target.checked;
-  else if(e.target.id==='cancelOk')upd();
+  else if(e.target.id==='cancelOk'||e.target.id==='balanceAuth'||e.target.name==='plan')upd();
   else if(e.target.id==='leaderOk'){render()}
 });
 init();

@@ -7,11 +7,13 @@ const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const CFG_KEY = 'retreat_booking_config';
 const ORDERS_KEY = 'retreat_booking_orders';
 const SPA_KEY = 'retreat_spa_requests';
+const BAL_KEY = 'retreat_balance_schedule';
 
 const TEMPLATE_KEY = 'retreat_booking_template';
 // Starting point for every "We take payment" retreat page (same as modules/retreat-booking-setup.js RBS_DEFAULTS).
 const DEFAULT_CFG = {
   title: 'Your Retreat Name', bannerUrl: '', taxFeePct: 24, gratuityPerNight: 30, teachingFee: { on: false, amountPP: 0 },
+  deposit: { on: true, pct: 50, monthsBefore: 2 },
   includes: ['Accommodations for your full stay', 'All meals, with the exception of one offsite dinner', 'Group Salsa dance class', 'Cooking demonstration'],
   notIncluded: 'Not included: the one offsite dinner, tours and spa treatments.',
   rooms: [
@@ -190,6 +192,40 @@ async function cbGone(bk, units) {
   return gone;
 }
 
+// ---- 50% now, balance auto-charged later ----
+// cfg.deposit = { on, pct (default 50), monthsBefore (default 2) }. Offered only when the balance date is still at least a week away;
+// otherwise the guest pays in full. Spa services are always paid in full today; the split applies to the room amount.
+function balanceDateOf(bk, cfg) {
+  const months = Number(cfg.deposit && cfg.deposit.monthsBefore) || 2;
+  const d = new Date(bk.start_date + 'T12:00:00');
+  d.setMonth(d.getMonth() - months);
+  return d.toISOString().slice(0, 10);
+}
+function depositOffer(bk, cfg, todayStr) {
+  const dep = cfg.deposit || {};
+  if (!dep.on) return { on: false };
+  const balanceDate = balanceDateOf(bk, cfg);
+  const today = todayStr || new Date().toISOString().slice(0, 10);
+  const minDate = new Date(today + 'T12:00:00'); minDate.setDate(minDate.getDate() + 7);
+  const eligible = balanceDate >= minDate.toISOString().slice(0, 10);
+  return { on: true, eligible, pct: Number(dep.pct) || 50, monthsBefore: Number(dep.monthsBefore) || 2, balanceDate };
+}
+function splitPayment(priced, pct) {
+  const room = priced.lines.filter((l) => l.type === 'room').reduce((a, l) => a + l.amount, 0);
+  const svc = priced.lines.filter((l) => l.type === 'service').reduce((a, l) => a + l.amount, 0);
+  const roomNow = Math.round(room * pct) / 100;
+  const roomLater = Math.round((room - roomNow) * 100) / 100;
+  return { roomNow, roomLater, svc, dueNow: Math.round((roomNow + svc) * 100) / 100 };
+}
+async function stripePost(path, params, idemKey) {
+  const r = await fetch(`https://api.stripe.com/v1${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Stripe-Version': '2024-06-20', ...(idemKey ? { 'Idempotency-Key': idemKey } : {}) },
+    body: new URLSearchParams(params).toString(),
+  });
+  return r.json();
+}
+
 function cors() {
   return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 }
@@ -197,4 +233,4 @@ function json(code, body) {
   return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };
 }
 
-module.exports = { TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
+module.exports = { BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
