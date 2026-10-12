@@ -226,6 +226,27 @@ async function stripePost(path, params, idemKey) {
   return r.json();
 }
 
+// ---- consent record + signed record link ----
+// The exact wording of every box a guest can tick (must match retreat-booking.html). A copy of the wording, the time, IP address
+// and browser is stored for every booking (app_store key 'rbconsent:<paymentIntentId>') and printed on the booking record PDF.
+const AGREE_TEXT = {
+  cancellation: 'I have read and agree to the cancellation policy.',
+  roommate: 'I agree that if there is no one to match me up with, I will pay the fee of a private room and will be moved to a garden room with a king or queen bed, and there will be a fee.',
+  roommateNotice: 'Please note: if we cannot match you up with anyone, you will be required to pay an upgrade fee to have a private room. Someone from our team will reach out 8 weeks prior to your booking if we cannot match you up.',
+  leader: 'I am a leader. Leaders are placed at Amansala Chica.',
+  king: 'Sharing a king bed? Please book together. Both guests must be included in one reservation, with payment made using a single credit card. Individual spaces in a king bed cannot be booked separately.',
+};
+const crypto = require('crypto');
+function sign(piId) { return crypto.createHmac('sha256', process.env.SUPABASE_SERVICE_KEY || 'x').update(String(piId)).digest('hex').slice(0, 32); }
+function recordUrl(piId) {
+  const base = process.env.URL || 'https://amansalaportal.com';
+  return `${base}/.netlify/functions/retreat-booking-record?pi=${encodeURIComponent(piId)}&k=${sign(piId)}`;
+}
+function clientIp(event) {
+  const h = event.headers || {};
+  return h['x-nf-client-connection-ip'] || h['client-ip'] || String(h['x-forwarded-for'] || '').split(',')[0].trim() || '';
+}
+
 function cors() {
   return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 }
@@ -233,4 +254,4 @@ function json(code, body) {
   return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };
 }
 
-module.exports = { BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
+module.exports = { AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };

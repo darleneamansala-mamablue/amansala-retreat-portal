@@ -133,6 +133,11 @@ async function fulfil(pi) {
     await L.appStoreSet(key, L.SPA_KEY, list);
   }
 
+  order.recordUrl = L.recordUrl(pi.id);
+  try {
+    const rec = await L.appStoreGet(key, 'rbconsent:' + pi.id);
+    if (rec) { rec.status = 'paid'; rec.paidAt = new Date().toISOString(); rec.paidNow = paidNow; rec.units = units || []; await L.appStoreSet(key, 'rbconsent:' + pi.id, rec); }
+  } catch (e) { console.warn('[rb-fulfil] consent record update failed', e.message); }
   orders[pi.id] = order;
   await L.appStoreSet(key, L.ORDERS_KEY, orders);
 
@@ -146,6 +151,7 @@ async function fulfil(pi) {
     ${isDeposit ? `<p><b>Remaining balance: ${money(roomLater)}.</b> As you authorized, it will be charged automatically to the same card on <b>${esc(m.rbBalanceDate)}</b>. We will email you when it is charged.</p>` : ''}
     ${isLeader && units ? `<p><b>Your room as a leader:</b> ${leaderAtGrande ? 'Amansala Chica is out of ' + esc(roomLine.name) + ' rooms, so your room will be at <b>Amansala Grande</b>.' : 'your room will be at <b>Amansala Chica</b>.'}</p>` : ''}
     ${svcLines.length ? '<p>Our spa team will contact you to schedule your treatments.</p>' : ''}
+    <p><a href="${L.recordUrl(pi.id)}" style="color:#3f5147;font-weight:700">Download your booking record (PDF)</a>: your booking summary, the cancellation policy and everything you agreed to.</p>
     <p>Questions? Reply to this email or write to retreats@amansala.com.</p><p>Amansala · Tulum</p></div>`;
   await sendEmail(m.rbEmail, `Thank you for your booking — ${title}`, guestHtml, 'retreats@amansala.com');
 
@@ -153,7 +159,7 @@ async function fulfil(pi) {
   const staffHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27"><h3>${units ? 'New retreat booking' : '⚠ Paid but NO ROOM FREE — needs attention'}</h3>
     <p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>${esc(title)} · ${esc(dates)}<br>${isLeader ? '<b>Leader</b>' + (leaderAtGrande ? ' placed at GRANDE because Chica was out of ' + esc(roomLine.name) + ' rooms' : ' placed at Chica') + '<br>' : ''}${units ? 'Placed in: ' + esc(units.join(', ')) : 'No free room of this type was left when the payment completed. Place the guest by hand or refund in Stripe.'}</p>
     ${others.length ? `<p>Other guests: ${esc(others.join(', '))}</p>` : ''}
-    <table style="border-collapse:collapse">${itemRows}</table><p>${isDeposit ? 'Paid now ' + money(paidNow) + ' (50%). Balance ' + money(roomLater) + ' auto-charges ' + esc(m.rbBalanceDate) + '.' : 'Total ' + money(priced.total)} · Stripe ${esc(pi.id)}</p>
+    <table style="border-collapse:collapse">${itemRows}</table><p>${isDeposit ? 'Paid now ' + money(paidNow) + ' (50%). Balance ' + money(roomLater) + ' auto-charges ' + esc(m.rbBalanceDate) + '.' : 'Total ' + money(priced.total)} · Stripe ${esc(pi.id)} · <a href="${L.recordUrl(pi.id)}">booking record (PDF)</a></p>
     ${cbIssues.length ? '<p><b>Cloudbeds needs a manual update</b> (the room list is correct):<br>' + cbIssues.map(esc).join('<br>') + '</p>' : ''}
     ${svcLines.length ? '<p><b>Spa pre-bookings to schedule</b> (saved under retreat spa requests).</p>' : ''}</div>`;
   await sendEmail(staffTo, `${units ? 'New retreat booking' : 'ACTION NEEDED: paid, no room'} — ${m.rbName} · ${title}`, staffHtml);
