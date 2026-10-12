@@ -11,7 +11,7 @@ const RBS_TEMPLATE='retreat_booking_template', RBS_BAL='retreat_balance_schedule
 const RBS_KEY='retreat_booking_config', RBS_ORDERS='retreat_booking_orders', RBS_SPA='retreat_spa_requests';
 const RBS_DEFAULT_POLICY='More than 6 weeks prior to the start date: two (2) nights will be charged according to the occupancy type booked.\n6 weeks or less prior to the start date: non-refundable and non-transferable.';
 const RBS_DEFAULTS={
-  taxFeePct:24,gratuityPerNight:30,teachingFee:{on:false,amountPP:0},
+  taxFeePct:19,gratuityPerNight:30,teachingFee:{on:false,amountPP:0},
   deposit:{on:true,pct:50,monthsBefore:2},
   includes:['Accommodations for your full stay','All meals, with the exception of one offsite dinner','Group Salsa dance class','Cooking demonstration'],
   notIncluded:'Not included: the one offsite dinner, tours and spa treatments.',
