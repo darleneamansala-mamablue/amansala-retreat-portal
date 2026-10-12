@@ -177,7 +177,6 @@ footer p{opacity:.65;margin:0;font-size:12px}
 
   <section class="pad" id="rooms">
     <div class="section-heading"><div><p class="kicker">Select your room</p><h2>Where you will stay</h2></div><p>Two guests can share a king bed and pay together, or choose a room for one guest. Rooms with separate beds are booked one bed at a time.</p></div>
-    <div class="leaderbox"><label class="agree" style="margin:0"><input type="checkbox" id="leaderOk"><span><b>I am a leader.</b> Leaders are placed at Amansala Chica. Tick this box and you will see the rooms available at Chica.</span></label><p class="hint" id="leaderNote" hidden></p></div>
     <div class="stay-list" id="stays"></div>
   </section>
 
@@ -429,7 +428,7 @@ function startPayment(){
   var body={bookingId:BK,cart:{room:{rtId:cart.room.rtId,mode:cart.room.mode,beds:cart.room.beds},services:Object.keys(cart.svcs).map(function(k){return {id:k,m:cart.svcs[k].m,q:cart.svcs[k].q}})},
     guest:{name:$('fName').value.trim(),email:$('fEmail').value.trim(),phone:$('fPhone').value.trim(),others:others()},
     plan:planChoice(),
-    acks:{cancellation:$('cancelOk').checked,roommate:ackRoommate,shareChoice:shareNeeded()?shareChoice():'',friendName:shareNeeded()&&shareChoice()==='friend'?$('friendName').value.trim():'',leader:$('leaderOk').checked,balanceAuth:planChoice()==='deposit'&&$('balanceAuth').checked}};
+    acks:{cancellation:$('cancelOk').checked,roommate:ackRoommate,shareChoice:shareNeeded()?shareChoice():'',friendName:shareNeeded()&&shareChoice()==='friend'?$('friendName').value.trim():'',leader:isLeader(),balanceAuth:planChoice()==='deposit'&&$('balanceAuth').checked}};
   $('go').disabled=true;$('err').textContent='';
   fetch('/.netlify/functions/retreat-booking-intent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j,s:r.status}})})
