@@ -3216,6 +3216,7 @@ function openScheduleViewer(bkId){
       ${['standard','lbbld','bld','blsd'].concat(bk.mealPlan==='full'?['full']:[]).concat(bk.mealPlan==='weTravel'?['weTravel']:[]).map(k=>`<option value="${k}"${(bk.mealPlan||'standard')===k?' selected':''}>${TS_MEAL_PLAN_LABELS[k]}</option>`).join('')}
     </select>
     <button class="btn" style="font-size:11.5px;padding:5px 10px;background:#fff;border:1.5px solid var(--teal);color:var(--teal)" onclick="mteOpen('${bkId}')">⏰ Edit meal times</button>
+    ${sr.mealTimesTeacherEdit?`<span style="font-size:11.5px;color:#92400e;background:#fef3c7;border-radius:6px;padding:3px 8px">Teacher changed meal times ${fmtDate(String(sr.mealTimesTeacherEdit.at).slice(0,10))}: ${sr.mealTimesTeacherEdit.changes}</span>`:''}
     <span style="font-size:11.5px;color:var(--muted)">Shows on the teacher's schedule, the printed schedule and the kitchen Menu.</span>
   </div>`;
   html+=`<div style="margin-bottom:14px;padding:10px 14px;background:#f5f3ee;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">

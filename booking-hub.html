@@ -1450,6 +1450,7 @@
         <div class="ts-card-title">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
           Meal Schedule
+          <button type="button" onclick="mteOpen(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id')||(typeof _tsBkId!=='undefined'?_tsBkId:''),true)" style="margin-left:auto;padding:6px 14px;font-size:12px;font-weight:600;font-family:'Jost',sans-serif;border:1.5px solid #2d6a6a;color:#2d6a6a;background:#fff;border-radius:8px;cursor:pointer">✏ Edit my meal times</button>
         </div>
         <div class="ts-meal-grid">
           <div class="ts-meal-item">
@@ -6392,7 +6393,7 @@ function switchTab(id,btn){
 <script src="modules/contract-library.js?v=20261009a"></script>
 <script src="modules/reports.js?v=20261005i"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20261012b"></script>
+<script src="modules/teacher-portal.js?v=20261012c"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
 // ===== TEACHER REGISTRATION — moved to modules/teacher-portal.js =====
@@ -6635,7 +6636,7 @@ if(location.protocol!=='file:'){
 <script src="modules/menu-variants.js?v=20261009b"></script>
 <script src="modules/menu-editor.js?v=20261009b"></script>
 <script src="modules/meal-times.js?v=20261012a"></script>
-<script src="modules/meal-times-editor.js?v=20261012a"></script>
+<script src="modules/meal-times-editor.js?v=20261012b"></script>
 <script src="modules/menu-variety.js?v=20260926b"></script>
 <script>
 // ===== MENU TAB — moved to modules/menu.js =====
