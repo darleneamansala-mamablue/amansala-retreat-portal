@@ -4676,7 +4676,7 @@ function _trBuildTransportTable(guests,type,result){
         const hdBg=date===_todayStr?'#ccfbf1':'#f5f0e8',hdClr=date===_todayStr?'#0f766e':'#5a5048';
         dateHeader=`<tr><td colspan="${_colCount}" style="padding:8px 12px;background:${hdBg};font-size:11px;font-weight:700;color:${hdClr};border-top:2px solid #e8dfd4">${label}</td></tr>`;
       } else {
-        dateHeader=`<tr><td colspan="${_colCount}" style="padding:8px 12px;background:#f5f0e8;font-size:11px;font-weight:700;color:#8a7e74;border-top:2px solid #e8dfd4">Not submitted yet</td></tr>`;
+        dateHeader=`<tr><td colspan="${_colCount}" style="padding:8px 12px;background:#f5f0e8;font-size:12px;font-weight:800;color:#b91c1c;border-top:2px solid #e8dfd4">Not submitted yet</td></tr>`;
       }
     }
     lastDate=date;
@@ -4771,7 +4771,7 @@ function _renderTeacherTransportInner(bkId){
 
   const _trFormUrl=`${location.origin}/transport-form.html?bk=${bkId}`;
   let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-    <span style="font-size:12px;color:#8a7e74">${submittedCount} / ${roster.length} guests submitted</span>
+    <span style="font-size:13px;font-weight:800;color:${submittedCount<roster.length?'#b91c1c':'#15803d'}">${submittedCount} / ${roster.length} guests submitted</span>
     <div style="display:flex;gap:8px">
       <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${_trFormUrl}').then(()=>{this.textContent='✓ Copied!';setTimeout(()=>this.textContent='🔗 Copy Form Link',1800)})" style="padding:6px 14px;border:1px solid #e8dfd4;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;cursor:pointer;color:#5a5048">🔗 Copy Form Link</button>
       <button onclick="renderTeacherTransport('${bkId}')" style="padding:6px 14px;border:1px solid #e8dfd4;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;cursor:pointer;color:#5a5048">↻ Refresh</button>
