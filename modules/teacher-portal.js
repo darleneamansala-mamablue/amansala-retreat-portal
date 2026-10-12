@@ -3028,6 +3028,7 @@ function tsRenderCalSection(bk){
       }
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
+    if(typeof tsApplyMealTimeOverrides==='function')tsApplyMealTimeOverrides(bk,rows);   // per-retreat meal times (meal-times-editor.js)
     rows.sort((a,b)=>sk(a.sk).localeCompare(sk(b.sk)));
     days.push({lbl,dayName:DAY_NAMES[d.getDay()],dateNum:d.getDate(),month:MON_NAMES[d.getMonth()],rows,prepaidActs});
   }
@@ -3214,6 +3215,7 @@ function openScheduleViewer(bkId){
     <select onchange="svSetMealPlan('${bkId}',this.value)" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">
       ${['standard','lbbld','bld','blsd'].concat(bk.mealPlan==='full'?['full']:[]).concat(bk.mealPlan==='weTravel'?['weTravel']:[]).map(k=>`<option value="${k}"${(bk.mealPlan||'standard')===k?' selected':''}>${TS_MEAL_PLAN_LABELS[k]}</option>`).join('')}
     </select>
+    <button class="btn" style="font-size:11.5px;padding:5px 10px;background:#fff;border:1.5px solid var(--teal);color:var(--teal)" onclick="mteOpen('${bkId}')">⏰ Edit meal times</button>
     <span style="font-size:11.5px;color:var(--muted)">Shows on the teacher's schedule, the printed schedule and the kitchen Menu.</span>
   </div>`;
   html+=`<div style="margin-bottom:14px;padding:10px 14px;background:#f5f3ee;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -5228,6 +5230,7 @@ function openPrintSchedule(bkId){
       rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99',isExtra:true});
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
+    if(typeof tsApplyMealTimeOverrides==='function')tsApplyMealTimeOverrides(bk,rows);   // per-retreat meal times (meal-times-editor.js)
     rows.sort((a,b)=>(a.sk||'99:99').localeCompare(b.sk||'99:99'));
     days.push({label:dayLabel,rows});
   }
