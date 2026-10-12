@@ -81,6 +81,7 @@ td.p span{letter-spacing:.1em;text-transform:uppercase;opacity:.6;font-size:10px
 .stepper{display:inline-flex;align-items:center;gap:10px;border:1px solid var(--ink);padding:3px 8px}
 .stepper button{background:none;border:0;font-size:18px;cursor:pointer;line-height:1;padding:2px 6px}
 .stepper b{min-width:18px;text-align:center}
+.sharebox{margin:0 0 16px}
 .plan{margin:0 0 16px}
 .plan-opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);background:var(--paper);padding:14px;margin-bottom:8px;cursor:pointer;font-size:14px;line-height:1.5}
 .plan-opt:has(input:checked){border-color:var(--moss);box-shadow:0 0 0 2px #3f51471f}
@@ -201,6 +202,13 @@ footer p{opacity:.65;margin:0;font-size:12px}
       <label>Email<input id="fEmail" type="email" autocomplete="email" placeholder="you@example.com"></label>
       <label>Phone number<input id="fPhone" type="tel" autocomplete="tel" placeholder="+1 555 123 4567"></label>
       <div id="others"></div>
+    </div>
+    <div class="sharebox" id="shareBox" hidden>
+      <p class="kicker" style="margin-bottom:8px">Booking a shared room?</p>
+      <label class="agree" style="margin:0 0 8px;background:var(--paper);border-color:var(--line)"><input type="radio" name="share" value="friend"><span><b>I'm travelling with a friend and would like to share a room with them.</b>
+        <span style="display:block;margin-top:8px;font-size:13px">First and Last name</span><input id="friendName" placeholder="Your friend's first and last name" style="width:100%;margin-top:4px;padding:10px 12px;border:1px solid var(--line);background:#fff;font-size:14px;border-radius:0">
+        <small style="display:block;margin-top:6px;opacity:.75">Your friend must also book a shared room.</small></span></label>
+      <label class="agree" style="margin:0;background:var(--paper);border-color:var(--line)"><input type="radio" name="share" value="alone"><span><b>I'm travelling alone and agree to be matched with another guest of the same gender.</b> If no suitable roommate is available, I agree to pay the additional cost for a private room.</span></label>
     </div>
     <div class="plan" id="planBox" hidden>
       <p class="kicker" style="margin-bottom:8px">How would you like to pay?</p>
@@ -367,6 +375,9 @@ function showCart(){
   [].forEach.call(document.querySelectorAll('.oth'),function(i,k){if(_oldOth[k])i.value=_oldOth[k]});
   $('err').textContent='';renderUpsell();upd();
 }
+function shareNeeded(){return !!(cart.room&&INFO&&roomCalc(cart.room).r.kind==='twin'&&roomCalc(cart.room).guests<(roomCalc(cart.room).r.maxBeds||2))}
+function shareChoice(){var r=document.querySelector('input[name=share]:checked');return r?r.value:''}
+function renderShare(){var b=$('shareBox');if(!b)return;var need=shareNeeded();b.hidden=!need;if(!need){var r=document.querySelector('input[name=share]:checked');if(r)r.checked=false}}
 function planInfo(){
   var d=INFO&&INFO.deposit;if(!d||!d.on||!d.eligible||!cart.room)return null;
   var room=roomCalc(cart.room).total, svc=0;Object.keys(cart.svcs).forEach(function(k){svc+=svcPrice(k)});
@@ -385,10 +396,11 @@ function renderPlan(){
   $('authBox').hidden=planChoice()!=='deposit';
 }
 function upd(){
-  renderPlan();
+  renderShare();renderPlan();
+  var shareOk=!shareNeeded()||!!shareChoice();
   var ok=$('cancelOk').checked, hasRoom=!!cart.room, dep=planChoice()==='deposit', authOk=!dep||$('balanceAuth').checked;
-  $('go').disabled=!(ok&&hasRoom&&authOk);
-  $('hint').textContent=!hasRoom?'Please add a room to your cart to continue.':(!ok?'Please read and tick the cancellation policy to continue.':(!authOk?'Please authorize the remaining balance to continue.':(cart.room&&roomCalc(cart.room).guests>1?'One credit card pays for all beds in your cart.':'')));
+  $('go').disabled=!(ok&&hasRoom&&authOk&&shareOk);
+  $('hint').textContent=!hasRoom?'Please add a room to your cart to continue.':(!ok?'Please read and tick the cancellation policy to continue.':(!shareOk?'Please tell us whether you are sharing with a friend or travelling alone.':(!authOk?'Please authorize the remaining balance to continue.':(cart.room&&roomCalc(cart.room).guests>1?'One credit card pays for all beds in your cart.':''))));
 }
 function details(){
   var n=$('fName').value.trim(),e=$('fEmail').value.trim(),p=$('fPhone').value.trim();
@@ -397,6 +409,7 @@ function details(){
   if(p.replace(/\D/g,'').length<7)return 'Please enter your phone number.';
   var oth=[].map.call(document.querySelectorAll('.oth'),function(i){return i.value.trim()});
   if(oth.some(function(x){return !x}))return 'Please enter the full name of the other guest'+(oth.length>1?'s':'')+'.';
+  if(shareNeeded()){if(!shareChoice())return 'Please tell us whether you are sharing with a friend or travelling alone.';if(shareChoice()==='friend'&&$('friendName').value.trim().split(/\s+/).filter(Boolean).length<2)return "Please enter your friend's first and last name."}
   return '';
 }
 function others(){return [].map.call(document.querySelectorAll('.oth'),function(i){return i.value.trim()})}
@@ -407,7 +420,7 @@ function startPayment(){
   var body={bookingId:BK,cart:{room:{rtId:cart.room.rtId,mode:cart.room.mode,beds:cart.room.beds},services:Object.keys(cart.svcs).map(function(k){return {id:k,m:cart.svcs[k].m,q:cart.svcs[k].q}})},
     guest:{name:$('fName').value.trim(),email:$('fEmail').value.trim(),phone:$('fPhone').value.trim(),others:others()},
     plan:planChoice(),
-    acks:{cancellation:$('cancelOk').checked,roommate:ackRoommate,leader:$('leaderOk').checked,balanceAuth:planChoice()==='deposit'&&$('balanceAuth').checked}};
+    acks:{cancellation:$('cancelOk').checked,roommate:ackRoommate,shareChoice:shareNeeded()?shareChoice():'',friendName:shareNeeded()&&shareChoice()==='friend'?$('friendName').value.trim():'',leader:$('leaderOk').checked,balanceAuth:planChoice()==='deposit'&&$('balanceAuth').checked}};
   $('go').disabled=true;$('err').textContent='';
   fetch('/.netlify/functions/retreat-booking-intent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j,s:r.status}})})
@@ -448,15 +461,16 @@ document.addEventListener('click',function(e){
   if(q('#opencart')){$('cancelOk').checked=false;showCart();$('bg').classList.add('open');return}
   if(t.id==='close'||t.id==='bg'){$('bg').classList.remove('open');return}
   if(q('#go')){var er=details();$('err').textContent=er;if(er)return;var c=cart.room?roomCalc(cart.room):null;
-    if(c&&c.r.kind==='twin'&&c.guests<(c.r.maxBeds||2)&&!ackRoommate){$('understand').checked=false;$('popgo').disabled=true;$('pop').classList.add('open')}else startPayment();return}
+    if(c&&c.r.kind==='twin'&&c.guests<(c.r.maxBeds||2)&&shareChoice()==='alone'&&!ackRoommate){$('understand').checked=false;$('popgo').disabled=true;$('pop').classList.add('open')}else startPayment();return}
   if(q('#popgo')){ackRoommate=true;$('pop').classList.remove('open');startPayment();return}
   if(t.id==='popno'||t.id==='pop'){$('pop').classList.remove('open');return}
   if(q('#pay')){confirmPay();return}
   if(q('#payback')){showCart();return}
 });
+document.addEventListener('input',function(e){if(e.target.id==='friendName')upd()});
 document.addEventListener('change',function(e){
   if(e.target.id==='understand')$('popgo').disabled=!e.target.checked;
-  else if(e.target.id==='cancelOk'||e.target.id==='balanceAuth'||e.target.name==='plan')upd();
+  else if(e.target.id==='cancelOk'||e.target.id==='balanceAuth'||e.target.name==='plan'||e.target.name==='share')upd();
   else if(e.target.id==='leaderOk'){render()}
 });
 init();

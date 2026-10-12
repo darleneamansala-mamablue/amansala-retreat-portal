@@ -38,7 +38,16 @@ exports.handler = async (event) => {
     // Everyone sharing the booking is named (both guests in one reservation); the booker is guest 1
     const others = (Array.isArray(guest.others) ? guest.others : []).map((n) => String(n || '').trim()).filter(Boolean);
     if (others.length !== priced.guests - 1) return L.json(400, { error: priced.guests > 1 ? `Please enter the full name of the ${priced.guests - 1 > 1 ? 'other guests' : 'other guest'}.` : 'Unexpected guests' });
-    if (rm.kind === 'twin' && priced.guests < (Number(rm.maxBeds) || 2) && acks.roommate !== true) return L.json(400, { error: 'Please read and agree to the roommate terms.' });
+    // A shared room (double / triple) that the guest's own party does not fill: they say whether they travel with a friend (named; the
+    // friend books their own bed) or alone (matched with a guest of the same gender, agreeing to pay for a private room if no match).
+    const sharedOpen = rm.kind === 'twin' && priced.guests < (Number(rm.maxBeds) || 2);
+    const shareChoice = sharedOpen ? String(acks.shareChoice || '') : '';
+    const friendName = sharedOpen ? String(acks.friendName || '').trim().slice(0, 100) : '';
+    if (sharedOpen) {
+      if (shareChoice !== 'friend' && shareChoice !== 'alone') return L.json(400, { error: 'Please tell us whether you are sharing the room with a friend or travelling alone.' });
+      if (shareChoice === 'friend' && friendName.split(/\s+/).filter(Boolean).length < 2) return L.json(400, { error: "Please enter your friend's first and last name." });
+      if (shareChoice === 'alone' && acks.roommate !== true) return L.json(400, { error: 'Please read and agree to the roommate terms.' });
+    }
 
     const av = await L.availability(key, bk, cfg);
     const isLeader = acks.leader === true;
@@ -84,7 +93,8 @@ exports.handler = async (event) => {
       'metadata[rbEmail]': email.slice(0, 200),
       'metadata[rbPhone]': phone.slice(0, 50),
       'metadata[rbOthers]': JSON.stringify(others).slice(0, 480),
-      'metadata[rbAck]': `cancel=1${acks.roommate === true ? ';roommate=1' : ''}${isLeader ? ';leader=1' : ''}${plan === 'deposit' ? ';balanceauth=1' : ''}`,
+      'metadata[rbShare]': shareChoice ? (shareChoice === 'friend' ? 'friend:' + friendName : 'alone') : '',
+      'metadata[rbAck]': `cancel=1${shareChoice === 'alone' && acks.roommate === true ? ';roommate=1' : ''}${isLeader ? ';leader=1' : ''}${plan === 'deposit' ? ';balanceauth=1' : ''}`,
       'metadata[rbTotal]': String(priced.total),
       'metadata[rbPlan]': plan,
     };
@@ -105,7 +115,9 @@ exports.handler = async (event) => {
       const now = new Date().toISOString();
       const agreements = [{ key: 'cancellation', text: L.AGREE_TEXT.cancellation, checked: true, at: now }];
       if (rm.kind === 'king' && priced.guests === 2) agreements.push({ key: 'king', text: L.AGREE_TEXT.king, checked: true, at: now, note: 'Shown on the room and in the cart (information)' });
-      if (acks.roommate === true) agreements.push({ key: 'roommate', text: L.AGREE_TEXT.roommate, checked: true, at: now, shownNotice: L.AGREE_TEXT.roommateNotice });
+      if (shareChoice === 'friend') agreements.push({ key: 'shareFriend', text: L.AGREE_TEXT.shareFriend, checked: true, at: now, note: `Friend's full name entered: ${friendName}` });
+      if (shareChoice === 'alone') agreements.push({ key: 'shareAlone', text: L.AGREE_TEXT.shareAlone, checked: true, at: now });
+      if (shareChoice === 'alone' && acks.roommate === true) agreements.push({ key: 'roommate', text: L.AGREE_TEXT.roommate, checked: true, at: now, shownNotice: L.AGREE_TEXT.roommateNotice });
       if (isLeader) agreements.push({ key: 'leader', text: L.AGREE_TEXT.leader, checked: true, at: now });
       if (plan === 'deposit') agreements.push({ key: 'balance', text: `I authorize Amansala to charge the remaining balance of $${balance.toFixed(2)} to this card on ${offer.balanceDate}.`, checked: true, at: now });
       const h = event.headers || {};
