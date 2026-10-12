@@ -61,17 +61,25 @@ async function fulfil(pi) {
   const roomLine = priced.lines.find((l) => l.type === 'room');
   const guests = [{ name: m.rbName, email: m.rbEmail, phone: m.rbPhone, notes: '' }].concat(others.map((n) => ({ name: n, email: '', phone: '', notes: '' })));
   const agreed = (m.rbAck || '').includes('roommate') ? 'cancellation policy and single-bed roommate terms' : 'cancellation policy';
-  const note = `Booked online ${new Date().toISOString().slice(0, 10)}${(m.rbAck || '').includes('leader=1') ? ' · LEADER (Chica)' : ''} · agreed to ${agreed} · Stripe ${pi.id}`;
 
   const av = await L.availability(key, bk, cfg);
   const freeAll = (av[room.rtId] || { free: [] }).free;
   const isLeader = (m.rbAck || '').includes('leader=1');
-  const freeChica = freeAll.filter(L.isChica);
+  const freeChica = freeAll.filter(L.isChica), freeGrande = freeAll.filter(L.isGrande);
   const needUnits = rm && rm.kind === 'twin' ? guests.length : 1;
-  // Leaders go to Amansala Chica; if no Chica room is left at fulfilment time, any free room is used and staff is told
-  let units = isLeader ? pickUnits(freeChica, needUnits) : pickUnits(freeAll, needUnits);
-  const leaderNotAtChica = isLeader && !units;
-  if (leaderNotAtChica) units = pickUnits(freeAll, needUnits);
+  // Leaders: Chica first; if Chica is out of this room type, Grande (and the guest + staff are told). Everyone else: Grande
+  // rooms first so Chica stays free for leaders, then Chica, then anything free.
+  let units, property = '';
+  if (isLeader) {
+    units = pickUnits(freeChica, needUnits);
+    if (units) property = 'Chica';
+    else { units = pickUnits(freeGrande, needUnits) || pickUnits(freeAll, needUnits); if (units) property = 'Grande'; }
+  } else {
+    units = pickUnits(freeGrande, needUnits) || pickUnits(freeChica, needUnits) || pickUnits(freeAll, needUnits);
+  }
+  const leaderAtGrande = isLeader && property === 'Grande';
+
+  const note = `Booked online ${new Date().toISOString().slice(0, 10)}${isLeader ? ' · LEADER (' + (property || 'no room') + ')' : ''} · agreed to ${agreed} · Stripe ${pi.id}`;
 
   const order = { piId: pi.id, bookingId, at: new Date().toISOString(), name: m.rbName, email: m.rbEmail, phone: m.rbPhone, total: priced.total, units: units || [], status: units ? 'placed' : 'needs_attention' };
 
@@ -105,13 +113,14 @@ async function fulfil(pi) {
     <h2 style="font-weight:400">Thank you for your booking</h2>
     <p>Hi ${esc((m.rbName || '').split(' ')[0])}, your payment of <b>${money(priced.total)}</b> was received and your place at <b>${esc(title)}</b> (${esc(dates)}) is ${units ? 'confirmed' : 'received. Our team will confirm your room shortly'}.</p>
     <table style="width:100%;border-collapse:collapse;border-top:1px solid #ddd;border-bottom:1px solid #ddd">${itemRows}<tr><td style="padding:8px 0;font-weight:700">Total paid</td><td style="padding:8px 0;text-align:right;font-weight:700">${money(priced.total)}</td></tr></table>
+    ${isLeader && units ? `<p><b>Your room as a leader:</b> ${leaderAtGrande ? 'Amansala Chica is out of ' + esc(roomLine.name) + ' rooms, so your room will be at <b>Amansala Grande</b>.' : 'your room will be at <b>Amansala Chica</b>.'}</p>` : ''}
     ${svcLines.length ? '<p>Our spa team will contact you to schedule your treatments.</p>' : ''}
     <p>Questions? Reply to this email or write to retreats@amansala.com.</p><p>Amansala · Tulum</p></div>`;
   await sendEmail(m.rbEmail, `Thank you for your booking — ${title}`, guestHtml, 'retreats@amansala.com');
 
   const staffTo = cfg.notifyEmail || 'retreats@amansala.com';
   const staffHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27"><h3>${units ? 'New retreat booking' : '⚠ Paid but NO ROOM FREE — needs attention'}</h3>
-    <p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>${esc(title)} · ${esc(dates)}<br>${(m.rbAck || '').includes('leader=1') ? '<b>Leader</b>' + (leaderNotAtChica ? ' (NO Chica room was free, placed elsewhere: please move to Chica)' : ' placed at Chica') + '<br>' : ''}${units ? 'Placed in: ' + esc(units.join(', ')) : 'No free room of this type was left when the payment completed. Place the guest by hand or refund in Stripe.'}</p>
+    <p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>${esc(title)} · ${esc(dates)}<br>${isLeader ? '<b>Leader</b>' + (leaderAtGrande ? ' placed at GRANDE because Chica was out of ' + esc(roomLine.name) + ' rooms' : ' placed at Chica') + '<br>' : ''}${units ? 'Placed in: ' + esc(units.join(', ')) : 'No free room of this type was left when the payment completed. Place the guest by hand or refund in Stripe.'}</p>
     ${others.length ? `<p>Other guests: ${esc(others.join(', '))}</p>` : ''}
     <table style="border-collapse:collapse">${itemRows}</table><p>Total ${money(priced.total)} · Stripe ${esc(pi.id)}</p>
     ${svcLines.length ? '<p><b>Spa pre-bookings to schedule</b> (saved under retreat spa requests).</p>' : ''}</div>`;

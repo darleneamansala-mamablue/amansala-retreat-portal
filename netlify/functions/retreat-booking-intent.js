@@ -42,10 +42,17 @@ exports.handler = async (event) => {
 
     const av = await L.availability(key, bk, cfg);
     const isLeader = acks.leader === true;
-    // A leader is placed at Amansala Chica, so a free CH room of this type is needed (everyone else: any free room)
+    // Leaders go to Amansala Chica. If Chica is out of this room type they are placed at Grande instead (and told on the page,
+    // in the cart and in the confirmation email). Everyone else: any free room (Grande rooms are used before Chica ones).
     const freeList = (av[rm.rtId] || { free: [] }).free;
-    const free = isLeader ? freeList.filter(L.isChica).length : freeList.length;
-    if (free < needed) return L.json(409, { error: isLeader ? 'There is no room of this type free at Amansala Chica. Please choose another room type.' : 'Sorry, that room was just taken. Please choose another option.' });
+    let leaderPlacement = null;
+    if (isLeader) {
+      if (freeList.filter(L.isChica).length >= needed) leaderPlacement = 'chica';
+      else if (freeList.filter(L.isGrande).length >= needed) leaderPlacement = 'grande';
+      else return L.json(409, { error: 'Sorry, that room type is sold out. Please choose another room type.' });
+    } else if (freeList.length < needed) {
+      return L.json(409, { error: 'Sorry, that room was just taken. Please choose another option.' });
+    }
 
     const amountCents = Math.round(priced.total * 100);
     if (amountCents < 50) return L.json(400, { error: 'Amount too small' });
@@ -75,7 +82,7 @@ exports.handler = async (event) => {
     });
     const pi = await piRes.json();
     if (pi.error) return L.json(400, { error: pi.error.message || 'Payment error' });
-    return L.json(200, { clientSecret: pi.client_secret, publishableKey: pubKey, amount: priced.total, lines: priced.lines });
+    return L.json(200, { clientSecret: pi.client_secret, publishableKey: pubKey, amount: priced.total, lines: priced.lines, leaderPlacement });
   } catch (e) {
     console.error('[retreat-booking-intent]', e.message);
     return L.json(400, { error: e.message && /not (priced|available)/.test(e.message) ? e.message : 'Could not start the payment. Please try again.' });

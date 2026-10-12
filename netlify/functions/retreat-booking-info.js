@@ -19,8 +19,9 @@ exports.handler = async (event) => {
     const rooms = (cfg.rooms || []).map((rm) => {
       const freeList = (av[rm.rtId] || { free: [] }).free;
       const free = freeList.length;
-      const freeChica = freeList.filter(L.isChica).length;      // for guests who tick "I am a leader"
-      const base = { rtId: rm.rtId, kind: rm.kind, label: rm.label, desc: rm.desc || '', imageUrl: rm.imageUrl || '', tags: rm.tags || [], free, freeChica };
+      const freeChica = freeList.filter(L.isChica).length;      // for guests who tick "I am a leader" (placed at Chica)
+      const freeGrande = freeList.filter(L.isGrande).length;    // leader fallback when Chica is out of this room type
+      const base = { rtId: rm.rtId, kind: rm.kind, label: rm.label, desc: rm.desc || '', imageUrl: rm.imageUrl || '', tags: rm.tags || [], free, freeChica, freeGrande };
       if (rm.kind === 'king') {
         const share = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'share' } });
         const solo = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'solo' } });

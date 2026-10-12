@@ -217,7 +217,10 @@ function money2(n){return '$'+Number(n).toLocaleString('en-US',{minimumFractionD
 function fmtD(s){return new Date(s+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
 function say(m){var t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(say.h);say.h=setTimeout(function(){t.hidden=true},2600)}
 function isLeader(){return !!($('leaderOk')&&$('leaderOk').checked)}
-function freeFor(r){return isLeader()?(r.freeChica||0):r.free}
+function placementFor(r,n){ // leaders: Chica first, Grande when Chica is out of this room type
+  if(!isLeader())return null;if((r.freeChica||0)>=n)return 'chica';if((r.freeGrande||0)>=n)return 'grande';return null}
+function okFor(r,n){return isLeader()?!!placementFor(r,n):r.free>=n}
+function leaderMsg(r,n){var p=placementFor(r,n);return p==='grande'?'Amansala Chica is out of '+esc(r.label)+' rooms, so as a leader your room will be at <b>Amansala Grande</b>.':(p==='chica'?'As a leader your room will be at <b>Amansala Chica</b>.':'')}
 function roomOf(id){return INFO.rooms.filter(function(r){return r.rtId===id})[0]}
 
 function roomCalc(c){
@@ -259,7 +262,7 @@ function render(){
   }).join('');
   $('stays').innerHTML=INFO.rooms.map(function(r,i){
     var rows='',btns='',kingNote='';
-    var needOne=freeFor(r)>=1;
+    var needOne=okFor(r,1);
     if(r.kind==='king'){
       rows='<div class="rate"><div class="l">Two guests · one king bed<small>Booked together, paid on one card</small></div><strong>'+money(r.sharePerPerson)+'<span>per person</span></strong></div><div class="rate"><div class="l">One guest<small>Just for you</small></div><strong>'+money(r.soloPerPerson)+'<span>per person</span></strong></div>';
       kingNote='<p class="kingnote"><b>Sharing a king bed? Please book together.</b> Both guests must be included in one reservation, with payment made using a single credit card. Individual spaces in a king bed cannot be booked separately.</p>';
@@ -267,13 +270,13 @@ function render(){
     }else if(r.kind==='twin'){
       rows='<div class="rate"><div class="l">Per bed<small>Each bed is booked and priced separately</small></div><strong>'+money(r.perBed)+'<span>per person</span></strong></div>';
       for(var n=1;n<=r.maxBeds;n++){
-        btns+='<button class="select" data-r="'+r.rtId+'" data-k="beds" data-n="'+n+'"'+(freeFor(r)>=n?'':' disabled')+'><span>'+(n===1?'Book 1 bed (just me)':'Book '+n+' beds (me + '+(n-1)+' friend'+(n>2?'s':'')+')')+'</span><span>&rarr;</span></button>';
+        btns+='<button class="select" data-r="'+r.rtId+'" data-k="beds" data-n="'+n+'"'+(okFor(r,n)?'':' disabled')+'><span>'+(n===1?'Book 1 bed (just me)':'Book '+n+' beds (me + '+(n-1)+' friend'+(n>2?'s':'')+')')+'</span><span>&rarr;</span></button>';
       }
     }else{
       rows='<div class="rate"><div class="l">One guest<small>Private room</small></div><strong>'+money(r.soloPerPerson)+'<span>per person</span></strong></div>';
       btns='<button class="select" data-r="'+r.rtId+'" data-k="solo"'+(needOne?'':' disabled')+'><span>Select for one guest</span><span>&rarr;</span></button>';
     }
-    var sold=freeFor(r)<1?'<p class="soldout">'+(isLeader()&&r.free>0?'No Chica room free':'Sold out')+'</p>':'';
+    var sold=!okFor(r,1)?'<p class="soldout">Sold out</p>':(isLeader()&&placementFor(r,1)==='grande'?'<p class="kingnote">'+leaderMsg(r,1)+'</p>':'');
     var img=r.imageUrl?'<img alt="'+esc(r.label)+'" src="'+esc(r.imageUrl)+'">':'';
     return '<article class="stay-card"><div class="img">'+img+'</div><div class="stay-content"><p class="eyebrow">Room '+(i+1)+' of '+INFO.rooms.length+'</p><h3>'+esc(r.label)+'</h3><p class="stay-desc">'+esc(r.desc)+'</p><div class="rates">'+rows+'</div>'+kingNote+sold+btns+'</div></article>';
   }).join('');
@@ -282,7 +285,7 @@ function render(){
     var seg=s.opts.length>1?'<div class="seg">'+s.opts.map(function(x){return '<button type="button" data-sv="'+esc(s.id)+'" data-m="'+x.m+'" class="'+(x.m===o.m?'on':'')+'">'+minLabel(x.m)+'</button>'}).join('')+'</div>':'<div class="seg"><button type="button" class="on" style="cursor:default">'+minLabel(s.opts[0].m)+'</button></div>';
     return '<article class="svc"><h3>'+esc(s.name)+'</h3><p>'+esc(s.desc||'')+'</p>'+seg+'<div class="pr">'+money(o.p)+'<span>per session</span></div><button class="select" data-add="'+esc(s.id)+'" style="margin-top:0"><span>'+(inCart?'In your cart · update':'Add to cart')+'</span><span>+</span></button></article>';
   }).join('');
-  var ln=$('leaderNote');if(ln){ln.hidden=!isLeader();ln.textContent='Showing rooms available at Amansala Chica for leaders.'}
+  var ln=$('leaderNote');if(ln){ln.hidden=!isLeader();ln.textContent='Leaders are placed at Amansala Chica. If Chica is out of a room type, your room will be at Amansala Grande and we will tell you before you pay.'}
   cartbar();
 }
 function cartbar(){
@@ -302,6 +305,7 @@ function showRoomPanel(){
   s+='<div class="line" style="opacity:.6;font-size:12px"><span>Taxes, fees and gratuity are included.'+(INFO.teachingFeeOn?'':' The teaching fee is billed separately.')+'</span></div>';
   $('sum').innerHTML=s;
   $('couple').hidden=!(r.kind==='king'&&cur.mode==='share');$('addbox').hidden=false;
+  if(isLeader()){$('sum').insertAdjacentHTML('beforeend','<div class="couple" style="margin:10px 0 0">'+leaderMsg(r,c.guests)+'</div>')}
   $('hint2').textContent=(r.kind==='king'&&cur.mode==='share')?'Both guests are in one reservation, paid with a single credit card.':(r.kind==='twin'&&cur.beds>1?'One credit card pays for all '+cur.beds+' beds.':'');
 }
 function showCart(){
@@ -314,7 +318,7 @@ function showCart(){
   $('cartlines').innerHTML=lines;
   $('sum').innerHTML='<div class="line total" style="margin-top:0;border-top:0;padding-top:0"><span>Total</span><span>'+money(cartTotal())+'</span></div>';
   $('couple').hidden=!(c&&c.r.kind==='king'&&c.guests===2);
-  if(isLeader()){$('sum').insertAdjacentHTML('beforeend','<div class="line" style="opacity:1;margin-top:8px"><span><b>Leader</b>: you will be placed at Amansala Chica.</span><span></span></div>')}
+  if(isLeader()&&c){$('sum').insertAdjacentHTML('beforeend','<div class="couple" style="margin:10px 0 0">'+leaderMsg(c.r,c.guests)+'</div>')}
   var has=!!cart.room;
   $('checkout').hidden=!(has||Object.keys(cart.svcs).length);
   $('others').innerHTML=(c&&c.guests>1)?Array.apply(null,Array(c.guests-1)).map(function(_,i){return '<label style="margin-top:12px">'+(c.guests===2?'Other guest':'Guest '+(i+2))+' full name<input class="oth" placeholder="First and last name"></label>'}).join(''):'';
@@ -351,7 +355,7 @@ function startPayment(){
      $('stripe-element').innerHTML='';elements.create('payment').mount('#stripe-element');
      $('payAmt').textContent=money2(x.j.amount);
      $('checkout').hidden=true;$('paybox').hidden=false;$('mt').textContent='Payment';
-     window._rbAmount=x.j.amount;
+     window._rbAmount=x.j.amount;window._rbLeaderMsg=(x.j.leaderPlacement?leaderMsg(roomOf(cart.room.rtId),roomCalc(cart.room).guests):'');
    }).catch(function(){$('err').textContent='Connection problem. Please try again.';$('go').disabled=false});
 }
 function init2(){ // refresh availability after a "just taken" message
@@ -363,7 +367,7 @@ function confirmPay(){
     if(res.error){$('payerr').textContent=res.error.message;$('pay').disabled=false;return}
     var total=window._rbAmount, nm=$('fName').value.trim().split(/\s+/)[0], em=$('fEmail').value.trim();
     resetPanels();$('cartlines').innerHTML='';$('sum').innerHTML='';document.querySelector('.lock').hidden=true;$('sum').hidden=true;$('mt').textContent='Booked';$('ms').textContent='';
-    $('donetxt').innerHTML='Thank you, '+esc(nm)+'. Your payment of <b>'+money2(total)+'</b> was received and your booking for '+esc($('datesTxt').textContent)+' is confirmed.<br>A confirmation was sent to <b>'+esc(em)+'</b>. We will be in touch before you arrive.';
+    $('donetxt').innerHTML='Thank you, '+esc(nm)+'. Your payment of <b>'+money2(total)+'</b> was received and your booking for '+esc($('datesTxt').textContent)+' is confirmed.<br>A confirmation was sent to <b>'+esc(em)+'</b>. We will be in touch before you arrive.'+(window._rbLeaderMsg?'<br><br>'+window._rbLeaderMsg:'');
     $('done').hidden=false;cart={room:null,svcs:{}};cartbar();say('Thank you for your booking');
   });
 }
