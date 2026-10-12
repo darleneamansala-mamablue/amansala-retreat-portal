@@ -3760,7 +3760,10 @@ function tsApplyMealPlan(bk,rows,dayIdx,nights){
     if(/^(Brunch|Breakfast)\b/.test(d)){
       tmpl=tmpl||r;
       if(plan.has('brunch'))out.push(r);
-      else if(plan.has('breakfast'))out.push({...r,desc:d.replace(/^(Brunch|Breakfast)/,'Breakfast')});
+      else if(plan.has('breakfast')){
+        const bt=(typeof mtBreakfastOverride==='function')?mtBreakfastOverride(bk):'';   // per-retreat Breakfast time (meal-times.js)
+        out.push({...r,desc:d.replace(/^(Brunch|Breakfast)/,'Breakfast'),...(bt?{time:tsFmt(bt),sk:bt}:{})});
+      }
       return;
     }
     if(/Snack$/.test(d)&&(r.cat==='meal'||r.cls===''||r.cls===undefined)){if(plan.has('snack'))out.push(r);return;}
