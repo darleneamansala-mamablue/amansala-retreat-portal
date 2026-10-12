@@ -38,7 +38,7 @@ exports.handler = async (event) => {
     // Everyone sharing the booking is named (both guests in one reservation); the booker is guest 1
     const others = (Array.isArray(guest.others) ? guest.others : []).map((n) => String(n || '').trim()).filter(Boolean);
     if (others.length !== priced.guests - 1) return L.json(400, { error: priced.guests > 1 ? `Please enter the full name of the ${priced.guests - 1 > 1 ? 'other guests' : 'other guest'}.` : 'Unexpected guests' });
-    if (rm.kind === 'twin' && priced.guests === 1 && acks.roommate !== true) return L.json(400, { error: 'Please read and agree to the roommate terms.' });
+    if (rm.kind === 'twin' && priced.guests < (Number(rm.maxBeds) || 2) && acks.roommate !== true) return L.json(400, { error: 'Please read and agree to the roommate terms.' });
 
     const av = await L.availability(key, bk, cfg);
     const isLeader = acks.leader === true;
