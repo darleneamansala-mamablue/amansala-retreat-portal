@@ -209,7 +209,9 @@ footer p{opacity:.65;margin:0;font-size:12px}
 <script>
 (function(){
 var $=function(i){return document.getElementById(i)};
-var BK=new URLSearchParams(location.search).get('r')||'';
+var QS=new URLSearchParams(location.search);
+var BK=QS.get('r')||'';
+var REVIEW=(QS.get('template')==='1'?'&template=1':'')+(QS.get('preview')==='1'?'&preview=1':'');   // review modes: payment is off
 var INFO=null, cur=null, cart={room:null,svcs:{}}, svcSel={}, stripe=null, elements=null, ackRoommate=false;
 
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
@@ -236,8 +238,8 @@ function cartTotal(){var t=cart.room?roomCalc(cart.room).total:0;Object.keys(car
 function minLabel(m){return m===60?'1 hour':m+' min'}
 
 function init(){
-  if(!BK){showClosed('This link is missing its retreat. Please use the link we sent you.');return}
-  fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+  if(!BK&&QS.get('template')!=='1'){showClosed('This link is missing its retreat. Please use the link we sent you.');return}
+  fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)+REVIEW).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
     if(!x.ok){showClosed(x.j&&x.j.error);return}
     INFO=x.j;INFO.services.forEach(function(s){svcSel[s.id]=s.opts[0].m});
     $('loading').hidden=true;$('app').hidden=false;
@@ -362,7 +364,7 @@ function startPayment(){
    }).catch(function(){$('err').textContent='Connection problem. Please try again.';$('go').disabled=false});
 }
 function init2(){ // refresh availability after a "just taken" message
-  fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)).then(function(r){return r.json()}).then(function(j){if(j&&j.rooms){INFO=j;INFO.services.forEach(function(s){if(!svcSel[s.id])svcSel[s.id]=s.opts[0].m});cart.room=null;render()}});
+  fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)+REVIEW).then(function(r){return r.json()}).then(function(j){if(j&&j.rooms){INFO=j;INFO.services.forEach(function(s){if(!svcSel[s.id])svcSel[s.id]=s.opts[0].m});cart.room=null;render()}});
 }
 function confirmPay(){
   $('pay').disabled=true;$('payerr').textContent='';
