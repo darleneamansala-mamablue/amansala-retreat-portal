@@ -99,7 +99,7 @@ exports.handler = async (event) => {
   });
 
   const match = final[slug];
-  if (!match) return { statusCode: 404, body: 'No active event matches this link.' };
+  if (!match) return { statusCode: 404, body: 'No active event matches this link. DBG ' + JSON.stringify({ path: event.path, q: event.queryStringParameters, slug }) };
 
   return {
     statusCode: 302,
