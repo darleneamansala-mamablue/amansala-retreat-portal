@@ -156,6 +156,14 @@ exports.handler = async (event) => {
     const pi   = stripeEvent.data.object;
     const meta = pi.metadata ?? {};
 
+    // Retreat Booking page payments (retreat-booking.html) are fulfilled by rb-fulfil.js: they go into the retreat's room list,
+    // never into the hotel booking_requests / Cloudbeds flow below.
+    if (meta.source === 'retreat_booking') {
+      try { await require('./rb-fulfil').fulfil(pi); }
+      catch (err) { console.error('[stripe-webhook] retreat booking fulfil error:', err.message); }
+      return { statusCode: 200, body: JSON.stringify({ received: true, retreatBooking: true }) };
+    }
+
     if (!meta.email || !meta.checkIn || !meta.checkOut) {
       console.warn('[stripe-webhook] Missing metadata on PI:', pi.id);
       return { statusCode: 200, body: JSON.stringify({ received: true }) };

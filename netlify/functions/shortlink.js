@@ -52,8 +52,9 @@ exports.handler = async (event) => {
   // Optional section. An unknown section is a 404 so a typo or a stray two-segment
   // path doesn't silently land on the dashboard.
   const rawView = (segs[1] || qs.view || '').toLowerCase();
-  const view = rawView ? VIEWS[rawView] : '';
-  if (rawView && !view) return { statusCode: 404, body: 'Not found' };
+  const isBook = rawView === 'book';          // /<slug>/book -> the guest booking page (retreat-booking.html)
+  const view = rawView && !isBook ? VIEWS[rawView] : '';
+  if (rawView && !isBook && !view) return { statusCode: 404, body: 'Not found' };
 
   let bookings;
   try {
@@ -101,6 +102,8 @@ exports.handler = async (event) => {
 
   const match = final[slug];
   if (!match) return { statusCode: 404, body: 'No active event matches this link.' };
+
+  if (isBook) return { statusCode: 302, headers: { Location: `/retreat-booking.html?r=${encodeURIComponent(match.id)}` } };
 
   return {
     statusCode: 302,

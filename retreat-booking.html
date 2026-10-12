@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Book Your Retreat | Amansala Tulum</title>
+<meta name="theme-color" content="#f8f5ef">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Italiana&display=swap" rel="stylesheet">
+<script src="https://js.stripe.com/v3/"></script>
+<style>
+/* Same look as book.html: sand + moss + clay, Italiana headings, DM Sans text. Always light. */
+:root{--sand:#eee9df;--sand-light:#f8f5ef;--ink:#1f2b27;--moss:#3f5147;--clay:#9a5f43;--line:#1f2b272e;--paper:#fffdf8;--warn:#f6ebd0;--warn-line:#c9993f;--display:'Italiana',Georgia,serif;--body:'DM Sans',system-ui,sans-serif;color-scheme:light}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--sand-light);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;line-height:1.5}
+button,input{font:inherit;color:inherit}
+.site-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;min-height:72px;padding:0 4vw;gap:10px}
+.wordmark{letter-spacing:.36em;font-size:17px;font-weight:600}
+.header-note{letter-spacing:.2em;text-transform:uppercase;opacity:.7;font-size:11px;text-align:center}
+.text-link{letter-spacing:.12em;text-transform:uppercase;justify-self:end;font-size:12px;text-decoration:none;color:inherit}
+.banner{width:100%;background:#0b1a1c}
+.banner img{display:block;width:100%;height:clamp(210px,34vw,440px);object-fit:cover;object-position:50% 30%}
+.titlebar{padding:56px 6vw;text-align:center;background:var(--moss);color:#fffdf8}
+.titlebar h1{font-family:var(--display);font-weight:400;font-size:clamp(40px,7vw,84px);margin:0;letter-spacing:-.03em;line-height:1}
+.booking-shell{width:min(1180px,92vw);margin:22px auto 0}
+.booking-bar{background:var(--paper);display:grid;grid-template-columns:1.3fr .8fr 1fr;box-shadow:0 24px 65px #1f2b271f}
+.field{border-right:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:12px;padding:26px 28px}
+.field>span{letter-spacing:.2em;text-transform:uppercase;opacity:.65;font-size:10px;font-weight:600}
+.field b{font-weight:500;font-size:15px}.field small{opacity:.65;font-size:12px}
+.go-bar{background:var(--moss);color:#fffdf8;display:flex;align-items:center;justify-content:space-between;padding:0 30px;letter-spacing:.06em;font-size:12px;font-weight:500;text-decoration:none;min-height:80px}
+.jump{display:flex;gap:10px 14px;flex-wrap:wrap;justify-content:center;width:min(1180px,92vw);margin:18px auto 0}
+.jump a{border:1px solid var(--ink);padding:10px 18px;letter-spacing:.14em;text-transform:uppercase;font-size:11px;text-decoration:none;color:var(--ink)}
+.jump a:hover{background:var(--ink);color:var(--sand-light)}
+section.pad{padding:90px 4vw 20px}
+.section-heading{display:grid;grid-template-columns:1.3fr .7fr;gap:6vw;align-items:end;max-width:1180px;margin:0 auto 38px}
+.kicker{letter-spacing:.24em;text-transform:uppercase;margin:0 0 20px;font-size:11px;font-weight:600;color:var(--clay)}
+.section-heading h2{font-family:var(--display);font-weight:400;letter-spacing:-.035em;margin:0;font-size:clamp(40px,6vw,76px);line-height:.95}
+.section-heading p{opacity:.75;margin:0;font-size:14px;line-height:1.8}
+.pricing{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:1.5fr 1fr;gap:5vw}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:420px;font-variant-numeric:tabular-nums}
+th{letter-spacing:.16em;text-transform:uppercase;font-size:10px;font-weight:600;opacity:.65;text-align:left;padding:0 10px 12px;border-bottom:1px solid var(--ink)}
+td{padding:16px 10px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+td .nm{font-family:var(--display);font-size:22px;line-height:1.1}
+td small{display:block;opacity:.6;font-size:12px;margin-top:3px}
+td.p strong{font-family:var(--display);font-size:24px;font-weight:400;display:block}
+td.p span{letter-spacing:.1em;text-transform:uppercase;opacity:.6;font-size:10px}
+.hint{font-size:12px;opacity:.7;margin-top:10px}
+.incl{background:var(--paper);border:1px solid var(--line);padding:34px 32px;align-self:start}
+.incl h3{font-family:var(--display);font-weight:400;font-size:34px;margin:0 0 18px;letter-spacing:-.02em}
+.incl ul{list-style:none;margin:0;padding:18px 0 0;border-top:1px solid var(--line);display:grid;gap:12px}
+.incl li{font-size:14px}.incl li::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--clay);margin-right:12px;vertical-align:middle}
+.incl .no{margin-top:20px;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;opacity:.8;line-height:1.6}
+.policybox{border:1px solid var(--line);background:var(--paper);padding:26px 30px}
+.ptxt{font-size:14px;line-height:1.75;margin:0}
+.stay-list{display:grid;gap:80px;max-width:1280px;margin:0 auto}
+.stay-card{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.7fr);align-items:center;gap:clamp(28px,5vw,80px)}
+.stay-card:nth-child(2n){grid-template-columns:minmax(300px,.7fr) minmax(0,1.5fr)}
+.stay-card:nth-child(2n) .img{grid-area:1/2}.stay-card:nth-child(2n) .stay-content{grid-area:1/1}
+.img{aspect-ratio:1.48;background:var(--sand);overflow:hidden}.img img{width:100%;height:100%;object-fit:cover;display:block}
+.eyebrow{color:var(--clay);letter-spacing:.2em;text-transform:uppercase;margin:0 0 12px;font-size:10px;font-weight:600}
+.stay-content h3{font-family:var(--display);font-weight:400;letter-spacing:-.03em;margin:0;font-size:clamp(36px,4vw,54px);line-height:1}
+.stay-desc{opacity:.75;margin:20px 0;font-size:14px;line-height:1.75}
+.rates{border-top:1px solid var(--line);display:grid}
+.rate{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
+.rate .l{letter-spacing:.1em;text-transform:uppercase;font-size:11px}.rate .l small{display:block;letter-spacing:0;text-transform:none;opacity:.6;font-size:12px;margin-top:2px}
+.rate strong{font-family:var(--display);font-size:28px;font-weight:400;text-align:right;white-space:nowrap}
+.rate strong span{display:block;font-family:var(--body);letter-spacing:.1em;text-transform:uppercase;opacity:.6;font-size:10px}
+.kingnote{font-size:12.5px;line-height:1.65;margin:12px 0 4px;padding:12px 14px;background:var(--paper);border:1px solid var(--line)}
+.select{border:1px solid var(--ink);letter-spacing:.14em;text-transform:uppercase;cursor:pointer;background:transparent;display:flex;justify-content:space-between;align-items:center;width:100%;padding:16px 18px;font-size:11px;margin-top:12px;transition:background .2s,color .2s}
+.select:hover:not(:disabled){background:var(--ink);color:var(--sand-light)}
+.select:disabled{opacity:.45;cursor:not-allowed}
+.soldout{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a63a2a;margin-top:10px}
+.svc-grid{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.svc{background:var(--paper);border:1px solid var(--line);padding:26px 24px;display:flex;flex-direction:column;gap:12px}
+.svc h3{font-family:var(--display);font-weight:400;font-size:32px;margin:0;line-height:1}
+.svc p{font-size:13.5px;line-height:1.7;opacity:.78;margin:0}
+.seg{display:flex;border:1px solid var(--ink)}.seg button{flex:1;background:transparent;border:0;padding:10px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
+.seg button+button{border-left:1px solid var(--ink)}.seg button.on{background:var(--ink);color:var(--sand-light)}
+.svc .pr{font-family:var(--display);font-size:30px;margin-top:auto}.svc .pr span{font-family:var(--body);font-size:10px;letter-spacing:.1em;text-transform:uppercase;opacity:.6;margin-left:6px}
+footer{background:var(--sand);margin-top:100px;display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;padding:44px 4vw 120px}
+footer p{opacity:.65;margin:0;font-size:12px}
+.cartbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--ink);color:var(--sand-light);display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 4vw;font-size:14px}
+.cartbar[hidden]{display:none}.cartbar b{font-family:var(--display);font-size:26px;font-weight:400;margin-left:10px}
+.cartbar button{background:var(--sand-light);color:var(--ink);border:0;padding:12px 22px;letter-spacing:.12em;text-transform:uppercase;font-size:11px;cursor:pointer}
+.bg{display:none;position:fixed;inset:0;background:rgba(20,28,25,.5);z-index:50;justify-content:flex-end}.bg.open{display:flex}
+.modal{background:var(--sand-light);width:min(520px,100%);height:100%;padding:56px 40px 36px;overflow-y:auto;position:relative;box-shadow:-30px 0 80px #141c192e}
+.close{position:absolute;top:20px;right:24px;background:none;border:0;font-size:26px;cursor:pointer;opacity:.5;line-height:1}
+.modal h3{font-family:var(--display);font-weight:400;font-size:44px;line-height:1;margin:0 0 6px}
+.modal .sub{font-size:12px;opacity:.65;margin:0 0 20px}
+.lock{display:flex;justify-content:space-between;gap:12px;padding:14px 16px;background:var(--paper);border:1px solid var(--line);margin-bottom:18px;font-size:14px}
+.lock span{letter-spacing:.16em;text-transform:uppercase;font-size:10px;opacity:.65;font-weight:600}
+.summary{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0;margin-bottom:18px;font-variant-numeric:tabular-nums}
+.line{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:3px 0;opacity:.8}.line.total{font-weight:600;opacity:1;margin-top:8px;padding-top:12px;border-top:1px solid var(--line);font-size:15px}
+.cartline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+.cartline small{display:block;opacity:.65;font-size:12px}
+.cartline .rm{background:none;border:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;opacity:.6;cursor:pointer;padding:0;margin-top:2px}
+.cartline .amt{font-variant-numeric:tabular-nums;white-space:nowrap}
+.couple{border:1px solid var(--line);background:var(--paper);padding:16px;margin-bottom:18px;font-size:13.5px;line-height:1.6}
+.fields{display:grid;gap:12px;margin:0 0 18px}
+.fields label{display:flex;flex-direction:column;gap:5px;font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+.fields input{padding:12px 13px;border:1px solid var(--line);background:var(--paper);font-size:14px;letter-spacing:0;text-transform:none;border-radius:0;outline:none}
+.fields input:focus{border-color:var(--moss)}
+.policy{margin:0 0 16px}
+.agree{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--warn-line);background:var(--warn);padding:16px;margin-bottom:16px;font-size:14px;line-height:1.6;cursor:pointer}
+.agree input{margin-top:3px;accent-color:var(--moss);width:18px;height:18px;flex:none}
+.btn{width:100%;background:var(--moss);color:#fffdf8;border:0;padding:20px;font-size:11px;letter-spacing:.13em;text-transform:uppercase;cursor:pointer;display:flex;justify-content:space-between}
+.btn:disabled{background:#c8c4bb;color:#55554f;cursor:not-allowed}
+.plain{background:none;border:0;margin:14px auto 0;display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.7;cursor:pointer}
+.err{color:#a63a2a;font-size:12.5px;margin-top:8px;min-height:1em}
+#stripe-element{border:1px solid var(--line);padding:12px;background:var(--paper);min-height:44px;margin-bottom:12px}
+.thanks{text-align:center;padding:30px 0}.thanks h3{font-size:46px}.thanks p{font-size:14px;line-height:1.75;opacity:.85}
+.pop{align-items:center;justify-content:center;padding:20px;z-index:60}
+.popbox{background:var(--sand-light);width:min(520px,100%);padding:34px 32px;box-shadow:0 30px 80px #141c192e;max-height:92vh;overflow-y:auto}
+.popbox h3{font-family:var(--display);font-weight:400;font-size:38px;margin:0 0 10px;line-height:1}.popbox p{font-size:14px;line-height:1.7;margin:0 0 16px}
+.toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);background:var(--ink);color:var(--sand-light);padding:12px 20px;font-size:13px;z-index:80;max-width:90vw}
+.state{max-width:560px;margin:80px auto;text-align:center;padding:0 20px}.state h2{font-family:var(--display);font-weight:400;font-size:42px;margin:0 0 10px}
+@media(max-width:820px){.site-header{grid-template-columns:1fr auto}.header-note{display:none}.booking-bar{grid-template-columns:1fr}.field{border-right:0;border-bottom:1px solid var(--line)}
+.section-heading,.pricing{grid-template-columns:1fr}.stay-card,.stay-card:nth-child(2n){grid-template-columns:1fr}.stay-card:nth-child(2n) .img,.stay-card:nth-child(2n) .stay-content{grid-area:auto}
+.svc-grid{grid-template-columns:1fr}footer{grid-template-columns:1fr;text-align:center}.modal{padding:52px 22px 28px}.cartbar{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<header class="site-header"><div class="wordmark">AMANSALA</div><div class="header-note">Retreat booking · Tulum</div><a class="text-link" href="https://amansala.com">amansala.com &rarr;</a></header>
+
+<div id="loading" class="state"><p>Loading your retreat…</p></div>
+<div id="closed" class="state" hidden><h2>This page is not open yet</h2><p id="closedTxt">Please check back soon or contact us at retreats@amansala.com.</p></div>
+
+<main id="app" hidden>
+  <section class="banner" id="bannerWrap" hidden><img id="bannerImg" alt=""></section>
+  <section class="titlebar" id="titleBar" hidden><h1 id="titleTxt"></h1></section>
+  <div class="booking-shell"><div class="booking-bar">
+    <div class="field"><span>Dates</span><b id="datesTxt"></b><small id="nightsTxt"></small></div>
+    <div class="field"><span>Room for</span><b>1 or 2 guests</b><small>Two guests in one king bed pay together</small></div>
+    <a class="go-bar" href="#rooms">Choose your room <span>&darr;</span></a>
+  </div></div>
+  <nav class="jump"><a href="#rooms">Rooms</a><a href="#spa" id="spaJump">Pre-book spa services</a><a href="#policy">Cancellation policy</a></nav>
+
+  <section class="pad">
+    <div class="section-heading"><div><p class="kicker">Retreat pricing</p><h2>One clear price per person</h2></div><p>Prices are per person for the full stay. Taxes, fees and gratuity are already included in every price you see.</p></div>
+    <div class="pricing">
+      <div class="tblwrap"><table><thead><tr><th>Room</th><th>Two guests sharing</th><th>One guest</th></tr></thead><tbody id="chart"></tbody></table>
+        <p class="hint">King bed rooms are booked for two guests together and paid with one credit card. Rooms with separate beds are booked one bed at a time.</p></div>
+      <aside class="incl"><h3>What's included</h3><ul id="inclList"></ul><div class="no" id="notIncl"></div></aside>
+    </div>
+  </section>
+
+  <section class="pad" id="policy" style="padding-top:40px;padding-bottom:0">
+    <div class="pricing" style="grid-template-columns:1fr"><div class="policybox"><p class="kicker">Cancellation policy</p><p class="ptxt" id="policyTxt"></p></div></div>
+  </section>
+
+  <section class="pad" id="rooms">
+    <div class="section-heading"><div><p class="kicker">Select your room</p><h2>Where you will stay</h2></div><p>Two guests can share a king bed and pay together, or choose a room for one guest. Rooms with separate beds are booked one bed at a time.</p></div>
+    <div class="stay-list" id="stays"></div>
+  </section>
+
+  <section class="pad" id="spa">
+    <div class="section-heading"><div><p class="kicker">Pre-book spa services</p><h2>Add something for you</h2></div><p>Reserve your treatments before you arrive. Add them to your cart with your room and pay once.</p></div>
+    <div class="svc-grid" id="svcs"></div>
+  </section>
+  <footer><p>Questions? retreats@amansala.com</p><div class="wordmark" style="font-size:15px">AMANSALA</div><p style="text-align:right">Tulum, Quintana Roo</p></footer>
+</main>
+
+<div class="cartbar" id="cartbar" hidden><div><span id="cartcount"></span><b id="carttotal"></b></div><button type="button" id="opencart">Review cart</button></div>
+
+<div class="bg" id="bg"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mt">
+  <button class="close" id="close" aria-label="Close">&times;</button>
+  <h3 id="mt"></h3><p class="sub" id="ms"></p>
+  <div class="lock"><span>Your dates</span><b id="lockDates"></b></div>
+  <div id="cartlines"></div>
+  <div class="summary" id="sum"></div>
+  <div class="couple" id="couple" hidden><b>Sharing a king bed? Please book together.</b> Both guests must be included in one reservation, with payment made using a single credit card. Individual spaces in a king bed cannot be booked separately.</div>
+  <div id="addbox" hidden><button class="btn" id="addroom" type="button"><span>Add room to cart</span><span>&rarr;</span></button><p class="hint" id="hint2"></p></div>
+  <div id="checkout" hidden>
+    <div class="fields" id="fields">
+      <label>Full name<input id="fName" autocomplete="name" placeholder="First and last name"></label>
+      <label>Email<input id="fEmail" type="email" autocomplete="email" placeholder="you@example.com"></label>
+      <label>Phone number<input id="fPhone" type="tel" autocomplete="tel" placeholder="+1 555 123 4567"></label>
+      <label class="agree" style="margin:6px 0 0;background:var(--paper);border-color:var(--line);font-size:13px;letter-spacing:0;text-transform:none;font-weight:400"><input type="checkbox" id="leaderOk"><span><b>I am a leader.</b> Leaders are placed at Amansala Chica.</span></label>
+      <div id="others"></div>
+    </div>
+    <div class="policy"><p class="kicker" style="margin-bottom:8px">Cancellation policy</p><p class="ptxt" id="policyTxt2"></p>
+      <label class="agree" style="margin:12px 0 0;background:var(--paper);border-color:var(--line)"><input type="checkbox" id="cancelOk"><span>I have read and agree to the cancellation policy.</span></label></div>
+    <button class="btn" id="go" type="button" disabled><span>Continue to payment</span><span>&rarr;</span></button>
+    <p class="hint" id="hint"></p><p class="err" id="err"></p>
+  </div>
+  <div id="paybox" hidden>
+    <p class="sub" style="margin-bottom:12px">Secure card payment</p>
+    <div id="stripe-element"></div>
+    <button class="btn" id="pay" type="button"><span>Pay <b id="payAmt"></b></span><span>&rarr;</span></button>
+    <button class="plain" id="payback" type="button">Back</button>
+    <p class="err" id="payerr"></p>
+  </div>
+  <div id="done" class="thanks" hidden><h3>Thank you for your booking</h3><p id="donetxt"></p></div>
+</div></div>
+
+<div class="bg pop" id="pop"><div class="popbox" role="dialog" aria-modal="true" aria-labelledby="pt">
+  <h3 id="pt">Before you continue</h3>
+  <p>You are booking <b>one bed</b> in a shared room. We will try to match you with another guest.</p>
+  <label class="agree"><input type="checkbox" id="understand"><span>I agree that if there is no one to match me up with, I will pay the fee of a private room and will be moved to a garden room with a king or queen bed, and there will be a fee.</span></label>
+  <button class="btn" id="popgo" type="button" disabled><span>Continue to payment</span><span>&rarr;</span></button>
+  <button class="plain" id="popno" type="button">Go back</button>
+</div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var BK=new URLSearchParams(location.search).get('r')||'';
+var INFO=null, cur=null, cart={room:null,svcs:{}}, svcSel={}, stripe=null, elements=null, ackRoommate=false;
+
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function money(n){return '$'+Math.round(n).toLocaleString('en-US')}
+function money2(n){return '$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function fmtD(s){return new Date(s+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+function say(m){var t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(say.h);say.h=setTimeout(function(){t.hidden=true},2600)}
+function roomOf(id){return INFO.rooms.filter(function(r){return r.rtId===id})[0]}
+
+function roomCalc(c){
+  var r=roomOf(c.rtId), per, n;
+  if(r.kind==='king'){ if(c.mode==='share'){per=r.sharePerPerson;n=2}else{per=r.soloPerPerson;n=1} }
+  else if(r.kind==='twin'){ per=r.perBed;n=c.beds }
+  else { per=r.soloPerPerson;n=1 }
+  return {r:r,per:per,guests:n,total:per*n};
+}
+function svcPrice(id){var s=INFO.services.filter(function(x){return x.id===id})[0],it=cart.svcs[id];var o=s.opts.filter(function(x){return x.m===it.m})[0];return o.p*it.q}
+function cartTotal(){var t=cart.room?roomCalc(cart.room).total:0;Object.keys(cart.svcs).forEach(function(k){t+=svcPrice(k)});return t}
+function minLabel(m){return m===60?'1 hour':m+' min'}
+
+function init(){
+  if(!BK){showClosed('This link is missing its retreat. Please use the link we sent you.');return}
+  fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
+    if(!x.ok){showClosed(x.j&&x.j.error);return}
+    INFO=x.j;INFO.services.forEach(function(s){svcSel[s.id]=s.opts[0].m});
+    $('loading').hidden=true;$('app').hidden=false;
+    document.title=(INFO.title||'Retreat')+' | Amansala Tulum';
+    if(INFO.bannerUrl){$('bannerImg').src=INFO.bannerUrl;$('bannerImg').alt=INFO.title||'';$('bannerWrap').hidden=false}
+    else{$('titleTxt').textContent=INFO.title||'Your retreat';$('titleBar').hidden=false}
+    var ds=fmtD(INFO.startDate)+' – '+fmtD(INFO.endDate);
+    $('datesTxt').textContent=ds;$('lockDates').textContent=ds;$('nightsTxt').textContent=INFO.nights+' nights · set for this retreat';
+    $('inclList').innerHTML=(INFO.includes||[]).map(function(i){return '<li>'+esc(i)+'</li>'}).join('');
+    $('notIncl').textContent=INFO.notIncluded||'';$('notIncl').hidden=!INFO.notIncluded;
+    $('policyTxt').innerHTML=esc(INFO.policy).replace(/\n/g,'<br>');$('policyTxt2').innerHTML=$('policyTxt').innerHTML;
+    if(!INFO.services.length){$('spa').hidden=true;$('spaJump').hidden=true}
+    render();
+  }).catch(function(){showClosed('We could not load this page. Please try again in a moment.')});
+}
+function showClosed(msg){$('loading').hidden=true;$('closed').hidden=false;if(msg)$('closedTxt').textContent=msg}
+
+function render(){
+  $('chart').innerHTML=INFO.rooms.map(function(r){
+    var two=r.kind==='king'?'<strong>'+money(r.sharePerPerson)+'</strong><span>per person</span><small>Two guests, one king bed</small>':(r.kind==='twin'?'<strong>'+money(r.perBed)+'</strong><span>per person</span><small>Per bed, shared room</small>':'<span>Private only</span>');
+    var one=(r.kind==='king'||r.kind==='single')?'<strong>'+money(r.soloPerPerson)+'</strong><span>per person</span>':'<span>Shared only</span>';
+    return '<tr><td><span class="nm">'+esc(r.label)+'</span><small>'+esc((r.tags||[]).join(' · '))+'</small></td><td class="p">'+two+'</td><td class="p">'+one+'</td></tr>';
+  }).join('');
+  $('stays').innerHTML=INFO.rooms.map(function(r,i){
+    var rows='',btns='',kingNote='';
+    var needOne=r.free>=1;
+    if(r.kind==='king'){
+      rows='<div class="rate"><div class="l">Two guests · one king bed<small>Booked together, paid on one card</small></div><strong>'+money(r.sharePerPerson)+'<span>per person</span></strong></div><div class="rate"><div class="l">One guest<small>Just for you</small></div><strong>'+money(r.soloPerPerson)+'<span>per person</span></strong></div>';
+      kingNote='<p class="kingnote"><b>Sharing a king bed? Please book together.</b> Both guests must be included in one reservation, with payment made using a single credit card. Individual spaces in a king bed cannot be booked separately.</p>';
+      btns='<button class="select" data-r="'+r.rtId+'" data-k="share"'+(needOne?'':' disabled')+'><span>Select for two guests</span><span>&rarr;</span></button><button class="select" data-r="'+r.rtId+'" data-k="solo"'+(needOne?'':' disabled')+'><span>Select for one guest</span><span>&rarr;</span></button>';
+    }else if(r.kind==='twin'){
+      rows='<div class="rate"><div class="l">Per bed<small>Each bed is booked and priced separately</small></div><strong>'+money(r.perBed)+'<span>per person</span></strong></div>';
+      for(var n=1;n<=r.maxBeds;n++){
+        btns+='<button class="select" data-r="'+r.rtId+'" data-k="beds" data-n="'+n+'"'+(r.free>=n?'':' disabled')+'><span>'+(n===1?'Book 1 bed (just me)':'Book '+n+' beds (me + '+(n-1)+' friend'+(n>2?'s':'')+')')+'</span><span>&rarr;</span></button>';
+      }
+    }else{
+      rows='<div class="rate"><div class="l">One guest<small>Private room</small></div><strong>'+money(r.soloPerPerson)+'<span>per person</span></strong></div>';
+      btns='<button class="select" data-r="'+r.rtId+'" data-k="solo"'+(needOne?'':' disabled')+'><span>Select for one guest</span><span>&rarr;</span></button>';
+    }
+    var sold=r.free<1?'<p class="soldout">Sold out</p>':'';
+    var img=r.imageUrl?'<img alt="'+esc(r.label)+'" src="'+esc(r.imageUrl)+'">':'';
+    return '<article class="stay-card"><div class="img">'+img+'</div><div class="stay-content"><p class="eyebrow">Room '+(i+1)+' of '+INFO.rooms.length+'</p><h3>'+esc(r.label)+'</h3><p class="stay-desc">'+esc(r.desc)+'</p><div class="rates">'+rows+'</div>'+kingNote+sold+btns+'</div></article>';
+  }).join('');
+  $('svcs').innerHTML=INFO.services.map(function(s){
+    var sel=svcSel[s.id], o=s.opts.filter(function(x){return x.m===sel})[0]||s.opts[0], inCart=!!cart.svcs[s.id];
+    var seg=s.opts.length>1?'<div class="seg">'+s.opts.map(function(x){return '<button type="button" data-sv="'+esc(s.id)+'" data-m="'+x.m+'" class="'+(x.m===o.m?'on':'')+'">'+minLabel(x.m)+'</button>'}).join('')+'</div>':'<div class="seg"><button type="button" class="on" style="cursor:default">'+minLabel(s.opts[0].m)+'</button></div>';
+    return '<article class="svc"><h3>'+esc(s.name)+'</h3><p>'+esc(s.desc||'')+'</p>'+seg+'<div class="pr">'+money(o.p)+'<span>per session</span></div><button class="select" data-add="'+esc(s.id)+'" style="margin-top:0"><span>'+(inCart?'In your cart · update':'Add to cart')+'</span><span>+</span></button></article>';
+  }).join('');
+  cartbar();
+}
+function cartbar(){
+  var n=cart.room?1:0, sv=Object.keys(cart.svcs).length;
+  $('cartbar').hidden=!(n||sv);
+  $('cartcount').textContent=(n?'1 room':'')+(n&&sv?' · ':'')+(sv?sv+' service'+(sv>1?'s':''):'');
+  $('carttotal').textContent=money(cartTotal());
+}
+function resetPanels(){['couple','addbox','checkout','paybox','done'].forEach(function(i){$(i).hidden=true});document.querySelector('.lock').hidden=false;$('sum').hidden=false;$('cartlines').hidden=false}
+function showRoomPanel(){
+  resetPanels();
+  var c=roomCalc(cur), r=c.r;
+  $('mt').textContent=r.label;
+  $('ms').textContent=r.kind==='twin'?(cur.beds===1?'One bed in a shared room':cur.beds+' beds · you and '+(cur.beds-1)+' friend'+(cur.beds>2?'s':'')):(r.kind==='king'&&cur.mode==='share'?'Two guests · one king bed':'One guest · just for you');
+  $('cartlines').innerHTML='';
+  var s='<div class="line"><span>'+money(c.per)+' per person, all in</span><span>'+(c.guests>1?'× '+c.guests:'')+'</span></div><div class="line total"><span>Total'+(c.guests>1?' for '+c.guests+' guests':' per person')+'</span><span>'+money(c.total)+'</span></div>';
+  s+='<div class="line" style="opacity:.6;font-size:12px"><span>Taxes, fees and gratuity are included.'+(INFO.teachingFeeOn?'':' The teaching fee is billed separately.')+'</span></div>';
+  $('sum').innerHTML=s;
+  $('couple').hidden=!(r.kind==='king'&&cur.mode==='share');$('addbox').hidden=false;
+  $('hint2').textContent=(r.kind==='king'&&cur.mode==='share')?'Both guests are in one reservation, paid with a single credit card.':(r.kind==='twin'&&cur.beds>1?'One credit card pays for all '+cur.beds+' beds.':'');
+}
+function showCart(){
+  resetPanels();
+  $('mt').textContent='Your cart';$('ms').textContent=$('datesTxt').textContent;
+  var lines='', c=cart.room?roomCalc(cart.room):null;
+  if(c){lines+='<div class="cartline"><div><b>'+esc(c.r.label)+'</b><small>'+(c.r.kind==='twin'?c.guests+' bed'+(c.guests>1?'s':''):(c.guests>1?'Two guests, one king bed':'One guest'))+' · '+INFO.nights+' nights · taxes, fees &amp; gratuity included</small><button class="rm" data-rm="room">Remove</button></div><div class="amt">'+money(c.total)+'</div></div>'}
+  Object.keys(cart.svcs).forEach(function(k){var s=INFO.services.filter(function(x){return x.id===k})[0],it=cart.svcs[k];lines+='<div class="cartline"><div><b>'+esc(s.name)+'</b><small>'+minLabel(it.m)+' · '+it.q+' session'+(it.q>1?'s':'')+'</small><button class="rm" data-rm="'+esc(k)+'">Remove</button></div><div class="amt">'+money(svcPrice(k))+'</div></div>'});
+  if(!lines)lines='<p class="sub">Your cart is empty.</p>';
+  $('cartlines').innerHTML=lines;
+  $('sum').innerHTML='<div class="line total" style="margin-top:0;border-top:0;padding-top:0"><span>Total</span><span>'+money(cartTotal())+'</span></div>';
+  $('couple').hidden=!(c&&c.r.kind==='king'&&c.guests===2);
+  var has=!!cart.room;
+  $('checkout').hidden=!(has||Object.keys(cart.svcs).length);
+  $('others').innerHTML=(c&&c.guests>1)?Array.apply(null,Array(c.guests-1)).map(function(_,i){return '<label style="margin-top:12px">'+(c.guests===2?'Other guest':'Guest '+(i+2))+' full name<input class="oth" placeholder="First and last name"></label>'}).join(''):'';
+  $('err').textContent='';upd();
+}
+function upd(){
+  var ok=$('cancelOk').checked, hasRoom=!!cart.room;
+  $('go').disabled=!(ok&&hasRoom);
+  $('hint').textContent=!hasRoom?'Please add a room to your cart to continue.':(!ok?'Please read and tick the cancellation policy to continue.':(cart.room&&roomCalc(cart.room).guests>1?'One credit card pays for all beds in your cart.':''));
+}
+function details(){
+  var n=$('fName').value.trim(),e=$('fEmail').value.trim(),p=$('fPhone').value.trim();
+  if(n.split(/\s+/).filter(Boolean).length<2)return 'Please enter your full name (first and last).';
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))return 'Please enter a valid email address.';
+  if(p.replace(/\D/g,'').length<7)return 'Please enter your phone number.';
+  var oth=[].map.call(document.querySelectorAll('.oth'),function(i){return i.value.trim()});
+  if(oth.some(function(x){return !x}))return 'Please enter the full name of the other guest'+(oth.length>1?'s':'')+'.';
+  return '';
+}
+function others(){return [].map.call(document.querySelectorAll('.oth'),function(i){return i.value.trim()})}
+
+function startPayment(){
+  var c=roomCalc(cart.room);
+  var body={bookingId:BK,cart:{room:{rtId:cart.room.rtId,mode:cart.room.mode,beds:cart.room.beds},services:Object.keys(cart.svcs).map(function(k){return {id:k,m:cart.svcs[k].m,q:cart.svcs[k].q}})},
+    guest:{name:$('fName').value.trim(),email:$('fEmail').value.trim(),phone:$('fPhone').value.trim(),others:others()},
+    acks:{cancellation:$('cancelOk').checked,roommate:ackRoommate,leader:$('leaderOk').checked}};
+  $('go').disabled=true;$('err').textContent='';
+  fetch('/.netlify/functions/retreat-booking-intent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+   .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j,s:r.status}})})
+   .then(function(x){
+     if(!x.ok){$('err').textContent=(x.j&&x.j.error)||'Could not start the payment.';$('go').disabled=false;if(x.s===409){init2()}return}
+     stripe=Stripe(x.j.publishableKey);
+     elements=stripe.elements({clientSecret:x.j.clientSecret,appearance:{theme:'stripe',variables:{fontFamily:'DM Sans, sans-serif',borderRadius:'0px',colorPrimary:'#3f5147'}}});
+     $('stripe-element').innerHTML='';elements.create('payment').mount('#stripe-element');
+     $('payAmt').textContent=money2(x.j.amount);
+     $('checkout').hidden=true;$('paybox').hidden=false;$('mt').textContent='Payment';
+     window._rbAmount=x.j.amount;
+   }).catch(function(){$('err').textContent='Connection problem. Please try again.';$('go').disabled=false});
+}
+function init2(){ // refresh availability after a "just taken" message
+  fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)).then(function(r){return r.json()}).then(function(j){if(j&&j.rooms){INFO=j;INFO.services.forEach(function(s){if(!svcSel[s.id])svcSel[s.id]=s.opts[0].m});cart.room=null;render()}});
+}
+function confirmPay(){
+  $('pay').disabled=true;$('payerr').textContent='';
+  stripe.confirmPayment({elements:elements,confirmParams:{return_url:location.href},redirect:'if_required'}).then(function(res){
+    if(res.error){$('payerr').textContent=res.error.message;$('pay').disabled=false;return}
+    var total=window._rbAmount, nm=$('fName').value.trim().split(/\s+/)[0], em=$('fEmail').value.trim();
+    resetPanels();$('cartlines').innerHTML='';$('sum').innerHTML='';document.querySelector('.lock').hidden=true;$('sum').hidden=true;$('mt').textContent='Booked';$('ms').textContent='';
+    $('donetxt').innerHTML='Thank you, '+esc(nm)+'. Your payment of <b>'+money2(total)+'</b> was received and your booking for '+esc($('datesTxt').textContent)+' is confirmed.<br>A confirmation was sent to <b>'+esc(em)+'</b>. We will be in touch before you arrive.';
+    $('done').hidden=false;cart={room:null,svcs:{}};cartbar();say('Thank you for your booking');
+  });
+}
+
+document.addEventListener('click',function(e){
+  if(!INFO)return;
+  var t=e.target,q=function(s){return t.closest&&t.closest(s)};
+  var b=q('.select[data-r]');if(b){if(b.disabled)return;var r=roomOf(b.dataset.r);cur={rtId:b.dataset.r,mode:b.dataset.k,beds:+(b.dataset.n||1)};ackRoommate=false;showRoomPanel();$('bg').classList.add('open');return}
+  var sg=q('[data-sv]');if(sg){svcSel[sg.dataset.sv]=+sg.dataset.m;if(cart.svcs[sg.dataset.sv])cart.svcs[sg.dataset.sv].m=+sg.dataset.m;render();return}
+  var ad=q('[data-add]');if(ad){var id=ad.dataset.add;cart.svcs[id]={m:svcSel[id],q:(cart.svcs[id]||{q:1}).q};render();say('Added to your cart');return}
+  var rm=q('[data-rm]');if(rm){if(rm.dataset.rm==='room')cart.room=null;else delete cart.svcs[rm.dataset.rm];render();showCart();return}
+  if(q('#addroom')){cart.room={rtId:cur.rtId,mode:cur.mode,beds:cur.beds};render();$('bg').classList.remove('open');say('Room added to your cart');return}
+  if(q('#opencart')){$('cancelOk').checked=false;showCart();$('bg').classList.add('open');return}
+  if(t.id==='close'||t.id==='bg'){$('bg').classList.remove('open');return}
+  if(q('#go')){var er=details();$('err').textContent=er;if(er)return;var c=cart.room?roomCalc(cart.room):null;
+    if(c&&c.r.kind==='twin'&&c.guests===1&&!ackRoommate){$('understand').checked=false;$('popgo').disabled=true;$('pop').classList.add('open')}else startPayment();return}
+  if(q('#popgo')){ackRoommate=true;$('pop').classList.remove('open');startPayment();return}
+  if(t.id==='popno'||t.id==='pop'){$('pop').classList.remove('open');return}
+  if(q('#pay')){confirmPay();return}
+  if(q('#payback')){showCart();return}
+});
+document.addEventListener('change',function(e){
+  if(e.target.id==='understand')$('popgo').disabled=!e.target.checked;
+  else if(e.target.id==='cancelOk')upd();
+});
+init();
+})();
+</script>
+</body>
+</html>
