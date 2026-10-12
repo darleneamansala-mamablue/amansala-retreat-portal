@@ -84,6 +84,7 @@ function rbsRender(orders,spa){
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><b style="font-size:17px;flex:1">Guest booking page · ${rbsEsc(bk.leaderName||bk.retreatName||'')}</b><button class="btn btn-secondary" onclick="document.getElementById('rbsOv').remove()">Close</button></div>
     <div style="font-size:12.5px;color:#5a5048;margin-bottom:12px">Guests pick a room, add spa services, agree to the cancellation policy and pay by card. They are placed in this retreat's room list. Block rooms for the retreat first (Add More Rooms).</div>
     <label style="display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:12px"><input type="checkbox" id="rbsEnabled" ${c.enabled?'checked':''}> Open for guests (the page shows "not open yet" until this is ticked)</label>
+    <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;margin-bottom:12px;font-size:13px"><input type="checkbox" id="rbsLock" ${(c.lockRoomList!==false)?'checked':''} style="margin-top:3px"> <span>Only admin can edit the room list. Locks it for the teacher (they can see it but cannot add, edit or move guests), because Amansala collects the guests' payments. Stays locked until you untick this and save.</span></label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <label style="font-size:12px;font-weight:600">Page title<input id="rbsTitle" value="${rbsEsc(c.title||'')}" style="${inp};width:100%;display:block"></label>
       <label style="font-size:12px;font-weight:600">Banner image (file in /images/retreats/, or full web address; empty = just the title)<input id="rbsBanner" value="${rbsEsc(c.bannerUrl||'')}" style="${inp};width:100%;display:block"></label>
@@ -116,7 +117,7 @@ function rbsRender(orders,spa){
 }
 function rbsCollect(){
   const c=_rbsCfg,g=id=>document.getElementById(id);
-  c.enabled=g('rbsEnabled').checked;c.title=g('rbsTitle').value.trim();c.bannerUrl=g('rbsBanner').value.trim();
+  c.enabled=g('rbsEnabled').checked;c.lockRoomList=g('rbsLock').checked;c.title=g('rbsTitle').value.trim();c.bannerUrl=g('rbsBanner').value.trim();
   c.taxFeePct=Number(g('rbsTax').value)||0;c.gratuityPerNight=Number(g('rbsGrat').value)||0;
   c.teachingFee={on:g('rbsTfYes').checked,amountPP:Number(g('rbsTfAmt').value)||0};
   document.querySelectorAll('#rbsOv input[data-r]').forEach(i=>{const r=c.rooms[+i.dataset.r];const v=i.value===''?0:Number(i.value);r[i.dataset.f]=v;});
@@ -140,6 +141,8 @@ async function rbsSave(){
     all[_rbsBk.id]=c;
     const {error}=await db.from('app_store').upsert({key:RBS_KEY,value:all,updated_at:new Date().toISOString()});
     if(error)throw error;
+    // room list is admin-only for a retreat where Amansala collects payments (same lock as Actions > Lock for Teacher)
+    if(c.enabled||c.lockRoomList===false){const want=!!c.lockRoomList;if(!!_rbsBk.allLocked!==want){_rbsBk.allLocked=want;saveAll();try{regRender();}catch(e){}}}
     showToast(c.enabled?'Saved. The guest booking page is OPEN.':'Saved. The page is still closed to guests.');
     rbsOpen();
   }catch(e){showToast('Save failed: '+(e.message||e));}
