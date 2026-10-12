@@ -23,6 +23,7 @@ const VIEWS = {
   roomlist: 'rooms',
   transport: 'transport',
   finances: 'financial',
+  assistant: 'assistant',
 };
 
 function slugify(name) {
