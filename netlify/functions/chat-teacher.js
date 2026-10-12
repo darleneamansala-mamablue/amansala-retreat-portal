@@ -231,6 +231,8 @@ async function executeTool(name, input, bookingId, supaKey) {
     case 'add_room_by_type': {
       const d = await loadBaseData(supaKey, bookingId);
       if (!d) return { error: 'Booking not found' };
+      // A retreat whose room list is locked (e.g. Amansala collects the guests' payments) is edited by admin only
+      if (d.bk.all_locked) return { success: false, reason: 'This retreat\'s room list is managed by the Amansala team, so I cannot change it. Please contact retreats@amansala.com and they will help you.' };
       const { bk, rts, conflictSet, getSubBeds } = d;
 
       const rt = matchType(input.type_name, rts);
@@ -277,6 +279,8 @@ async function executeTool(name, input, bookingId, supaKey) {
     case 'remove_room_by_type': {
       const d = await loadBaseData(supaKey, bookingId);
       if (!d) return { error: 'Booking not found' };
+      // A retreat whose room list is locked (e.g. Amansala collects the guests' payments) is edited by admin only
+      if (d.bk.all_locked) return { success: false, reason: 'This retreat\'s room list is managed by the Amansala team, so I cannot change it. Please contact retreats@amansala.com and they will help you.' };
       const { bk, rts, roomToType, getSubBeds } = d;
 
       const rt = matchType(input.type_name, rts);
