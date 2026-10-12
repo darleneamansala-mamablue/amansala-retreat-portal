@@ -4355,6 +4355,21 @@ function teacherShowView(view){
   }
   if(isContract){const savedId=(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id'));if(savedId)renderTeacherContract(savedId);}
   if(isSched){const savedId=(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id'));if(savedId)tsInit(savedId);}
+  teacherSyncUrl(view);
+}
+
+// Address bar follows the tab: /<name>/schedule, /roomlist, /transport, /finances, /dashboard
+// (the same links shortlink.js resolves). Other tabs show the plain /<name> link. Cosmetic only.
+const TEACHER_VIEW_PATH={dash:'dashboard',schedule:'schedule',rooms:'roomlist',transport:'transport',financial:'finances'};
+function teacherSyncUrl(view){
+  try{
+    if(!IS_TEACHER_MODE)return;
+    const bkId=localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id');
+    const slug=bkId&&computeShortSlug(bkId);
+    if(!slug)return;
+    const sec=TEACHER_VIEW_PATH[view];
+    history.replaceState(null,'','/'+slug+(sec?'/'+sec:''));
+  }catch(e){}
 }
 
 function renderTeacherActivities(bkId){
@@ -4884,7 +4899,11 @@ function enterTeacherView(bkId){
     }
     // If contract is pending, start on contract view; if room list just sent, go to rooms; otherwise dashboard
     const bkrCheck=AppData.bookings.find(b=>b.id===bkId);
-    if(bkrCheck&&bkrCheck.contractSentViaPortal&&!bkrCheck.contractSignedAt){
+    // /<slug>/schedule etc. (netlify/functions/shortlink.js adds &view=) opens that tab directly
+    const _reqView=new URLSearchParams(window.location.search).get('view');
+    if(['dash','schedule','rooms','transport','financial'].includes(_reqView)){
+      teacherShowView(_reqView);
+    } else if(bkrCheck&&bkrCheck.contractSentViaPortal&&!bkrCheck.contractSignedAt){
       teacherShowView('contract');
     } else if(bkrCheck&&(bkrCheck.blockedRooms||[]).length>0&&bkrCheck.status==='room_list_sent'){
       teacherShowView('rooms');
