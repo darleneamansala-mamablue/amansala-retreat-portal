@@ -29,12 +29,15 @@ Object.assign(MENU_DETAIL,{
 const MENU2=JSON.parse(JSON.stringify(WEEKLY_MENU));
 // Monday dinner replaced with Hamburger · French Fries · Salad (soup and dessert kept — change in Menu Editor)
 MENU2[1].dinner={protein:'Hamburguesa',dishes:['Sopa de Zanahoria','Papas Fritas','Ensalada Verde'],dessert:'Flan de Cafe'};
-// Saturday dinner replaced with slow-cooked ribs (soup stays Mushroom as in Menu 1)
-MENU2[6].dinner={protein:'Slow Cooked Ribs',dishes:['Sopa de Champiñones','Rosemary Sweet Potato Mash','Ensalada Verde'],dessert:'Coconut Ice Cream'};
+// Friday dinner replaced with slow-cooked ribs (soup stays Mushroom as in Menu 1)
+// and the fish dinner moves from Friday to Saturday (swapped 2026-10-12, Darlene).
+// Saturday's Menu 1 kebabs are not served in Menu 2.
+MENU2[6].dinner=JSON.parse(JSON.stringify(WEEKLY_MENU[5].dinner));
+MENU2[5].dinner={protein:'Slow Cooked Ribs',dishes:['Sopa de Champiñones','Rosemary Sweet Potato Mash','Ensalada Verde'],dessert:'Coconut Ice Cream'};
 // Sunday: chicken added to the Phad Thai
 MENU2[7].dinner={protein:'Phad Thai con Pollo',dishes:['Thai Slaw'],dessert:'Coconut Ice Cream'};
 // Costing for Menu 2's changed dinners (ids from the protein catalog in menu.js)
-const MV_MENU2_ASSIGN={1:'molida',6:'',7:'pollo'}; // 6: ribs aren't in the protein catalog yet, so no (wrong) chicken cost
+const MV_MENU2_ASSIGN={1:'molida',5:'',7:'pollo'}; // 5: ribs aren't in the protein catalog yet, so no (wrong) chicken cost. Saturday = Friday's fish, see menuAssignForIdx
 
 function menuVariantForWeek(sundayISO){return menuWeekVariants[sundayISO]==='menu2'?'menu2':'menu1';}
 function menuDataFor(dateStr){
@@ -47,6 +50,7 @@ function menuDataForIdx(di){
 }
 function menuAssignForIdx(di){
   const base=menuProteinAssign[di]||{};
+  if(menuVariantForWeek(menuCurrentMonday)==='menu2'&&di===6)return Object.assign({},base,{dinner:(menuProteinAssign[5]||{}).dinner||''}); // Saturday fish = Menu 1 Friday's protein
   if(menuVariantForWeek(menuCurrentMonday)==='menu2'&&(di in MV_MENU2_ASSIGN))return Object.assign({},base,{dinner:MV_MENU2_ASSIGN[di]});
   return base;
 }
