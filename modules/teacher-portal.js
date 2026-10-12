@@ -4587,6 +4587,35 @@ function _trPricingCardHtml(){
     <div style="text-align:center;font-size:10px;color:rgba(255,255,255,.65);margin-top:8px">Prices are per person · Amansala coordinates all shared ride groupings</div>
   </div>`;
 }
+const _TR_REMINDED_KEY='ama_tr_reminded';
+function _trRemindedAt(bkId,email){try{return (JSON.parse(localStorage.getItem(_TR_REMINDED_KEY)||'{}')[bkId+'|'+email.toLowerCase()])||'';}catch(e){return '';}}
+function _trMissingNameCell(g,bkId,shared){
+  const name=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#b91c1c;margin-right:6px;vertical-align:middle"></span><span style="font-weight:800;color:#b91c1c">${escHtml(g.name)}</span>`;
+  const em=(g.email||'').trim();
+  if(!em||shared.has(em.toLowerCase()))return name+` <span style="font-size:10.5px;color:#7f1d1d;font-weight:600;margin-left:6px">no email on file</span>`;
+  const at=_trRemindedAt(bkId,em);
+  const lbl=at?`✉ Reminded ${fmtDate(at.slice(0,10))} · Remind again`:'✉ Remind';
+  return name+` <button type="button" data-bk="${escHtml(bkId)}" data-email="${escHtml(em)}" data-name="${escHtml(g.name)}" onclick="remindTransportGuest(this)" style="margin-left:8px;padding:3px 9px;font-size:11px;font-weight:700;font-family:'Jost',sans-serif;border:1.5px solid #b91c1c;color:#b91c1c;background:#fff;border-radius:7px;cursor:pointer">${lbl}</button>`;
+}
+// "Remind" next to a guest who hasn't submitted: emails them a link to the transport form (same /send-email endpoint every
+// other guest email uses). Asks first; remembers (in this browser) when each guest was last reminded.
+async function remindTransportGuest(btn){
+  const bkId=btn.dataset.bk,email=btn.dataset.email,name=btn.dataset.name;
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
+  if(!confirm(`Send ${name} (${email}) a reminder to fill in their transportation info?`))return;
+  const first=(name||'').trim().split(/\s+/)[0]||'there';
+  const retreat=bk.retreatName||bk.leaderName||'your retreat';
+  const url=`${location.origin}/transport-form.html?bk=${bkId}`;
+  const html=`<p>Hi ${escHtml(first)},</p><p>We are still missing your transportation details for <b>${escHtml(retreat)}</b> (${escHtml(fmtDate(bk.startDate))} – ${escHtml(fmtDate(bk.endDate))}). Please fill in your arrival and departure flight info so we can arrange your airport transfer:</p><p><a href="${url}" style="display:inline-block;padding:10px 18px;background:#2d6a6a;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Fill in my transportation info</a></p><p>It only takes a minute. Thank you!</p><p>— Amansala</p>`;
+  btn.disabled=true;const old=btn.textContent;btn.textContent='Sending…';
+  try{
+    const res=await fetch('/.netlify/functions/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:email,subject:`Please fill in your transportation info — ${retreat}`,html})});
+    if(!res.ok)throw new Error('send failed');
+    try{const m=JSON.parse(localStorage.getItem(_TR_REMINDED_KEY)||'{}');m[bkId+'|'+email.toLowerCase()]=new Date().toISOString();localStorage.setItem(_TR_REMINDED_KEY,JSON.stringify(m));}catch(e){}
+    showToast(`Reminder sent to ${name} ✓`);
+    _renderTeacherTransportInner(bkId);
+  }catch(e){btn.disabled=false;btn.textContent=old;showToast(`⚠ Could not send the reminder to ${name} — check their email address`);}
+}
 function _trBuildTransportTable(guests,type,result){
   const{prices,groupOf,groups}=result;
   const isArr=type==='arr';
@@ -4609,6 +4638,15 @@ function _trBuildTransportTable(guests,type,result){
   const _todayStr=new Date().toISOString().slice(0,10);
   const _tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10);
   const _colCount=9; // Guest, Room, Date, Time, Airport, Flight, Notes, + exactly one of Pickup/Share, + Est. Cost (matches the original group-separator row's colspan)
+
+  // Guests who haven't submitted: bold red name + a "Remind" button when we have a usable email. An email counts as
+  // unusable when it is the teacher's own (room-list entries fall back to the leader's email as a placeholder) or is
+  // shared by several guests — a reminder to it would reach the wrong person.
+  const _trBkId=(typeof regSelBk!=='undefined'&&regSelBk&&regSelBk.id)||localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id')||'';
+  const _trSharedEmails=new Set();
+  {const cnt={};guests.forEach(x=>{const e=(x.email||'').toLowerCase().trim();if(e)cnt[e]=(cnt[e]||0)+1;});
+   Object.keys(cnt).forEach(e=>{if(cnt[e]>1)_trSharedEmails.add(e);});
+   const lb=AppData.bookings.find(b=>b.id===_trBkId);const le=((lb&&lb.leaderEmail)||'').toLowerCase().trim();if(le)_trSharedEmails.add(le);}
 
   let lastGi,lastDate='__unset__';
   const rows=indexed.map(({g,i,date})=>{
@@ -4686,7 +4724,7 @@ function _trBuildTransportTable(guests,type,result){
     lastGi=curGi;
 
     return dateHeader+sep+`<tr style="border-bottom:1px solid #f0ece4;background:${rowBg}">
-      <td style="padding:10px 12px;font-size:13px;font-weight:600;white-space:nowrap">${dot}${escHtml(g.name)}${driverBadge}</td>
+      <td style="padding:10px 12px;font-size:13px;font-weight:600;white-space:nowrap">${tr?`${dot}${escHtml(g.name)}${driverBadge}`:_trMissingNameCell(g,_trBkId,_trSharedEmails)}</td>
       <td style="padding:10px 12px;font-size:12px;color:#8a7e74;white-space:nowrap">${g.room?escHtml(g.room):'—'}</td>
       <td style="padding:10px 12px;font-size:12px">${dateCell}</td>
       <td style="padding:10px 12px;font-size:12px">${timeCell}</td>
