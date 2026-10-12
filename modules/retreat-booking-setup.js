@@ -36,7 +36,7 @@ let _rbsBk=null,_rbsCfg=null,_rbsBal=[],_rbsSpaWasOn=false;
 
 function rbsEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function rbsLink(bk){
-  try{if(_rbsCfg&&_rbsCfg.slug)return `${location.origin}/${_rbsCfg.slug}`;}catch(e){}
+  try{if(_rbsCfg&&_rbsCfg.slug)return `${location.origin}/retreat-booking.html/${_rbsCfg.slug}`;}catch(e){}
   try{const slug=(typeof computeShortSlug==='function')?computeShortSlug(bk.id):'';if(slug)return `${location.origin}/${slug}/book`;}catch(e){}
   return `${location.origin}/retreat-booking.html?r=${encodeURIComponent(bk.id)}`;
 }
@@ -97,7 +97,7 @@ function rbsRender(orders,spa){
     <label style="display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:12px"><input type="checkbox" id="rbsEnabled" ${c.enabled?'checked':''}> Open for guests (the page shows "not open yet" until this is ticked)</label>
     <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;margin-bottom:12px;font-size:13px"><input type="checkbox" id="rbsLock" ${(c.lockRoomList!==false)?'checked':''} style="margin-top:3px"> <span>Only admin can edit the room list. Locks it for the teacher (they can see it but cannot add, edit or move guests), because Amansala collects the guests' payments. Stays locked until you untick this and save.</span></label>
     <label style="font-size:12px;font-weight:600;display:block;margin-bottom:12px">Link name guests see (letters and numbers only)
-      <div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="font-size:13px;color:#5a5048">${rbsEsc(location.host)}/</span><input id="rbsSlug" value="${rbsEsc(c.slug||'')}" placeholder="weimmersion" style="${inp};width:220px"></div></label>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="font-size:13px;color:#5a5048">${rbsEsc(location.host)}/retreat-booking.html/</span><input id="rbsSlug" value="${rbsEsc(c.slug||'')}" placeholder="weimmersion" style="${inp};width:220px"></div></label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <label style="font-size:12px;font-weight:600">Page title<input id="rbsTitle" value="${rbsEsc(c.title||'')}" style="${inp};width:100%;display:block"></label>
       <label style="font-size:12px;font-weight:600">Banner image (file in /images/retreats/, or full web address; empty = just the title)<input id="rbsBanner" value="${rbsEsc(c.bannerUrl||'')}" style="${inp};width:100%;display:block"></label>

@@ -45,6 +45,7 @@ exports.handler = async (event) => {
   // and optional segment 2 = section (/<slug>/schedule, /roomlist, ...).
   const segs = (event.path || '').split('/').filter(Boolean);
   if (segs[0] === '.netlify') segs.splice(0, 3);
+  if (segs[0] === 'retreat-booking.html') segs.shift(); // /retreat-booking.html/<name>
   const qs = event.queryStringParameters || {};
   const slug = (segs[0] || qs.slug || '').toLowerCase();
   if (!slug) return { statusCode: 404, body: 'Not found' };
