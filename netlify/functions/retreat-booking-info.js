@@ -56,6 +56,7 @@ exports.handler = async (event) => {
       bannerUrl: cfg.bannerUrl || '',
       intro: cfg.intro || '',
       teachingFeeOn: !!(cfg.teachingFee && cfg.teachingFee.on),
+      teachingPayee: String(cfg.teachingFeePayee || ''),
       gratuityPerNight: Number(cfg.gratuityPerNight) || 0,
       includes: cfg.includes || [],
       notIncluded: cfg.notIncluded || '',
