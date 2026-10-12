@@ -155,7 +155,7 @@ footer p{opacity:.65;margin:0;font-size:12px}
   <section class="titlebar" id="titleBar" hidden><h1 id="titleTxt"></h1></section>
   <div class="booking-shell"><div class="booking-bar">
     <div class="field"><span>Dates</span><b id="datesTxt"></b><small id="nightsTxt"></small></div>
-    <div class="field"><span>Room for</span><b>1 or 2 guests</b><small>Two guests in one king bed pay together</small></div>
+    <div class="field"><span>Payment</span><b id="payTxt">Secure card payment</b><small id="paySub">Pay online, in full or in two parts</small></div>
     <a class="go-bar" href="#rooms">Choose your room <span>&darr;</span></a>
   </div></div>
   <nav class="jump"><a href="#rooms">Rooms</a><a href="#spa" id="spaJump">Pre-book spa services</a><a href="#policy">Cancellation policy</a></nav>
@@ -283,6 +283,7 @@ function init(){
     else{$('titleTxt').textContent=INFO.title||'Your retreat';$('titleBar').hidden=false}
     var ds=INFO.template?'Your retreat dates':fmtD(INFO.startDate)+' – '+fmtD(INFO.endDate);
     $('datesTxt').textContent=ds;$('lockDates').textContent=ds;$('nightsTxt').textContent=INFO.template?'Prices shown for '+INFO.nights+' nights · dates are set for each retreat':INFO.nights+' nights · set for this retreat';
+    (function(){var d=INFO.deposit;if(d&&d.on&&d.eligible){$('payTxt').textContent='Pay in full, or '+d.pct+'% now';$('paySub').textContent='The rest is charged automatically on '+fmtD(d.balanceDate)}else{$('payTxt').textContent='Pay in full by card';$('paySub').textContent='Secure online payment'}})();
     if(INFO.preview){var rb=document.createElement('div');rb.className='preview-ribbon';rb.textContent=INFO.template?'Template preview · payment is turned off':'Preview · not open for booking yet · payment is turned off';document.body.insertBefore(rb,document.body.firstChild)}
     $('inclList').innerHTML=(INFO.includes||[]).map(function(i){return '<li>'+esc(i)+'</li>'}).join('');
     $('notIncl').textContent=INFO.notIncluded||'';$('notIncl').hidden=!INFO.notIncluded;
