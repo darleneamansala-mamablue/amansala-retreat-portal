@@ -52,7 +52,7 @@ async function fulfil(pi) {
   const roomLater = isDeposit ? Math.round(Number(m.rbBalance) * 100) / 100 : 0;
   const roomPaidNow = Math.round((roomLine.amount - roomLater) * 100) / 100;
   const paidNow = pi.amount / 100;
-  const guests = [{ name: m.rbName, email: m.rbEmail, phone: m.rbPhone, notes: '' }].concat(others.map((n) => ({ name: n, email: '', phone: '', notes: '' })));
+  const guests = [{ name: m.rbName, email: m.rbEmail, phone: m.rbPhone, notes: '' }].concat(others.map((o) => (typeof o === 'string' ? { name: o, email: '', phone: '', notes: '' } : { name: o.name, email: o.email || '', phone: o.phone || '', notes: '' })));
   const agreed = (m.rbAck || '').includes('roommate') ? 'cancellation policy and single-bed roommate terms' : 'cancellation policy';
 
   const av = await L.availability(key, bk, cfg);
@@ -150,6 +150,7 @@ async function fulfil(pi) {
     <p>Hi ${esc((m.rbName || '').split(' ')[0])}, your payment of <b>${money(paidNow)}</b>${isDeposit ? ' (50% of your room)' : ''} was received and your place at <b>${esc(title)}</b> (${esc(dates)}) is ${units ? 'confirmed' : 'received. Our team will confirm your room shortly'}.</p>
     <table style="width:100%;border-collapse:collapse;border-top:1px solid #ddd;border-bottom:1px solid #ddd">${itemRows}<tr><td style="padding:8px 0;font-weight:700">Paid today</td><td style="padding:8px 0;text-align:right;font-weight:700">${money(paidNow)}</td></tr></table>
     ${isDeposit ? `<p><b>Remaining balance: ${money(roomLater)}.</b> As you authorized, it will be charged automatically to the same card on <b>${esc(m.rbBalanceDate)}</b>. We will email you when it is charged.</p>` : ''}
+    ${(cfg.includes || []).length ? `<p style="margin-bottom:4px"><b>What's included</b></p><ul style="margin-top:0">${cfg.includes.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>${cfg.notIncluded ? `<p style="font-size:13px">${esc(cfg.notIncluded)}</p>` : ''}` : ''}
     ${isLeader && units ? `<p><b>Your room as a leader:</b> ${leaderAtGrande ? 'Amansala Chica is out of ' + esc(roomLine.name) + ' rooms, so your room will be at <b>Amansala Grande</b>.' : 'your room will be at <b>Amansala Chica</b>.'}</p>` : ''}
     ${svcLines.length ? '<p>Our spa team will contact you to schedule your treatments.</p>' : ''}
     <p><a href="${L.recordUrl(pi.id)}" style="color:#3f5147;font-weight:700">Download your booking record (PDF)</a>: your booking summary, the cancellation policy and everything you agreed to.</p>
@@ -159,7 +160,7 @@ async function fulfil(pi) {
   const staffTo = cfg.notifyEmail || 'retreats@amansala.com';
   const staffHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27"><h3>${units ? 'New retreat booking' : '⚠ Paid but NO ROOM FREE — needs attention'}</h3>
     <p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>${esc(title)} · ${esc(dates)}<br>${isLeader ? '<b>Leader</b>' + (leaderAtGrande ? ' placed at GRANDE because Chica was out of ' + esc(roomLine.name) + ' rooms' : ' placed at Chica') + '<br>' : ''}${units ? 'Placed in: ' + esc(units.join(', ')) : 'No free room of this type was left when the payment completed. Place the guest by hand or refund in Stripe.'}</p>
-    ${others.length ? `<p>Other guests: ${esc(others.join(', '))}</p>` : ''}
+    ${others.length ? `<p>Other guests: ${others.map((o) => esc(typeof o === 'string' ? o : `${o.name} (${o.email}, ${o.phone})`)).join('; ')}</p>` : ''}
     ${m.rbShare ? `<p><b>Shared room:</b> ${m.rbShare.startsWith('friend:') ? 'travelling with friend ' + esc(m.rbShare.slice(7)) + ' (their friend must also book a shared room)' : 'travelling alone, to be matched with a guest of the same gender; agreed to pay for a private room if no match'}</p>` : ''}
     <table style="border-collapse:collapse">${itemRows}</table><p>${isDeposit ? 'Paid now ' + money(paidNow) + ' (50%). Balance ' + money(roomLater) + ' auto-charges ' + esc(m.rbBalanceDate) + '.' : 'Total ' + money(priced.total)} · Stripe ${esc(pi.id)} · <a href="${L.recordUrl(pi.id)}">booking record (PDF)</a></p>
     ${cbIssues.length ? '<p><b>Cloudbeds needs a manual update</b> (the room list is correct):<br>' + cbIssues.map(esc).join('<br>') + '</p>' : ''}

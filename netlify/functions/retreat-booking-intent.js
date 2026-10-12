@@ -36,8 +36,16 @@ exports.handler = async (event) => {
     const priced = L.priceCart(cfg, nights, cart);
     const needed = rm.kind === 'twin' ? priced.guests : 1;
     // Everyone sharing the booking is named (both guests in one reservation); the booker is guest 1
-    const others = (Array.isArray(guest.others) ? guest.others : []).map((n) => String(n || '').trim()).filter(Boolean);
-    if (others.length !== priced.guests - 1) return L.json(400, { error: priced.guests > 1 ? `Please enter the full name of the ${priced.guests - 1 > 1 ? 'other guests' : 'other guest'}.` : 'Unexpected guests' });
+    // Every other guest must have a full name, an email and a phone number (needed for the room list, Cloudbeds and their own confirmation)
+    const others = (Array.isArray(guest.others) ? guest.others : []).map((o) => ({
+      name: String((o && o.name) || '').trim().slice(0, 100), email: String((o && o.email) || '').trim().slice(0, 150), phone: String((o && o.phone) || '').trim().slice(0, 40),
+    }));
+    if (others.length !== priced.guests - 1) return L.json(400, { error: priced.guests > 1 ? 'Please enter the details of the other guest' + (priced.guests > 2 ? 's' : '') + '.' : 'Unexpected guests' });
+    for (const o of others) {
+      if (o.name.split(/\s+/).filter(Boolean).length < 2) return L.json(400, { error: 'Please enter the full name (first and last) of every guest.' });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(o.email)) return L.json(400, { error: 'Please enter a valid email address for every guest.' });
+      if (o.phone.replace(/\D/g, '').length < 7) return L.json(400, { error: 'Please enter a phone number for every guest.' });
+    }
     // A shared room (double / triple) that the guest's own party does not fill: they say whether they travel with a friend (named; the
     // friend books their own bed) or alone (matched with a guest of the same gender, agreeing to pay for a private room if no match).
     const sharedOpen = rm.kind === 'twin' && priced.guests < (Number(rm.maxBeds) || 2);
@@ -127,7 +135,7 @@ exports.handler = async (event) => {
         retreat: cfg.title || bk.retreat_name || bk.leader_name, startDate: bk.start_date, endDate: bk.end_date, nights,
         guest: { name, email, phone, others }, leader: isLeader, placementNotice: leaderPlacement === 'grande' ? 'Chica was out of this room type: leader placed at Grande' : '',
         lines: priced.lines, total: priced.total, plan, dueNow, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null,
-        policy: cfg.policy || L.DEFAULT_POLICY, agreements,
+        policy: cfg.policy || L.DEFAULT_POLICY, agreements, included: cfg.includes || [], notIncluded: cfg.notIncluded || '',
       });
     } catch (e) { console.warn('[retreat-booking-intent] consent record not saved:', e.message); }
     return L.json(200, { clientSecret: pi.client_secret, publishableKey: pubKey, amount: dueNow, plan, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null, total: priced.total, lines: priced.lines, leaderPlacement, recordUrl: L.recordUrl(pi.id) });

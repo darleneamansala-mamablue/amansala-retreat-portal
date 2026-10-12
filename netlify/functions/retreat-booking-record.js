@@ -35,7 +35,7 @@ exports.handler = async (event) => {
     B.push({ t: 'kv', k: 'Name', v: g.name });
     B.push({ t: 'kv', k: 'Email', v: g.email });
     B.push({ t: 'kv', k: 'Phone', v: g.phone });
-    if ((g.others || []).length) B.push({ t: 'kv', k: 'Other guests', v: g.others.join(', ') });
+    (g.others || []).forEach((o, i) => B.push({ t: 'kv', k: (g.others.length > 1 ? 'Guest ' + (i + 2) : 'Other guest'), v: typeof o === 'string' ? o : `${o.name}  |  ${o.email}  |  ${o.phone}` }));
     if (rec.leader) B.push({ t: 'kv', k: 'Leader', v: 'Yes. Leaders are placed at Amansala Chica.' + (rec.placementNotice ? ' ' + rec.placementNotice + '.' : '') });
     B.push({ t: 'space', h: 4 });
     B.push({ t: 'h2', text: 'Booking summary' });
@@ -57,6 +57,12 @@ exports.handler = async (event) => {
     B.push({ t: 'kv', k: 'Payment status', v: rec.status === 'paid' ? `Paid ${tulum(rec.paidAt)}` : 'Awaiting payment' });
     B.push({ t: 'kv', k: 'Payment id', v: pi });
     B.push({ t: 'rule' });
+    if ((rec.included || []).length) {
+      B.push({ t: 'h2', text: "What's included" });
+      rec.included.forEach((i) => B.push({ t: 'p', text: '-  ' + i }));
+      if (rec.notIncluded) B.push({ t: 'small', text: rec.notIncluded });
+      B.push({ t: 'rule' });
+    }
     B.push({ t: 'h2', text: 'Cancellation policy' });
     B.push({ t: 'small', text: 'As shown to the guest when booking:' });
     B.push({ t: 'p', text: rec.policy });
