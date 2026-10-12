@@ -4940,6 +4940,14 @@ function showTeacherCode(){
   openTeacherPortal(regSelBk.id);
 }
 
+// Room list → Schedule button. Teacher: switch to their My Schedule tab. Admin: open this retreat's Review Schedule.
+// (The direct /<teacher>/schedule link is under Actions → "Copy teacher link: Schedule".)
+function goToRetreatSchedule(){
+  if(IS_TEACHER_MODE&&document.getElementById('teacherNav')&&document.getElementById('tnBtnSchedule')){teacherShowView('schedule');return;}
+  if(!regSelBk){showToast('Select a retreat first');return;}
+  openScheduleViewer(regSelBk.id);
+}
+
 // Direct link to one section of the teacher's portal: <teacher link>/dashboard|schedule|roomlist|transport|finances
 // (resolved by netlify/functions/shortlink.js). Falls back to the long link with &view= when the teacher has no short slug.
 function copyTeacherSectionLink(section){
