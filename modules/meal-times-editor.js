@@ -67,9 +67,11 @@ function mteFields(bk){
 function mteCurrent(bk,meal){
   try{return menuMealTime(bk,meal==='brunch'?'brunch':meal,mteSampleDate(bk))||'';}catch(e){return '';}
 }
-let _mteFromSchedule='';   // booking id when opened from Review Schedule
-function mteOpen(bkId){
+let _mteFromSchedule='';   // booking id when opened from Review Schedule or the teacher's own schedule page
+let _mteTeacher=false;     // true when a teacher is editing their own retreat's times
+function mteOpen(bkId,teacher){
   _mteFromSchedule=(typeof bkId==='string'&&bkId)?bkId:'';
+  _mteTeacher=!!teacher;
   const bks=_mteFromSchedule?AppData.bookings.filter(b=>b.id===_mteFromSchedule):(typeof mtWeekRetreats==='function'?mtWeekRetreats():[]);
   document.getElementById('mtOv')?.remove();
   const ov=document.createElement('div');ov.id='mtOv';
@@ -87,8 +89,8 @@ function mteOpen(bkId){
       <div style="display:flex;gap:10px;flex-wrap:wrap">${inputs}</div></div>`;
   }).join('');
   ov.innerHTML=`<div style="background:#fff;border-radius:12px;width:min(560px,100%);max-height:86vh;overflow-y:auto;padding:20px">
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px">Meal times</div>
-    <div style="font-size:12px;color:#7f8c9a;margin-bottom:10px">Change any time for a retreat this week; it applies to all of that retreat's days and shows on the Menu, the teacher's schedule and the printed schedule. Clear a box to go back to the automatic time. A dinner time set for one specific night in Review Schedule still wins for that night.</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">${_mteTeacher?'Edit my meal times':'Meal times'}</div>
+    <div style="font-size:12px;color:#7f8c9a;margin-bottom:10px">${_mteTeacher?'Change the times you would like for your group. They apply to every day of your retreat and update your schedule and our kitchen right away. Clear a box to go back to the usual time. If a night has its own dinner time, it stays as shown on your schedule.':"Change any time for a retreat this week; it applies to all of that retreat's days and shows on the Menu, the teacher's schedule and the printed schedule. Clear a box to go back to the automatic time. A dinner time set for one specific night in Review Schedule still wins for that night."}</div>
     ${rows||'<div style="font-size:13px;color:#a89e94;padding:10px 0">No retreats this week.</div>'}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
       <button onclick="document.getElementById('mtOv').remove()" style="padding:8px 16px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;cursor:pointer">Cancel</button>
@@ -97,6 +99,7 @@ function mteOpen(bkId){
 }
 async function mteSave(){
   const touched=new Map();   // bookingId → bk
+  const changeLog=[];
   document.querySelectorAll('#mtOv input[data-mte-id]').forEach(inp=>{
     const bk=AppData.bookings.find(b=>b.id===inp.dataset.mteId);if(!bk)return;
     const meal=inp.dataset.mteMeal,v=(inp.value||'').trim(),orig=inp.dataset.mteOrig||'';
@@ -114,8 +117,10 @@ async function mteSave(){
       if(v)cfg[MTE_CFG_KEYS[meal]]=v;else delete cfg[MTE_CFG_KEYS[meal]];
       if(!Object.keys(cfg).length)delete bk.packageCustomPrices.__cfg__;
     }
+    changeLog.push(`${meal==='lightBreakfast'?'Fruit, Coffee & Tea':meal[0].toUpperCase()+meal.slice(1)} ${v||'automatic'}`);
     touched.set(bk.id,bk);
   });
+  if(_mteTeacher)touched.forEach(bk=>{bk.scheduleRequest=bk.scheduleRequest||{};bk.scheduleRequest.mealTimesTeacherEdit={at:new Date().toISOString(),changes:changeLog.join(', ')};});
   document.getElementById('mtOv')?.remove();
   if(!touched.size){showToast('No changes');return;}
   saveAll();
@@ -126,8 +131,10 @@ async function mteSave(){
     }).eq('id',bk.id)));
   }catch(e){}
   try{menuPopulateFromRetreats(true);}catch(e){}
-  if(_mteFromSchedule&&typeof openScheduleViewer==='function'){try{openScheduleViewer(_mteFromSchedule);}catch(e){}}
-  showToast(`Meal times saved for ${touched.size} retreat${touched.size===1?'':'s'} ✓`);
+  if(_mteFromSchedule&&_mteTeacher){
+    try{const b=AppData.bookings.find(x=>x.id===_mteFromSchedule);if(typeof tsRenderCalSection==='function')tsRenderCalSection(b);if(typeof tsRenderDinnerTime==='function')tsRenderDinnerTime(b);}catch(e){}
+  }else if(_mteFromSchedule&&typeof openScheduleViewer==='function'){try{openScheduleViewer(_mteFromSchedule);}catch(e){}}
+  showToast(_mteTeacher?'Your meal times are saved ✓':`Meal times saved for ${touched.size} retreat${touched.size===1?'':'s'} ✓`);
 }
 
 // The Menu toolbar button from meal-times.js now opens this editor
