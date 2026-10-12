@@ -8,6 +8,29 @@ const CFG_KEY = 'retreat_booking_config';
 const ORDERS_KEY = 'retreat_booking_orders';
 const SPA_KEY = 'retreat_spa_requests';
 
+const TEMPLATE_KEY = 'retreat_booking_template';
+// Starting point for every "We take payment" retreat page (same as modules/retreat-booking-setup.js RBS_DEFAULTS).
+const DEFAULT_CFG = {
+  title: 'Your Retreat Name', bannerUrl: '', taxFeePct: 24, gratuityPerNight: 30, teachingFee: { on: false, amountPP: 0 },
+  includes: ['Accommodations for your full stay', 'All meals, with the exception of one offsite dinner', 'Group Salsa dance class', 'Cooking demonstration'],
+  notIncluded: 'Not included: the one offsite dinner, tours and spa treatments.',
+  rooms: [
+    { rtId: 'rt1', kind: 'king', label: 'Beachfront King', soloRate: 575, shareRate: 360, desc: 'An ocean-facing king room steps from the sand, with morning light and a private terrace.', imageUrl: '/images/rooms/beachfront-deluxe.jpg', tags: ['King bed', 'Ocean view', 'Terrace'] },
+    { rtId: 'rt2', kind: 'king', label: 'Superior King', soloRate: 475, shareRate: 305, desc: 'A spacious king room on the garden side with a generous bathroom and a quiet sitting corner.', imageUrl: '/images/rooms/superior.jpg', tags: ['King bed', 'Garden side', 'Sitting area'] },
+    { rtId: 'rt3', kind: 'king', label: 'Garden Plus King', soloRate: 390, shareRate: 260, desc: 'A larger garden room with its own terrace, surrounded by greenery and shade.', imageUrl: '/images/rooms/garden-plus.jpg', tags: ['King bed', 'Terrace', 'Garden'] },
+    { rtId: 'rt4', kind: 'king', label: 'Garden King', soloRate: 345, shareRate: 240, desc: 'A calm garden room with a king bed, the simplest way to stay close to everything.', imageUrl: '/images/rooms/garden-king.jpg', tags: ['King bed', 'Garden', 'Quiet'] },
+    { rtId: 'rt5', kind: 'single', label: 'Garden Basic (private)', soloRate: 295, desc: 'A simple private room for one guest.', imageUrl: '/images/rooms/super-simple.jpg', tags: ['Private', 'One guest'] },
+    { rtId: 'bd1', kind: 'twin', label: 'Double Beachview', shareRate: 335, maxBeds: 2, desc: 'A bright room with two separate beds and ocean views. Book one bed to be matched with another guest, or both beds to share with a friend.', imageUrl: '/images/rooms/beachview-double.jpg', tags: ['Two beds', 'Beach view', 'Private bathroom'] },
+    { rtId: 'bd2', kind: 'twin', label: 'Double Room', shareRate: 275, maxBeds: 2, desc: 'A bright room with two separate beds. Book one bed to be matched with another guest, or both beds to share with a friend.', imageUrl: '/images/rooms/garden-double.jpg', tags: ['Two beds', 'Private bathroom', 'Garden side'] },
+    { rtId: 'bd3', kind: 'twin', label: 'Triple Room', shareRate: 235, maxBeds: 3, desc: 'A roomy room with three separate beds, ideal for a group of friends. Book one bed, two or all three.', imageUrl: '/images/rooms/family-room.jpg', tags: ['Three beds', 'Private bathroom', 'Garden side'] },
+  ],
+  services: [
+    { id: 'massage', name: 'Massage', desc: 'A restorative massage with one of our therapists. Choose one hour or ninety minutes.', opts: [{ m: 60, p: 95 }, { m: 90, p: 145 }] },
+    { id: 'mayan', name: 'Mayan Healing Massage', desc: 'A traditional Mayan healing massage using warm oils and ancestral technique.', opts: [{ m: 60, p: 111 }, { m: 90, p: 165 }] },
+    { id: 'tarot', name: 'Tarot Card Reading', desc: 'A one hour reading with Mama Blue to bring clarity to the questions you are carrying.', opts: [{ m: 60, p: 95 }] },
+  ],
+};
+
 const DEFAULT_POLICY =
   'More than 6 weeks prior to the start date: two (2) nights will be charged according to the occupancy type booked.\n' +
   '6 weeks or less prior to the start date: non-refundable and non-transferable.';
@@ -174,4 +197,4 @@ function json(code, body) {
   return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };
 }
 
-module.exports = { pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
+module.exports = { TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };

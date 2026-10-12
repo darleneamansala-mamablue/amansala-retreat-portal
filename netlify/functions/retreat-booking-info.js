@@ -7,20 +7,30 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: L.cors(), body: '' };
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!key) return L.json(500, { error: 'Server config error' });
-  const id = (event.queryStringParameters && event.queryStringParameters.r) || '';
-  if (!id) return L.json(400, { error: 'Missing retreat' });
+  const qs = event.queryStringParameters || {};
+  const id = qs.r || '';
+  const isTemplate = qs.template === '1';
+  const isPreview = isTemplate || qs.preview === '1';      // review mode: shows the page, never takes payment
+  if (!id && !isTemplate) return L.json(400, { error: 'Missing retreat' });
   try {
-    const found = await L.loadRetreat(key, id);
-    if (!found || !found.cfg || !found.cfg.enabled) return L.json(404, { notOpen: true, error: 'This booking page is not open yet.' });
-    const { bk, cfg } = found;
-    if (bk.status === 'cancelled') return L.json(404, { notOpen: true, error: 'This booking page is not open.' });
+    let bk, cfg;
+    if (isTemplate) {
+      const saved = await L.appStoreGet(key, L.TEMPLATE_KEY);
+      cfg = Object.assign({ enabled: true, policy: L.DEFAULT_POLICY }, JSON.parse(JSON.stringify(L.DEFAULT_CFG)), saved || {});
+      bk = { id: 'template', leader_name: cfg.title, retreat_name: cfg.title, start_date: '2027-01-01', end_date: '2027-01-05', status: 'template', blocked_rooms: [], cb_reservation_ids: {} };
+    } else {
+      const found = await L.loadRetreat(key, id);
+      if (!found || !found.cfg || (!found.cfg.enabled && !isPreview)) return L.json(404, { notOpen: true, error: 'This booking page is not open yet.' });
+      ({ bk, cfg } = found);
+      if (bk.status === 'cancelled') return L.json(404, { notOpen: true, error: 'This booking page is not open.' });
+    }
     const nights = L.nightsOf(bk);
-    const av = await L.availability(key, bk, cfg);
+    const av = isPreview ? null : await L.availability(key, bk, cfg);
     const rooms = (cfg.rooms || []).map((rm) => {
-      const freeList = (av[rm.rtId] || { free: [] }).free;
-      const free = freeList.length;
-      const freeChica = freeList.filter(L.isChica).length;      // for guests who tick "I am a leader" (placed at Chica)
-      const freeGrande = freeList.filter(L.isGrande).length;    // leader fallback when Chica is out of this room type
+      const freeList = isPreview ? [] : (av[rm.rtId] || { free: [] }).free;
+      const free = isPreview ? 9 : freeList.length;
+      const freeChica = isPreview ? 9 : freeList.filter(L.isChica).length;      // for guests who tick "I am a leader" (placed at Chica)
+      const freeGrande = isPreview ? 9 : freeList.filter(L.isGrande).length;    // leader fallback when Chica is out of this room type
       const base = { rtId: rm.rtId, kind: rm.kind, label: rm.label, desc: rm.desc || '', imageUrl: rm.imageUrl || '', tags: rm.tags || [], free, freeChica, freeGrande };
       if (rm.kind === 'king') {
         const share = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'share' } });
@@ -35,6 +45,8 @@ exports.handler = async (event) => {
       return { ...base, soloPerPerson: p.lines[0].perPerson };
     });
     return L.json(200, {
+      preview: isPreview,
+      template: isTemplate,
       bookingId: bk.id,
       title: cfg.title || bk.retreat_name || bk.leader_name,
       startDate: bk.start_date,

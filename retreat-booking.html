@@ -68,6 +68,7 @@ td.p span{letter-spacing:.1em;text-transform:uppercase;opacity:.6;font-size:10px
 .rate strong{font-family:var(--display);font-size:28px;font-weight:400;text-align:right;white-space:nowrap}
 .rate strong span{display:block;font-family:var(--body);letter-spacing:.1em;text-transform:uppercase;opacity:.6;font-size:10px}
 .leaderbox{max-width:1180px;margin:0 auto 46px}
+.preview-ribbon{position:sticky;top:0;z-index:70;background:#1f2b27;color:#fffdf8;text-align:center;padding:10px 16px;font-size:12px;letter-spacing:.14em;text-transform:uppercase}
 .kingnote{font-size:12.5px;line-height:1.65;margin:12px 0 4px;padding:12px 14px;background:var(--paper);border:1px solid var(--line)}
 .select{border:1px solid var(--ink);letter-spacing:.14em;text-transform:uppercase;cursor:pointer;background:transparent;display:flex;justify-content:space-between;align-items:center;width:100%;padding:16px 18px;font-size:11px;margin-top:12px;transition:background .2s,color .2s}
 .select:hover:not(:disabled){background:var(--ink);color:var(--sand-light)}
@@ -243,8 +244,9 @@ function init(){
     document.title=(INFO.title||'Retreat')+' | Amansala Tulum';
     if(INFO.bannerUrl){$('bannerImg').src=INFO.bannerUrl;$('bannerImg').alt=INFO.title||'';$('bannerWrap').hidden=false}
     else{$('titleTxt').textContent=INFO.title||'Your retreat';$('titleBar').hidden=false}
-    var ds=fmtD(INFO.startDate)+' – '+fmtD(INFO.endDate);
-    $('datesTxt').textContent=ds;$('lockDates').textContent=ds;$('nightsTxt').textContent=INFO.nights+' nights · set for this retreat';
+    var ds=INFO.template?'Your retreat dates':fmtD(INFO.startDate)+' – '+fmtD(INFO.endDate);
+    $('datesTxt').textContent=ds;$('lockDates').textContent=ds;$('nightsTxt').textContent=INFO.template?'Prices shown for '+INFO.nights+' nights · dates are set for each retreat':INFO.nights+' nights · set for this retreat';
+    if(INFO.preview){var rb=document.createElement('div');rb.className='preview-ribbon';rb.textContent=INFO.template?'Template preview · payment is turned off':'Preview · not open for booking yet · payment is turned off';document.body.insertBefore(rb,document.body.firstChild)}
     $('inclList').innerHTML=(INFO.includes||[]).map(function(i){return '<li>'+esc(i)+'</li>'}).join('');
     $('notIncl').textContent=INFO.notIncluded||'';$('notIncl').hidden=!INFO.notIncluded;
     $('policyTxt').innerHTML=esc(INFO.policy).replace(/\n/g,'<br>');$('policyTxt2').innerHTML=$('policyTxt').innerHTML;
@@ -341,6 +343,7 @@ function details(){
 function others(){return [].map.call(document.querySelectorAll('.oth'),function(i){return i.value.trim()})}
 
 function startPayment(){
+  if(INFO.preview){say('Preview only: payment is turned off on this page.');return}
   var c=roomCalc(cart.room);
   var body={bookingId:BK,cart:{room:{rtId:cart.room.rtId,mode:cart.room.mode,beds:cart.room.beds},services:Object.keys(cart.svcs).map(function(k){return {id:k,m:cart.svcs[k].m,q:cart.svcs[k].q}})},
     guest:{name:$('fName').value.trim(),email:$('fEmail').value.trim(),phone:$('fPhone').value.trim(),others:others()},
