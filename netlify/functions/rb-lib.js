@@ -38,7 +38,7 @@ async function appStoreSet(key, k, value) {
 }
 
 async function loadRetreat(key, bookingId) {
-  const bks = await sget(key, `bookings?id=eq.${encodeURIComponent(bookingId)}&select=id,leader_name,retreat_name,leader_email,start_date,end_date,status,blocked_rooms`);
+  const bks = await sget(key, `bookings?id=eq.${encodeURIComponent(bookingId)}&select=id,leader_name,retreat_name,leader_email,start_date,end_date,status,blocked_rooms,cb_reservation_ids,cb_guest_ids`);
   const bk = bks[0];
   if (!bk) return null;
   const all = (await appStoreGet(key, CFG_KEY)) || {};
@@ -65,7 +65,11 @@ async function availability(key, bk, cfg) {
   const out = {};
   (cfg.rooms || []).forEach((rm) => {
     const units = blocked.filter((room) => rtRooms[rm.rtId] && rtRooms[rm.rtId].has(room));
-    out[rm.rtId] = { units, free: units.filter((u) => !taken.has(u)) };
+    // A room is only offered when Cloudbeds holds it for this retreat (the room has its placeholder reservation there), so the
+    // page and the hotel inventory cannot disagree. Turn off per retreat with cfg.requireCloudbeds = false.
+    const cbIds = bk.cb_reservation_ids || {};
+    const held = cfg.requireCloudbeds === false ? units : units.filter((u) => cbIds[u]);
+    out[rm.rtId] = { units, notHeld: units.length - held.length, free: held.filter((u) => !taken.has(u)) };
   });
   return out;
 }
@@ -119,6 +123,50 @@ function isChica(room) { return /^ch/i.test(String(room)) && !/^(csh|cg|c4)/i.te
 // Grande = the main Amansala property: regular rooms that are neither Chica (CH...) nor a Casa (CSH-, CG-, C4-)
 function isGrande(room) { return !isChica(room) && !/^(csh|cg|c4)/i.test(String(room)); }
 
+function baseOf(unit) { return String(unit).replace(/\s*-?\s*[a-z]$/i, ''); }
+// Choose n free units, preferring beds of one room
+function pickUnits(free, n) {
+  if (free.length < n) return null;
+  if (n === 1) return [free[0]];
+  const groups = {};
+  free.forEach((u) => { (groups[baseOf(u)] = groups[baseOf(u)] || []).push(u); });
+  const best = Object.values(groups).filter((g) => g.length >= n).sort((a, b) => a.length - b.length)[0];
+  return best ? best.slice(0, n) : free.slice(0, n);
+}
+// Leaders: Chica first, Grande when Chica is out of this room type. Everyone else: Grande first (keeps Chica free for leaders).
+function chooseUnits(free, n, isLeader) {
+  const chica = free.filter(isChica), grande = free.filter(isGrande);
+  if (isLeader) {
+    const c = pickUnits(chica, n); if (c) return { units: c, property: 'Chica' };
+    const g = pickUnits(grande, n) || pickUnits(free, n); return g ? { units: g, property: 'Grande' } : { units: null, property: '' };
+  }
+  const u = pickUnits(grande, n) || pickUnits(chica, n) || pickUnits(free, n);
+  return { units: u, property: '' };
+}
+
+// ---- Cloudbeds (through the portal's own cloudbeds function) ----
+async function cbCall(action, body, ms) {
+  const base = process.env.URL || 'https://amansalaportal.com';
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms || 12000);
+  try {
+    const r = await fetch(`${base}/.netlify/functions/cloudbeds?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), signal: ctrl.signal });
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+// Live check that Cloudbeds still holds each room's placeholder reservation. Returns the units that are confirmed gone
+// (cancelled/missing). A Cloudbeds outage or timeout never blocks a guest: unknown counts as fine.
+async function cbGone(bk, units) {
+  const ids = bk.cb_reservation_ids || {};
+  const gone = [];
+  await Promise.all(units.map(async (u) => {
+    if (!ids[u]) return;
+    try { const r = await cbCall('checkReservation', { reservationId: ids[u] }, 9000); if (r && r.active === false) gone.push(u); }
+    catch (e) { /* unknown: allow */ }
+  }));
+  return gone;
+}
+
 function cors() {
   return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 }
@@ -126,4 +174,4 @@ function json(code, body) {
   return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };
 }
 
-module.exports = { isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
+module.exports = { pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };

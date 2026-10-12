@@ -42,10 +42,13 @@ async function rbsLoadAll(){
   return (data&&data.value&&typeof data.value==='object')?data.value:{};
 }
 function rbsFreeCount(bk,rtId){
-  const rt=AppData.roomTypes.find(t=>t.id===rtId);if(!rt)return {blocked:0,free:0};
+  const rt=AppData.roomTypes.find(t=>t.id===rtId);if(!rt)return {blocked:0,held:0,free:0};
   const blocked=(bk.blockedRooms||[]).filter(r=>(rt.rooms||[]).includes(r));
+  // the guest page only offers rooms Cloudbeds holds for the retreat (each has a placeholder reservation there)
+  const cb=bk.cbReservationIds||{};
+  const held=blocked.filter(r=>cb[r]);
   const taken=new Set(AppData.regs.filter(r=>r.bookingId===bk.id&&!r.cancelled&&(r.guests||[]).some(g=>g.name)).map(r=>r.room));
-  return {blocked:blocked.length,free:blocked.filter(r=>!taken.has(r)).length};
+  return {blocked:blocked.length,held:held.length,free:held.filter(r=>!taken.has(r)).length};
 }
 async function rbsOpen(){
   const bk=(typeof regSelBk!=='undefined')?regSelBk:null;
@@ -75,14 +78,14 @@ function rbsRender(orders,spa){
       :r.kind==='twin'?`<input data-r="${i}" data-f="shareRate" type="number" value="${r.shareRate||''}" style="${inp};width:80px" title="Per bed per night">`
       :`<input data-r="${i}" data-f="soloRate" type="number" value="${r.soloRate||''}" style="${inp};width:80px" title="One guest per night">`;
     const lbl=r.kind==='king'?'solo · sharing pp':r.kind==='twin'?'per bed':'solo';
-    return `<tr style="border-top:1px solid #e5e7eb"><td style="padding:6px 8px;font-weight:600;font-size:13px">${rbsEsc(r.label)}</td><td style="padding:6px 8px">${rates}<div style="font-size:10.5px;color:#7f8c9a">${lbl} · per night</div></td><td style="padding:6px 8px;font-size:12.5px;color:${f.free?'#15803d':'#b91c1c'};font-weight:700">${f.free} free of ${f.blocked} blocked</td></tr>`;
+    return `<tr style="border-top:1px solid #e5e7eb"><td style="padding:6px 8px;font-weight:600;font-size:13px">${rbsEsc(r.label)}</td><td style="padding:6px 8px">${rates}<div style="font-size:10.5px;color:#7f8c9a">${lbl} · per night</div></td><td style="padding:6px 8px;font-size:12.5px;color:${f.free?'#15803d':'#b91c1c'};font-weight:700">${f.free} free · ${f.held} of ${f.blocked} blocked rooms held in Cloudbeds</td></tr>`;
   }).join('');
   const svcRows=c.services.map((s,i)=>`<tr style="border-top:1px solid #e5e7eb"><td style="padding:6px 8px;font-weight:600;font-size:13px">${rbsEsc(s.name)}</td>${[60,90].map(m=>{const o=(s.opts||[]).find(x=>x.m===m);return `<td style="padding:6px 8px">${(m===60||o)?`<input data-s="${i}" data-m="${m}" type="number" value="${o?o.p:''}" style="${inp};width:80px" placeholder="—">`:`<input data-s="${i}" data-m="${m}" type="number" value="" style="${inp};width:80px" placeholder="—">`}<span style="font-size:10.5px;color:#7f8c9a"> ${m} min</span></td>`}).join('')}</tr>`).join('');
   const orderRows=orders.length?orders.sort((a,b)=>(b.at||'').localeCompare(a.at||'')).map(o=>`<div style="font-size:12.5px;padding:4px 0;border-top:1px solid #f1f5f9"><b>${rbsEsc(o.name||'')}</b> · ${rbsEsc(o.email||'')} · $${Number(o.total||0).toLocaleString()} · <span style="font-weight:700;color:${o.status==='placed'?'#15803d':'#b91c1c'}">${rbsEsc(o.status)}</span>${o.units&&o.units.length?' · '+rbsEsc(o.units.join(', ')):''}</div>`).join(''):'<div style="font-size:12.5px;color:#7f8c9a">No bookings yet.</div>';
   const spaRows=spa.length?spa.map(s=>`<div style="font-size:12.5px;padding:4px 0;border-top:1px solid #f1f5f9"><b>${rbsEsc(s.name)}</b> · ${rbsEsc(s.phone||'')} · ${(s.items||[]).map(i=>rbsEsc(i.name)+' '+i.minutes+' min'+(i.qty>1?' ×'+i.qty:'')).join(', ')}</div>`).join(''):'<div style="font-size:12.5px;color:#7f8c9a">No spa pre-bookings yet.</div>';
   ov.innerHTML=`<div style="background:#fff;border-radius:12px;width:min(820px,100%);max-height:92vh;overflow-y:auto;padding:20px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><b style="font-size:17px;flex:1">Guest booking page · ${rbsEsc(bk.leaderName||bk.retreatName||'')}</b><button class="btn btn-secondary" onclick="document.getElementById('rbsOv').remove()">Close</button></div>
-    <div style="font-size:12.5px;color:#5a5048;margin-bottom:12px">Guests pick a room, add spa services, agree to the cancellation policy and pay by card. They are placed in this retreat's room list. Block rooms for the retreat first (Add More Rooms).</div>
+    <div style="font-size:12.5px;color:#5a5048;margin-bottom:12px">Guests pick a room, add spa services, agree to the cancellation policy and pay by card. They are placed in this retreat's room list. Block rooms for the retreat first (Add More Rooms) and push the retreat to Cloudbeds: only rooms Cloudbeds holds are offered, so the page always matches the hotel inventory.</div>
     <label style="display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:12px"><input type="checkbox" id="rbsEnabled" ${c.enabled?'checked':''}> Open for guests (the page shows "not open yet" until this is ticked)</label>
     <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;margin-bottom:12px;font-size:13px"><input type="checkbox" id="rbsLock" ${(c.lockRoomList!==false)?'checked':''} style="margin-top:3px"> <span>Only admin can edit the room list. Locks it for the teacher (they can see it but cannot add, edit or move guests), because Amansala collects the guests' payments. Stays locked until you untick this and save.</span></label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">

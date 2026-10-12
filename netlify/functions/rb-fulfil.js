@@ -11,18 +11,6 @@ const L = require('./rb-lib');
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function baseOf(unit) { return String(unit).replace(/\s*-?\s*[a-z]$/i, ''); }
-
-// Choose n free units, preferring beds of one room
-function pickUnits(free, n) {
-  if (free.length < n) return null;
-  if (n === 1) return [free[0]];
-  const groups = {};
-  free.forEach((u) => { (groups[baseOf(u)] = groups[baseOf(u)] || []).push(u); });
-  const best = Object.values(groups).filter((g) => g.length >= n).sort((a, b) => a.length - b.length)[0];
-  return best ? best.slice(0, n) : free.slice(0, n);
-}
-
 async function sendEmail(to, subject, html, replyTo) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey || !to) return;
@@ -65,18 +53,11 @@ async function fulfil(pi) {
   const av = await L.availability(key, bk, cfg);
   const freeAll = (av[room.rtId] || { free: [] }).free;
   const isLeader = (m.rbAck || '').includes('leader=1');
-  const freeChica = freeAll.filter(L.isChica), freeGrande = freeAll.filter(L.isGrande);
   const needUnits = rm && rm.kind === 'twin' ? guests.length : 1;
   // Leaders: Chica first; if Chica is out of this room type, Grande (and the guest + staff are told). Everyone else: Grande
-  // rooms first so Chica stays free for leaders, then Chica, then anything free.
-  let units, property = '';
-  if (isLeader) {
-    units = pickUnits(freeChica, needUnits);
-    if (units) property = 'Chica';
-    else { units = pickUnits(freeGrande, needUnits) || pickUnits(freeAll, needUnits); if (units) property = 'Grande'; }
-  } else {
-    units = pickUnits(freeGrande, needUnits) || pickUnits(freeChica, needUnits) || pickUnits(freeAll, needUnits);
-  }
+  // rooms first so Chica stays free for leaders (L.chooseUnits).
+  const ch = L.chooseUnits(freeAll, needUnits, isLeader);
+  const units = ch.units, property = ch.property;
   const leaderAtGrande = isLeader && property === 'Grande';
 
   const note = `Booked online ${new Date().toISOString().slice(0, 10)}${isLeader ? ' · LEADER (' + (property || 'no room') + ')' : ''} · agreed to ${agreed} · Stripe ${pi.id}`;
@@ -95,6 +76,36 @@ async function fulfil(pi) {
       else await L.sreq(key, 'POST', 'registrations', { booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');
     }
   }
+
+  // Put the guest's name on that room's Cloudbeds reservation so the hotel inventory matches the room list.
+  const cbIssues = [];
+  if (units) {
+    const ids = bk.cb_reservation_ids || {}, gids = bk.cb_guest_ids || {};
+    await Promise.all(units.map(async (unit, i) => {
+      const rowGuests = rm.kind === 'twin' ? [guests[i]] : guests;
+      if (!ids[unit]) { cbIssues.push(`${unit}: no Cloudbeds reservation on file (retreat not pushed?)`); return; }
+      try {
+        const r = await L.cbCall('updateReservationGuest', {
+          reservationId: ids[unit], guestId: gids[unit], roomName: unit, startDate: bk.start_date, endDate: bk.end_date,
+          guestFirstName: rowGuests.map((g) => g.name).join(' & '), guestEmail: rowGuests[0].email || '', guestPhone: rowGuests[0].phone || '',
+          groupName: cfg.title || bk.retreat_name || bk.leader_name, leaderName: bk.leader_name, adults: rowGuests.length, dailyRate: 0,
+          // same safety the portal's own name sync uses: never let Cloudbeds cancel + recreate a reservation. A rename Cloudbeds
+          // refuses is reported for a manual fix instead.
+          skipRecreateFallback: true,
+        }, 22000);
+        if (r && (r.updated === false || r.success === false || r.error)) cbIssues.push(`${unit}: Cloudbeds did not accept the guest name (${r.error || r.message || 'rename refused'})`);
+        else if (r && r.reservationId && r.reservationId !== ids[unit]) {
+          // Cloudbeds replaced the reservation: keep the portal's link to it current
+          const fresh = await L.sget(key, `bookings?id=eq.${encodeURIComponent(bookingId)}&select=cb_reservation_ids,cb_guest_ids`);
+          const nr = Object.assign({}, fresh[0] && fresh[0].cb_reservation_ids, { [unit]: r.reservationId });
+          const ng = Object.assign({}, fresh[0] && fresh[0].cb_guest_ids, r.guestId ? { [unit]: r.guestId } : {});
+          await L.sreq(key, 'PATCH', `bookings?id=eq.${encodeURIComponent(bookingId)}`, { cb_reservation_ids: nr, cb_guest_ids: ng }, 'return=minimal');
+        }
+      } catch (e) { cbIssues.push(`${unit}: Cloudbeds update failed (${e.message})`); }
+    }));
+  }
+  order.cloudbeds = cbIssues.length ? 'needs_update' : 'updated';
+  if (cbIssues.length) order.cloudbedsIssues = cbIssues;
 
   const svcLines = priced.lines.filter((l) => l.type === 'service');
   if (svcLines.length) {
@@ -123,6 +134,7 @@ async function fulfil(pi) {
     <p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>${esc(title)} · ${esc(dates)}<br>${isLeader ? '<b>Leader</b>' + (leaderAtGrande ? ' placed at GRANDE because Chica was out of ' + esc(roomLine.name) + ' rooms' : ' placed at Chica') + '<br>' : ''}${units ? 'Placed in: ' + esc(units.join(', ')) : 'No free room of this type was left when the payment completed. Place the guest by hand or refund in Stripe.'}</p>
     ${others.length ? `<p>Other guests: ${esc(others.join(', '))}</p>` : ''}
     <table style="border-collapse:collapse">${itemRows}</table><p>Total ${money(priced.total)} · Stripe ${esc(pi.id)}</p>
+    ${cbIssues.length ? '<p><b>Cloudbeds needs a manual update</b> (the room list is correct):<br>' + cbIssues.map(esc).join('<br>') + '</p>' : ''}
     ${svcLines.length ? '<p><b>Spa pre-bookings to schedule</b> (saved under retreat spa requests).</p>' : ''}</div>`;
   await sendEmail(staffTo, `${units ? 'New retreat booking' : 'ACTION NEEDED: paid, no room'} — ${m.rbName} · ${title}`, staffHtml);
   return { ok: true, placed: !!units };
@@ -136,4 +148,4 @@ async function fulfil(pi) {
   }
 }
 
-module.exports = { fulfil, pickUnits };
+module.exports = { fulfil };

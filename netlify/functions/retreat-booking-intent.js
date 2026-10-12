@@ -42,17 +42,18 @@ exports.handler = async (event) => {
 
     const av = await L.availability(key, bk, cfg);
     const isLeader = acks.leader === true;
-    // Leaders go to Amansala Chica. If Chica is out of this room type they are placed at Grande instead (and told on the page,
-    // in the cart and in the confirmation email). Everyone else: any free room (Grande rooms are used before Chica ones).
-    const freeList = (av[rm.rtId] || { free: [] }).free;
-    let leaderPlacement = null;
-    if (isLeader) {
-      if (freeList.filter(L.isChica).length >= needed) leaderPlacement = 'chica';
-      else if (freeList.filter(L.isGrande).length >= needed) leaderPlacement = 'grande';
-      else return L.json(409, { error: 'Sorry, that room type is sold out. Please choose another room type.' });
-    } else if (freeList.length < needed) {
-      return L.json(409, { error: 'Sorry, that room was just taken. Please choose another option.' });
+    // Pick the room(s) the guest would get (leaders: Chica, else Grande; others: Grande first), then confirm with Cloudbeds that
+    // each is still held. A room Cloudbeds says is gone is dropped and the next one is tried.
+    let freeList = (av[rm.rtId] || { free: [] }).free.slice();
+    let choice = L.chooseUnits(freeList, needed, isLeader);
+    for (let tries = 0; tries < 4 && choice.units; tries++) {
+      const gone = await L.cbGone(bk, choice.units);
+      if (!gone.length) break;
+      freeList = freeList.filter((u) => !gone.includes(u));
+      choice = L.chooseUnits(freeList, needed, isLeader);
     }
+    if (!choice.units) return L.json(409, { error: isLeader ? 'Sorry, that room type is sold out. Please choose another room type.' : 'Sorry, that room was just taken. Please choose another option.' });
+    const leaderPlacement = isLeader ? choice.property.toLowerCase() : null;
 
     const amountCents = Math.round(priced.total * 100);
     if (amountCents < 50) return L.json(400, { error: 'Amount too small' });
