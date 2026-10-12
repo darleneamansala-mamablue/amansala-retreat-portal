@@ -7,11 +7,11 @@
 <meta name="theme-color" content="#f8f5ef">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Italiana&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://js.stripe.com/v3/"></script>
 <style>
 /* Same look as book.html: sand + moss + clay, Italiana headings, DM Sans text. Always light. */
-:root{--sand:#eee9df;--sand-light:#f8f5ef;--ink:#1f2b27;--moss:#3f5147;--clay:#9a5f43;--line:#1f2b272e;--paper:#fffdf8;--warn:#f6ebd0;--warn-line:#c9993f;--display:'Italiana',Georgia,serif;--body:'DM Sans',system-ui,sans-serif;color-scheme:light}
+:root{--sand:#eee9df;--sand-light:#f8f5ef;--ink:#1f2b27;--moss:#3f5147;--clay:#9a5f43;--line:#1f2b272e;--paper:#fffdf8;--warn:#f6ebd0;--warn-line:#c9993f;--display:'Cormorant Garamond',Georgia,serif;--body:'DM Sans',system-ui,sans-serif;color-scheme:light}
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;background:var(--sand-light);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased;line-height:1.5}
 button,input{font:inherit;color:inherit}
@@ -145,6 +145,15 @@ footer p{opacity:.65;margin:0;font-size:12px}
 @media(max-width:820px){.site-header{grid-template-columns:1fr auto}.header-note{display:none}.booking-bar{grid-template-columns:1fr}.field{border-right:0;border-bottom:1px solid var(--line)}
 .section-heading,.pricing{grid-template-columns:1fr}.stay-card,.stay-card:nth-child(2n){grid-template-columns:1fr}.stay-card:nth-child(2n) .img,.stay-card:nth-child(2n) .stay-content{grid-area:auto}
 .svc-grid{grid-template-columns:1fr}footer{grid-template-columns:1fr;text-align:center}.modal{padding:52px 22px 28px}.cartbar{flex-wrap:wrap}}
+
+/* Readability (Darlene 2026-10-12): the thin display face was hard to read. Sturdier serif, lining numerals for prices, darker small text. */
+h1,h2,h3,.nm,.rate strong,.svc h3,.svc .pr,td.p strong,.upprice,.cartbar b,.popbox h3,.modal h3,.incl h3,.state h2,.titlebar h1,.stay-content h3,.section-heading h2{font-family:var(--display);font-weight:600;font-variant-numeric:lining-nums;letter-spacing:0}
+h1,.titlebar h1{font-weight:700}
+.nm{font-size:25px}
+td.p strong{font-size:28px}
+.rate strong{font-size:31px}
+.stay-desc,.section-heading p,.uprow small,.svc p,.cartline small,.rate .l small,td small,.field small,.hint,.sub,.incl .no,.ptxt{opacity:.9}
+.eyebrow,.kicker{font-weight:700}
 </style>
 </head>
 <body>
@@ -161,7 +170,7 @@ footer p{opacity:.65;margin:0;font-size:12px}
     <div class="field"><span>Payment</span><b id="payTxt">Secure card payment</b><small id="paySub">Pay online, in full or in two parts</small></div>
     <a class="go-bar" href="#rooms">Choose your room <span>&darr;</span></a>
   </div></div>
-  <nav class="jump"><a href="#rooms">Rooms</a><a href="#spa" id="spaJump">Pre-book spa services</a><a href="#policy">Cancellation policy</a></nav>
+  <nav class="jump"><a href="#rooms">Rooms</a><a href="#policy">Cancellation policy</a></nav>
 
   <section class="pad">
     <div class="section-heading"><div><p class="kicker">Retreat pricing · room and meals</p></div><p id="priceIntro">Rates are per person, per night. Taxes and fees and staff gratuity are added at checkout, and your full total is shown before you pay.</p></div>
@@ -292,7 +301,7 @@ function init(){
     $('inclList').innerHTML=(INFO.includes||[]).map(function(i){return '<li>'+esc(i)+'</li>'}).join('');
     $('notIncl').textContent=INFO.notIncluded||'';$('notIncl').hidden=!INFO.notIncluded;
     $('policyTxt').innerHTML=esc(INFO.policy).replace(/\n/g,'<br>');$('policyTxt2').innerHTML=$('policyTxt').innerHTML;
-    if(!INFO.services.length){$('spa').hidden=true;$('spaJump').hidden=true}
+    if(!INFO.services.length){$('spa').hidden=true}
     render();
   }).catch(function(){showClosed('We could not load this page. Please try again in a moment.')});
 }
