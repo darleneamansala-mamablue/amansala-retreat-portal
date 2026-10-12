@@ -65,7 +65,8 @@ async function fulfil(pi) {
   const units = ch.units, property = ch.property;
   const leaderAtGrande = isLeader && property === 'Grande';
 
-  const note = `Booked online ${new Date().toISOString().slice(0, 10)}${isLeader ? ' · LEADER (' + (property || 'no room') + ')' : ''} · agreed to ${agreed}${isDeposit ? ` · PAID 50% (${'$' + roomPaidNow.toFixed(2)}), balance $${roomLater.toFixed(2)} auto-charges ${m.rbBalanceDate}` : ''} · Stripe ${pi.id}`;
+  const shareTxt = !m.rbShare ? '' : m.rbShare.startsWith('friend:') ? ` · SHARED ROOM: travelling with friend ${m.rbShare.slice(7)} (friend must also book a shared room)` : ' · SHARED ROOM: travelling alone, to be matched with a guest of the same gender (agreed to pay for a private room if no match)';
+  const note = `Booked online ${new Date().toISOString().slice(0, 10)}${isLeader ? ' · LEADER (' + (property || 'no room') + ')' : ''}${shareTxt} · agreed to ${agreed}${isDeposit ? ` · PAID 50% (${'$' + roomPaidNow.toFixed(2)}), balance $${roomLater.toFixed(2)} auto-charges ${m.rbBalanceDate}` : ''} · Stripe ${pi.id}`;
 
   const order = { piId: pi.id, bookingId, at: new Date().toISOString(), name: m.rbName, email: m.rbEmail, phone: m.rbPhone, total: priced.total, paidNow, balance: roomLater, balanceDate: isDeposit ? m.rbBalanceDate : null, units: units || [], status: units ? 'placed' : 'needs_attention' };
 
@@ -159,6 +160,7 @@ async function fulfil(pi) {
   const staffHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27"><h3>${units ? 'New retreat booking' : '⚠ Paid but NO ROOM FREE — needs attention'}</h3>
     <p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>${esc(title)} · ${esc(dates)}<br>${isLeader ? '<b>Leader</b>' + (leaderAtGrande ? ' placed at GRANDE because Chica was out of ' + esc(roomLine.name) + ' rooms' : ' placed at Chica') + '<br>' : ''}${units ? 'Placed in: ' + esc(units.join(', ')) : 'No free room of this type was left when the payment completed. Place the guest by hand or refund in Stripe.'}</p>
     ${others.length ? `<p>Other guests: ${esc(others.join(', '))}</p>` : ''}
+    ${m.rbShare ? `<p><b>Shared room:</b> ${m.rbShare.startsWith('friend:') ? 'travelling with friend ' + esc(m.rbShare.slice(7)) + ' (their friend must also book a shared room)' : 'travelling alone, to be matched with a guest of the same gender; agreed to pay for a private room if no match'}</p>` : ''}
     <table style="border-collapse:collapse">${itemRows}</table><p>${isDeposit ? 'Paid now ' + money(paidNow) + ' (50%). Balance ' + money(roomLater) + ' auto-charges ' + esc(m.rbBalanceDate) + '.' : 'Total ' + money(priced.total)} · Stripe ${esc(pi.id)} · <a href="${L.recordUrl(pi.id)}">booking record (PDF)</a></p>
     ${cbIssues.length ? '<p><b>Cloudbeds needs a manual update</b> (the room list is correct):<br>' + cbIssues.map(esc).join('<br>') + '</p>' : ''}
     ${svcLines.length ? '<p><b>Spa pre-bookings to schedule</b> (saved under retreat spa requests).</p>' : ''}</div>`;

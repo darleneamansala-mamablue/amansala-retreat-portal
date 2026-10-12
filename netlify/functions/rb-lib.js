@@ -234,6 +234,8 @@ const AGREE_TEXT = {
   roommate: 'I agree that if there is no one to match me up with, I will pay the fee of a private room and will be moved to a garden room with a king or queen bed, and there will be a fee.',
   roommateNotice: 'Please note: if we cannot match you up with anyone, you will be required to pay an upgrade fee to have a private room. Someone from our team will reach out 8 weeks prior to your booking if we cannot match you up.',
   leader: 'I am a leader. Leaders are placed at Amansala Chica.',
+  shareFriend: "I'm travelling with a friend and would like to share a room with them. (Your friend must also book a shared room.)",
+  shareAlone: "I'm travelling alone and agree to be matched with another guest of the same gender. If no suitable roommate is available, I agree to pay the additional cost for a private room.",
   king: 'Sharing a king bed? Please book together. Both guests must be included in one reservation, with payment made using a single credit card. Individual spaces in a king bed cannot be booked separately.',
 };
 const crypto = require('crypto');
