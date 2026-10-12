@@ -162,10 +162,10 @@ footer p{opacity:.65;margin:0;font-size:12px}
   <nav class="jump"><a href="#rooms">Rooms</a><a href="#spa" id="spaJump">Pre-book spa services</a><a href="#policy">Cancellation policy</a></nav>
 
   <section class="pad">
-    <div class="section-heading"><div><p class="kicker">Retreat pricing · room and meals</p></div><p id="priceIntro">Prices are per person for the full stay. Taxes, fees and gratuity are already included in every price you see, so what you see is what you pay.</p></div>
+    <div class="section-heading"><div><p class="kicker">Retreat pricing · room and meals</p></div><p id="priceIntro">Rates are per person, per night. Taxes and fees and staff gratuity are added at checkout, and your full total is shown before you pay.</p></div>
     <div class="pricing">
       <div class="tblwrap"><table><thead><tr><th>Room</th><th>Two guests sharing</th><th>One guest</th></tr></thead><tbody id="chart"></tbody></table>
-        <p class="pricenote">All prices are per person for the full stay and <b>include taxes, fees and staff gratuity</b>. There is nothing more to add at checkout.<span id="priceNoteTeach"></span></p>
+        <p class="pricenote" id="priceNote"></p>
         <p class="hint">King bed rooms are booked for two guests together and paid with one credit card. Rooms with separate beds are booked one bed at a time.</p></div>
       <aside class="incl"><h3>What's included</h3><ul id="inclList"></ul><div class="no" id="notIncl"></div></aside>
     </div>
@@ -290,8 +290,6 @@ function init(){
     $('inclList').innerHTML=(INFO.includes||[]).map(function(i){return '<li>'+esc(i)+'</li>'}).join('');
     $('notIncl').textContent=INFO.notIncluded||'';$('notIncl').hidden=!INFO.notIncluded;
     $('policyTxt').innerHTML=esc(INFO.policy).replace(/\n/g,'<br>');$('policyTxt2').innerHTML=$('policyTxt').innerHTML;
-    var tn=teachNote();if(tn&&$('priceNoteTeach'))$('priceNoteTeach').innerHTML=' <b>'+esc(tn)+'</b>';
-    if(tn){$('priceIntro').innerHTML=esc($('priceIntro').textContent)+' <b>'+esc(tn)+'</b>'}
     if(!INFO.services.length){$('spa').hidden=true;$('spaJump').hidden=true}
     render();
   }).catch(function(){showClosed('We could not load this page. Please try again in a moment.')});
@@ -300,24 +298,25 @@ function showClosed(msg){$('loading').hidden=true;$('closed').hidden=false;if(ms
 
 function render(){
   $('chart').innerHTML=INFO.rooms.map(function(r){
-    var two=r.kind==='king'?'<strong>'+money(r.sharePerPerson)+'</strong><span>per person</span><small>Two guests, one king bed</small>':(r.kind==='twin'?'<strong>'+money(r.perBed)+'</strong><span>per person</span><small>Per bed, shared room</small>':'<span>Private only</span>');
-    var one=(r.kind==='king'||r.kind==='single')?'<strong>'+money(r.soloPerPerson)+'</strong><span>per person</span>':'<span>Shared only</span>';
+    var two=r.kind==='king'?'<strong>'+money(r.rateShare)+'</strong><span>per person, per night</span><small>Two guests, one king bed</small>':(r.kind==='twin'?'<strong>'+money(r.rateShare)+'</strong><span>per person, per night</span><small>Per bed, shared room</small>':'<span>Private only</span>');
+    var one=(r.kind==='king'||r.kind==='single')?'<strong>'+money(r.rateSolo)+'</strong><span>per person, per night</span>':'<span>Shared only</span>';
     return '<tr><td><span class="nm">'+esc(r.label)+'</span><small>'+esc((r.tags||[]).join(' · '))+'</small></td><td class="p">'+two+'</td><td class="p">'+one+'</td></tr>';
   }).join('');
+  var pn=$('priceNote');if(pn){pn.innerHTML='Rates are per person, per night, for '+INFO.nights+' nights. <b>Plus '+INFO.taxFeePct+'% taxes and fees and $'+INFO.gratuityPerNight+' gratuity per person, per night</b>, added at checkout.'+(teachNote()?' <b>'+esc(teachNote())+'</b>':'')}
   $('stays').innerHTML=INFO.rooms.map(function(r,i){
     var rows='',btns='',kingNote='';
     var needOne=okFor(r,1);
     if(r.kind==='king'){
-      rows='<div class="rate"><div class="l">Two guests · one king bed<small>Booked together, paid on one card</small></div><strong>'+money(r.sharePerPerson)+'<span>per person</span></strong></div><div class="rate"><div class="l">One guest<small>Just for you</small></div><strong>'+money(r.soloPerPerson)+'<span>per person</span></strong></div>';
+      rows='<div class="rate"><div class="l">Two guests · one king bed<small>Booked together, paid on one card</small></div><strong>'+money(r.rateShare)+'<span>per person, per night</span></strong></div><div class="rate"><div class="l">One guest<small>Just for you</small></div><strong>'+money(r.rateSolo)+'<span>per person, per night</span></strong></div>';
       kingNote='<p class="kingnote"><b>Sharing a king bed? Please book together.</b> Both guests must be included in one reservation, with payment made using a single credit card. Individual spaces in a king bed cannot be booked separately.</p>';
       btns='<button class="select" data-r="'+r.rtId+'" data-k="share"'+(needOne?'':' disabled')+'><span>Select for two guests</span><span>&rarr;</span></button><button class="select" data-r="'+r.rtId+'" data-k="solo"'+(needOne?'':' disabled')+'><span>Select for one guest</span><span>&rarr;</span></button>';
     }else if(r.kind==='twin'){
-      rows='<div class="rate"><div class="l">Per bed<small>Each bed is booked and priced separately</small></div><strong>'+money(r.perBed)+'<span>per person</span></strong></div>';
+      rows='<div class="rate"><div class="l">Per bed<small>Each bed is booked and priced separately</small></div><strong>'+money(r.rateShare)+'<span>per person, per night</span></strong></div>';
       for(var n=1;n<=r.maxBeds;n++){
         btns+='<button class="select" data-r="'+r.rtId+'" data-k="beds" data-n="'+n+'"'+(okFor(r,n)?'':' disabled')+'><span>'+(n===1?'Book 1 bed (just me)':'Book '+n+' beds (me + '+(n-1)+' friend'+(n>2?'s':'')+')')+'</span><span>&rarr;</span></button>';
       }
     }else{
-      rows='<div class="rate"><div class="l">One guest<small>Private room</small></div><strong>'+money(r.soloPerPerson)+'<span>per person</span></strong></div>';
+      rows='<div class="rate"><div class="l">One guest<small>Private room</small></div><strong>'+money(r.rateSolo)+'<span>per person, per night</span></strong></div>';
       btns='<button class="select" data-r="'+r.rtId+'" data-k="solo"'+(needOne?'':' disabled')+'><span>Select for one guest</span><span>&rarr;</span></button>';
     }
     var sold=!okFor(r,1)?'<p class="soldout">Sold out</p>':(isLeader()&&placementFor(r,1)==='grande'?'<p class="kingnote">'+leaderMsg(r,1)+'</p>':'');
@@ -361,8 +360,12 @@ function showRoomPanel(){
   $('mt').textContent=r.label;
   $('ms').textContent=r.kind==='twin'?(cur.beds===1?'One bed in a shared room':cur.beds+' beds · you and '+(cur.beds-1)+' friend'+(cur.beds>2?'s':'')):(r.kind==='king'&&cur.mode==='share'?'Two guests · one king bed':'One guest · just for you');
   $('cartlines').innerHTML='';
-  var s='<div class="line"><span>'+money(c.per)+' per person, all in</span><span>'+(c.guests>1?'× '+c.guests:'')+'</span></div><div class="line total"><span>Total'+(c.guests>1?' for '+c.guests+' guests':' per person')+'</span><span>'+money(c.total)+'</span></div>';
-  s+='<div class="line" style="opacity:.6;font-size:12px"><span>Taxes, fees and gratuity are included.'+(teachNote()?' '+esc(teachNote()):'')+'</span></div>';
+  var nightly=(r.kind==='king'&&cur.mode==='share')?r.rateShare:(r.kind==='twin'?r.rateShare:(r.rateSolo||0)), roomPP=nightly*INFO.nights, tf=INFO.teachingFeeAmount||0, grat=INFO.gratuityPerNight*INFO.nights, taxes=Math.round((c.per-roomPP-tf-grat)*100)/100;
+  var s='<div class="line"><span>'+money2(nightly)+' per night × '+INFO.nights+' nights, per person</span><span>'+money2(roomPP)+'</span></div>';
+  if(tf)s+='<div class="line"><span>Teaching fee</span><span>'+money2(tf)+'</span></div>';
+  s+='<div class="line"><span>Taxes &amp; fees ('+INFO.taxFeePct+'%)</span><span>'+money2(taxes)+'</span></div><div class="line"><span>Staff gratuity ($'+INFO.gratuityPerNight+' per night)</span><span>'+money2(grat)+'</span></div><div class="line total"><span>Total per person</span><span>'+money2(c.per)+'</span></div>';
+  if(c.guests>1)s+='<div class="line total" style="margin-top:4px;border-top:0;padding-top:0"><span>Total for '+c.guests+' '+(r.kind==='twin'?'beds':'guests')+'</span><span>'+money2(c.total)+'</span></div>';
+  s+='<div class="line" style="opacity:.7;font-size:12px"><span>'+(teachNote()?esc(teachNote()):'')+'</span></div>';
   $('sum').innerHTML=s;
   $('couple').hidden=!(r.kind==='king'&&cur.mode==='share');$('addbox').hidden=false;renderUpsell();
   if(isLeader()){$('sum').insertAdjacentHTML('beforeend','<div class="couple" style="margin:10px 0 0">'+leaderMsg(r,c.guests)+'</div>')}

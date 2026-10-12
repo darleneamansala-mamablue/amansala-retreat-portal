@@ -32,17 +32,18 @@ exports.handler = async (event) => {
       const freeChica = isPreview ? 9 : freeList.filter(L.isChica).length;      // for guests who tick "I am a leader" (placed at Chica)
       const freeGrande = isPreview ? 9 : freeList.filter(L.isGrande).length;    // leader fallback when Chica is out of this room type
       const base = { rtId: rm.rtId, kind: rm.kind, label: rm.label, desc: rm.desc || '', imageUrl: rm.imageUrl || '', tags: rm.tags || [], free, freeChica, freeGrande };
+      const nightly = { rateShare: rm.kind === 'single' ? null : Number(rm.shareRate) || null, rateSolo: rm.kind === 'twin' ? null : Number(rm.soloRate) || null };
       if (rm.kind === 'king') {
         const share = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'share' } });
         const solo = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'solo' } });
-        return { ...base, sharePerPerson: share.lines[0].perPerson, soloPerPerson: solo.lines[0].perPerson };
+        return { ...base, ...nightly, sharePerPerson: share.lines[0].perPerson, soloPerPerson: solo.lines[0].perPerson };
       }
       if (rm.kind === 'twin') {
         const p = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'beds', beds: 1 } });
-        return { ...base, maxBeds: Number(rm.maxBeds) || 2, perBed: p.lines[0].perPerson };
+        return { ...base, ...nightly, maxBeds: Number(rm.maxBeds) || 2, perBed: p.lines[0].perPerson };
       }
       const p = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'solo' } });
-      return { ...base, soloPerPerson: p.lines[0].perPerson };
+      return { ...base, ...nightly, soloPerPerson: p.lines[0].perPerson };
     });
     return L.json(200, {
       deposit: L.depositOffer(bk, cfg),
@@ -58,6 +59,8 @@ exports.handler = async (event) => {
       teachingFeeOn: !!(cfg.teachingFee && cfg.teachingFee.on),
       teachingPayee: String(cfg.teachingFeePayee || ''),
       gratuityPerNight: Number(cfg.gratuityPerNight) || 0,
+      taxFeePct: Number(cfg.taxFeePct) || 0,
+      teachingFeeAmount: (cfg.teachingFee && cfg.teachingFee.on) ? Number(cfg.teachingFee.amountPP) || 0 : 0,
       includes: cfg.includes || [],
       notIncluded: cfg.notIncluded || '',
       policy: cfg.policy || L.DEFAULT_POLICY,
