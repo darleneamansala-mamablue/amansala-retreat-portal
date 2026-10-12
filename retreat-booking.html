@@ -118,6 +118,8 @@ footer p{opacity:.65;margin:0;font-size:12px}
 .summary{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0;margin-bottom:18px;font-variant-numeric:tabular-nums}
 .line{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:3px 0;opacity:.8}.line.total{font-weight:600;opacity:1;margin-top:8px;padding-top:12px;border-top:1px solid var(--line);font-size:15px}
 .cartline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+.brk{margin:6px 0 2px;padding:6px 0 0;border-top:1px dashed var(--line);font-size:12.5px;line-height:1.7}
+.brk>div{display:flex;justify-content:space-between;gap:12px;opacity:.8;font-variant-numeric:tabular-nums}
 .cartline small{display:block;opacity:.65;font-size:12px}
 .cartline .rm{background:none;border:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;opacity:.6;cursor:pointer;padding:0;margin-top:2px}
 .cartline .amt{font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -354,6 +356,12 @@ function renderUpsell(){
 }
 function refreshAfterCart(){render();if(!$('checkout').hidden)showCart();else if(!$('addbox').hidden){renderUpsell()}}
 function resetPanels(){['couple','addbox','checkout','paybox','done','upsell'].forEach(function(i){$(i).hidden=true});document.querySelector('.lock').hidden=false;$('sum').hidden=false;$('cartlines').hidden=false}
+function roomParts(c){ // nightly rate, taxes & fees and gratuity for the whole booking (all guests), from the same numbers the server charges
+  var r=c.r,nightly=(r.kind==='king'&&cur&&false)?0:0;
+  var rate=(r.kind==='king')?(c.guests===2?r.rateShare:r.rateSolo):(r.kind==='twin'?r.rateShare:r.rateSolo);
+  var roomPP=rate*INFO.nights,tf=INFO.teachingFeeAmount||0,grat=INFO.gratuityPerNight*INFO.nights,taxes=Math.round((c.per-roomPP-tf-grat)*100)/100,g=c.guests;
+  return {rate:rate,nights:INFO.nights,guests:g,room:roomPP*g,teach:tf*g,taxes:taxes*g,grat:grat*g,total:c.total};
+}
 function showRoomPanel(){
   resetPanels();
   var c=roomCalc(cur), r=c.r;
@@ -375,7 +383,13 @@ function showCart(){
   resetPanels();
   $('mt').textContent='Your cart';$('ms').textContent=$('datesTxt').textContent;
   var lines='', c=cart.room?roomCalc(cart.room):null;
-  if(c){lines+='<div class="cartline"><div><b>'+esc(c.r.label)+'</b><small>'+(c.r.kind==='twin'?c.guests+' bed'+(c.guests>1?'s':''):(c.guests>1?'Two guests, one king bed':'One guest'))+' · '+INFO.nights+' nights · taxes, fees &amp; gratuity included</small><button class="rm" data-rm="room">Remove</button></div><div class="amt">'+money(c.total)+'</div></div>'}
+  if(c){var P=roomParts(c);
+    lines+='<div class="cartline" style="display:block"><div style="display:flex;justify-content:space-between;gap:12px"><div><b>'+esc(c.r.label)+'</b><small>'+(c.r.kind==='twin'?c.guests+' bed'+(c.guests>1?'s':''):(c.guests>1?'Two guests, one king bed':'One guest'))+' · '+INFO.nights+' nights</small></div><div class="amt"><b>'+money2(P.total)+'</b></div></div>'
+      +'<div class="brk"><div><span>'+money2(P.rate)+' per night × '+P.nights+' nights'+(P.guests>1?' × '+P.guests+' guests':'')+'</span><span>'+money2(P.room)+'</span></div>'
+      +(P.teach?'<div><span>Teaching fee</span><span>'+money2(P.teach)+'</span></div>':'')
+      +'<div><span>Taxes &amp; fees ('+INFO.taxFeePct+'%)</span><span>'+money2(P.taxes)+'</span></div>'
+      +'<div><span>Staff gratuity ($'+INFO.gratuityPerNight+' per person, per night)</span><span>'+money2(P.grat)+'</span></div></div>'
+      +'<button class="rm" data-rm="room">Remove</button></div>'}
   Object.keys(cart.svcs).forEach(function(k){var s=INFO.services.filter(function(x){return x.id===k})[0],it=cart.svcs[k];lines+='<div class="cartline"><div><b>'+esc(s.name)+'</b><small>'+minLabel(it.m)+' · '+it.q+' session'+(it.q>1?'s':'')+'</small><button class="rm" data-rm="'+esc(k)+'">Remove</button></div><div class="amt">'+money(svcPrice(k))+'</div></div>'});
   if(!lines)lines='<p class="sub">Your cart is empty.</p>';
   $('cartlines').innerHTML=lines;
