@@ -116,6 +116,9 @@ function priceCart(cfg, nights, cart) {
 // Amansala Chica rooms are the CH... rooms (CH02, CH11, CH3a ...); the Casa properties (CSH-, CG-, C4-) are not Chica
 function isChica(room) { return /^ch/i.test(String(room)) && !/^(csh|cg|c4)/i.test(String(room)); }
 
+// Grande = the main Amansala property: regular rooms that are neither Chica (CH...) nor a Casa (CSH-, CG-, C4-)
+function isGrande(room) { return !isChica(room) && !/^(csh|cg|c4)/i.test(String(room)); }
+
 function cors() {
   return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 }
@@ -123,4 +126,4 @@ function json(code, body) {
   return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };
 }
 
-module.exports = { isChica, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
+module.exports = { isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
