@@ -7,6 +7,7 @@
 // Guests who book are written into the retreat's room list (free rooms/beds of the room block), so rooms must be blocked
 // for the retreat first (Add More Rooms); the screen shows how many are free per room type.
 
+const RBS_TEMPLATE='retreat_booking_template';
 const RBS_KEY='retreat_booking_config', RBS_ORDERS='retreat_booking_orders', RBS_SPA='retreat_spa_requests';
 const RBS_DEFAULT_POLICY='More than 6 weeks prior to the start date: two (2) nights will be charged according to the occupancy type booked.\n6 weeks or less prior to the start date: non-refundable and non-transferable.';
 const RBS_DEFAULTS={
@@ -56,7 +57,8 @@ async function rbsOpen(){
   _rbsBk=bk;
   let all={};try{all=await rbsLoadAll();}catch(e){}
   const saved=all[bk.id];
-  _rbsCfg=saved?JSON.parse(JSON.stringify(saved)):Object.assign({enabled:false,title:bk.retreatName||bk.leaderName||'',bannerUrl:'',policy:RBS_DEFAULT_POLICY},JSON.parse(JSON.stringify(RBS_DEFAULTS)));
+  let tpl=null;try{const t=await db.from('app_store').select('value').eq('key',RBS_TEMPLATE).maybeSingle();tpl=t.data&&t.data.value;}catch(e){}
+  _rbsCfg=saved?JSON.parse(JSON.stringify(saved)):Object.assign({enabled:false,policy:RBS_DEFAULT_POLICY},JSON.parse(JSON.stringify(RBS_DEFAULTS)),tpl?JSON.parse(JSON.stringify(tpl)):{},{enabled:false,title:bk.retreatName||bk.leaderName||'',bannerUrl:''});
   let orders={},spa=[];
   try{
     const o=await db.from('app_store').select('value').eq('key',RBS_ORDERS).maybeSingle();orders=(o.data&&o.data.value)||{};
@@ -111,8 +113,12 @@ function rbsRender(orders,spa){
       <button class="btn btn-primary" onclick="rbsSave()">Save</button>
       <button class="btn btn-secondary" onclick="rbsCopy()">Copy guest link</button>
       <button class="btn btn-secondary" onclick="window.open(rbsLink(_rbsBk),'_blank')">Open page</button>
+      <button class="btn btn-secondary" onclick="rbsCopyPreview()">Copy review link (no payment)</button>
+      <button class="btn btn-secondary" onclick="rbsSaveTemplate()">Save these settings as the template</button>
     </div>
-    <div style="font-size:11.5px;color:#7f8c9a;word-break:break-all;margin-bottom:10px">${rbsEsc(rbsLink(bk))}</div>
+    <div style="font-size:11.5px;color:#7f8c9a;word-break:break-all;margin-bottom:4px">Guest link: ${rbsEsc(rbsLink(bk))}</div>
+    <div style="font-size:11.5px;color:#7f8c9a;word-break:break-all;margin-bottom:4px">Review link (shows the page, payment off): ${rbsEsc(rbsPreviewLink(bk))}</div>
+    <div style="font-size:11.5px;color:#7f8c9a;word-break:break-all;margin-bottom:10px">Template link: ${rbsEsc(rbsTemplateLink())}</div>
     <b style="font-size:13px">Bookings (${orders.length})</b>${orderRows}
     <div style="height:10px"></div><b style="font-size:13px">Spa pre-bookings to schedule (${spa.length})</b>${spaRows}
   </div>`;
@@ -148,6 +154,21 @@ async function rbsSave(){
     if(c.enabled||c.lockRoomList===false){const want=!!c.lockRoomList;if(!!_rbsBk.allLocked!==want){_rbsBk.allLocked=want;saveAll();try{regRender();}catch(e){}}}
     showToast(c.enabled?'Saved. The guest booking page is OPEN.':'Saved. The page is still closed to guests.');
     rbsOpen();
+  }catch(e){showToast('Save failed: '+(e.message||e));}
+}
+function rbsPreviewLink(bk){return `${location.origin}/retreat-booking.html?r=${encodeURIComponent(bk.id)}&preview=1`;}
+function rbsTemplateLink(){return `${location.origin}/retreat-booking.html?template=1`;}
+function rbsCopyPreview(){const l=rbsPreviewLink(_rbsBk);navigator.clipboard.writeText(l).then(()=>showToast('Review link copied (payment is off on it)')).catch(()=>showToast('Link: '+l));}
+// The template is what every NEW retreat page starts from: rooms, rates, spa, wording, policy, fees. Retreat-specific things
+// (title, banner, on/off, the teaching fee choice) are not part of it.
+async function rbsSaveTemplate(){
+  try{
+    const c=JSON.parse(JSON.stringify(rbsCollect()));
+    ['enabled','title','bannerUrl','lockRoomList'].forEach(k=>delete c[k]);
+    c.teachingFee={on:false,amountPP:0};
+    const {error}=await db.from('app_store').upsert({key:RBS_TEMPLATE,value:c,updated_at:new Date().toISOString()});
+    if(error)throw error;
+    showToast('Saved as the template. New retreat pages start from it. Template link: '+rbsTemplateLink());
   }catch(e){showToast('Save failed: '+(e.message||e));}
 }
 function rbsCopy(){
