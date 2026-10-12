@@ -99,7 +99,26 @@ exports.handler = async (event) => {
     }
     const pi = await L.stripePost('/payment_intents', params);
     if (pi.error) return L.json(400, { error: pi.error.message || 'Payment error' });
-    return L.json(200, { clientSecret: pi.client_secret, publishableKey: pubKey, amount: dueNow, plan, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null, total: priced.total, lines: priced.lines, leaderPlacement });
+
+    // Proof of what this guest saw and agreed to, kept for the booking record PDF and in case of a dispute
+    try {
+      const now = new Date().toISOString();
+      const agreements = [{ key: 'cancellation', text: L.AGREE_TEXT.cancellation, checked: true, at: now }];
+      if (rm.kind === 'king' && priced.guests === 2) agreements.push({ key: 'king', text: L.AGREE_TEXT.king, checked: true, at: now, note: 'Shown on the room and in the cart (information)' });
+      if (acks.roommate === true) agreements.push({ key: 'roommate', text: L.AGREE_TEXT.roommate, checked: true, at: now, shownNotice: L.AGREE_TEXT.roommateNotice });
+      if (isLeader) agreements.push({ key: 'leader', text: L.AGREE_TEXT.leader, checked: true, at: now });
+      if (plan === 'deposit') agreements.push({ key: 'balance', text: `I authorize Amansala to charge the remaining balance of $${balance.toFixed(2)} to this card on ${offer.balanceDate}.`, checked: true, at: now });
+      const h = event.headers || {};
+      await L.appStoreSet(key, 'rbconsent:' + pi.id, {
+        v: 1, piId: pi.id, createdAt: now, status: 'awaiting_payment',
+        ip: L.clientIp(event), userAgent: String(h['user-agent'] || '').slice(0, 300),
+        retreat: cfg.title || bk.retreat_name || bk.leader_name, startDate: bk.start_date, endDate: bk.end_date, nights,
+        guest: { name, email, phone, others }, leader: isLeader, placementNotice: leaderPlacement === 'grande' ? 'Chica was out of this room type: leader placed at Grande' : '',
+        lines: priced.lines, total: priced.total, plan, dueNow, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null,
+        policy: cfg.policy || L.DEFAULT_POLICY, agreements,
+      });
+    } catch (e) { console.warn('[retreat-booking-intent] consent record not saved:', e.message); }
+    return L.json(200, { clientSecret: pi.client_secret, publishableKey: pubKey, amount: dueNow, plan, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null, total: priced.total, lines: priced.lines, leaderPlacement, recordUrl: L.recordUrl(pi.id) });
   } catch (e) {
     console.error('[retreat-booking-intent]', e.message);
     return L.json(400, { error: e.message && /not (priced|available)/.test(e.message) ? e.message : 'Could not start the payment. Please try again.' });

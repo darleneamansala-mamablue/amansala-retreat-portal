@@ -418,7 +418,7 @@ function startPayment(){
      $('stripe-element').innerHTML='';elements.create('payment').mount('#stripe-element');
      $('payAmt').textContent=money2(x.j.amount);
      $('checkout').hidden=true;$('paybox').hidden=false;$('mt').textContent='Payment';
-     window._rbAmount=x.j.amount;window._rbBalance=x.j.plan==='deposit'?{amt:x.j.balance,date:x.j.balanceDate}:null;window._rbLeaderMsg=(x.j.leaderPlacement?leaderMsg(roomOf(cart.room.rtId),roomCalc(cart.room).guests):'');
+     window._rbAmount=x.j.amount;window._rbRecord=x.j.recordUrl||'';window._rbBalance=x.j.plan==='deposit'?{amt:x.j.balance,date:x.j.balanceDate}:null;window._rbLeaderMsg=(x.j.leaderPlacement?leaderMsg(roomOf(cart.room.rtId),roomCalc(cart.room).guests):'');
    }).catch(function(){$('err').textContent='Connection problem. Please try again.';$('go').disabled=false});
 }
 function init2(){ // refresh availability after a "just taken" message
@@ -430,7 +430,7 @@ function confirmPay(){
     if(res.error){$('payerr').textContent=res.error.message;$('pay').disabled=false;return}
     var total=window._rbAmount, nm=$('fName').value.trim().split(/\s+/)[0], em=$('fEmail').value.trim();
     resetPanels();$('cartlines').innerHTML='';$('sum').innerHTML='';document.querySelector('.lock').hidden=true;$('sum').hidden=true;$('mt').textContent='Booked';$('ms').textContent='';
-    $('donetxt').innerHTML='Thank you, '+esc(nm)+'. Your payment of <b>'+money2(total)+'</b> was received and your booking for '+esc($('datesTxt').textContent)+' is confirmed.<br>A confirmation was sent to <b>'+esc(em)+'</b>. We will be in touch before you arrive.'+(window._rbBalance?'<br><br>The remaining balance of <b>'+money2(window._rbBalance.amt)+'</b> will be charged automatically to the same card on <b>'+esc(fmtD(window._rbBalance.date))+'</b>. We will email you when it is charged.':'')+(window._rbLeaderMsg?'<br><br>'+window._rbLeaderMsg:'');
+    $('donetxt').innerHTML='Thank you, '+esc(nm)+'. Your payment of <b>'+money2(total)+'</b> was received and your booking for '+esc($('datesTxt').textContent)+' is confirmed.<br>A confirmation was sent to <b>'+esc(em)+'</b>. We will be in touch before you arrive.'+(window._rbBalance?'<br><br>The remaining balance of <b>'+money2(window._rbBalance.amt)+'</b> will be charged automatically to the same card on <b>'+esc(fmtD(window._rbBalance.date))+'</b>. We will email you when it is charged.':'')+(window._rbLeaderMsg?'<br><br>'+window._rbLeaderMsg:'')+(window._rbRecord?'<br><br><a href="'+esc(window._rbRecord)+'" target="_blank" rel="noopener" style="color:var(--moss);font-weight:700">Download your booking record (PDF)</a><br><span style="font-size:12px;opacity:.75">Your booking summary, the cancellation policy and everything you agreed to.</span>':'');
     $('done').hidden=false;cart={room:null,svcs:{}};cartbar();say('Thank you for your booking');
   });
 }
