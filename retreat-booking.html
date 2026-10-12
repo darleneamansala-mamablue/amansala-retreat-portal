@@ -304,7 +304,7 @@ function render(){
     var one=(r.kind==='king'||r.kind==='single')?'<strong>'+money(r.rateSolo)+'</strong><span>per person, per night</span>':'<span>Shared only</span>';
     return '<tr><td><span class="nm">'+esc(r.label)+'</span><small>'+esc((r.tags||[]).join(' · '))+'</small></td><td class="p">'+two+'</td><td class="p">'+one+'</td></tr>';
   }).join('');
-  var pn=$('priceNote');if(pn){pn.innerHTML='Rates are per person, per night, for '+INFO.nights+' nights. <b>Plus '+INFO.taxFeePct+'% taxes and fees and $'+INFO.gratuityPerNight+' gratuity per person, per night</b>, added at checkout.'+(teachNote()?' <b>'+esc(teachNote())+'</b>':'')}
+  var pn=$('priceNote');if(pn){pn.innerHTML='Rates are per person, per night, for '+INFO.nights+' nights. <b>Plus '+INFO.taxFeePct+'% taxes and fees and $'+INFO.gratuityPerNight+' gratuity per person, per night</b>, added at checkout.'}
   $('stays').innerHTML=INFO.rooms.map(function(r,i){
     var rows='',btns='',kingNote='';
     var needOne=okFor(r,1);
