@@ -4884,7 +4884,11 @@ function enterTeacherView(bkId){
     }
     // If contract is pending, start on contract view; if room list just sent, go to rooms; otherwise dashboard
     const bkrCheck=AppData.bookings.find(b=>b.id===bkId);
-    if(bkrCheck&&bkrCheck.contractSentViaPortal&&!bkrCheck.contractSignedAt){
+    // /<slug>/schedule etc. (netlify/functions/shortlink.js adds &view=) opens that tab directly
+    const _reqView=new URLSearchParams(window.location.search).get('view');
+    if(['dash','schedule','rooms','transport','financial'].includes(_reqView)){
+      teacherShowView(_reqView);
+    } else if(bkrCheck&&bkrCheck.contractSentViaPortal&&!bkrCheck.contractSignedAt){
       teacherShowView('contract');
     } else if(bkrCheck&&(bkrCheck.blockedRooms||[]).length>0&&bkrCheck.status==='room_list_sent'){
       teacherShowView('rooms');

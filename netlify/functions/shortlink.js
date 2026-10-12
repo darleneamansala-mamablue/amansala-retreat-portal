@@ -16,6 +16,15 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
 
+// Section path -> teacherShowView() name in modules/teacher-portal.js.
+const VIEWS = {
+  dashboard: 'dash',
+  schedule: 'schedule',
+  roomlist: 'rooms',
+  transport: 'transport',
+  finances: 'financial',
+};
+
 function slugify(name) {
   return (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
@@ -37,6 +46,12 @@ exports.handler = async (event) => {
   const raw = fromQuery || (fromPath !== 'shortlink' ? fromPath : '');
   const slug = raw.toLowerCase().replace(/^\/+|\/+$/g, '');
   if (!slug) return { statusCode: 404, body: 'Not found' };
+
+  // Optional section (/<slug>/schedule etc.). An unknown section is a 404 so a
+  // typo or a stray two-segment path doesn't silently land on the dashboard.
+  const rawView = ((event.queryStringParameters && event.queryStringParameters.view) || '').toLowerCase();
+  const view = rawView ? VIEWS[rawView] : '';
+  if (rawView && !view) return { statusCode: 404, body: 'Not found' };
 
   let bookings;
   try {
@@ -87,6 +102,6 @@ exports.handler = async (event) => {
 
   return {
     statusCode: 302,
-    headers: { Location: `/booking-hub.html?mode=teacher&bk=${encodeURIComponent(match.id)}` },
+    headers: { Location: `/booking-hub.html?mode=teacher&bk=${encodeURIComponent(match.id)}${view ? '&view=' + view : ''}` },
   };
 };
