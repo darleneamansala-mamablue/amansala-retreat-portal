@@ -24,7 +24,7 @@ button,input{font:inherit;color:inherit}
 .titlebar{padding:56px 6vw;text-align:center;background:var(--moss);color:#fffdf8}
 .titlebar h1{font-family:var(--display);font-weight:400;font-size:clamp(40px,7vw,84px);margin:0;letter-spacing:-.03em;line-height:1}
 .booking-shell{width:min(1180px,92vw);margin:22px auto 0}
-.booking-bar{background:var(--paper);display:grid;grid-template-columns:1.3fr .8fr 1fr;box-shadow:0 24px 65px #1f2b271f}
+.booking-bar{background:var(--paper);display:grid;grid-template-columns:1.6fr 1fr;box-shadow:0 24px 65px #1f2b271f}
 .field{border-right:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:12px;padding:26px 28px}
 .field>span{letter-spacing:.2em;text-transform:uppercase;opacity:.65;font-size:10px;font-weight:600}
 .field b{font-weight:500;font-size:15px}.field small{opacity:.65;font-size:12px}
@@ -84,6 +84,9 @@ td.p span{letter-spacing:.1em;text-transform:uppercase;opacity:.6;font-size:10px
 .stepper button{background:none;border:0;font-size:18px;cursor:pointer;line-height:1;padding:2px 6px}
 .stepper b{min-width:18px;text-align:center}
 .sharebox{margin:0 0 16px}
+.inclremind{margin:0 0 16px;padding:14px 16px;background:var(--paper);border:1px solid var(--line)}
+.inclremind ul{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:13.5px}
+.inclremind li::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--clay);margin-right:10px;vertical-align:middle}
 .plan{margin:0 0 16px}
 .plan-opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);background:var(--paper);padding:14px;margin-bottom:8px;cursor:pointer;font-size:14px;line-height:1.5}
 .plan-opt:has(input:checked){border-color:var(--moss);box-shadow:0 0 0 2px #3f51471f}
@@ -167,7 +170,6 @@ td.p strong{font-size:28px}
   <section class="titlebar" id="titleBar" hidden><h1 id="titleTxt"></h1></section>
   <div class="booking-shell"><div class="booking-bar">
     <div class="field"><span>Dates</span><b id="datesTxt"></b><small id="nightsTxt"></small></div>
-    <div class="field"><span>Payment</span><b id="payTxt">Secure card payment</b><small id="paySub">Pay online, in full or in two parts</small></div>
     <a class="go-bar" href="#rooms">Choose your room <span>&darr;</span></a>
   </div></div>
   
@@ -181,11 +183,7 @@ td.p strong{font-size:28px}
     </div>
   </section>
 
-  <section class="pad" id="policy" style="padding-top:40px;padding-bottom:0">
-    <div class="pricing" style="grid-template-columns:1fr"><div class="policybox"><p class="kicker">Cancellation policy</p><p class="ptxt" id="policyTxt"></p></div></div>
-  </section>
-
-  <section class="pad" id="rooms">
+    <section class="pad" id="rooms">
     <div class="section-heading"><div><p class="kicker">Select your room</p><h2>Where you will stay</h2></div><p>Two guests can share a king bed and pay together, or choose a room for one guest. Rooms with separate beds are booked one bed at a time.</p></div>
     <div class="stay-list" id="stays"></div>
   </section>
@@ -215,6 +213,7 @@ td.p strong{font-size:28px}
       <label>Phone number<input id="fPhone" type="tel" autocomplete="tel" placeholder="+1 555 123 4567"></label>
       <div id="others"></div>
     </div>
+    <div class="inclremind" id="inclRemind" hidden><p class="kicker" style="margin-bottom:8px">Reminder: what's included</p><ul id="inclRemindList"></ul><p class="ptxt" id="inclRemindNo" style="margin-top:10px;font-size:13px"></p></div>
     <div class="sharebox" id="shareBox" hidden>
       <p class="kicker" style="margin-bottom:8px">Booking a shared room?</p>
       <label class="agree" style="margin:0 0 8px;background:var(--paper);border-color:var(--line)"><input type="radio" name="share" value="friend"><span><b>I'm travelling with a friend and would like to share a room with them.</b>
@@ -295,11 +294,11 @@ function init(){
     else{$('titleTxt').textContent=INFO.title||'Your retreat';$('titleBar').hidden=false}
     var ds=INFO.template?'Your retreat dates':fmtD(INFO.startDate)+' – '+fmtD(INFO.endDate);
     $('datesTxt').textContent=ds;$('lockDates').textContent=ds;$('nightsTxt').textContent=INFO.template?'Prices shown for '+INFO.nights+' nights · dates are set for each retreat':INFO.nights+' nights · set for this retreat';
-    (function(){var d=INFO.deposit;if(d&&d.on&&d.eligible){$('payTxt').textContent='Pay in full, or '+d.pct+'% now';$('paySub').textContent='The rest is charged automatically on '+fmtD(d.balanceDate)}else{$('payTxt').textContent='Pay in full by card';$('paySub').textContent='Secure online payment'}})();
     if(INFO.preview){var rb=document.createElement('div');rb.className='preview-ribbon';rb.textContent=INFO.template?'Template preview · payment is turned off':'Preview · not open for booking yet · payment is turned off';document.body.insertBefore(rb,document.body.firstChild)}
     $('inclList').innerHTML=(INFO.includes||[]).map(function(i){return '<li>'+esc(i)+'</li>'}).join('');
     $('notIncl').textContent=INFO.notIncluded||'';$('notIncl').hidden=!INFO.notIncluded;
-    $('policyTxt').innerHTML=esc(INFO.policy).replace(/\n/g,'<br>');$('policyTxt2').innerHTML=$('policyTxt').innerHTML;
+    $('inclRemindList').innerHTML=(INFO.includes||[]).map(function(i){return '<li>'+esc(i)+'</li>'}).join('');$('inclRemindNo').textContent=INFO.notIncluded||'';$('inclRemind').hidden=!((INFO.includes||[]).length||INFO.notIncluded);
+    $('policyTxt2').innerHTML=esc(INFO.policy).replace(/\n/g,'<br>');
     if(!INFO.services.length){$('spa').hidden=true}
     render();
   }).catch(function(){showClosed('We could not load this page. Please try again in a moment.')});
@@ -308,8 +307,8 @@ function showClosed(msg){$('loading').hidden=true;$('closed').hidden=false;if(ms
 
 function render(){
   $('chart').innerHTML=INFO.rooms.map(function(r){
-    var two=r.kind==='king'?'<strong>'+money(r.rateShare)+'</strong><span>per person, per night</span><small>Two guests, one king bed</small>':(r.kind==='twin'?'<strong>'+money(r.rateShare)+'</strong><span>per person, per night</span><small>Per bed, shared room</small>':'<span>Private only</span>');
-    var one=(r.kind==='king'||r.kind==='single')?'<strong>'+money(r.rateSolo)+'</strong><span>per person, per night</span>':'<span>Shared only</span>';
+    var two=r.kind==='king'?'<strong>'+money(r.rateShare)+'</strong><span>per person, per night</span><small>Based on 2 people, one king bed</small>':(r.kind==='twin'?'<strong>'+money(r.rateShare)+'</strong><span>per person, per night</span><small>Per bed, shared room</small>':'<span>Private only</span>');
+    var one=(r.kind==='king'||r.kind==='single')?'<strong>'+money(r.rateSolo)+'</strong><span>per person, per night</span><small>Based on 1 person</small>':'<span>Shared only</span>';
     return '<tr><td><span class="nm">'+esc(r.label)+'</span><small>'+esc((r.tags||[]).join(' · '))+'</small></td><td class="p">'+two+'</td><td class="p">'+one+'</td></tr>';
   }).join('');
   var pn=$('priceNote');if(pn){pn.innerHTML='Rates are per person, per night, for '+INFO.nights+' nights. <b>Plus '+INFO.taxFeePct+'% taxes and fees and $'+INFO.gratuityPerNight+' gratuity per person, per night</b>, added at checkout.'}
@@ -317,7 +316,7 @@ function render(){
     var rows='',btns='',kingNote='';
     var needOne=okFor(r,1);
     if(r.kind==='king'){
-      rows='<div class="rate"><div class="l">Two guests · one king bed<small>Booked together, paid on one card</small></div><strong>'+money(r.rateShare)+'<span>per person, per night</span></strong></div><div class="rate"><div class="l">One guest<small>Just for you</small></div><strong>'+money(r.rateSolo)+'<span>per person, per night</span></strong></div>';
+      rows='<div class="rate"><div class="l">Two guests · one king bed<small>Based on 2 people, booked together and paid on one card</small></div><strong>'+money(r.rateShare)+'<span>per person, per night</span></strong></div><div class="rate"><div class="l">One guest<small>Based on 1 person, just for you</small></div><strong>'+money(r.rateSolo)+'<span>per person, per night</span></strong></div>';
       kingNote='<p class="kingnote"><b>Sharing a king bed? Please book together.</b> Both guests must be included in one reservation, with payment made using a single credit card. Individual spaces in a king bed cannot be booked separately.</p>';
       btns='<button class="select" data-r="'+r.rtId+'" data-k="share"'+(needOne?'':' disabled')+'><span>Select for two guests</span><span>&rarr;</span></button><button class="select" data-r="'+r.rtId+'" data-k="solo"'+(needOne?'':' disabled')+'><span>Select for one guest</span><span>&rarr;</span></button>';
     }else if(r.kind==='twin'){
@@ -331,7 +330,7 @@ function render(){
     }
     var sold=!okFor(r,1)?'<p class="soldout">Sold out</p>':(isLeader()&&placementFor(r,1)==='grande'?'<p class="kingnote">'+leaderMsg(r,1)+'</p>':'');
     var img=r.imageUrl?'<img alt="'+esc(r.label)+'" src="'+esc(r.imageUrl)+'">':'';
-    return '<article class="stay-card"><div class="img">'+img+'</div><div class="stay-content"><p class="eyebrow">Room '+(i+1)+' of '+INFO.rooms.length+'</p><h3>'+esc(r.label)+'</h3><p class="stay-desc">'+esc(r.desc)+'</p><div class="rates">'+rows+'</div>'+kingNote+sold+btns+'</div></article>';
+    return '<article class="stay-card"><div class="img">'+img+'</div><div class="stay-content"><p class="eyebrow">Room '+(i+1)+' of '+INFO.rooms.length+'</p><h3>'+esc(r.label)+'</h3><p class="stay-desc">'+esc(r.desc)+'</p><div class="rates">'+rows+'</div>'+sold+btns+'</div></article>';
   }).join('');
   $('svcs').innerHTML=INFO.services.map(function(s){
     var sel=svcSel[s.id], o=s.opts.filter(function(x){return x.m===sel})[0]||s.opts[0], inCart=!!cart.svcs[s.id];
@@ -383,9 +382,9 @@ function showRoomPanel(){
   if(c.guests>1)s+='<div class="line total" style="margin-top:4px;border-top:0;padding-top:0"><span>Total for '+c.guests+' '+(r.kind==='twin'?'beds':'guests')+'</span><span>'+money2(c.total)+'</span></div>';
   s+='<div class="line" style="opacity:.7;font-size:12px"><span>'+(teachNote()?esc(teachNote()):'')+'</span></div>';
   $('sum').innerHTML=s;
-  $('couple').hidden=!(r.kind==='king'&&cur.mode==='share');$('addbox').hidden=false;renderUpsell();
+  $('couple').hidden=true;$('addbox').hidden=false;renderUpsell();
   if(isLeader()){$('sum').insertAdjacentHTML('beforeend','<div class="couple" style="margin:10px 0 0">'+leaderMsg(r,c.guests)+'</div>')}
-  $('hint2').textContent=(r.kind==='king'&&cur.mode==='share')?'Both guests are in one reservation, paid with a single credit card.':(r.kind==='twin'&&cur.beds>1?'One credit card pays for all '+cur.beds+' beds.':'');
+  $('hint2').textContent='';
 }
 function showCart(){
   resetPanels();
@@ -406,9 +405,9 @@ function showCart(){
   if(isLeader()&&c){$('sum').insertAdjacentHTML('beforeend','<div class="couple" style="margin:10px 0 0">'+leaderMsg(c.r,c.guests)+'</div>')}
   var has=!!cart.room;
   $('checkout').hidden=!(has||Object.keys(cart.svcs).length);
-  var _oldOth=[].map.call(document.querySelectorAll('.oth'),function(i){return i.value});
-  $('others').innerHTML=(c&&c.guests>1)?Array.apply(null,Array(c.guests-1)).map(function(_,i){return '<label style="margin-top:12px">'+(c.guests===2?'Other guest':'Guest '+(i+2))+' full name<input class="oth" placeholder="First and last name"></label>'}).join(''):'';
-  [].forEach.call(document.querySelectorAll('.oth'),function(i,k){if(_oldOth[k])i.value=_oldOth[k]});
+  var _oldOth=[].map.call(document.querySelectorAll('.oth-name,.oth-email,.oth-phone'),function(i){return i.value});
+  $('others').innerHTML=(c&&c.guests>1)?Array.apply(null,Array(c.guests-1)).map(function(_,i){var t=(c.guests===2?'Other guest':'Guest '+(i+2));return '<div class="othbox" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><p class="kicker" style="margin:0 0 6px">'+t+' (required)</p><label>Full name<input class="oth-name" placeholder="First and last name" autocomplete="off"></label><label style="margin-top:10px">Email<input class="oth-email" type="email" placeholder="their@email.com" autocomplete="off"></label><label style="margin-top:10px">Phone number<input class="oth-phone" type="tel" placeholder="+1 555 123 4567" autocomplete="off"></label></div>'}).join(''):'';
+  [].forEach.call(document.querySelectorAll('.oth-name,.oth-email,.oth-phone'),function(i,k){if(_oldOth[k])i.value=_oldOth[k]});
   $('err').textContent='';renderUpsell();upd();
 }
 function shareNeeded(){return !!(cart.room&&INFO&&roomCalc(cart.room).r.kind==='twin'&&roomCalc(cart.room).guests<(roomCalc(cart.room).r.maxBeds||2))}
@@ -443,12 +442,15 @@ function details(){
   if(n.split(/\s+/).filter(Boolean).length<2)return 'Please enter your full name (first and last).';
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))return 'Please enter a valid email address.';
   if(p.replace(/\D/g,'').length<7)return 'Please enter your phone number.';
-  var oth=[].map.call(document.querySelectorAll('.oth'),function(i){return i.value.trim()});
-  if(oth.some(function(x){return !x}))return 'Please enter the full name of the other guest'+(oth.length>1?'s':'')+'.';
+  var boxes=document.querySelectorAll('.othbox');
+  for(var bi=0;bi<boxes.length;bi++){var bn=boxes[bi].querySelector('.oth-name').value.trim(),be=boxes[bi].querySelector('.oth-email').value.trim(),bp=boxes[bi].querySelector('.oth-phone').value.trim();var who=boxes.length>1?'guest '+(bi+2):'the other guest';
+    if(bn.split(/\s+/).filter(Boolean).length<2)return 'Please enter the full name (first and last) of '+who+'.';
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(be))return 'Please enter a valid email address for '+who+'.';
+    if(bp.replace(/\D/g,'').length<7)return 'Please enter the phone number of '+who+'.'}
   if(shareNeeded()){if(!shareChoice())return 'Please tell us whether you are sharing with a friend or travelling alone.';if(shareChoice()==='friend'&&$('friendName').value.trim().split(/\s+/).filter(Boolean).length<2)return "Please enter your friend's first and last name."}
   return '';
 }
-function others(){return [].map.call(document.querySelectorAll('.oth'),function(i){return i.value.trim()})}
+function others(){return [].map.call(document.querySelectorAll('.othbox'),function(b){return {name:b.querySelector('.oth-name').value.trim(),email:b.querySelector('.oth-email').value.trim(),phone:b.querySelector('.oth-phone').value.trim()}})}
 
 function startPayment(){
   if(INFO.preview){say('Preview only: payment is turned off on this page.');return}
