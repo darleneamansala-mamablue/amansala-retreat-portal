@@ -67,6 +67,7 @@ td.p span{letter-spacing:.1em;text-transform:uppercase;opacity:.6;font-size:10px
 .rate .l{letter-spacing:.1em;text-transform:uppercase;font-size:11px}.rate .l small{display:block;letter-spacing:0;text-transform:none;opacity:.6;font-size:12px;margin-top:2px}
 .rate strong{font-family:var(--display);font-size:28px;font-weight:400;text-align:right;white-space:nowrap}
 .rate strong span{display:block;font-family:var(--body);letter-spacing:.1em;text-transform:uppercase;opacity:.6;font-size:10px}
+.leaderbox{max-width:1180px;margin:0 auto 46px}
 .kingnote{font-size:12.5px;line-height:1.65;margin:12px 0 4px;padding:12px 14px;background:var(--paper);border:1px solid var(--line)}
 .select{border:1px solid var(--ink);letter-spacing:.14em;text-transform:uppercase;cursor:pointer;background:transparent;display:flex;justify-content:space-between;align-items:center;width:100%;padding:16px 18px;font-size:11px;margin-top:12px;transition:background .2s,color .2s}
 .select:hover:not(:disabled){background:var(--ink);color:var(--sand-light)}
@@ -152,6 +153,7 @@ footer p{opacity:.65;margin:0;font-size:12px}
 
   <section class="pad" id="rooms">
     <div class="section-heading"><div><p class="kicker">Select your room</p><h2>Where you will stay</h2></div><p>Two guests can share a king bed and pay together, or choose a room for one guest. Rooms with separate beds are booked one bed at a time.</p></div>
+    <div class="leaderbox"><label class="agree" style="margin:0"><input type="checkbox" id="leaderOk"><span><b>I am a leader.</b> Leaders are placed at Amansala Chica. Tick this box and you will see the rooms available at Chica.</span></label><p class="hint" id="leaderNote" hidden></p></div>
     <div class="stay-list" id="stays"></div>
   </section>
 
@@ -177,7 +179,6 @@ footer p{opacity:.65;margin:0;font-size:12px}
       <label>Full name<input id="fName" autocomplete="name" placeholder="First and last name"></label>
       <label>Email<input id="fEmail" type="email" autocomplete="email" placeholder="you@example.com"></label>
       <label>Phone number<input id="fPhone" type="tel" autocomplete="tel" placeholder="+1 555 123 4567"></label>
-      <label class="agree" style="margin:6px 0 0;background:var(--paper);border-color:var(--line);font-size:13px;letter-spacing:0;text-transform:none;font-weight:400"><input type="checkbox" id="leaderOk"><span><b>I am a leader.</b> Leaders are placed at Amansala Chica.</span></label>
       <div id="others"></div>
     </div>
     <div class="policy"><p class="kicker" style="margin-bottom:8px">Cancellation policy</p><p class="ptxt" id="policyTxt2"></p>
@@ -215,6 +216,8 @@ function money(n){return '$'+Math.round(n).toLocaleString('en-US')}
 function money2(n){return '$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function fmtD(s){return new Date(s+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
 function say(m){var t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(say.h);say.h=setTimeout(function(){t.hidden=true},2600)}
+function isLeader(){return !!($('leaderOk')&&$('leaderOk').checked)}
+function freeFor(r){return isLeader()?(r.freeChica||0):r.free}
 function roomOf(id){return INFO.rooms.filter(function(r){return r.rtId===id})[0]}
 
 function roomCalc(c){
@@ -256,7 +259,7 @@ function render(){
   }).join('');
   $('stays').innerHTML=INFO.rooms.map(function(r,i){
     var rows='',btns='',kingNote='';
-    var needOne=r.free>=1;
+    var needOne=freeFor(r)>=1;
     if(r.kind==='king'){
       rows='<div class="rate"><div class="l">Two guests · one king bed<small>Booked together, paid on one card</small></div><strong>'+money(r.sharePerPerson)+'<span>per person</span></strong></div><div class="rate"><div class="l">One guest<small>Just for you</small></div><strong>'+money(r.soloPerPerson)+'<span>per person</span></strong></div>';
       kingNote='<p class="kingnote"><b>Sharing a king bed? Please book together.</b> Both guests must be included in one reservation, with payment made using a single credit card. Individual spaces in a king bed cannot be booked separately.</p>';
@@ -264,13 +267,13 @@ function render(){
     }else if(r.kind==='twin'){
       rows='<div class="rate"><div class="l">Per bed<small>Each bed is booked and priced separately</small></div><strong>'+money(r.perBed)+'<span>per person</span></strong></div>';
       for(var n=1;n<=r.maxBeds;n++){
-        btns+='<button class="select" data-r="'+r.rtId+'" data-k="beds" data-n="'+n+'"'+(r.free>=n?'':' disabled')+'><span>'+(n===1?'Book 1 bed (just me)':'Book '+n+' beds (me + '+(n-1)+' friend'+(n>2?'s':'')+')')+'</span><span>&rarr;</span></button>';
+        btns+='<button class="select" data-r="'+r.rtId+'" data-k="beds" data-n="'+n+'"'+(freeFor(r)>=n?'':' disabled')+'><span>'+(n===1?'Book 1 bed (just me)':'Book '+n+' beds (me + '+(n-1)+' friend'+(n>2?'s':'')+')')+'</span><span>&rarr;</span></button>';
       }
     }else{
       rows='<div class="rate"><div class="l">One guest<small>Private room</small></div><strong>'+money(r.soloPerPerson)+'<span>per person</span></strong></div>';
       btns='<button class="select" data-r="'+r.rtId+'" data-k="solo"'+(needOne?'':' disabled')+'><span>Select for one guest</span><span>&rarr;</span></button>';
     }
-    var sold=r.free<1?'<p class="soldout">Sold out</p>':'';
+    var sold=freeFor(r)<1?'<p class="soldout">'+(isLeader()&&r.free>0?'No Chica room free':'Sold out')+'</p>':'';
     var img=r.imageUrl?'<img alt="'+esc(r.label)+'" src="'+esc(r.imageUrl)+'">':'';
     return '<article class="stay-card"><div class="img">'+img+'</div><div class="stay-content"><p class="eyebrow">Room '+(i+1)+' of '+INFO.rooms.length+'</p><h3>'+esc(r.label)+'</h3><p class="stay-desc">'+esc(r.desc)+'</p><div class="rates">'+rows+'</div>'+kingNote+sold+btns+'</div></article>';
   }).join('');
@@ -279,6 +282,7 @@ function render(){
     var seg=s.opts.length>1?'<div class="seg">'+s.opts.map(function(x){return '<button type="button" data-sv="'+esc(s.id)+'" data-m="'+x.m+'" class="'+(x.m===o.m?'on':'')+'">'+minLabel(x.m)+'</button>'}).join('')+'</div>':'<div class="seg"><button type="button" class="on" style="cursor:default">'+minLabel(s.opts[0].m)+'</button></div>';
     return '<article class="svc"><h3>'+esc(s.name)+'</h3><p>'+esc(s.desc||'')+'</p>'+seg+'<div class="pr">'+money(o.p)+'<span>per session</span></div><button class="select" data-add="'+esc(s.id)+'" style="margin-top:0"><span>'+(inCart?'In your cart · update':'Add to cart')+'</span><span>+</span></button></article>';
   }).join('');
+  var ln=$('leaderNote');if(ln){ln.hidden=!isLeader();ln.textContent='Showing rooms available at Amansala Chica for leaders.'}
   cartbar();
 }
 function cartbar(){
@@ -310,6 +314,7 @@ function showCart(){
   $('cartlines').innerHTML=lines;
   $('sum').innerHTML='<div class="line total" style="margin-top:0;border-top:0;padding-top:0"><span>Total</span><span>'+money(cartTotal())+'</span></div>';
   $('couple').hidden=!(c&&c.r.kind==='king'&&c.guests===2);
+  if(isLeader()){$('sum').insertAdjacentHTML('beforeend','<div class="line" style="opacity:1;margin-top:8px"><span><b>Leader</b>: you will be placed at Amansala Chica.</span><span></span></div>')}
   var has=!!cart.room;
   $('checkout').hidden=!(has||Object.keys(cart.svcs).length);
   $('others').innerHTML=(c&&c.guests>1)?Array.apply(null,Array(c.guests-1)).map(function(_,i){return '<label style="margin-top:12px">'+(c.guests===2?'Other guest':'Guest '+(i+2))+' full name<input class="oth" placeholder="First and last name"></label>'}).join(''):'';
@@ -383,6 +388,7 @@ document.addEventListener('click',function(e){
 document.addEventListener('change',function(e){
   if(e.target.id==='understand')$('popgo').disabled=!e.target.checked;
   else if(e.target.id==='cancelOk')upd();
+  else if(e.target.id==='leaderOk'){render()}
 });
 init();
 })();
