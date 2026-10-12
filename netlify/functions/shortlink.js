@@ -49,6 +49,20 @@ exports.handler = async (event) => {
   const slug = (segs[0] || qs.slug || '').toLowerCase();
   if (!slug) return { statusCode: 404, body: 'Not found' };
 
+  // A custom name for a retreat's guest booking page (set in Teacher Reg > We Take Payment, saved as cfg.slug in app_store
+  // 'retreat_booking_config'), e.g. /weimmersion -> retreat-booking.html. Checked before the teacher links; the setup screen
+  // refuses a name that is already a teacher link.
+  try {
+    const cr = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.retreat_booking_config&select=value`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } });
+    if (cr.ok) {
+      const rows = await cr.json();
+      const all = (rows[0] && rows[0].value) || {};
+      const hit = Object.keys(all).find((id) => String(all[id].slug || '').toLowerCase() === slug);
+      if (hit) return { statusCode: 302, headers: { Location: `/retreat-booking.html?r=${encodeURIComponent(hit)}` } };
+    }
+  } catch (e) { /* fall through to the teacher links */ }
+
   // Optional section. An unknown section is a 404 so a typo or a stray two-segment
   // path doesn't silently land on the dashboard.
   const rawView = (segs[1] || qs.view || '').toLowerCase();

@@ -36,6 +36,7 @@ let _rbsBk=null,_rbsCfg=null,_rbsBal=[];
 
 function rbsEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function rbsLink(bk){
+  try{if(_rbsCfg&&_rbsCfg.slug)return `${location.origin}/${_rbsCfg.slug}`;}catch(e){}
   try{const slug=(typeof computeShortSlug==='function')?computeShortSlug(bk.id):'';if(slug)return `${location.origin}/${slug}/book`;}catch(e){}
   return `${location.origin}/retreat-booking.html?r=${encodeURIComponent(bk.id)}`;
 }
@@ -93,6 +94,8 @@ function rbsRender(orders,spa){
     <div style="font-size:12.5px;color:#5a5048;margin-bottom:12px">Guests pick a room, add spa services, agree to the cancellation policy and pay by card. They are placed in this retreat's room list. Block rooms for the retreat first (Add More Rooms) and push the retreat to Cloudbeds: only rooms Cloudbeds holds are offered, so the page always matches the hotel inventory.</div>
     <label style="display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:12px"><input type="checkbox" id="rbsEnabled" ${c.enabled?'checked':''}> Open for guests (the page shows "not open yet" until this is ticked)</label>
     <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;margin-bottom:12px;font-size:13px"><input type="checkbox" id="rbsLock" ${(c.lockRoomList!==false)?'checked':''} style="margin-top:3px"> <span>Only admin can edit the room list. Locks it for the teacher (they can see it but cannot add, edit or move guests), because Amansala collects the guests' payments. Stays locked until you untick this and save.</span></label>
+    <label style="font-size:12px;font-weight:600;display:block;margin-bottom:12px">Link name guests see (letters and numbers only)
+      <div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="font-size:13px;color:#5a5048">${rbsEsc(location.host)}/</span><input id="rbsSlug" value="${rbsEsc(c.slug||'')}" placeholder="weimmersion" style="${inp};width:220px"></div></label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <label style="font-size:12px;font-weight:600">Page title<input id="rbsTitle" value="${rbsEsc(c.title||'')}" style="${inp};width:100%;display:block"></label>
       <label style="font-size:12px;font-weight:600">Banner image (file in /images/retreats/, or full web address; empty = just the title)<input id="rbsBanner" value="${rbsEsc(c.bannerUrl||'')}" style="${inp};width:100%;display:block"></label>
@@ -136,6 +139,7 @@ function rbsRender(orders,spa){
 }
 function rbsCollect(){
   const c=_rbsCfg,g=id=>document.getElementById(id);
+  c.slug=(g('rbsSlug').value||'').toLowerCase().replace(/[^a-z0-9]/g,'');
   c.enabled=g('rbsEnabled').checked;c.lockRoomList=g('rbsLock').checked;c.title=g('rbsTitle').value.trim();c.bannerUrl=g('rbsBanner').value.trim();
   c.taxFeePct=Number(g('rbsTax').value)||0;c.gratuityPerNight=Number(g('rbsGrat').value)||0;
   c.teachingFee={on:g('rbsTfYes').checked,amountPP:Number(g('rbsTfAmt').value)||0};
@@ -158,6 +162,15 @@ async function rbsSave(){
   try{
     const c=rbsCollect();
     const all=await rbsLoadAll();   // re-read so another retreat saved meanwhile is not overwritten
+    if(c.slug){
+      const reserved=['bookinghub','retreatbooking','retreatportal','images','modules','netlify','spastaff','pay','index','book','api','admin','schedule','dashboard','roomlist','transport','finances','assistant'];
+      if(c.slug.length<4){showToast('The link name needs at least 4 letters or numbers.');return;}
+      if(reserved.includes(c.slug)){showToast('That link name is reserved. Please choose another.');return;}
+      const clash=Object.keys(all).find(id=>id!==_rbsBk.id&&String(all[id].slug||'')===c.slug);
+      if(clash){showToast('Another retreat already uses that link name.');return;}
+      const teacherLinks=new Set((AppData.bookings||[]).filter(b=>b.id!==_rbsBk.id&&b.status!=='cancelled').map(b=>{try{return computeShortSlug(b.id);}catch(e){return '';}}).filter(Boolean));
+      if(teacherLinks.has(c.slug)){showToast('That name is already a teacher link. Please choose another.');return;}
+    }
     all[_rbsBk.id]=c;
     const {error}=await db.from('app_store').upsert({key:RBS_KEY,value:all,updated_at:new Date().toISOString()});
     if(error)throw error;
