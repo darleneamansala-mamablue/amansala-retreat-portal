@@ -3028,7 +3028,7 @@ function tsRenderCalSection(bk){
       }
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
-    if(typeof tsApplyMealTimeOverrides==='function')tsApplyMealTimeOverrides(bk,rows);   // per-retreat meal times (meal-times-editor.js)
+    if(typeof tsApplyMealTimeOverrides==='function')tsApplyMealTimeOverrides(bk,rows,dateStr);   // per-retreat meal times (meal-times-editor.js)
     rows.sort((a,b)=>sk(a.sk).localeCompare(sk(b.sk)));
     days.push({lbl,dayName:DAY_NAMES[d.getDay()],dateNum:d.getDate(),month:MON_NAMES[d.getMonth()],rows,prepaidActs});
   }
@@ -5241,7 +5241,7 @@ function openPrintSchedule(bkId){
       rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99',isExtra:true});
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
-    if(typeof tsApplyMealTimeOverrides==='function')tsApplyMealTimeOverrides(bk,rows);   // per-retreat meal times (meal-times-editor.js)
+    if(typeof tsApplyMealTimeOverrides==='function')tsApplyMealTimeOverrides(bk,rows,dateStr);   // per-retreat meal times (meal-times-editor.js)
     rows.sort((a,b)=>(a.sk||'99:99').localeCompare(b.sk||'99:99'));
     days.push({label:dayLabel,rows});
   }
