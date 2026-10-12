@@ -38,19 +38,19 @@ function idSuffix(id) {
 }
 
 exports.handler = async (event) => {
-  if (event.queryStringParameters && event.queryStringParameters.view === 'zzdebug') return { statusCode: 200, body: JSON.stringify({ path: event.path, q: event.queryStringParameters, raw: event.rawUrl }) };
-  const fromQuery = (event.queryStringParameters && event.queryStringParameters.slug) || '';
-  // event.path is /.netlify/functions/shortlink/<slug> when reached via the
-  // /:slug -> /.netlify/functions/shortlink/:slug rewrite — fall back to the
-  // last path segment if the query param isn't populated.
-  const fromPath = (event.path || '').split('/').filter(Boolean).pop() || '';
-  const raw = fromQuery || (fromPath !== 'shortlink' ? fromPath : '');
-  const slug = raw.toLowerCase().replace(/^\/+|\/+$/g, '');
+  // Netlify hands a rewritten request to the function with its ORIGINAL path and no
+  // query string (/lillianso/schedule), while a direct call arrives as
+  // /.netlify/functions/shortlink/<slug>. Strip that prefix, then segment 1 = slug
+  // and optional segment 2 = section (/<slug>/schedule, /roomlist, ...).
+  const segs = (event.path || '').split('/').filter(Boolean);
+  if (segs[0] === '.netlify') segs.splice(0, 3);
+  const qs = event.queryStringParameters || {};
+  const slug = (segs[0] || qs.slug || '').toLowerCase();
   if (!slug) return { statusCode: 404, body: 'Not found' };
 
-  // Optional section (/<slug>/schedule etc.). An unknown section is a 404 so a
-  // typo or a stray two-segment path doesn't silently land on the dashboard.
-  const rawView = ((event.queryStringParameters && event.queryStringParameters.view) || '').toLowerCase();
+  // Optional section. An unknown section is a 404 so a typo or a stray two-segment
+  // path doesn't silently land on the dashboard.
+  const rawView = (segs[1] || qs.view || '').toLowerCase();
   const view = rawView ? VIEWS[rawView] : '';
   if (rawView && !view) return { statusCode: 404, body: 'Not found' };
 
@@ -99,7 +99,7 @@ exports.handler = async (event) => {
   });
 
   const match = final[slug];
-  if (!match) return { statusCode: 404, body: 'No active event matches this link. DBG ' + JSON.stringify({ path: event.path, q: event.queryStringParameters, slug }) };
+  if (!match) return { statusCode: 404, body: 'No active event matches this link.' };
 
   return {
     statusCode: 302,
