@@ -5,6 +5,14 @@
 [functions."cloudbeds"]
   timeout = 26
 
+# Retreat booking: the payment start re-checks the room in Cloudbeds and the fulfilment after payment updates Cloudbeds,
+# both can take longer than the 10s default.
+[functions."retreat-booking-intent"]
+  timeout = 26
+
+[functions."stripe-webhook"]
+  timeout = 26
+
 [[headers]]
   for = "/*.html"
   [headers.values]
