@@ -75,3 +75,23 @@ function mtInjectButton(){
   const orig=menuRenderWeek;
   menuRenderWeek=function(){const r=orig.apply(this,arguments);try{mtInjectButton();}catch(e){}return r;};
 })();
+
+// ---------- per-retreat Breakfast time (Breakfast · Lunch plans: bld / blsd / lbbld) ----------
+// Stored at bk.packageCustomPrices.__cfg__.breakfastTime (HH:MM). Without it, Breakfast keeps following the morning
+// class (15 min after it ends). Light Breakfast (lightBreakfastTime above) is a separate meal and is not affected.
+// Used by the Menu (menuMealTime wrapper below) and by the teacher schedule rows (tsApplyMealPlan in teacher-portal.js).
+function mtBreakfastOverride(bk){
+  const t=bk&&bk.packageCustomPrices&&bk.packageCustomPrices.__cfg__&&bk.packageCustomPrices.__cfg__.breakfastTime;
+  return /^\d{2}:\d{2}$/.test(t||'')?t:'';
+}
+(function(){
+  const orig=menuMealTime;
+  menuMealTime=function(bk,meal,dateStr){
+    if(meal==='breakfast'&&bk.mealPlan!=='weTravel'){
+      const t=mtBreakfastOverride(bk);
+      const isArrival=dateStr&&bk.startDate&&dateStr===bk.startDate.slice(0,10);
+      if(t&&!isArrival)return t;
+    }
+    return orig.apply(this,arguments);
+  };
+})();
