@@ -21,4 +21,4 @@
 # Section links for a teacher -- /nombredellider/dashboard, /schedule, /roomlist,
 # /transport, /finances. Same lookup as the short link above; the function adds
 # &view=<section> to the teacher URL so the portal opens straight on that tab.
-/:slug/:view  /.netlify/functions/shortlink/:slug?view=:view  200
+/:slug/:view  /.netlify/functions/shortlink?slug=:slug&view=:view  200
