@@ -12,7 +12,7 @@ const BAL_KEY = 'retreat_balance_schedule';
 const TEMPLATE_KEY = 'retreat_booking_template';
 // Starting point for every "We take payment" retreat page (same as modules/retreat-booking-setup.js RBS_DEFAULTS).
 const DEFAULT_CFG = {
-  title: 'Your Retreat Name', bannerUrl: '', taxFeePct: 24, gratuityPerNight: 30, teachingFee: { on: false, amountPP: 0 },
+  title: 'Your Retreat Name', bannerUrl: '', taxFeePct: 19, gratuityPerNight: 30, teachingFee: { on: false, amountPP: 0 },
   deposit: { on: true, pct: 50, monthsBefore: 2 },
   includes: ['Accommodations for your full stay', 'All meals, with the exception of one offsite dinner', 'Group Salsa dance class', 'Cooking demonstration'],
   notIncluded: 'Not included: the one offsite dinner, tours and spa treatments.',
