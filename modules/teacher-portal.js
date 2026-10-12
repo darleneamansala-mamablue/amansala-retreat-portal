@@ -4940,6 +4940,16 @@ function showTeacherCode(){
   openTeacherPortal(regSelBk.id);
 }
 
+// Direct link to one section of the teacher's portal: <teacher link>/dashboard|schedule|roomlist|transport|finances
+// (resolved by netlify/functions/shortlink.js). Falls back to the long link with &view= when the teacher has no short slug.
+function copyTeacherSectionLink(section){
+  if(!regSelBk){showToast('Select a retreat first');return;}
+  const VIEW={dashboard:'dash',schedule:'schedule',roomlist:'rooms',transport:'transport',finances:'financial'}[section];
+  const slug=computeShortSlug(regSelBk.id);
+  const link=slug?`${location.origin}/${slug}/${section}`:`${location.origin}/booking-hub.html?mode=teacher&bk=${regSelBk.id}&view=${VIEW}`;
+  navigator.clipboard.writeText(link).then(()=>showToast('Copied: '+link)).catch(()=>showToast('Link: '+link));
+}
+
 function copyTeacherLink(){
   if(!regSelBk)return;
   navigator.clipboard.writeText(teacherPortalLink(regSelBk.id)).then(()=>showToast('Link copied!')).catch(()=>showToast('Link: '+teacherPortalLink(regSelBk.id)));

@@ -2086,6 +2086,9 @@
       <button class="btn btn-secondary btn-sm" onclick="openBlockModal(regSelBk&&regSelBk.id)" style="display:flex;gap:5px">
         🛏 Block Rooms
       </button>
+      <button class="btn btn-secondary btn-sm" onclick="copyTeacherSectionLink('schedule')" title="Copy the teacher's direct link to their Schedule page" style="display:flex;gap:5px">
+        🔗 Schedule
+      </button>
     </div>
   </div>
 
@@ -4356,6 +4359,11 @@ function regBuildActionsMenu(bk){
   const paysDeparture=flags.includes('teacher_pays_departure_transport');
   menu.innerHTML=
     _regActionMenuItem('🛏 Block Rooms',"openBlockModal(regSelBk&&regSelBk.id)")+
+    _regActionMenuItem('🔗 Copy teacher link: Dashboard',"copyTeacherSectionLink('dashboard')")+
+    _regActionMenuItem('🔗 Copy teacher link: Schedule',"copyTeacherSectionLink('schedule')")+
+    _regActionMenuItem('🔗 Copy teacher link: Room List',"copyTeacherSectionLink('roomlist')")+
+    _regActionMenuItem('🔗 Copy teacher link: Transport',"copyTeacherSectionLink('transport')")+
+    _regActionMenuItem('🔗 Copy teacher link: Finances',"copyTeacherSectionLink('finances')")+
     _regActionMenuItem('🏠 Real Rooms',"openRealRoomsPanel()")+
     _regActionMenuItem('💰 Price List',"openPriceList()")+
     _regActionMenuItem('📦 Package Rates',"openPkgRatesPanel()")+
@@ -6393,7 +6401,7 @@ function switchTab(id,btn){
 <script src="modules/contract-library.js?v=20261009a"></script>
 <script src="modules/reports.js?v=20261005i"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20261012c"></script>
+<script src="modules/teacher-portal.js?v=20261012d"></script>
 <script src="modules/dietary-report.js"></script>
 <script>
 // ===== TEACHER REGISTRATION — moved to modules/teacher-portal.js =====
