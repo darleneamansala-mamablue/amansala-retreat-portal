@@ -47,6 +47,11 @@ async function fulfil(pi) {
   const cart = { room: { rtId: room.rtId, mode: room.mode, beds: room.beds }, services: svc.map(([id, mm, q]) => ({ id, m: mm, q })) };
   const priced = L.priceCart(cfg, nights, cart);
   const roomLine = priced.lines.find((l) => l.type === 'room');
+  // 50% plan: only the first part of the room amount is paid now (spa services are paid in full); the balance is scheduled below
+  const isDeposit = m.rbPlan === 'deposit' && Number(m.rbBalance) > 0;
+  const roomLater = isDeposit ? Math.round(Number(m.rbBalance) * 100) / 100 : 0;
+  const roomPaidNow = Math.round((roomLine.amount - roomLater) * 100) / 100;
+  const paidNow = pi.amount / 100;
   const guests = [{ name: m.rbName, email: m.rbEmail, phone: m.rbPhone, notes: '' }].concat(others.map((n) => ({ name: n, email: '', phone: '', notes: '' })));
   const agreed = (m.rbAck || '').includes('roommate') ? 'cancellation policy and single-bed roommate terms' : 'cancellation policy';
 
@@ -60,12 +65,12 @@ async function fulfil(pi) {
   const units = ch.units, property = ch.property;
   const leaderAtGrande = isLeader && property === 'Grande';
 
-  const note = `Booked online ${new Date().toISOString().slice(0, 10)}${isLeader ? ' · LEADER (' + (property || 'no room') + ')' : ''} · agreed to ${agreed} · Stripe ${pi.id}`;
+  const note = `Booked online ${new Date().toISOString().slice(0, 10)}${isLeader ? ' · LEADER (' + (property || 'no room') + ')' : ''} · agreed to ${agreed}${isDeposit ? ` · PAID 50% (${'$' + roomPaidNow.toFixed(2)}), balance $${roomLater.toFixed(2)} auto-charges ${m.rbBalanceDate}` : ''} · Stripe ${pi.id}`;
 
-  const order = { piId: pi.id, bookingId, at: new Date().toISOString(), name: m.rbName, email: m.rbEmail, phone: m.rbPhone, total: priced.total, units: units || [], status: units ? 'placed' : 'needs_attention' };
+  const order = { piId: pi.id, bookingId, at: new Date().toISOString(), name: m.rbName, email: m.rbEmail, phone: m.rbPhone, total: priced.total, paidNow, balance: roomLater, balanceDate: isDeposit ? m.rbBalanceDate : null, units: units || [], status: units ? 'placed' : 'needs_attention' };
 
   if (units) {
-    const perRow = Math.round((roomLine.amount / units.length) * 100) / 100;
+    const perRow = Math.round((roomPaidNow / units.length) * 100) / 100;
     for (let i = 0; i < units.length; i++) {
       const unit = units[i];
       const rowGuests = rm.kind === 'twin' ? [guests[i]] : guests;     // king: both guests in the one room
@@ -75,6 +80,20 @@ async function fulfil(pi) {
       if (existing[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${existing[0].id}`, patch, 'return=minimal');
       else await L.sreq(key, 'POST', 'registrations', { booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');
     }
+  }
+
+  if (isDeposit) {
+    const sched = (await L.appStoreGet(key, L.BAL_KEY)) || [];
+    const rowsLater = units ? Object.fromEntries(units.map((u) => [u, Math.round((roomLater / units.length) * 100) / 100])) : {};
+    sched.push({
+      id: 'bal_' + Date.now().toString(36), piId: pi.id, bookingId, retreat: cfg.title || bk.retreat_name || bk.leader_name,
+      customerId: typeof pi.customer === 'string' ? pi.customer : (pi.customer && pi.customer.id) || '',
+      paymentMethodId: typeof pi.payment_method === 'string' ? pi.payment_method : (pi.payment_method && pi.payment_method.id) || '',
+      amount: roomLater, dueDate: m.rbBalanceDate, status: 'scheduled', tries: 0,
+      name: m.rbName, email: m.rbEmail, phone: m.rbPhone, units: units || [], rowAmounts: rowsLater,
+      consent: 'Guest authorized the balance to be charged to the card used at booking', createdAt: new Date().toISOString(),
+    });
+    await L.appStoreSet(key, L.BAL_KEY, sched);
   }
 
   // Put the guest's name on that room's Cloudbeds reservation so the hotel inventory matches the room list.
@@ -122,8 +141,9 @@ async function fulfil(pi) {
   const itemRows = priced.lines.map((l) => `<tr><td style="padding:6px 0">${esc(l.name)}${l.type === 'service' ? ` (${l.minutes === 60 ? '1 hour' : l.minutes + ' min'}${l.qty > 1 ? ' × ' + l.qty : ''})` : l.guests > 1 ? ` (${l.guests} guests)` : ''}</td><td style="padding:6px 0;text-align:right">${money(l.amount)}</td></tr>`).join('');
   const guestHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27;max-width:560px">
     <h2 style="font-weight:400">Thank you for your booking</h2>
-    <p>Hi ${esc((m.rbName || '').split(' ')[0])}, your payment of <b>${money(priced.total)}</b> was received and your place at <b>${esc(title)}</b> (${esc(dates)}) is ${units ? 'confirmed' : 'received. Our team will confirm your room shortly'}.</p>
-    <table style="width:100%;border-collapse:collapse;border-top:1px solid #ddd;border-bottom:1px solid #ddd">${itemRows}<tr><td style="padding:8px 0;font-weight:700">Total paid</td><td style="padding:8px 0;text-align:right;font-weight:700">${money(priced.total)}</td></tr></table>
+    <p>Hi ${esc((m.rbName || '').split(' ')[0])}, your payment of <b>${money(paidNow)}</b>${isDeposit ? ' (50% of your room)' : ''} was received and your place at <b>${esc(title)}</b> (${esc(dates)}) is ${units ? 'confirmed' : 'received. Our team will confirm your room shortly'}.</p>
+    <table style="width:100%;border-collapse:collapse;border-top:1px solid #ddd;border-bottom:1px solid #ddd">${itemRows}<tr><td style="padding:8px 0;font-weight:700">Paid today</td><td style="padding:8px 0;text-align:right;font-weight:700">${money(paidNow)}</td></tr></table>
+    ${isDeposit ? `<p><b>Remaining balance: ${money(roomLater)}.</b> As you authorized, it will be charged automatically to the same card on <b>${esc(m.rbBalanceDate)}</b>. We will email you when it is charged.</p>` : ''}
     ${isLeader && units ? `<p><b>Your room as a leader:</b> ${leaderAtGrande ? 'Amansala Chica is out of ' + esc(roomLine.name) + ' rooms, so your room will be at <b>Amansala Grande</b>.' : 'your room will be at <b>Amansala Chica</b>.'}</p>` : ''}
     ${svcLines.length ? '<p>Our spa team will contact you to schedule your treatments.</p>' : ''}
     <p>Questions? Reply to this email or write to retreats@amansala.com.</p><p>Amansala · Tulum</p></div>`;
@@ -133,7 +153,7 @@ async function fulfil(pi) {
   const staffHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27"><h3>${units ? 'New retreat booking' : '⚠ Paid but NO ROOM FREE — needs attention'}</h3>
     <p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>${esc(title)} · ${esc(dates)}<br>${isLeader ? '<b>Leader</b>' + (leaderAtGrande ? ' placed at GRANDE because Chica was out of ' + esc(roomLine.name) + ' rooms' : ' placed at Chica') + '<br>' : ''}${units ? 'Placed in: ' + esc(units.join(', ')) : 'No free room of this type was left when the payment completed. Place the guest by hand or refund in Stripe.'}</p>
     ${others.length ? `<p>Other guests: ${esc(others.join(', '))}</p>` : ''}
-    <table style="border-collapse:collapse">${itemRows}</table><p>Total ${money(priced.total)} · Stripe ${esc(pi.id)}</p>
+    <table style="border-collapse:collapse">${itemRows}</table><p>${isDeposit ? 'Paid now ' + money(paidNow) + ' (50%). Balance ' + money(roomLater) + ' auto-charges ' + esc(m.rbBalanceDate) + '.' : 'Total ' + money(priced.total)} · Stripe ${esc(pi.id)}</p>
     ${cbIssues.length ? '<p><b>Cloudbeds needs a manual update</b> (the room list is correct):<br>' + cbIssues.map(esc).join('<br>') + '</p>' : ''}
     ${svcLines.length ? '<p><b>Spa pre-bookings to schedule</b> (saved under retreat spa requests).</p>' : ''}</div>`;
   await sendEmail(staffTo, `${units ? 'New retreat booking' : 'ACTION NEEDED: paid, no room'} — ${m.rbName} · ${title}`, staffHtml);

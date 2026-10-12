@@ -45,6 +45,7 @@ exports.handler = async (event) => {
       return { ...base, soloPerPerson: p.lines[0].perPerson };
     });
     return L.json(200, {
+      deposit: L.depositOffer(bk, cfg),
       preview: isPreview,
       template: isTemplate,
       bookingId: bk.id,

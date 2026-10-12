@@ -55,16 +55,27 @@ exports.handler = async (event) => {
     if (!choice.units) return L.json(409, { error: isLeader ? 'Sorry, that room type is sold out. Please choose another room type.' : 'Sorry, that room was just taken. Please choose another option.' });
     const leaderPlacement = isLeader ? choice.property.toLowerCase() : null;
 
-    const amountCents = Math.round(priced.total * 100);
+    // Payment plan: pay everything now, or (when the retreat offers it) 50% now and the balance charged automatically on the
+    // balance date to the card saved with this payment. Spa services are paid in full now.
+    const offer = L.depositOffer(bk, cfg);
+    const plan = body.plan === 'deposit' ? 'deposit' : 'full';
+    let dueNow = priced.total, balance = 0;
+    if (plan === 'deposit') {
+      if (!offer.on || !offer.eligible) return L.json(400, { error: 'The 50% payment option is not available for this booking. Please pay in full.' });
+      if (acks.balanceAuth !== true) return L.json(400, { error: 'Please authorize the remaining balance to be charged to your card.' });
+      const sp = L.splitPayment(priced, offer.pct);
+      dueNow = sp.dueNow; balance = sp.roomLater;
+    }
+    const amountCents = Math.round(dueNow * 100);
     if (amountCents < 50) return L.json(400, { error: 'Amount too small' });
 
     const roomLine = priced.lines.find((l) => l.type === 'room');
     const svcCompact = JSON.stringify((cart.services || []).map((s) => [s.id, Number(s.m), Math.max(1, Math.min(4, parseInt(s.q, 10) || 1))]));
-    const params = new URLSearchParams({
+    const params = {
       amount: String(amountCents),
       currency: 'usd',
       receipt_email: email,
-      description: `Amansala Tulum · ${(cfg.title || bk.retreat_name || bk.leader_name || 'Retreat').slice(0, 80)} · ${roomLine.name} · ${bk.start_date} – ${bk.end_date}`.slice(0, 500),
+      description: `Amansala Tulum · ${(cfg.title || bk.retreat_name || bk.leader_name || 'Retreat').slice(0, 80)} · ${roomLine.name}${plan === 'deposit' ? ' · 50% now' : ''} · ${bk.start_date} – ${bk.end_date}`.slice(0, 500),
       'metadata[source]': 'retreat_booking',
       'metadata[rbBookingId]': bk.id,
       'metadata[rbRoom]': JSON.stringify({ rtId: rm.rtId, mode: cart.room.mode || '', beds: priced.guests }).slice(0, 400),
@@ -73,17 +84,22 @@ exports.handler = async (event) => {
       'metadata[rbEmail]': email.slice(0, 200),
       'metadata[rbPhone]': phone.slice(0, 50),
       'metadata[rbOthers]': JSON.stringify(others).slice(0, 480),
-      'metadata[rbAck]': `cancel=1${acks.roommate === true ? ';roommate=1' : ''}${isLeader ? ';leader=1' : ''}`,
+      'metadata[rbAck]': `cancel=1${acks.roommate === true ? ';roommate=1' : ''}${isLeader ? ';leader=1' : ''}${plan === 'deposit' ? ';balanceauth=1' : ''}`,
       'metadata[rbTotal]': String(priced.total),
-    });
-    const piRes = await fetch(`${STRIPE_API}/payment_intents`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${stripeKey}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Stripe-Version': '2024-06-20' },
-      body: params.toString(),
-    });
-    const pi = await piRes.json();
+      'metadata[rbPlan]': plan,
+    };
+    if (plan === 'deposit') {
+      // a Stripe customer + saving the card for later charges (off session), with the guest's explicit authorization
+      const cust = await L.stripePost('/customers', { email, name, phone, 'metadata[rbBookingId]': bk.id });
+      if (cust.error) return L.json(400, { error: cust.error.message || 'Could not set up the payment' });
+      params.customer = cust.id;
+      params.setup_future_usage = 'off_session';
+      params['metadata[rbBalance]'] = String(balance);
+      params['metadata[rbBalanceDate]'] = offer.balanceDate;
+    }
+    const pi = await L.stripePost('/payment_intents', params);
     if (pi.error) return L.json(400, { error: pi.error.message || 'Payment error' });
-    return L.json(200, { clientSecret: pi.client_secret, publishableKey: pubKey, amount: priced.total, lines: priced.lines, leaderPlacement });
+    return L.json(200, { clientSecret: pi.client_secret, publishableKey: pubKey, amount: dueNow, plan, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null, total: priced.total, lines: priced.lines, leaderPlacement });
   } catch (e) {
     console.error('[retreat-booking-intent]', e.message);
     return L.json(400, { error: e.message && /not (priced|available)/.test(e.message) ? e.message : 'Could not start the payment. Please try again.' });

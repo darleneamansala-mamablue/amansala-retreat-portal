@@ -7,11 +7,12 @@
 // Guests who book are written into the retreat's room list (free rooms/beds of the room block), so rooms must be blocked
 // for the retreat first (Add More Rooms); the screen shows how many are free per room type.
 
-const RBS_TEMPLATE='retreat_booking_template';
+const RBS_TEMPLATE='retreat_booking_template', RBS_BAL='retreat_balance_schedule';
 const RBS_KEY='retreat_booking_config', RBS_ORDERS='retreat_booking_orders', RBS_SPA='retreat_spa_requests';
 const RBS_DEFAULT_POLICY='More than 6 weeks prior to the start date: two (2) nights will be charged according to the occupancy type booked.\n6 weeks or less prior to the start date: non-refundable and non-transferable.';
 const RBS_DEFAULTS={
   taxFeePct:24,gratuityPerNight:30,teachingFee:{on:false,amountPP:0},
+  deposit:{on:true,pct:50,monthsBefore:2},
   includes:['Accommodations for your full stay','All meals, with the exception of one offsite dinner','Group Salsa dance class','Cooking demonstration'],
   notIncluded:'Not included: the one offsite dinner, tours and spa treatments.',
   notifyEmail:'retreats@amansala.com',
@@ -31,7 +32,7 @@ const RBS_DEFAULTS={
     {id:'tarot',name:'Tarot Card Reading',desc:'A one hour reading with Mama Blue to bring clarity to the questions you are carrying.',opts:[{m:60,p:95}]}
   ]
 };
-let _rbsBk=null,_rbsCfg=null;
+let _rbsBk=null,_rbsCfg=null,_rbsBal=[];
 
 function rbsEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function rbsLink(bk){
@@ -64,7 +65,9 @@ async function rbsOpen(){
     const o=await db.from('app_store').select('value').eq('key',RBS_ORDERS).maybeSingle();orders=(o.data&&o.data.value)||{};
     const s=await db.from('app_store').select('value').eq('key',RBS_SPA).maybeSingle();spa=(s.data&&s.data.value)||[];
   }catch(e){}
+  let bal=[];try{const b=await db.from('app_store').select('value').eq('key',RBS_BAL).maybeSingle();bal=(b.data&&b.data.value)||[];}catch(e){}
   const mine=Object.values(orders).filter(x=>x.bookingId===bk.id);
+  _rbsBal=bal.filter(x=>x.bookingId===bk.id);
   const mySpa=spa.filter(x=>x.bookingId===bk.id);
   rbsRender(mine,mySpa);
 }
@@ -101,6 +104,12 @@ function rbsRender(orders,spa){
       <label><input type="radio" name="rbsTf" id="rbsTfNo" ${c.teachingFee&&c.teachingFee.on?'':'checked'}> No teaching fee (billed separately)</label>
       <label><input type="radio" name="rbsTf" id="rbsTfYes" ${c.teachingFee&&c.teachingFee.on?'checked':''}> Teaching fee $<input id="rbsTfAmt" type="number" value="${(c.teachingFee&&c.teachingFee.amountPP)||0}" style="${inp};width:90px"> per person (added before the taxes &amp; fees)</label>
     </div>
+    <div style="margin-bottom:12px;padding:10px 12px;background:#f5f3ee;border-radius:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <label style="font-weight:700;font-size:13px"><input type="checkbox" id="rbsDepOn" ${(c.deposit&&c.deposit.on)?'checked':''}> Offer a payment plan:</label>
+      <span style="font-size:13px"><input id="rbsDepPct" type="number" value="${(c.deposit&&c.deposit.pct)||50}" style="${inp};width:64px">% of the room now, the rest charged automatically to the same card</span>
+      <span style="font-size:13px"><input id="rbsDepMonths" type="number" value="${(c.deposit&&c.deposit.monthsBefore)||2}" style="${inp};width:56px"> month(s) before the retreat</span>
+      <div style="font-size:11.5px;color:#7f8c9a;flex-basis:100%">Spa services are paid in full at booking. If a guest books inside that window they pay in full. The guest must tick an authorization to be charged later.</div>
+    </div>
     <b style="font-size:13px">Rooms and rates</b>
     <table style="width:100%;border-collapse:collapse;margin:4px 0 12px">${roomRows}</table>
     <b style="font-size:13px">Spa services (price per session)</b>
@@ -119,7 +128,8 @@ function rbsRender(orders,spa){
     <div style="font-size:11.5px;color:#7f8c9a;word-break:break-all;margin-bottom:4px">Guest link: ${rbsEsc(rbsLink(bk))}</div>
     <div style="font-size:11.5px;color:#7f8c9a;word-break:break-all;margin-bottom:4px">Review link (shows the page, payment off): ${rbsEsc(rbsPreviewLink(bk))}</div>
     <div style="font-size:11.5px;color:#7f8c9a;word-break:break-all;margin-bottom:10px">Template link: ${rbsEsc(rbsTemplateLink())}</div>
-    <b style="font-size:13px">Bookings (${orders.length})</b>${orderRows}
+    <b style="font-size:13px">Balances to charge (${_rbsBal.length})</b>${_rbsBal.length?_rbsBal.sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||'')).map(b=>`<div style="font-size:12.5px;padding:4px 0;border-top:1px solid #f1f5f9"><b>${rbsEsc(b.name)}</b> · $${Number(b.amount||0).toLocaleString()} · due ${rbsEsc(b.dueDate)} · <span style="font-weight:700;color:${b.status==='paid'?'#15803d':(b.status==='failed'?'#b91c1c':'#92400e')}">${rbsEsc(b.status)}</span>${b.lastError?' · '+rbsEsc(b.lastError):''}${(b.status==='scheduled'||b.status==='retry')?` <button class="btn btn-secondary" style="padding:2px 8px;font-size:11px" onclick="rbsCancelBalance('${rbsEsc(b.id)}')">Cancel this charge</button>`:''}</div>`).join(''):'<div style="font-size:12.5px;color:#7f8c9a">No balances scheduled.</div>'}
+    <div style="height:10px"></div><b style="font-size:13px">Bookings (${orders.length})</b>${orderRows}
     <div style="height:10px"></div><b style="font-size:13px">Spa pre-bookings to schedule (${spa.length})</b>${spaRows}
   </div>`;
   document.body.appendChild(ov);
@@ -129,6 +139,7 @@ function rbsCollect(){
   c.enabled=g('rbsEnabled').checked;c.lockRoomList=g('rbsLock').checked;c.title=g('rbsTitle').value.trim();c.bannerUrl=g('rbsBanner').value.trim();
   c.taxFeePct=Number(g('rbsTax').value)||0;c.gratuityPerNight=Number(g('rbsGrat').value)||0;
   c.teachingFee={on:g('rbsTfYes').checked,amountPP:Number(g('rbsTfAmt').value)||0};
+  c.deposit={on:g('rbsDepOn').checked,pct:Math.min(90,Math.max(10,Number(g('rbsDepPct').value)||50)),monthsBefore:Math.max(1,Number(g('rbsDepMonths').value)||2)};
   document.querySelectorAll('#rbsOv input[data-r]').forEach(i=>{const r=c.rooms[+i.dataset.r];const v=i.value===''?0:Number(i.value);r[i.dataset.f]=v;});
   document.querySelectorAll('#rbsOv input[data-s]').forEach(i=>{
     const s=c.services[+i.dataset.s],m=+i.dataset.m;s.opts=(s.opts||[]).filter(o=>o.m!==m);
@@ -170,6 +181,16 @@ async function rbsSaveTemplate(){
     if(error)throw error;
     showToast('Saved as the template. New retreat pages start from it. Template link: '+rbsTemplateLink());
   }catch(e){showToast('Save failed: '+(e.message||e));}
+}
+async function rbsCancelBalance(id){
+  if(!confirm('Cancel this scheduled balance charge? The guest will not be charged automatically.'))return;
+  try{
+    const {data}=await db.from('app_store').select('value').eq('key',RBS_BAL).maybeSingle();
+    const list=(data&&data.value)||[];const it=list.find(x=>x.id===id);if(it){it.status='cancelled';it.cancelledAt=new Date().toISOString();}
+    const {error}=await db.from('app_store').upsert({key:RBS_BAL,value:list,updated_at:new Date().toISOString()});
+    if(error)throw error;
+    showToast('Balance charge cancelled.');rbsOpen();
+  }catch(e){showToast('Failed: '+(e.message||e));}
 }
 function rbsCopy(){
   const l=rbsLink(_rbsBk);

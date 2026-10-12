@@ -13,6 +13,11 @@
 [functions."stripe-webhook"]
   timeout = 26
 
+# Retreat booking: charges the remaining balances that are due (50% plan). 15:00 UTC = 10am in Tulum.
+[functions."rb-charge-balances"]
+  schedule = "0 15 * * *"
+  timeout = 26
+
 [[headers]]
   for = "/*.html"
   [headers.values]
