@@ -60,7 +60,7 @@ exports.handler = async (event) => {
       const rows = await cr.json();
       const all = (rows[0] && rows[0].value) || {};
       const hit = Object.keys(all).find((id) => String(all[id].slug || '').toLowerCase() === slug);
-      if (hit) return { statusCode: 302, headers: { Location: `/retreat-booking.html?r=${encodeURIComponent(hit)}` } };
+      if (hit) return { statusCode: 302, headers: { Location: `/retreat-booking.html?r=${encodeURIComponent(hit)}${qs.preview === '1' ? '&preview=1' : ''}` } };
     }
   } catch (e) { /* fall through to the teacher links */ }
 
