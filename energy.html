@@ -47,7 +47,7 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <div class="tbl"><table id="apps"><thead><tr><th>Appliance</th><th>Qty</th><th>kW each</th><th>Hours / day</th><th>Duty %</th><th>kWh / day</th><th>Peak kW</th></tr></thead><tbody></tbody></table></div></div>
 
 <div class="card"><h2>Guest AC (220V)</h2><div class="row">
-<label>Running draw, kW per unit<input type="number" id="acKw" step="0.05" value="0.9"></label>
+<label>Running draw, kW per unit (5 A × 220 V × 0.9)<input type="number" id="acKw" step="0.05" value="1.0"></label>
 <label>Hours on per night<input type="number" id="acH" value="12"></label>
 <label>Duty low %<input type="number" id="acLo" value="50"></label>
 <label>Duty likely %<input type="number" id="acMid" value="65"></label>
@@ -96,7 +96,7 @@ var APPS=[
  {n:'Ice bath chiller (0 if none)',q:0,kw:1.5,h:12,d:100},
  {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,d:60}
 ];
-var ST_KEY='amansala_energy_v1', BK=[];
+var ST_KEY='amansala_energy_v2', BK=[];
 function $(i){return document.getElementById(i)}
 function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','cost','acKw','acH','acLo','acMid','acHi','casaLiving','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
