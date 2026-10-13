@@ -33,12 +33,17 @@ exports.handler = async (event) => {
     if (!cfg.house || !cfg.house.on) return L.json(404, { error: 'Casa Master is not available for this retreat.' });
     const nights = L.nightsOf(bk);
 
+    if (cfg.house.wholeHouseOnly) {
+      const miss = H.missingRooms(cfg, rooms);
+      if (miss.length) return L.json(400, { error: `Casa Master is booked as a whole house. Please add every room (still needed: ${miss.map((r) => r.label).join(', ')}).` });
+    }
     let priced;
     try { priced = H.priceSelection(cfg, nights, rooms); } catch (e) { return L.json(400, { error: e.message }); }
 
     const av = await H.houseAvailability(key, bk, cfg);
     if (!av.open) return L.json(409, { error: 'Casa Master is not available for this retreat.' });
     const takenNow = priced.rooms.filter((r) => !(av.rooms[r.id] && av.rooms[r.id].free));
+    if (takenNow.length && cfg.house.wholeHouseOnly) return L.json(409, { error: 'Casa Master is booked as a whole house and is not fully available for these dates.' });
     if (takenNow.length) return L.json(409, { error: `Sorry, ${takenNow.map((r) => r.label).join(' and ')} ${takenNow.length > 1 ? 'are' : 'is'} no longer available. Please choose another room.` });
     // confirm with Cloudbeds that each real room is still held (same safety as the single-room checkout)
     const houseUnits = priced.rooms.flatMap((r) => (av.rooms[r.id] && av.rooms[r.id].units) || []);

@@ -116,7 +116,18 @@ async function houseAvailability(key, bk, cfg) {
     } else { free = blocked.has(unit) && heldOk(unit); reason = free ? '' : 'not in the retreat room list'; }
     out.rooms[r.id] = { free, reason, units };
   });
+  // Whole house only (cfg.house.wholeHouseOnly): the house is offered only when EVERY bedroom is available; one missing room hides all
+  out.whole = !!house.wholeHouseOnly;
+  if (house.wholeHouseOnly && Object.values(out.rooms).some((x) => !x.free)) {
+    Object.values(out.rooms).forEach((x) => { x.free = false; x.reason = x.reason || 'Casa Master is booked as a whole house and is not fully available'; });
+  }
   return out;
 }
 
-module.exports = { HOUSE_ROOMS_KEY, occupancyOptions, capacity, checkSelection, priceRoom, priceSelection, houseAvailability };
+// Whole-house rule: the selection must contain every bedroom of the house
+function missingRooms(cfg, selections) {
+  const have = new Set((selections || []).map((s) => String(s && s.id)));
+  return ((cfg.house && cfg.house.rooms) || []).filter((r) => !have.has(r.id));
+}
+
+module.exports = { missingRooms, HOUSE_ROOMS_KEY, occupancyOptions, capacity, checkSelection, priceRoom, priceSelection, houseAvailability };
