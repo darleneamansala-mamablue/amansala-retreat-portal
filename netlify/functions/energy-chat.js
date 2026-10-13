@@ -16,6 +16,7 @@ How the report works (use this to explain it):
 - Other loads (kitchen cold room, fridges, freezer, espresso machine, blenders, extractor, pool pump and lights, parking lot lights, yoga room speakers and dim lights, boutique AC, water pumps, modems, phone and laptop charging per occupied room, etc.) are in the appliance list with quantity, kW each, hours per day and duty. kWh per day = qty x kW x hours x duty%.
 - Peak kW assumes every listed unit runs at the same moment, plus a safety margin for start-up surges. kVA = kW / power factor. Generator capacity in kW = kVA x power factor. The 100 kVA and 250 kVA plants can be used alone or together.
 - Diesel: the generators run on diesel. Diesel liters = kWh x litersPerKwh; cost = liters x price per liter (Mexican pesos, MXN). Both numbers are editable in the report (dieselPricePerLiterMxn, dieselLitersPerKwh). Lightly loaded generators burn more diesel per kWh than these figures.
+- meterReadings are real load-meter readings typed by the user (amps per phase, volts, Hz). Real kW = volts x (A1+A2+A3) / 1000 x power factor. Compare them with the modeled daily load; a steady real load of X kW means X x 24 kWh per day. Frequency should be about 60 Hz (59.5 to 60.5 is normal); phase imbalance above about 10% should be rebalanced.
 - Status: OK under 60% of capacity, Watch 60-85%, Over above 85%.
 
 Rules:

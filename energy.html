@@ -53,6 +53,11 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <div class="card"><h2>Daily energy vs what the generator can supply</h2><div class="tbl" id="daily"></div><div class="helpbox" id="roomsPanel" data-roomsbox="1" hidden></div><div class="helpbar"><button class="alt" data-help="daily">What does this mean?</button><div class="helpbox" id="help_daily" hidden></div></div>
 <p class="note">Likely kWh uses the "likely" AC duty below. Generator can supply = capacity kW × 24 h. Status: OK under 60% of peak capacity, Watch 60 to 85%, Over above 85% (keeps room for motor start-up surges).</p></div>
 
+<div class="card" id="meterCard"><h2>Generator meter readings (real measurements)</h2>
+<p class="note">Type what the load meter ("Medidor de carga") shows. The page turns it into real kW and shows what that costs in diesel if the load stays that high all day. Each reading is saved in the log below.</p>
+<div class="row"><label>Date and time<input type="datetime-local" id="mTime"></label><label>L1 amps<input type="number" step="any" id="mA1"></label><label>L2 amps<input type="number" step="any" id="mA2"></label><label>L3 amps<input type="number" step="any" id="mA3"></label><label>Volts (one phase)<input type="number" step="any" id="mV" value="127"></label><label>Frequency Hz<input type="number" step="any" id="mHz" value="60"></label><label>Power factor<input type="number" step="0.01" id="mPf" value="0.85"></label><label>Which generator<select id="mGen"><option>Not sure</option><option>100 kVA</option><option>250 kVA</option></select></label><button id="mSave">Calculate and save</button></div>
+<div id="mOut" style="margin-top:12px"></div>
+<div class="tbl" id="mLog" style="margin-top:12px"></div></div>
 <div class="card"><h2>Appliances and loads</h2>
 <p class="note">Typical values, not measurements. Edit any row; set quantity to 0 for anything you don't have. Peak counts every unit running at once.</p>
 <div class="tbl"><table id="apps"><thead><tr><th>Appliance</th><th>Qty</th><th>kW each</th><th>Hours / day</th><th>Duty %</th><th>kWh / day</th><th>Peak kW</th><th></th></tr></thead><tbody></tbody></table></div>
@@ -358,12 +363,41 @@ function dateChanged(){
 $('from').addEventListener('change',dateChanged);$('to').addEventListener('change',dateChanged);
 
 document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-setlpk]');if(!b)return;$('lpk').value=b.dataset.setlpk;save();render()});
+var MKEY='amansala_energy_meter', METER=[];
+try{METER=JSON.parse(localStorage.getItem(MKEY)||'[]')}catch(e){}
+function mCalc(r){
+  var v=r.v,a=[r.a1,r.a2,r.a3],kva=v*(a[0]+a[1]+a[2])/1000,kw=kva*r.pf,avg=(a[0]+a[1]+a[2])/3,imb=avg?(Math.max.apply(null,a)-avg)/avg*100:0;
+  return {kva:kva,kw:kw,imb:imb,avg:avg};
+}
+function mHtml(r,c){
+  var pr=+$('diesel').value||0,lp=+$('lpk').value||0,fx=+$('fx').value||1,kwhDay=c.kw*24,lDay=kwhDay*lp,mxnDay=lDay*pr;
+  var fr=r.hz<59?'<span class="tag over">Too low</span>':r.hz<59.5||r.hz>60.5?'<span class="tag watch">Check</span>':'<span class="tag ok">Normal</span>';
+  var ib=c.imb>20?'<span class="tag over">Unbalanced</span>':c.imb>10?'<span class="tag watch">Watch</span>':'<span class="tag ok">Balanced</span>';
+  return '<div class="kpis" style="margin:0">'+
+   '<div class="kpi"><b>'+c.kw.toFixed(1)+' kW</b><span>Real power now ('+c.kva.toFixed(1)+' kVA × PF '+r.pf+')</span></div>'+
+   '<div class="kpi"><b>'+Math.round(c.kva/100*100)+'% / '+Math.round(c.kva/250*100)+'%</b><span>Of the 100 kVA / 250 kVA plant (by kVA)</span></div>'+
+   '<div class="kpi"><b>'+c.imb.toFixed(0)+'%</b><span>Phase imbalance (highest phase above the average) '+ib+'</span></div>'+
+   '<div class="kpi"><b>'+r.hz.toFixed(2)+' Hz</b><span>Frequency, should be 60 '+fr+'</span></div>'+
+   '<div class="kpi"><b>$'+fmt(mxnDay)+' MXN</b><span>≈ $'+fmt(mxnDay/fx)+' USD per day if this load stays all day ('+fmt(kwhDay)+' kWh, '+fmt(lDay)+' liters). About '+fmt(mxnDay*30/fx)+' USD per 30 days.</span></div></div>';
+}
+function drawMeter(){
+  $('mLog').innerHTML=METER.length?'<table><thead><tr><th>Date and time</th><th>Generator</th><th>L1 A</th><th>L2 A</th><th>L3 A</th><th>Real kW</th><th>kVA</th><th>Imbalance</th><th>Hz</th><th></th></tr></thead><tbody>'+METER.slice().reverse().map(function(r,i){var c=mCalc(r),idx=METER.length-1-i;return '<tr><td>'+r.t.replace('T',' ')+'</td><td>'+r.g+'</td><td>'+r.a1+'</td><td>'+r.a2+'</td><td>'+r.a3+'</td><td><b>'+c.kw.toFixed(1)+'</b></td><td>'+c.kva.toFixed(1)+'</td><td>'+c.imb.toFixed(0)+'%</td><td>'+r.hz+'</td><td><a href="#" data-mdel="'+idx+'" style="color:#8a2b1f;font-size:12px">Remove</a></td></tr>'}).join('')+'</tbody></table>':'';
+}
+$('mSave').onclick=function(){
+  var r={t:$('mTime').value||new Date().toISOString().slice(0,16),a1:+$('mA1').value,a2:+$('mA2').value,a3:+$('mA3').value,v:+$('mV').value||127,hz:+$('mHz').value||60,pf:+$('mPf').value||0.85,g:$('mGen').value};
+  if(!(r.a1>0&&r.a2>0&&r.a3>0)){$('mOut').innerHTML='<p class="note">Please type the amps for all three lines (L1, L2, L3).</p>';return}
+  var c=mCalc(r);METER.push(r);try{localStorage.setItem(MKEY,JSON.stringify(METER))}catch(e){}
+  $('mOut').innerHTML=mHtml(r,c);drawMeter();
+};
+document.addEventListener('click',function(e){var d=e.target.closest&&e.target.closest('[data-mdel]');if(!d)return;e.preventDefault();METER.splice(+d.dataset.mdel,1);try{localStorage.setItem(MKEY,JSON.stringify(METER))}catch(x){}drawMeter()});
+(function(){var d=new Date(),p=function(n){return String(n).padStart(2,'0')};$('mTime').value=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());drawMeter();if(METER.length){var l=METER[METER.length-1];$('mOut').innerHTML='<p class="note">Last saved reading:</p>'+mHtml(l,mCalc(l))}})();
+
 var CHAT=[];
 function snapshot(){
   var r=LAST||calc(),g=r.g;
   return {range:{from:$('from').value,toLastNight:$('to').value},generators:{kva100:$('g1').checked,kva250:$('g2').checked,selectedKva:g.kva,powerFactor:+$('pf').value,capacityKw:Math.round(g.kw*10)/10,safetyMarginPct:+$('margin').value},
    dieselPricePerLiterMxn:+$('diesel').value,dieselLitersPerKwh:+$('lpk').value,actualDieselPaidUsd:+$('actualUsd').value||null,mxnPerUsd:+$('fx').value,
-   acAssumptions:{kwPerUnit:+$('acKw').value,hoursPerNight:+$('acH').value,dutyLowPct:+$('acLo').value,dutyLikelyPct:+$('acMid').value,dutyHighPct:+$('acHi').value,casaLivingRoomUnits:+$('casaLiving').value,lightBulbsPerRoom:+$('bulbs').value,extraBulbsInDoubleRooms:+$('bulbsDbl').value,wattsPerBulb:+$('bulbW').value,lightHoursPerNight:+$('bulbH').value,paidDaytimeAcRooms:+$('dayRooms').value,daytimeAcHours:+$('dayH').value,chargingWattsPerRoom:+$('chW').value,chargingHours:+$('chH').value,acUnitsPerRoomOverrides:$('acMap').value.split('\n').join(', ')},
+   acAssumptions:{kwPerUnit:+$('acKw').value,hoursPerNight:+$('acH').value,dutyLowPct:+$('acLo').value,dutyLikelyPct:+$('acMid').value,dutyHighPct:+$('acHi').value,casaLivingRoomUnits:+$('casaLiving').value,lightBulbsPerRoom:+$('bulbs').value,extraBulbsInDoubleRooms:+$('bulbsDbl').value,wattsPerBulb:+$('bulbW').value,lightHoursPerNight:+$('bulbH').value,meterReadings:METER.slice(-8).map(function(r){var c=mCalc(r);return {time:r.t,generator:r.g,ampsL1:r.a1,ampsL2:r.a2,ampsL3:r.a3,volts:r.v,hz:r.hz,pf:r.pf,realKw:Math.round(c.kw*10)/10,kva:Math.round(c.kva*10)/10,imbalancePct:Math.round(c.imb)}}),paidDaytimeAcRooms:+$('dayRooms').value,daytimeAcHours:+$('dayH').value,chargingWattsPerRoom:+$('chW').value,chargingHours:+$('chH').value,acUnitsPerRoomOverrides:$('acMap').value.split('\n').join(', ')},
    appliances:APPS.map(function(a){return {name:a.n,qty:a.q,kwEach:a.kw,hoursPerDay:a.h,dutyPct:a.d,kwhPerDay:Math.round(a.q*a.kw*a.h*a.d)/100,peakKw:Math.round(a.q*a.kw*10)/10}}),
    applianceTotals:{kwhPerDay:Math.round(r.appKwh*10)/10,peakKw:Math.round(r.appKw*10)/10},
    days:r.rows.map(function(x){return {night:x.d,roomsOccupied:x.rooms,acUnitsOn:x.units,kwhLow:Math.round(x.lo),kwhLikely:Math.round(x.mid),kwhHigh:Math.round(x.hi),peakKw:Math.round(x.peak*10)/10,generatorCapacityKw:Math.round(x.cap),peakPctOfCapacity:Math.round(x.pct),energyPctOfWhatGeneratorCanSupply:Math.round(x.epct*10)/10}})};
