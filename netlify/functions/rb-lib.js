@@ -109,7 +109,15 @@ function priceCart(cfg, nights, cart) {
     const rm = (cfg.rooms || []).find((r) => r.rtId === cart.room.rtId);
     if (!rm) throw new Error('Room type not available');
     let rate, n;
-    if (rm.kind === 'king' && cart.room.mode === 'trio' && Number(rm.extraGuestRate) > 0) {
+    if (rm.kind === 'house') {
+      // Whole house, flat nightly price. Booked by one person (the booker); gratuity is charged for the house's guest count.
+      const hg = Math.max(1, Number(rm.houseGuests) || 1);
+      if (!(Number(rm.houseRate) > 0)) throw new Error('This room option is not priced');
+      const amount = Math.round(((Number(rm.houseRate) * nights + teach * hg) * (1 + taxFee) + grat * nights * hg) * 100) / 100;
+      lines.push({ type: 'room', rtId: rm.rtId, name: rm.label, guests: 1, perPerson: amount, amount });
+      total += amount;
+      guests = 1;
+    } else if (rm.kind === 'king' && cart.room.mode === 'trio' && Number(rm.extraGuestRate) > 0) {
       // King bed plus an individual bed: two guests at the shared rate, the third guest at the extra-guest rate
       const pp = (r) => Math.round(((r * nights + teach) * (1 + taxFee) + grat * nights) * 100) / 100;
       const amount = Math.round((pp(Number(rm.shareRate)) * 2 + pp(Number(rm.extraGuestRate))) * 100) / 100;
@@ -125,7 +133,7 @@ function priceCart(cfg, nights, cart) {
     } else { // single, private only
       rate = Number(rm.soloRate); n = 1;
     }
-    if (guests !== 3) {
+    if (rm.kind !== 'house' && !(rm.kind === 'king' && cart.room.mode === 'trio' && Number(rm.extraGuestRate) > 0)) {
       if (!(rate > 0)) throw new Error('This room option is not priced');
       const perPerson = Math.round(((rate * nights + teach) * (1 + taxFee) + grat * nights) * 100) / 100;
       lines.push({ type: 'room', rtId: rm.rtId, name: rm.label, guests: n, perPerson, amount: Math.round(perPerson * n * 100) / 100 });

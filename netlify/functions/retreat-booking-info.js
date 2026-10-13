@@ -33,6 +33,10 @@ exports.handler = async (event) => {
       const freeGrande = isPreview ? 9 : freeList.filter(L.isGrande).length;    // leader fallback when Chica is out of this room type
       const base = { rtId: rm.rtId, kind: rm.kind, label: rm.label, desc: rm.desc || '', imageUrl: rm.imageUrl || '', tags: rm.tags || [], free, freeChica, freeGrande };
       const nightly = { rateShare: rm.kind === 'single' ? null : Number(rm.shareRate) || null, rateSolo: rm.kind === 'twin' ? null : Number(rm.soloRate) || null };
+      if (rm.kind === 'house') {
+        const h = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'house' } });
+        return { ...base, houseRate: Number(rm.houseRate) || 0, houseGuests: Number(rm.houseGuests) || 0, breakdown: rm.breakdown || [], houseTotal: h.lines[0].amount, soloPerPerson: h.lines[0].amount };
+      }
       if (rm.kind === 'king') {
         const share = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'share' } });
         const solo = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'solo' } });

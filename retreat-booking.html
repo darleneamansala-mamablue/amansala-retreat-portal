@@ -274,6 +274,7 @@ function roomOf(id){return INFO.rooms.filter(function(r){return r.rtId===id})[0]
 
 function roomCalc(c){
   var r=roomOf(c.rtId), per, n;
+  if(r.kind==='house'){return {r:r,per:r.houseTotal,guests:1,total:r.houseTotal}}
   if(r.kind==='king'&&c.mode==='trio'&&r.trioTotal){return {r:r,per:r.trioTotal/3,guests:3,total:r.trioTotal}}
   if(r.kind==='king'){ if(c.mode==='share'){per=r.sharePerPerson;n=2}else{per=r.soloPerPerson;n=1} }
   else if(r.kind==='twin'){ per=r.perBed;n=c.beds }
@@ -309,8 +310,8 @@ function init(){
 function showClosed(msg){$('loading').hidden=true;$('closed').hidden=false;if(msg)$('closedTxt').textContent=msg}
 
 function render(){
-  INFO.rooms.sort(function(x,y){return (x.kind==='twin')-(y.kind==='twin')||((y.rateSolo||y.rateShare||0)-(x.rateSolo||x.rateShare||0))});
-  var cp=INFO.rooms.filter(function(r){return r.kind!=='twin'}),cs=INFO.rooms.filter(function(r){return r.kind==='twin'});
+  INFO.rooms.sort(function(x,y){return (x.kind==='house')-(y.kind==='house')||(x.kind==='twin')-(y.kind==='twin')||((y.rateSolo||y.rateShare||0)-(x.rateSolo||x.rateShare||0))});
+  var cp=INFO.rooms.filter(function(r){return r.kind!=='twin'&&r.kind!=='house'}),cs=INFO.rooms.filter(function(r){return r.kind==='twin'});
   function tags(r){return '<td><span class="nm">'+esc(r.label)+'</span><small>'+esc((r.tags||[]).join(' · '))+'</small></td>'}
   $('chart').innerHTML=cp.map(function(r){
     var two=r.kind==='king'?'<strong>'+money(r.rateShare)+'</strong><span>per person, per night</span>':'<span>Private only</span>';
@@ -323,7 +324,11 @@ function render(){
   var cards=INFO.rooms.map(function(r,i){
     var rows='',btns='',kingNote='';
     var needOne=okFor(r,1);
-    if(r.kind==='king'){
+    if(r.kind==='house'){
+      rows='<div class="rate"><div class="l">The whole house<small>Private, for your group</small></div><strong>'+money(r.houseRate)+'<span>per night</span></strong></div>';
+      kingNote='<div class="kingnote"><b>What is in the house</b><ul style="margin:6px 0 0;padding-left:18px">'+(r.breakdown||[]).map(function(b){return '<li>'+esc(b)+'</li>'}).join('')+'</ul></div>';
+      btns='<button class="select" data-r="'+r.rtId+'" data-k="house"'+(needOne?'':' disabled')+'><span>Select the whole house</span><span>&rarr;</span></button>';
+    }else if(r.kind==='king'){
       rows='<div class="rate"><div class="l">Based on 2 guests</div><strong>'+money(r.rateShare)+'<span>per person, per night</span></strong></div><div class="rate"><div class="l">Based on 1 guest</div><strong>'+money(r.rateSolo)+'<span>per person, per night</span></strong></div>';
       kingNote='<p class="kingnote"><b>Sharing a king bed? Please book together.</b> Both guests must be included in one reservation, with payment made using a single credit card. Individual spaces in a king bed cannot be booked separately.</p>';
       btns='<button class="select" data-r="'+r.rtId+'" data-k="share"'+(needOne?'':' disabled')+'><span>Select for two guests</span><span>&rarr;</span></button><button class="select" data-r="'+r.rtId+'" data-k="solo"'+(needOne?'':' disabled')+'><span>Select for one guest</span><span>&rarr;</span></button>';
@@ -339,7 +344,7 @@ function render(){
     }
     var sold=!okFor(r,1)?'<p class="soldout">Sold out</p>':(isLeader()&&placementFor(r,1)==='grande'?'<p class="kingnote">'+leaderMsg(r,1)+'</p>':'');
     var img=r.imageUrl?'<img alt="'+esc(r.label)+'" src="'+esc(r.imageUrl)+'">':'';
-    return {shared:r.kind==='twin',h:'<article class="stay-card"><div class="img">'+img+'</div><div class="stay-content"><h3>'+esc(r.label)+'</h3><p class="stay-desc">'+esc(r.desc)+'</p><div class="rates">'+rows+'</div>'+sold+btns+'</div></article>'};
+    return {shared:r.kind==='twin',h:'<article class="stay-card"><div class="img">'+img+'</div><div class="stay-content"><h3>'+esc(r.label)+'</h3><p class="stay-desc">'+esc(r.desc)+'</p><div class="rates">'+rows+'</div>'+(r.kind==='house'?kingNote:'')+sold+btns+'</div></article>'};
   });
   var priv=cards.filter(function(c){return !c.shared}),sh=cards.filter(function(c){return c.shared});
   $('stays').innerHTML=priv.concat(sh).map(function(c){return c.h}).join('');
@@ -378,6 +383,7 @@ function roomParts(c){ // nightly rate, taxes & fees and gratuity for the whole 
   var r=c.r,nightly=(r.kind==='king'&&cur&&false)?0:0;
   var rate=(r.kind==='king')?(c.guests>=2?r.rateShare:r.rateSolo):(r.kind==='twin'?r.rateShare:r.rateSolo);
   var roomPP=rate*INFO.nights,tf=INFO.teachingFeeAmount||0,grat=INFO.gratuityPerNight*INFO.nights,taxes=Math.round((c.per-roomPP-tf-grat)*100)/100,g=c.guests;
+  if(r.kind==='house'){var hr=r.houseRate*INFO.nights,hg=INFO.gratuityPerNight*INFO.nights*r.houseGuests,ht=(INFO.teachingFeeAmount||0)*r.houseGuests;return {rate:r.houseRate,nights:INFO.nights,guests:1,room:hr,teach:ht,taxes:Math.round((c.total-hr-hg-ht)*100)/100,grat:hg,total:c.total}}
   if(g===3&&r.rateThird){var rm3=roomPP*2+r.rateThird*INFO.nights;return {rate:rate,nights:INFO.nights,guests:g,room:rm3,teach:tf*g,taxes:Math.round((c.total-rm3-tf*g-grat*g)*100)/100,grat:grat*g,total:c.total}}
   return {rate:rate,nights:INFO.nights,guests:g,room:roomPP*g,teach:tf*g,taxes:taxes*g,grat:grat*g,total:c.total};
 }
@@ -385,8 +391,9 @@ function showRoomPanel(){
   resetPanels();
   var c=roomCalc(cur), r=c.r;
   $('mt').textContent=r.label;
-  $('ms').textContent=r.kind==='twin'?(cur.beds===1?'One bed in a shared room':cur.beds+' beds · you and '+(cur.beds-1)+' friend'+(cur.beds>2?'s':'')):(r.kind==='king'&&cur.mode==='trio'?'Three guests · one king bed and one single bed':(r.kind==='king'&&cur.mode==='share'?'Two guests · one king bed':'One guest · just for you'));
+  $('ms').textContent=r.kind==='house'?'The whole house · '+INFO.nights+' nights':r.kind==='twin'?(cur.beds===1?'One bed in a shared room':cur.beds+' beds · you and '+(cur.beds-1)+' friend'+(cur.beds>2?'s':'')):(r.kind==='king'&&cur.mode==='trio'?'Three guests · one king bed and one single bed':(r.kind==='king'&&cur.mode==='share'?'Two guests · one king bed':'One guest · just for you'));
   $('cartlines').innerHTML='';
+  if(r.kind==='house'){$('cartlines').innerHTML='';var hp=roomParts(c);var s4='<div class="line"><span>'+money2(r.houseRate)+' per night × '+INFO.nights+' nights, whole house</span><span>'+money2(r.houseRate*INFO.nights)+'</span></div>';if(hp.teach)s4+='<div class="line"><span>Teaching fee</span><span>'+money2(hp.teach)+'</span></div>';s4+='<div class="line"><span>Taxes &amp; fees ('+INFO.taxFeePct+'%)</span><span>'+money2(hp.taxes)+'</span></div><div class="line"><span>Staff gratuity ($'+INFO.gratuityPerNight+' per person, per night, for '+r.houseGuests+' guests)</span><span>'+money2(hp.grat)+'</span></div><div class="line total"><span>Total for the house</span><span>'+money2(c.total)+'</span></div>';$('sum').innerHTML=s4;return}
   if(r.kind==='king'&&cur.mode==='trio'&&r.trioTotal){$('cartlines').innerHTML='';var rp=roomParts(c);var s3='<div class="line"><span>Two guests · '+money2(r.rateShare)+' per night × '+INFO.nights+' nights, per person</span><span>'+money2(r.rateShare*INFO.nights*2)+'</span></div><div class="line"><span>Third guest · '+money2(r.rateThird)+' per night × '+INFO.nights+' nights</span><span>'+money2(r.rateThird*INFO.nights)+'</span></div>';if(rp.teach)s3+='<div class="line"><span>Teaching fee</span><span>'+money2(rp.teach)+'</span></div>';s3+='<div class="line"><span>Taxes &amp; fees ('+INFO.taxFeePct+'%)</span><span>'+money2(rp.taxes)+'</span></div><div class="line"><span>Staff gratuity ($'+INFO.gratuityPerNight+' per night, per person)</span><span>'+money2(rp.grat)+'</span></div><div class="line total"><span>Total for 3 guests</span><span>'+money2(c.total)+'</span></div>';$('sum').innerHTML=s3;return}
   var nightly=(r.kind==='king'&&cur.mode==='share')?r.rateShare:(r.kind==='twin'?r.rateShare:(r.rateSolo||0)), roomPP=nightly*INFO.nights, tf=INFO.teachingFeeAmount||0, grat=INFO.gratuityPerNight*INFO.nights, taxes=Math.round((c.per-roomPP-tf-grat)*100)/100;
   var s='<div class="line"><span>'+money2(nightly)+' per night × '+INFO.nights+' nights, per person</span><span>'+money2(roomPP)+'</span></div>';
