@@ -61,7 +61,7 @@ async function fulfil(pi) {
   const needUnits = rm && rm.kind === 'twin' ? guests.length : 1;
   // Leaders: Chica first; if Chica is out of this room type, Grande (and the guest + staff are told). Everyone else: Grande
   // rooms first so Chica stays free for leaders (L.chooseUnits).
-  const ch = L.chooseUnits(freeAll, needUnits, isLeader);
+  const ch = L.chooseUnits(freeAll, needUnits, isLeader, L.grandeOnly(rm));
   const units = ch.units, property = ch.property;
   const leaderAtGrande = isLeader && property === 'Grande';
 

@@ -171,13 +171,19 @@ function pickUnits(free, n) {
   const best = Object.values(groups).filter((g) => g.length >= n).sort((a, b) => a.length - b.length)[0];
   return best ? best.slice(0, n) : free.slice(0, n);
 }
-// Leaders: Chica first, Grande when Chica is out of this room type. Everyone else: Grande first (keeps Chica free for leaders).
-function chooseUnits(free, n, isLeader) {
+// Room types whose Chica rooms are never sold to regular guests (only the Grande rooms of the retreat's block are offered; Chica ones
+// stay for leaders). Override per room in the retreat's booking config with rooms[i].grandeOnly = true / false.
+const GRANDE_ONLY_TYPES = ['rt1'];   // Beachfront King
+function grandeOnly(rm) { return rm && rm.grandeOnly !== undefined ? !!rm.grandeOnly : !!(rm && GRANDE_ONLY_TYPES.includes(rm.rtId)); }
+// Leaders: Chica first, Grande when Chica is out of this room type. Everyone else: Grande first (keeps Chica free for leaders);
+// for a Grande-only room type everyone else gets Grande rooms only.
+function chooseUnits(free, n, isLeader, grandeOnlyType) {
   const chica = free.filter(isChica), grande = free.filter(isGrande);
   if (isLeader) {
     const c = pickUnits(chica, n); if (c) return { units: c, property: 'Chica' };
     const g = pickUnits(grande, n) || pickUnits(free, n); return g ? { units: g, property: 'Grande' } : { units: null, property: '' };
   }
+  if (grandeOnlyType) return { units: pickUnits(grande, n), property: '' };
   const u = pickUnits(grande, n) || pickUnits(chica, n) || pickUnits(free, n);
   return { units: u, property: '' };
 }
@@ -269,4 +275,4 @@ function json(code, body) {
   return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };
 }
 
-module.exports = { AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
+module.exports = { grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
