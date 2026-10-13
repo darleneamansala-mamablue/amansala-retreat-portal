@@ -53,6 +53,10 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <div class="card"><h2>Daily energy vs what the generator can supply</h2><div class="tbl" id="daily"></div><div class="helpbox" id="roomsPanel" data-roomsbox="1" hidden></div><div class="helpbar"><button class="alt" data-help="daily">What does this mean?</button><div class="helpbox" id="help_daily" hidden></div></div>
 <p class="note">Likely kWh uses the "likely" AC duty below. Generator can supply = capacity kW × 24 h. Status: OK under 60% of peak capacity, Watch 60 to 85%, Over above 85% (keeps room for motor start-up surges).</p></div>
 
+<div class="card" id="acCard"><h2>AC units in the hotel (inventory)</h2>
+<p class="note">Every air conditioner counted by this page, from the room list and the AC counts you gave me. Change the room counts in the "AC units per room" box and the appliance list and this report updates.</p>
+<div class="row"><label>Casa Master AC units<input type="number" id="cmAc" value="7"></label><label>Casa Shanti AC units<input type="number" id="shAc" value="7"></label><label>Casita 4 AC units<input type="number" id="c4Ac" value="3"></label><button class="alt" id="acCsv">Download AC list (CSV)</button></div>
+<div id="acReport" style="margin-top:12px"></div></div>
 <div class="card" id="meterCard"><h2>Generator meter readings (real measurements)</h2>
 <p class="note">Type what the load meter ("Medidor de carga") shows. The page turns it into real kW and shows what that costs in diesel if the load stays that high all day. Each reading is saved in the log below.</p>
 <div class="row"><label>Date and time<input type="datetime-local" id="mTime"></label><label>L1 amps<input type="number" step="any" id="mA1"></label><label>L2 amps<input type="number" step="any" id="mA2"></label><label>L3 amps<input type="number" step="any" id="mA3"></label><label>Volts (one phase)<input type="number" step="any" id="mV" value="127"></label><label>Frequency Hz<input type="number" step="any" id="mHz" value="60"></label><label>Power factor<input type="number" step="0.01" id="mPf" value="0.85"></label><label>Which generator<select id="mGen"><option>Not sure</option><option>100 kVA</option><option>250 kVA</option></select></label><button id="mSave">Calculate and save</button></div>
@@ -145,9 +149,9 @@ var APPS=[
  {n:'Spa fans (11 am to 5 pm)',q:6,kw:0.07,h:6,s:11,d:100},
  {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,s:9,d:60}
 ];
-var ST_KEY='amansala_energy_v15', BK=[];
+var ST_KEY='amansala_energy_v16', BK=[];
 function $(i){return document.getElementById(i)}
-function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','fx','actualUsd','acKw','acH','acLo','acMid','acHi','casaLiving','dayRooms','ac24list','acStart','bulbStart','chStart','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
+function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','fx','actualUsd','acKw','acH','acLo','acMid','acHi','casaLiving','cmAc','shAc','c4Ac','dayRooms','ac24list','acStart','bulbStart','chStart','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
 function drawApps(){
   $('apps').tBodies[0].innerHTML=APPS.map(function(a,i){
@@ -183,7 +187,7 @@ function tag(p){return p<60?'<span class="tag ok">OK</span>':p<=85?'<span class=
 function usdp(mxn){var f=+$('fx').value||0;return f?'$'+(mxn/f).toFixed(2)+' USD':''}
 function usd(mxn){var f=+$('fx').value||0;return f?'$'+Math.round(mxn/f).toLocaleString('en-US')+' USD':''}
 function fmt(n){return Math.round(n).toLocaleString('en-US')}
-var LAST=null, TYPE={};
+var LAST=null, TYPE={}, ROOMTYPES=[];
 var DOUBLE_TYPES={rt6:1,rt7:1,bd1:1,bd2:1};
 function isDouble(key){return !!DOUBLE_TYPES[TYPE[String(key).toLowerCase()]]}
 function acOf(key,map){if(key.indexOf('CASA:')===0)return 1;var m=map[key.toLowerCase()];return m==null?1:m}
@@ -208,6 +212,7 @@ function render(){
   chart(rows,g);
   verdict(rows);
   hourly();
+  acInventory();
   (function(){
     var pr=+$('diesel').value||0,lp=+$('lpk').value||0,lit=tot*lp,peso=lit*pr,days=rows.length;
     $('costcard').innerHTML='<h2>Diesel cost for these '+days+' days</h2><div class="kpis" style="margin:0">'+
@@ -272,7 +277,7 @@ async function fetchBookings(){
   var r=await db.from('bookings').select('start_date,end_date,status,blocked_rooms').lte('start_date',b).gte('end_date',a).neq('status','cancelled');
   if(r.error){$('status').textContent='Could not load bookings: '+r.error.message;return}
   BK=(r.data||[]).filter(function(x){return x.start_date&&x.end_date});
-  try{var rt=await db.from('room_types').select('id,rooms');(rt.data||[]).forEach(function(t){(t.rooms||[]).forEach(function(n){var k=base(n).toLowerCase();if(!TYPE[k]||/^rt/.test(t.id))TYPE[k]=t.id})})}catch(e){}
+  try{var rt=await db.from('room_types').select('id,rooms');ROOMTYPES=rt.data||[];(rt.data||[]).forEach(function(t){(t.rooms||[]).forEach(function(n){var k=base(n).toLowerCase();if(!TYPE[k]||/^rt/.test(t.id))TYPE[k]=t.id})})}catch(e){}
   $('status').textContent=BK.length+' bookings loaded';weekLabel();render();
 }
 document.addEventListener('input',function(e){var t=e.target;if(t.dataset&&t.dataset.i!=null){APPS[+t.dataset.i][t.dataset.f]=+t.value||0}if(t.closest&&t.closest('.card')&&t.id!=='from'&&t.id!=='to'){save();render()}});
@@ -477,6 +482,36 @@ function hourly(){
 }
 document.addEventListener('click',function(e){var h=e.target.closest&&e.target.closest('[data-hour]');if(!h)return;$('hHour').value=h.dataset.hour;hourly()});
 $('hDate').addEventListener('change',hourly);$('hHour').addEventListener('change',hourly);
+
+var AC_WHOLE={rt1:1,rt2:1,rt3:1,rt4:1,rt5:1,rt6:1,rt7:1,rt8:1,rt9:1};
+function acInventoryData(){
+  var map=acMap(),rooms={};
+  ROOMTYPES.forEach(function(t){if(AC_WHOLE[t.id])(t.rooms||[]).forEach(function(r){rooms[r]=t.name})});
+  var g={Grande:[],Chica:[]};
+  Object.keys(rooms).sort(function(a,b){return a.localeCompare(b,undefined,{numeric:true})}).forEach(function(r){var u=map[r.toLowerCase()];u=u==null?1:u;(/^ch/i.test(r)?g.Chica:g.Grande).push({r:r,u:u,t:rooms[r]})});
+  var other=APPS.filter(function(a){return /(^|\s)AC(\s|$)/.test(a.n)&&a.q>0});
+  return {g:g,casas:[['Casa Master',+$('cmAc').value||0],['Casa Shanti',+$('shAc').value||0],['Casita 4',+$('c4Ac').value||0]],other:other};
+}
+function acInventory(){
+  var box=$('acReport');if(!box)return;
+  if(!ROOMTYPES.length){box.textContent='Loading the room list…';return}
+  var d=acInventoryData(),kw=+$('acKw').value||0,sum=function(a){return a.reduce(function(s,x){return s+x.u},0)};
+  var gU=sum(d.g.Grande),cU=sum(d.g.Chica),casaU=d.casas.reduce(function(s,c){return s+c[1]},0),guest=gU+cU+casaU,oU=d.other.reduce(function(s,a){return s+a.q},0),oKw=d.other.reduce(function(s,a){return s+a.q*a.kw},0);
+  var multi=function(l){return l.filter(function(x){return x.u>1}).map(function(x){return x.r+' ('+x.u+')'}).join(', ')||'none'};
+  var rows=[['Hotel Grande',d.g.Grande.length+' rooms',gU,multi(d.g.Grande)],['Hotel Chica',d.g.Chica.length+' rooms',cU,multi(d.g.Chica)]].concat(d.casas.map(function(c){return [c[0],'1 house',c[1],'whole house']}));
+  var chips=function(l){return l.map(function(x){return '<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;border:1px solid var(--line);background:'+(x.u>1?'#fffaf0':'#fff')+'">'+esc2(x.r)+(x.u>1?' <b>×'+x.u+'</b>':'')+'</span>'}).join('')};
+  box.innerHTML='<div class="kpis" style="margin:0 0 12px"><div class="kpi"><b>'+(guest+oU)+'</b><span>AC units in total</span></div><div class="kpi"><b>'+guest+'</b><span>In guest rooms and houses</span></div><div class="kpi"><b>'+oU+'</b><span>Other AC (office, kitchen cold areas, boutique, others)</span></div><div class="kpi"><b>'+fmt(guest*kw+oKw)+' kW</b><span>Power if every AC ran at once ('+kw+' kW per guest unit)</span></div></div>'+
+   '<div class="tbl"><table><thead><tr><th>Where</th><th>Rooms</th><th>AC units</th><th>Rooms with more than 1 AC</th></tr></thead><tbody>'+rows.map(function(r){return '<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td><b>'+r[2]+'</b></td><td style="text-align:left">'+r[3]+'</td></tr>'}).join('')+'<tr style="font-weight:600"><td>Guest rooms and houses</td><td></td><td>'+guest+'</td><td></td></tr>'+d.other.map(function(a){return '<tr><td>'+esc2(a.n.replace(/ \(.*$/,''))+'</td><td>other</td><td>'+a.q+'</td><td style="text-align:left">'+a.kw+' kW each, '+(a.h>=24?'24 hours':a.h+' hours')+' a day</td></tr>'}).join('')+'<tr style="font-weight:600"><td>Total AC units</td><td></td><td>'+(guest+oU)+'</td><td></td></tr></tbody></table></div>'+
+   '<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">Hotel Grande rooms ('+d.g.Grande.length+')</summary><p>'+chips(d.g.Grande)+'</p></details><details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">Hotel Chica rooms ('+d.g.Chica.length+')</summary><p>'+chips(d.g.Chica)+'</p></details>';
+}
+$('acCsv').onclick=function(){
+  var d=acInventoryData(),q=function(v){v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v},L=['Property,Room,Room type,AC units'];
+  Object.keys(d.g).forEach(function(k){d.g[k].forEach(function(x){L.push([k==='Grande'?'Hotel Grande':'Hotel Chica',x.r,x.t,x.u].map(q).join(','))})});
+  d.casas.forEach(function(c){L.push([c[0],'whole house','house',c[1]].map(q).join(','))});
+  d.other.forEach(function(a){L.push(['Other',a.n,'',a.q].map(q).join(','))});
+  var b=new Blob([L.join('\n')],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='ac-units-inventory.csv';document.body.appendChild(a);a.click();a.remove();
+};
+document.addEventListener('input',function(e){var t=e.target;if(t.id==='cmAc'||t.id==='shAc'||t.id==='c4Ac'||t.id==='acMap')acInventory()});
 
 var CHAT=[];
 function snapshot(){
