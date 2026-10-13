@@ -32,9 +32,11 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <label>To (last night)<input type="date" id="to" value="2026-10-24"></label>
 <label>Generators running<span class="chk"><input type="checkbox" id="g1" checked> 100 kVA</span><span class="chk"><input type="checkbox" id="g2" checked> 250 kVA</span></label>
 <label>Power factor<input type="number" id="pf" step="0.05" value="0.8"></label>
+<label>Safety margin for start-up surges %<input type="number" id="margin" value="25"></label>
 <label>Cost per kWh (USD)<input type="number" id="cost" step="0.01" value="0.40"></label>
 <button id="go">Update</button><span class="note" id="status"></span></div></div>
 
+<div class="card" id="verdict"></div>
 <div class="kpis" id="kpis"></div>
 <div class="card"><h2>Peak power vs generator capacity</h2><div id="chart1"></div></div>
 <div class="card"><h2>Daily energy vs what the generator can supply</h2><div class="tbl" id="daily"></div>
@@ -96,7 +98,7 @@ var APPS=[
 ];
 var ST_KEY='amansala_energy_v1', BK=[];
 function $(i){return document.getElementById(i)}
-function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','cost','acKw','acH','acLo','acMid','acHi','casaLiving','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
+function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','cost','acKw','acH','acLo','acMid','acHi','casaLiving','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
 function drawApps(){
   $('apps').tBodies[0].innerHTML=APPS.map(function(a,i){
@@ -140,6 +142,26 @@ function render(){
   $('daily').innerHTML='<table><thead><tr><th>Night</th><th>Rooms</th><th>AC units</th><th>kWh low</th><th>kWh likely</th><th>kWh high</th><th>Peak kW</th><th>Gen can supply kWh</th><th>Energy used</th><th>Peak vs capacity</th></tr></thead><tbody>'+
    rows.map(function(x){var dt=new Date(x.d+'T12:00:00');return '<tr><td>'+dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</td><td>'+x.rooms+'</td><td>'+x.units+'</td><td>'+fmt(x.lo)+'</td><td><b>'+fmt(x.mid)+'</b></td><td>'+fmt(x.hi)+'</td><td>'+fmt(x.peak)+'</td><td>'+fmt(x.capKwh)+'</td><td>'+Math.round(x.epct)+'%</td><td>'+Math.round(x.pct)+'% '+tag(x.pct)+'</td></tr>'}).join('')+'</tbody></table>';
   chart(rows,g);
+  verdict(rows);
+}
+function verdict(rows){
+  var pf=+$('pf').value||0.8,mg=1+(+$('margin').value||0)/100,worst=rows.reduce(function(m,x){return x.peak>m.peak?x:m},rows[0]);
+  var needKw=worst.peak*mg,needKva=needKw/pf;
+  var sc=[['100 kVA alone',100],['250 kVA alone',250],['100 + 250 kVA together',350]].map(function(c){
+    var cap=c[1],gap=cap-needKva;return {n:c[0],cap:cap,gap:gap,ok:gap>=0,use:worst.peak/(cap*pf)*100};
+  });
+  var pick=sc.filter(function(x){return x.ok})[0];
+  var best=sc.filter(function(x){return x.ok}).length?'':'';
+  var head,color;
+  if(!sc[0].ok&&!sc[1].ok&&!sc[2].ok){head='Yes, you need additional power';color='var(--bad)'}
+  else if(!sc[0].ok&&sc[1].ok){head='The 100 kVA plant alone is not enough. Run the 250 kVA plant (or both).';color='var(--warn)'}
+  else {head='No additional power needed for this period';color='var(--ok)'}
+  var late=rows.filter(function(x){return x.peak*mg/pf>350});
+  $('verdict').innerHTML='<h2 style="color:'+color+'">'+head+'</h2>'+
+   '<p style="margin:0 0 12px">Highest peak: <b>'+fmt(worst.peak)+' kW</b> on <b>'+worst.d+'</b>. With a '+$('margin').value+'% safety margin for AC and pump start-up surges, the generators must supply about <b>'+fmt(needKw)+' kW = '+fmt(needKva)+' kVA</b> at power factor '+pf+'.</p>'+
+   '<div class="tbl"><table><thead><tr><th>Option</th><th>Capacity kVA</th><th>Needed kVA</th><th>Spare (+) / short (−) kVA</th><th>Load at peak</th><th></th></tr></thead><tbody>'+
+   sc.map(function(x){return '<tr><td>'+x.n+'</td><td>'+x.cap+'</td><td>'+fmt(needKva)+'</td><td>'+(x.gap>=0?'+':'')+fmt(x.gap)+'</td><td>'+Math.round(x.use)+'%</td><td>'+(x.ok?'<span class="tag ok">Enough</span>':'<span class="tag over">Not enough</span>')+'</td></tr>'}).join('')+'</tbody></table></div>'+
+   '<p class="note" style="margin-top:10px">Based only on the loads listed below. Anything that is not on the list (kitchen equipment, laundry, spa, staff areas, other buildings) adds to the real peak, so add it to the appliance list to keep this answer honest.</p>';
 }
 function chart(rows,g){
   var W=1100,H=300,L=56,B=34,T=14,n=rows.length,bw=Math.min(70,(W-L-20)/n*0.6),max=Math.max(g.kw,Math.max.apply(null,rows.map(function(x){return x.peak})))*1.12||100;
