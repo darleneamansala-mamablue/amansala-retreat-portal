@@ -106,7 +106,7 @@ var db=supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGc
 var APPS=[
  {n:'Boutique AC',q:1,kw:2.5,h:12,s:9,d:70},
  {n:'AC in the gold room (confirm which room)',q:1,kw:1.0,h:12,s:9,d:65},
- {n:'AC in the office (confirm how many units)',q:1,kw:1.0,h:10,s:8,d:65},
+ {n:'AC in the office (1 unit)',q:1,kw:1.0,h:10,s:8,d:65},
  {n:'Cold room for food (walk-in)',q:1,kw:2.0,h:24,s:0,d:50},
  {n:'Fridges, kitchen (2.5 A × 220 V × 0.8)',q:4,kw:0.45,h:24,s:0,d:40},
  {n:'Freezer',q:1,kw:0.3,h:24,s:0,d:40},
@@ -114,13 +114,14 @@ var APPS=[
  {n:'Blenders (bar)',q:1,kw:0.8,h:1,s:8,d:100},
  {n:'Blender (kitchen)',q:1,kw:1.2,h:2,s:8,d:100},
  {n:'Extractor / hood (kitchen)',q:1,kw:0.5,h:8,s:7,d:100},
- {n:'Restaurant: dishwasher (0 if none)',q:0,kw:3.0,h:3,s:9,d:60},
- {n:'Restaurant: electric oven / stove (0 if gas)',q:0,kw:4.0,h:5,s:7,d:60},
- {n:'Restaurant: extra freezers and fridges (0 if none)',q:0,kw:0.4,h:24,s:0,d:40},
- {n:'Restaurant: bar fridges and display coolers (0 if none)',q:0,kw:0.3,h:24,s:0,d:40},
- {n:'Restaurant: juicers, grinders, mixers (0 if none)',q:0,kw:0.6,h:3,s:8,d:100},
- {n:'Restaurant: AC or fans (0 if none)',q:0,kw:1.0,h:12,s:9,d:65},
- {n:'Restaurant and bar lighting / sound (0 if counted elsewhere)',q:0,kw:1.0,h:8,s:16,d:100},
+ {n:'Restaurant: dishwasher (ESTIMATE, average restaurant)',q:1,kw:3.5,h:4,s:9,d:60},
+ {n:'Restaurant: electric oven (ESTIMATE; stove assumed gas)',q:1,kw:5.0,h:5,s:7,d:50},
+ {n:'Restaurant: extra reach-in fridges and chest freezer (ESTIMATE)',q:3,kw:0.45,h:24,s:0,d:40},
+ {n:'Restaurant: bar fridges and display coolers (ESTIMATE)',q:3,kw:0.3,h:24,s:0,d:45},
+ {n:'Restaurant: juicers, coffee grinder, mixers (ESTIMATE)',q:3,kw:0.6,h:3,s:7,d:60},
+ {n:'Restaurant: ceiling fans and ventilation (ESTIMATE)',q:8,kw:0.07,h:12,s:8,d:100},
+ {n:'Restaurant and bar lighting and sound (ESTIMATE)',q:1,kw:1.5,h:8,s:16,d:100},
+ {n:'Restaurant: kettles, toaster, heat lamps, POS and computers (ESTIMATE)',q:1,kw:1.2,h:10,s:7,d:60},
  {n:'Yoga room speakers (5 shalas)',q:5,kw:0.15,h:6,s:6,d:100},
  {n:'Yoga room lights, dimmed (5 shalas)',q:5,kw:0.3,h:5,s:17,d:50},
  {n:'Pool pump (5 A × 220 V × 0.85)',q:1,kw:0.95,h:8,s:8,d:100},
@@ -138,7 +139,7 @@ var APPS=[
  {n:'Spa fans (11 am to 5 pm)',q:6,kw:0.07,h:6,s:11,d:100},
  {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,s:9,d:60}
 ];
-var ST_KEY='amansala_energy_v12', BK=[];
+var ST_KEY='amansala_energy_v13', BK=[];
 function $(i){return document.getElementById(i)}
 function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','fx','actualUsd','acKw','acH','acLo','acMid','acHi','casaLiving','dayRooms','acStart','bulbStart','chStart','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
