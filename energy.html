@@ -66,6 +66,11 @@ CH26=2
 19B=2</textarea>
 <p class="note">Casa Master, Casa Shanti and Casita 4 are counted per occupied bedroom plus the living room above. Edit if the real totals differ (Casa Master 7, Casa Shanti 7, Casita 4: 3).</p></div>
 
+<div class="card" id="chatcard"><h2>Ask about this report</h2>
+<p class="note">Ask anything about the numbers above, in English or Spanish. For example: "Why is Wednesday the highest?", "Can the 100 kVA plant handle Thursday?", "What if all rooms are full?"</p>
+<div id="chatlog" style="max-height:380px;overflow:auto;margin:12px 0"></div>
+<div class="row" style="align-items:stretch"><input id="chatq" placeholder="Type your question" style="flex:1;min-width:220px;padding:10px 12px"><button id="chatgo">Ask</button></div>
+<div class="row" style="margin-top:8px"><button class="alt" data-q="Explain this report in simple words">Explain simply</button><button class="alt" data-q="Which day is the highest and why?">Highest day</button><button class="alt" data-q="Do we need additional power?">Need more power?</button><button class="alt" data-q="Which appliances use the most energy?">Biggest loads</button></div></div>
 <p class="note">Saved on this computer only. Occupancy comes from the portal's bookings (blocked rooms of every non-cancelled retreat and room-only reservation).</p>
 </div>
 <script>
@@ -130,8 +135,9 @@ function calc(){
 }
 function tag(p){return p<60?'<span class="tag ok">OK</span>':p<=85?'<span class="tag watch">Watch</span>':'<span class="tag over">Over</span>'}
 function fmt(n){return Math.round(n).toLocaleString('en-US')}
+var LAST=null;
 function render(){
-  var r=calc(),rows=r.rows,g=r.g;if(!rows.length){$('daily').innerHTML='';return}
+  var r=calc(),rows=r.rows,g=r.g;LAST=r;if(!rows.length){$('daily').innerHTML='';return}
   var maxPeak=rows.reduce(function(m,x){return x.peak>m.peak?x:m},rows[0]), tot=rows.reduce(function(s,x){return s+x.mid},0), totLo=rows.reduce(function(s,x){return s+x.lo},0),totHi=rows.reduce(function(s,x){return s+x.hi},0),cost=+$('cost').value||0;
   $('kpis').innerHTML=
    '<div class="kpi"><b>'+fmt(tot)+' kWh</b><span>Likely total for '+rows.length+' days ('+fmt(totLo)+' to '+fmt(totHi)+')</span></div>'+
@@ -186,5 +192,30 @@ async function fetchBookings(){
 document.addEventListener('input',function(e){var t=e.target;if(t.dataset&&t.dataset.i!=null){APPS[+t.dataset.i][t.dataset.f]=+t.value||0}if(t.closest&&t.closest('.card')&&t.id!=='from'&&t.id!=='to'){save();render()}});
 document.addEventListener('change',function(e){if(e.target.id==='g1'||e.target.id==='g2'){save();render()}});
 $('go').onclick=function(){save();fetchBookings()};
+
+var CHAT=[];
+function snapshot(){
+  var r=LAST||calc(),g=r.g;
+  return {range:{from:$('from').value,toLastNight:$('to').value},generators:{kva100:$('g1').checked,kva250:$('g2').checked,selectedKva:g.kva,powerFactor:+$('pf').value,capacityKw:Math.round(g.kw*10)/10,safetyMarginPct:+$('margin').value},
+   costPerKwhUsd:+$('cost').value,
+   acAssumptions:{kwPerUnit:+$('acKw').value,hoursPerNight:+$('acH').value,dutyLowPct:+$('acLo').value,dutyLikelyPct:+$('acMid').value,dutyHighPct:+$('acHi').value,casaLivingRoomUnits:+$('casaLiving').value,chargingWattsPerRoom:+$('chW').value,chargingHours:+$('chH').value,acUnitsPerRoomOverrides:$('acMap').value.split('\n').join(', ')},
+   appliances:APPS.map(function(a){return {name:a.n,qty:a.q,kwEach:a.kw,hoursPerDay:a.h,dutyPct:a.d,kwhPerDay:Math.round(a.q*a.kw*a.h*a.d)/100,peakKw:Math.round(a.q*a.kw*10)/10}}),
+   applianceTotals:{kwhPerDay:Math.round(r.appKwh*10)/10,peakKw:Math.round(r.appKw*10)/10},
+   days:r.rows.map(function(x){return {night:x.d,roomsOccupied:x.rooms,acUnitsOn:x.units,kwhLow:Math.round(x.lo),kwhLikely:Math.round(x.mid),kwhHigh:Math.round(x.hi),peakKw:Math.round(x.peak*10)/10,generatorCapacityKw:Math.round(x.cap),peakPctOfCapacity:Math.round(x.pct),energyPctOfWhatGeneratorCanSupply:Math.round(x.epct*10)/10}})};
+}
+function addMsg(role,text){var d=document.createElement('div');d.style.cssText='margin:8px 0;padding:10px 12px;white-space:pre-wrap;'+(role==='user'?'background:#eef2ee;margin-left:40px':'background:#fff;border:1px solid var(--line);margin-right:40px');d.textContent=text;$('chatlog').appendChild(d);$('chatlog').scrollTop=$('chatlog').scrollHeight;return d}
+async function ask(q){
+  q=(q||'').trim();if(!q)return;$('chatq').value='';addMsg('user',q);CHAT.push({role:'user',content:q});
+  var wait=addMsg('assistant','Thinking…');$('chatgo').disabled=true;
+  try{
+    var r=await fetch('/.netlify/functions/energy-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:CHAT,report:snapshot()})});
+    var j=await r.json();var a=j.answer||j.error||'Something went wrong. Please try again.';
+    wait.textContent=a;if(j.answer)CHAT.push({role:'assistant',content:a});else CHAT.pop();
+  }catch(e){wait.textContent='Connection problem. Please try again.';CHAT.pop()}
+  $('chatgo').disabled=false;
+}
+$('chatgo').onclick=function(){ask($('chatq').value)};
+$('chatq').addEventListener('keydown',function(e){if(e.key==='Enter')ask($('chatq').value)});
+document.querySelectorAll('[data-q]').forEach(function(b){b.onclick=function(){ask(b.dataset.q)}});
 load();drawApps();fetchBookings();
 </script></body></html>
