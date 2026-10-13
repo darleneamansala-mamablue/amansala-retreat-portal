@@ -86,18 +86,36 @@ function priceSelection(cfg, nights, selections) {
   return { rooms, total, guests: rooms.reduce((a, r) => a + r.guests, 0) };
 }
 
-// The house is only offered when its unit (default "Casa Master") is blocked for this retreat and held in Cloudbeds;
-// a room is free until a paid order has taken it.
+// A house bedroom is bookable when EVERY real room (unit) it maps to is blocked for this retreat, held in Cloudbeds, has no named guest
+// yet, and has not been sold through this page. cfg.house.rooms[i].units = the room names in the room list (e.g. 'Queen Downstairs A').
+// A bedroom without units falls back to the old rule: the whole 'Casa Master' unit is blocked and held for the retreat.
 async function houseAvailability(key, bk, cfg) {
   const house = cfg.house;
-  const out = { open: false, taken: {} };
+  const out = { open: false, taken: {}, rooms: {} };
   if (!house || !house.on) return out;
-  const unit = house.unit || 'Casa Master';
-  const blocked = (bk.blocked_rooms || []).includes(unit);
-  const held = cfg.requireCloudbeds === false ? blocked : blocked && !!(bk.cb_reservation_ids || {})[unit];
-  out.open = held;
+  out.open = true;
+  const blocked = new Set(bk.blocked_rooms || []);
+  const cb = bk.cb_reservation_ids || {};
+  const heldOk = (u) => cfg.requireCloudbeds === false || !!cb[u];
   const all = (await L.appStoreGet(key, HOUSE_ROOMS_KEY)) || {};
   out.taken = all[bk.id] || {};
+  const regs = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(bk.id)}&select=room,guests,cancelled`);
+  const named = new Set();
+  regs.forEach((r) => { if (!r.cancelled && (r.guests || []).some((g) => g && g.name)) named.add(r.room); });
+  const unit = house.unit || 'Casa Master';
+  (house.rooms || []).forEach((r) => {
+    const units = Array.isArray(r.units) ? r.units : [];
+    let free, reason = '';
+    if (out.taken[r.id]) { free = false; reason = 'sold'; }
+    else if (units.length) {
+      const notBlocked = units.filter((u) => !blocked.has(u));
+      const notHeld = units.filter((u) => blocked.has(u) && !heldOk(u));
+      const hasGuest = units.filter((u) => named.has(u));
+      free = !notBlocked.length && !notHeld.length && !hasGuest.length;
+      reason = notBlocked.length ? 'not in the retreat room list' : notHeld.length ? 'not held in Cloudbeds' : hasGuest.length ? 'already has a guest' : '';
+    } else { free = blocked.has(unit) && heldOk(unit); reason = free ? '' : 'not in the retreat room list'; }
+    out.rooms[r.id] = { free, reason, units };
+  });
   return out;
 }
 

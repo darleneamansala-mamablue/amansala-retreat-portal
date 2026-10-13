@@ -53,6 +53,40 @@ async function fulfil(pi) {
     all[bookingId] = mine;
     await L.appStoreSet(key, H.HOUSE_ROOMS_KEY, all);
 
+    // Put every guest on the room list: one registration row per real room (unit), exactly like the single-room checkout does.
+    const rts = await L.sget(key, 'room_types?select=id,rooms');
+    const typeOf = {}; rts.forEach((t) => (t.rooms || []).forEach((u) => { if (!typeOf[u]) typeOf[u] = t.id; }));
+    const placedUnits = [], placeIssues = [];
+    const paidTotal = pi.amount / 100, bookerName = String(m.rbName || '').trim().toLowerCase();
+    for (const r of rec.rooms) {
+      const cr = ((cfg.house && cfg.house.rooms) || []).find((x) => x.id === r.id) || {};
+      const units = Array.isArray(cr.units) ? cr.units : [];
+      if (!units.length) { placeIssues.push(`${r.label}: not linked to a real room, please place the guests by hand`); continue; }
+      const gl = r.guestList.map((g) => ({ name: g.name, email: g.name.trim().toLowerCase() === bookerName ? (m.rbEmail || '') : '', phone: g.name.trim().toLowerCase() === bookerName ? (m.rbPhone || '') : '', notes: g.type === 'child' ? `Child, age ${g.age}` : '' }));
+      const byUnit = units.map(() => []);
+      gl.forEach((g, i) => byUnit[units.length > 1 ? i % units.length : 0].push(g));   // two-bed room: one guest per bed
+      const perUnit = Math.round((paidTotal * (r.total / rec.total) / units.length) * 100) / 100;
+      for (let k = 0; k < units.length; k++) {
+        const unit = units[k];
+        const existing = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(bookingId)}&room=eq.${encodeURIComponent(unit)}&select=id,notes,amount_paid`);
+        const note = `Booked online (Casa Master, ${r.label}) ${new Date().toISOString().slice(0, 10)} · booked by ${m.rbName}${r.supplement ? ' · includes the individual bed' : ''}`;
+        const patch = { guests: byUnit[k], amount_paid: perUnit + (Number(existing[0] && existing[0].amount_paid) || 0), notes: (existing[0] && existing[0].notes ? existing[0].notes + ' — ' : '') + note, room_type_id: typeOf[unit] || null };
+        if (existing[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${existing[0].id}`, patch, 'return=minimal');
+        else await L.sreq(key, 'POST', 'registrations', { booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');
+        placedUnits.push(unit);
+        // put the guest name on that room's Cloudbeds reservation so hotel inventory matches the room list
+        const ids = bk.cb_reservation_ids || {}, gids = bk.cb_guest_ids || {};
+        if (!ids[unit]) { placeIssues.push(`${unit}: no Cloudbeds reservation on file`); continue; }
+        if (!byUnit[k].length) continue;
+        try {
+          const cr2 = await L.cbCall('updateReservationGuest', { reservationId: ids[unit], guestId: gids[unit], roomName: unit, startDate: bk.start_date, endDate: bk.end_date,
+            guestFirstName: byUnit[k].map((g) => g.name).join(' & '), guestEmail: byUnit[k][0].email || m.rbEmail || '', guestPhone: byUnit[k][0].phone || m.rbPhone || '',
+            groupName: cfg.title || bk.retreat_name || bk.leader_name, leaderName: bk.leader_name, adults: byUnit[k].length, dailyRate: 0, skipRecreateFallback: true }, 22000);
+          if (cr2 && (cr2.updated === false || cr2.success === false || cr2.error)) placeIssues.push(`${unit}: Cloudbeds did not accept the guest name (${cr2.error || cr2.message || 'rename refused'})`);
+        } catch (e) { placeIssues.push(`${unit}: Cloudbeds update failed (${e.message})`); }
+      }
+    }
+
     const paidNow = pi.amount / 100;
     const isDeposit = m.rbPlan === 'deposit' && Number(m.rbBalance) > 0;
     const roomLater = isDeposit ? Math.round(Number(m.rbBalance) * 100) / 100 : 0;
@@ -60,11 +94,13 @@ async function fulfil(pi) {
     const order = {
       piId: pi.id, bookingId, at: new Date().toISOString(), type: 'house',
       name: m.rbName, email: m.rbEmail, phone: m.rbPhone, total: rec.total, paidNow, balance: roomLater, balanceDate: isDeposit ? m.rbBalanceDate : null,
-      status: conflicts.length ? 'needs_attention' : 'placed', units: roomLabels,
+      status: (conflicts.length || placeIssues.some((x) => /not linked/.test(x))) ? 'needs_attention' : 'placed', units: placedUnits.length ? placedUnits : roomLabels,
       houseRooms: rec.rooms.map((r) => ({ id: r.id, label: r.label, guests: r.guestList, total: r.total, supplement: r.supplement })),
       recordUrl: L.recordUrl(pi.id),
     };
     if (conflicts.length) order.conflict = `Already sold to another booking: ${conflicts.map((r) => r.label).join(', ')}`;
+    order.cloudbeds = placeIssues.length ? 'needs_update' : 'updated';
+    if (placeIssues.length) order.cloudbedsIssues = placeIssues;
     orders[pi.id] = order;
     await L.appStoreSet(key, L.ORDERS_KEY, orders);
 
@@ -107,7 +143,8 @@ async function fulfil(pi) {
       ${conflicts.length ? `<p><b>Already sold to another booking:</b> ${conflicts.map((r) => esc(r.label)).join(', ')}. Please place or refund by hand.</p>` : ''}
       <table style="width:100%;border-collapse:collapse">${rows}</table>
       <p>${isDeposit ? 'Paid now ' + money(paidNow) + ' (50%). Balance ' + money(roomLater) + ' auto-charges ' + esc(m.rbBalanceDate) + '.' : 'Total ' + money(rec.total) + ' paid'} · Stripe ${esc(pi.id)} · <a href="${L.recordUrl(pi.id)}">Booking record</a></p>
-      <p><b>Please place these guests in the room list / Cloudbeds</b> (Casa Master rooms are not separate units in the portal yet).</p></div>`;
+      <p>${placedUnits.length ? '<b>On the room list now:</b> ' + placedUnits.map(esc).join(', ') + '.' : ''}</p>
+      ${placeIssues.length ? '<p><b>Needs a manual look:</b><br>' + placeIssues.map(esc).join('<br>') + '</p>' : ''}</div>`;
     await sendEmail(staffTo, `${conflicts.length ? 'ACTION NEEDED: ' : ''}New Casa Master booking — ${m.rbName} · ${title}`, staffHtml);
     return { ok: true, placed: !conflicts.length };
   } catch (err) {
