@@ -58,16 +58,21 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <div class="row"><label>Date and time<input type="datetime-local" id="mTime"></label><label>L1 amps<input type="number" step="any" id="mA1"></label><label>L2 amps<input type="number" step="any" id="mA2"></label><label>L3 amps<input type="number" step="any" id="mA3"></label><label>Volts (one phase)<input type="number" step="any" id="mV" value="127"></label><label>Frequency Hz<input type="number" step="any" id="mHz" value="60"></label><label>Power factor<input type="number" step="0.01" id="mPf" value="0.85"></label><label>Which generator<select id="mGen"><option>Not sure</option><option>100 kVA</option><option>250 kVA</option></select></label><button id="mSave">Calculate and save</button></div>
 <div id="mOut" style="margin-top:12px"></div>
 <div class="tbl" id="mLog" style="margin-top:12px"></div></div>
+<div class="card" id="hourCard"><h2>Hour by hour for one day</h2>
+<p class="note">See how the load changes through the day against what the generators can supply. Pick a day, then click any bar or row (or choose the hour below) to see exactly what is running.</p>
+<div class="row"><label>Day<select id="hDate"></select></label><label>Look at hour<select id="hHour"></select></label><label>Light bulbs on from hour<input type="number" id="bulbStart" value="18"></label><label>Phone / laptop charging from hour<input type="number" id="chStart" value="19"></label></div>
+<div id="hGlance" style="margin-top:12px"></div><div id="hChart"></div><div id="hDetail"></div><div class="tbl" id="hTable"></div>
+<p class="note">Each appliance runs for its "Hours / day" starting at its "Starts at hour" in the appliance list. "Likely" uses the duty percentages; "worst case" assumes everything that is on runs flat out at the same time.</p></div>
 <div class="card"><h2>Appliances and loads</h2>
 <p class="note">Typical values, not measurements. Edit any row; set quantity to 0 for anything you don't have. Peak counts every unit running at once.</p>
-<div class="tbl"><table id="apps"><thead><tr><th>Appliance</th><th>Qty</th><th>kW each</th><th>Hours / day</th><th>Duty %</th><th>kWh / day</th><th>Peak kW</th><th></th></tr></thead><tbody></tbody></table></div>
-<div class="card" style="background:#fffaf0;margin:14px 0 0"><b>Add an appliance</b><div class="row" style="margin-top:8px"><label>Name<input id="naName" placeholder="e.g. Laundry dryer" style="width:200px"></label><label>Qty<input type="number" id="naQty" value="1"></label><label>kW each (or leave blank and use amps)<input type="number" step="any" id="naKw" style="width:130px"></label><label>Amps<input type="number" step="any" id="naA"></label><label>Volts<input type="number" id="naV" value="220"></label><label>Hours / day<input type="number" step="any" id="naH" value="4"></label><label>Duty %<input type="number" id="naD" value="100"></label><button id="naAdd">Add</button></div><p class="note" id="naMsg" style="margin-top:6px"></p></div><div class="helpbar"><button class="alt" data-help="apps">What does this mean?</button><div class="helpbox" id="help_apps" hidden></div></div></div>
+<div class="tbl"><table id="apps"><thead><tr><th>Appliance</th><th>Qty</th><th>kW each</th><th>Hours / day</th><th>Starts at hour</th><th>Duty %</th><th>kWh / day</th><th>Peak kW</th><th></th></tr></thead><tbody></tbody></table></div>
+<div class="card" style="background:#fffaf0;margin:14px 0 0"><b>Add an appliance</b><div class="row" style="margin-top:8px"><label>Name<input id="naName" placeholder="e.g. Laundry dryer" style="width:200px"></label><label>Qty<input type="number" id="naQty" value="1"></label><label>kW each (or leave blank and use amps)<input type="number" step="any" id="naKw" style="width:130px"></label><label>Amps<input type="number" step="any" id="naA"></label><label>Volts<input type="number" id="naV" value="220"></label><label>Hours / day<input type="number" step="any" id="naH" value="4"></label><label>Starts at hour (0 to 23)<input type="number" id="naS" value="9"></label><label>Duty %<input type="number" id="naD" value="100"></label><button id="naAdd">Add</button></div><p class="note" id="naMsg" style="margin-top:6px"></p></div><div class="helpbar"><button class="alt" data-help="apps">What does this mean?</button><div class="helpbox" id="help_apps" hidden></div></div></div>
 
 <div class="card"><h2>Guest AC (220V)</h2><div class="helpbar"><button class="alt" data-help="ac">What does this mean?</button><div class="helpbox" id="help_ac" hidden></div></div><div class="row">
 <label>Running draw, kW per unit (5 A × 220 V × 0.9)<input type="number" id="acKw" step="0.05" value="1.0"></label>
 <label>AC hours per night (9 pm to 9 am = 12)<input type="number" id="acH" value="12"></label>
-<label>Rooms paying for daytime AC (each day)<input type="number" id="dayRooms" value="0"></label>
-<label>Daytime AC hours for those rooms<input type="number" id="dayH" value="8"></label>
+<label>AC starts at hour (21 = 9 pm)<input type="number" id="acStart" value="21"></label>
+<label>Guest AC units that stay on 24 hours (right now: 10)<input type="number" id="dayRooms" value="10"></label>
 <label>Duty low %<input type="number" id="acLo" value="50"></label>
 <label>Duty likely %<input type="number" id="acMid" value="65"></label>
 <label>Duty high %<input type="number" id="acHi" value="80"></label>
@@ -99,39 +104,47 @@ CH26=2
 <script>
 var db=supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A');
 var APPS=[
- {n:'Boutique AC',q:1,kw:2.5,h:12,d:70},
- {n:'AC in the gold room (confirm which room)',q:1,kw:1.0,h:12,d:65},
- {n:'Cold room for food (walk-in)',q:1,kw:2.0,h:24,d:50},
- {n:'Fridges, kitchen (2.5 A × 220 V × 0.8)',q:4,kw:0.45,h:24,d:40},
- {n:'Freezer',q:1,kw:0.3,h:24,d:40},
- {n:'Espresso machine',q:1,kw:2.0,h:4,d:60},
- {n:'Blenders (bar)',q:1,kw:0.8,h:1,d:100},
- {n:'Blender (kitchen)',q:1,kw:1.2,h:2,d:100},
- {n:'Extractor / hood (kitchen)',q:1,kw:0.5,h:8,d:100},
- {n:'Yoga room speakers (5 shalas)',q:5,kw:0.15,h:6,d:100},
- {n:'Yoga room lights, dimmed (5 shalas)',q:5,kw:0.3,h:5,d:50},
- {n:'Pool pump (5 A × 220 V × 0.85)',q:1,kw:0.95,h:8,d:100},
- {n:'Pool lights',q:1,kw:0.3,h:6,d:100},
- {n:'Parking lot lights',q:1,kw:0.5,h:11,d:100},
- {n:'Water pumps (bombas de agua), confirm amps',q:2,kw:1.5,h:3,d:100},
- {n:'Lighting, common areas and grounds (rooms are counted separately)',q:1,kw:1.5,h:6,d:100},
- {n:'Speakers and sound, other',q:1,kw:0.5,h:10,d:100},
- {n:'Modems, network, cameras',q:1,kw:0.4,h:24,d:100},
- {n:'Washing machines (0 if none)',q:0,kw:0.8,h:4,d:100},
- {n:'Dryer, electric (0 if gas)',q:0,kw:4,h:3,d:100},
- {n:'Water heaters (PLACEHOLDER: tell me how many and the size)',q:4,kw:3,h:2,d:60},
- {n:'Ice machine (confirm amps)',q:1,kw:0.8,h:24,d:50},
- {n:'Ice bath chiller (0 if none)',q:0,kw:1.5,h:12,d:100},
- {n:'Spa fans (11 am to 5 pm)',q:6,kw:0.07,h:6,d:100},
- {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,d:60}
+ {n:'Boutique AC',q:1,kw:2.5,h:12,s:9,d:70},
+ {n:'AC in the gold room (confirm which room)',q:1,kw:1.0,h:12,s:9,d:65},
+ {n:'AC in the office (confirm how many units)',q:1,kw:1.0,h:10,s:8,d:65},
+ {n:'Cold room for food (walk-in)',q:1,kw:2.0,h:24,s:0,d:50},
+ {n:'Fridges, kitchen (2.5 A × 220 V × 0.8)',q:4,kw:0.45,h:24,s:0,d:40},
+ {n:'Freezer',q:1,kw:0.3,h:24,s:0,d:40},
+ {n:'Espresso machine',q:1,kw:2.0,h:4,s:7,d:60},
+ {n:'Blenders (bar)',q:1,kw:0.8,h:1,s:8,d:100},
+ {n:'Blender (kitchen)',q:1,kw:1.2,h:2,s:8,d:100},
+ {n:'Extractor / hood (kitchen)',q:1,kw:0.5,h:8,s:7,d:100},
+ {n:'Restaurant: dishwasher (0 if none)',q:0,kw:3.0,h:3,s:9,d:60},
+ {n:'Restaurant: electric oven / stove (0 if gas)',q:0,kw:4.0,h:5,s:7,d:60},
+ {n:'Restaurant: extra freezers and fridges (0 if none)',q:0,kw:0.4,h:24,s:0,d:40},
+ {n:'Restaurant: bar fridges and display coolers (0 if none)',q:0,kw:0.3,h:24,s:0,d:40},
+ {n:'Restaurant: juicers, grinders, mixers (0 if none)',q:0,kw:0.6,h:3,s:8,d:100},
+ {n:'Restaurant: AC or fans (0 if none)',q:0,kw:1.0,h:12,s:9,d:65},
+ {n:'Restaurant and bar lighting / sound (0 if counted elsewhere)',q:0,kw:1.0,h:8,s:16,d:100},
+ {n:'Yoga room speakers (5 shalas)',q:5,kw:0.15,h:6,s:6,d:100},
+ {n:'Yoga room lights, dimmed (5 shalas)',q:5,kw:0.3,h:5,s:17,d:50},
+ {n:'Pool pump (5 A × 220 V × 0.85)',q:1,kw:0.95,h:8,s:8,d:100},
+ {n:'Pool lights',q:1,kw:0.3,h:6,s:19,d:100},
+ {n:'Parking lot lights',q:1,kw:0.5,h:11,s:18,d:100},
+ {n:'Water pumps (bombas de agua), confirm amps',q:2,kw:1.5,h:3,s:6,d:100},
+ {n:'Lighting, common areas and grounds (rooms are counted separately)',q:1,kw:1.5,h:6,s:18,d:100},
+ {n:'Speakers and sound, other',q:1,kw:0.5,h:10,s:16,d:100},
+ {n:'Modems, network, cameras',q:1,kw:0.4,h:24,s:0,d:100},
+ {n:'Washing machines (0 if none)',q:0,kw:0.8,h:4,s:9,d:100},
+ {n:'Dryer, electric (0 if gas)',q:0,kw:4,h:3,s:9,d:100},
+ {n:'Water heaters (PLACEHOLDER: tell me how many and the size)',q:4,kw:3,h:2,s:5,d:60},
+ {n:'Ice machine (confirm amps)',q:1,kw:0.8,h:24,s:0,d:50},
+ {n:'Ice bath chiller (0 if none)',q:0,kw:1.5,h:12,s:8,d:100},
+ {n:'Spa fans (11 am to 5 pm)',q:6,kw:0.07,h:6,s:11,d:100},
+ {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,s:9,d:60}
 ];
-var ST_KEY='amansala_energy_v11', BK=[];
+var ST_KEY='amansala_energy_v12', BK=[];
 function $(i){return document.getElementById(i)}
-function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','fx','actualUsd','acKw','acH','acLo','acMid','acHi','casaLiving','dayRooms','dayH','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
+function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','fx','actualUsd','acKw','acH','acLo','acMid','acHi','casaLiving','dayRooms','acStart','bulbStart','chStart','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
 function drawApps(){
   $('apps').tBodies[0].innerHTML=APPS.map(function(a,i){
-    return '<tr><td>'+a.n+'</td>'+['q','kw','h','d'].map(function(f){return '<td class="in"><input type="number" step="any" data-i="'+i+'" data-f="'+f+'" value="'+a[f]+'"></td>'}).join('')+'<td id="ak'+i+'"></td><td id="ap'+i+'"></td><td><a href="#" data-del="'+i+'" style="color:#8a2b1f;font-size:12px">Remove</a></td></tr>'}).join('');
+    return '<tr><td>'+a.n+'</td>'+['q','kw','h','s','d'].map(function(f){return '<td class="in"><input type="number" step="any" data-i="'+i+'" data-f="'+f+'" value="'+a[f]+'"></td>'}).join('')+'<td id="ak'+i+'"></td><td id="ap'+i+'"></td><td><a href="#" data-del="'+i+'" style="color:#8a2b1f;font-size:12px">Remove</a></td></tr>'}).join('');
 }
 function base(r){
   if(/^(Casa|Queen Down|Upstairs Ind|Shanti)/i.test(r))return 'CASA:'+r;
@@ -152,7 +165,7 @@ function calc(){
     var units=keys.reduce(function(s,r){return s+acOf(r,map)},0)+(casa?liv:0);
     var bW=(+$('bulbW').value||0)/1000,bH=+$('bulbH').value||0,lightPk=0,lightKwh=0;keys.forEach(function(r){var n=bulbsOf(r);lightPk+=n*bW;lightKwh+=n*bW*bH});
     var ch=keys.length*chW*chH+lightKwh,chPk=keys.length*chW+lightPk;
-    var dU=+$('dayRooms').value||0,dH=+$('dayH').value||0;
+    var dU=+$('dayRooms').value||0,dH=Math.max(0,24-(+$('acH').value||0));
     var kLo=appKwh*0.85+ch+units*kw*h*lo+dU*kw*dH*lo,kMid=appKwh+ch+units*kw*h*mid+dU*kw*dH*mid,kHi=appKwh*1.2+ch+units*kw*h*hi+dU*kw*dH*hi;
     var peak=Math.max(units*kw+appKw+chPk,dU*kw+appKw+chPk), cap=g.kw, capKwh=cap*24;
     return {keys:keys.slice().sort(),casa:casa,d:d,rooms:keys.length,units:units,lo:kLo,mid:kMid,hi:kHi,peak:peak,cap:cap,capKwh:capKwh,pct:cap?peak/cap*100:999,epct:capKwh?kMid/capKwh*100:999};
@@ -182,6 +195,7 @@ function render(){
    rows.map(function(x,i){var dt=new Date(x.d+'T12:00:00');return '<tr><td>'+dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</td><td><a href="#" data-rooms="'+i+'" style="color:var(--moss);text-decoration:underline">'+x.rooms+' rooms</a></td><td>'+x.units+'</td><td>'+fmt(x.lo)+'</td><td><b>'+fmt(x.mid)+'</b></td><td>'+fmt(x.hi)+'</td><td>'+fmt(x.peak)+'</td><td>'+fmt(x.capKwh)+'</td><td>'+Math.round(x.epct)+'%</td><td>'+Math.round(x.pct)+'% '+tag(x.pct)+'</td><td>'+fmt(x.mid*lpk)+'</td><td>$'+fmt(x.mid*cost)+'</td><td>'+usd(x.mid*cost)+'</td></tr>'}).join('')+'</tbody></table>';
   chart(rows,g);
   verdict(rows);
+  hourly();
   (function(){
     var pr=+$('diesel').value||0,lp=+$('lpk').value||0,lit=tot*lp,peso=lit*pr,days=rows.length;
     $('costcard').innerHTML='<h2>Diesel cost for these '+days+' days</h2><div class="kpis" style="margin:0">'+
@@ -275,7 +289,7 @@ function H(){
    apps:'<p>This list is everything that uses electricity besides the guest rooms\' AC. For each one: <b>Qty</b> is how many you have, <b>kW each</b> is how much power it draws while running, <b>Hours / day</b> is how long it runs, and <b>Duty %</b> is how much of that time it is actually working (a fridge motor switches on and off, so it is not 100%).</p>'+
     '<p><b>kWh / day</b> is energy per day (qty × kW × hours × duty). <b>Peak kW</b> is its power if it is running at the same moment as everything else. Change any number and the whole page updates. Set Qty to 0 for something you do not have.</p>',
    ac:'<p>The guest-room air conditioners are the biggest use of electricity. We assume each unit draws about <b>'+$('acKw').value+' kW</b> while running (5 amps × 220 volts), stays on for <b>'+$('acH').value+' hours</b> a night (9 pm to 9 am), and its compressor works about <b>'+$('acMid').value+'%</b> of that time. Low and high show the range from '+$('acLo').value+'% to '+$('acHi').value+'%.</p>'+
-    '<p>During the day the AC is off unless a guest pays for it. Use the "Rooms paying for daytime AC" box to add those rooms (it is 0 now), with the hours they use it.</p><p>The box lists rooms with more than one AC. A room that is not listed counts as 1 unit. Casa rooms count one per occupied bedroom plus the living room.</p>'+
+    '<p>During the day the guest AC is off, except the units that stay on 24 hours (set in the box, 10 right now). The "AC hours per night" box is the night window, starting at the hour you choose.</p><p>The box lists rooms with more than one AC. A room that is not listed counts as 1 unit. Casa rooms count one per occupied bedroom plus the living room.</p>'+
     '<p><b>Phone and laptop charging</b> adds a small amount for every occupied room.</p>'
   };
 }
@@ -321,7 +335,7 @@ $('naAdd').onclick=function(){
   if(!(kw>0)&&A>0)kw=Math.round(V*A*0.85)/1000;
   if(!(kw>0)){$('naMsg').textContent='Please give either kW or amps (and volts).';return}
   if(!(q>=0)||!(h>=0)||!(d>=0)){$('naMsg').textContent='Quantity, hours and duty must be numbers.';return}
-  APPS.push({n:n,q:q,kw:kw,h:h,d:d||100});save();drawApps();render();
+  APPS.push({n:n,q:q,kw:kw,h:h,s:+$('naS').value||0,d:d||100});save();drawApps();render();
   $('naMsg').textContent='Added "'+n+'": '+q+' × '+kw+' kW, '+h+' h/day. The page is updated.';
   $('naName').value='';$('naKw').value='';$('naA').value='';
 };
@@ -392,12 +406,62 @@ $('mSave').onclick=function(){
 document.addEventListener('click',function(e){var d=e.target.closest&&e.target.closest('[data-mdel]');if(!d)return;e.preventDefault();METER.splice(+d.dataset.mdel,1);try{localStorage.setItem(MKEY,JSON.stringify(METER))}catch(x){}drawMeter()});
 (function(){var d=new Date(),p=function(n){return String(n).padStart(2,'0')};$('mTime').value=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());drawMeter();if(METER.length){var l=METER[METER.length-1];$('mOut').innerHTML='<p class="note">Last saved reading:</p>'+mHtml(l,mCalc(l))}})();
 
+function hourlyModel(idx){
+  var r=LAST;if(!r||!r.rows[idx])return null;var x=r.rows[idx];
+  var kw=+$('acKw').value||0,mid=(+$('acMid').value||0)/100,acH=+$('acH').value||0,acS=+$('acStart').value||0,ac24=Math.min(x.units,+$('dayRooms').value||0);
+  var bW=(+$('bulbW').value||0)/1000,bH=+$('bulbH').value||0,bS=+$('bulbStart').value||0,chW=(+$('chW').value||0)/1000,chH=+$('chH').value||0,chS=+$('chStart').value||0;
+  var bulbs=x.keys.reduce(function(s,k){return s+bulbsOf(k)},0),on=function(H,start,hrs){return hrs>=24||((H-start+48)%24)<hrs};
+  var hrs=[];
+  for(var H=0;H<24;H++){
+    var inWin=on(H,acS,acH),u=inWin?x.units:ac24,acL=u*kw*mid,acW=u*kw;
+    var liW=on(H,bS,bH)?bulbs*bW:0,chK=on(H,chS,chH)?x.rooms*chW:0,items=[],apL=0,apW=0;
+    APPS.forEach(function(a){if(a.q>0&&on(H,+a.s||0,a.h)){var l=a.q*a.kw*a.d/100,w=a.q*a.kw;apL+=l;apW+=w;items.push({n:a.n,l:l,w:w})}});
+    hrs.push({H:H,u:u,acL:acL,acW:acW,li:liW,ch:chK,apL:apL,apW:apW,items:items,likely:acL+liW+chK+apL,worst:acW+liW+chK+apW});
+  }
+  return {x:x,hrs:hrs,bulbs:bulbs};
+}
+function hourly(){
+  var r=LAST;if(!r||!r.rows.length)return;
+  var cur=$('hDate').value,sel=-1;
+  $('hDate').innerHTML=r.rows.map(function(y,i){if(y.d===cur)sel=i;return '<option value="'+y.d+'">'+new Date(y.d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</option>'}).join('');
+  if(sel<0){sel=0;r.rows.forEach(function(y,i){if(y.peak>r.rows[sel].peak)sel=i})}
+  $('hDate').selectedIndex=sel;
+  if(!$('hHour').options.length){var o='';for(var h=0;h<24;h++)o+='<option value="'+h+'">'+(h<10?'0':'')+h+':00</option>';$('hHour').innerHTML=o;$('hHour').value=Math.min(23,new Date().getHours())}
+  var m=hourlyModel(sel);if(!m)return;
+  var hs=m.hrs,cap=r.g.kw,lp=+$('lpk').value||0,pr=+$('diesel').value||0,fx=+$('fx').value||1;
+  var kwh=hs.reduce(function(s,y){return s+y.likely},0),mn=hs.reduce(function(a,y){return y.likely<a.likely?y:a},hs[0]),mx=hs.reduce(function(a,y){return y.likely>a.likely?y:a},hs[0]),wmx=hs.reduce(function(a,y){return y.worst>a.worst?y:a},hs[0]),hh=function(n){return (n<10?'0':'')+n+':00'};
+  $('hGlance').innerHTML='<div class="kpis" style="margin:0">'+
+   '<div class="kpi"><b>'+fmt(kwh)+' kWh</b><span>Likely energy for the day ('+(kwh/24).toFixed(1)+' kW on average)</span></div>'+
+   '<div class="kpi"><b>'+mx.likely.toFixed(1)+' kW</b><span>Likely peak, at '+hh(mx.H)+'</span></div>'+
+   '<div class="kpi"><b>'+wmx.worst.toFixed(1)+' kW</b><span>Worst-case peak (everything on at once), at '+hh(wmx.H)+(cap?' · '+Math.round(wmx.worst/cap*100)+'% of capacity':'')+'</span></div>'+
+   '<div class="kpi"><b>'+mn.likely.toFixed(1)+' kW</b><span>Lowest, at '+hh(mn.H)+'</span></div>'+
+   '<div class="kpi"><b>$'+fmt(kwh*lp*pr/fx)+' USD</b><span>Diesel for the day ≈ $'+fmt(kwh*lp*pr)+' MXN ('+fmt(kwh*lp)+' liters)</span></div></div>';
+  var W=1100,Hh=280,L=56,B=30,T=12,max=Math.max(cap||0,wmx.worst)*1.1||100;
+  var y=function(v){return T+(Hh-T-B)*(1-v/max)},bw=(W-L-10)/24;
+  var svg='<svg viewBox="0 0 '+W+' '+Hh+'" width="100%" role="img" aria-label="Load by hour against generator capacity">';
+  for(var t=0;t<=4;t++){var v=max*t/4;svg+='<line x1="'+L+'" x2="'+(W-10)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="#e6e0d2"/><text x="'+(L-8)+'" y="'+(y(v)+4)+'" text-anchor="end" font-size="11" fill="#6b6a5f">'+Math.round(v)+'</text>'}
+  var selH=+$('hHour').value;
+  hs.forEach(function(q){var x0=L+q.H*bw+3,sel2=q.H===selH,pct=cap?q.worst/cap*100:0,c=pct<60?'#2f7a4b':pct<=85?'#b7791f':'#b3261e';
+    svg+='<rect x="'+x0+'" y="'+y(q.worst)+'" width="'+(bw-6)+'" height="'+(y(0)-y(q.worst))+'" fill="'+c+'" opacity=".22"/><rect x="'+x0+'" y="'+y(q.likely)+'" width="'+(bw-6)+'" height="'+(y(0)-y(q.likely))+'" fill="'+c+'"'+(sel2?' stroke="#1f2b27" stroke-width="2"':'')+'/><text x="'+(x0+(bw-6)/2)+'" y="'+(Hh-12)+'" text-anchor="middle" font-size="10.5" fill="#6b6a5f">'+q.H+'</text><rect data-hour="'+q.H+'" x="'+x0+'" y="'+T+'" width="'+(bw-6)+'" height="'+(Hh-T-B)+'" fill="transparent" style="cursor:pointer"/>'});
+  [[$('g1').checked?100*(+$('pf').value||0.8):0,'100 kVA alone'],[$('g2').checked?250*(+$('pf').value||0.8):0,'250 kVA alone']].forEach(function(l){if(l[0]&&l[0]<max)svg+='<line x1="'+L+'" x2="'+(W-10)+'" y1="'+y(l[0])+'" y2="'+y(l[0])+'" stroke="#1f2b27" stroke-dasharray="6 4"/><text x="'+(W-12)+'" y="'+(y(l[0])-5)+'" text-anchor="end" font-size="12" fill="#1f2b27">'+l[1]+': '+Math.round(l[0])+' kW</text>'});
+  METER.forEach(function(q){if(q.t.slice(0,10)===$('hDate').value){var c=mCalc(q),hr=+q.t.slice(11,13)+(+q.t.slice(14,16))/60;svg+='<circle cx="'+(L+hr*bw)+'" cy="'+y(c.kw)+'" r="7" fill="#1f2b27" stroke="#fff" stroke-width="2"/><text x="'+(L+hr*bw+10)+'" y="'+(y(c.kw)+4)+'" font-size="12" font-weight="600" fill="#1f2b27">Meter '+c.kw.toFixed(0)+' kW</text>'}});
+  svg+='<text x="12" y="'+(T+8)+'" font-size="11" fill="#6b6a5f">kW</text></svg><p class="note">Dark bars are the likely load, the faded bars behind them are the worst case. The numbers along the bottom are the hour of the day (0 is midnight, 21 is 9 pm). Click a bar to see what is running. A black dot is a meter reading you saved for this day.</p>';
+  $('hChart').innerHTML=svg;
+  var q=hs[selH],it=q.items.slice().sort(function(a,b){return b.l-a.l});
+  $('hDetail').innerHTML='<div class="helpbox" style="margin-top:12px"><p><b>At '+hh(selH)+' on '+$('hDate').options[$('hDate').selectedIndex].text+':</b> about <b>'+q.likely.toFixed(1)+' kW</b> likely ('+q.worst.toFixed(1)+' kW worst case)'+(cap?', '+Math.round(q.worst/cap*100)+'% of the '+Math.round(cap)+' kW the selected generators can supply':'')+'.</p>'+
+   '<p>• Guest AC: <b>'+q.u+' units</b> on = '+q.acL.toFixed(1)+' kW likely ('+q.acW.toFixed(1)+' kW if all run)<br>• Room lights: '+q.li.toFixed(1)+' kW ('+m.bulbs+' bulbs in use that night)<br>• Phone / laptop charging: '+q.ch.toFixed(1)+' kW<br>• Everything else: '+q.apL.toFixed(1)+' kW</p>'+
+   (it.length?'<p><b>Running at this hour from the list:</b> '+it.map(function(a){return a.n.replace(/ \(.*$/,'')+' '+a.l.toFixed(1)+' kW'}).join(' · ')+'</p>':'')+'</div>';
+  $('hTable').innerHTML='<table><thead><tr><th>Hour</th><th>AC units on</th><th>Guest AC kW</th><th>Lights kW</th><th>Charging kW</th><th>Other loads kW</th><th>Likely total kW</th><th>Worst case kW</th><th>% of capacity (worst)</th></tr></thead><tbody>'+hs.map(function(q){var pc=cap?q.worst/cap*100:0;return '<tr data-hour="'+q.H+'" style="cursor:pointer'+(q.H===selH?';background:#fffaf0':'')+'"><td>'+hh(q.H)+'</td><td>'+q.u+'</td><td>'+q.acL.toFixed(1)+'</td><td>'+q.li.toFixed(1)+'</td><td>'+q.ch.toFixed(1)+'</td><td>'+q.apL.toFixed(1)+'</td><td><b>'+q.likely.toFixed(1)+'</b></td><td>'+q.worst.toFixed(1)+'</td><td>'+Math.round(pc)+'% '+tag(pc)+'</td></tr>'}).join('')+'</tbody></table>';
+}
+document.addEventListener('click',function(e){var h=e.target.closest&&e.target.closest('[data-hour]');if(!h)return;$('hHour').value=h.dataset.hour;hourly()});
+$('hDate').addEventListener('change',hourly);$('hHour').addEventListener('change',hourly);
+
 var CHAT=[];
 function snapshot(){
   var r=LAST||calc(),g=r.g;
   return {range:{from:$('from').value,toLastNight:$('to').value},generators:{kva100:$('g1').checked,kva250:$('g2').checked,selectedKva:g.kva,powerFactor:+$('pf').value,capacityKw:Math.round(g.kw*10)/10,safetyMarginPct:+$('margin').value},
    dieselPricePerLiterMxn:+$('diesel').value,dieselLitersPerKwh:+$('lpk').value,actualDieselPaidUsd:+$('actualUsd').value||null,mxnPerUsd:+$('fx').value,
-   acAssumptions:{kwPerUnit:+$('acKw').value,hoursPerNight:+$('acH').value,dutyLowPct:+$('acLo').value,dutyLikelyPct:+$('acMid').value,dutyHighPct:+$('acHi').value,casaLivingRoomUnits:+$('casaLiving').value,lightBulbsPerRoom:+$('bulbs').value,extraBulbsInDoubleRooms:+$('bulbsDbl').value,wattsPerBulb:+$('bulbW').value,lightHoursPerNight:+$('bulbH').value,meterReadings:METER.slice(-8).map(function(r){var c=mCalc(r);return {time:r.t,generator:r.g,ampsL1:r.a1,ampsL2:r.a2,ampsL3:r.a3,volts:r.v,hz:r.hz,pf:r.pf,realKw:Math.round(c.kw*10)/10,kva:Math.round(c.kva*10)/10,imbalancePct:Math.round(c.imb)}}),paidDaytimeAcRooms:+$('dayRooms').value,daytimeAcHours:+$('dayH').value,chargingWattsPerRoom:+$('chW').value,chargingHours:+$('chH').value,acUnitsPerRoomOverrides:$('acMap').value.split('\n').join(', ')},
+   acAssumptions:{kwPerUnit:+$('acKw').value,hoursPerNight:+$('acH').value,dutyLowPct:+$('acLo').value,dutyLikelyPct:+$('acMid').value,dutyHighPct:+$('acHi').value,casaLivingRoomUnits:+$('casaLiving').value,lightBulbsPerRoom:+$('bulbs').value,extraBulbsInDoubleRooms:+$('bulbsDbl').value,wattsPerBulb:+$('bulbW').value,lightHoursPerNight:+$('bulbH').value,meterReadings:METER.slice(-8).map(function(r){var c=mCalc(r);return {time:r.t,generator:r.g,ampsL1:r.a1,ampsL2:r.a2,ampsL3:r.a3,volts:r.v,hz:r.hz,pf:r.pf,realKw:Math.round(c.kw*10)/10,kva:Math.round(c.kva*10)/10,imbalancePct:Math.round(c.imb)}}),acUnitsOn24Hours:+$('dayRooms').value,acStartHour:+$('acStart').value,chargingWattsPerRoom:+$('chW').value,chargingHours:+$('chH').value,acUnitsPerRoomOverrides:$('acMap').value.split('\n').join(', ')},
    appliances:APPS.map(function(a){return {name:a.n,qty:a.q,kwEach:a.kw,hoursPerDay:a.h,dutyPct:a.d,kwhPerDay:Math.round(a.q*a.kw*a.h*a.d)/100,peakKw:Math.round(a.q*a.kw*10)/10}}),
    applianceTotals:{kwhPerDay:Math.round(r.appKwh*10)/10,peakKw:Math.round(r.appKw*10)/10},
    days:r.rows.map(function(x){return {night:x.d,roomsOccupied:x.rooms,acUnitsOn:x.units,kwhLow:Math.round(x.lo),kwhLikely:Math.round(x.mid),kwhHigh:Math.round(x.hi),peakKw:Math.round(x.peak*10)/10,generatorCapacityKw:Math.round(x.cap),peakPctOfCapacity:Math.round(x.pct),energyPctOfWhatGeneratorCanSupply:Math.round(x.epct*10)/10}})};
