@@ -274,6 +274,7 @@ function roomOf(id){return INFO.rooms.filter(function(r){return r.rtId===id})[0]
 
 function roomCalc(c){
   var r=roomOf(c.rtId), per, n;
+  if(r.kind==='king'&&c.mode==='trio'&&r.trioTotal){return {r:r,per:r.trioTotal/3,guests:3,total:r.trioTotal}}
   if(r.kind==='king'){ if(c.mode==='share'){per=r.sharePerPerson;n=2}else{per=r.soloPerPerson;n=1} }
   else if(r.kind==='twin'){ per=r.perBed;n=c.beds }
   else { per=r.soloPerPerson;n=1 }
@@ -326,6 +327,7 @@ function render(){
       rows='<div class="rate"><div class="l">Based on 2 guests</div><strong>'+money(r.rateShare)+'<span>per person, per night</span></strong></div><div class="rate"><div class="l">Based on 1 guest</div><strong>'+money(r.rateSolo)+'<span>per person, per night</span></strong></div>';
       kingNote='<p class="kingnote"><b>Sharing a king bed? Please book together.</b> Both guests must be included in one reservation, with payment made using a single credit card. Individual spaces in a king bed cannot be booked separately.</p>';
       btns='<button class="select" data-r="'+r.rtId+'" data-k="share"'+(needOne?'':' disabled')+'><span>Select for two guests</span><span>&rarr;</span></button><button class="select" data-r="'+r.rtId+'" data-k="solo"'+(needOne?'':' disabled')+'><span>Select for one guest</span><span>&rarr;</span></button>';
+      if(r.rateThird){rows+='<div class="rate"><div class="l">Third guest<small>Sleeps on the extra single bed in the room</small></div><strong>'+money(r.rateThird)+'<span>per night</span></strong></div>';btns+='<button class="select" data-r="'+r.rtId+'" data-k="trio"'+(needOne?'':' disabled')+'><span>Select for three guests</span><span>&rarr;</span></button>'}
     }else if(r.kind==='twin'){
       rows='<div class="rate"><div class="l">Per bed<small>Each bed is booked and priced separately</small></div><strong>'+money(r.rateShare)+'<span>per person, per night</span></strong></div>';
       for(var n=1;n<=r.maxBeds;n++){
@@ -374,16 +376,18 @@ function refreshAfterCart(){render();if(!$('checkout').hidden)showCart();else if
 function resetPanels(){['couple','addbox','checkout','paybox','done','upsell'].forEach(function(i){$(i).hidden=true});document.querySelector('.lock').hidden=false;$('sum').hidden=false;$('cartlines').hidden=false}
 function roomParts(c){ // nightly rate, taxes & fees and gratuity for the whole booking (all guests), from the same numbers the server charges
   var r=c.r,nightly=(r.kind==='king'&&cur&&false)?0:0;
-  var rate=(r.kind==='king')?(c.guests===2?r.rateShare:r.rateSolo):(r.kind==='twin'?r.rateShare:r.rateSolo);
+  var rate=(r.kind==='king')?(c.guests>=2?r.rateShare:r.rateSolo):(r.kind==='twin'?r.rateShare:r.rateSolo);
   var roomPP=rate*INFO.nights,tf=INFO.teachingFeeAmount||0,grat=INFO.gratuityPerNight*INFO.nights,taxes=Math.round((c.per-roomPP-tf-grat)*100)/100,g=c.guests;
+  if(g===3&&r.rateThird){var rm3=roomPP*2+r.rateThird*INFO.nights;return {rate:rate,nights:INFO.nights,guests:g,room:rm3,teach:tf*g,taxes:Math.round((c.total-rm3-tf*g-grat*g)*100)/100,grat:grat*g,total:c.total}}
   return {rate:rate,nights:INFO.nights,guests:g,room:roomPP*g,teach:tf*g,taxes:taxes*g,grat:grat*g,total:c.total};
 }
 function showRoomPanel(){
   resetPanels();
   var c=roomCalc(cur), r=c.r;
   $('mt').textContent=r.label;
-  $('ms').textContent=r.kind==='twin'?(cur.beds===1?'One bed in a shared room':cur.beds+' beds · you and '+(cur.beds-1)+' friend'+(cur.beds>2?'s':'')):(r.kind==='king'&&cur.mode==='share'?'Two guests · one king bed':'One guest · just for you');
+  $('ms').textContent=r.kind==='twin'?(cur.beds===1?'One bed in a shared room':cur.beds+' beds · you and '+(cur.beds-1)+' friend'+(cur.beds>2?'s':'')):(r.kind==='king'&&cur.mode==='trio'?'Three guests · one king bed and one single bed':(r.kind==='king'&&cur.mode==='share'?'Two guests · one king bed':'One guest · just for you'));
   $('cartlines').innerHTML='';
+  if(r.kind==='king'&&cur.mode==='trio'&&r.trioTotal){$('cartlines').innerHTML='';var rp=roomParts(c);var s3='<div class="line"><span>Two guests · '+money2(r.rateShare)+' per night × '+INFO.nights+' nights, per person</span><span>'+money2(r.rateShare*INFO.nights*2)+'</span></div><div class="line"><span>Third guest · '+money2(r.rateThird)+' per night × '+INFO.nights+' nights</span><span>'+money2(r.rateThird*INFO.nights)+'</span></div>';if(rp.teach)s3+='<div class="line"><span>Teaching fee</span><span>'+money2(rp.teach)+'</span></div>';s3+='<div class="line"><span>Taxes &amp; fees ('+INFO.taxFeePct+'%)</span><span>'+money2(rp.taxes)+'</span></div><div class="line"><span>Staff gratuity ($'+INFO.gratuityPerNight+' per night, per person)</span><span>'+money2(rp.grat)+'</span></div><div class="line total"><span>Total for 3 guests</span><span>'+money2(c.total)+'</span></div>';$('sum').innerHTML=s3;return}
   var nightly=(r.kind==='king'&&cur.mode==='share')?r.rateShare:(r.kind==='twin'?r.rateShare:(r.rateSolo||0)), roomPP=nightly*INFO.nights, tf=INFO.teachingFeeAmount||0, grat=INFO.gratuityPerNight*INFO.nights, taxes=Math.round((c.per-roomPP-tf-grat)*100)/100;
   var s='<div class="line"><span>'+money2(nightly)+' per night × '+INFO.nights+' nights, per person</span><span>'+money2(roomPP)+'</span></div>';
   if(tf)s+='<div class="line"><span>Teaching fee</span><span>'+money2(tf)+'</span></div>';

@@ -36,7 +36,12 @@ exports.handler = async (event) => {
       if (rm.kind === 'king') {
         const share = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'share' } });
         const solo = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'solo' } });
-        return { ...base, ...nightly, sharePerPerson: share.lines[0].perPerson, soloPerPerson: solo.lines[0].perPerson };
+        const out = { ...base, ...nightly, sharePerPerson: share.lines[0].perPerson, soloPerPerson: solo.lines[0].perPerson };
+        if (Number(rm.extraGuestRate) > 0) {
+          const trio = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'trio' } });
+          Object.assign(out, { rateThird: Number(rm.extraGuestRate), trioTotal: trio.lines[0].amount });
+        }
+        return out;
       }
       if (rm.kind === 'twin') {
         const p = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'beds', beds: 1 } });
