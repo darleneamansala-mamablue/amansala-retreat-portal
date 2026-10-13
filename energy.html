@@ -105,11 +105,11 @@ var APPS=[
  {n:'Washing machines (0 if none)',q:0,kw:0.8,h:4,d:100},
  {n:'Dryer, electric (0 if gas)',q:0,kw:4,h:3,d:100},
  {n:'Water heaters (PLACEHOLDER: tell me how many and the size)',q:4,kw:3,h:2,d:60},
- {n:'Ice machine (0 if none)',q:0,kw:0.7,h:12,d:100},
+ {n:'Ice machine (confirm amps)',q:1,kw:0.8,h:24,d:50},
  {n:'Ice bath chiller (0 if none)',q:0,kw:1.5,h:12,d:100},
  {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,d:60}
 ];
-var ST_KEY='amansala_energy_v5', BK=[];
+var ST_KEY='amansala_energy_v6', BK=[];
 function $(i){return document.getElementById(i)}
 function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','cost','acKw','acH','acLo','acMid','acHi','casaLiving','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
