@@ -36,7 +36,7 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <label>Generators running<span class="chk"><input type="checkbox" id="g1" checked> 100 kVA</span><span class="chk"><input type="checkbox" id="g2" checked> 250 kVA</span></label>
 <label>Power factor<input type="number" id="pf" step="0.05" value="0.8"></label>
 <label>Safety margin for start-up surges %<input type="number" id="margin" value="25"></label>
-<label>Diesel price per liter, MXN (the price we actually pay)<input type="number" id="diesel" step="0.01" value="32" style="width:130px"></label>
+<label>Diesel price per liter, MXN (the price we actually pay)<input type="number" id="diesel" step="0.01" value="32" style="width:130px"><span class="note" id="dieselUsd"></span></label>
 <label>Diesel liters per kWh<input type="number" id="lpk" step="0.01" value="0.30"></label>
 <label>Actual diesel paid for these dates, USD (optional)<input type="number" id="actualUsd" step="1" placeholder="e.g. 13000" style="width:150px"></label>
 <label>Exchange rate, pesos per US dollar<input type="number" id="fx" step="0.01" value="18.50" style="width:110px"></label>
@@ -155,6 +155,7 @@ function calc(){
   return {rows:rows,g:g,appKwh:appKwh,appKw:appKw};
 }
 function tag(p){return p<60?'<span class="tag ok">OK</span>':p<=85?'<span class="tag watch">Watch</span>':'<span class="tag over">Over</span>'}
+function usdp(mxn){var f=+$('fx').value||0;return f?'$'+(mxn/f).toFixed(2)+' USD':''}
 function usd(mxn){var f=+$('fx').value||0;return f?'$'+Math.round(mxn/f).toLocaleString('en-US')+' USD':''}
 function fmt(n){return Math.round(n).toLocaleString('en-US')}
 var LAST=null, TYPE={};
@@ -163,6 +164,7 @@ function isDouble(key){return !!DOUBLE_TYPES[TYPE[String(key).toLowerCase()]]}
 function acOf(key,map){if(key.indexOf('CASA:')===0)return 1;var m=map[key.toLowerCase()];return m==null?1:m}
 function bulbsOf(key){return (+$('bulbs').value||0)+(isDouble(key)?(+$('bulbsDbl').value||0):0)}
 function render(){
+  try{$('dieselUsd').textContent=' = '+usdp(+$('diesel').value||0)+' per liter'}catch(e){}
   var r=calc(),rows=r.rows,g=r.g;LAST=r;if(!rows.length){$('daily').innerHTML='';return}
   var maxPeak=rows.reduce(function(m,x){return x.peak>m.peak?x:m},rows[0]), tot=rows.reduce(function(s,x){return s+x.mid},0), totLo=rows.reduce(function(s,x){return s+x.lo},0),totHi=rows.reduce(function(s,x){return s+x.hi},0),lpk=+$('lpk').value||0,diesel=+$('diesel').value||0,cost=diesel*lpk;
   $('kpis').innerHTML=
@@ -170,7 +172,7 @@ function render(){
    '<div class="kpi" data-tile="peak"><b>'+fmt(maxPeak.peak)+' kW</b><span>Highest peak, '+maxPeak.d+'</span></div>'+
    '<div class="kpi" data-tile="cap"><b>'+fmt(g.kw)+' kW</b><span>Generator capacity ('+g.kva+' kVA × PF '+$('pf').value+')</span></div>'+
    '<div class="kpi" data-tile="load"><b>'+(g.kw?Math.round(maxPeak.peak/g.kw*100)+'%':'no generator')+'</b><span>Peak load vs capacity '+(g.kw?tag(maxPeak.pct):'')+'</span></div>'+
-   '<div class="kpi" data-tile="cost"><b>$'+fmt(tot*cost)+' MXN</b><span><b style="font-size:18px">≈ '+usd(tot*cost)+'</b><br>Diesel: about '+fmt(tot*lpk)+' liters at $'+diesel.toFixed(2)+' MXN per liter</span></div>';
+   '<div class="kpi" data-tile="cost"><b>$'+fmt(tot*cost)+' MXN</b><span><b style="font-size:18px">≈ '+usd(tot*cost)+'</b><br>Diesel: about '+fmt(tot*lpk)+' liters at $'+diesel.toFixed(2)+' MXN ('+usdp(diesel)+') per liter</span></div>';
   $('daily').innerHTML='<table><thead><tr><th>Night</th><th>Rooms</th><th>AC units</th><th>kWh low</th><th>kWh likely</th><th>kWh high</th><th>Peak kW</th><th>Gen can supply kWh</th><th>Energy used</th><th>Peak vs capacity</th><th>Diesel liters</th><th>Diesel cost MXN</th><th>Diesel cost USD</th></tr></thead><tbody>'+
    rows.map(function(x,i){var dt=new Date(x.d+'T12:00:00');return '<tr><td>'+dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</td><td><a href="#" data-rooms="'+i+'" style="color:var(--moss);text-decoration:underline">'+x.rooms+' rooms</a></td><td>'+x.units+'</td><td>'+fmt(x.lo)+'</td><td><b>'+fmt(x.mid)+'</b></td><td>'+fmt(x.hi)+'</td><td>'+fmt(x.peak)+'</td><td>'+fmt(x.capKwh)+'</td><td>'+Math.round(x.epct)+'%</td><td>'+Math.round(x.pct)+'% '+tag(x.pct)+'</td><td>'+fmt(x.mid*lpk)+'</td><td>$'+fmt(x.mid*cost)+'</td><td>'+usd(x.mid*cost)+'</td></tr>'}).join('')+'</tbody></table>';
   chart(rows,g);
@@ -178,7 +180,7 @@ function render(){
   (function(){
     var pr=+$('diesel').value||0,lp=+$('lpk').value||0,lit=tot*lp,peso=lit*pr,days=rows.length;
     $('costcard').innerHTML='<h2>Diesel cost for these '+days+' days</h2><div class="kpis" style="margin:0">'+
-     '<div class="kpi"><b>$'+pr.toFixed(2)+' MXN</b><span>Diesel price per liter in use (change it at the top)</span></div>'+
+     '<div class="kpi"><b>$'+pr.toFixed(2)+' MXN</b><span><b style="font-size:18px">≈ '+usdp(pr)+'</b><br>Diesel price per liter in use (change it at the top)</span></div>'+
      '<div class="kpi"><b>'+fmt(lit)+' liters</b><span>Diesel needed ('+lp+' liters per kWh × '+fmt(tot)+' kWh)</span></div>'+
      '<div class="kpi"><b>$'+fmt(peso)+' MXN</b><span><b style="font-size:18px">≈ '+usd(peso)+'</b><br>Total cost for the '+days+' days</span></div>'+
      '<div class="kpi"><b>$'+fmt(days?peso/days:0)+' MXN</b><span><b style="font-size:18px">≈ '+usd(days?peso/days:0)+'</b><br>Average cost per day</span></div>'+
@@ -191,7 +193,7 @@ function render(){
     var fx=+$('fx').value||1,pr=+$('diesel').value||0,lp=+$('lpk').value||0,days=rows.length;
     var actMxn=act*fx,actL=pr?actMxn/pr:0,estUsd=tot*lp*pr/fx,ratio=estUsd?act/estUsd:0,implied=actL/tot;
     $('actualbox').innerHTML='<h2>Actual diesel vs this estimate</h2><div class="kpis" style="margin:0">'+
-     '<div class="kpi"><b>$'+fmt(act)+' USD</b><span>Actual paid for these '+days+' days<br>≈ $'+fmt(actMxn)+' MXN ≈ '+fmt(actL)+' liters at $'+pr.toFixed(2)+' per liter</span></div>'+
+     '<div class="kpi"><b>$'+fmt(act)+' USD</b><span>Actual paid for these '+days+' days<br>≈ $'+fmt(actMxn)+' MXN ≈ '+fmt(actL)+' liters at $'+pr.toFixed(2)+' MXN ('+usdp(pr)+') per liter</span></div>'+
      '<div class="kpi"><b>$'+fmt(estUsd)+' USD</b><span>What this estimate says ('+fmt(tot*lp)+' liters)</span></div>'+
      '<div class="kpi"><b>'+ratio.toFixed(1)+' ×</b><span>Actual is '+ratio.toFixed(1)+' times the estimate. The estimate explains about '+Math.round(100/ratio)+'% of what was paid.</span></div>'+
      '<div class="kpi"><b>'+implied.toFixed(2)+' L per kWh</b><span>Diesel burned for each kWh this page counts. A well-loaded generator burns about 0.25 to 0.35.</span></div></div>'+
