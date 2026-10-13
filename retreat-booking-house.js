@@ -24,7 +24,7 @@
     '#house .hroom{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:24px;padding:24px 0;border-top:1px solid var(--line)}' +
     '#house .himg{width:100%;aspect-ratio:1.4;object-fit:cover;background:var(--sand);display:block}#house .hph{width:100%;aspect-ratio:1.4;background:var(--sand);display:flex;align-items:center;justify-content:center;color:#7a705c;font-size:13px}' +
     '#house .hthumbs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:8px}#house .hthumb{padding:0;border:2px solid transparent;background:none;cursor:pointer;line-height:0}#house .hthumb.on{border-color:var(--moss)}#house .hthumb img{width:100%;aspect-ratio:1.3;object-fit:cover;display:block}' +
-    '#house h3{font-family:var(--display);font-weight:400;font-size:30px;margin:0}#house .hmeta{color:#5b5a50;font-size:14px;margin:2px 0 10px}' +
+    '#house .hgal{margin:8px 0 28px;max-width:760px}#house .hgalthumbs{grid-template-columns:repeat(7,minmax(0,1fr))}#house .hgal #hgalmain{aspect-ratio:1.6}#house h3{font-family:var(--display);font-weight:400;font-size:30px;margin:0}#house .hmeta{color:#5b5a50;font-size:14px;margin:2px 0 10px}' +
     '#house .hnote{background:#fbf3df;border-left:3px solid #c9972b;padding:10px 12px;font-size:13.5px;margin:10px 0}' +
     '#house .hocc{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}#house .hocc button{border:1.5px solid var(--line);background:var(--paper);padding:9px 14px;cursor:pointer;font:inherit;font-size:13.5px;color:inherit}#house .hocc button.on{border-color:var(--moss);background:var(--moss);color:#fff}' +
     '#house .hg{display:grid;grid-template-columns:1fr 110px 70px;gap:8px;margin-bottom:8px}#house .hg input,#house .hg select{padding:9px 10px;border:1px solid var(--line);background:#fff;font:inherit;font-size:14px;border-radius:0;min-width:0}' +
@@ -65,10 +65,18 @@
     var html = '<div class="section-heading" style="grid-template-columns:1fr;gap:12px"><div><p class="kicker">Your private house</p><h2>' + esc(HOUSE.label) + '</h2></div>' +
       (HOUSE.intro ? '<p style="max-width:720px">' + esc(HOUSE.intro) + '</p>' : '') +
       '<p style="max-width:720px;font-size:14px">Choose the bedrooms you need, add the guests for each one, and pay for everything together with one card. Rates are per person, per night. <b>Plus ' + INFO.taxFeePct + '% taxes and fees and $' + INFO.gratuityPerNight + ' gratuity per person, per night</b>, included in the totals below.</p></div>' +
+      gallery() +
       '<div class="hgrid"><div>' + HOUSE.rooms.map(roomCard).join('') + '</div><aside class="hcart" id="hcart"></aside></div>';
     $('house').innerHTML = html;
     restore();
     drawCart();
+  }
+
+  function gallery() {
+    var g = HOUSE.gallery || [];
+    if (!g.length) return '';
+    return '<div class="hgal"><img class="himg" id="hgalmain" alt="' + esc(HOUSE.label) + '" src="' + esc(g[0]) + '"><div class="hthumbs hgalthumbs">' +
+      g.map(function (u, i) { return '<button type="button" class="hthumb' + (i ? '' : ' on') + '" data-room="gal" data-src="' + esc(u) + '" aria-label="Photo ' + (i + 1) + '"><img loading="lazy" alt="" src="' + esc(u) + '"></button>'; }).join('') + '</div></div>';
   }
 
   function roomCard(r) {
@@ -198,7 +206,7 @@
   document.addEventListener('click', function (e) {
     var t = e.target; if (!t || !t.closest) return;
     var b;
-    if ((b = t.closest('.hthumb'))) { var m = $('hmain_' + b.dataset.room); if (m) { m.src = b.dataset.src; document.querySelectorAll('.hthumb[data-room="' + b.dataset.room + '"]').forEach(function (x) { x.classList.toggle('on', x === b); }); } return; }
+    if ((b = t.closest('.hthumb'))) { var m = $(b.dataset.room === 'gal' ? 'hgalmain' : 'hmain_' + b.dataset.room); if (m) { m.src = b.dataset.src; document.querySelectorAll('.hthumb[data-room="' + b.dataset.room + '"]').forEach(function (x) { x.classList.toggle('on', x === b); }); } return; }
     if ((b = t.closest('[data-occ]'))) { keep(); pick[b.dataset.occ] = +b.dataset.n; draw(); return; }
     if ((b = t.closest('[data-add]'))) { addRoom(b.dataset.add); return; }
     if ((b = t.closest('[data-drop]'))) { drop(b.dataset.drop); return; }

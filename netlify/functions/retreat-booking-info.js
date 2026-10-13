@@ -60,7 +60,7 @@ exports.handler = async (event) => {
     if (cfg.house && cfg.house.on) {
       const hav = isPreview ? { open: true, taken: {} } : await H.houseAvailability(key, bk, cfg);
       house = {
-        label: cfg.house.label || 'Casa Master', intro: cfg.house.intro || '', open: hav.open,
+        label: cfg.house.label || 'Casa Master', intro: cfg.house.intro || '', gallery: cfg.house.gallery || [], open: hav.open,
         rooms: (cfg.house.rooms || []).map((r) => ({
           id: r.id, label: r.label, beds: r.beds || '', desc: r.desc || '', images: r.images || [], kind: r.kind, max: H.capacity(r), note: r.note || '',
           soloRate: Number(r.soloRate) || 0, shareRate: Number(r.shareRate) || 0, extraRate: Number(r.extraRate) || 0,
