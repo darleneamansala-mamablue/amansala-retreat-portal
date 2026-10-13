@@ -275,4 +275,25 @@ function json(code, body) {
   return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) };
 }
 
-module.exports = { grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
+// Open dates for the regular rooms (cfg.openDatesRooms): the guest picks check-in / check-out; nights outside the retreat are extra nights at the
+// same rates (all meals included). Returns { checkIn, checkOut, nights, custom } or null when the dates are not allowed.
+function stayRange(cfg, bk, ci, co) {
+  const retreat = { checkIn: bk.start_date, checkOut: bk.end_date, nights: nightsOf(bk), custom: false };
+  if (!cfg.openDatesRooms || !ci || !co) return retreat;
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  if (!re.test(ci) || !re.test(co)) return null;
+  const nights = Math.round((new Date(co + 'T12:00:00') - new Date(ci + 'T12:00:00')) / 86400000);
+  if (!(nights >= 1) || nights > 60) return null;
+  if (ci < new Date().toISOString().slice(0, 10)) return null;
+  return { checkIn: ci, checkOut: co, nights, custom: ci !== bk.start_date || co !== bk.end_date };
+}
+// Take out of the free rooms any room another group / reservation holds on the nights the guest chose
+async function applyStayAvailability(key, bk, av, range) {
+  if (!range || !range.custom) return av;
+  const others = await sget(key, `bookings?id=neq.${encodeURIComponent(bk.id)}&status=neq.cancelled&start_date=lt.${range.checkOut}&end_date=gt.${range.checkIn}&select=blocked_rooms`);
+  const busy = new Set(); others.forEach((o) => (o.blocked_rooms || []).forEach((u) => busy.add(u)));
+  Object.values(av).forEach((x) => { x.free = x.free.filter((u) => !busy.has(u)); });
+  return av;
+}
+
+module.exports = { stayRange, applyStayAvailability, grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
