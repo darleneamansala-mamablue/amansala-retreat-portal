@@ -64,6 +64,7 @@
   function draw() {
     var html = '<div class="section-heading" style="grid-template-columns:1fr;gap:12px"><div><p class="kicker">Your private house</p><h2>' + esc(HOUSE.label) + '</h2></div>' +
       (HOUSE.intro ? '<p style="max-width:720px">' + esc(HOUSE.intro) + '</p>' : '') +
+      (HOUSE.wholeHouseOnly?'<div class="hnote" style="max-width:720px"><b>Casa Master is booked as a whole house.</b> Add every one of the '+HOUSE.rooms.length+' rooms below, with the guests staying in each, to continue to payment. Rooms cannot be booked one at a time.</div>':'')+
       '<p style="max-width:720px;font-size:14px">Choose the bedrooms you need, add the guests for each one, and pay for everything together with one card. Rates are per person, per night. <b>Plus ' + INFO.taxFeePct + '% taxes and fees and $' + INFO.gratuityPerNight + ' gratuity per person, per night</b>, included in the totals below.</p></div>' +
       gallery() +
       '<div class="hgrid"><div>' + HOUSE.rooms.map(roomCard).join('') + '</div><aside class="hcart" id="hcart"></aside></div>';
@@ -140,7 +141,9 @@
         '<button type="button" data-drop="' + c.id + '">Remove</button></div>';
     }).join('') + '<div class="htot"><span>Total · ' + guestCount() + ' guest' + (guestCount() > 1 ? 's' : '') + ' · ' + cart.length + ' room' + (cart.length > 1 ? 's' : '') + '</span><span>' + money(total()) + '</span></div>' +
       (INFO.preview ? '<p style="font-size:12.5px;color:#7a705c;margin:10px 0 0">Preview only: payment is turned off on this page.</p>'
-        : '<button class="hadd" style="margin-top:12px" type="button" data-checkout="1">Continue to payment</button>');
+        : (HOUSE.wholeHouseOnly&&cart.length<HOUSE.rooms.length
+            ? '<button class="hadd" style="margin-top:12px" type="button" disabled>Add all '+HOUSE.rooms.length+' rooms to continue ('+cart.length+' of '+HOUSE.rooms.length+' added)</button><p style="font-size:12.5px;color:#7a705c;margin:8px 0 0">Casa Master is booked as a whole house.</p>'
+            : '<button class="hadd" style="margin-top:12px" type="button" data-checkout="1">Continue to payment</button>'));
     box.innerHTML = h;
   }
 
@@ -151,6 +154,7 @@
     return m;
   }
   function openCheckout() {
+    if (HOUSE.wholeHouseOnly && cart.length < HOUSE.rooms.length) return;
     var dep = INFO.deposit && INFO.deposit.on && INFO.deposit.eligible ? INFO.deposit : null;
     var t = total();
     var sum = cart.map(function (c) { var r = room(c.id); return '<div class="hline"><span>' + esc(r.label) + ' · ' + c.n + ' guest' + (c.n > 1 ? 's' : '') + '</span><span>' + money(opt(r, c.n).total) + '</span></div>'; }).join('');
