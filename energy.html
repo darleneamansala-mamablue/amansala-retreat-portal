@@ -74,7 +74,7 @@ var APPS=[
  {n:'Boutique AC',q:1,kw:2.5,h:12,d:70},
  {n:'AC in the gold room (confirm which room)',q:1,kw:1.0,h:12,d:65},
  {n:'Cold room for food (walk-in)',q:1,kw:2.0,h:24,d:50},
- {n:'Fridges',q:4,kw:0.25,h:24,d:40},
+ {n:'Fridges, kitchen (2.5 A × 220 V × 0.8)',q:4,kw:0.45,h:24,d:40},
  {n:'Freezer',q:1,kw:0.3,h:24,d:40},
  {n:'Espresso machine',q:1,kw:2.0,h:4,d:60},
  {n:'Blenders (bar)',q:1,kw:0.8,h:1,d:100},
@@ -82,7 +82,7 @@ var APPS=[
  {n:'Extractor / hood (kitchen)',q:1,kw:0.5,h:8,d:100},
  {n:'Yoga room speakers (5 shalas)',q:5,kw:0.15,h:6,d:100},
  {n:'Yoga room lights, dimmed (5 shalas)',q:5,kw:0.3,h:5,d:50},
- {n:'Pool pump',q:1,kw:1.5,h:8,d:100},
+ {n:'Pool pump (5 A × 220 V × 0.85)',q:1,kw:0.95,h:8,d:100},
  {n:'Pool lights',q:1,kw:0.3,h:6,d:100},
  {n:'Parking lot lights',q:1,kw:0.5,h:11,d:100},
  {n:'Water pumps / cistern',q:2,kw:1.5,h:3,d:100},
@@ -96,7 +96,7 @@ var APPS=[
  {n:'Ice bath chiller (0 if none)',q:0,kw:1.5,h:12,d:100},
  {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,d:60}
 ];
-var ST_KEY='amansala_energy_v2', BK=[];
+var ST_KEY='amansala_energy_v3', BK=[];
 function $(i){return document.getElementById(i)}
 function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','cost','acKw','acH','acLo','acMid','acHi','casaLiving','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
