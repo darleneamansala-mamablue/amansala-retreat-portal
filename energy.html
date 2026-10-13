@@ -30,7 +30,7 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <p style="margin:0 0 10px"><button class="alt" id="collapseAll">Collapse all</button> <button class="alt" id="expandAll">Expand all</button> <span class="note">Tap a section title to open or close it.</span></p>
 <p class="sub">What the property will consume each day compared with what the generator(s) can supply. Estimates from real bookings plus the editable assumptions below.</p>
 
-<div class="card"><div class="row">
+<div class="card"><div class="row" style="margin-bottom:12px"><button class="alt" id="wPrev">‹ Previous week</button><button class="alt" id="wThis">This week</button><button class="alt" id="wNext">Next week ›</button><button class="alt" id="w4">Last 4 weeks</button><button class="alt" id="wCsv">Download report (CSV)</button><span class="note" id="wLabel"></span></div><div class="row">
 <label>From<input type="date" id="from" value="2026-10-18"></label>
 <label>To (last night)<input type="date" id="to" value="2026-10-24"></label>
 <label>Generators running<span class="chk"><input type="checkbox" id="g1" checked> 100 kVA</span><span class="chk"><input type="checkbox" id="g2" checked> 250 kVA</span></label>
@@ -222,7 +222,7 @@ async function fetchBookings(){
   if(r.error){$('status').textContent='Could not load bookings: '+r.error.message;return}
   BK=(r.data||[]).filter(function(x){return x.start_date&&x.end_date});
   try{var rt=await db.from('room_types').select('id,rooms');(rt.data||[]).forEach(function(t){(t.rooms||[]).forEach(function(n){var k=base(n).toLowerCase();if(!TYPE[k]||/^rt/.test(t.id))TYPE[k]=t.id})})}catch(e){}
-  $('status').textContent=BK.length+' bookings loaded';render();
+  $('status').textContent=BK.length+' bookings loaded';weekLabel();render();
 }
 document.addEventListener('input',function(e){var t=e.target;if(t.dataset&&t.dataset.i!=null){APPS[+t.dataset.i][t.dataset.f]=+t.value||0}if(t.closest&&t.closest('.card')&&t.id!=='from'&&t.id!=='to'){save();render()}});
 document.addEventListener('change',function(e){if(e.target.id==='g1'||e.target.id==='g2'){save();render()}});
@@ -308,6 +308,26 @@ function loadCol(){try{var a=JSON.parse(localStorage.getItem(COL_KEY)||'[]');car
 document.addEventListener('click',function(e){var h=e.target.closest&&e.target.closest('.card>h2');if(!h)return;h.parentNode.classList.toggle('collapsed');saveCol()});
 $('collapseAll').onclick=function(){cards().forEach(function(c){if(c.querySelector(':scope>h2'))c.classList.add('collapsed')});saveCol()};
 $('expandAll').onclick=function(){cards().forEach(function(c){c.classList.remove('collapsed')});saveCol()};
+
+function iso(d){return d.toISOString().slice(0,10)}
+function addDays(str,n){var d=new Date(str+'T12:00:00');d.setDate(d.getDate()+n);return iso(d)}
+function weekStart(str){var d=new Date(str+'T12:00:00');d.setDate(d.getDate()-d.getDay());return iso(d)}   // Sunday
+function setRange(a,b){$('from').value=a;$('to').value=b;save();fetchBookings()}
+function weekLabel(){var a=$('from').value,b=$('to').value;if(!a||!b)return '';var f=function(x){return new Date(x+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};$('wLabel').textContent='Showing '+f(a)+' to '+f(b)+' ('+nightsList(a,b).length+' nights)'}
+$('wPrev').onclick=function(){var a=$('from').value,n=Math.max(1,nightsList($('from').value,$('to').value).length);setRange(addDays(a,-n),addDays(a,-1))};
+$('wNext').onclick=function(){var b=$('to').value,n=Math.max(1,nightsList($('from').value,$('to').value).length);setRange(addDays(b,1),addDays(b,n))};
+$('wThis').onclick=function(){var t=iso(new Date()),a=weekStart(t);setRange(a,addDays(a,6))};
+$('w4').onclick=function(){var t=iso(new Date()),a=weekStart(t);setRange(addDays(a,-21),addDays(a,6))};
+$('wCsv').onclick=function(){
+  var r=LAST||calc(),pr=+$('diesel').value||0,lp=+$('lpk').value||0,fx=+$('fx').value||1;
+  var q=function(v){v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  var lines=[['Night','Rooms in use','AC units on','kWh low','kWh likely','kWh high','Peak kW','Generator capacity kW','Peak % of capacity','Diesel liters','Diesel cost MXN','Diesel cost USD'].join(',')];
+  r.rows.forEach(function(x){lines.push([x.d,x.rooms,x.units,Math.round(x.lo),Math.round(x.mid),Math.round(x.hi),x.peak.toFixed(1),Math.round(x.cap),Math.round(x.pct),Math.round(x.mid*lp),Math.round(x.mid*lp*pr),Math.round(x.mid*lp*pr/fx)].map(q).join(','))});
+  var tot=r.rows.reduce(function(s,x){return s+x.mid},0);
+  lines.push(['TOTAL','','',,Math.round(tot),'','','','',Math.round(tot*lp),Math.round(tot*lp*pr),Math.round(tot*lp*pr/fx)].map(q).join(','));
+  lines.push('');lines.push(['Assumptions','Diesel price MXN per liter '+pr,'Liters per kWh '+lp,'MXN per USD '+fx,'AC kW per unit '+$('acKw').value,'AC hours '+$('acH').value].map(q).join(','));
+  var blob=new Blob([lines.join('\n')],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='energy-report-'+$('from').value+'-to-'+$('to').value+'.csv';document.body.appendChild(a);a.click();a.remove();
+};
 
 var CHAT=[];
 function snapshot(){
