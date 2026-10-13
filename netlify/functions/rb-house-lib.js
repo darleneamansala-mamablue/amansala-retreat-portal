@@ -89,7 +89,22 @@ function priceSelection(cfg, nights, selections) {
 // A house bedroom is bookable when EVERY real room (unit) it maps to is blocked for this retreat, held in Cloudbeds, has no named guest
 // yet, and has not been sold through this page. cfg.house.rooms[i].units = the room names in the room list (e.g. 'Queen Downstairs A').
 // A bedroom without units falls back to the old rule: the whole 'Casa Master' unit is blocked and held for the retreat.
-async function houseAvailability(key, bk, cfg) {
+// Open dates (cfg.house.openDates): the guest picks check-in / check-out; anything outside the retreat dates is an extra night at the same
+// rates (meals included). Returns { checkIn, checkOut, nights, custom } or null when the dates are not valid / not allowed.
+function parseRange(cfg, bk, ci, co) {
+  const house = cfg.house || {};
+  const retreat = { checkIn: bk.start_date, checkOut: bk.end_date, nights: L.nightsOf(bk), custom: false };
+  if (!house.openDates || !ci || !co) return retreat;
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  if (!re.test(ci) || !re.test(co)) return null;
+  const a = new Date(ci + 'T12:00:00'), b = new Date(co + 'T12:00:00');
+  const nights = Math.round((b - a) / 86400000);
+  if (!(nights >= 1) || nights > 60) return null;
+  if (ci < new Date().toISOString().slice(0, 10)) return null;
+  return { checkIn: ci, checkOut: co, nights, custom: ci !== bk.start_date || co !== bk.end_date };
+}
+
+async function houseAvailability(key, bk, cfg, range) {
   const house = cfg.house;
   const out = { open: false, taken: {}, rooms: {} };
   if (!house || !house.on) return out;
@@ -116,6 +131,16 @@ async function houseAvailability(key, bk, cfg) {
     } else { free = blocked.has(unit) && heldOk(unit); reason = free ? '' : 'not in the retreat room list'; }
     out.rooms[r.id] = { free, reason, units };
   });
+  // Open dates: the units must also be free of other retreats / reservations on the nights the guest chose
+  if (range && house.openDates && range.custom) {
+    const others = await L.sget(key, `bookings?id=neq.${encodeURIComponent(bk.id)}&status=neq.cancelled&start_date=lt.${range.checkOut}&end_date=gt.${range.checkIn}&select=blocked_rooms`);
+    const busy = new Set(); others.forEach((o) => (o.blocked_rooms || []).forEach((u) => busy.add(u)));
+    (house.rooms || []).forEach((r) => {
+      const x = out.rooms[r.id]; if (!x || !x.free) return;
+      const clash = (x.units && x.units.length ? x.units : [house.unit || 'Casa Master']).filter((u) => busy.has(u));
+      if (clash.length) { x.free = false; x.reason = 'booked by another group on those dates'; }
+    });
+  }
   // Whole house only (cfg.house.wholeHouseOnly): the house is offered only when EVERY bedroom is available; one missing room hides all
   out.whole = !!house.wholeHouseOnly;
   if (house.wholeHouseOnly && Object.values(out.rooms).some((x) => !x.free)) {
@@ -130,4 +155,4 @@ function missingRooms(cfg, selections) {
   return ((cfg.house && cfg.house.rooms) || []).filter((r) => !have.has(r.id));
 }
 
-module.exports = { missingRooms, HOUSE_ROOMS_KEY, occupancyOptions, capacity, checkSelection, priceRoom, priceSelection, houseAvailability };
+module.exports = { parseRange, missingRooms, HOUSE_ROOMS_KEY, occupancyOptions, capacity, checkSelection, priceRoom, priceSelection, houseAvailability };

@@ -58,14 +58,15 @@ exports.handler = async (event) => {
     // Casa Master (house) bedrooms, each priced for every occupancy it allows (rb-house-lib: the one place house prices are calculated)
     let house = null;
     if (cfg.house && cfg.house.on) {
-      const hav = isPreview ? { open: true, taken: {}, rooms: {} } : await H.houseAvailability(key, bk, cfg);
+      const hr = H.parseRange(cfg, bk, qs.ci, qs.co) || H.parseRange(cfg, bk, '', '');
+      const hav = isPreview ? { open: true, taken: {}, rooms: {} } : await H.houseAvailability(key, bk, cfg, hr);
       house = {
-        label: cfg.house.label || 'Casa Master', intro: cfg.house.intro || '', gallery: cfg.house.gallery || [], wholeHouseOnly: !!cfg.house.wholeHouseOnly, open: !!hav.open,
+        dates: { checkIn: hr.checkIn, checkOut: hr.checkOut, nights: hr.nights, custom: hr.custom, retreatStart: bk.start_date, retreatEnd: bk.end_date, open: !!cfg.house.openDates }, label: cfg.house.label || 'Casa Master', intro: cfg.house.intro || '', gallery: cfg.house.gallery || [], wholeHouseOnly: !!cfg.house.wholeHouseOnly, open: !!hav.open,
         rooms: (cfg.house.rooms || []).map((r) => ({
           id: r.id, label: r.label, beds: r.beds || '', desc: r.desc || '', images: r.images || [], kind: r.kind, max: H.capacity(r), note: r.note || '',
           soloRate: Number(r.soloRate) || 0, shareRate: Number(r.shareRate) || 0, extraRate: Number(r.extraRate) || 0,
           free: isPreview ? true : !!(hav.open && hav.rooms[r.id] && hav.rooms[r.id].free),
-          options: H.occupancyOptions(r).map((n) => ({ n, ...H.priceRoom(cfg, nights, r, n) })),
+          options: H.occupancyOptions(r).map((n) => ({ n, ...H.priceRoom(cfg, hr.nights, r, n) })),
         })),
       };
     }
