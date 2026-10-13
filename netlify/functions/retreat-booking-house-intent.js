@@ -38,8 +38,14 @@ exports.handler = async (event) => {
 
     const av = await H.houseAvailability(key, bk, cfg);
     if (!av.open) return L.json(409, { error: 'Casa Master is not available for this retreat.' });
-    const takenNow = priced.rooms.filter((r) => av.taken[r.id]);
-    if (takenNow.length) return L.json(409, { error: `Sorry, ${takenNow.map((r) => r.label).join(' and ')} ${takenNow.length > 1 ? 'were' : 'was'} just taken. Please choose another room.` });
+    const takenNow = priced.rooms.filter((r) => !(av.rooms[r.id] && av.rooms[r.id].free));
+    if (takenNow.length) return L.json(409, { error: `Sorry, ${takenNow.map((r) => r.label).join(' and ')} ${takenNow.length > 1 ? 'are' : 'is'} no longer available. Please choose another room.` });
+    // confirm with Cloudbeds that each real room is still held (same safety as the single-room checkout)
+    const houseUnits = priced.rooms.flatMap((r) => (av.rooms[r.id] && av.rooms[r.id].units) || []);
+    if (houseUnits.length) {
+      const gone = await L.cbGone(bk, houseUnits);
+      if (gone.length) return L.json(409, { error: 'Sorry, one of those rooms was just taken. Please choose another room.' });
+    }
 
     // Payment plan: pay everything now, or (when the retreat offers it) a percentage now and the balance charged automatically later
     const offer = L.depositOffer(bk, cfg);

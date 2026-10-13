@@ -58,13 +58,13 @@ exports.handler = async (event) => {
     // Casa Master (house) bedrooms, each priced for every occupancy it allows (rb-house-lib: the one place house prices are calculated)
     let house = null;
     if (cfg.house && cfg.house.on) {
-      const hav = isPreview ? { open: true, taken: {} } : await H.houseAvailability(key, bk, cfg);
+      const hav = isPreview ? { open: true, taken: {}, rooms: {} } : await H.houseAvailability(key, bk, cfg);
       house = {
-        label: cfg.house.label || 'Casa Master', intro: cfg.house.intro || '', gallery: cfg.house.gallery || [], open: hav.open,
+        label: cfg.house.label || 'Casa Master', intro: cfg.house.intro || '', gallery: cfg.house.gallery || [], open: !!hav.open,
         rooms: (cfg.house.rooms || []).map((r) => ({
           id: r.id, label: r.label, beds: r.beds || '', desc: r.desc || '', images: r.images || [], kind: r.kind, max: H.capacity(r), note: r.note || '',
           soloRate: Number(r.soloRate) || 0, shareRate: Number(r.shareRate) || 0, extraRate: Number(r.extraRate) || 0,
-          free: hav.open && !hav.taken[r.id],
+          free: isPreview ? true : !!(hav.open && hav.rooms[r.id] && hav.rooms[r.id].free),
           options: H.occupancyOptions(r).map((n) => ({ n, ...H.priceRoom(cfg, nights, r, n) })),
         })),
       };
