@@ -72,7 +72,7 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <label>Running draw, kW per unit (5 A × 220 V × 0.9)<input type="number" id="acKw" step="0.05" value="1.0"></label>
 <label>AC hours per night (9 pm to 9 am = 12)<input type="number" id="acH" value="12"></label>
 <label>AC starts at hour (21 = 9 pm)<input type="number" id="acStart" value="21"></label>
-<label>Guest AC units that stay on 24 hours (right now: 10)<input type="number" id="dayRooms" value="10"></label>
+<label>Other guest AC units on 24 hours (besides the rooms listed below)<input type="number" id="dayRooms" value="0"></label>
 <label>Duty low %<input type="number" id="acLo" value="50"></label>
 <label>Duty likely %<input type="number" id="acMid" value="65"></label>
 <label>Duty high %<input type="number" id="acHi" value="80"></label>
@@ -83,8 +83,12 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <label>Hours lights on per night<input type="number" id="bulbH" value="6"></label>
 <label>Phone / laptop charging per occupied room, watts<input type="number" id="chW" value="60"></label>
 <label>Charging hours per night<input type="number" id="chH" value="10"></label></div>
+<p class="note" style="margin-top:12px"><b>Rooms whose AC stays on 24 hours</b> (one per line; end with * to match every room that starts with that name). Their AC counts for the whole day whenever the room is occupied.</p>
+<textarea id="ac24list" rows="3" style="width:100%;max-width:420px">Shanti*
+3</textarea>
 <p class="note" style="margin-top:12px">AC units per room. One per line as <b>room=units</b>. Every room not listed has 1. Rooms 6 and 32 are not confirmed yet.</p>
-<textarea id="acMap" rows="9" style="width:100%;max-width:420px">11=3
+<textarea id="acMap" rows="9" style="width:100%;max-width:420px">3=2
+11=3
 14B=2
 CH25=2
 CH26=2
@@ -106,7 +110,9 @@ var db=supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGc
 var APPS=[
  {n:'Boutique AC',q:1,kw:2.5,h:12,s:9,d:70},
  {n:'AC in the gold room (confirm which room)',q:1,kw:1.0,h:12,s:9,d:65},
- {n:'AC in the office (1 unit)',q:1,kw:1.0,h:10,s:8,d:65},
+ {n:'AC in the office (1 unit, stays on 24 hours)',q:1,kw:1.0,h:24,s:0,d:65},
+ {n:'AC in the vegetable room (1 unit, 24 hours)',q:1,kw:1.0,h:24,s:0,d:65},
+ {n:'AC in one Casa Master room (24 hours, confirm which room)',q:1,kw:1.0,h:24,s:0,d:65},
  {n:'Cold room for food (walk-in)',q:1,kw:2.0,h:24,s:0,d:50},
  {n:'Fridges, kitchen (2.5 A × 220 V × 0.8)',q:4,kw:0.45,h:24,s:0,d:40},
  {n:'Freezer',q:1,kw:0.3,h:24,s:0,d:40},
@@ -139,9 +145,9 @@ var APPS=[
  {n:'Spa fans (11 am to 5 pm)',q:6,kw:0.07,h:6,s:11,d:100},
  {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,s:9,d:60}
 ];
-var ST_KEY='amansala_energy_v13', BK=[];
+var ST_KEY='amansala_energy_v15', BK=[];
 function $(i){return document.getElementById(i)}
-function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','fx','actualUsd','acKw','acH','acLo','acMid','acHi','casaLiving','dayRooms','acStart','bulbStart','chStart','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
+function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','fx','actualUsd','acKw','acH','acLo','acMid','acHi','casaLiving','dayRooms','ac24list','acStart','bulbStart','chStart','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
 function drawApps(){
   $('apps').tBodies[0].innerHTML=APPS.map(function(a,i){
@@ -166,10 +172,10 @@ function calc(){
     var units=keys.reduce(function(s,r){return s+acOf(r,map)},0)+(casa?liv:0);
     var bW=(+$('bulbW').value||0)/1000,bH=+$('bulbH').value||0,lightPk=0,lightKwh=0;keys.forEach(function(r){var n=bulbsOf(r);lightPk+=n*bW;lightKwh+=n*bW*bH});
     var ch=keys.length*chW*chH+lightKwh,chPk=keys.length*chW+lightPk;
-    var dU=+$('dayRooms').value||0,dH=Math.max(0,24-(+$('acH').value||0));
+    var u24=ac24Units(keys,map),dU=Math.min(units,u24+(+$('dayRooms').value||0)),dH=Math.max(0,24-(+$('acH').value||0));
     var kLo=appKwh*0.85+ch+units*kw*h*lo+dU*kw*dH*lo,kMid=appKwh+ch+units*kw*h*mid+dU*kw*dH*mid,kHi=appKwh*1.2+ch+units*kw*h*hi+dU*kw*dH*hi;
     var peak=Math.max(units*kw+appKw+chPk,dU*kw+appKw+chPk), cap=g.kw, capKwh=cap*24;
-    return {keys:keys.slice().sort(),casa:casa,d:d,rooms:keys.length,units:units,lo:kLo,mid:kMid,hi:kHi,peak:peak,cap:cap,capKwh:capKwh,pct:cap?peak/cap*100:999,epct:capKwh?kMid/capKwh*100:999};
+    return {u24:Math.min(units,u24+(+$('dayRooms').value||0)),keys:keys.slice().sort(),casa:casa,d:d,rooms:keys.length,units:units,lo:kLo,mid:kMid,hi:kHi,peak:peak,cap:cap,capKwh:capKwh,pct:cap?peak/cap*100:999,epct:capKwh?kMid/capKwh*100:999};
   });
   return {rows:rows,g:g,appKwh:appKwh,appKw:appKw};
 }
@@ -181,6 +187,11 @@ var LAST=null, TYPE={};
 var DOUBLE_TYPES={rt6:1,rt7:1,bd1:1,bd2:1};
 function isDouble(key){return !!DOUBLE_TYPES[TYPE[String(key).toLowerCase()]]}
 function acOf(key,map){if(key.indexOf('CASA:')===0)return 1;var m=map[key.toLowerCase()];return m==null?1:m}
+function ac24Units(keys,map){
+  var list=($('ac24list').value||'').split('\n').map(function(l){return l.trim().toLowerCase()}).filter(Boolean),u=0,casa=false;
+  keys.forEach(function(k){var kl=k.replace('CASA:','').toLowerCase();var hit=list.some(function(e){return e.slice(-1)==='*'?kl.indexOf(e.slice(0,-1))===0:kl===e});if(hit){u+=acOf(k,map);if(k.indexOf('CASA:')===0)casa=true}});
+  return u+(casa?(+$('casaLiving').value||0):0);
+}
 function bulbsOf(key){return (+$('bulbs').value||0)+(isDouble(key)?(+$('bulbsDbl').value||0):0)}
 function render(){
   try{$('dieselUsd').textContent=' = '+usdp(+$('diesel').value||0)+' per liter'}catch(e){}
@@ -290,7 +301,7 @@ function H(){
    apps:'<p>This list is everything that uses electricity besides the guest rooms\' AC. For each one: <b>Qty</b> is how many you have, <b>kW each</b> is how much power it draws while running, <b>Hours / day</b> is how long it runs, and <b>Duty %</b> is how much of that time it is actually working (a fridge motor switches on and off, so it is not 100%).</p>'+
     '<p><b>kWh / day</b> is energy per day (qty × kW × hours × duty). <b>Peak kW</b> is its power if it is running at the same moment as everything else. Change any number and the whole page updates. Set Qty to 0 for something you do not have.</p>',
    ac:'<p>The guest-room air conditioners are the biggest use of electricity. We assume each unit draws about <b>'+$('acKw').value+' kW</b> while running (5 amps × 220 volts), stays on for <b>'+$('acH').value+' hours</b> a night (9 pm to 9 am), and its compressor works about <b>'+$('acMid').value+'%</b> of that time. Low and high show the range from '+$('acLo').value+'% to '+$('acHi').value+'%.</p>'+
-    '<p>During the day the guest AC is off, except the units that stay on 24 hours (set in the box, 10 right now). The "AC hours per night" box is the night window, starting at the hour you choose.</p><p>The box lists rooms with more than one AC. A room that is not listed counts as 1 unit. Casa rooms count one per occupied bedroom plus the living room.</p>'+
+    '<p>During the day the guest AC is off, except the rooms listed under "Rooms whose AC stays on 24 hours" (Casa Shanti and room 3 right now). The "AC hours per night" box is the night window, starting at the hour you choose.</p><p>The box lists rooms with more than one AC. A room that is not listed counts as 1 unit. Casa rooms count one per occupied bedroom plus the living room.</p>'+
     '<p><b>Phone and laptop charging</b> adds a small amount for every occupied room.</p>'
   };
 }
@@ -409,7 +420,7 @@ document.addEventListener('click',function(e){var d=e.target.closest&&e.target.c
 
 function hourlyModel(idx){
   var r=LAST;if(!r||!r.rows[idx])return null;var x=r.rows[idx];
-  var kw=+$('acKw').value||0,mid=(+$('acMid').value||0)/100,acH=+$('acH').value||0,acS=+$('acStart').value||0,ac24=Math.min(x.units,+$('dayRooms').value||0);
+  var kw=+$('acKw').value||0,mid=(+$('acMid').value||0)/100,acH=+$('acH').value||0,acS=+$('acStart').value||0,ac24=x.u24||0;
   var bW=(+$('bulbW').value||0)/1000,bH=+$('bulbH').value||0,bS=+$('bulbStart').value||0,chW=(+$('chW').value||0)/1000,chH=+$('chH').value||0,chS=+$('chStart').value||0;
   var bulbs=x.keys.reduce(function(s,k){return s+bulbsOf(k)},0),on=function(H,start,hrs){return hrs>=24||((H-start+48)%24)<hrs};
   var hrs=[];
@@ -462,7 +473,7 @@ function snapshot(){
   var r=LAST||calc(),g=r.g;
   return {range:{from:$('from').value,toLastNight:$('to').value},generators:{kva100:$('g1').checked,kva250:$('g2').checked,selectedKva:g.kva,powerFactor:+$('pf').value,capacityKw:Math.round(g.kw*10)/10,safetyMarginPct:+$('margin').value},
    dieselPricePerLiterMxn:+$('diesel').value,dieselLitersPerKwh:+$('lpk').value,actualDieselPaidUsd:+$('actualUsd').value||null,mxnPerUsd:+$('fx').value,
-   acAssumptions:{kwPerUnit:+$('acKw').value,hoursPerNight:+$('acH').value,dutyLowPct:+$('acLo').value,dutyLikelyPct:+$('acMid').value,dutyHighPct:+$('acHi').value,casaLivingRoomUnits:+$('casaLiving').value,lightBulbsPerRoom:+$('bulbs').value,extraBulbsInDoubleRooms:+$('bulbsDbl').value,wattsPerBulb:+$('bulbW').value,lightHoursPerNight:+$('bulbH').value,meterReadings:METER.slice(-8).map(function(r){var c=mCalc(r);return {time:r.t,generator:r.g,ampsL1:r.a1,ampsL2:r.a2,ampsL3:r.a3,volts:r.v,hz:r.hz,pf:r.pf,realKw:Math.round(c.kw*10)/10,kva:Math.round(c.kva*10)/10,imbalancePct:Math.round(c.imb)}}),acUnitsOn24Hours:+$('dayRooms').value,acStartHour:+$('acStart').value,chargingWattsPerRoom:+$('chW').value,chargingHours:+$('chH').value,acUnitsPerRoomOverrides:$('acMap').value.split('\n').join(', ')},
+   acAssumptions:{kwPerUnit:+$('acKw').value,hoursPerNight:+$('acH').value,dutyLowPct:+$('acLo').value,dutyLikelyPct:+$('acMid').value,dutyHighPct:+$('acHi').value,casaLivingRoomUnits:+$('casaLiving').value,lightBulbsPerRoom:+$('bulbs').value,extraBulbsInDoubleRooms:+$('bulbsDbl').value,wattsPerBulb:+$('bulbW').value,lightHoursPerNight:+$('bulbH').value,meterReadings:METER.slice(-8).map(function(r){var c=mCalc(r);return {time:r.t,generator:r.g,ampsL1:r.a1,ampsL2:r.a2,ampsL3:r.a3,volts:r.v,hz:r.hz,pf:r.pf,realKw:Math.round(c.kw*10)/10,kva:Math.round(c.kva*10)/10,imbalancePct:Math.round(c.imb)}}),acRoomsOn24Hours:$('ac24list').value.split('\n').join(', '),otherAcUnitsOn24Hours:+$('dayRooms').value,acStartHour:+$('acStart').value,chargingWattsPerRoom:+$('chW').value,chargingHours:+$('chH').value,acUnitsPerRoomOverrides:$('acMap').value.split('\n').join(', ')},
    appliances:APPS.map(function(a){return {name:a.n,qty:a.q,kwEach:a.kw,hoursPerDay:a.h,dutyPct:a.d,kwhPerDay:Math.round(a.q*a.kw*a.h*a.d)/100,peakKw:Math.round(a.q*a.kw*10)/10}}),
    applianceTotals:{kwhPerDay:Math.round(r.appKwh*10)/10,peakKw:Math.round(r.appKw*10)/10},
    days:r.rows.map(function(x){return {night:x.d,roomsOccupied:x.rooms,acUnitsOn:x.units,kwhLow:Math.round(x.lo),kwhLikely:Math.round(x.mid),kwhHigh:Math.round(x.hi),peakKw:Math.round(x.peak*10)/10,generatorCapacityKw:Math.round(x.cap),peakPctOfCapacity:Math.round(x.pct),energyPctOfWhatGeneratorCanSupply:Math.round(x.epct*10)/10}})};
