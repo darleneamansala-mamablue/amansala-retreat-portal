@@ -42,6 +42,7 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <div class="helpbar"><button class="alt" data-help="verdict">What does this mean?</button><div class="helpbox" id="help_verdict" hidden></div></div>
 <div class="kpis" id="kpis"></div>
 <div class="helpbox" id="help_tile" hidden style="margin:-6px 0 18px"></div>
+<div class="card" id="costcard"></div>
 <div class="helpbar"><button class="alt" data-help="kpis">What does this mean?</button><div class="helpbox" id="help_kpis" hidden></div></div>
 <div class="card"><h2>Peak power vs generator capacity</h2><div id="chart1"></div><div class="helpbar"><button class="alt" data-help="chart">What does this mean?</button><div class="helpbox" id="help_chart" hidden></div></div></div>
 <div class="card"><h2>Daily energy vs what the generator can supply</h2><div class="tbl" id="daily"></div><div class="helpbox" id="roomsPanel" data-roomsbox="1" hidden></div><div class="helpbar"><button class="alt" data-help="daily">What does this mean?</button><div class="helpbox" id="help_daily" hidden></div></div>
@@ -49,7 +50,8 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 
 <div class="card"><h2>Appliances and loads</h2>
 <p class="note">Typical values, not measurements. Edit any row; set quantity to 0 for anything you don't have. Peak counts every unit running at once.</p>
-<div class="tbl"><table id="apps"><thead><tr><th>Appliance</th><th>Qty</th><th>kW each</th><th>Hours / day</th><th>Duty %</th><th>kWh / day</th><th>Peak kW</th></tr></thead><tbody></tbody></table></div><div class="helpbar"><button class="alt" data-help="apps">What does this mean?</button><div class="helpbox" id="help_apps" hidden></div></div></div>
+<div class="tbl"><table id="apps"><thead><tr><th>Appliance</th><th>Qty</th><th>kW each</th><th>Hours / day</th><th>Duty %</th><th>kWh / day</th><th>Peak kW</th><th></th></tr></thead><tbody></tbody></table></div>
+<div class="card" style="background:#fffaf0;margin:14px 0 0"><b>Add an appliance</b><div class="row" style="margin-top:8px"><label>Name<input id="naName" placeholder="e.g. Laundry dryer" style="width:200px"></label><label>Qty<input type="number" id="naQty" value="1"></label><label>kW each (or leave blank and use amps)<input type="number" step="any" id="naKw" style="width:130px"></label><label>Amps<input type="number" step="any" id="naA"></label><label>Volts<input type="number" id="naV" value="220"></label><label>Hours / day<input type="number" step="any" id="naH" value="4"></label><label>Duty %<input type="number" id="naD" value="100"></label><button id="naAdd">Add</button></div><p class="note" id="naMsg" style="margin-top:6px"></p></div><div class="helpbar"><button class="alt" data-help="apps">What does this mean?</button><div class="helpbox" id="help_apps" hidden></div></div></div>
 
 <div class="card"><h2>Guest AC (220V)</h2><div class="helpbar"><button class="alt" data-help="ac">What does this mean?</button><div class="helpbox" id="help_ac" hidden></div></div><div class="row">
 <label>Running draw, kW per unit (5 A × 220 V × 0.9)<input type="number" id="acKw" step="0.05" value="1.0"></label>
@@ -110,15 +112,16 @@ var APPS=[
  {n:'Water heaters (PLACEHOLDER: tell me how many and the size)',q:4,kw:3,h:2,d:60},
  {n:'Ice machine (confirm amps)',q:1,kw:0.8,h:24,d:50},
  {n:'Ice bath chiller (0 if none)',q:0,kw:1.5,h:12,d:100},
+ {n:'Spa fans (11 am to 5 pm)',q:6,kw:0.07,h:6,d:100},
  {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,d:60}
 ];
-var ST_KEY='amansala_energy_v8', BK=[];
+var ST_KEY='amansala_energy_v9', BK=[];
 function $(i){return document.getElementById(i)}
 function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','acKw','acH','acLo','acMid','acHi','casaLiving','dayRooms','dayH','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
 function drawApps(){
   $('apps').tBodies[0].innerHTML=APPS.map(function(a,i){
-    return '<tr><td>'+a.n+'</td>'+['q','kw','h','d'].map(function(f){return '<td class="in"><input type="number" step="any" data-i="'+i+'" data-f="'+f+'" value="'+a[f]+'"></td>'}).join('')+'<td id="ak'+i+'"></td><td id="ap'+i+'"></td></tr>'}).join('');
+    return '<tr><td>'+a.n+'</td>'+['q','kw','h','d'].map(function(f){return '<td class="in"><input type="number" step="any" data-i="'+i+'" data-f="'+f+'" value="'+a[f]+'"></td>'}).join('')+'<td id="ak'+i+'"></td><td id="ap'+i+'"></td><td><a href="#" data-del="'+i+'" style="color:#8a2b1f;font-size:12px">Remove</a></td></tr>'}).join('');
 }
 function base(r){
   if(/^(Casa|Queen Down|Upstairs Ind|Shanti)/i.test(r))return 'CASA:'+r;
@@ -166,6 +169,16 @@ function render(){
    rows.map(function(x,i){var dt=new Date(x.d+'T12:00:00');return '<tr><td>'+dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</td><td><a href="#" data-rooms="'+i+'" style="color:var(--moss);text-decoration:underline">'+x.rooms+' rooms</a></td><td>'+x.units+'</td><td>'+fmt(x.lo)+'</td><td><b>'+fmt(x.mid)+'</b></td><td>'+fmt(x.hi)+'</td><td>'+fmt(x.peak)+'</td><td>'+fmt(x.capKwh)+'</td><td>'+Math.round(x.epct)+'%</td><td>'+Math.round(x.pct)+'% '+tag(x.pct)+'</td><td>'+fmt(x.mid*lpk)+'</td><td>$'+fmt(x.mid*cost)+'</td></tr>'}).join('')+'</tbody></table>';
   chart(rows,g);
   verdict(rows);
+  (function(){
+    var pr=+$('diesel').value||0,lp=+$('lpk').value||0,lit=tot*lp,peso=lit*pr,days=rows.length;
+    $('costcard').innerHTML='<h2>Diesel cost for these '+days+' days</h2><div class="kpis" style="margin:0">'+
+     '<div class="kpi"><b>$'+pr.toFixed(2)+' MXN</b><span>Diesel price per liter in use (change it at the top)</span></div>'+
+     '<div class="kpi"><b>'+fmt(lit)+' liters</b><span>Diesel needed ('+lp+' liters per kWh × '+fmt(tot)+' kWh)</span></div>'+
+     '<div class="kpi"><b>$'+fmt(peso)+' MXN</b><span>Total cost in pesos for the '+days+' days</span></div>'+
+     '<div class="kpi"><b>$'+fmt(days?peso/days:0)+' MXN</b><span>Average cost per day</span></div>'+
+     '<div class="kpi"><b>$'+(pr*lp).toFixed(2)+' MXN</b><span>Cost of each kWh ('+lp+' L × $'+pr.toFixed(2)+')</span></div></div>'+
+     '<p class="note" style="margin-top:10px">Range for the diesel: '+fmt(totLo*lp)+' to '+fmt(totHi*lp)+' liters, or $'+fmt(totLo*lp*pr)+' to $'+fmt(totHi*lp*pr)+' MXN.</p>';
+  })();
 }
 function verdict(rows){
   var pf=+$('pf').value||0.8,mg=1+(+$('margin').value||0)/100,worst=rows.reduce(function(m,x){return x.peak>m.peak?x:m},rows[0]);
@@ -272,6 +285,18 @@ document.addEventListener('change',function(e){if(e.target.className==='roomNigh
 
 document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('[data-rooms]');if(!a)return;e.preventDefault();var p=$('roomsPanel');p.innerHTML=roomsHtml(+a.dataset.rooms)+'<p><a href="#" id="roomsClose">Close</a></p>';p.hidden=false;p.scrollIntoView({behavior:'smooth',block:'nearest'})});
 document.addEventListener('click',function(e){if(e.target.id==='roomsClose'){e.preventDefault();$('roomsPanel').hidden=true}});
+document.addEventListener('click',function(e){var d=e.target.closest&&e.target.closest('[data-del]');if(!d)return;e.preventDefault();var i=+d.dataset.del;if(confirm('Remove "'+APPS[i].n+'" from the list?')){APPS.splice(i,1);save();drawApps();render()}});
+$('naAdd').onclick=function(){
+  var n=$('naName').value.trim(),q=+$('naQty').value,kw=+$('naKw').value,A=+$('naA').value,V=+$('naV').value||220,h=+$('naH').value,d=+$('naD').value;
+  if(!n){$('naMsg').textContent='Please type the name of the appliance.';return}
+  if(!(kw>0)&&A>0)kw=Math.round(V*A*0.85)/1000;
+  if(!(kw>0)){$('naMsg').textContent='Please give either kW or amps (and volts).';return}
+  if(!(q>=0)||!(h>=0)||!(d>=0)){$('naMsg').textContent='Quantity, hours and duty must be numbers.';return}
+  APPS.push({n:n,q:q,kw:kw,h:h,d:d||100});save();drawApps();render();
+  $('naMsg').textContent='Added "'+n+'": '+q+' × '+kw+' kW, '+h+' h/day. The page is updated.';
+  $('naName').value='';$('naKw').value='';$('naA').value='';
+};
+
 var CHAT=[];
 function snapshot(){
   var r=LAST||calc(),g=r.g;
