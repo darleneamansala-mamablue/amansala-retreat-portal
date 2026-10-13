@@ -63,7 +63,7 @@
   function kidToggle(id, i) { var t = $('ht_' + id + '_' + i), a = $('ha_' + id + '_' + i); if (!t || !a) return; a.disabled = t.value !== 'child'; if (a.disabled) a.value = ''; }
 
   function dateBar() {
-    var d = HOUSE.dates; if (!d || !d.open) return '';
+    var d = HOUSE.dates; if (!d || !d.open || INFO.datesOpen) return '';
     var today = new Date().toISOString().slice(0, 10);
     return '<div class="hdates"><div class="row2"><label>Check-in<input type="date" id="hCi" min="' + today + '" value="' + esc(d.checkIn) + '"></label><label>Check-out<input type="date" id="hCo" min="' + today + '" value="' + esc(d.checkOut) + '"></label>' +
       '<div class="hdn"><b>' + d.nights + ' night' + (d.nights > 1 ? 's' : '') + '</b><span>' + (d.custom ? 'Your dates differ from the retreat (' + esc(d.retreatStart) + ' to ' + esc(d.retreatEnd) + ').' : 'The retreat dates. Change them to add nights before or after.') + '</span></div></div>' +

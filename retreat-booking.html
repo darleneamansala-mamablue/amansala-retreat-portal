@@ -170,7 +170,7 @@ td.p strong{font-size:28px}
   <section class="banner" id="bannerWrap" hidden><img id="bannerImg" alt=""></section>
   <section class="titlebar" id="titleBar" hidden><h1 id="titleTxt"></h1></section>
   <div class="booking-shell"><div class="booking-bar">
-    <div class="field"><span>Dates</span><b id="datesTxt"></b><small id="nightsTxt"></small></div>
+    <div class="field"><span>Dates</span><b id="datesTxt"></b><div id="datePick" hidden style="display:none;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:8px 0 2px"><label style="display:flex;flex-direction:column;font-size:12px;gap:3px">Check-in<input type="date" id="pCi" style="padding:8px 10px;border:1px solid var(--line);background:#fff;font:inherit;font-size:14px"></label><label style="display:flex;flex-direction:column;font-size:12px;gap:3px">Check-out<input type="date" id="pCo" style="padding:8px 10px;border:1px solid var(--line);background:#fff;font:inherit;font-size:14px"></label></div><small id="datePickMsg" style="display:block;color:#8a2b1f"></small><small id="nightsTxt"></small></div>
     <a class="go-bar" href="#rooms">Choose your room <span>&darr;</span></a>
   </div></div>
   
@@ -301,6 +301,7 @@ function init(){
     else{$('titleTxt').textContent=INFO.title||'Your retreat';$('titleBar').hidden=false}
     var ds=INFO.template?'Your retreat dates':fmtD(INFO.startDate)+' – '+fmtD(INFO.endDate);
     $('datesTxt').textContent=ds;$('lockDates').textContent=ds;$('nightsTxt').textContent=INFO.template?'Dates are set for each retreat':(INFO.datesNote||'');
+    setupDatePick();
     if(INFO.preview){var rb=document.createElement('div');rb.className='preview-ribbon';rb.textContent=INFO.template?'Template preview · payment is turned off':'Preview · not open for booking yet · payment is turned off';document.body.insertBefore(rb,document.body.firstChild)}
     $('inclList').innerHTML=(INFO.includes||[]).map(function(i){return '<li>'+esc(i)+'</li>'}).join('');
     $('notIncl').textContent=INFO.notIncluded||'';$('notIncl').hidden=!INFO.notIncluded;
@@ -482,7 +483,7 @@ function others(){return [].map.call(document.querySelectorAll('.othbox'),functi
 function startPayment(){
   if(INFO.preview){say('Preview only: payment is turned off on this page.');return}
   var c=roomCalc(cart.room);
-  var body={bookingId:BK,cart:{room:{rtId:cart.room.rtId,mode:cart.room.mode,beds:cart.room.beds},services:Object.keys(cart.svcs).map(function(k){return {id:k,m:cart.svcs[k].m,q:cart.svcs[k].q}})},
+  var body={bookingId:BK,dates:INFO.datesOpen?{checkIn:INFO.startDate,checkOut:INFO.endDate}:null,cart:{room:{rtId:cart.room.rtId,mode:cart.room.mode,beds:cart.room.beds},services:Object.keys(cart.svcs).map(function(k){return {id:k,m:cart.svcs[k].m,q:cart.svcs[k].q}})},
     guest:{name:$('fName').value.trim(),email:$('fEmail').value.trim(),phone:$('fPhone').value.trim(),others:others()},
     plan:planChoice(),
     acks:{cancellation:$('cancelOk').checked,roommate:ackRoommate,shareChoice:shareNeeded()?shareChoice():'',friendName:shareNeeded()&&shareChoice()==='friend'?$('friendName').value.trim():'',leader:isLeader(),balanceAuth:planChoice()==='deposit'&&$('balanceAuth').checked}};
@@ -499,8 +500,36 @@ function startPayment(){
      window._rbAmount=x.j.amount;window._rbRecord=x.j.recordUrl||'';window._rbBalance=x.j.plan==='deposit'?{amt:x.j.balance,date:x.j.balanceDate}:null;window._rbLeaderMsg=(x.j.leaderPlacement?leaderMsg(roomOf(cart.room.rtId),roomCalc(cart.room).guests):'');
    }).catch(function(){$('err').textContent='Connection problem. Please try again.';$('go').disabled=false});
 }
+
+var DATES={ci:'',co:''};
+function isoDay(s){return s}
+function setupDatePick(){
+  var box=$('datePick');if(!box)return;
+  if(!INFO||!INFO.datesOpen||INFO.template){box.style.display='none';box.hidden=true;return}
+  DATES.ci=INFO.startDate;DATES.co=INFO.endDate;
+  box.hidden=false;box.style.display='flex';
+  var today=new Date().toISOString().slice(0,10);
+  $('pCi').min=today;$('pCo').min=today;$('pCi').value=INFO.startDate;$('pCo').value=INFO.endDate;
+  var n=INFO.nights;$('nightsTxt').textContent=n+' night'+(n>1?'s':'')+(INFO.datesCustom?' · your dates differ from the retreat ('+fmtD(INFO.retreatStart)+' – '+fmtD(INFO.retreatEnd)+'). Extra nights include all meals.':' · the retreat dates. Change them to add nights before or after. Extra nights include all meals.');
+}
+function applyDates(){
+  var ci=$('pCi').value,co=$('pCo').value,msg=$('datePickMsg');
+  if(!ci||!co)return;
+  if(co<=ci){msg.textContent='Check-out must be after check-in.';return}
+  msg.textContent='';
+  fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)+REVIEW+'&ci='+encodeURIComponent(ci)+'&co='+encodeURIComponent(co)).then(function(r){return r.json()}).then(function(j){
+    if(!j||!j.rooms){msg.textContent='Those dates are not available.';return}
+    var prevRoom=cart.room;INFO=j;INFO.services.forEach(function(s){if(!svcSel[s.id])svcSel[s.id]=s.opts[0].m});
+    var ds=fmtD(INFO.startDate)+' – '+fmtD(INFO.endDate);$('datesTxt').textContent=ds;$('lockDates').textContent=ds;
+    var still=prevRoom&&INFO.rooms.some(function(r){return r.rtId===prevRoom.rtId&&r.free>0});if(!still)cart.room=null;
+    render();setupDatePick();if(window.rbHouse)window.rbHouse.init(INFO);
+    if(prevRoom&&!still)say('That room is not available on those dates, so it was removed from your cart.');
+  }).catch(function(){msg.textContent='Connection problem. Please try again.'});
+}
+document.addEventListener('change',function(e){if(e.target&&(e.target.id==='pCi'||e.target.id==='pCo'))applyDates()});
+
 function init2(){ // refresh availability after a "just taken" message
-  fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)+REVIEW).then(function(r){return r.json()}).then(function(j){if(j&&j.rooms){INFO=j;INFO.services.forEach(function(s){if(!svcSel[s.id])svcSel[s.id]=s.opts[0].m});cart.room=null;render()}});
+  fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)+REVIEW+(INFO&&INFO.datesOpen?'&ci='+encodeURIComponent(INFO.startDate)+'&co='+encodeURIComponent(INFO.endDate):'')).then(function(r){return r.json()}).then(function(j){if(j&&j.rooms){INFO=j;INFO.services.forEach(function(s){if(!svcSel[s.id])svcSel[s.id]=s.opts[0].m});cart.room=null;render()}});
 }
 function confirmPay(){
   $('pay').disabled=true;$('payerr').textContent='';

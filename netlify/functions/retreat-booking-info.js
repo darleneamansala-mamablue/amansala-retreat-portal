@@ -25,8 +25,9 @@ exports.handler = async (event) => {
       ({ bk, cfg } = found);
       if (bk.status === 'cancelled') return L.json(404, { notOpen: true, error: 'This booking page is not open.' });
     }
-    const nights = L.nightsOf(bk);
-    const av = isPreview ? null : await L.availability(key, bk, cfg);
+    const range = L.stayRange(cfg, bk, qs.ci, qs.co) || L.stayRange(cfg, bk, '', '');
+    const nights = range.nights;
+    const av = isPreview ? null : await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg), range);
     const rooms = (cfg.rooms || []).map((rm) => {
       const freeList = isPreview ? [] : (av[rm.rtId] || { free: [] }).free;
       const freeChica = isPreview ? 9 : freeList.filter(L.isChica).length;      // for guests who tick "I am a leader" (placed at Chica)
@@ -78,8 +79,12 @@ exports.handler = async (event) => {
       slug: isTemplate ? '' : String(cfg.slug || ''),
       bookingId: bk.id,
       title: cfg.title || bk.retreat_name || bk.leader_name,
-      startDate: bk.start_date,
-      endDate: bk.end_date,
+      startDate: range.checkIn,
+      endDate: range.checkOut,
+      retreatStart: bk.start_date,
+      retreatEnd: bk.end_date,
+      datesOpen: !!cfg.openDatesRooms,
+      datesCustom: range.custom,
       nights,
       bannerUrl: cfg.bannerUrl || '',
       intro: cfg.intro || '',

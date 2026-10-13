@@ -29,7 +29,9 @@ exports.handler = async (event) => {
     const found = await L.loadRetreat(key, bookingId);
     if (!found || !found.cfg || !found.cfg.enabled || found.bk.status === 'cancelled') return L.json(404, { error: 'This booking page is not open.' });
     const { bk, cfg } = found;
-    const nights = L.nightsOf(bk);
+    const range = L.stayRange(cfg, bk, body.dates && body.dates.checkIn, body.dates && body.dates.checkOut);
+    if (!range) return L.json(400, { error: 'Please choose valid check-in and check-out dates (check-out after check-in, not in the past).' });
+    const nights = range.nights;
     const rm = (cfg.rooms || []).find((r) => r.rtId === cart.room.rtId);
     if (!rm) return L.json(400, { error: 'That room is not available.' });
 
@@ -57,7 +59,7 @@ exports.handler = async (event) => {
       if (shareChoice === 'alone' && acks.roommate !== true) return L.json(400, { error: 'Please read and agree to the roommate terms.' });
     }
 
-    const av = await L.availability(key, bk, cfg);
+    const av = await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg), range);
     const isLeader = acks.leader === true;
     // Pick the room(s) the guest would get (leaders: Chica, else Grande; others: Grande first), then confirm with Cloudbeds that
     // each is still held. A room Cloudbeds says is gone is dropped and the next one is tried.
@@ -93,7 +95,7 @@ exports.handler = async (event) => {
       amount: String(amountCents),
       currency: 'usd',
       receipt_email: email,
-      description: `Amansala Tulum · ${(cfg.title || bk.retreat_name || bk.leader_name || 'Retreat').slice(0, 80)} · ${roomLine.name}${plan === 'deposit' ? ' · 50% now' : ''} · ${bk.start_date} – ${bk.end_date}`.slice(0, 500),
+      description: `Amansala Tulum · ${(cfg.title || bk.retreat_name || bk.leader_name || 'Retreat').slice(0, 80)} · ${roomLine.name}${plan === 'deposit' ? ' · 50% now' : ''} · ${range.checkIn} – ${range.checkOut}`.slice(0, 500),
       'metadata[source]': 'retreat_booking',
       'metadata[rbBookingId]': bk.id,
       'metadata[rbRoom]': JSON.stringify({ rtId: rm.rtId, mode: cart.room.mode || '', beds: priced.guests }).slice(0, 400),
@@ -106,6 +108,7 @@ exports.handler = async (event) => {
       'metadata[rbAck]': `cancel=1${shareChoice === 'alone' && acks.roommate === true ? ';roommate=1' : ''}${isLeader ? ';leader=1' : ''}${plan === 'deposit' ? ';balanceauth=1' : ''}`,
       'metadata[rbTotal]': String(priced.total),
       'metadata[rbPlan]': plan,
+      'metadata[rbDates]': `${range.checkIn}_${range.checkOut}`,
     };
     if (plan === 'deposit') {
       // a Stripe customer + saving the card for later charges (off session), with the guest's explicit authorization
@@ -133,7 +136,7 @@ exports.handler = async (event) => {
       await L.appStoreSet(key, 'rbconsent:' + pi.id, {
         v: 1, piId: pi.id, createdAt: now, status: 'awaiting_payment',
         ip: L.clientIp(event), userAgent: String(h['user-agent'] || '').slice(0, 300),
-        retreat: cfg.title || bk.retreat_name || bk.leader_name, startDate: bk.start_date, endDate: bk.end_date, nights,
+        retreat: cfg.title || bk.retreat_name || bk.leader_name, startDate: range.checkIn, endDate: range.checkOut, nights, stay: range,
         guest: { name, email, phone, others }, leader: isLeader, placementNotice: leaderPlacement === 'grande' ? 'Chica was out of this room type: leader placed at Grande' : '',
         lines: priced.lines, total: priced.total, plan, dueNow, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null,
         policy: cfg.policy || L.DEFAULT_POLICY, agreements, included: cfg.includes || [], notIncluded: cfg.notIncluded || '',
