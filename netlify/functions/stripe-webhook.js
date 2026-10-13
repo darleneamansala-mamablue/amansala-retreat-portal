@@ -164,6 +164,13 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ received: true, retreatBooking: true }) };
     }
 
+    // Casa Master (house) bookings from the same page are fulfilled by rb-fulfil-house.js
+    if (meta.source === 'retreat_booking_house') {
+      try { await require('./rb-fulfil-house').fulfil(pi); }
+      catch (err) { console.error('[stripe-webhook] house booking fulfil error:', err.message); }
+      return { statusCode: 200, body: JSON.stringify({ received: true, retreatBookingHouse: true }) };
+    }
+
     if (!meta.email || !meta.checkIn || !meta.checkOut) {
       console.warn('[stripe-webhook] Missing metadata on PI:', pi.id);
       return { statusCode: 200, body: JSON.stringify({ received: true }) };
