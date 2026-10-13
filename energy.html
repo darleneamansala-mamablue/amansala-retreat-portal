@@ -226,7 +226,7 @@ async function fetchBookings(){
 }
 document.addEventListener('input',function(e){var t=e.target;if(t.dataset&&t.dataset.i!=null){APPS[+t.dataset.i][t.dataset.f]=+t.value||0}if(t.closest&&t.closest('.card')&&t.id!=='from'&&t.id!=='to'){save();render()}});
 document.addEventListener('change',function(e){if(e.target.id==='g1'||e.target.id==='g2'){save();render()}});
-$('go').onclick=function(){save();fetchBookings()};
+$('go').onclick=function(){save();dateChanged()};
 
 function H(){
   var r=LAST||calc(),rows=r.rows,g=r.g,pf=+$('pf').value||0.8,mg=1+(+$('margin').value||0)/100;
@@ -328,6 +328,14 @@ $('wCsv').onclick=function(){
   lines.push('');lines.push(['Assumptions','Diesel price MXN per liter '+pr,'Liters per kWh '+lp,'MXN per USD '+fx,'AC kW per unit '+$('acKw').value,'AC hours '+$('acH').value].map(q).join(','));
   var blob=new Blob([lines.join('\n')],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='energy-report-'+$('from').value+'-to-'+$('to').value+'.csv';document.body.appendChild(a);a.click();a.remove();
 };
+
+function dateChanged(){
+  var a=$('from').value,b=$('to').value;
+  if(!a||!b)return;
+  if(b<a){$('status').textContent='The last night must be on or after the first night.';return}
+  fetchBookings();
+}
+$('from').addEventListener('change',dateChanged);$('to').addEventListener('change',dateChanged);
 
 var CHAT=[];
 function snapshot(){
