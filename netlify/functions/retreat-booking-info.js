@@ -35,7 +35,7 @@ exports.handler = async (event) => {
       const nightly = { rateShare: rm.kind === 'single' ? null : Number(rm.shareRate) || null, rateSolo: rm.kind === 'twin' ? null : Number(rm.soloRate) || null };
       if (rm.kind === 'house') {
         const h = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'house' } });
-        return { ...base, houseRate: Number(rm.houseRate) || 0, houseGuests: Number(rm.houseGuests) || 0, breakdown: rm.breakdown || [], houseTotal: h.lines[0].amount, soloPerPerson: h.lines[0].amount };
+        return { ...base, houseRate: Number(rm.houseRate) || 0, houseGuests: Number(rm.houseGuests) || 0, breakdown: rm.breakdown || [], gallery: rm.gallery || [], houseTotal: h.lines[0].amount, soloPerPerson: h.lines[0].amount };
       }
       if (rm.kind === 'king') {
         const share = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'share' } });
