@@ -109,7 +109,14 @@ function priceCart(cfg, nights, cart) {
     const rm = (cfg.rooms || []).find((r) => r.rtId === cart.room.rtId);
     if (!rm) throw new Error('Room type not available');
     let rate, n;
-    if (rm.kind === 'king') {
+    if (rm.kind === 'king' && cart.room.mode === 'trio' && Number(rm.extraGuestRate) > 0) {
+      // King bed plus an individual bed: two guests at the shared rate, the third guest at the extra-guest rate
+      const pp = (r) => Math.round(((r * nights + teach) * (1 + taxFee) + grat * nights) * 100) / 100;
+      const amount = Math.round((pp(Number(rm.shareRate)) * 2 + pp(Number(rm.extraGuestRate))) * 100) / 100;
+      lines.push({ type: 'room', rtId: rm.rtId, name: rm.label, guests: 3, perPerson: Math.round(amount / 3 * 100) / 100, amount });
+      total += amount;
+      guests = 3;
+    } else if (rm.kind === 'king') {
       if (cart.room.mode === 'share') { rate = Number(rm.shareRate); n = 2; }
       else { rate = Number(rm.soloRate); n = 1; }
     } else if (rm.kind === 'twin') {
@@ -118,11 +125,13 @@ function priceCart(cfg, nights, cart) {
     } else { // single, private only
       rate = Number(rm.soloRate); n = 1;
     }
-    if (!(rate > 0)) throw new Error('This room option is not priced');
-    const perPerson = Math.round(((rate * nights + teach) * (1 + taxFee) + grat * nights) * 100) / 100;
-    lines.push({ type: 'room', rtId: rm.rtId, name: rm.label, guests: n, perPerson, amount: Math.round(perPerson * n * 100) / 100 });
-    total += perPerson * n;
-    guests = n;
+    if (guests !== 3) {
+      if (!(rate > 0)) throw new Error('This room option is not priced');
+      const perPerson = Math.round(((rate * nights + teach) * (1 + taxFee) + grat * nights) * 100) / 100;
+      lines.push({ type: 'room', rtId: rm.rtId, name: rm.label, guests: n, perPerson, amount: Math.round(perPerson * n * 100) / 100 });
+      total += perPerson * n;
+      guests = n;
+    }
   }
   (cart.services || []).forEach((it) => {
     const sv = (cfg.services || []).find((s) => s.id === it.id);
