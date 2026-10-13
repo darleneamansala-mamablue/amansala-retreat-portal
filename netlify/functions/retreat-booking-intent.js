@@ -62,12 +62,13 @@ exports.handler = async (event) => {
     // Pick the room(s) the guest would get (leaders: Chica, else Grande; others: Grande first), then confirm with Cloudbeds that
     // each is still held. A room Cloudbeds says is gone is dropped and the next one is tried.
     let freeList = (av[rm.rtId] || { free: [] }).free.slice();
-    let choice = L.chooseUnits(freeList, needed, isLeader);
+    const gOnly = L.grandeOnly(rm);
+    let choice = L.chooseUnits(freeList, needed, isLeader, gOnly);
     for (let tries = 0; tries < 4 && choice.units; tries++) {
       const gone = await L.cbGone(bk, choice.units);
       if (!gone.length) break;
       freeList = freeList.filter((u) => !gone.includes(u));
-      choice = L.chooseUnits(freeList, needed, isLeader);
+      choice = L.chooseUnits(freeList, needed, isLeader, gOnly);
     }
     if (!choice.units) return L.json(409, { error: isLeader ? 'Sorry, that room type is sold out. Please choose another room type.' : 'Sorry, that room was just taken. Please choose another option.' });
     const leaderPlacement = isLeader ? choice.property.toLowerCase() : null;

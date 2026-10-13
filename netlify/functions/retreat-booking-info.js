@@ -29,9 +29,9 @@ exports.handler = async (event) => {
     const av = isPreview ? null : await L.availability(key, bk, cfg);
     const rooms = (cfg.rooms || []).map((rm) => {
       const freeList = isPreview ? [] : (av[rm.rtId] || { free: [] }).free;
-      const free = isPreview ? 9 : freeList.length;
       const freeChica = isPreview ? 9 : freeList.filter(L.isChica).length;      // for guests who tick "I am a leader" (placed at Chica)
       const freeGrande = isPreview ? 9 : freeList.filter(L.isGrande).length;    // leader fallback when Chica is out of this room type
+      const free = isPreview ? 9 : (L.grandeOnly(rm) ? freeGrande : freeList.length);   // what a regular guest can book (Beachfront: Grande rooms only)
       const base = { rtId: rm.rtId, kind: rm.kind, label: rm.label, desc: rm.desc || '', imageUrl: rm.imageUrl || '', tags: rm.tags || [], free, freeChica, freeGrande };
       const nightly = { rateShare: rm.kind === 'single' ? null : Number(rm.shareRate) || null, rateSolo: rm.kind === 'twin' ? null : Number(rm.soloRate) || null };
       if (rm.kind === 'house') {
