@@ -21,11 +21,13 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}.kpi{background:var(--paper);border:1px solid var(--line);padding:14px}.kpi[data-tile]{cursor:pointer}.kpi[data-tile]:hover{border-color:var(--moss)}.kpi[data-tile].on{border-color:#c9972b;background:#fffaf0}.kpi[data-tile]::after{content:'What does this mean? \203A';display:block;margin-top:6px;font-size:12px;color:#8a6a1f}.kpi b{display:block;font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:500;line-height:1.1}.kpi span{font-size:12.5px;color:var(--muted)}.kpi .tag{color:#fff;font-size:12px;margin-left:6px}
 .note{font-size:12.5px;color:var(--muted)}.tbl{overflow-x:auto}svg text{font-family:'DM Sans',sans-serif}
 .helpbar{margin:0 0 18px}.card .helpbar{margin:14px 0 0}.helpbox{background:#fffaf0;border-left:3px solid #c9972b;padding:12px 14px;margin-top:10px;font-size:14.5px;line-height:1.6}.helpbox p{margin:0 0 8px}.helpbox b{font-weight:600}
+.card>h2{cursor:pointer;user-select:none}.card>h2::after{content:'\25BE';float:right;font-size:18px;color:#8a6a1f}.card.collapsed>h2::after{content:'\25B8'}.card.collapsed>*:not(h2){display:none!important}
 .chk{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--ink)}
 </style>
 </head>
 <body><div class="wrap">
 <h1>Energy vs Generator</h1>
+<p style="margin:0 0 10px"><button class="alt" id="collapseAll">Collapse all</button> <button class="alt" id="expandAll">Expand all</button> <span class="note">Tap a section title to open or close it.</span></p>
 <p class="sub">What the property will consume each day compared with what the generator(s) can supply. Estimates from real bookings plus the editable assumptions below.</p>
 
 <div class="card"><div class="row">
@@ -36,6 +38,7 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <label>Safety margin for start-up surges %<input type="number" id="margin" value="25"></label>
 <label>Diesel price per liter, MXN (the price we actually pay)<input type="number" id="diesel" step="0.01" value="32" style="width:130px"></label>
 <label>Diesel liters per kWh<input type="number" id="lpk" step="0.01" value="0.30"></label>
+<label>Exchange rate, pesos per US dollar<input type="number" id="fx" step="0.01" value="18.50" style="width:110px"></label>
 <button id="go">Update</button><span class="note" id="status"></span></div></div>
 
 <div class="card" id="verdict"></div>
@@ -115,9 +118,9 @@ var APPS=[
  {n:'Spa fans (11 am to 5 pm)',q:6,kw:0.07,h:6,d:100},
  {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,d:60}
 ];
-var ST_KEY='amansala_energy_v9', BK=[];
+var ST_KEY='amansala_energy_v10', BK=[];
 function $(i){return document.getElementById(i)}
-function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','acKw','acH','acLo','acMid','acHi','casaLiving','dayRooms','dayH','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
+function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','fx','acKw','acH','acLo','acMid','acHi','casaLiving','dayRooms','dayH','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
 function drawApps(){
   $('apps').tBodies[0].innerHTML=APPS.map(function(a,i){
@@ -150,6 +153,7 @@ function calc(){
   return {rows:rows,g:g,appKwh:appKwh,appKw:appKw};
 }
 function tag(p){return p<60?'<span class="tag ok">OK</span>':p<=85?'<span class="tag watch">Watch</span>':'<span class="tag over">Over</span>'}
+function usd(mxn){var f=+$('fx').value||0;return f?'$'+Math.round(mxn/f).toLocaleString('en-US')+' USD':''}
 function fmt(n){return Math.round(n).toLocaleString('en-US')}
 var LAST=null, TYPE={};
 var DOUBLE_TYPES={rt6:1,rt7:1,bd1:1,bd2:1};
@@ -164,9 +168,9 @@ function render(){
    '<div class="kpi" data-tile="peak"><b>'+fmt(maxPeak.peak)+' kW</b><span>Highest peak, '+maxPeak.d+'</span></div>'+
    '<div class="kpi" data-tile="cap"><b>'+fmt(g.kw)+' kW</b><span>Generator capacity ('+g.kva+' kVA × PF '+$('pf').value+')</span></div>'+
    '<div class="kpi" data-tile="load"><b>'+(g.kw?Math.round(maxPeak.peak/g.kw*100)+'%':'no generator')+'</b><span>Peak load vs capacity '+(g.kw?tag(maxPeak.pct):'')+'</span></div>'+
-   '<div class="kpi" data-tile="cost"><b>$'+fmt(tot*cost)+' MXN</b><span>Diesel: about '+fmt(tot*lpk)+' liters at $'+diesel.toFixed(2)+' per liter</span></div>';
-  $('daily').innerHTML='<table><thead><tr><th>Night</th><th>Rooms</th><th>AC units</th><th>kWh low</th><th>kWh likely</th><th>kWh high</th><th>Peak kW</th><th>Gen can supply kWh</th><th>Energy used</th><th>Peak vs capacity</th><th>Diesel liters</th><th>Diesel cost MXN</th></tr></thead><tbody>'+
-   rows.map(function(x,i){var dt=new Date(x.d+'T12:00:00');return '<tr><td>'+dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</td><td><a href="#" data-rooms="'+i+'" style="color:var(--moss);text-decoration:underline">'+x.rooms+' rooms</a></td><td>'+x.units+'</td><td>'+fmt(x.lo)+'</td><td><b>'+fmt(x.mid)+'</b></td><td>'+fmt(x.hi)+'</td><td>'+fmt(x.peak)+'</td><td>'+fmt(x.capKwh)+'</td><td>'+Math.round(x.epct)+'%</td><td>'+Math.round(x.pct)+'% '+tag(x.pct)+'</td><td>'+fmt(x.mid*lpk)+'</td><td>$'+fmt(x.mid*cost)+'</td></tr>'}).join('')+'</tbody></table>';
+   '<div class="kpi" data-tile="cost"><b>$'+fmt(tot*cost)+' MXN</b><span><b style="font-size:18px">≈ '+usd(tot*cost)+'</b><br>Diesel: about '+fmt(tot*lpk)+' liters at $'+diesel.toFixed(2)+' MXN per liter</span></div>';
+  $('daily').innerHTML='<table><thead><tr><th>Night</th><th>Rooms</th><th>AC units</th><th>kWh low</th><th>kWh likely</th><th>kWh high</th><th>Peak kW</th><th>Gen can supply kWh</th><th>Energy used</th><th>Peak vs capacity</th><th>Diesel liters</th><th>Diesel cost MXN</th><th>Diesel cost USD</th></tr></thead><tbody>'+
+   rows.map(function(x,i){var dt=new Date(x.d+'T12:00:00');return '<tr><td>'+dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</td><td><a href="#" data-rooms="'+i+'" style="color:var(--moss);text-decoration:underline">'+x.rooms+' rooms</a></td><td>'+x.units+'</td><td>'+fmt(x.lo)+'</td><td><b>'+fmt(x.mid)+'</b></td><td>'+fmt(x.hi)+'</td><td>'+fmt(x.peak)+'</td><td>'+fmt(x.capKwh)+'</td><td>'+Math.round(x.epct)+'%</td><td>'+Math.round(x.pct)+'% '+tag(x.pct)+'</td><td>'+fmt(x.mid*lpk)+'</td><td>$'+fmt(x.mid*cost)+'</td><td>'+usd(x.mid*cost)+'</td></tr>'}).join('')+'</tbody></table>';
   chart(rows,g);
   verdict(rows);
   (function(){
@@ -174,10 +178,10 @@ function render(){
     $('costcard').innerHTML='<h2>Diesel cost for these '+days+' days</h2><div class="kpis" style="margin:0">'+
      '<div class="kpi"><b>$'+pr.toFixed(2)+' MXN</b><span>Diesel price per liter in use (change it at the top)</span></div>'+
      '<div class="kpi"><b>'+fmt(lit)+' liters</b><span>Diesel needed ('+lp+' liters per kWh × '+fmt(tot)+' kWh)</span></div>'+
-     '<div class="kpi"><b>$'+fmt(peso)+' MXN</b><span>Total cost in pesos for the '+days+' days</span></div>'+
-     '<div class="kpi"><b>$'+fmt(days?peso/days:0)+' MXN</b><span>Average cost per day</span></div>'+
-     '<div class="kpi"><b>$'+(pr*lp).toFixed(2)+' MXN</b><span>Cost of each kWh ('+lp+' L × $'+pr.toFixed(2)+')</span></div></div>'+
-     '<p class="note" style="margin-top:10px">Range for the diesel: '+fmt(totLo*lp)+' to '+fmt(totHi*lp)+' liters, or $'+fmt(totLo*lp*pr)+' to $'+fmt(totHi*lp*pr)+' MXN.</p>';
+     '<div class="kpi"><b>$'+fmt(peso)+' MXN</b><span><b style="font-size:18px">≈ '+usd(peso)+'</b><br>Total cost for the '+days+' days</span></div>'+
+     '<div class="kpi"><b>$'+fmt(days?peso/days:0)+' MXN</b><span><b style="font-size:18px">≈ '+usd(days?peso/days:0)+'</b><br>Average cost per day</span></div>'+
+     '<div class="kpi"><b>$'+(pr*lp).toFixed(2)+' MXN</b><span><b style="font-size:18px">≈ $'+((pr*lp)/(+$('fx').value||1)).toFixed(2)+' USD</b><br>Cost of each kWh ('+lp+' L × $'+pr.toFixed(2)+')</span></div></div>'+
+     '<p class="note" style="margin-top:10px">Range for the diesel: '+fmt(totLo*lp)+' to '+fmt(totHi*lp)+' liters, or $'+fmt(totLo*lp*pr)+' to $'+fmt(totHi*lp*pr)+' MXN ('+usd(totLo*lp*pr)+' to '+usd(totHi*lp*pr)+'). Exchange rate used: '+(+$('fx').value||0).toFixed(2)+' pesos per dollar (change it at the top).</p>';
   })();
 }
 function verdict(rows){
@@ -260,7 +264,7 @@ function T(k){
    peak:'<p><b>Highest moment: about '+fmt(worst.peak)+' kW on '+worst.d+'.</b></p><p>A kW is how much power is being used right now, like how hard the engine is working. This is the busiest moment of the whole period, when the most rooms are full and the air conditioners are running. The generator must be strong enough for this moment, not for the average.</p>',
    cap:'<p><b>The generator(s) can give about '+fmt(g.kw)+' kW.</b></p><p>The size printed on a generator is in kVA ('+g.kva+' kVA for the ones ticked at the top). To get the real, usable power, we multiply by 0.8. If the number is not what you expect, check which generators are ticked in the top row.</p><div data-roomsbox="1">'+roomsHtml(null)+'</div>',
    load:'<p><b>At the busiest moment the generator would be '+(g.kw?Math.round(worst.peak/g.kw*100):0)+'% full.</b></p><p>Think of it like a car engine: under 60% is comfortable, 60 to 85% is working hard, above 85% is too much. We also keep a safety cushion for the extra surge that air conditioners and pumps pull when they start.</p>',
-   cost:'<p><b>Estimated diesel for these '+rows.length+' days: about '+fmt(tot*(+$('lpk').value||0))+' liters, roughly $'+fmt(tot*cost)+' MXN.</b></p><p>We take the energy used (kWh) and multiply by how many liters of diesel the generator burns for each kWh ('+$('lpk').value+' liters, a typical figure) and by the price per liter you typed at the top ($'+(+$('diesel').value||0).toFixed(2)+'). Change the price at the top to the price you actually pay. A generator that is lightly loaded burns more diesel per kWh, so if you run the big 250 kVA plant on a small load the real number can be higher. Check the fuel use on your generator manual or your last fill-ups to set the liters per kWh.</p>'
+   cost:'<p><b>Estimated diesel for these '+rows.length+' days: about '+fmt(tot*(+$('lpk').value||0))+' liters, roughly $'+fmt(tot*cost)+' MXN ('+usd(tot*cost)+').</b></p><p>We take the energy used (kWh) and multiply by how many liters of diesel the generator burns for each kWh ('+$('lpk').value+' liters, a typical figure) and by the price per liter you typed at the top ($'+(+$('diesel').value||0).toFixed(2)+'). Change the price at the top to the price you actually pay. A generator that is lightly loaded burns more diesel per kWh, so if you run the big 250 kVA plant on a small load the real number can be higher. Check the fuel use on your generator manual or your last fill-ups to set the liters per kWh.</p>'
   };
   return t[k];
 }
@@ -297,11 +301,19 @@ $('naAdd').onclick=function(){
   $('naName').value='';$('naKw').value='';$('naA').value='';
 };
 
+var COL_KEY='amansala_energy_collapsed';
+function cards(){return Array.prototype.slice.call(document.querySelectorAll('.wrap > .card'))}
+function saveCol(){try{localStorage.setItem(COL_KEY,JSON.stringify(cards().map(function(c){return c.classList.contains('collapsed')})))}catch(e){}}
+function loadCol(){try{var a=JSON.parse(localStorage.getItem(COL_KEY)||'[]');cards().forEach(function(c,i){if(a[i])c.classList.add('collapsed')})}catch(e){}}
+document.addEventListener('click',function(e){var h=e.target.closest&&e.target.closest('.card>h2');if(!h)return;h.parentNode.classList.toggle('collapsed');saveCol()});
+$('collapseAll').onclick=function(){cards().forEach(function(c){if(c.querySelector(':scope>h2'))c.classList.add('collapsed')});saveCol()};
+$('expandAll').onclick=function(){cards().forEach(function(c){c.classList.remove('collapsed')});saveCol()};
+
 var CHAT=[];
 function snapshot(){
   var r=LAST||calc(),g=r.g;
   return {range:{from:$('from').value,toLastNight:$('to').value},generators:{kva100:$('g1').checked,kva250:$('g2').checked,selectedKva:g.kva,powerFactor:+$('pf').value,capacityKw:Math.round(g.kw*10)/10,safetyMarginPct:+$('margin').value},
-   dieselPricePerLiterMxn:+$('diesel').value,dieselLitersPerKwh:+$('lpk').value,
+   dieselPricePerLiterMxn:+$('diesel').value,dieselLitersPerKwh:+$('lpk').value,mxnPerUsd:+$('fx').value,
    acAssumptions:{kwPerUnit:+$('acKw').value,hoursPerNight:+$('acH').value,dutyLowPct:+$('acLo').value,dutyLikelyPct:+$('acMid').value,dutyHighPct:+$('acHi').value,casaLivingRoomUnits:+$('casaLiving').value,lightBulbsPerRoom:+$('bulbs').value,extraBulbsInDoubleRooms:+$('bulbsDbl').value,wattsPerBulb:+$('bulbW').value,lightHoursPerNight:+$('bulbH').value,paidDaytimeAcRooms:+$('dayRooms').value,daytimeAcHours:+$('dayH').value,chargingWattsPerRoom:+$('chW').value,chargingHours:+$('chH').value,acUnitsPerRoomOverrides:$('acMap').value.split('\n').join(', ')},
    appliances:APPS.map(function(a){return {name:a.n,qty:a.q,kwEach:a.kw,hoursPerDay:a.h,dutyPct:a.d,kwhPerDay:Math.round(a.q*a.kw*a.h*a.d)/100,peakKw:Math.round(a.q*a.kw*10)/10}}),
    applianceTotals:{kwhPerDay:Math.round(r.appKwh*10)/10,peakKw:Math.round(r.appKw*10)/10},
@@ -321,5 +333,5 @@ async function ask(q){
 $('chatgo').onclick=function(){ask($('chatq').value)};
 $('chatq').addEventListener('keydown',function(e){if(e.key==='Enter')ask($('chatq').value)});
 document.querySelectorAll('[data-q]').forEach(function(b){b.onclick=function(){ask(b.dataset.q)}});
-load();drawApps();fetchBookings();
+load();drawApps();loadCol();fetchBookings();
 </script></body></html>
