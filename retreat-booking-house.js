@@ -37,6 +37,7 @@
     '#hbg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto}#hbg.open{display:flex}#hbg .hmodal{background:var(--paper,#fffdf8);max-width:560px;width:100%;padding:26px;position:relative}' +
     '#hbg label{display:block;font-size:13px;margin:10px 0 0}#hbg input[type=text],#hbg input[type=email],#hbg input[type=tel]{width:100%;padding:10px 12px;border:1px solid var(--line);background:#fff;font:inherit;font-size:14px;border-radius:0;margin-top:4px}' +
     '#hbg .hx{position:absolute;right:12px;top:8px;border:0;background:none;font-size:26px;cursor:pointer}#hbg .hline{display:flex;justify-content:space-between;gap:8px;font-size:13.5px;padding:3px 0}' +
+    '#house .hdates{max-width:720px;margin-top:4px}#house .hdates .row2{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}#house .hdates label{display:flex;flex-direction:column;font-size:12.5px;color:#6b6a5f;gap:4px}#house .hdates input{padding:9px 10px;border:1px solid var(--line);background:#fff;font:inherit;font-size:14px;border-radius:0}#house .hdn{display:flex;flex-direction:column;font-size:13px;padding-bottom:4px}#house .hdn span{color:#6b6a5f;font-size:12.5px}#house .hhint{font-size:13px;color:#5b5a50;margin:8px 0 0}' +
     '@media(max-width:900px){#house .hgrid{grid-template-columns:1fr}#house .hroom{grid-template-columns:1fr}#house .hcart{position:static}#house .hg{grid-template-columns:1fr 100px 60px}}';
 
   function init(info) {
@@ -61,11 +62,17 @@
   }
   function kidToggle(id, i) { var t = $('ht_' + id + '_' + i), a = $('ha_' + id + '_' + i); if (!t || !a) return; a.disabled = t.value !== 'child'; if (a.disabled) a.value = ''; }
 
+  function dateBar() {
+    var d = HOUSE.dates; if (!d || !d.open) return '';
+    var today = new Date().toISOString().slice(0, 10);
+    return '<div class="hdates"><div class="row2"><label>Check-in<input type="date" id="hCi" min="' + today + '" value="' + esc(d.checkIn) + '"></label><label>Check-out<input type="date" id="hCo" min="' + today + '" value="' + esc(d.checkOut) + '"></label>' +
+      '<div class="hdn"><b>' + d.nights + ' night' + (d.nights > 1 ? 's' : '') + '</b><span>' + (d.custom ? 'Your dates differ from the retreat (' + esc(d.retreatStart) + ' to ' + esc(d.retreatEnd) + ').' : 'The retreat dates. Change them to add nights before or after.') + '</span></div></div>' +
+      '<p class="hhint">Choose your own dates. Extra nights outside the retreat include all meals.</p><div class="herr" id="hDateErr"></div></div>';
+  }
   function draw() {
     var html = '<div class="section-heading" style="grid-template-columns:1fr;gap:12px"><div><p class="kicker">Your private house</p><h2>' + esc(HOUSE.label) + '</h2></div>' +
-      (HOUSE.intro ? '<p style="max-width:720px">' + esc(HOUSE.intro) + '</p>' : '') +
-      (HOUSE.wholeHouseOnly?'<div class="hnote" style="max-width:720px"><b>Casa Master is booked as a whole house.</b> Add every one of the '+HOUSE.rooms.length+' rooms below, with the guests staying in each, to continue to payment. Rooms cannot be booked one at a time.</div>':'')+
-      '<p style="max-width:720px;font-size:14px">Choose the bedrooms you need, add the guests for each one, and pay for everything together with one card. Rates are per person, per night. <b>Plus ' + INFO.taxFeePct + '% taxes and fees and $' + INFO.gratuityPerNight + ' gratuity per person, per night</b>, included in the totals below.</p></div>' +
+      '<p style="max-width:720px;font-size:14px">Taxes and fees and staff gratuity are added at checkout, and your full total is shown before you pay.</p>' +
+      dateBar() + '</div>' +
       gallery() +
       '<div class="hgrid"><div>' + HOUSE.rooms.map(roomCard).join('') + '</div><aside class="hcart" id="hcart"></aside></div>';
     $('house').innerHTML = html;
@@ -98,7 +105,7 @@
       (r.note ? '<div class="hnote">' + esc(r.note) + '</div>' : '') +
       '<div class="hmeta">' + rateLine(r) + '</div>' + sold +
       (r.free ? occ + '<div>' + guests + '<div class="herr" id="herr_' + r.id + '"></div></div>' +
-        '<div class="hprice"><span>' + n + ' guest' + (n > 1 ? 's' : '') + ' · ' + INFO.nights + ' nights, incl. tax &amp; gratuity</span><b>' + money(o.total) + '</b></div>' +
+        '<div class="hprice"><span>' + n + ' guest' + (n > 1 ? 's' : '') + ' · ' + o.nights + ' night' + (o.nights > 1 ? 's' : '') + ', before taxes and fees</span><b>' + money(o.roomSubtotal + o.teaching) + '</b></div>' +
         '<button class="hadd" type="button" data-add="' + r.id + '"' + (inCart ? ' disabled' : '') + '>' + (inCart ? 'Added to your reservation' : 'Add this room') + '</button>' : '') +
       '</div></div>';
   }
@@ -120,6 +127,7 @@
   function drop(id) { cart = cart.filter(function (c) { return c.id !== id; }); keep(); draw(); }
 
   function total() { return Math.round(cart.reduce(function (s, c) { return s + opt(room(c.id), c.n).total; }, 0) * 100) / 100; }
+  function subtotal() { return Math.round(cart.reduce(function (s, c) { var o = opt(room(c.id), c.n); return s + o.roomSubtotal + o.teaching; }, 0) * 100) / 100; }
   function guestCount() { return cart.reduce(function (s, c) { return s + c.n; }, 0); }
   function lineDetail(c) {
     var r = room(c.id), o = opt(r, c.n), rows = '';
@@ -128,7 +136,6 @@
     if (o.supplement) rows += '<div class="row"><span>Individual bed · ' + money(o.supplement.nightlyRate) + ' × ' + o.nights + ' nights</span><span>' + money(o.supplement.amount) + '</span></div>';
     rows += '<div class="row"><span>Room subtotal</span><span>' + money(o.roomSubtotal) + '</span></div>';
     if (o.teaching) rows += '<div class="row"><span>Teaching fee</span><span>' + money(o.teaching) + '</span></div>';
-    rows += '<div class="row"><span>Taxes &amp; fees (' + INFO.taxFeePct + '%)</span><span>' + money(o.taxes) + '</span></div><div class="row"><span>Gratuity</span><span>' + money(o.gratuity) + '</span></div>';
     return rows;
   }
   function drawCart() {
@@ -136,10 +143,10 @@
     if (!cart.length) { box.innerHTML = '<h4>Your reservation</h4><p style="color:#7a705c;font-size:13.5px;margin:0">No rooms yet. Choose a room to start.</p>'; return; }
     var h = '<h4>Your reservation</h4>' + cart.map(function (c) {
       var r = room(c.id), o = opt(r, c.n);
-      return '<div class="hcl"><div class="t"><span>' + esc(r.label) + '<small>' + esc(r.beds) + '</small></span><span>' + money(o.total) + '</span></div><small>' +
+      return '<div class="hcl"><div class="t"><span>' + esc(r.label) + '<small>' + esc(r.beds) + '</small></span><span>' + money(o.roomSubtotal + o.teaching) + '</span></div><small>' +
         c.guests.map(function (g) { return esc(g.name) + (g.type === 'child' ? ' (child, ' + g.age + ')' : ''); }).join(', ') + '</small>' + lineDetail(c) +
         '<button type="button" data-drop="' + c.id + '">Remove</button></div>';
-    }).join('') + '<div class="htot"><span>Total · ' + guestCount() + ' guest' + (guestCount() > 1 ? 's' : '') + ' · ' + cart.length + ' room' + (cart.length > 1 ? 's' : '') + '</span><span>' + money(total()) + '</span></div>' +
+    }).join('') + '<div class="htot"><span>Subtotal · ' + guestCount() + ' guest' + (guestCount() > 1 ? 's' : '') + ' · ' + cart.length + ' room' + (cart.length > 1 ? 's' : '') + '</span><span>' + money(subtotal()) + '</span></div><p style="font-size:12.5px;color:#5b5a50;margin:8px 0 0">Taxes and fees and staff gratuity are added at checkout, and your full total is shown before you pay.</p>' +
       (INFO.preview ? '<p style="font-size:12.5px;color:#7a705c;margin:10px 0 0">Preview only: payment is turned off on this page.</p>'
         : (HOUSE.wholeHouseOnly&&cart.length<HOUSE.rooms.length
             ? '<button class="hadd" style="margin-top:12px" type="button" disabled>Add all '+HOUSE.rooms.length+' rooms to continue ('+cart.length+' of '+HOUSE.rooms.length+' added)</button><p style="font-size:12.5px;color:#7a705c;margin:8px 0 0">Casa Master is booked as a whole house.</p>'
@@ -157,9 +164,14 @@
     if (HOUSE.wholeHouseOnly && cart.length < HOUSE.rooms.length) return;
     var dep = INFO.deposit && INFO.deposit.on && INFO.deposit.eligible ? INFO.deposit : null;
     var t = total();
-    var sum = cart.map(function (c) { var r = room(c.id); return '<div class="hline"><span>' + esc(r.label) + ' · ' + c.n + ' guest' + (c.n > 1 ? 's' : '') + '</span><span>' + money(opt(r, c.n).total) + '</span></div>'; }).join('');
-    $('hbody').innerHTML = '<h3 style="font-family:var(--display);font-weight:400;font-size:28px;margin:0 0 8px">Checkout</h3>' + sum +
-      '<div class="hline" style="font-weight:700;border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><span>Total</span><span>' + money(t) + '</span></div>' +
+    var sum = cart.map(function (c) { var r = room(c.id), o = opt(r, c.n); return '<div class="hline"><span>' + esc(r.label) + ' · ' + c.n + ' guest' + (c.n > 1 ? 's' : '') + '</span><span>' + money(o.roomSubtotal + o.teaching) + '</span></div>'; }).join('');
+    var tx = cart.reduce(function (a, c) { var o = opt(room(c.id), c.n); return { t: a.t + o.taxes, g: a.g + o.gratuity }; }, { t: 0, g: 0 });
+    var dts = HOUSE.dates ? HOUSE.dates.checkIn + ' to ' + HOUSE.dates.checkOut + ' (' + HOUSE.dates.nights + ' nights)' : '';
+    $('hbody').innerHTML = '<h3 style="font-family:var(--display);font-weight:400;font-size:28px;margin:0 0 8px">Checkout</h3>' + (dts ? '<p style="margin:0 0 8px;font-size:13.5px"><b>Your dates:</b> ' + esc(dts) + '</p>' : '') + sum +
+      '<div class="hline" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><span>Subtotal</span><span>' + money(subtotal()) + '</span></div>' +
+      '<div class="hline"><span>Taxes and fees (' + INFO.taxFeePct + '%)</span><span>' + money(tx.t) + '</span></div>' +
+      '<div class="hline"><span>Staff gratuity ($' + INFO.gratuityPerNight + ' per guest, per night)</span><span>' + money(tx.g) + '</span></div>' +
+      '<div class="hline" style="font-weight:700;border-top:2px solid var(--ink);margin-top:6px;padding-top:6px;font-size:16px"><span>Your full total</span><span>' + money(t) + '</span></div>' +
       '<label>Your full name<input type="text" id="hbName" autocomplete="name" placeholder="First and last name"></label>' +
       '<label>Email<input type="email" id="hbEmail" autocomplete="email" placeholder="you@example.com"></label>' +
       '<label>Phone number<input type="tel" id="hbPhone" autocomplete="tel" placeholder="+1 555 123 4567"></label>' +
@@ -174,7 +186,7 @@
   function goPay() {
     var plan = (document.querySelector('input[name=hplan]:checked') || {}).value === 'deposit' ? 'deposit' : 'full';
     var body = {
-      bookingId: bookingId, plan: plan,
+      bookingId: bookingId, plan: plan, dates: HOUSE.dates && HOUSE.dates.open ? { checkIn: HOUSE.dates.checkIn, checkOut: HOUSE.dates.checkOut } : null,
       rooms: cart.map(function (c) { return { id: c.id, guests: c.guests }; }),
       booker: { name: $('hbName').value.trim(), email: $('hbEmail').value.trim(), phone: $('hbPhone').value.trim() },
       acks: { cancellation: $('hbCancel').checked, balanceAuth: !!($('hbAuth') && $('hbAuth').checked) }
@@ -203,8 +215,16 @@
       cart = []; draw();
     });
   }
-  function refresh() {
-    fetch('/.netlify/functions/retreat-booking-info?r=' + encodeURIComponent(bookingId) + (INFO.preview ? '&preview=1' : '')).then(function (r) { return r.json(); }).then(function (j) { if (j && j.rooms) init(j); });
+  function refresh(ci, co) {
+    var q = (ci && co ? '&ci=' + encodeURIComponent(ci) + '&co=' + encodeURIComponent(co) : '');
+    return fetch('/.netlify/functions/retreat-booking-info?r=' + encodeURIComponent(bookingId) + (INFO.preview ? '&preview=1' : '') + q).then(function (r) { return r.json(); }).then(function (j) { if (j && j.rooms) { INFO.nights = j.nights; init(j); } });
+  }
+  function dateChange() {
+    var ci = $('hCi').value, co = $('hCo').value, err = $('hDateErr');
+    if (!ci || !co) return;
+    if (co <= ci) { err.textContent = 'Check-out must be after check-in.'; return; }
+    err.textContent = '';
+    keep(); refresh(ci, co).then(function () { var e = $('hDateErr'); if (e && HOUSE.dates && (HOUSE.dates.checkIn !== ci || HOUSE.dates.checkOut !== co)) e.textContent = 'Those dates are not available. Showing the retreat dates.'; });
   }
 
   document.addEventListener('click', function (e) {
@@ -221,6 +241,7 @@
   });
   document.addEventListener('change', function (e) {
     var t = e.target;
+    if (t && (t.id === 'hCi' || t.id === 'hCo')) { dateChange(); return; }
     if (t && t.dataset && t.dataset.kid) kidToggle(t.dataset.kid, t.dataset.i);
     if (t && t.name === 'hplan') { var w = $('hbAuthWrap'); if (w) w.style.display = t.value === 'deposit' ? 'flex' : 'none'; }
   });

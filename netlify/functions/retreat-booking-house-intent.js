@@ -31,7 +31,10 @@ exports.handler = async (event) => {
     if (!found || !found.cfg || !found.cfg.enabled || found.bk.status === 'cancelled') return L.json(404, { error: 'This booking page is not open.' });
     const { bk, cfg } = found;
     if (!cfg.house || !cfg.house.on) return L.json(404, { error: 'Casa Master is not available for this retreat.' });
-    const nights = L.nightsOf(bk);
+    // Stay dates: the retreat's dates, or (when the retreat page has open dates) the check-in / check-out the guest chose
+    const range = H.parseRange(cfg, bk, body.dates && body.dates.checkIn, body.dates && body.dates.checkOut);
+    if (!range) return L.json(400, { error: 'Please choose valid check-in and check-out dates (check-out after check-in, not in the past).' });
+    const nights = range.nights;
 
     if (cfg.house.wholeHouseOnly) {
       const miss = H.missingRooms(cfg, rooms);
@@ -40,7 +43,7 @@ exports.handler = async (event) => {
     let priced;
     try { priced = H.priceSelection(cfg, nights, rooms); } catch (e) { return L.json(400, { error: e.message }); }
 
-    const av = await H.houseAvailability(key, bk, cfg);
+    const av = await H.houseAvailability(key, bk, cfg, range);
     if (!av.open) return L.json(409, { error: 'Casa Master is not available for this retreat.' });
     const takenNow = priced.rooms.filter((r) => !(av.rooms[r.id] && av.rooms[r.id].free));
     if (takenNow.length && cfg.house.wholeHouseOnly) return L.json(409, { error: 'Casa Master is booked as a whole house and is not fully available for these dates.' });
@@ -70,7 +73,7 @@ exports.handler = async (event) => {
       amount: String(amountCents),
       currency: 'usd',
       receipt_email: email,
-      description: `Amansala Tulum · ${title.slice(0, 80)} · Casa Master (${priced.rooms.length} room${priced.rooms.length > 1 ? 's' : ''})${plan === 'deposit' ? ' · 50% now' : ''} · ${bk.start_date} – ${bk.end_date}`.slice(0, 500),
+      description: `Amansala Tulum · ${title.slice(0, 80)} · Casa Master (${priced.rooms.length} room${priced.rooms.length > 1 ? 's' : ''})${plan === 'deposit' ? ' · 50% now' : ''} · ${range.checkIn} – ${range.checkOut}`.slice(0, 500),
       'metadata[source]': 'retreat_booking_house',
       'metadata[rbBookingId]': bk.id,
       'metadata[rbName]': name.slice(0, 120),
@@ -79,6 +82,7 @@ exports.handler = async (event) => {
       'metadata[rbRooms]': priced.rooms.map((r) => r.id).join(',').slice(0, 400),
       'metadata[rbTotal]': String(priced.total),
       'metadata[rbPlan]': plan,
+      'metadata[rbDates]': `${range.checkIn}_${range.checkOut}`,
     };
     if (plan === 'deposit') {
       const cust = await L.stripePost('/customers', { email, name, phone, 'metadata[rbBookingId]': bk.id });
@@ -101,13 +105,13 @@ exports.handler = async (event) => {
     try {
       await L.appStoreSet(key, 'rbhouse:' + pi.id, {
         v: 1, piId: pi.id, bookingId: bk.id, createdAt: now, status: 'awaiting_payment',
-        booker: { name, email, phone }, nights, plan, dueNow, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null,
+        booker: { name, email, phone }, nights, dates: range, plan, dueNow, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null,
         rooms: priced.rooms, total: priced.total, guests: priced.guests,
       });
       await L.appStoreSet(key, 'rbconsent:' + pi.id, {
         v: 1, piId: pi.id, createdAt: now, status: 'awaiting_payment',
         ip: L.clientIp(event), userAgent: String(h['user-agent'] || '').slice(0, 300),
-        retreat: `${title} - Casa Master`, startDate: bk.start_date, endDate: bk.end_date, nights,
+        retreat: `${title} - Casa Master`, startDate: range.checkIn, endDate: range.checkOut, nights,
         guest: { name, email, phone, others: priced.rooms.flatMap((r) => r.guestList.map((g) => `${g.name}${g.type === 'child' ? ` (child, age ${g.age})` : ''}  |  ${r.label}`)) },
         leader: false, placementNotice: '',
         lines, total: priced.total, plan, dueNow, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null,

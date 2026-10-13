@@ -55,6 +55,7 @@ async function fulfil(pi) {
 
     // Put every guest on the room list: one registration row per real room (unit), exactly like the single-room checkout does.
     const rts = await L.sget(key, 'room_types?select=id,rooms');
+    const stayTxt = (rec.dates && rec.dates.custom) ? ` · STAY ${rec.dates.checkIn} to ${rec.dates.checkOut} (retreat ${bk.start_date} to ${bk.end_date}, extra nights include all meals)` : '';
     const typeOf = {}; rts.forEach((t) => (t.rooms || []).forEach((u) => { if (!typeOf[u]) typeOf[u] = t.id; }));
     const placedUnits = [], placeIssues = [];
     const paidTotal = pi.amount / 100, bookerName = String(m.rbName || '').trim().toLowerCase();
@@ -69,7 +70,7 @@ async function fulfil(pi) {
       for (let k = 0; k < units.length; k++) {
         const unit = units[k];
         const existing = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(bookingId)}&room=eq.${encodeURIComponent(unit)}&select=id,notes,amount_paid`);
-        const note = `Booked online (Casa Master, ${r.label}) ${new Date().toISOString().slice(0, 10)} · booked by ${m.rbName}${r.supplement ? ' · includes the individual bed' : ''}`;
+        const note = `Booked online (Casa Master, ${r.label}) ${new Date().toISOString().slice(0, 10)} · booked by ${m.rbName}${r.supplement ? ' · includes the individual bed' : ''}${stayTxt}`;
         const patch = { guests: byUnit[k], amount_paid: perUnit + (Number(existing[0] && existing[0].amount_paid) || 0), notes: (existing[0] && existing[0].notes ? existing[0].notes + ' — ' : '') + note, room_type_id: typeOf[unit] || null };
         if (existing[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${existing[0].id}`, patch, 'return=minimal');
         else await L.sreq(key, 'POST', 'registrations', { booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');
@@ -96,7 +97,7 @@ async function fulfil(pi) {
       name: m.rbName, email: m.rbEmail, phone: m.rbPhone, total: rec.total, paidNow, balance: roomLater, balanceDate: isDeposit ? m.rbBalanceDate : null,
       status: (conflicts.length || placeIssues.some((x) => /not linked/.test(x))) ? 'needs_attention' : 'placed', units: placedUnits.length ? placedUnits : roomLabels,
       houseRooms: rec.rooms.map((r) => ({ id: r.id, label: r.label, guests: r.guestList, total: r.total, supplement: r.supplement })),
-      recordUrl: L.recordUrl(pi.id),
+      recordUrl: L.recordUrl(pi.id), stay: rec.dates || null,
     };
     if (conflicts.length) order.conflict = `Already sold to another booking: ${conflicts.map((r) => r.label).join(', ')}`;
     order.cloudbeds = placeIssues.length ? 'needs_update' : 'updated';
@@ -124,8 +125,10 @@ async function fulfil(pi) {
       await L.appStoreSet(key, L.BAL_KEY, sched);
     }
 
+    const stay = rec.dates || { checkIn: bk.start_date, checkOut: bk.end_date, custom: false };
     const title = cfg.title || bk.retreat_name || bk.leader_name || 'the retreat';
-    const dates = `${bk.start_date} – ${bk.end_date}`;
+    const dates = `${stay.checkIn} – ${stay.checkOut}`;
+    const extraNote = stay.custom ? `Stay ${stay.checkIn} to ${stay.checkOut} differs from the retreat (${bk.start_date} to ${bk.end_date}); extra nights include all meals.` : '';
     const rows = rec.rooms.map(roomHtml).join('');
     const guestHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27;max-width:600px">
       <h2 style="font-weight:400">Thank you for your booking</h2>
@@ -133,6 +136,7 @@ async function fulfil(pi) {
       <table style="width:100%;border-collapse:collapse">${rows}<tr><td style="padding:10px 0;border-top:2px solid #1f2b27;font-weight:700">Total for ${rec.guests} guest${rec.guests > 1 ? 's' : ''} · ${rec.rooms.length} room${rec.rooms.length > 1 ? 's' : ''}</td><td style="padding:10px 0;border-top:2px solid #1f2b27;text-align:right;font-weight:700">${money(rec.total)}</td></tr><tr><td style="padding:2px 0">Paid today</td><td style="text-align:right">${money(paidNow)}</td></tr></table>
       ${isDeposit ? `<p><b>Remaining balance: ${money(roomLater)}.</b> As you authorized, it will be charged automatically to the same card on <b>${esc(m.rbBalanceDate)}</b>. We will email you when it is charged.</p>` : ''}
       ${(cfg.includes || []).length ? `<p style="margin-bottom:4px"><b>What's included</b></p><ul style="margin-top:0">${cfg.includes.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>${cfg.notIncluded ? `<p style="font-size:13px">${esc(cfg.notIncluded)}</p>` : ''}` : ''}
+      ${stay.custom ? `<p>Your stay is <b>${esc(stay.checkIn)} to ${esc(stay.checkOut)}</b>. The nights outside the retreat dates include all meals.</p>` : ''}
       <p><a href="${L.recordUrl(pi.id)}" style="color:#3f5147;font-weight:700">Download your booking record (PDF)</a>: every room, guest and price, the cancellation policy and everything you agreed to.</p>
       <p>Questions? Reply to this email or write to retreats@amansala.com.</p><p>Amansala · Tulum</p></div>`;
     await sendEmail(m.rbEmail, `Thank you for your booking — ${title} · Casa Master`, guestHtml, 'retreats@amansala.com');
@@ -140,6 +144,7 @@ async function fulfil(pi) {
     const staffTo = cfg.notifyEmail || 'retreats@amansala.com';
     const staffHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27;max-width:640px"><h3>${conflicts.length ? '⚠ Casa Master booking — a room was already sold, needs attention' : 'New Casa Master booking'}</h3>
       <p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>${esc(title)} · ${esc(dates)}</p>
+      ${extraNote ? `<p><b>Different dates from the retreat:</b> ${esc(extraNote)} Please add the extra nights in Cloudbeds.</p>` : ''}
       ${conflicts.length ? `<p><b>Already sold to another booking:</b> ${conflicts.map((r) => esc(r.label)).join(', ')}. Please place or refund by hand.</p>` : ''}
       <table style="width:100%;border-collapse:collapse">${rows}</table>
       <p>${isDeposit ? 'Paid now ' + money(paidNow) + ' (50%). Balance ' + money(roomLater) + ' auto-charges ' + esc(m.rbBalanceDate) + '.' : 'Total ' + money(rec.total) + ' paid'} · Stripe ${esc(pi.id)} · <a href="${L.recordUrl(pi.id)}">Booking record</a></p>
