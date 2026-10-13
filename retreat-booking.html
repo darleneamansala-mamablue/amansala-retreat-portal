@@ -348,10 +348,10 @@ function render(){
     var img=r.imageUrl?'<img alt="'+esc(r.label)+'" src="'+esc(r.imageUrl)+'">':'';
     var thumbs='';
     if(r.gallery&&r.gallery.length){img='<img class="gmain" alt="'+esc(r.label)+'" src="'+esc(r.gallery[0])+'">';thumbs='<div class="gthumbs">'+r.gallery.map(function(u,gi){return '<button type="button" class="gthumb'+(gi?'':' on')+'" data-src="'+esc(u)+'" aria-label="Photo '+(gi+1)+'"><img loading="lazy" alt="" src="'+esc(u)+'"></button>'}).join('')+'</div>'}
-    return {shared:r.kind==='twin',h:'<article class="stay-card"><div class="img-col"><div class="img">'+img+'</div>'+thumbs+'</div><div class="stay-content"><h3>'+esc(r.label)+'</h3><p class="stay-desc">'+esc(r.desc)+'</p><div class="rates">'+rows+'</div>'+(r.kind==='house'?kingNote:'')+sold+btns+'</div></article>'};
+    return {shared:r.kind==='twin',house:r.kind==='house',h:'<article class="stay-card"><div class="img-col"><div class="img">'+img+'</div>'+thumbs+'</div><div class="stay-content"><h3>'+esc(r.label)+'</h3><p class="stay-desc">'+esc(r.desc)+'</p><div class="rates">'+rows+'</div>'+(r.kind==='house'?kingNote:'')+sold+btns+'</div></article>'};
   });
-  var priv=cards.filter(function(c){return !c.shared}),sh=cards.filter(function(c){return c.shared});
-  $('stays').innerHTML=priv.concat(sh).map(function(c){return c.h}).join('');
+  var priv=cards.filter(function(c){return !c.shared&&!c.house}),sh=cards.filter(function(c){return c.shared}),hs=cards.filter(function(c){return c.house});
+  $('stays').innerHTML=priv.concat(sh).concat(hs).map(function(c){return c.h}).join('');
   $('svcs').innerHTML=INFO.services.map(function(s){
     var sel=svcSel[s.id], o=s.opts.filter(function(x){return x.m===sel})[0]||s.opts[0], inCart=!!cart.svcs[s.id];
     var seg=s.opts.length>1?'<div class="seg">'+s.opts.map(function(x){return '<button type="button" data-sv="'+esc(s.id)+'" data-m="'+x.m+'" class="'+(x.m===o.m?'on':'')+'">'+minLabel(x.m)+'</button>'}).join('')+'</div>':'<div class="seg"><button type="button" class="on" style="cursor:default">'+minLabel(s.opts[0].m)+'</button></div>';
