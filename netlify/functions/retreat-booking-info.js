@@ -2,6 +2,7 @@
 // Public data for the Retreat Booking page: retreat name/dates, banner, room options with all-in prices and how many are still
 // free, spa services, cancellation policy. Never returns guest names or emails. Prices come from rb-lib.priceCart (single source).
 const L = require('./rb-lib');
+const H = require('./rb-house-lib');
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: L.cors(), body: '' };
@@ -54,7 +55,22 @@ exports.handler = async (event) => {
       const p = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'solo' } });
       return { ...base, ...nightly, soloPerPerson: p.lines[0].perPerson };
     });
+    // Casa Master (house) bedrooms, each priced for every occupancy it allows (rb-house-lib: the one place house prices are calculated)
+    let house = null;
+    if (cfg.house && cfg.house.on) {
+      const hav = isPreview ? { open: true, taken: {} } : await H.houseAvailability(key, bk, cfg);
+      house = {
+        label: cfg.house.label || 'Casa Master', intro: cfg.house.intro || '', open: hav.open,
+        rooms: (cfg.house.rooms || []).map((r) => ({
+          id: r.id, label: r.label, beds: r.beds || '', desc: r.desc || '', images: r.images || [], kind: r.kind, max: H.capacity(r), note: r.note || '',
+          soloRate: Number(r.soloRate) || 0, shareRate: Number(r.shareRate) || 0, extraRate: Number(r.extraRate) || 0,
+          free: hav.open && !hav.taken[r.id],
+          options: H.occupancyOptions(r).map((n) => ({ n, ...H.priceRoom(cfg, nights, r, n) })),
+        })),
+      };
+    }
     return L.json(200, {
+      house,
       deposit: L.depositOffer(bk, cfg),
       preview: isPreview,
       template: isTemplate,
