@@ -185,7 +185,7 @@ async function rbsSave(){
     rbsOpen();
   }catch(e){showToast('Save failed: '+(e.message||e));}
 }
-function rbsPreviewLink(bk){return `${location.origin}/retreat-booking.html?r=${encodeURIComponent(bk.id)}&preview=1`;}
+function rbsPreviewLink(bk){if(_rbsCfg&&_rbsCfg.slug)return `${location.origin}/retreat-booking.html/${_rbsCfg.slug}?preview=1`;return `${location.origin}/retreat-booking.html?r=${encodeURIComponent(bk.id)}&preview=1`;}
 function rbsTemplateLink(){return `${location.origin}/retreat-booking.html?template=1`;}
 function rbsCopyPreview(){const l=rbsPreviewLink(_rbsBk);navigator.clipboard.writeText(l).then(()=>showToast('Review link copied (payment is off on it)')).catch(()=>showToast('Link: '+l));}
 // The template is what every NEW retreat page starts from: rooms, rates, spa, wording, policy, fees. Retreat-specific things

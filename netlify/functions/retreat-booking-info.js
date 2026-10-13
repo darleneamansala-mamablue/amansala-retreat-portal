@@ -49,6 +49,7 @@ exports.handler = async (event) => {
       deposit: L.depositOffer(bk, cfg),
       preview: isPreview,
       template: isTemplate,
+      slug: isTemplate ? '' : String(cfg.slug || ''),
       bookingId: bk.id,
       title: cfg.title || bk.retreat_name || bk.leader_name,
       startDate: bk.start_date,
