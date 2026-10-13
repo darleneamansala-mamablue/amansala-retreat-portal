@@ -277,7 +277,7 @@ async function fetchBookings(){
 }
 document.addEventListener('input',function(e){var t=e.target;if(t.dataset&&t.dataset.i!=null){APPS[+t.dataset.i][t.dataset.f]=+t.value||0}if(t.closest&&t.closest('.card')&&t.id!=='from'&&t.id!=='to'){save();render()}});
 document.addEventListener('change',function(e){if(e.target.id==='g1'||e.target.id==='g2'){save();render()}});
-$('go').onclick=function(){save();dateChanged()};
+$('go').onclick=function(){save();dateChanged('go')};
 
 function H(){
   var r=LAST||calc(),rows=r.rows,g=r.g,pf=+$('pf').value||0.8,mg=1+(+$('margin').value||0)/100;
@@ -363,7 +363,7 @@ $('expandAll').onclick=function(){cards().forEach(function(c){c.classList.remove
 function iso(d){return d.toISOString().slice(0,10)}
 function addDays(str,n){var d=new Date(str+'T12:00:00');d.setDate(d.getDate()+n);return iso(d)}
 function weekStart(str){var d=new Date(str+'T12:00:00');d.setDate(d.getDate()-d.getDay());return iso(d)}   // Sunday
-function setRange(a,b){$('from').value=a;$('to').value=b;save();fetchBookings()}
+function setRange(a,b){$('from').value=a;$('to').value=b;save();saveRange();fetchBookings()}
 function weekLabel(){var a=$('from').value,b=$('to').value;if(!a||!b)return '';var f=function(x){return new Date(x+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};$('wLabel').textContent='Showing '+f(a)+' to '+f(b)+' ('+nightsList(a,b).length+' nights)'}
 $('wPrev').onclick=function(){var a=$('from').value,n=Math.max(1,nightsList($('from').value,$('to').value).length);setRange(addDays(a,-n),addDays(a,-1))};
 $('wNext').onclick=function(){var b=$('to').value,n=Math.max(1,nightsList($('from').value,$('to').value).length);setRange(addDays(b,1),addDays(b,n))};
@@ -380,13 +380,23 @@ $('wCsv').onclick=function(){
   var blob=new Blob([lines.join('\n')],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='energy-report-'+$('from').value+'-to-'+$('to').value+'.csv';document.body.appendChild(a);a.click();a.remove();
 };
 
-function dateChanged(){
+var RKEY='amansala_energy_range';
+function saveRange(){try{localStorage.setItem(RKEY,JSON.stringify({a:$('from').value,b:$('to').value}))}catch(e){}}
+function loadRange(){try{var r=JSON.parse(localStorage.getItem(RKEY)||'null');if(r&&r.a&&r.b&&r.b>=r.a){$('from').value=r.a;$('to').value=r.b}}catch(e){}}
+var dateTimer=null;
+function dateChanged(src){
   var a=$('from').value,b=$('to').value;
   if(!a||!b)return;
-  if(b<a){$('status').textContent='The last night must be on or after the first night.';return}
-  fetchBookings();
+  if(b<a){   // keep the range valid: move the other date along with the one just changed
+    var n=Math.max(1,nightsList(a,a).length);
+    if(src==='to'){$('from').value=addDays(b,-6)}else{$('to').value=addDays(a,6)}
+    a=$('from').value;b=$('to').value;
+  }
+  saveRange();
+  $('status').innerHTML='<b style="color:#8a6a1f">Loading '+a+' to '+b+'…</b>';
+  clearTimeout(dateTimer);dateTimer=setTimeout(fetchBookings,150);
 }
-$('from').addEventListener('change',dateChanged);$('to').addEventListener('change',dateChanged);
+['change','input'].forEach(function(ev){$('from').addEventListener(ev,function(){dateChanged('from')});$('to').addEventListener(ev,function(){dateChanged('to')})});
 
 document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-setlpk]');if(!b)return;$('lpk').value=b.dataset.setlpk;save();render()});
 var MKEY='amansala_energy_meter', METER=[];
@@ -492,5 +502,5 @@ async function ask(q){
 $('chatgo').onclick=function(){ask($('chatq').value)};
 $('chatq').addEventListener('keydown',function(e){if(e.key==='Enter')ask($('chatq').value)});
 document.querySelectorAll('[data-q]').forEach(function(b){b.onclick=function(){ask(b.dataset.q)}});
-load();drawApps();loadCol();fetchBookings();
+load();loadRange();drawApps();loadCol();fetchBookings();
 </script></body></html>
