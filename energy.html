@@ -53,6 +53,12 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <div class="card"><h2>Daily energy vs what the generator can supply</h2><div class="tbl" id="daily"></div><div class="helpbox" id="roomsPanel" data-roomsbox="1" hidden></div><div class="helpbar"><button class="alt" data-help="daily">What does this mean?</button><div class="helpbox" id="help_daily" hidden></div></div>
 <p class="note">Likely kWh uses the "likely" AC duty below. Generator can supply = capacity kW × 24 h. Status: OK under 60% of peak capacity, Watch 60 to 85%, Over above 85% (keeps room for motor start-up surges).</p></div>
 
+<div class="card" id="invCard"><h2>Electrical inventory (every appliance)</h2>
+<p class="note">The full list of what uses electricity: where it is, its size, brand, volts, amps and kW. Everything you type here feeds the energy report above. For amps and volts, the kW fills in by itself (volts × amps × 0.85); you can also type the kW directly.</p>
+<div class="row"><label>Show<select id="invCat"></select></label><label>Search<input id="invQ" placeholder="name or room" style="width:200px"></label><button class="alt" id="invCsv">Download inventory (CSV)</button></div>
+<div id="invTotals" style="margin-top:12px"></div>
+<div class="tbl" id="invTable" style="margin-top:12px"></div>
+<p class="note">Guest room air conditioners are listed in the AC inventory card. They are added to the totals above automatically. Add new items with "Add an appliance" under the appliance list; the category, location, size and model go in there too.</p></div>
 <div class="card" id="acCard"><h2>AC units in the hotel (inventory)</h2>
 <p class="note">Every air conditioner counted by this page, from the room list and the AC counts you gave me. Change the room counts in the "AC units per room" box and the appliance list and this report updates.</p>
 <div class="row"><label>Casa Master AC units<input type="number" id="cmAc" value="7"></label><label>Casa Shanti AC units<input type="number" id="shAc" value="7"></label><label>Casita 4 AC units<input type="number" id="c4Ac" value="3"></label><button class="alt" id="acCsv">Download AC list (CSV)</button></div>
@@ -70,7 +76,7 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <div class="card"><h2>Appliances and loads</h2>
 <p class="note">Typical values, not measurements. Edit any row; set quantity to 0 for anything you don't have. Peak counts every unit running at once.</p>
 <div class="tbl"><table id="apps"><thead><tr><th>Appliance</th><th>Qty</th><th>kW each</th><th>Hours / day</th><th>Starts at hour</th><th>Duty %</th><th>kWh / day</th><th>Peak kW</th><th></th></tr></thead><tbody></tbody></table></div>
-<div class="card" style="background:#fffaf0;margin:14px 0 0"><b>Add an appliance</b><div class="row" style="margin-top:8px"><label>Name<input id="naName" placeholder="e.g. Laundry dryer" style="width:200px"></label><label>Qty<input type="number" id="naQty" value="1"></label><label>kW each (or leave blank and use amps)<input type="number" step="any" id="naKw" style="width:130px"></label><label>Amps<input type="number" step="any" id="naA"></label><label>Volts<input type="number" id="naV" value="220"></label><label>Hours / day<input type="number" step="any" id="naH" value="4"></label><label>Starts at hour (0 to 23)<input type="number" id="naS" value="9"></label><label>Duty %<input type="number" id="naD" value="100"></label><button id="naAdd">Add</button></div><p class="note" id="naMsg" style="margin-top:6px"></p></div><div class="helpbar"><button class="alt" data-help="apps">What does this mean?</button><div class="helpbox" id="help_apps" hidden></div></div></div>
+<div class="card" style="background:#fffaf0;margin:14px 0 0"><b>Add an appliance</b><div class="row" style="margin-top:8px"><label>Name<input id="naName" placeholder="e.g. Laundry dryer" style="width:200px"></label><label>Category<select id="naCat"></select></label><label>Location<input id="naLoc" placeholder="e.g. Kitchen" style="width:130px"></label><label>Size / capacity<input id="naSize" placeholder="e.g. 12,000 BTU" style="width:130px"></label><label>Brand / model<input id="naModel" style="width:130px"></label><label>Qty<input type="number" id="naQty" value="1"></label><label>kW each (or leave blank and use amps)<input type="number" step="any" id="naKw" style="width:130px"></label><label>Amps<input type="number" step="any" id="naA"></label><label>Volts<input type="number" id="naV" value="220"></label><label>Hours / day<input type="number" step="any" id="naH" value="4"></label><label>Starts at hour (0 to 23)<input type="number" id="naS" value="9"></label><label>Duty %<input type="number" id="naD" value="100"></label><button id="naAdd">Add</button></div><p class="note" id="naMsg" style="margin-top:6px"></p></div><div class="helpbar"><button class="alt" data-help="apps">What does this mean?</button><div class="helpbox" id="help_apps" hidden></div></div></div>
 
 <div class="card"><h2>Guest AC (220V)</h2><div class="helpbar"><button class="alt" data-help="ac">What does this mean?</button><div class="helpbox" id="help_ac" hidden></div></div><div class="row">
 <label>Running draw, kW per unit (5 A × 220 V × 0.9)<input type="number" id="acKw" step="0.05" value="1.0"></label>
@@ -149,7 +155,7 @@ var APPS=[
  {n:'Spa fans (11 am to 5 pm)',q:6,kw:0.07,h:6,s:11,d:100},
  {n:'Spa room AC and heaters (0 if none)',q:0,kw:1.5,h:8,s:9,d:60}
 ];
-var ST_KEY='amansala_energy_v16', BK=[];
+var ST_KEY='amansala_energy_v17', BK=[];
 function $(i){return document.getElementById(i)}
 function save(){try{localStorage.setItem(ST_KEY,JSON.stringify({apps:APPS,f:['pf','margin','diesel','lpk','fx','actualUsd','acKw','acH','acLo','acMid','acHi','casaLiving','cmAc','shAc','c4Ac','dayRooms','ac24list','acStart','bulbStart','chStart','bulbs','bulbsDbl','bulbW','bulbH','chW','chH','acMap'].reduce(function(o,k){o[k]=$(k).value;return o},{}),g1:$('g1').checked,g2:$('g2').checked}))}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(ST_KEY)||'null');if(!s)return;APPS=s.apps||APPS;Object.keys(s.f||{}).forEach(function(k){if($(k))$(k).value=s.f[k]});$('g1').checked=s.g1!==false;$('g2').checked=s.g2!==false}catch(e){}}
@@ -213,6 +219,7 @@ function render(){
   verdict(rows);
   hourly();
   acInventory();
+  invTotals();
   (function(){
     var pr=+$('diesel').value||0,lp=+$('lpk').value||0,lit=tot*lp,peso=lit*pr,days=rows.length;
     $('costcard').innerHTML='<h2>Diesel cost for these '+days+' days</h2><div class="kpis" style="margin:0">'+
@@ -352,7 +359,7 @@ $('naAdd').onclick=function(){
   if(!(kw>0)&&A>0)kw=Math.round(V*A*0.85)/1000;
   if(!(kw>0)){$('naMsg').textContent='Please give either kW or amps (and volts).';return}
   if(!(q>=0)||!(h>=0)||!(d>=0)){$('naMsg').textContent='Quantity, hours and duty must be numbers.';return}
-  APPS.push({n:n,q:q,kw:kw,h:h,s:+$('naS').value||0,d:d||100});save();drawApps();render();
+  APPS.push({n:n,q:q,kw:kw,h:h,s:+$('naS').value||0,d:d||100,cat:$('naCat').value,loc:$('naLoc').value.trim(),size:$('naSize').value.trim(),model:$('naModel').value.trim(),v:V,amps:A||''});normApps();save();drawApps();render();
   $('naMsg').textContent='Added "'+n+'": '+q+' × '+kw+' kW, '+h+' h/day. The page is updated.';
   $('naName').value='';$('naKw').value='';$('naA').value='';
 };
@@ -513,6 +520,63 @@ $('acCsv').onclick=function(){
 };
 document.addEventListener('input',function(e){var t=e.target;if(t.id==='cmAc'||t.id==='shAc'||t.id==='c4Ac'||t.id==='acMap')acInventory()});
 
+var CATS=['Cooling (AC)','Refrigeration','Kitchen and restaurant','Water (pumps, heaters)','Pool','Lighting','Sound and fans','Spa and wellness','IT and security','Laundry','Other'];
+function guessCat(n){n=n.toLowerCase();
+  if(/\bac\b|air cond|gold room|boutique/.test(n))return CATS[0];
+  if(/fridge|freezer|cold room|cooler|ice machine|chiller|refrig/.test(n))return CATS[1];
+  if(/restaurant|kitchen|espresso|blender|extractor|oven|dishwasher|juicer|kettle/.test(n))return CATS[2];
+  if(/water|pump|heater/.test(n)&&!/pool/.test(n))return CATS[3];
+  if(/pool/.test(n))return CATS[4];
+  if(/light|lamp/.test(n))return CATS[5];
+  if(/speaker|sound|fan/.test(n))return CATS[6];
+  if(/spa/.test(n))return CATS[7];
+  if(/modem|network|camera|computer|pos/.test(n))return CATS[8];
+  if(/wash|dryer|laundry/.test(n))return CATS[9];
+  return CATS[10];}
+function guessLoc(n){n=n.toLowerCase();
+  var m=[[/office/,'Office'],[/vegetable/,'Vegetable room'],[/casa master/,'Casa Master'],[/gold room/,'Gold room'],[/boutique/,'Boutique'],[/pool/,'Pool'],[/parking/,'Parking lot'],[/yoga/,'Yoga shalas'],[/spa/,'Spa'],[/restaurant|kitchen|cold room|espresso|blender|extractor|fridge|freezer|ice/,'Kitchen / restaurant'],[/bar/,'Bar'],[/water|pump|cistern/,'Water room']];
+  for(var i=0;i<m.length;i++)if(m[i][0].test(n))return m[i][1];return '';}
+function normApps(){APPS.forEach(function(a){a.cat=a.cat||guessCat(a.n);a.loc=a.loc||guessLoc(a.n);a.size=a.size||'';a.model=a.model||'';a.note=a.note||'';if(a.v==null||a.v==='')a.v=220;if(a.amps==null)a.amps=''})}
+function fillCats(){var o=CATS.map(function(c){return '<option>'+c+'</option>'}).join('');$('naCat').innerHTML=o;$('invCat').innerHTML='<option value="">All categories</option>'+o}
+function invRows(){return APPS.map(function(a,i){return {a:a,i:i}}).filter(function(o){var q=($('invQ').value||'').toLowerCase(),c=$('invCat').value;return (!c||o.a.cat===c)&&(!q||(o.a.n+' '+o.a.loc+' '+o.a.model+' '+o.a.size).toLowerCase().indexOf(q)>=0)})}
+function drawInventory(){
+  var sel=function(v){return CATS.map(function(c){return '<option'+(c===v?' selected':'')+'>'+c+'</option>'}).join('')};
+  var t=function(i,f,w,ph){return '<input data-ii="'+i+'" data-ff="'+f+'" value="'+esc2(APPS[i][f]==null?'':APPS[i][f])+'" placeholder="'+(ph||'')+'" style="width:'+w+'px">'};
+  $('invTable').innerHTML='<table><thead><tr><th>Appliance</th><th>Category</th><th>Location</th><th>Qty</th><th>Size / capacity</th><th>Brand / model</th><th>Volts</th><th>Amps</th><th>kW each</th><th>Total kW</th><th>Notes</th></tr></thead><tbody>'+
+   invRows().map(function(o){var a=o.a,i=o.i;return '<tr><td style="min-width:200px">'+t(i,'n',230)+'</td><td><select data-ii="'+i+'" data-ff="cat" style="max-width:150px">'+sel(a.cat)+'</select></td><td>'+t(i,'loc',110)+'</td><td>'+t(i,'q',50)+'</td><td>'+t(i,'size',110,'e.g. 12,000 BTU')+'</td><td>'+t(i,'model',110)+'</td><td>'+t(i,'v',55)+'</td><td>'+t(i,'amps',55)+'</td><td><input data-ii="'+i+'" data-ff="kw" id="invkw'+i+'" value="'+a.kw+'" style="width:65px"></td><td id="invtk'+i+'"><b>'+(a.q*a.kw).toFixed(2)+'</b></td><td>'+t(i,'note',150)+'</td></tr>'}).join('')+'</tbody></table>';
+  invTotals();
+}
+function invTotals(){
+  var box=$('invTotals');if(!box)return;
+  var map=acMap(),kwG=+$('acKw').value||0,ac=null;
+  if(ROOMTYPES.length){var d=acInventoryData();ac={u:d.g.Grande.reduce(function(s,x){return s+x.u},0)+d.g.Chica.reduce(function(s,x){return s+x.u},0)+d.casas.reduce(function(s,c){return s+c[1]},0)}}
+  var rows=CATS.map(function(c){var l=APPS.filter(function(a){return a.cat===c}),q=l.reduce(function(s,a){return s+(+a.q||0)},0),kw=l.reduce(function(s,a){return s+a.q*a.kw},0),kwh=l.reduce(function(s,a){return s+a.q*a.kw*a.h*a.d/100},0);
+    if(c===CATS[0]&&ac){q+=ac.u;kw+=ac.u*kwG;kwh+=ac.u*kwG*(+$('acH').value||0)*(+$('acMid').value||0)/100*0.5}
+    return {c:c,items:l.length,q:q,kw:kw,kwh:kwh}}).filter(function(r){return r.q>0});
+  var totKw=rows.reduce(function(s,r){return s+r.kw},0),totQ=rows.reduce(function(s,r){return s+r.q},0);
+  box.innerHTML='<div class="kpis" style="margin:0 0 10px"><div class="kpi"><b>'+totQ+'</b><span>Electrical items counted (including '+(ac?ac.u:0)+' guest AC units)</span></div><div class="kpi"><b>'+fmt(totKw)+' kW</b><span>Total connected power (everything on at once)</span></div></div>'+
+   '<div class="tbl"><table><thead><tr><th>Category</th><th>Lines</th><th>Units</th><th>Connected kW</th></tr></thead><tbody>'+rows.map(function(r){return '<tr><td>'+r.c+'</td><td>'+r.items+(r.c===CATS[0]&&ac?' + guest rooms':'')+'</td><td>'+r.q+'</td><td>'+fmt(r.kw)+'</td></tr>'}).join('')+'</tbody></table></div>';
+}
+document.addEventListener('input',function(e){
+  var t=e.target;if(!t.dataset||t.dataset.ii==null)return;
+  var i=+t.dataset.ii,f=t.dataset.ff,a=APPS[i];if(!a)return;
+  if(['q','kw','v','amps'].indexOf(f)>=0){a[f]=t.value===''?'':+t.value}else a[f]=t.value;
+  if((f==='v'||f==='amps')&&a.v>0&&a.amps>0){a.kw=Math.round(a.v*a.amps*0.85)/1000;var k=$('invkw'+i);if(k)k.value=a.kw}
+  var tk=$('invtk'+i);if(tk)tk.innerHTML='<b>'+((+a.q||0)*(+a.kw||0)).toFixed(2)+'</b>';
+  if(['q','kw','v','amps','n'].indexOf(f)>=0){a.q=+a.q||0;a.kw=+a.kw||0}
+  save();drawApps();render();invTotals();
+});
+document.addEventListener('change',function(e){var t=e.target;if(t.dataset&&t.dataset.ii!=null&&t.tagName==='SELECT'){APPS[+t.dataset.ii][t.dataset.ff]=t.value;save();invTotals()}});
+$('invCat').addEventListener('change',drawInventory);$('invQ').addEventListener('input',drawInventory);
+$('invCsv').onclick=function(){
+  var q=function(v){v=String(v==null?'':v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v},L=['Appliance,Category,Location,Qty,Size / capacity,Brand / model,Volts,Amps,kW each,Total kW,Hours per day,Starts at hour,Duty %,Notes'];
+  APPS.forEach(function(a){L.push([a.n,a.cat,a.loc,a.q,a.size,a.model,a.v,a.amps,a.kw,(a.q*a.kw).toFixed(2),a.h,a.s||0,a.d,a.note].map(q).join(','))});
+  if(ROOMTYPES.length){var d=acInventoryData(),kw=+$('acKw').value||0;
+    d.g.Grande.concat(d.g.Chica).forEach(function(x){L.push(['Guest room AC - room '+x.r,CATS[0],(/^ch/i.test(x.r)?'Hotel Chica':'Hotel Grande'),x.u,'',x.t,220,'',kw,(x.u*kw).toFixed(2),'','','',''].map(q).join(','))});
+    d.casas.forEach(function(c){L.push(['AC - '+c[0],CATS[0],c[0],c[1],'','',220,'',kw,(c[1]*kw).toFixed(2),'','','',''].map(q).join(','))})}
+  var b=new Blob([L.join('\n')],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='electrical-inventory.csv';document.body.appendChild(a);a.click();a.remove();
+};
+
 var CHAT=[];
 function snapshot(){
   var r=LAST||calc(),g=r.g;
@@ -537,5 +601,5 @@ async function ask(q){
 $('chatgo').onclick=function(){ask($('chatq').value)};
 $('chatq').addEventListener('keydown',function(e){if(e.key==='Enter')ask($('chatq').value)});
 document.querySelectorAll('[data-q]').forEach(function(b){b.onclick=function(){ask(b.dataset.q)}});
-load();loadRange();drawApps();loadCol();fetchBookings();
+load();loadRange();normApps();fillCats();drawApps();drawInventory();loadCol();fetchBookings();
 </script></body></html>
