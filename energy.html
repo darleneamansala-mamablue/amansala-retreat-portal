@@ -18,7 +18,7 @@ input,select,textarea{font:inherit;font-size:14px;padding:7px 9px;border:1px sol
 input[type=number]{width:90px}button{font:inherit;font-size:13px;border:0;background:var(--ink);color:#fff;padding:9px 16px;cursor:pointer;letter-spacing:.05em}button.alt{background:#fff;color:var(--ink);border:1px solid var(--line)}
 table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}th{font-size:12px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.06em}
 td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9px;font-size:12px;font-weight:600;color:#fff}.ok{background:var(--ok)}.watch{background:var(--warn)}.over{background:var(--bad)}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}.kpi{background:var(--paper);border:1px solid var(--line);padding:14px}.kpi b{display:block;font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:500;line-height:1.1}.kpi span{font-size:12.5px;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}.kpi{background:var(--paper);border:1px solid var(--line);padding:14px}.kpi[data-tile]{cursor:pointer}.kpi[data-tile]:hover{border-color:var(--moss)}.kpi[data-tile].on{border-color:#c9972b;background:#fffaf0}.kpi[data-tile]::after{content:'What does this mean? \203A';display:block;margin-top:6px;font-size:12px;color:#8a6a1f}.kpi b{display:block;font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:500;line-height:1.1}.kpi span{font-size:12.5px;color:var(--muted)}.kpi .tag{color:#fff;font-size:12px;margin-left:6px}
 .note{font-size:12.5px;color:var(--muted)}.tbl{overflow-x:auto}svg text{font-family:'DM Sans',sans-serif}
 .helpbar{margin:0 0 18px}.card .helpbar{margin:14px 0 0}.helpbox{background:#fffaf0;border-left:3px solid #c9972b;padding:12px 14px;margin-top:10px;font-size:14.5px;line-height:1.6}.helpbox p{margin:0 0 8px}.helpbox b{font-weight:600}
 .chk{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--ink)}
@@ -40,6 +40,7 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <div class="card" id="verdict"></div>
 <div class="helpbar"><button class="alt" data-help="verdict">What does this mean?</button><div class="helpbox" id="help_verdict" hidden></div></div>
 <div class="kpis" id="kpis"></div>
+<div class="helpbox" id="help_tile" hidden style="margin:-6px 0 18px"></div>
 <div class="helpbar"><button class="alt" data-help="kpis">What does this mean?</button><div class="helpbox" id="help_kpis" hidden></div></div>
 <div class="card"><h2>Peak power vs generator capacity</h2><div id="chart1"></div><div class="helpbar"><button class="alt" data-help="chart">What does this mean?</button><div class="helpbox" id="help_chart" hidden></div></div></div>
 <div class="card"><h2>Daily energy vs what the generator can supply</h2><div class="tbl" id="daily"></div><div class="helpbar"><button class="alt" data-help="daily">What does this mean?</button><div class="helpbox" id="help_daily" hidden></div></div>
@@ -143,11 +144,11 @@ function render(){
   var r=calc(),rows=r.rows,g=r.g;LAST=r;if(!rows.length){$('daily').innerHTML='';return}
   var maxPeak=rows.reduce(function(m,x){return x.peak>m.peak?x:m},rows[0]), tot=rows.reduce(function(s,x){return s+x.mid},0), totLo=rows.reduce(function(s,x){return s+x.lo},0),totHi=rows.reduce(function(s,x){return s+x.hi},0),cost=+$('cost').value||0;
   $('kpis').innerHTML=
-   '<div class="kpi"><b>'+fmt(tot)+' kWh</b><span>Likely total for '+rows.length+' days ('+fmt(totLo)+' to '+fmt(totHi)+')</span></div>'+
-   '<div class="kpi"><b>'+fmt(maxPeak.peak)+' kW</b><span>Highest peak, '+maxPeak.d+'</span></div>'+
-   '<div class="kpi"><b>'+fmt(g.kw)+' kW</b><span>Generator capacity ('+g.kva+' kVA × PF '+$('pf').value+')</span></div>'+
-   '<div class="kpi"><b>'+(g.kw?Math.round(maxPeak.peak/g.kw*100)+'%':'no generator')+'</b><span>Peak load vs capacity '+(g.kw?tag(maxPeak.pct):'')+'</span></div>'+
-   '<div class="kpi"><b>$'+fmt(tot*cost)+'</b><span>Likely energy cost at $'+cost.toFixed(2)+' per kWh</span></div>';
+   '<div class="kpi" data-tile="energy"><b>'+fmt(tot)+' kWh</b><span>Likely total for '+rows.length+' days ('+fmt(totLo)+' to '+fmt(totHi)+')</span></div>'+
+   '<div class="kpi" data-tile="peak"><b>'+fmt(maxPeak.peak)+' kW</b><span>Highest peak, '+maxPeak.d+'</span></div>'+
+   '<div class="kpi" data-tile="cap"><b>'+fmt(g.kw)+' kW</b><span>Generator capacity ('+g.kva+' kVA × PF '+$('pf').value+')</span></div>'+
+   '<div class="kpi" data-tile="load"><b>'+(g.kw?Math.round(maxPeak.peak/g.kw*100)+'%':'no generator')+'</b><span>Peak load vs capacity '+(g.kw?tag(maxPeak.pct):'')+'</span></div>'+
+   '<div class="kpi" data-tile="cost"><b>$'+fmt(tot*cost)+'</b><span>Likely energy cost at $'+cost.toFixed(2)+' per kWh</span></div>';
   $('daily').innerHTML='<table><thead><tr><th>Night</th><th>Rooms</th><th>AC units</th><th>kWh low</th><th>kWh likely</th><th>kWh high</th><th>Peak kW</th><th>Gen can supply kWh</th><th>Energy used</th><th>Peak vs capacity</th></tr></thead><tbody>'+
    rows.map(function(x){var dt=new Date(x.d+'T12:00:00');return '<tr><td>'+dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</td><td>'+x.rooms+'</td><td>'+x.units+'</td><td>'+fmt(x.lo)+'</td><td><b>'+fmt(x.mid)+'</b></td><td>'+fmt(x.hi)+'</td><td>'+fmt(x.peak)+'</td><td>'+fmt(x.capKwh)+'</td><td>'+Math.round(x.epct)+'%</td><td>'+Math.round(x.pct)+'% '+tag(x.pct)+'</td></tr>'}).join('')+'</tbody></table>';
   chart(rows,g);
@@ -223,6 +224,20 @@ function H(){
   };
 }
 document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-help]');if(!b)return;var k=b.dataset.help,box=$('help_'+k);if(!box.hidden){box.hidden=true;b.textContent='What does this mean?';return}box.innerHTML=H()[k];box.hidden=false;b.textContent='Hide explanation'});
+
+function T(k){
+  var r=LAST||calc(),rows=r.rows,g=r.g,pf=+$('pf').value||0.8,cost=+$('cost').value||0;
+  var worst=rows.reduce(function(m,x){return x.peak>m.peak?x:m},rows[0])||{peak:0,d:'',pct:0},tot=rows.reduce(function(s,x){return s+x.mid},0);
+  var t={
+   energy:'<p><b>Total energy for these '+rows.length+' days: about '+fmt(tot)+' kWh.</b></p><p>A kWh is the amount of electricity, like litres of fuel. It is what your generator burns (or what you pay for) over the week. The range in brackets is the low to high guess, because we do not know exactly how often each AC switches on and off.</p>',
+   peak:'<p><b>Highest moment: about '+fmt(worst.peak)+' kW on '+worst.d+'.</b></p><p>A kW is how much power is being used right now, like how hard the engine is working. This is the busiest moment of the whole period, when the most rooms are full and the air conditioners are running. The generator must be strong enough for this moment, not for the average.</p>',
+   cap:'<p><b>The generator(s) can give about '+fmt(g.kw)+' kW.</b></p><p>The size printed on a generator is in kVA ('+g.kva+' kVA for the ones ticked at the top). To get the real, usable power, we multiply by 0.8. If the number is not what you expect, check which generators are ticked in the top row.</p>',
+   load:'<p><b>At the busiest moment the generator would be '+(g.kw?Math.round(worst.peak/g.kw*100):0)+'% full.</b></p><p>Think of it like a car engine: under 60% is comfortable, 60 to 85% is working hard, above 85% is too much. We also keep a safety cushion for the extra surge that air conditioners and pumps pull when they start.</p>',
+   cost:'<p><b>Estimated energy cost: about $'+fmt(tot*cost)+'.</b></p><p>This is the total kWh multiplied by the price per kWh you typed at the top ($'+cost.toFixed(2)+'). It is a rough guide. If you run on diesel, the real cost depends on how much fuel the generator burns for each kWh.</p>'
+  };
+  return t[k];
+}
+document.addEventListener('click',function(e){var c=e.target.closest&&e.target.closest('[data-tile]');if(!c)return;var box=$('help_tile'),k=c.dataset.tile;if(!box.hidden&&box.dataset.k===k){box.hidden=true;c.classList.remove('on');return}document.querySelectorAll('.kpi.on').forEach(function(x){x.classList.remove('on')});c.classList.add('on');box.dataset.k=k;box.innerHTML=T(k);box.hidden=false});
 
 var CHAT=[];
 function snapshot(){
