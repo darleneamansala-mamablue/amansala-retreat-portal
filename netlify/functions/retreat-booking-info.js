@@ -85,6 +85,7 @@ exports.handler = async (event) => {
       intro: cfg.intro || '',
       teachingFeeOn: !!(cfg.teachingFee && cfg.teachingFee.on),
       teachingPayee: String(cfg.teachingFeePayee || ''),
+      datesNote: String(cfg.datesNote || ''),
       roomNote: String(cfg.roomNote || ''),   // optional note under the price when a guest picks a room; replaces the teaching-fee line
       gratuityPerNight: Number(cfg.gratuityPerNight) || 0,
       taxFeePct: Number(cfg.taxFeePct) || 0,

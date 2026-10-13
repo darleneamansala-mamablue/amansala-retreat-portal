@@ -175,7 +175,7 @@ td.p strong{font-size:28px}
   </div></div>
   
   <section class="pad">
-    <div class="section-heading"><div><p class="kicker">Meals and accommodations</p></div><p id="priceIntro">Rates are per person, per night. Taxes and fees and staff gratuity are added at checkout, and your full total is shown before you pay.</p></div>
+    <div class="section-heading"><div><p class="kicker">Meals and accommodations</p></div><p id="priceIntro">Rates are per person, per night.</p></div>
     <div class="pricing">
       <aside class="incl"><h3>What's included</h3><ul id="inclList"></ul><div class="no" id="notIncl"></div></aside>
       <div class="tblwrap"><div class="twocol"><div class="tcol"><h3 class="colh">Private rooms</h3><table><thead><tr><th>Room Type</th><th>Based on 2 guests</th><th>Based on 1 guest</th></tr></thead><tbody id="chart"></tbody></table></div><div class="tcol" id="sharedCol"><h3 class="colh">Shared rooms</h3><table><thead><tr><th>Room Type</th><th>Per bed</th></tr></thead><tbody id="chartShared"></tbody></table></div></div>
@@ -300,7 +300,7 @@ function init(){
     if(INFO.bannerUrl){$('bannerImg').src=INFO.bannerUrl;$('bannerImg').alt=INFO.title||'';$('bannerWrap').hidden=false}
     else{$('titleTxt').textContent=INFO.title||'Your retreat';$('titleBar').hidden=false}
     var ds=INFO.template?'Your retreat dates':fmtD(INFO.startDate)+' – '+fmtD(INFO.endDate);
-    $('datesTxt').textContent=ds;$('lockDates').textContent=ds;$('nightsTxt').textContent=INFO.template?'Dates are set for each retreat':'';
+    $('datesTxt').textContent=ds;$('lockDates').textContent=ds;$('nightsTxt').textContent=INFO.template?'Dates are set for each retreat':(INFO.datesNote||'');
     if(INFO.preview){var rb=document.createElement('div');rb.className='preview-ribbon';rb.textContent=INFO.template?'Template preview · payment is turned off':'Preview · not open for booking yet · payment is turned off';document.body.insertBefore(rb,document.body.firstChild)}
     $('inclList').innerHTML=(INFO.includes||[]).map(function(i){return '<li>'+esc(i)+'</li>'}).join('');
     $('notIncl').textContent=INFO.notIncluded||'';$('notIncl').hidden=!INFO.notIncluded;
