@@ -20,6 +20,7 @@ table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:8px 10px;
 td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9px;font-size:12px;font-weight:600;color:#fff}.ok{background:var(--ok)}.watch{background:var(--warn)}.over{background:var(--bad)}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}.kpi{background:var(--paper);border:1px solid var(--line);padding:14px}.kpi b{display:block;font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:500;line-height:1.1}.kpi span{font-size:12.5px;color:var(--muted)}
 .note{font-size:12.5px;color:var(--muted)}.tbl{overflow-x:auto}svg text{font-family:'DM Sans',sans-serif}
+.helpbar{margin:0 0 18px}.card .helpbar{margin:14px 0 0}.helpbox{background:#fffaf0;border-left:3px solid #c9972b;padding:12px 14px;margin-top:10px;font-size:14.5px;line-height:1.6}.helpbox p{margin:0 0 8px}.helpbox b{font-weight:600}
 .chk{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--ink)}
 </style>
 </head>
@@ -37,16 +38,18 @@ td.in input{width:78px;text-align:right}.tag{display:inline-block;padding:2px 9p
 <button id="go">Update</button><span class="note" id="status"></span></div></div>
 
 <div class="card" id="verdict"></div>
+<div class="helpbar"><button class="alt" data-help="verdict">What does this mean?</button><div class="helpbox" id="help_verdict" hidden></div></div>
 <div class="kpis" id="kpis"></div>
-<div class="card"><h2>Peak power vs generator capacity</h2><div id="chart1"></div></div>
-<div class="card"><h2>Daily energy vs what the generator can supply</h2><div class="tbl" id="daily"></div>
+<div class="helpbar"><button class="alt" data-help="kpis">What does this mean?</button><div class="helpbox" id="help_kpis" hidden></div></div>
+<div class="card"><h2>Peak power vs generator capacity</h2><div id="chart1"></div><div class="helpbar"><button class="alt" data-help="chart">What does this mean?</button><div class="helpbox" id="help_chart" hidden></div></div></div>
+<div class="card"><h2>Daily energy vs what the generator can supply</h2><div class="tbl" id="daily"></div><div class="helpbar"><button class="alt" data-help="daily">What does this mean?</button><div class="helpbox" id="help_daily" hidden></div></div>
 <p class="note">Likely kWh uses the "likely" AC duty below. Generator can supply = capacity kW × 24 h. Status: OK under 60% of peak capacity, Watch 60 to 85%, Over above 85% (keeps room for motor start-up surges).</p></div>
 
 <div class="card"><h2>Appliances and loads</h2>
 <p class="note">Typical values, not measurements. Edit any row; set quantity to 0 for anything you don't have. Peak counts every unit running at once.</p>
-<div class="tbl"><table id="apps"><thead><tr><th>Appliance</th><th>Qty</th><th>kW each</th><th>Hours / day</th><th>Duty %</th><th>kWh / day</th><th>Peak kW</th></tr></thead><tbody></tbody></table></div></div>
+<div class="tbl"><table id="apps"><thead><tr><th>Appliance</th><th>Qty</th><th>kW each</th><th>Hours / day</th><th>Duty %</th><th>kWh / day</th><th>Peak kW</th></tr></thead><tbody></tbody></table></div><div class="helpbar"><button class="alt" data-help="apps">What does this mean?</button><div class="helpbox" id="help_apps" hidden></div></div></div>
 
-<div class="card"><h2>Guest AC (220V)</h2><div class="row">
+<div class="card"><h2>Guest AC (220V)</h2><div class="helpbar"><button class="alt" data-help="ac">What does this mean?</button><div class="helpbox" id="help_ac" hidden></div></div><div class="row">
 <label>Running draw, kW per unit (5 A × 220 V × 0.9)<input type="number" id="acKw" step="0.05" value="1.0"></label>
 <label>Hours on per night<input type="number" id="acH" value="12"></label>
 <label>Duty low %<input type="number" id="acLo" value="50"></label>
@@ -192,6 +195,34 @@ async function fetchBookings(){
 document.addEventListener('input',function(e){var t=e.target;if(t.dataset&&t.dataset.i!=null){APPS[+t.dataset.i][t.dataset.f]=+t.value||0}if(t.closest&&t.closest('.card')&&t.id!=='from'&&t.id!=='to'){save();render()}});
 document.addEventListener('change',function(e){if(e.target.id==='g1'||e.target.id==='g2'){save();render()}});
 $('go').onclick=function(){save();fetchBookings()};
+
+function H(){
+  var r=LAST||calc(),rows=r.rows,g=r.g,pf=+$('pf').value||0.8,mg=1+(+$('margin').value||0)/100;
+  var worst=rows.reduce(function(m,x){return x.peak>m.peak?x:m},rows[0])||{peak:0,d:''},tot=rows.reduce(function(s,x){return s+x.mid},0);
+  var cap100=100*pf,cap250=250*pf,need=worst.peak*mg/pf;
+  return {
+   verdict:'<p><b>The question:</b> is the generator big enough for the busiest moment of the week, or do we need to bring in more power?</p>'+
+    '<p><b>How we answer it:</b> we find the busiest night ('+worst.d+'), when about <b>'+fmt(worst.peak)+' kW</b> could be running at once. We add a '+$('margin').value+'% cushion, because air conditioners and pumps pull extra power for a second when they start. That gives about <b>'+fmt(need)+' kVA</b> that the generator must be able to deliver.</p>'+
+    '<p><b>Reading the table:</b> "Enough" means the generator has room to spare. "Not enough" means it would be running at its limit, which risks a blackout or damage. If you see "Not enough" for every option, that is when you need additional power.</p>',
+   kpis:'<p><b>kWh (kilowatt-hours)</b> is the amount of energy used, like litres of fuel. It decides the fuel or electricity bill. You are using about <b>'+fmt(tot)+' kWh</b> over these '+rows.length+' days.</p>'+
+    '<p><b>kW (kilowatts)</b> is how much power is being drawn at one moment, like how hard the engine is working. The generator has to be strong enough for the highest moment, about <b>'+fmt(worst.peak)+' kW</b>.</p>'+
+    '<p><b>Generator capacity</b> is the most power your selected generators can give: <b>'+fmt(g.kw)+' kW</b>. (kVA is the size printed on the generator. Multiplying by 0.8 turns it into usable kW.)</p>'+
+    '<p><b>Peak load vs capacity</b> is how full the generator gets at the busiest moment. Under 60% is comfortable, 60 to 85% is getting tight, above 85% is too much.</p>',
+   chart:'<p>Each bar is one night. The <b>height</b> is the most power the property could be using at once (in kW). The <b>lines</b> are what the generators can supply: the lower dashed line is the 100 kVA plant alone ('+fmt(cap100)+' kW), the upper dashed line is the 250 kVA plant alone ('+fmt(cap250)+' kW), and the solid line is the generators you ticked at the top.</p>'+
+    '<p><b>Green</b> bars are comfortable, <b>orange</b> is getting close to the limit, <b>red</b> is too much. A bar that reaches a line means that generator would be working at its limit that night.</p>',
+   daily:'<p>One row per night.</p><p><b>Rooms / AC units:</b> how many rooms are booked that night and how many air conditioners are on (some rooms have more than one).</p>'+
+    '<p><b>kWh low / likely / high:</b> the energy used in a day. We give a range because we do not know exactly how often each AC runs. "Likely" is the one to plan with.</p>'+
+    '<p><b>Peak kW:</b> the highest power at one moment that night.</p>'+
+    '<p><b>Gen can supply kWh:</b> the most energy the generators could produce in a full day. <b>Energy used</b> is the share of that you actually use. It is small because the generators are much bigger than what a day needs.</p>'+
+    '<p><b>Peak vs capacity:</b> how full the generator gets at the busiest moment. This is the number that matters for blackouts.</p>',
+   apps:'<p>This list is everything that uses electricity besides the guest rooms\' AC. For each one: <b>Qty</b> is how many you have, <b>kW each</b> is how much power it draws while running, <b>Hours / day</b> is how long it runs, and <b>Duty %</b> is how much of that time it is actually working (a fridge motor switches on and off, so it is not 100%).</p>'+
+    '<p><b>kWh / day</b> is energy per day (qty × kW × hours × duty). <b>Peak kW</b> is its power if it is running at the same moment as everything else. Change any number and the whole page updates. Set Qty to 0 for something you do not have.</p>',
+   ac:'<p>The guest-room air conditioners are the biggest use of electricity. We assume each unit draws about <b>'+$('acKw').value+' kW</b> while running (5 amps × 220 volts), stays on for <b>'+$('acH').value+' hours</b> a night (default 9 pm to 9 am), and its compressor works about <b>'+$('acMid').value+'%</b> of that time. Low and high show the range from '+$('acLo').value+'% to '+$('acHi').value+'%.</p>'+
+    '<p>The box lists rooms with more than one AC. A room that is not listed counts as 1 unit. Casa rooms count one per occupied bedroom plus the living room.</p>'+
+    '<p><b>Phone and laptop charging</b> adds a small amount for every occupied room.</p>'
+  };
+}
+document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-help]');if(!b)return;var k=b.dataset.help,box=$('help_'+k);if(!box.hidden){box.hidden=true;b.textContent='What does this mean?';return}box.innerHTML=H()[k];box.hidden=false;b.textContent='Hide explanation'});
 
 var CHAT=[];
 function snapshot(){
