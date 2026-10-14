@@ -195,6 +195,7 @@ async function _bdLoadFolios(){
   try{
     let {data:folios,error}=await db.from('folios').select('*').eq(subj.folioCol,folioSubjId).eq('guest_name',guestName);
     if(error)throw error;
+    let justSeeded=false;
     if(!folios||!folios.length){
       const token=uid().replace(/[^a-z0-9]/gi,'');
       const {data:created,error:cErr}=await db.from('folios').insert({[subj.folioCol]:folioSubjId,guest_name:guestName,name:guestName,payment_token:token,status:'open'}).select().single();
@@ -215,11 +216,27 @@ async function _bdLoadFolios(){
         const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
         const {error:riErr}=await db.from('folio_items').insert({folio_id:created.id,description:`Room charge — ${subj.room||'Room'}`,qty:nights,unit_price:subj.rate,tax_rate:0,category:'Room'});
         if(riErr)throw riErr;
+        justSeeded=true;
       }
     }
     const folioIds=folios.map(f=>f.id);
-    const {data:items,error:iErr}=await db.from('folio_items').select('*').in('folio_id',folioIds).order('created_at',{ascending:true});
+    let {data:items,error:iErr}=await db.from('folio_items').select('*').in('folio_id',folioIds).order('created_at',{ascending:true});
     if(iErr)throw iErr;
+    // Jorge's report 2026-10-14 (round 2): the seeding above only covers a folio
+    // the FIRST time it's ever created -- it did nothing for a Walk-in/Direct/OTA
+    // booking whose (empty) folio already existed in Supabase from before this
+    // fix shipped (f3fe77c), so "No charges yet." kept showing on every one of
+    // those pre-existing reservations. Backfill the same Room charge here too,
+    // into the oldest folio, the first time one of these old empty folios is
+    // opened -- runs at most once per booking, since folio_items is non-empty
+    // on every later open.
+    if(!justSeeded&&subj.folioCol==='registration_id'&&subj.rate>0&&!(items&&items.length)){
+      const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
+      const oldest=[...folios].sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0))[0];
+      const {data:backfilled,error:bfErr}=await db.from('folio_items').insert({folio_id:oldest.id,description:`Room charge — ${subj.room||'Room'}`,qty:nights,unit_price:subj.rate,tax_rate:0,category:'Room'}).select().single();
+      if(bfErr)throw bfErr;
+      items=[backfilled];
+    }
     _bdFolios=folios.map(f=>({folio:f,items:(items||[]).filter(i=>i.folio_id===f.id)}));
     // Jorge's report 2026-10-01: reopening Edit on a Comisión charge always
     // showed the Staff field blank, even after it had saved correctly --
