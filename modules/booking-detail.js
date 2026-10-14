@@ -646,7 +646,7 @@ function _bdFolioRowHtml(f){
         <span style="margin-left:10px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${isOpen?'#fef3c7':'#dcfce7'};color:${isOpen?'#92400e':'#15803d'}">${f.folio.status.toUpperCase()}</span>
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-primary btn-sm" onclick="bdCopyGuestLink('${f.folio.payment_token}')">Send to Guest</button>
+        <button class="btn btn-primary btn-sm" onclick="bdSendToGuest('${fid}')">Send to Guest</button>
         ${isOpen?`<button class="btn btn-secondary btn-sm" onclick="bdCloseFolio('${fid}')">Close</button>`:`<button class="btn btn-secondary btn-sm" onclick="bdReopenFolio('${fid}')">Reopen</button>`}
         <button class="btn btn-danger btn-sm" onclick="bdDeleteFolioRow('${fid}')">Delete</button>
       </div>
@@ -1054,6 +1054,38 @@ function bdCopyGuestLink(token){
     document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
     showToast('Guest link copied!');
   });
+}
+
+// "Send to Guest" -- Jorge's ask 2026-10-14: this used to only copy the link
+// to the clipboard despite the label; now it actually sends it by email AND
+// WhatsApp (whichever the guest has on file), saying "Pay your booking or
+// extras here" with the payment link, via send-folio-payment-link.js. Still
+// copies to clipboard too, same as before, so staff can paste it anywhere
+// (e.g. a WhatsApp chat window) regardless of how the send itself goes.
+// A folio's guest_name doesn't always match the subject's primary guest in a
+// shared room (see _bdSubject()'s allGuests comment) -- matched against
+// allGuests by name first, falling back to the subject's own contact info.
+async function bdSendToGuest(fid){
+  const f=_bdFolios.find(x=>x.folio.id===fid);if(!f)return;
+  const token=f.folio.payment_token;
+  bdCopyGuestLink(token);
+  const subj=_bdSubject();
+  const guestName=f.folio.guest_name||(subj?subj.guestName:'');
+  const match=subj&&(subj.allGuests||[]).find(g=>g.name&&g.name.trim().toLowerCase()===String(guestName).trim().toLowerCase());
+  const email=(match?match.email:subj?.guestEmail)||'';
+  const phone=(match?match.phone:(subj?.allGuests||[])[0]?.phone)||'';
+  if(!email&&!phone){showToast('No email or phone on file — link copied to clipboard.');return;}
+  try{
+    const res=await fetch('/.netlify/functions/send-folio-payment-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,guestName,email,phone})});
+    const d=await res.json();
+    if(!res.ok)throw new Error(d.error||'Send failed');
+    const parts=[];
+    if(email)parts.push(`Email ${d.results.email}`);
+    if(phone)parts.push(`WhatsApp ${d.results.whatsapp}`);
+    showToast(`${parts.join(' · ')} — link also copied to clipboard`);
+  }catch(e){
+    showToast('Could not send ('+(e.message||'error')+') — link copied to clipboard');
+  }
 }
 
 // Notifies modules/reservations.js (if its Arrivals/In House/Departures/
