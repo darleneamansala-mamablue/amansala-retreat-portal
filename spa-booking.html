@@ -674,8 +674,14 @@ function sbPickAutoSlot(startMin){
   const candidates=sbCandidateTherapists();
   const assigns=sbAllFreeAssignments(candidates,SB.date,startMin,svc.duration);   // re-checked now, in case someone just booked it
   if(!assigns.length){alert('Sorry, that time was just taken. Please choose another time.');sbRenderSlots(candidates,svc);return;}
-  const load=t=>SpaAppointments.filter(a=>a.therapistId===t.id&&a.status!=='CANCELLED').length;
-  assigns.sort((a,b)=>load(a.therapist)-load(b.therapist));
+  // Even distribution. Among the free therapists, give the service to whoever has (1) the fewest services that day, then (2) the fewest
+  // that week (Monday to Sunday), then (3) the fewest overall, then (4) alphabetical so the result is stable.
+  const d0=new Date(SB.date+'T12:00:00'),dow=(d0.getDay()+6)%7;
+  const wkStart=new Date(d0.getTime()-dow*86400000).toISOString().slice(0,10),wkEnd=new Date(d0.getTime()+(6-dow)*86400000).toISOString().slice(0,10);
+  const live=t=>SpaAppointments.filter(a=>a.therapistId===t.id&&a.status!=='CANCELLED');
+  const dayN=t=>live(t).filter(a=>a.date===SB.date).length;
+  const weekN=t=>live(t).filter(a=>a.date>=wkStart&&a.date<=wkEnd).length;
+  assigns.sort((a,b)=>dayN(a.therapist)-dayN(b.therapist)||weekN(a.therapist)-weekN(b.therapist)||live(a.therapist).length-live(b.therapist).length||String(a.therapist.firstName).localeCompare(String(b.therapist.firstName)));
   sbPickSlot(startMin,assigns[0].therapist.id,assigns[0].room?assigns[0].room.id:'');
 }
 function sbPickSlot(startMin,therapistId,roomId){

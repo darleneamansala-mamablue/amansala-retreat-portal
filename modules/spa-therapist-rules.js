@@ -102,3 +102,30 @@ function sprInjectService(svc) {
     };
   }
 })();
+
+// ---- Admin calendar: warn (not block) when a booking would go past a therapist's daily maximum or inside their break ----
+(function () {
+  const orig = window.spaApptSave;
+  if (typeof orig !== 'function') return;
+  window.spaApptSave = function () {
+    try {
+      const g = id => (document.getElementById(id) || {}).value;
+      const id = g('spaApptId'), therId = g('spaApptTherapist'), date = g('spaApptDate'), status = g('spaApptStatus');
+      const start = g('spaApptStart'), dur = parseInt(g('spaApptDuration'), 10) || 60;
+      const t = (SpaData.therapists || []).find(x => x.id === therId);
+      if (t && date && status !== 'CANCELLED' && Array.isArray(SpaAppointments)) {
+        const others = SpaAppointments.filter(a => a.id !== id && a.date === date && a.therapistId === therId && a.status !== 'CANCELLED');
+        const max = parseInt(t.maxServicesPerDay, 10) || 0, brk = parseInt(t.breakMinutes, 10) || 0;
+        const msgs = [];
+        if (max > 0 && others.length >= max) msgs.push(`${t.firstName} already has ${others.length} service${others.length === 1 ? '' : 's'} that day, and her maximum is ${max}.`.replace('her maximum', 'the maximum'));
+        if (brk > 0 && start) {
+          const s0 = spaCalHHMMToMin(start), e0 = s0 + dur;
+          const tight = others.find(a => { const as = spaCalHHMMToMin(a.start), ae = as + (a.duration || 60); return s0 < ae + brk && e0 + brk > as && !(s0 < ae && e0 > as); });
+          if (tight) msgs.push(`This leaves less than ${brk} minutes between ${t.firstName}'s services (${tight.clientName} at ${spaCalFmtT(tight.start)}).`);
+        }
+        if (msgs.length && !confirm(msgs.join('\n\n') + '\n\nBook it anyway?')) return;
+      }
+    } catch (e) { /* never block saving because of this check */ }
+    return orig.apply(this, arguments);
+  };
+})();
