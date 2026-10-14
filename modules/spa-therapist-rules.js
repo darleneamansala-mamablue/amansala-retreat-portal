@@ -1,4 +1,4 @@
-// ===== spa-therapist-rules.js — per-therapist booking rules: max services per day, break after each service =====
+// ===== spa-therapist-rules.js — booking rules: per-therapist max services per day / break, and a service's "always assign to" therapist =====
 // Loaded as a classic script AFTER spa.js; shares global scope. Standalone: it adds a small "Booking rules" block to the existing
 // Edit/New Therapist form and saves two optional fields on the therapist record (SpaData.therapists[i]):
 //   maxServicesPerDay  (whole number, blank = no limit)
@@ -50,6 +50,53 @@ function sprInject(t) {
           t.breakMinutes = b > 0 ? b : null;
           if (typeof spaSave === 'function') spaSave();
         }
+      } catch (e) {}
+      return r;
+    };
+  }
+})();
+
+// ---- Service form: "Always assign to" (service.fixedTherapistId) ----
+// When set, the public booking page offers and assigns ONLY that therapist for this service (e.g. Mayan Healing -> Maria Luisa).
+function sprInjectService(svc) {
+  const gp = document.getElementById('spaSvcGenderPref');
+  if (!gp) return;
+  const anchor = gp.closest('label') || gp.parentNode;
+  let box = document.getElementById('sprSvcBox');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'sprSvcBox';
+    box.style.cssText = 'margin-top:12px';
+    anchor.parentNode.insertBefore(box, anchor.nextSibling);
+  }
+  const therapists = (SpaData.therapists || []).filter(t => t.active !== false);
+  const cur = svc && svc.fixedTherapistId ? svc.fixedTherapistId : '';
+  box.innerHTML = `<label style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;display:block;margin-bottom:5px">Always assign to <span style="font-weight:400;text-transform:none;letter-spacing:0">(public booking page)</span></label>
+    <select id="sprFixedTher" style="width:100%;padding:9px 12px;border:1.5px solid #c8bfb5;border-radius:9px;font-family:'Jost',sans-serif;font-size:13px;background:#fff">
+      <option value="">Any available therapist</option>
+      ${therapists.map(t => `<option value="${t.id}" ${t.id === cur ? 'selected' : ''}>${(t.firstName || '') + ' ' + (t.lastName || '')}</option>`).join('')}
+    </select>
+    <div style="font-size:11.5px;color:#9ca3af;margin-top:4px">If a therapist is chosen here, guests are only ever booked with them for this service. Staff can still reassign it on the calendar.</div>`;
+}
+(function () {
+  const origShow = window.spaShowServiceForm;
+  if (typeof origShow === 'function') {
+    window.spaShowServiceForm = function (id) {
+      const r = origShow.apply(this, arguments);
+      try { sprInjectService(id ? SpaData.services.find(x => x.id === id) : null); } catch (e) {}
+      return r;
+    };
+  }
+  const origSave = window.spaSaveService;
+  if (typeof origSave === 'function') {
+    window.spaSaveService = function () {
+      let ther = '', id = '', name = '';
+      try { ther = document.getElementById('sprFixedTher').value; id = document.getElementById('spaSvcId').value; name = document.getElementById('spaSvcName').value.trim(); } catch (e) {}
+      const before = new Set(SpaData.services.map(x => x.id));
+      const r = origSave.apply(this, arguments);
+      try {
+        const svc = id ? SpaData.services.find(x => x.id === id) : SpaData.services.find(x => !before.has(x.id) && x.name === name);
+        if (svc) { svc.fixedTherapistId = ther || null; if (typeof spaSave === 'function') spaSave(); }
       } catch (e) {}
       return r;
     };
