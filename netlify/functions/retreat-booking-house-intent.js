@@ -55,6 +55,13 @@ exports.handler = async (event) => {
       if (gone.length) return L.json(409, { error: 'Sorry, one of those rooms was just taken. Please choose another room.' });
     }
 
+    // Reserve these exact bedroom(s) for the next HOLD_TTL_MIN minutes so nobody else's
+    // availability check can pick them while this guest is mid-payment -- same fix as the
+    // single-room checkout (Jorge's ask 2026-10-14). Shares rb_holds; bedroom ids (e.g.
+    // "cm-gd") never collide with real room codes.
+    const rbHoldId = 'h_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    await L.placeHold(key, bk.id, 'house', priced.rooms.map((r) => r.id), rbHoldId);
+
     // Payment plan: pay everything now, or (when the retreat offers it) a percentage now and the balance charged automatically later
     const offer = L.depositOffer(bk, cfg);
     const plan = body.plan === 'deposit' ? 'deposit' : 'full';
@@ -83,17 +90,18 @@ exports.handler = async (event) => {
       'metadata[rbTotal]': String(priced.total),
       'metadata[rbPlan]': plan,
       'metadata[rbDates]': `${range.checkIn}_${range.checkOut}`,
+      'metadata[rbHoldId]': rbHoldId,
     };
     if (plan === 'deposit') {
       const cust = await L.stripePost('/customers', { email, name, phone, 'metadata[rbBookingId]': bk.id });
-      if (cust.error) return L.json(400, { error: cust.error.message || 'Could not set up the payment' });
+      if (cust.error) { await L.releaseHold(key, rbHoldId); return L.json(400, { error: cust.error.message || 'Could not set up the payment' }); }
       params.customer = cust.id;
       params.setup_future_usage = 'off_session';
       params['metadata[rbBalance]'] = String(balance);
       params['metadata[rbBalanceDate]'] = offer.balanceDate;
     }
     const pi = await L.stripePost('/payment_intents', params);
-    if (pi.error) return L.json(400, { error: pi.error.message || 'Payment error' });
+    if (pi.error) { await L.releaseHold(key, rbHoldId); return L.json(400, { error: pi.error.message || 'Payment error' }); }
 
     const now = new Date().toISOString();
     const lineName = (r) => `Casa Master - ${r.label}${r.beds ? ' (' + r.beds + ')' : ''}: ${r.guestList.map((g) => g.name + (g.type === 'child' ? ` [child, ${g.age}]` : '')).join(', ')}${r.supplement ? ` - includes individual bed at ${money(r.supplement.nightlyRate)} per night` : ''}`;
@@ -123,6 +131,9 @@ exports.handler = async (event) => {
     }
     return L.json(200, { clientSecret: pi.client_secret, publishableKey: pubKey, amount: dueNow, plan, balance, balanceDate: plan === 'deposit' ? offer.balanceDate : null, total: priced.total, rooms: priced.rooms, recordUrl: L.recordUrl(pi.id) });
   } catch (e) {
+    // Anything thrown this late already has a real PaymentIntent (and its hold) in flight --
+    // left to expire on its own (HOLD_TTL_MIN) rather than guessed at here, same as every
+    // other "something failed after Stripe succeeded" edge case in this file.
     console.error('[retreat-booking-house-intent]', e.message);
     return L.json(400, { error: 'Could not start the payment. Please try again.' });
   }
