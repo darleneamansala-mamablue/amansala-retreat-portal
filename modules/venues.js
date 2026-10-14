@@ -2868,8 +2868,23 @@ function rcRenderExternalReservations(reservations,startMs){
     (r.rooms||[]).forEach(roomName=>{
       // Exact match first, case-insensitive fallback via roomCodesEqual (which knows
       // "2B"/"2b" etc. are actually two different rooms and won't fold those together).
-      const track=allTracks.find(t=>t.getAttribute('data-room')===roomName)||allTracks.find(t=>roomCodesEqual(t.getAttribute('data-room'),roomName));
-      if(!track){console.warn('[rcExternal] no track for room:',roomName,'available:',trackNames);return;}
+      const directTrack=allTracks.find(t=>t.getAttribute('data-room')===roomName)||allTracks.find(t=>roomCodesEqual(t.getAttribute('data-room'),roomName));
+      // A whole-room code like "19"/"19B" (sold as one room OR as split beds
+      // "19a"/"19b") never gets its own visible calendar row -- only the bed
+      // rows render -- so a direct lookup always failed and the reservation
+      // was silently dropped (real incident 2026-10-14: Elisabeth Watkins/
+      // room 19 and the "19B" reservation never showed anywhere on this
+      // calendar even once getExternalReservations itself was fixed to
+      // actually return them). Fall back to whichever sibling bed row(s)
+      // getRoomCounterparts resolves, same derived-room logic already used
+      // for portal bookings -- a whole-room reservation blocks every one of
+      // its sibling beds, so it should visually render in all of them.
+      const targetTracks=directTrack?[directTrack]
+        :(typeof getRoomCounterparts==='function'?getRoomCounterparts(roomName):[])
+          .map(sib=>allTracks.find(t=>t.getAttribute('data-room')===sib)||allTracks.find(t=>roomCodesEqual(t.getAttribute('data-room'),sib)))
+          .filter(Boolean);
+      if(!targetTracks.length){console.warn('[rcExternal] no track for room:',roomName,'available:',trackNames);return;}
+      targetTracks.forEach(track=>{
       const bl=document.createElement('div');
       bl.className='bk';
       bl.setAttribute('data-ext','1');
@@ -2911,6 +2926,7 @@ function rcRenderExternalReservations(reservations,startMs){
       }
       bl.appendChild(cancelBtn);
       track.appendChild(bl);
+      });
     });
   });
 }
