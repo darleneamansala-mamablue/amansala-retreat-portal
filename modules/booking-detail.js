@@ -200,6 +200,22 @@ async function _bdLoadFolios(){
       const {data:created,error:cErr}=await db.from('folios').insert({[subj.folioCol]:folioSubjId,guest_name:guestName,name:guestName,payment_token:token,status:'open'}).select().single();
       if(cErr)throw cErr;
       folios=[created];
+      // Jorge's report 2026-10-14: a Walk-in (and any other manually-entered Room
+      // Only reservation, e.g. Direct/OTA) opened a brand-new folio showing "No
+      // charges yet." even though Room Total correctly showed the nightly rate --
+      // rmSaveNewBooking() (modules/venues.js) never seeds a Room folio_items row,
+      // unlike the Stripe/WeTravel webhook paths (stripe-webhook.js's
+      // createInitialFolio, wetravel-webhook.js). Seeded here instead, the one
+      // place a 'reg' subject's very first folio gets created, so Balance Due
+      // matches Room Total from the start. Scoped to folioCol==='registration_id'
+      // only -- booking_requests (folioCol 'booking_request_id') already get their
+      // Room charge seeded by the payment webhook at the moment they're actually
+      // paid, and must not get a second one here before/without payment.
+      if(subj.folioCol==='registration_id'&&subj.rate>0){
+        const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
+        const {error:riErr}=await db.from('folio_items').insert({folio_id:created.id,description:`Room charge — ${subj.room||'Room'}`,qty:nights,unit_price:subj.rate,tax_rate:0,category:'Room'});
+        if(riErr)throw riErr;
+      }
     }
     const folioIds=folios.map(f=>f.id);
     const {data:items,error:iErr}=await db.from('folio_items').select('*').in('folio_id',folioIds).order('created_at',{ascending:true});
