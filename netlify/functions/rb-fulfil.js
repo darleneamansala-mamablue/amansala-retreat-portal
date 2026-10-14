@@ -57,7 +57,9 @@ async function fulfil(pi) {
   const guests = [{ name: m.rbName, email: m.rbEmail, phone: m.rbPhone, notes: '' }].concat(others.map((o) => (typeof o === 'string' ? { name: o, email: '', phone: '', notes: '' } : { name: o.name, email: o.email || '', phone: o.phone || '', notes: '' })));
   const agreed = (m.rbAck || '').includes('roommate') ? 'cancellation policy and single-bed roommate terms' : 'cancellation policy';
 
-  const av = await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg), range);
+  // Exclude this payment's own hold from "taken by someone else" -- it reserved these units for
+  // itself back in retreat-booking-intent.js precisely so it could still have them here.
+  const av = await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg, m.rbHoldId), range);
   const freeAll = (av[room.rtId] || { free: [] }).free;
   const isLeader = (m.rbAck || '').includes('leader=1');
   const needUnits = rm && rm.kind === 'twin' ? guests.length : 1;
@@ -66,6 +68,10 @@ async function fulfil(pi) {
   const ch = L.chooseUnits(freeAll, needUnits, isLeader, L.grandeOnly(rm));
   const units = ch.units, property = ch.property;
   const leaderAtGrande = isLeader && property === 'Grande';
+  // The hold has done its job either way (a real registration below now reserves the room, or
+  // there's genuinely nothing left to hold) -- release it instead of leaving it to expire, so a
+  // retry of this exact unit by someone else doesn't need to wait out the rest of the TTL.
+  await L.releaseHold(key, m.rbHoldId);
 
   const shareTxt = !m.rbShare ? '' : m.rbShare.startsWith('friend:') ? ` · SHARED ROOM: travelling with friend ${m.rbShare.slice(7)} (friend must also book a shared room)` : ' · SHARED ROOM: travelling alone, to be matched with a guest of the same gender (agreed to pay for a private room if no match)';
   const note = `Booked online ${new Date().toISOString().slice(0, 10)}${range.custom ? ` · STAY ${range.checkIn} to ${range.checkOut} (retreat ${bk.start_date} to ${bk.end_date}; extra nights include all meals; add the extra nights in Cloudbeds)` : ''}${isLeader ? ' · LEADER (' + (property || 'no room') + ')' : ''}${shareTxt} · agreed to ${agreed}${isDeposit ? ` · PAID 50% (${'$' + roomPaidNow.toFixed(2)}), balance $${roomLater.toFixed(2)} auto-charges ${m.rbBalanceDate}` : ''} · Stripe ${pi.id}`;
@@ -174,6 +180,7 @@ async function fulfil(pi) {
     console.error('[rb-fulfil] failed after payment', pi.id, err.message);
     orders[pi.id] = { piId: pi.id, bookingId, status: 'error', error: String(err.message).slice(0, 300), name: m.rbName, email: m.rbEmail, at: new Date().toISOString() };
     try { await L.appStoreSet(key, L.ORDERS_KEY, orders); } catch (e) { /* ignore */ }
+    await L.releaseHold(key, m.rbHoldId); // otherwise it just sits until HOLD_TTL_MIN expires, which is fine too
     await sendEmail('retreats@amansala.com', `ACTION NEEDED: retreat booking paid but not recorded — ${m.rbName || ''}`,
       `<p>A retreat booking payment succeeded but could not be fully recorded.</p><p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>Retreat booking id: ${esc(bookingId)}<br>Stripe payment: ${esc(pi.id)}<br>Total: ${esc(m.rbTotal)}<br>Error: ${esc(err.message)}</p><p>Please place the guest in the room list by hand or refund in Stripe.</p>`);
     return { error: true };

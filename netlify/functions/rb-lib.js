@@ -72,7 +72,9 @@ function nightsOf(bk) {
 
 // Free rooms / beds of each configured room type inside this retreat's room block.
 // A unit is free when its registration row has no named guest. Type membership comes from room_types.rooms.
-async function availability(key, bk, cfg) {
+// excludeHoldId: when fulfillment re-checks availability for the hold IT placed, pass that hold's id so its
+// own held units don't count as "taken by someone else" and block it from using them.
+async function availability(key, bk, cfg, excludeHoldId) {
   const rts = await sget(key, 'room_types?select=id,rooms');
   const rtRooms = {};
   rts.forEach((t) => { rtRooms[t.id] = new Set(t.rooms || []); });
@@ -82,6 +84,12 @@ async function availability(key, bk, cfg) {
     if (r.cancelled) return;
     if ((r.guests || []).some((g) => g && g.name)) taken.add(r.room);
   });
+  // Units another guest's checkout already has a short-lived hold on -- placed the moment
+  // Stripe charges them (placeHold below), released as soon as rb-fulfil.js finishes with it,
+  // otherwise left to expire on its own (HOLD_TTL_MIN). Without this, two guests paying within
+  // the same few minutes for the last unit of a room type could both be charged for it (Jorge's
+  // ask 2026-10-14: prevent that race instead of just emailing staff after the fact).
+  const checkoutHeld = await activeHoldUnits(key, bk.id, excludeHoldId);
   const blocked = bk.blocked_rooms || [];
   const out = {};
   (cfg.rooms || []).forEach((rm) => {
@@ -90,9 +98,38 @@ async function availability(key, bk, cfg) {
     // page and the hotel inventory cannot disagree. Turn off per retreat with cfg.requireCloudbeds = false.
     const cbIds = bk.cb_reservation_ids || {};
     const held = cfg.requireCloudbeds === false ? units : units.filter((u) => cbIds[u]);
-    out[rm.rtId] = { units, notHeld: units.length - held.length, free: held.filter((u) => !taken.has(u)) };
+    out[rm.rtId] = { units, notHeld: units.length - held.length, free: held.filter((u) => !taken.has(u) && !checkoutHeld.has(u)) };
   });
   return out;
+}
+
+// ---- Short-lived unit holds, closing the "paid before a room was ever reserved" race ----
+// A guest filling out their card can take minutes; without reserving the unit(s) the moment
+// they start paying, a second guest could pick the same (last) unit and both get charged for
+// it. placeHold is called right after retreat-booking-intent.js settles on which unit(s) a
+// guest will get, tagged with a holdId carried in the PaymentIntent's metadata; rb-fulfil.js
+// releases it once the booking is actually recorded (or abandoned), and availability() above
+// always excludes any still-active hold so nobody else can choose the same unit meanwhile.
+// Requires the `rb_holds` table (id, hold_id, booking_id, rt_id, unit, expires_at, created_at).
+const HOLD_TTL_MIN = 20;
+async function activeHoldUnits(key, bookingId, excludeHoldId) {
+  // Opportunistic cleanup -- correctness never depends on this running (every read here also
+  // filters by expires_at), it just keeps the table from growing with dead rows forever.
+  sreq(key, 'DELETE', `rb_holds?expires_at=lt.${encodeURIComponent(new Date().toISOString())}`, undefined, 'return=minimal').catch(() => {});
+  let path = `rb_holds?booking_id=eq.${encodeURIComponent(bookingId)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=unit,hold_id`;
+  const rows = await sget(key, path);
+  const set = new Set();
+  rows.forEach((r) => { if (r.hold_id !== excludeHoldId) set.add(r.unit); });
+  return set;
+}
+async function placeHold(key, bookingId, rtId, units, holdId) {
+  const expiresAt = new Date(Date.now() + HOLD_TTL_MIN * 60000).toISOString();
+  const rows = units.map((u) => ({ id: `${holdId}:${u}`, hold_id: holdId, booking_id: bookingId, rt_id: rtId, unit: u, expires_at: expiresAt }));
+  await sreq(key, 'POST', 'rb_holds', rows, 'return=minimal');
+}
+async function releaseHold(key, holdId) {
+  if (!holdId) return;
+  try { await sreq(key, 'DELETE', `rb_holds?hold_id=eq.${encodeURIComponent(holdId)}`, undefined, 'return=minimal'); } catch (e) { /* expires on its own either way */ }
 }
 
 // Price of a cart, in dollars, from the saved config only.
@@ -296,4 +333,4 @@ async function applyStayAvailability(key, bk, av, range) {
   return av;
 }
 
-module.exports = { stayRange, applyStayAvailability, grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json };
+module.exports = { stayRange, applyStayAvailability, grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json, placeHold, releaseHold, activeHoldUnits };
