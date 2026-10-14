@@ -181,7 +181,7 @@ function esc(s){return (s||'').replace(/</g,'&lt;');}
     if(n>=gp.minGroup)return gp.perPersonUSD*n;
     return null;
   };
-  const active=SpaData.services.filter(s=>s.active && s.duration!=null && (s.groupPricing?true:s.price!=null));
+  const active=SpaData.services.filter(s=>s.active && !s.offer && s.duration!=null && (s.groupPricing?true:s.price!=null));
   if(!active.length){
     svcEl.innerHTML='<p class="loading-note">Our menu is being finalized — check back soon.</p>';
   }else{

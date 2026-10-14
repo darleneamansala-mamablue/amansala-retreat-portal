@@ -188,6 +188,10 @@ function sbFindGuestBooking(clientName,roomNumber){
   return fallback;
 }
 
+// Special offer link (e.g. /spa-crystal -> ?offer=crystal): only services flagged with that offer are shown, and the general
+// page hides them. A service's `offer` field is set in the spa data.
+const SB_OFFER=(new URLSearchParams(location.search).get('offer')||'').toLowerCase();
+function sbOfferFilter(s){return SB_OFFER?String(s.offer||'').toLowerCase()===SB_OFFER:!s.offer;}
 function setStep(n){SB.step=n;renderStep();window.scrollTo({top:0,behavior:'smooth'});}
 
 function renderDots(total){
@@ -225,6 +229,7 @@ function renderStep(){
 
 // ── STEP 1 — ONE-ON-ONE OR GROUP CEREMONY ────────────────────────────────
 function renderStep1_SessionType(el){
+  if(SB_OFFER){const o=SpaData.services.filter(s=>s.active&&sbOfferFilter(s));if(o.length){SB.sessionType=(o[0].sessionType||'individual');SB.step=2;return renderStep2_Service(el);}}
   renderDots(7);
   el.innerHTML=`<div class="card">
     <div class="section-title">What Would You Like to Book?</div>
@@ -238,8 +243,8 @@ function sbPickSessionType(t){SB.sessionType=t;setStep(2);}
 // ── STEP 2 — SERVICE ─────────────────────────────────────────────────────
 function renderStep2_Service(el){
   renderDots(7);
-  const active=SpaData.services.filter(s=>s.active && s.duration!=null && (s.groupPricing?true:s.price!=null) && (s.sessionType||'individual')===SB.sessionType);
-  let html=`<button class="btn-back" onclick="setStep(1)">&#8249; Back</button><div class="card"><div class="section-title">Choose a Treatment</div><div class="section-sub">Select the service you'd like to book.</div>`;
+  const active=SpaData.services.filter(s=>s.active && s.duration!=null && (s.groupPricing?true:s.price!=null) && (s.sessionType||'individual')===SB.sessionType && sbOfferFilter(s));
+  let html=`${SB_OFFER?'':'<button class="btn-back" onclick="setStep(1)">&#8249; Back</button>'}<div class="card"><div class="section-title">Choose a Treatment</div><div class="section-sub">Select the service you'd like to book.</div>`;
   if(!active.length){
     html+=`<div class="no-slots">Nothing here is ready to book yet — please check back soon or contact us directly.</div>`;
   }
