@@ -60,14 +60,14 @@ function sclDecorate() {
       const icon = box.querySelector('[onclick*="spaCalToggleApptConfirm"]');
       if (!a || !icon) return;
       const r = sclRole(a);
-      icon.textContent = !a.confirmed ? '⏳' : r === 'therapist' ? '✅' : r === 'staff' ? '☑️' : '✔️';
+      icon.textContent = r === 'therapist' ? '✅' : '⏳';   // only the therapist's own confirmation counts as confirmed
       icon.title = sclTitle(a) + (a.confirmed ? ' — click to unconfirm' : ' — click to confirm on their behalf');
       box.querySelectorAll('.scl-label').forEach(x => x.remove());
-      if (a.confirmed && box.offsetHeight > 44) {
+      if ((a.confirmed || r !== 'therapist') && box.offsetHeight > 44 && a.confirmed) {
         const d = document.createElement('div');
         d.className = 'scl-label';
         d.style.cssText = 'font-size:9.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + (r === 'therapist' ? '#15803d' : '#92400e');
-        d.textContent = r === 'therapist' ? 'Confirmed by therapist' : r === 'staff' ? 'Staff confirmed, not therapist' : 'Confirmed (who not recorded)';
+        d.textContent = r === 'therapist' ? 'Confirmed by therapist' : 'Awaiting therapist';
         box.appendChild(d);
       }
     });
@@ -77,7 +77,7 @@ function sclDecorate() {
       const a = m && sclAppt(m[1]);
       if (!a || !a.confirmed) return;
       const r = sclRole(a);
-      btn.textContent = r === 'therapist' ? '✓ Confirmed by therapist' : r === 'staff' ? '✓ Confirmed by staff' : '✓ Confirmed';
+      btn.textContent = r === 'therapist' ? '✓ Confirmed by therapist' : 'Awaiting therapist';
       btn.title = sclTitle(a);
       btn.style.whiteSpace = 'normal';
       btn.style.lineHeight = '1.25';
