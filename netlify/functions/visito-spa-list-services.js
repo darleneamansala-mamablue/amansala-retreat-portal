@@ -52,7 +52,7 @@ exports.handler = async (event) => {
     const spaData = row?.value || {};
 
     const eligible = (spaData.services || [])
-      .filter(s => s.active && s.duration != null && (s.groupPricing ? true : s.price != null))
+      .filter(s => s.active && !s.offer && s.duration != null && (s.groupPricing ? true : s.price != null))
       .filter(s => !sessionType || (s.sessionType || 'individual') === sessionType)
       .map(s => ({ ...s, _label: labelFor(s.category) }));
 
