@@ -75,6 +75,13 @@ exports.handler = async (event) => {
     if (!choice.units) return L.json(409, { error: isLeader ? 'Sorry, that room type is sold out. Please choose another room type.' : 'Sorry, that room was just taken. Please choose another option.' });
     const leaderPlacement = isLeader ? choice.property.toLowerCase() : null;
 
+    // Reserve these exact unit(s) for the next HOLD_TTL_MIN minutes (comfortably longer than
+    // filling out a card) so nobody else's availability check can pick them while this guest is
+    // mid-payment -- the race this whole flow used to leave open (Jorge's ask 2026-10-14):
+    // the room was only ever re-checked, never actually reserved, between intent and fulfillment.
+    const holdId = 'h_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    await L.placeHold(key, bk.id, rm.rtId, choice.units, holdId);
+
     // Payment plan: pay everything now, or (when the retreat offers it) 50% now and the balance charged automatically on the
     // balance date to the card saved with this payment. Spa services are paid in full now.
     const offer = L.depositOffer(bk, cfg);
@@ -109,18 +116,19 @@ exports.handler = async (event) => {
       'metadata[rbTotal]': String(priced.total),
       'metadata[rbPlan]': plan,
       'metadata[rbDates]': `${range.checkIn}_${range.checkOut}`,
+      'metadata[rbHoldId]': holdId,
     };
     if (plan === 'deposit') {
       // a Stripe customer + saving the card for later charges (off session), with the guest's explicit authorization
       const cust = await L.stripePost('/customers', { email, name, phone, 'metadata[rbBookingId]': bk.id });
-      if (cust.error) return L.json(400, { error: cust.error.message || 'Could not set up the payment' });
+      if (cust.error) { await L.releaseHold(key, holdId); return L.json(400, { error: cust.error.message || 'Could not set up the payment' }); }
       params.customer = cust.id;
       params.setup_future_usage = 'off_session';
       params['metadata[rbBalance]'] = String(balance);
       params['metadata[rbBalanceDate]'] = offer.balanceDate;
     }
     const pi = await L.stripePost('/payment_intents', params);
-    if (pi.error) return L.json(400, { error: pi.error.message || 'Payment error' });
+    if (pi.error) { await L.releaseHold(key, holdId); return L.json(400, { error: pi.error.message || 'Payment error' }); }
 
     // Proof of what this guest saw and agreed to, kept for the booking record PDF and in case of a dispute
     try {
