@@ -52,6 +52,9 @@ async function fulfil(pi) {
     rec.rooms.forEach((r) => { if (!mine[r.id]) mine[r.id] = { piId: pi.id, at: new Date().toISOString() }; });
     all[bookingId] = mine;
     await L.appStoreSet(key, H.HOUSE_ROOMS_KEY, all);
+    // retreat_house_rooms above is now the permanent "taken" signal for these bedrooms --
+    // the temporary hold placed in retreat-booking-house-intent.js has done its job.
+    await L.releaseHold(key, m.rbHoldId);
 
     // Put every guest on the room list: one registration row per real room (unit), exactly like the single-room checkout does.
     const rts = await L.sget(key, 'room_types?select=id,rooms');
@@ -156,6 +159,7 @@ async function fulfil(pi) {
     console.error('[rb-fulfil-house] failed after payment', pi.id, err.message);
     orders[pi.id] = { piId: pi.id, bookingId, type: 'house', status: 'error', error: String(err.message).slice(0, 300), name: m.rbName, email: m.rbEmail, at: new Date().toISOString() };
     try { await L.appStoreSet(key, L.ORDERS_KEY, orders); } catch (e) { /* ignore */ }
+    await L.releaseHold(key, m.rbHoldId); // otherwise it just sits until HOLD_TTL_MIN expires, which is fine too
     await sendEmail('retreats@amansala.com', `ACTION NEEDED: Casa Master booking paid but not recorded — ${m.rbName || ''}`,
       `<p>A Casa Master booking payment succeeded but could not be fully recorded.</p><p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>Retreat booking id: ${esc(bookingId)}<br>Stripe payment: ${esc(pi.id)}<br>Total: ${esc(m.rbTotal)}<br>Rooms: ${esc(m.rbRooms)}<br>Error: ${esc(err.message)}</p>`);
     return { error: true };

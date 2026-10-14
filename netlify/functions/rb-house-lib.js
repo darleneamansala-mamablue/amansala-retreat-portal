@@ -104,7 +104,9 @@ function parseRange(cfg, bk, ci, co) {
   return { checkIn: ci, checkOut: co, nights, custom: ci !== bk.start_date || co !== bk.end_date };
 }
 
-async function houseAvailability(key, bk, cfg, range) {
+// excludeHoldId: pass the caller's own hold id when it's re-checking availability for a
+// selection it already placed a hold on, so that hold doesn't count as "someone else has it".
+async function houseAvailability(key, bk, cfg, range, excludeHoldId) {
   const house = cfg.house;
   const out = { open: false, taken: {}, rooms: {} };
   if (!house || !house.on) return out;
@@ -117,11 +119,18 @@ async function houseAvailability(key, bk, cfg, range) {
   const regs = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(bk.id)}&select=room,guests,cancelled`);
   const named = new Set();
   regs.forEach((r) => { if (!r.cancelled && (r.guests || []).some((g) => g && g.name)) named.add(r.room); });
+  // A bedroom someone else is actively mid-checkout for (placed in retreat-booking-house-intent.js
+  // the moment Stripe charges them) is reserved the same way a single-room checkout's unit is --
+  // shares rb_holds with the single-room flow (bedroom ids like "cm-gd" never collide with real
+  // room codes like "19a", so this is safe without a separate table). Jorge's ask 2026-10-14:
+  // prevent two guests paying for the same Casa Master bedroom at once, same as the single rooms.
+  const checkoutHeld = await L.activeHoldUnits(key, bk.id, excludeHoldId);
   const unit = house.unit || 'Casa Master';
   (house.rooms || []).forEach((r) => {
     const units = Array.isArray(r.units) ? r.units : [];
     let free, reason = '';
     if (out.taken[r.id]) { free = false; reason = 'sold'; }
+    else if (checkoutHeld.has(r.id)) { free = false; reason = 'being booked by someone else right now'; }
     else if (units.length) {
       const notBlocked = units.filter((u) => !blocked.has(u));
       const notHeld = units.filter((u) => blocked.has(u) && !heldOk(u));
