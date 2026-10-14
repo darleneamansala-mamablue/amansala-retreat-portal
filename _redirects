@@ -7,8 +7,8 @@
 /spa-staff  /booking-hub.html?mode=spa-staff  302
 
 # Public spa booking link for the 60 minute Crystal Balancing offer (service flagged offer=crystal). A 302, like /spa-staff, so the page sees ?offer=crystal.
-/spa-crystal  /spa-booking.html?offer=crystal  302
-/crystal  /spa-booking.html?offer=crystal  302
+/spa-crystal  /spa-booking.html  302
+/crystal  /spa-booking.html  302
 
 # Clean public link for the general spa booking page (no login). A rewrite keeps the short URL.
 /spa  /spa-booking.html  200

@@ -2,7 +2,6 @@
 // Loaded as a classic script AFTER spa.js; shares global scope. Standalone: it only adds a bar above the Public page preview.
 const SPL_LINKS = [
   { label: 'Spa booking page (all services)', path: '/spa', note: 'Guests choose any service and book. No login.' },
-  { label: 'Crystal Balancing, 60 min, $111', path: '/crystal', note: 'Goes straight to this one service.' },
   { label: 'Spa information page', path: '/spa-landing.html', note: 'Menu, therapists and a Book button.' },
 ];
 function splCopy(path, btn) {
