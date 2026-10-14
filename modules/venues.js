@@ -2864,7 +2864,7 @@ function rcRenderExternalReservations(reservations,startMs){
     // as part of that retreat and be clickable to actually join it, not show
     // as a disconnected grey "import as new booking" block (Darlene's ask
     // 2026-09-16 — Penelope/Karin, guests within Shannon Jamail's retreat).
-    const match=rcKnownGuestMatch(r.guestName);
+    const match=rcKnownGuestMatch(r.guestName,r.startDate,r.endDate);
     (r.rooms||[]).forEach(roomName=>{
       // Exact match first, case-insensitive fallback via roomCodesEqual (which knows
       // "2B"/"2b" etc. are actually two different rooms and won't fold those together).
@@ -2970,32 +2970,63 @@ function rcCancelExternalReservation(r,roomName,ev){
 // reservation Cloudbeds knows about but the portal hasn't linked yet
 // (cbReservationIds missing that room) can still be recognized as belonging
 // to a real retreat instead of looking like a brand-new, unrelated walk-in.
-function rcKnownGuestMatch(guestName){
+// resStartDate/resEndDate: the Cloudbeds reservation's own dates, when known
+// -- required to confirm a name match isn't coincidental (real incident
+// 2026-10-14: Elisabeth Watkins' Oct 14-18 2026 Cloudbeds reservation
+// matched Racheal Goldbert's Jan 24-28 2027 retreat purely because one of
+// her guests was registered as a bare first name "Lisa", and raw substring
+// matching let "lisa" match inside "elisabeth" -- months apart, unrelated
+// guests. Jorge linked it, which silently merged room 19 into the wrong
+// retreat's blocked_rooms and made the real Oct reservation disappear from
+// its actual dates entirely.
+function rcKnownGuestMatch(guestName,resStartDate,resEndDate){
   // Strip parenthetical nicknames ("Kathryn (Katie) Stevenson" -> "Kathryn
   // Stevenson") before comparing, or a name Cloudbeds annotated that way
   // never matches the portal's plain version of it (real gap found
   // 2026-09-16 while chasing this down).
   const clean=s=>(s||'').replace(/\([^)]*\)/g,' ').replace(/\s+/g,' ').toLowerCase().trim();
+  // Whole-word (token) matching instead of raw substring -- substring let a
+  // short name like "Lisa" match embedded inside an unrelated longer name
+  // ("eLISAbeth"). Every token of the shorter name must appear as a WHOLE
+  // word in the longer name's token list.
+  const toks=s=>clean(s).split(' ').filter(Boolean);
+  const tokensMatch=(a,b)=>{
+    if(!a.length||!b.length)return false;
+    const [shorter,longer]=a.length<=b.length?[a,b]:[b,a];
+    return shorter.every(t=>longer.includes(t));
+  };
   const norm=clean(guestName);
+  const normToks=toks(guestName);
   if(!norm)return null;
+  // A name match alone isn't enough -- two different guests (or the same
+  // guest on an unrelated stay) can share a name. Require the candidate
+  // booking's own dates to actually overlap, or be close enough to plausibly
+  // be an adjacent/extra night of the SAME stay (±3 days), same adjacency
+  // reasoning as BE_MATCH_WINDOW_DAYS elsewhere in this app.
+  const datesPlausible=bk=>{
+    if(!resStartDate||!resEndDate||!bk.startDate||!bk.endDate)return true; // no dates to check against -- don't block a real match
+    if(typeof datesOverlap==='function'&&datesOverlap(resStartDate,resEndDate,bk.startDate,bk.endDate))return true;
+    const DAY_MS=86400000;
+    const gapBefore=(new Date(bk.startDate)-new Date(resEndDate))/DAY_MS;
+    const gapAfter=(new Date(resStartDate)-new Date(bk.endDate))/DAY_MS;
+    return (gapBefore>=0&&gapBefore<=3)||(gapAfter>=0&&gapAfter<=3);
+  };
   for(const bk of AppData.bookings){
-    if(bk.status==='cancelled')continue;
+    if(bk.status==='cancelled'||!datesPlausible(bk))continue;
     // Check the retreat name too, not just the leader's personal name — a
     // Cloudbeds reservation is sometimes tagged with the retreat's name
     // ("... De La Sol Retreat") rather than who's actually on it.
     for(const candidate of [bk.leaderName,bk.retreatName]){
       if(!candidate)continue;
-      const ln=clean(candidate);
-      if(ln&&(norm.includes(ln)||ln.includes(norm)))return{bk};
+      if(tokensMatch(normToks,toks(candidate)))return{bk};
     }
   }
   for(const reg of AppData.regs){
     const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
-    if(!bk||bk.status==='cancelled')continue;
+    if(!bk||bk.status==='cancelled'||!datesPlausible(bk))continue;
     for(const g of(reg.guests||[])){
       if(!g.name)continue;
-      const gn=clean(g.name);
-      if(gn&&(norm.includes(gn)||gn.includes(norm)))return{bk,room:reg.room};
+      if(tokensMatch(normToks,toks(g.name)))return{bk,room:reg.room};
     }
   }
   return null;
@@ -3034,7 +3065,7 @@ async function rclOpen(){
   const seen=new Set();
   (data.reservations||[]).forEach(r=>{
     if(portalResIds.has(String(r.reservationID))||seen.has(r.reservationID))return;
-    const match=rcKnownGuestMatch(r.guestName);
+    const match=rcKnownGuestMatch(r.guestName,r.startDate,r.endDate);
     if(!match)return;
     seen.add(r.reservationID);
     (r.rooms||[]).forEach(room=>_rclMatches.push({r,bk:match.bk,room}));
