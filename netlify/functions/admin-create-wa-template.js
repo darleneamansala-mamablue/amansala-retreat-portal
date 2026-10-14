@@ -24,7 +24,7 @@ exports.handler = async () => {
         category: 'UTILITY',
         components: [{
           type: 'BODY',
-          text: 'Hi {{1}}, thanks for booking with us directly. Pay your booking or extras here: {{2}}',
+          text: 'Hi {{1}}, thanks for booking with us directly. Pay your booking or extras here: {{2}}.',
           example: { body_text: [['Jorge', 'https://amansalaportal.com/guest-pay.html?token=abc123']] },
         }],
       },
