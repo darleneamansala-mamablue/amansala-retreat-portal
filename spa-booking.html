@@ -429,10 +429,16 @@ function sbSubmitOffsite(){
 
 // ── STEP 5 — THERAPIST PREFERENCE ────────────────────────────────────────
 function sbEligibleTherapists(){
-  return SpaData.therapists.filter(t=>t.active && (t.services||[]).some(s=>s.serviceId===SB.serviceId));
+  const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  let list=SpaData.therapists.filter(t=>t.active && (t.services||[]).some(s=>s.serviceId===SB.serviceId));
+  // A service can be locked to one therapist (service.fixedTherapistId, e.g. Mayan Healing -> Maria Luisa): only she is ever offered or assigned.
+  if(svc&&svc.fixedTherapistId){const fixed=list.filter(t=>t.id===svc.fixedTherapistId);if(fixed.length)list=fixed;}
+  return list;
 }
 function renderStep5_Preference(el){
   const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  // Offsite guests don't know our therapists, so they can't pick one; only hotel guests can choose a specific therapist
+  if(SB.guestType!=='hotel'&&SB.prefType==='specific'){SB.prefType='none';SB.requestedTherapistId=null;}
   if(!svc.genderPrefEnabled){SB.prefType='none';return setStep(6);}
   renderDots(7);
   const eligible=sbEligibleTherapists();
@@ -444,7 +450,7 @@ function renderStep5_Preference(el){
       <div class="choice-btn" onclick="sbPickPref('none')">No preference</div>
       <div class="choice-btn" onclick="sbPickPref('female')">Female therapist</div>
       <div class="choice-btn" onclick="sbPickPref('male')">Male therapist</div>
-      <div class="choice-btn" onclick="sbShowTherapistList()">Choose a specific therapist</div>
+      ${SB.guestType==='hotel'?`<div class="choice-btn" onclick="sbShowTherapistList()">Choose a specific therapist</div>`:''}
       <div id="sbTherapistList" style="display:none;margin-top:10px">
         ${eligible.map(t=>`<div class="choice-btn" style="display:flex;gap:12px;align-items:center" onclick="sbPickPref('specific','${t.id}')">
           ${t.photoDataUrl?`<img src="${t.photoDataUrl}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<div style="width:42px;height:42px;border-radius:50%;background:#f0ebe0;color:#c8bfb5;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">${CAT_ICON[svc.category]||'🧑'}</div>`}
@@ -505,9 +511,19 @@ function sbIsTherapistAvailable(ther,date,period){
 }
 function sbSlotFree(therapistId,roomId,dateStr,startMin,duration,excludeApptId){
   const endMin=startMin+duration;
+  let brk=0;
   if(therapistId){
     const ther=SpaData.therapists.find(t=>t.id===therapistId);
     if(ther&&!sbIsTherapistAvailable(ther,dateStr,startMin<720?'AM':'PM'))return false;
+    // Per-therapist rules set on their profile: max services per day, and a break (minutes) after each service. Both optional.
+    if(ther){
+      brk=Math.max(0,parseInt(ther.breakMinutes,10)||0);
+      const max=parseInt(ther.maxServicesPerDay,10)||0;
+      if(max>0){
+        const today=SpaAppointments.filter(a=>a.id!==excludeApptId&&a.date===dateStr&&a.status!=='CANCELLED'&&a.therapistId===therapistId).length;
+        if(today>=max)return false;
+      }
+    }
   }
   return !SpaAppointments.some(a=>{
     if(excludeApptId&&a.id===excludeApptId) return false;
@@ -516,7 +532,8 @@ function sbSlotFree(therapistId,roomId,dateStr,startMin,duration,excludeApptId){
     const sameRoom=roomId&&a.roomId===roomId;
     if(!sameTher&&!sameRoom) return false;
     const aStart=hhmmToMin(a.start), aEnd=aStart+(a.duration||60);
-    return startMin<aEnd && endMin>aStart;
+    const pad=sameTher?brk:0;   // the break sits after whichever service comes first
+    return startMin<aEnd+pad && endMin+pad>aStart;
   });
 }
 // Simple stand-in for the fair-rotation queue (full claim/accept flow is a
@@ -638,6 +655,12 @@ function sbRenderSlots(candidates,svc){
     if(assigns.length) rows.push({start:m,assigns});
   }
   if(!rows.length){wrap.innerHTML=`<div class="no-slots">No open times on this day — try another date.</div>`;return;}
+  // No specific therapist chosen (no preference, or just female / male): show plain time buttons. Picking a time assigns the least-busy
+  // free therapist automatically; staff can reassign or move the appointment afterwards in the admin calendar.
+  if(SB.prefType!=='specific'){
+    wrap.innerHTML=`<div class="section-sub" style="margin:0 0 10px">Choose a time. We will assign one of our ${SB.prefType==='female'?'female ':SB.prefType==='male'?'male ':''}therapists for you.</div><div style="display:flex;flex-wrap:wrap;gap:8px">${rows.map(r=>`<button class="slot-btn" style="width:auto;padding:10px 16px" onclick="sbPickAutoSlot(${r.start})">${fmtT(minToHHMM(r.start))}</button>`).join('')}</div>`;
+    return;
+  }
   wrap.innerHTML=`<div style="display:flex;flex-direction:column;gap:12px">${rows.map(r=>`
     <div>
       <div style="font-size:12px;font-weight:700;color:#8a7e74;margin-bottom:5px">${fmtT(minToHHMM(r.start))}</div>
@@ -645,6 +668,15 @@ function sbRenderSlots(candidates,svc){
         ${r.assigns.map(a=>`<button class="slot-btn" style="width:auto;padding:10px 16px" onclick="sbPickSlot(${r.start},'${a.therapist.id}','${a.room?a.room.id:''}')">${esc(a.therapist.firstName)}</button>`).join('')}
       </div>
     </div>`).join('')}</div>`;
+}
+function sbPickAutoSlot(startMin){
+  const svc=SpaData.services.find(s=>s.id===SB.serviceId);
+  const candidates=sbCandidateTherapists();
+  const assigns=sbAllFreeAssignments(candidates,SB.date,startMin,svc.duration);   // re-checked now, in case someone just booked it
+  if(!assigns.length){alert('Sorry, that time was just taken. Please choose another time.');sbRenderSlots(candidates,svc);return;}
+  const load=t=>SpaAppointments.filter(a=>a.therapistId===t.id&&a.status!=='CANCELLED').length;
+  assigns.sort((a,b)=>load(a.therapist)-load(b.therapist));
+  sbPickSlot(startMin,assigns[0].therapist.id,assigns[0].room?assigns[0].room.id:'');
 }
 function sbPickSlot(startMin,therapistId,roomId){
   SB.start=minToHHMM(startMin);
@@ -665,12 +697,12 @@ function renderStep7_Confirm(el){
       <div class="summary-row"><span class="lbl">Service</span><span class="val">${esc(svc.name)}</span></div>
       <div class="summary-row"><span class="lbl">Date</span><span class="val">${fmtDateLong(SB.date)}</span></div>
       <div class="summary-row"><span class="lbl">Time</span><span class="val">${fmtT(SB.start)}</span></div>
-      <div class="summary-row"><span class="lbl">Therapist</span><span class="val">${esc(ther.firstName)} ${esc(ther.lastName||'')}</span></div>
+      <div class="summary-row"><span class="lbl">Therapist</span><span class="val">${SB.prefType==='specific'?esc(ther.firstName)+' '+esc(ther.lastName||''):'Assigned by our team'}</span></div>
       ${svc.groupPricing?`<div class="summary-row"><span class="lbl">Guests</span><span class="val">${SB.guestCount}</span></div>`:''}
       <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc.groupPricing?SB.groupTotalPrice:svc.price} USD</span></div>
       <div class="summary-row"><span class="lbl">${SB.guestType==='hotel'?'Room':'Contact'}</span><span class="val">${SB.guestType==='hotel'?esc(SB.roomNumber):esc(SB.email)}</span></div>
       <div class="form-group" style="margin-top:16px">
-        <label class="form-label">Add a Tip for ${esc(ther.firstName)} (optional)</label>
+        <label class="form-label">Add a Tip${SB.prefType==='specific'?' for '+esc(ther.firstName):' for your therapist'} (optional)</label>
         <input class="form-input" type="number" min="0" step="1" id="sbTipInput" placeholder="e.g. 10" value="${SB.tipAmount||''}" oninput="SB.tipAmount=parseFloat(this.value)||0">
       </div>
       ${SB.guestType!=='hotel'?`<div id="sbStripeContainer" style="display:none;margin-top:14px">
@@ -1035,7 +1067,7 @@ async function sbWriteAppointment(paymentIntentId){
     const ther=SpaData.therapists.find(t=>t.id===appt.therapistId)||SpaData.therapists.find(t=>t.id===SB.therapistId);
     const roomLoc=SpaData.rooms.find(r=>r.id===appt.roomId);
     const meetAt=roomLoc?(roomLoc.location?`${roomLoc.name} — ${roomLoc.location}`:roomLoc.name):'Our spa reception';
-    const therName=ther?`${ther.firstName} ${ther.lastName||''}`.trim():'Your therapist';
+    const therName=(ther&&(appt.therapistPreference||{}).type==='specific')?`${ther.firstName} ${ther.lastName||''}`.trim():'Assigned by our team';
     if(appt.email) await sbSendConfirmEmail(appt,svc,therName,meetAt,folioPosted);
     await sbSendTherapistNewBookingEmail(appt,svc);
     const el=document.getElementById('mainContent');
@@ -1082,7 +1114,7 @@ function sbRenderConfirmationScreen(apptId){
   const ther=SpaData.therapists.find(t=>t.id===appt.therapistId);
   const room=SpaData.rooms.find(r=>r.id===appt.roomId);
   const meetAt=room?(room.location?`${room.name} — ${room.location}`:room.name):'Our spa reception';
-  const therName=ther?`${ther.firstName} ${ther.lastName||''}`.trim():'To be assigned';
+  const therName=(ther&&(appt.therapistPreference||{}).type==='specific')?`${ther.firstName} ${ther.lastName||''}`.trim():(ther?'Assigned by our team':'To be assigned');
   const isCancelled=appt.status==='CANCELLED';
   const hoursLeft=(sbApptDateTime(appt)-new Date())/3600000;
   const canCancelOnline=!isCancelled&&hoursLeft>=12;
