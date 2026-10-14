@@ -172,6 +172,11 @@ exports.handler = async (event) => {
     const allTypes = allTypesRes.ok ? await allTypesRes.json() : [];
     propagateSiblingBlocks(blockedRooms, allTypes);
 
+    // A room someone else is actively mid-checkout for (stripe.js placed this the moment
+    // it created their PaymentIntent) shouldn't show as available here either.
+    const heldRes = await fetch(`${SUPABASE_URL}/rest/v1/eng_holds?check_in=lt.${checkOut}&check_out=gt.${checkIn}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=room`, { headers: hdrs });
+    (heldRes.ok ? await heldRes.json() : []).forEach(h => blockedRooms.add(h.room));
+
     const nights = Math.max(1, Math.round((new Date(checkOut) - new Date(checkIn)) / 86400000));
     const numAdults = Math.max(1, parseInt(adults) || 1);
     const taxPct = parseFloat(settings.taxes_pct) || 0;

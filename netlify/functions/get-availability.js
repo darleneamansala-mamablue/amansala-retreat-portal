@@ -178,6 +178,13 @@ exports.handler = async (event) => {
     const allTypes = allTypesRes.ok ? await allTypesRes.json() : [];
     propagateSiblingBlocks(blockedRooms, allTypes);
 
+    // A room someone else is actively mid-checkout for (stripe.js placed this the moment
+    // it created their PaymentIntent, released once their payment resolves or left to
+    // expire) shouldn't show as available here either -- otherwise this count and the
+    // room stripe.js actually assigns could disagree for the few minutes a hold is live.
+    const heldRes = await fetch(`${SUPABASE_URL}/rest/v1/eng_holds?check_in=lt.${checkOut}&check_out=gt.${checkIn}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=room`, { headers: hdrs });
+    (heldRes.ok ? await heldRes.json() : []).forEach(h => blockedRooms.add(h.room));
+
     const available = (roomTypes ?? []).map(rt => {
       const rooms = rt.rooms ?? [];
       const availableCount = rooms.filter(r => !blockedRooms.has(r)).length;

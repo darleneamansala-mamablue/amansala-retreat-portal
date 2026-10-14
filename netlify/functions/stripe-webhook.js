@@ -268,48 +268,71 @@ exports.handler = async (event) => {
     if (insertedId && meta.roomTypeId) {
       try {
         const hdrs = { 'apikey': supaKey, 'Authorization': `Bearer ${supaKey}` };
-        // Get physical rooms for this room type
-        const rtRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(meta.roomTypeId)}&select=rooms`,
-          { headers: hdrs }
-        );
-        const [rt] = rtRes.ok ? await rtRes.json() : [{}];
-        const physicalRooms = rt?.rooms ?? [];
+        let assignedRoom = (meta.assignedRoom || '').trim() || null;
 
-        if (physicalRooms.length) {
-          // Find rooms occupied for overlapping dates from booking_requests
-          const brOcc = await fetch(
-            `${SUPABASE_URL}/rest/v1/booking_requests?room=not.is.null&check_in=lt.${encodeURIComponent(meta.checkOut)}&check_out=gt.${encodeURIComponent(meta.checkIn)}&status=not.in.(declined,cancelled)&select=room`,
+        // stripe.js now picks and HOLDS a room before the guest even enters card details
+        // (Jorge's ask 2026-10-14, same fix already shipped for retreat-booking.html) -- trust
+        // that pre-assignment instead of recomputing, closing the same-room-twice race this
+        // recompute-at-webhook-time approach could never fully close by itself. Only a
+        // PaymentIntent created before this shipped has no meta.assignedRoom; fall back to the
+        // old recompute-from-scratch for those so an in-flight payment at deploy time still works.
+        if (!assignedRoom) {
+          const rtRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(meta.roomTypeId)}&select=rooms`,
             { headers: hdrs }
           );
-          const occupied = new Set((brOcc.ok ? await brOcc.json() : []).map(r => r.room));
+          const [rt] = rtRes.ok ? await rtRes.json() : [{}];
+          const physicalRooms = rt?.rooms ?? [];
 
-          // Also check group bookings blocked_rooms
-          const bkOcc = await fetch(
-            `${SUPABASE_URL}/rest/v1/bookings?start_date=lt.${encodeURIComponent(meta.checkOut)}&end_date=gt.${encodeURIComponent(meta.checkIn)}&status=neq.cancelled&select=blocked_rooms`,
-            { headers: hdrs }
-          );
-          (bkOcc.ok ? await bkOcc.json() : []).forEach(b => (b.blocked_rooms ?? []).forEach(r => occupied.add(r)));
-
-          // A room sold whole (e.g. "19B") and as individual shared beds
-          // ("19B -a", "19B -b") is the SAME physical space -- confirmed real
-          // gap 2026-10-10 (Jorge's report): this auto-assignment could pick
-          // an already-occupied room's sibling, a genuine double-booking.
-          const allTypesRes = await fetch(`${SUPABASE_URL}/rest/v1/room_types?select=id,rooms`, { headers: hdrs });
-          const allTypes = allTypesRes.ok ? await allTypesRes.json() : [];
-          propagateSiblingBlocks(occupied, allTypes);
-
-          const assignedRoom = physicalRooms.find(r => !occupied.has(r)) ?? null;
-          if (assignedRoom) {
-            await fetch(`${SUPABASE_URL}/rest/v1/booking_requests?id=eq.${insertedId}`, {
-              method:  'PATCH',
-              headers: { ...hdrs, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-              body:    JSON.stringify({ room: assignedRoom }),
-            });
-            console.log('[stripe-webhook] Auto-assigned room:', assignedRoom, 'to booking', insertedId);
-          } else {
-            console.warn('[stripe-webhook] No available room found for type', meta.roomTypeId, 'on', meta.checkIn, '–', meta.checkOut);
+          if (physicalRooms.length) {
+            const brOcc = await fetch(
+              `${SUPABASE_URL}/rest/v1/booking_requests?room=not.is.null&check_in=lt.${encodeURIComponent(meta.checkOut)}&check_out=gt.${encodeURIComponent(meta.checkIn)}&status=not.in.(declined,cancelled)&select=room`,
+              { headers: hdrs }
+            );
+            const occupied = new Set((brOcc.ok ? await brOcc.json() : []).map(r => r.room));
+            const bkOcc = await fetch(
+              `${SUPABASE_URL}/rest/v1/bookings?start_date=lt.${encodeURIComponent(meta.checkOut)}&end_date=gt.${encodeURIComponent(meta.checkIn)}&status=neq.cancelled&select=blocked_rooms`,
+              { headers: hdrs }
+            );
+            (bkOcc.ok ? await bkOcc.json() : []).forEach(b => (b.blocked_rooms ?? []).forEach(r => occupied.add(r)));
+            // A room sold whole (e.g. "19B") and as individual shared beds
+            // ("19B -a", "19B -b") is the SAME physical space -- confirmed real
+            // gap 2026-10-10 (Jorge's report): this auto-assignment could pick
+            // an already-occupied room's sibling, a genuine double-booking.
+            const allTypesRes = await fetch(`${SUPABASE_URL}/rest/v1/room_types?select=id,rooms`, { headers: hdrs });
+            const allTypes = allTypesRes.ok ? await allTypesRes.json() : [];
+            propagateSiblingBlocks(occupied, allTypes);
+            assignedRoom = physicalRooms.find(r => !occupied.has(r)) ?? null;
           }
+        }
+
+        if (assignedRoom) {
+          await fetch(`${SUPABASE_URL}/rest/v1/booking_requests?id=eq.${insertedId}`, {
+            method:  'PATCH',
+            headers: { ...hdrs, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+            body:    JSON.stringify({ room: assignedRoom }),
+          });
+          console.log('[stripe-webhook] Auto-assigned room:', assignedRoom, 'to booking', insertedId);
+        } else {
+          console.warn('[stripe-webhook] No available room found for type', meta.roomTypeId, 'on', meta.checkIn, '–', meta.checkOut);
+          // Paid with no room assigned used to be completely silent (nothing but this console
+          // line) -- real gap closed alongside the hold fix: staff now get the same kind of
+          // "paid but no room free" alert retreat-booking.html already sends.
+          const resendKey = process.env.RESEND_API_KEY;
+          if (resendKey) {
+            fetch('https://api.resend.com/emails', {
+              method: 'POST', headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                from: 'Amansala <retreats@amansala.com>', to: ['retreats@amansala.com'],
+                subject: `ACTION NEEDED: paid, no room — ${meta.firstName || ''} ${meta.lastName || ''}`.trim(),
+                html: `<p>A ${meta.source || 'Booking Engine'} payment succeeded but no physical room of type <b>${meta.roomTypeId}</b> was free to assign.</p><p><b>${meta.firstName || ''} ${meta.lastName || ''}</b> · ${meta.email || ''} · ${meta.phone || ''}<br>${meta.checkIn} – ${meta.checkOut}<br>Stripe ${pi.id} · booking_requests id ${insertedId}</p><p>Please place the guest in a room by hand or refund in Stripe.</p>`,
+              }),
+            }).catch((e) => console.warn('[stripe-webhook] no-room alert email failed:', e.message));
+          }
+        }
+        // Whatever happened above, this hold has done its job -- nothing left to release it for.
+        if (meta.engHoldId) {
+          fetch(`${SUPABASE_URL}/rest/v1/eng_holds?hold_id=eq.${encodeURIComponent(meta.engHoldId)}`, { method: 'DELETE', headers: hdrs }).catch(() => {});
         }
       } catch (roomErr) {
         console.error('[stripe-webhook] Room assignment error (non-fatal):', roomErr.message);

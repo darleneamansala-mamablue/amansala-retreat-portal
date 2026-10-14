@@ -23,6 +23,58 @@ function inExtraNightBlackout(checkIn, checkOut) {
   });
 }
 
+// A room sold whole (e.g. "19B") and as individual shared beds ("19B -a",
+// "19B -b") is the SAME physical space -- blocking one must block the
+// other(s). Mirrors stripe-webhook.js's own copy exactly (kept duplicated,
+// not shared, matching every other room-siblings copy in netlify/functions —
+// get-availability.js, visito-check-availability.js).
+const ROOM_PARENT_TO_BED = { rt6: 'bd1', rt7: 'bd2', rt8: 'bd3', rt9: 'bd4' };
+const ROOM_BED_TO_PARENT = { bd1: 'rt6', bd2: 'rt7', bd3: 'rt8', bd4: 'rt9' };
+const VILLA_TO_SUBTYPES = { cm1: ['cg1', 'cg2', 'cg3', 'cg4', 'cg5'], csh3: ['csh1', 'csh2'] };
+function splitDoubleHalf(room) {
+  const r = String(room || '').trim();
+  let m = r.match(/^(\d+)([a-d])$/i);
+  if (m) return { base: m[1] };
+  m = r.match(/^(.+?)\s*-([a-d])$/i);
+  if (m) return { base: m[1] };
+  m = r.match(/^(.+\d)([a-d])$/i);
+  if (m) return { base: m[1] };
+  return null;
+}
+function propagateSiblingBlocks(blockedSet, roomTypes) {
+  const roomToType = new Map();
+  roomTypes.forEach(rt => (rt.rooms || []).forEach(r => roomToType.set(r, rt.id)));
+  const roomsById = new Map(roomTypes.map(rt => [rt.id, rt.rooms || []]));
+  const toAdd = new Set();
+  [...blockedSet].forEach(room => {
+    const typeId = roomToType.get(room);
+    if (!typeId) return;
+    if (ROOM_PARENT_TO_BED[typeId]) {
+      (roomsById.get(ROOM_PARENT_TO_BED[typeId]) || []).forEach(r => {
+        const s = splitDoubleHalf(r);
+        if (s && s.base.toLowerCase() === room.toLowerCase()) toAdd.add(r);
+      });
+    } else if (ROOM_BED_TO_PARENT[typeId]) {
+      const split = splitDoubleHalf(room);
+      if (!split) return;
+      const parentRooms = roomsById.get(ROOM_BED_TO_PARENT[typeId]) || [];
+      if (parentRooms.includes(split.base)) toAdd.add(split.base);
+      (roomsById.get(typeId) || []).forEach(r => {
+        const s = splitDoubleHalf(r);
+        if (s && s.base.toLowerCase() === split.base.toLowerCase()) toAdd.add(r);
+      });
+    }
+    if (VILLA_TO_SUBTYPES[typeId]) {
+      VILLA_TO_SUBTYPES[typeId].forEach(subId => (roomsById.get(subId) || []).forEach(r => toAdd.add(r)));
+    } else {
+      for (const [villaId, subIds] of Object.entries(VILLA_TO_SUBTYPES)) {
+        if (subIds.includes(typeId)) (roomsById.get(villaId) || []).forEach(r => toAdd.add(r));
+      }
+    }
+  });
+  toAdd.forEach(r => blockedSet.add(r));
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: '' };
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
@@ -147,6 +199,40 @@ exports.handler = async (event) => {
 
   if (amountCents < 50) return jsonErr(400, 'Amount too small');
 
+  // Pick a physical room NOW and hold it for HOLD_TTL_MIN minutes -- before this, a room was
+  // only ever assigned AFTER payment succeeded (stripe-webhook.js), with zero check at charge
+  // time, so two guests paying within the same few minutes for the last room of a type could
+  // both be charged, and the second one got no room at all with nothing but a console.warn (no
+  // staff alert). Jorge's ask 2026-10-14: apply the same hold-while-paying fix as retreat-booking.
+  const rtAllRes = await fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=rooms`, { headers: supaHdrs });
+  const [rtAll] = rtAllRes.ok ? await rtAllRes.json() : [{}];
+  const physicalRooms = rtAll?.rooms ?? [];
+  if (!physicalRooms.length) return jsonErr(400, 'That room type has no physical rooms configured.');
+
+  const [brOccRes, bkOccRes, allTypesRes, heldRes] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/booking_requests?room=not.is.null&check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&status=not.in.(declined,cancelled)&select=room`, { headers: supaHdrs }),
+    fetch(`${SUPABASE_URL}/rest/v1/bookings?start_date=lt.${encodeURIComponent(checkOut)}&end_date=gt.${encodeURIComponent(checkIn)}&status=neq.cancelled&select=blocked_rooms`, { headers: supaHdrs }),
+    fetch(`${SUPABASE_URL}/rest/v1/room_types?select=id,rooms`, { headers: supaHdrs }),
+    fetch(`${SUPABASE_URL}/rest/v1/eng_holds?check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=room`, { headers: supaHdrs }),
+  ]);
+  const occupied = new Set((brOccRes.ok ? await brOccRes.json() : []).map(r => r.room));
+  (bkOccRes.ok ? await bkOccRes.json() : []).forEach(b => (b.blocked_rooms ?? []).forEach(r => occupied.add(r)));
+  const allTypes = allTypesRes.ok ? await allTypesRes.json() : [];
+  propagateSiblingBlocks(occupied, allTypes);
+  (heldRes.ok ? await heldRes.json() : []).forEach(h => occupied.add(h.room));
+
+  const assignedRoom = physicalRooms.find(r => !occupied.has(r)) ?? null;
+  if (!assignedRoom) return jsonErr(409, 'Sorry, that room type just sold out. Please choose a different room or dates.');
+
+  const engHoldId = 'eh_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const expiresAt = new Date(Date.now() + 20 * 60000).toISOString();
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/eng_holds`, {
+      method: 'POST', headers: { ...supaHdrs, Prefer: 'return=minimal' },
+      body: JSON.stringify({ id: engHoldId, hold_id: engHoldId, room: assignedRoom, check_in: checkIn, check_out: checkOut, expires_at: expiresAt }),
+    });
+  } catch (holdErr) { console.error('[stripe] could not place room hold (non-fatal):', holdErr.message); }
+
   // Stripe metadata has a 500-char limit per value
   const params = new URLSearchParams({
     amount:             String(amountCents),
@@ -168,6 +254,8 @@ exports.handler = async (event) => {
     'metadata[discountAmount]':  String(discountAmount),
     'metadata[source]':          (source || 'Escape').slice(0, 50),
     'metadata[rate]':            String(rate),
+    'metadata[assignedRoom]':    assignedRoom,
+    'metadata[engHoldId]':       engHoldId,
   });
 
   const piRes = await fetch(`${STRIPE_API}/payment_intents`, {
@@ -180,7 +268,10 @@ exports.handler = async (event) => {
     body: params.toString(),
   });
   const pi = await piRes.json();
-  if (pi.error) return jsonErr(400, pi.error.message ?? 'Stripe error');
+  if (pi.error) {
+    fetch(`${SUPABASE_URL}/rest/v1/eng_holds?id=eq.${encodeURIComponent(engHoldId)}`, { method: 'DELETE', headers: supaHdrs }).catch(() => {});
+    return jsonErr(400, pi.error.message ?? 'Stripe error');
+  }
 
   return {
     statusCode: 200,
