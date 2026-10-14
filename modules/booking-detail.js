@@ -1075,8 +1075,9 @@ async function bdSendToGuest(fid){
   const email=(match?match.email:subj?.guestEmail)||'';
   const phone=(match?match.phone:(subj?.allGuests||[])[0]?.phone)||'';
   if(!email&&!phone){showToast('No email or phone on file — link copied to clipboard.');return;}
+  const manual=subj&&subj.bookingType==='room_only';
   try{
-    const res=await fetch('/.netlify/functions/send-folio-payment-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,guestName,email,phone})});
+    const res=await fetch('/.netlify/functions/send-folio-payment-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,guestName,email,phone,manual})});
     const d=await res.json();
     if(!res.ok)throw new Error(d.error||'Send failed');
     const parts=[];

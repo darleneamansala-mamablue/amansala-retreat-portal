@@ -8,13 +8,15 @@
 // pagar". Mirrors send-booking-confirmation.js's email+WhatsApp shape, but
 // for an existing folio's payment link rather than a brand-new reservation.
 //
-// WhatsApp goes out through the same Meta-approved template already used for
-// the checkout payment-link reminder (send-checkout-payment-links.js) --
-// outside the 24h window only a pre-approved template can be sent, so the
-// WhatsApp wording itself is whatever that template's approved body text
-// says (first name + link are the only parts filled in here); the phrase
-// "Pay your booking or extras here" is used verbatim in the email, which has
-// no such restriction.
+// WhatsApp goes out through a Meta-approved template -- outside the 24h
+// window only a pre-approved template can be sent, so the WhatsApp wording
+// itself is whatever that template's approved body text says (first name +
+// link are the only parts filled in here); the phrase "Pay your booking or
+// extras here" is used verbatim in the email, which has no such restriction.
+// Jorge's ask 2026-10-14: a reservation entered manually by staff (Walk-in/
+// Direct/OTA, booking.bookingType==='room_only') should say so ("thanks for
+// booking with us directly") rather than the generic checkout-reminder
+// template every other folio uses -- pass manual:true for those.
 const VISITO_API = 'https://platform-api.visitoai.com/m2m/v1';
 
 function toE164(raw) {
@@ -36,7 +38,7 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { token, guestName, email, phone } = body;
+  const { token, guestName, email, phone, manual } = body;
   if (!token) return jsonErr(400, 'Missing token');
   if (!email && !phone) return jsonErr(400, 'Need an email or phone to send to');
 
@@ -71,8 +73,10 @@ exports.handler = async (event) => {
     const to = toE164(phone);
     const visitoKey = process.env.VISITO_M2M_KEY;
     const channelId = process.env.VISITO_WA_CHANNEL_ID;
-    const templateName = process.env.VISITO_CHECKOUT_TEMPLATE;
-    const templateLang = process.env.VISITO_CHECKOUT_TEMPLATE_LANG || 'en_US';
+    const templateName = manual
+      ? (process.env.VISITO_MANUAL_BOOKING_TEMPLATE || 'manual_booking_payment_link')
+      : process.env.VISITO_CHECKOUT_TEMPLATE;
+    const templateLang = (manual ? process.env.VISITO_MANUAL_BOOKING_TEMPLATE_LANG : process.env.VISITO_CHECKOUT_TEMPLATE_LANG) || 'en_US';
     if (!to) {
       results.whatsapp = 'no usable phone';
     } else if (!visitoKey || !channelId || !templateName) {
