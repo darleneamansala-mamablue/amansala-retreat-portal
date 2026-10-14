@@ -920,20 +920,27 @@ async function tr2LoadData() {
     })());
     const retreatLabel = bk ? [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ') : 'Sin retiro asignado';
 
-    if (d.arrivalDate && d.arrivalTime) {
+    // An OT (own transport) guest legitimately has no date/time at all, or a
+    // date with no time (staff ticking the OT box on an existing submission
+    // doesn't require filling in a time) -- requiring BOTH to render the entry
+    // at all silently dropped them from every view, "Own Transport" section
+    // included (real incident 2026-10-14: Jorge marked Maria Averill OT in
+    // admin, but with arrivalTime left blank she vanished everywhere instead
+    // of showing under Own Transport).
+    if (d.arrivalOT || (d.arrivalDate && d.arrivalTime)) {
       tr2AllEntries.push({
-        rowId: row.id, type: 'arrival', date: d.arrivalDate, time: d.arrivalTime, guest: name,
+        rowId: row.id, type: 'arrival', date: d.arrivalDate || '', time: d.arrivalTime || '', guest: name,
         email: d.email || '', flight: d.flightNumber || '', airport: d.arrivalAirport || '',
         ot: !!d.arrivalOT, share: !!d.willingToShare, notes: d.notes || '', room, retreatId: bkId, retreatLabel,
-        eta: d.arrivalOT ? null : tr2AddMins(d.arrivalTime, d.arrivalAirport === 'cancun' ? 90 : 45),
+        eta: (d.arrivalOT || !d.arrivalTime) ? null : tr2AddMins(d.arrivalTime, d.arrivalAirport === 'cancun' ? 90 : 45),
         driverConfirmed: !!d.driver_confirmed, cost: d.serviceCost != null ? Number(d.serviceCost) : null,
       });
     }
-    if (d.departureDate && d.departureTime) {
+    if (d.departureOT || (d.departureDate && d.departureTime)) {
       const depAirport = d.departureAirport || '';
-      const pickup = (!d.departureOT && depAirport) ? tr2AddMins(d.departureTime, depAirport === 'cancun' ? -240 : -150) : null;
+      const pickup = (!d.departureOT && depAirport && d.departureTime) ? tr2AddMins(d.departureTime, depAirport === 'cancun' ? -240 : -150) : null;
       tr2AllEntries.push({
-        rowId: row.id, type: 'departure', date: d.departureDate, time: d.departureTime, guest: name,
+        rowId: row.id, type: 'departure', date: d.departureDate || '', time: d.departureTime || '', guest: name,
         email: d.email || '', flight: d.flightNumber || '', airport: depAirport,
         ot: !!d.departureOT, share: !!d.willingToShare, notes: d.notes || '', room, retreatId: bkId, retreatLabel,
         eta: null, pickup, driverConfirmed: !!d.driver_confirmed, cost: d.serviceCost != null ? Number(d.serviceCost) : null,
