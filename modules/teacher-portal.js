@@ -4628,12 +4628,23 @@ function _trBuildTransportTable(guests,type,result){
   // teacher scanning their own list can tell at a glance which day a batch of
   // arrivals lands, instead of only the ride-share color coding. Guests with
   // no date yet (haven't submitted) sort last, under their own header.
-  const indexed=guests.map((g,i)=>({g,i,gi:groupOf[i]??-1,date:isArr?g.tr?.arrivalDate:g.tr?.departureDate}));
+  // Own Transport (guest told us they're arranging their own ride — ot:true,
+  // intentionally no date/time needed) and genuinely not-submitted-yet (no tr
+  // at all) both have a falsy date, but mean opposite things for the teacher —
+  // same split the admin Transport tab already makes (realOtEntries vs
+  // missingEntries, "Own Transport"/"Missing Transport" headers). Jorge's
+  // report 2026-10-14: My Transportation lumped OT guests under "Not
+  // submitted yet" with no way to tell them apart from an actual non-response.
+  const indexed=guests.map((g,i)=>{
+    const ot=isArr?g.tr?.arrivalOT:g.tr?.departureOT;
+    const date=isArr?g.tr?.arrivalDate:g.tr?.departureDate;
+    return{g,i,gi:groupOf[i]??-1,date,ot:!!ot,cat:date?0:ot?1:2};
+  });
   indexed.sort((a,b)=>{
-    if(!!a.date!==!!b.date)return a.date?-1:1;
-    if(a.date&&b.date&&a.date!==b.date)return a.date.localeCompare(b.date);
+    if(a.cat!==b.cat)return a.cat-b.cat;
+    if(a.cat===0&&a.date!==b.date)return a.date.localeCompare(b.date);
     if(a.gi!==b.gi)return(a.gi===-1?999:a.gi)-(b.gi===-1?999:b.gi);
-    return 0;
+    return a.g.name.localeCompare(b.g.name);
   });
   const _todayStr=new Date().toISOString().slice(0,10);
   const _tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10);
@@ -4648,10 +4659,9 @@ function _trBuildTransportTable(guests,type,result){
    Object.keys(cnt).forEach(e=>{if(cnt[e]>1)_trSharedEmails.add(e);});
    const lb=AppData.bookings.find(b=>b.id===_trBkId);const le=((lb&&lb.leaderEmail)||'').toLowerCase().trim();if(le)_trSharedEmails.add(le);}
 
-  let lastGi,lastDate='__unset__';
-  const rows=indexed.map(({g,i,date})=>{
+  let lastGi,lastCat=-1,lastDate='__unset__';
+  const rows=indexed.map(({g,i,date,ot,cat})=>{
     const tr=g.tr;
-    const ot=isArr?tr?.arrivalOT:tr?.departureOT;
     const time=isArr?tr?.arrivalTime:tr?.departureTime;
     const ap=isArr?tr?.arrivalAirport:tr?.departureAirport;
     const p=prices[i];
@@ -4708,16 +4718,18 @@ function _trBuildTransportTable(guests,type,result){
 
     const curGi=groupOf[i]??-1;
     let dateHeader='';
-    if(date!==lastDate){
-      if(date){
+    if(cat===0?date!==lastDate:cat!==lastCat){
+      if(cat===0){
         const label=date===_todayStr?'Today':date===_tomorrowStr?'Tomorrow':fmtDate(date);
         const hdBg=date===_todayStr?'#ccfbf1':'#f5f0e8',hdClr=date===_todayStr?'#0f766e':'#5a5048';
         dateHeader=`<tr><td colspan="${_colCount}" style="padding:8px 12px;background:${hdBg};font-size:11px;font-weight:700;color:${hdClr};border-top:2px solid #e8dfd4">${label}</td></tr>`;
+      } else if(cat===1){
+        dateHeader=`<tr><td colspan="${_colCount}" style="padding:8px 12px;background:#fef2f2;font-size:12px;font-weight:800;color:#dc2626;border-top:2px solid #e8dfd4">Own Transport</td></tr>`;
       } else {
         dateHeader=`<tr><td colspan="${_colCount}" style="padding:8px 12px;background:#f5f0e8;font-size:12px;font-weight:800;color:#b91c1c;border-top:2px solid #e8dfd4">Not submitted yet</td></tr>`;
       }
     }
-    lastDate=date;
+    lastDate=date;lastCat=cat;
     const sep=(!dateHeader&&lastGi!==undefined&&curGi!==lastGi)
       ?`<tr><td colspan="${_colCount}" style="padding:6px;background:#fff;border:none"></td></tr>`
       :'';
