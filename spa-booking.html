@@ -28,6 +28,7 @@ body{font-family:'DM Sans',sans-serif;background:#faf7f0;color:#2d2520;min-heigh
 .svc-price{font-weight:700;color:#a05a35}
 .cat-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#a89a86;margin:18px 0 8px}
 .cat-label:first-child{margin-top:0}
+.cat-fold{margin:0}.cat-sum{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:6px 2px}.cat-sum::-webkit-details-marker{display:none}.cat-sum::after{content:'+';font-size:18px;font-weight:600;color:#8a7e74}.cat-fold[open]>.cat-sum::after{content:'\2212'}
 .choice-btn{width:100%;text-align:left;background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;color:#2d2520;transition:border-color .15s,background .15s}
 .choice-btn:hover{border-color:#3AB7AE;background:#f0f9f9}
 .choice-btn .cd{font-size:12px;font-weight:400;color:#8a7e74;margin-top:2px}
@@ -248,18 +249,26 @@ function renderStep2_Service(el){
   if(!active.length){
     html+=`<div class="no-slots">Nothing here is ready to book yet — please check back soon or contact us directly.</div>`;
   }
-  CAT_ORDER.forEach(cat=>{
-    const list=active.filter(s=>s.category===cat);
-    if(!list.length) return;
-    html+=`<div class="cat-label">${CAT_LABEL[cat]}</div>`;
-    list.forEach(s=>{
-      const priceLbl=s.groupPricing?('from $'+spaGroupPrice(s,s.groupPricing.minGuests||1)+' USD'):('$'+s.price+' USD');
-      html+=`<div class="svc-card" onclick="sbPickService('${s.id}')">
+  // Sections: Body Work, Spirit Work and one combined "Body Movement and Yoga" (fitness, yoga, pilates, dance). Spirit Work and
+  // Body Movement and Yoga are collapsible; Body Movement and Yoga starts closed.
+  const svcCard=s=>{
+    const priceLbl=s.groupPricing?('from $'+spaGroupPrice(s,s.groupPricing.minGuests||1)+' USD'):('$'+s.price+' USD');
+    return `<div class="svc-card" onclick="sbPickService('${s.id}')">
         <div class="svc-name">${esc(s.name)}</div>
         ${s.description?`<div class="svc-desc">${esc(s.description)}</div>`:''}
         <div class="svc-meta"><span>${s.duration} min</span><span class="svc-price">${priceLbl}</span></div>
       </div>`;
-    });
+  };
+  const SECTIONS=[
+    {label:'Body Work',cats:['massage'],collapsible:false},
+    {label:'Spirit Work',cats:['spirit'],collapsible:true,open:true},
+    {label:'Body Movement and Yoga',cats:['fitness','yoga','pilates','dance'],collapsible:true,open:false},
+  ];
+  SECTIONS.forEach(sec=>{
+    const list=active.filter(s=>sec.cats.includes(s.category)).sort((a,b)=>sec.cats.indexOf(a.category)-sec.cats.indexOf(b.category));
+    if(!list.length) return;
+    if(!sec.collapsible){html+=`<div class="cat-label">${sec.label}</div>`+list.map(svcCard).join('');return;}
+    html+=`<details class="cat-fold"${sec.open?' open':''}><summary class="cat-label cat-sum">${sec.label}</summary>${list.map(svcCard).join('')}</details>`;
   });
   html+=`</div>`;
   el.innerHTML=html;
