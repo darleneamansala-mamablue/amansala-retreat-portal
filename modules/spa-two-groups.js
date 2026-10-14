@@ -19,7 +19,8 @@ function spa2IsBodyWork(t) {
   window.spaTherGroupList = function (therapists) {
     const body = therapists.filter(spa2IsBodyWork);
     const bodyIds = new Set(body.map(t => t.id));
-    const other = therapists.filter(t => !bodyIds.has(t.id));
+    // Body Work keeps the order set in the portal; Spirit or Movement is alphabetical (nobody has a set order there)
+    const other = therapists.filter(t => !bodyIds.has(t.id)).sort((a, b) => String(a.firstName || '').localeCompare(String(b.firstName || ''), undefined, { sensitivity: 'base' }));
     return [
       { label: 'Body Work', key: SPA2_BODY_KEY, list: body },
       { label: 'Spirit or Movement', key: SPA2_OTHER_KEY, list: other },
