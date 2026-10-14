@@ -193,6 +193,12 @@ function sbFindGuestBooking(clientName,roomNumber){
 // page hides them. A service's `offer` field is set in the spa data.
 const SB_OFFER=(new URLSearchParams(location.search).get('offer')||'').toLowerCase();
 function sbOfferFilter(s){return SB_OFFER?String(s.offer||'').toLowerCase()===SB_OFFER:!s.offer;}
+// Beach Club perk: entrance is FREE for spa services in October and November 2026 (Darlene 2026-10-14); otherwise $20 USD off on the day.
+function sbBeachClubLine(){
+  const d=String(SB.date||'');
+  if(/^2026-(10|11)-/.test(d))return '<b>Entrance to the Amansala Beach Club is free</b> on the day of your appointment when you book a spa service in October or November.';
+  return '<b>Spa guests receive $20 USD off entrance to the Amansala Beach Club</b> on the day of their appointment.';
+}
 function setStep(n){SB.step=n;renderStep();window.scrollTo({top:0,behavior:'smooth'});}
 
 function renderDots(total){
@@ -395,7 +401,7 @@ function renderStep4_Offsite(el){
       <div class="section-title">Welcome to Amansala</div>
       <div class="policy-box">
         Advance payment is required to reserve your service.<br><br>
-        <b>Spa guests receive $20 USD off entrance to the Amansala Beach Club</b> on the day of their appointment.<br><br>
+        ${sbBeachClubLine()}<br><br>
         Please review our cancellation policy: services must be cancelled at least 12 hours in advance, or the full charge applies.
       </div>
       <label class="chk-row"><input type="checkbox" id="sbPolicyChk"> I agree to the cancellation policy above</label>
