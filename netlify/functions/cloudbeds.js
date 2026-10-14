@@ -1459,10 +1459,20 @@ async function getExternalReservations(tok, startDate, endDate, viewStart) {
     return d;
   }
 
+  // Cloudbeds' real /getReservations has no "startDate"/"endDate" query params at
+  // all -- confirmed against Cloudbeds' own API docs 2026-10-14. Sending them (as
+  // this did before) is a silent no-op: Cloudbeds just ignores unrecognized params
+  // and returns whatever its own default window/order is, so this was NEVER
+  // actually date-scoped. Real incident: Laura Luscinski (19B) and Elisabeth
+  // Watkins (19), both arriving today, were completely absent from the ~1800
+  // reservations this returned, because they fell outside whatever untargeted
+  // default Cloudbeds was giving us. The real params for "stay overlaps
+  // [startDate, endDate]" are checkInTo (checkin on/before the window ends) +
+  // checkOutFrom (checkout on/after the window starts) together.
   let allRes = [];
   let pageNumber = 1;
   while (true) {
-    const res = await cbGet(tok, "/getReservations", { startDate, endDate, pageNumber, pageSize: 100 });
+    const res = await cbGet(tok, "/getReservations", { checkInTo: endDate, checkOutFrom: startDate, pageNumber, pageSize: 100 });
     if (!res.success) throw new Error("getReservations failed: " + JSON.stringify(res).slice(0, 200));
     const page = res.data || [];
     allRes = allRes.concat(page);
