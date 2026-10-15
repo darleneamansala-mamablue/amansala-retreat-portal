@@ -94,7 +94,16 @@ exports.handler = async (event) => {
   }
 
   // ── WhatsApp (Visito) — same template/gate as stripe-webhook.js ──────────
-  if (phone && process.env.ESCAPE_WA_CONFIRM_ENABLED === 'true') {
+  // Staff-editable in Admin > Settings (Jorge's ask 2026-10-15) instead of the
+  // ESCAPE_WA_CONFIRM_ENABLED env var -- defaults to on (matching the env var's prior
+  // production value) if that screen was never saved.
+  let waConfirmEnabled = true;
+  try {
+    const sres = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.portal_settings&select=value`, { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } });
+    const [srow] = sres.ok ? await sres.json() : [];
+    if (srow && srow.value && srow.value.notifications && srow.value.notifications.escapeWaConfirmEnabled != null) waConfirmEnabled = !!srow.value.notifications.escapeWaConfirmEnabled;
+  } catch (e) { /* non-fatal — defaults to enabled */ }
+  if (phone && waConfirmEnabled) {
     const visitoKey = process.env.VISITO_M2M_KEY;
     const channelId = process.env.VISITO_WA_CHANNEL_ID;
     const templateName = process.env.VISITO_BOOKING_CONFIRM_TEMPLATE || 'booking_confirmation';

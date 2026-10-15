@@ -52,7 +52,15 @@ function randomToken() {
 exports.handler = async () => {
   const supaKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supaKey) { console.error('[checkout-links] SUPABASE_SERVICE_KEY missing'); return { statusCode: 500 }; }
-  const enabled = process.env.CHECKOUT_LINKS_ENABLED === 'true';
+  // Staff-editable in Admin > Settings (Jorge's ask 2026-10-15) instead of the
+  // CHECKOUT_LINKS_ENABLED env var -- defaults to on (matching the env var's prior
+  // production value) if that screen was never saved.
+  let enabled = true;
+  try {
+    const sres = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.portal_settings&select=value`, { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } });
+    const [srow] = sres.ok ? await sres.json() : [];
+    if (srow && srow.value && srow.value.notifications && srow.value.notifications.checkoutLinksEnabled != null) enabled = !!srow.value.notifications.checkoutLinksEnabled;
+  } catch (e) { /* non-fatal — defaults to enabled */ }
   const m2mKey = process.env.VISITO_M2M_KEY;
   const channelId = process.env.VISITO_WA_CHANNEL_ID;
   const templateName = process.env.VISITO_CHECKOUT_TEMPLATE;

@@ -36,7 +36,15 @@ function fmtDateEsLong(dateStr) {
 exports.handler = async () => {
   const supaKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supaKey) { console.error('[climas-report] SUPABASE_SERVICE_KEY missing'); return { statusCode: 500 }; }
-  const enabled = process.env.CLIMAS_REPORT_ENABLED === 'true';
+  // Staff-editable in Admin > Settings (Jorge's ask 2026-10-15) instead of the
+  // CLIMAS_REPORT_ENABLED env var -- defaults to on (matching the env var's prior
+  // production value) if that screen was never saved.
+  let enabled = true;
+  try {
+    const sres = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.portal_settings&select=value`, { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } });
+    const [srow] = sres.ok ? await sres.json() : [];
+    if (srow && srow.value && srow.value.notifications && srow.value.notifications.climasReportEnabled != null) enabled = !!srow.value.notifications.climasReportEnabled;
+  } catch (e) { /* non-fatal — defaults to enabled */ }
   const m2mKey  = process.env.VISITO_M2M_KEY;
   const numbers = (process.env.CLIMAS_REPORT_NUMBERS || '').split(',').map(s => s.trim()).filter(Boolean);
   if (enabled && (!m2mKey || !numbers.length)) {

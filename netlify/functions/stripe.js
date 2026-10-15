@@ -209,23 +209,27 @@ exports.handler = async (event) => {
   const physicalRooms = rtAll?.rooms ?? [];
   if (!physicalRooms.length) return jsonErr(400, 'That room type has no physical rooms configured.');
 
-  const [brOccRes, bkOccRes, allTypesRes, heldRes] = await Promise.all([
+  const [brOccRes, bkOccRes, allTypesRes, heldRes, settingsRes] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/booking_requests?room=not.is.null&check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&status=not.in.(declined,cancelled)&select=room`, { headers: supaHdrs }),
     fetch(`${SUPABASE_URL}/rest/v1/bookings?start_date=lt.${encodeURIComponent(checkOut)}&end_date=gt.${encodeURIComponent(checkIn)}&status=neq.cancelled&select=blocked_rooms`, { headers: supaHdrs }),
     fetch(`${SUPABASE_URL}/rest/v1/room_types?select=id,rooms`, { headers: supaHdrs }),
     fetch(`${SUPABASE_URL}/rest/v1/eng_holds?check_in=lt.${encodeURIComponent(checkOut)}&check_out=gt.${encodeURIComponent(checkIn)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=room`, { headers: supaHdrs }),
+    fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.portal_settings&select=value`, { headers: supaHdrs }),
   ]);
   const occupied = new Set((brOccRes.ok ? await brOccRes.json() : []).map(r => r.room));
   (bkOccRes.ok ? await bkOccRes.json() : []).forEach(b => (b.blocked_rooms ?? []).forEach(r => occupied.add(r)));
   const allTypes = allTypesRes.ok ? await allTypesRes.json() : [];
   propagateSiblingBlocks(occupied, allTypes);
   (heldRes.ok ? await heldRes.json() : []).forEach(h => occupied.add(h.room));
+  // Staff-editable in Admin > Settings (Jorge's ask 2026-10-15) -- 20 min if never saved.
+  const [settingsRow] = settingsRes.ok ? await settingsRes.json() : [];
+  const holdTtlMin = (settingsRow && settingsRow.value && settingsRow.value.holdTtlMinutes > 0) ? settingsRow.value.holdTtlMinutes : 20;
 
   const assignedRoom = physicalRooms.find(r => !occupied.has(r)) ?? null;
   if (!assignedRoom) return jsonErr(409, 'Sorry, that room type just sold out. Please choose a different room or dates.');
 
   const engHoldId = 'eh_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  const expiresAt = new Date(Date.now() + 20 * 60000).toISOString();
+  const expiresAt = new Date(Date.now() + holdTtlMin * 60000).toISOString();
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/eng_holds`, {
       method: 'POST', headers: { ...supaHdrs, Prefer: 'return=minimal' },

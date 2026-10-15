@@ -111,7 +111,16 @@ async function availability(key, bk, cfg, excludeHoldId) {
 // releases it once the booking is actually recorded (or abandoned), and availability() above
 // always excludes any still-active hold so nobody else can choose the same unit meanwhile.
 // Requires the `rb_holds` table (id, hold_id, booking_id, rt_id, unit, expires_at, created_at).
-const HOLD_TTL_MIN = 20;
+// Staff-editable in Admin > Settings (Jorge's ask 2026-10-15) -- this default is only
+// used if that screen was never saved (app_store key 'portal_settings').
+const HOLD_TTL_MIN_DEFAULT = 20;
+async function holdTtlMinutes(key) {
+  try {
+    const rows = await sget(key, `app_store?key=eq.portal_settings&select=value`);
+    const v = rows[0] && rows[0].value && rows[0].value.holdTtlMinutes;
+    return (typeof v === 'number' && v > 0) ? v : HOLD_TTL_MIN_DEFAULT;
+  } catch (e) { return HOLD_TTL_MIN_DEFAULT; }
+}
 async function activeHoldUnits(key, bookingId, excludeHoldId) {
   // Opportunistic cleanup -- correctness never depends on this running (every read here also
   // filters by expires_at), it just keeps the table from growing with dead rows forever.
@@ -123,7 +132,8 @@ async function activeHoldUnits(key, bookingId, excludeHoldId) {
   return set;
 }
 async function placeHold(key, bookingId, rtId, units, holdId) {
-  const expiresAt = new Date(Date.now() + HOLD_TTL_MIN * 60000).toISOString();
+  const ttl = await holdTtlMinutes(key);
+  const expiresAt = new Date(Date.now() + ttl * 60000).toISOString();
   const rows = units.map((u) => ({ id: `${holdId}:${u}`, hold_id: holdId, booking_id: bookingId, rt_id: rtId, unit: u, expires_at: expiresAt }));
   await sreq(key, 'POST', 'rb_holds', rows, 'return=minimal');
 }
