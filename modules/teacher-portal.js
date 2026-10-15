@@ -605,7 +605,7 @@ function regRender(){
         <span class="rt-card-name" ${IS_TEACHER_MODE?`onmouseenter="showRtTooltip(event,'${rt.id}')" onmouseleave="hideRtTooltip()" style="cursor:help"`:''}>${rt.name}</span>
         <span class="rt-card-occ">${rt.maxOcc===1?(/^Bed in a /i.test(rt.name)?'Shared room':'Private only'):`Up to ${rt.maxOcc} guests`} · ${nights} nights</span>
         <span class="occ-badge ${badge}" style="margin-left:4px">${badgeText}</span>
-        <span class="rt-card-price">${priceTag} &nbsp;<span style="color:#aaa;font-size:10.5px">${_grT?'all-inclusive package price':'+16% tax +$30/night tip'}</span></span>
+        <span class="rt-card-price">${priceTag} &nbsp;<span style="color:#aaa;font-size:10.5px">${_grT?'all-inclusive package price':`+${Math.round(portalRoomsTaxRate()*100)}% tax +$${getTip(regSelBk)}/night tip`}</span></span>
         <button class="rt-info-btn" onclick="showPriceTip(event,'${rt.id}')" title="View pricing breakdown">ℹ</button>
       </div>
       <table class="reg-table">
