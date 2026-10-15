@@ -381,17 +381,25 @@ exports.handler = async (event) => {
       }
     } catch (emailErr) { console.warn('[visito-spa-create-booking] email failed (non-fatal):', emailErr.message); }
 
+    // Jorge's report 2026-10-13/2026-10-15: Lana's confirmation message was saying just
+    // "Precio: $95 USD" (the base price, from priceUSD below) with no mention of the 13%
+    // tax that's actually added at payment -- even after visito-spa-check-availability.js /
+    // visito-spa-list-services.js already got a tax-aware priceDisplay field, this booking-
+    // creation response (what Lana actually echoes right after booking) didn't have one.
+    // Offsite guests only: a hotel guest's price is charged to their folio, not quoted here.
+    const taxRatePct = !isHotel ? 13 : undefined;
+    const priceDisplay = !isHotel ? `$${priceUSD} USD + 13% tax` : undefined;
     return ok({
       success: true,
       appointmentId: apptId,
       serviceName: svc.name, therapistName: therName, date, start, durationMinutes: svc.duration,
-      priceUSD, guestType, folioPosted, roomNumber: matchedRoomNumber,
+      priceUSD, taxRatePct, priceDisplay, guestType, folioPosted, roomNumber: matchedRoomNumber,
       paymentUrl,
       message: isHotel
         ? `Cita creada y cargada al cuarto ${matchedRoomNumber || ''} (${clientName}). Correo de confirmación enviado.`
         : (paymentUrl
-          ? `Cita creada — comparte este link de pago con el huésped para confirmarla (también se le mandó por correo): ${paymentUrl}`
-          : `Cita creada, pero no se pudo generar el link de pago automático — avísale al equipo que necesita cobrarle a ${clientName} manualmente.`),
+          ? `Cita creada — comparte este link de pago con el huésped para confirmarla (precio: ${priceDisplay}, también se le mandó por correo): ${paymentUrl}`
+          : `Cita creada, pero no se pudo generar el link de pago automático — avísale al equipo que necesita cobrarle a ${clientName} (precio: ${priceDisplay}) manualmente.`),
     });
   } catch (err) {
     console.error('[visito-spa-create-booking]', err.message);
