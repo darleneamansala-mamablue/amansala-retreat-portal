@@ -108,7 +108,7 @@ let SBRegs=[];
 let SBBookings=[];
 let SBStaffAccounts=[];
 let SB={step:1,sessionType:null,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
-        policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null,tipAmount:0,
+        policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null,tipAmount:0,rotationGroup:null,rotationName:null,
         stayStart:null,stayEnd:null};
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
@@ -462,6 +462,7 @@ function renderStep5_Preference(el){
 function sbShowTherapistList(){document.getElementById('sbTherapistList').style.display='block';}
 function sbPickPref(type,therapistId){
   SB.prefType=type;SB.requestedTherapistId=therapistId||null;
+  SB.rotationGroup=null;SB.rotationName=null;   // cleared here so a stale auto-pick from an earlier preference never leaks into a later "specific therapist" choice
   setStep(6);
 }
 
@@ -509,19 +510,42 @@ function sbIsTherapistAvailable(ther,date,period){
   }
   return true;
 }
+// Darlene's spec 2026-10-15 (automatic therapist assignment): breaks/daily caps are no
+// longer one flat "X minutes after every service" number for everyone — Maria Luisa has
+// her own staged pattern (2 services, 45-min break, 2 more, hard cap 4 for AUTOMATIC
+// bookings only — staff can still go over 4 by hand in the admin calendar, which uses its
+// own separate soft-warning check in modules/spa-therapist-rules.js, untouched by this).
+// Everyone else: a 30-min break after every 3 CONSECUTIVE (back-to-back, no gap) services,
+// capped at 7/day. An explicit per-therapist override (ther.breakMinutes/maxServicesPerDay,
+// settable on their profile) still wins over these defaults when staff has set one.
+const SPA_GENERAL_BREAK_AFTER=3, SPA_GENERAL_BREAK_MINUTES=30, SPA_GENERAL_DAILY_CAP=7;
+const SPA_MARIA_BREAK_MINUTES=45, SPA_MARIA_DAILY_CAP=4;
 function sbSlotFree(therapistId,roomId,dateStr,startMin,duration,excludeApptId){
   const endMin=startMin+duration;
   let brk=0;
   if(therapistId){
     const ther=SpaData.therapists.find(t=>t.id===therapistId);
     if(ther&&!sbIsTherapistAvailable(ther,dateStr,startMin<720?'AM':'PM'))return false;
-    // Per-therapist rules set on their profile: max services per day, and a break (minutes) after each service. Both optional.
     if(ther){
-      brk=Math.max(0,parseInt(ther.breakMinutes,10)||0);
-      const max=parseInt(ther.maxServicesPerDay,10)||0;
-      if(max>0){
-        const today=SpaAppointments.filter(a=>a.id!==excludeApptId&&a.date===dateStr&&a.status!=='CANCELLED'&&a.therapistId===therapistId).length;
-        if(today>=max)return false;
+      const todaysSorted=SpaAppointments.filter(a=>a.id!==excludeApptId&&a.date===dateStr&&a.status!=='CANCELLED'&&a.therapistId===therapistId).sort((a,b)=>hhmmToMin(a.start)-hhmmToMin(b.start));
+      if((ther.firstName||'').trim()==='Maria Luisa'){
+        if(todaysSorted.length>=SPA_MARIA_DAILY_CAP)return false;
+        if(todaysSorted.length===2){
+          const last=todaysSorted[1];
+          if(startMin<hhmmToMin(last.start)+(last.duration||60)+SPA_MARIA_BREAK_MINUTES)return false;
+        }
+      }else{
+        const cap=parseInt(ther.maxServicesPerDay,10)||SPA_GENERAL_DAILY_CAP;
+        if(todaysSorted.length>=cap)return false;
+        // Walk backward from the candidate slot: how many of today's services chain
+        // back-to-back (no gap) right up to this new one? 3+ in a row needs a break first.
+        let consecutive=0,cursorEnd=startMin;
+        for(let i=todaysSorted.length-1;i>=0;i--){
+          const aStart=hhmmToMin(todaysSorted[i].start),aEnd=aStart+(todaysSorted[i].duration||60);
+          if(aEnd===cursorEnd){consecutive++;cursorEnd=aStart;}else break;
+        }
+        const explicitBreak=Math.max(0,parseInt(ther.breakMinutes,10)||0);
+        brk=explicitBreak||(consecutive>=SPA_GENERAL_BREAK_AFTER?SPA_GENERAL_BREAK_MINUTES:0);
       }
     }
   }
@@ -669,20 +693,61 @@ function sbRenderSlots(candidates,svc){
       </div>
     </div>`).join('')}</div>`;
 }
+// Darlene's spec 2026-10-15 (automatic therapist assignment): named priority order
+// instead of plain "whoever's least busy". Rotation position is derived purely from
+// TODAY's already-placed auto-assignments (appt.rotationGroup, set only by this same
+// function — a staff-manual or "specific therapist" booking never counts toward it).
+// "No gender preference" tries the male rotation first (Julian, then Miguel), per
+// Jorge's confirmation 2026-10-15, falling through to the female rotation (and then
+// the generic least-busy fallback) only if nobody from it is actually free right now
+// — the "never leave a booking unfilled" safeguard.
+function sbRotationOrder(){
+  const apptsToday=SpaAppointments.filter(a=>a.date===SB.date&&a.status!=='CANCELLED');
+  const order=[];
+  if(SB.prefType!=='female'){
+    const julianToday=apptsToday.filter(a=>a.rotationGroup==='male'&&a.rotationName==='Julian').length;
+    const totalMale=apptsToday.filter(a=>a.rotationGroup==='male').length;
+    if(julianToday<4) order.push({name:'Julian',group:'male'},{name:'Miguel',group:'male'});
+    else{
+      const alt=totalMale-julianToday;
+      order.push({name:alt%2===0?'Miguel':'Julian',group:'male'},{name:alt%2===0?'Julian':'Miguel',group:'male'});
+    }
+  }
+  if(SB.prefType!=='male'){
+    const totalFemale=apptsToday.filter(a=>a.rotationGroup==='female').length;
+    const pattern=['Laura','Laura','Gabby','Graciela'];
+    const primary=pattern[totalFemale%pattern.length];
+    const rest=pattern.filter(n=>n!==primary);
+    [primary,...rest].forEach(n=>order.push({name:n,group:'female'}));
+    order.push({name:'Rosario',group:'female'});
+  }
+  return order;
+}
 function sbPickAutoSlot(startMin){
   const svc=SpaData.services.find(s=>s.id===SB.serviceId);
   const candidates=sbCandidateTherapists();
   const assigns=sbAllFreeAssignments(candidates,SB.date,startMin,svc.duration);   // re-checked now, in case someone just booked it
   if(!assigns.length){alert('Sorry, that time was just taken. Please choose another time.');sbRenderSlots(candidates,svc);return;}
-  // Even distribution. Among the free therapists, give the service to whoever has (1) the fewest services that day, then (2) the fewest
-  // that week (Monday to Sunday), then (3) the fewest overall, then (4) alphabetical so the result is stable.
-  const d0=new Date(SB.date+'T12:00:00'),dow=(d0.getDay()+6)%7;
-  const wkStart=new Date(d0.getTime()-dow*86400000).toISOString().slice(0,10),wkEnd=new Date(d0.getTime()+(6-dow)*86400000).toISOString().slice(0,10);
-  const live=t=>SpaAppointments.filter(a=>a.therapistId===t.id&&a.status!=='CANCELLED');
-  const dayN=t=>live(t).filter(a=>a.date===SB.date).length;
-  const weekN=t=>live(t).filter(a=>a.date>=wkStart&&a.date<=wkEnd).length;
-  assigns.sort((a,b)=>dayN(a.therapist)-dayN(b.therapist)||weekN(a.therapist)-weekN(b.therapist)||live(a.therapist).length-live(b.therapist).length||String(a.therapist.firstName).localeCompare(String(b.therapist.firstName)));
-  sbPickSlot(startMin,assigns[0].therapist.id,assigns[0].room?assigns[0].room.id:'');
+  let picked=null,pickedGroup=null;
+  for(const r of sbRotationOrder()){
+    const hit=assigns.find(a=>(a.therapist.firstName||'').trim()===r.name);
+    if(hit){picked=hit;pickedGroup=r.group;break;}
+  }
+  if(!picked){
+    // Nobody from either named rotation is free/qualified for this slot (e.g. only a
+    // specialist like Eva qualifies) — fall back to the old least-busy-first logic
+    // rather than leaving the booking unfilled.
+    const d0=new Date(SB.date+'T12:00:00'),dow=(d0.getDay()+6)%7;
+    const wkStart=new Date(d0.getTime()-dow*86400000).toISOString().slice(0,10),wkEnd=new Date(d0.getTime()+(6-dow)*86400000).toISOString().slice(0,10);
+    const live=t=>SpaAppointments.filter(a=>a.therapistId===t.id&&a.status!=='CANCELLED');
+    const dayN=t=>live(t).filter(a=>a.date===SB.date).length;
+    const weekN=t=>live(t).filter(a=>a.date>=wkStart&&a.date<=wkEnd).length;
+    const sorted=[...assigns].sort((a,b)=>dayN(a.therapist)-dayN(b.therapist)||weekN(a.therapist)-weekN(b.therapist)||live(a.therapist).length-live(b.therapist).length||String(a.therapist.firstName).localeCompare(String(b.therapist.firstName)));
+    picked=sorted[0];pickedGroup=null;
+  }
+  SB.rotationGroup=pickedGroup;
+  SB.rotationName=pickedGroup?(picked.therapist.firstName||'').trim():null;
+  sbPickSlot(startMin,picked.therapist.id,picked.room?picked.room.id:'');
 }
 function sbPickSlot(startMin,therapistId,roomId){
   SB.start=minToHHMM(startMin);
@@ -981,6 +1046,10 @@ async function sbWriteAppointment(paymentIntentId){
       paymentIntentId:paymentIntentId||null,
       folioStatus:isHotel?'PENDING':'NOT_REQUIRED',
       therapistPreference:{type:SB.prefType,requestedTherapistId:SB.requestedTherapistId||null},
+      // Set only when sbPickAutoSlot actually used the named rotation to pick this
+      // therapist -- a staff-manual or "specific therapist" booking leaves these null,
+      // so sbRotationOrder()'s counts only ever reflect real automatic placements.
+      rotationGroup:SB.rotationGroup||null, rotationName:SB.rotationName||null,
       cancellationPolicyAcceptedAt:SB.policyAcceptedAt||null,
       cancellationPolicyVersion:SB.policyVersion||null,
       source:'guest_booking',
