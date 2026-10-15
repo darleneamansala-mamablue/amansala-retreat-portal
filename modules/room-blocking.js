@@ -836,7 +836,7 @@ function gUpdatePrice(){
   const bal=final-paid;
   const season=isLowSeason(_effStart,bd.nights)?'Low Season (May – Sep)':'High Season (Oct – Apr)';
   const _pkgTr=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk));
-  document.getElementById('pbSeasonLbl').textContent=`Pricing — ${season} · +16% room tax · +$30/night tip`;
+  document.getElementById('pbSeasonLbl').textContent=`Pricing — ${season} · +${Math.round(portalRoomsTaxRate()*100)}% room tax · +$${getTip(regSelBk)}/night tip`;
   document.getElementById('pbc-type').textContent=`${rt.name} · ${gc} guest${gc>1?'s':''} · ${bd.nights} night${bd.nights!==1?'s':''}`;
   document.getElementById('pbc-rate').textContent=draft.customRateOverride!==null?`${fmt$(bd.rate)}/person/night (override)`:`${fmt$(bd.rate)}/person/night`;
   document.getElementById('pbc-base').textContent=fmt$(bd.base);
