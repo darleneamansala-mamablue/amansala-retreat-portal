@@ -50,8 +50,22 @@ exports.handler = async (event) => {
     const takenNow = priced.rooms.filter((r) => !(av.rooms[r.id] && av.rooms[r.id].free));
     if (takenNow.length && cfg.house.wholeHouseOnly) return L.json(409, { error: `${HL} is booked as a whole house and is not fully available for these dates.` });
     if (takenNow.length) return L.json(409, { error: `Sorry, ${takenNow.map((r) => r.label).join(' and ')} ${takenNow.length > 1 ? 'are' : 'is'} no longer available. Please choose another room.` });
+    // perBed rooms (Jorge's ask 2026-10-15, Casita 4's shared rooms): a room can be "free" above
+    // (at least 1 bed left) but not have enough beds for THIS request -- pick exactly which
+    // physical beds this guest gets, so the hold below (and fulfillment later) know which ones,
+    // leaving any other bed in the same room still bookable by someone else.
+    const shortOnBeds = [];
+    priced.rooms.forEach((r) => {
+      const cr = (cfg.house.rooms || []).find((x) => x.id === r.id);
+      const a = av.rooms[r.id];
+      if (cr && cr.perBed) {
+        if (!a || !a.freeUnits || a.freeUnits.length < r.guests) shortOnBeds.push(r.label);
+        else r.chosenUnits = a.freeUnits.slice(0, r.guests);
+      }
+    });
+    if (shortOnBeds.length) return L.json(409, { error: `Sorry, ${shortOnBeds.join(' and ')} ${shortOnBeds.length > 1 ? "don't" : "doesn't"} have enough beds left. Please choose fewer guests or another room.` });
     // confirm with Cloudbeds that each real room is still held (same safety as the single-room checkout)
-    const houseUnits = priced.rooms.flatMap((r) => (av.rooms[r.id] && av.rooms[r.id].units) || []);
+    const houseUnits = priced.rooms.flatMap((r) => r.chosenUnits || (av.rooms[r.id] && av.rooms[r.id].units) || []);
     if (houseUnits.length) {
       const gone = await L.cbGone(bk, houseUnits);
       if (gone.length) return L.json(409, { error: 'Sorry, one of those rooms was just taken. Please choose another room.' });
@@ -60,9 +74,11 @@ exports.handler = async (event) => {
     // Reserve these exact bedroom(s) for the next HOLD_TTL_MIN minutes so nobody else's
     // availability check can pick them while this guest is mid-payment -- same fix as the
     // single-room checkout (Jorge's ask 2026-10-14). Shares rb_holds; bedroom ids (e.g.
-    // "cm-gd") never collide with real room codes.
+    // "cm-gd") never collide with real room codes -- a perBed room holds its chosen bed
+    // codes directly instead of the whole-room id, so a sibling bed stays bookable.
     const rbHoldId = 'h_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    await L.placeHold(key, bk.id, 'house', priced.rooms.map((r) => r.id), rbHoldId);
+    const holdUnits = priced.rooms.flatMap((r) => (r.chosenUnits && r.chosenUnits.length ? r.chosenUnits : [r.id]));
+    await L.placeHold(key, bk.id, 'house', holdUnits, rbHoldId);
 
     // Payment plan: pay everything now, or (when the retreat offers it) a percentage now and the balance charged automatically later
     const offer = L.depositOffer(bk, cfg);

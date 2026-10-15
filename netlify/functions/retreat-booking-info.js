@@ -65,12 +65,20 @@ exports.handler = async (event) => {
       return {
         id, dates: { checkIn: hr.checkIn, checkOut: hr.checkOut, nights: hr.nights, custom: hr.custom, retreatStart: bk.start_date, retreatEnd: bk.end_date, open: !!h.openDates },
         label: h.label || 'Casa Master', intro: h.intro || '', gallery: h.gallery || [], wholeHouseOnly: !!h.wholeHouseOnly, open: !!hav.open,
-        rooms: (h.rooms || []).map((r) => ({
-          id: r.id, label: r.label, beds: r.beds || '', desc: r.desc || '', images: r.images || [], kind: r.kind, max: H.capacity(r), note: r.note || '',
-          soloRate: Number(r.soloRate) || 0, shareRate: Number(r.shareRate) || 0, extraRate: Number(r.extraRate) || 0,
-          free: isPreview ? true : !!(hav.open && hav.rooms[r.id] && hav.rooms[r.id].free),
-          options: H.occupancyOptions(r).map((n) => ({ n, ...H.priceRoom(cfgH, hr.nights, r, n) })),
-        })),
+        rooms: (h.rooms || []).map((r) => {
+          const a = hav.rooms[r.id];
+          const freeCount = isPreview ? H.capacity(r) : (a ? a.freeCount : 0);
+          return {
+            id: r.id, label: r.label, beds: r.beds || '', desc: r.desc || '', images: r.images || [], kind: r.kind, max: H.capacity(r), note: r.note || '',
+            perBed: !!r.perBed,
+            soloRate: Number(r.soloRate) || 0, shareRate: Number(r.shareRate) || 0, extraRate: Number(r.extraRate) || 0,
+            free: isPreview ? true : !!(hav.open && a && a.free),
+            freeCount,
+            // perBed: only offer as many beds as are actually still free, so a guest can never
+            // even select more beds than exist right now (Jorge's ask 2026-10-15).
+            options: H.occupancyOptions(r).filter((n) => !r.perBed || n <= freeCount).map((n) => ({ n, ...H.priceRoom(cfgH, hr.nights, r, n) })),
+          };
+        }),
       };
     };
     const house = cfg.house && cfg.house.on ? await buildHouse(cfg, null) : null;

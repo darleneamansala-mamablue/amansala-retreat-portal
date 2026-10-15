@@ -48,10 +48,14 @@ async function fulfil(pi) {
     if (!rec) throw new Error('house booking details not found for this payment');
 
     // Mark the rooms taken; if one was taken by another paid order in the meantime, say so (nothing is lost; staff resolve it)
+    // perBed rooms (Casita 4's shared rooms): mark only the SPECIFIC beds this order paid for
+    // (rec.rooms[i].chosenUnits, set in retreat-booking-house-intent.js) -- any sibling bed in
+    // the same room stays open for someone else, instead of marking the whole room as sold.
     const all = (await L.appStoreGet(key, H.HOUSE_ROOMS_KEY)) || {};
     const mine = all[bookingId] || {};
-    const conflicts = rec.rooms.filter((r) => mine[r.id] && mine[r.id].piId !== pi.id);
-    rec.rooms.forEach((r) => { if (!mine[r.id]) mine[r.id] = { piId: pi.id, at: new Date().toISOString() }; });
+    const soldKeysOf = (r) => (r.chosenUnits && r.chosenUnits.length ? r.chosenUnits : [r.id]);
+    const conflicts = rec.rooms.filter((r) => soldKeysOf(r).some((k) => mine[k] && mine[k].piId !== pi.id));
+    rec.rooms.forEach((r) => { soldKeysOf(r).forEach((k) => { if (!mine[k]) mine[k] = { piId: pi.id, at: new Date().toISOString() }; }); });
     all[bookingId] = mine;
     await L.appStoreSet(key, H.HOUSE_ROOMS_KEY, all);
     // retreat_house_rooms above is now the permanent "taken" signal for these bedrooms --
@@ -66,7 +70,9 @@ async function fulfil(pi) {
     const paidTotal = pi.amount / 100, bookerName = String(m.rbName || '').trim().toLowerCase();
     for (const r of rec.rooms) {
       const cr = ((cfg.house && cfg.house.rooms) || []).find((x) => x.id === r.id) || {};
-      const units = Array.isArray(cr.units) ? cr.units : [];
+      // perBed rooms: only the specific beds THIS order paid for (chosenUnits), not every bed
+      // the room config lists -- otherwise a sibling guest's bed would get overwritten here.
+      const units = (Array.isArray(r.chosenUnits) && r.chosenUnits.length) ? r.chosenUnits : (Array.isArray(cr.units) ? cr.units : []);
       if (!units.length) { placeIssues.push(`${r.label}: not linked to a real room, please place the guests by hand`); continue; }
       const gl = r.guestList.map((g) => ({ name: g.name, email: g.name.trim().toLowerCase() === bookerName ? (m.rbEmail || '') : '', phone: g.name.trim().toLowerCase() === bookerName ? (m.rbPhone || '') : '', notes: g.type === 'child' ? `Child, age ${g.age}` : '' }));
       const byUnit = units.map(() => []);
