@@ -367,11 +367,14 @@ function generateContractHTML(bk,isLow,signDate){
   const pax=bk.pax||'';
   const nights=getNights(bk);
   const depositDue=fmtShort(addDays(signDate||new Date(),7));
-  const payFullDue=fmtShort(addDays(pd(bk.startDate),-42));
-  const cancelDeadline=fmtShort(addDays(pd(bk.startDate),-112));
-  const roomRelease=fmtShort(addDays(pd(bk.startDate),-45));
-  const flightDue=fmtShort(addDays(pd(bk.startDate),-30));
-  const lastMinReg=fmtShort(addDays(pd(bk.startDate),-21));
+  // Staff-editable in Admin > Settings (Jorge's ask 2026-10-15) instead of hardcoded
+  // day-offsets -- these defaults are only used if that screen was never saved.
+  const _cd=(typeof PortalSettings!=='undefined'&&PortalSettings.contractDeadlines)||{fullPaymentDaysBefore:42,cancelDeadlineDaysBefore:112,roomAllotmentReleaseDaysBefore:45,flightDetailsDaysBefore:30,lastMinuteCutoffDaysBefore:21};
+  const payFullDue=fmtShort(addDays(pd(bk.startDate),-_cd.fullPaymentDaysBefore));
+  const cancelDeadline=fmtShort(addDays(pd(bk.startDate),-_cd.cancelDeadlineDaysBefore));
+  const roomRelease=fmtShort(addDays(pd(bk.startDate),-_cd.roomAllotmentReleaseDaysBefore));
+  const flightDue=fmtShort(addDays(pd(bk.startDate),-_cd.flightDetailsDaysBefore));
+  const lastMinReg=fmtShort(addDays(pd(bk.startDate),-_cd.lastMinuteCutoffDaysBefore));
   const hr=`<hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0">`;
   const tmpl=loadContractTmpl();
   // Section text: this retreat's own edited version if it has one, else the template
@@ -447,11 +450,14 @@ function generateContractText(bk,isLow,signDate){
   const pax=bk.pax||'TBD';
   const nights=getNights(bk);
   const depositDue=fmtShort(addDays(signDate||new Date(),7));
-  const payFullDue=fmtShort(addDays(pd(bk.startDate),-42));
-  const cancelDeadline=fmtShort(addDays(pd(bk.startDate),-112));
-  const roomRelease=fmtShort(addDays(pd(bk.startDate),-45));
-  const flightDue=fmtShort(addDays(pd(bk.startDate),-30));
-  const lastMinReg=fmtShort(addDays(pd(bk.startDate),-21));
+  // Staff-editable in Admin > Settings (Jorge's ask 2026-10-15) instead of hardcoded
+  // day-offsets -- these defaults are only used if that screen was never saved.
+  const _cd=(typeof PortalSettings!=='undefined'&&PortalSettings.contractDeadlines)||{fullPaymentDaysBefore:42,cancelDeadlineDaysBefore:112,roomAllotmentReleaseDaysBefore:45,flightDetailsDaysBefore:30,lastMinuteCutoffDaysBefore:21};
+  const payFullDue=fmtShort(addDays(pd(bk.startDate),-_cd.fullPaymentDaysBefore));
+  const cancelDeadline=fmtShort(addDays(pd(bk.startDate),-_cd.cancelDeadlineDaysBefore));
+  const roomRelease=fmtShort(addDays(pd(bk.startDate),-_cd.roomAllotmentReleaseDaysBefore));
+  const flightDue=fmtShort(addDays(pd(bk.startDate),-_cd.flightDetailsDaysBefore));
+  const lastMinReg=fmtShort(addDays(pd(bk.startDate),-_cd.lastMinuteCutoffDaysBefore));
   const season=isLow?'LOW SEASON (May – Sep)':'HIGH SEASON (Oct – Apr)';
   const eq='═'.repeat(52);const dash='─'.repeat(40);
   return `AMANSALA ECO-CHIC RESORT AND RETREAT
