@@ -1419,8 +1419,8 @@ async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, 
 
   let folioOk = false, folioItemId = null;
   if (pretaxTotal != null && pretaxTotal > 0) {
-    const upgradeTotal = +(pretaxTotal * 1.16).toFixed(2);
-    const commissionAmount = +(pretaxTotal * 0.05).toFixed(2);
+    const upgradeTotal = +(pretaxTotal * (1 + portalRoomsTaxRate())).toFixed(2);
+    const commissionAmount = +(pretaxTotal * portalCommissionRate()).toFixed(2);
     const folioDesc = (nightlyRate && nights) ? `Upgrade $${nightlyRate} × ${nights} noches` : `Room Upgrade: ${entry.room} → ${newRoom}`;
     try {
       const fcRes = await fetch('/.netlify/functions/create-folio-charge', {
@@ -1447,7 +1447,7 @@ async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, 
           staff_id: staffId, staff_name: staffName, type: 'upgrade', guest_name: entry.guest, booking_id: entry.retreatId,
           folio_item_id: folioItemId,
           room_from: entry.room, room_to: newRoom, upgrade_pretax: pretaxTotal, upgrade_total: upgradeTotal,
-          commission_rate: 0.05, commission_amount: commissionAmount, date: entry.date, status: 'pending',
+          commission_rate: portalCommissionRate(), commission_amount: commissionAmount, date: entry.date, status: 'pending',
         });
         showToast(`Upgrade confirmado: ${entry.guest} → ${newRoom}${folioOk ? ' · Cargo en folio ✓' : ''} · Comisión $${commissionAmount} para ${staffName} ✓`);
       } catch (e) { showToast('Upgrade OK — error al guardar comisión: ' + e.message); }

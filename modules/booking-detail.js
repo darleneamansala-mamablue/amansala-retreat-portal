@@ -793,7 +793,8 @@ function _bdCommissionFieldsHtml(prefix,id,open,initialPrice,selectedStaffId){
   </div>`;
 }
 function _bdCommissionPreviewText(price){
-  return`Comisión (5% del precio, antes de impuesto): $${(( parseFloat(price)||0)*0.05).toFixed(2)}`;
+  const r=portalCommissionRate();
+  return`Comisión (${(r*100).toFixed(0)}% del precio, antes de impuesto): $${((parseFloat(price)||0)*r).toFixed(2)}`;
 }
 function _bdOnCategoryChange(prefix,id){
   const catEl=document.getElementById(`${prefix}-cat-${id}`);
@@ -888,7 +889,7 @@ async function _bdUpsertCommission(fid,itemId,staffId,baseAmount,taxRate,commiss
     // carry the folio charge's own description so it shows up readably in
     // the Commissions tab (commissionsRenderBody()'s detail column).
     room_from:null,room_to:desc||'Cargo de folio',upgrade_pretax:baseAmount,upgrade_total:+(baseAmount*(1+(taxRate||0)/100)).toFixed(2),
-    commission_rate:0.05,commission_amount:commissionAmount,date:new Date().toISOString().slice(0,10),status:'pending',
+    commission_rate:portalCommissionRate(),commission_amount:commissionAmount,date:new Date().toISOString().slice(0,10),status:'pending',
   };
   try{
     const{data:existing}=await db.from('commissions').select('id').eq('folio_item_id',itemId).maybeSingle();
@@ -917,7 +918,7 @@ async function _bdSyncLinkedCommission(itemId,qty,unitPrice,taxRate){
     if(!existing)return;
     const pretax=+(Number(qty)*Number(unitPrice)).toFixed(2);
     const total=+(pretax*(1+(Number(taxRate)||0)/100)).toFixed(2);
-    const rate=Number(existing.commission_rate)||0.05;
+    const rate=Number(existing.commission_rate)||portalCommissionRate();
     const commissionAmount=+(pretax*rate).toFixed(2);
     await db.from('commissions').update({upgrade_pretax:pretax,upgrade_total:total,commission_amount:commissionAmount}).eq('id',existing.id);
   }catch(e){console.warn('[commission] linked sync failed:',e.message);}
@@ -942,7 +943,7 @@ async function bdAddItem(fid){
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
   const {data:newItem,error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty:1,unit_price:price,tax_rate:tax,category,staff_name:getCurrentSession()?.name||null}).select().single();
   if(error){showToast('Error: '+error.message);return;}
-  if(isComm&&staffId)await _bdUpsertCommission(fid,newItem.id,staffId,price,tax,+(price*0.05).toFixed(2),desc);
+  if(isComm&&staffId)await _bdUpsertCommission(fid,newItem.id,staffId,price,tax,+(price*portalCommissionRate()).toFixed(2),desc);
   _bdAddOpen[fid]=false;
   await _bdLoadFolios();
 }
@@ -971,7 +972,7 @@ async function bdSaveEditItem(fid,itemId){
   const origItem=_bdFolios.find(x=>x.folio.id===fid)?.items.find(x=>x.id===itemId);
   const {error}=await db.from('folio_items').update({description:desc,unit_price:price,tax_rate:tax,category}).eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
-  if(isComm&&staffId)await _bdUpsertCommission(fid,itemId,staffId,price,tax,+(price*0.05).toFixed(2),desc);
+  if(isComm&&staffId)await _bdUpsertCommission(fid,itemId,staffId,price,tax,+(price*portalCommissionRate()).toFixed(2),desc);
   else await _bdSyncLinkedCommission(itemId,origItem?.qty??1,price,tax);
   delete _bdEditOpen[itemId];
   await _bdLoadFolios();
