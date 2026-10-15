@@ -196,6 +196,27 @@ async function _bdLoadFolios(){
     let {data:folios,error}=await db.from('folios').select('*').eq(subj.folioCol,folioSubjId).eq('guest_name',guestName);
     if(error)throw error;
     let justSeeded=false;
+    // Jorge's report 2026-10-15 (Elisabeth Watkins/Laura Luscinski, room 4B):
+    // a registration with only ONE named guest slot (no sharing) whose name
+    // got edited later ("Elisabeth Watkins" -> "Elisabeth Watkins / Laura
+    // Luscinski") orphaned its real folio -- the exact guest_name match above
+    // found nothing and created a brand-new EMPTY folio under the new name
+    // (re-seeding a duplicate Room charge into it), hiding everything already
+    // charged (tours, restaurant, spa, the real room charge) under the old
+    // name. When a registration only ever has one guest, any existing folio
+    // for it is unambiguously this guest's, regardless of what name is
+    // stored on it -- reuse it instead of creating a duplicate. Left alone
+    // for an actual shared room (2+ named guests), where guest_name is the
+    // only thing telling each guest's folio apart.
+    if((!folios||!folios.length)&&_bdKind==='reg'){
+      const reg=AppData.regs.find(r=>r.id===_bdId);
+      const soleGuest=reg&&(reg.guests||[]).filter(g=>g&&g.name&&!g.cancelled).length<=1;
+      if(soleGuest){
+        const {data:anyFolios,error:aErr}=await db.from('folios').select('*').eq(subj.folioCol,folioSubjId);
+        if(aErr)throw aErr;
+        if(anyFolios&&anyFolios.length)folios=anyFolios;
+      }
+    }
     if(!folios||!folios.length){
       const token=uid().replace(/[^a-z0-9]/gi,'');
       const {data:created,error:cErr}=await db.from('folios').insert({[subj.folioCol]:folioSubjId,guest_name:guestName,name:guestName,payment_token:token,status:'open'}).select().single();
