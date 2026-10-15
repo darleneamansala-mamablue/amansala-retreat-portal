@@ -10,6 +10,14 @@ const L = require('./rb-lib');
 const HOUSE_ROOMS_KEY = 'retreat_house_rooms';   // { [bookingId]: { [roomId]: { piId, at } } }  rooms already sold
 const r2 = (n) => Math.round(n * 100) / 100;
 
+// Which house a request is about: the retreat's main house (cfg.house, Casa Master) or one of cfg.houses[] (e.g. Casita 4, id 'casita4').
+// Returns a copy of cfg whose .house is that house, so every function below works unchanged; null when the id is unknown.
+function cfgFor(cfg, houseId) {
+  if (!houseId) return cfg;
+  const h = (cfg.houses || []).find((x) => x.id === houseId);
+  return h ? { ...cfg, house: h } : null;
+}
+
 function occupancyOptions(room) {
   if (room.kind === 'single') return [1];
   if (room.kind === 'twin') return [2];
@@ -153,7 +161,7 @@ async function houseAvailability(key, bk, cfg, range, excludeHoldId) {
   // Whole house only (cfg.house.wholeHouseOnly): the house is offered only when EVERY bedroom is available; one missing room hides all
   out.whole = !!house.wholeHouseOnly;
   if (house.wholeHouseOnly && Object.values(out.rooms).some((x) => !x.free)) {
-    Object.values(out.rooms).forEach((x) => { x.free = false; x.reason = x.reason || 'Casa Master is booked as a whole house and is not fully available'; });
+    Object.values(out.rooms).forEach((x) => { x.free = false; x.reason = x.reason || ((house.label || 'This house') + ' is booked as a whole house and is not fully available'); });
   }
   return out;
 }
@@ -164,4 +172,4 @@ function missingRooms(cfg, selections) {
   return ((cfg.house && cfg.house.rooms) || []).filter((r) => !have.has(r.id));
 }
 
-module.exports = { parseRange, missingRooms, HOUSE_ROOMS_KEY, occupancyOptions, capacity, checkSelection, priceRoom, priceSelection, houseAvailability };
+module.exports = { cfgFor, parseRange, missingRooms, HOUSE_ROOMS_KEY, occupancyOptions, capacity, checkSelection, priceRoom, priceSelection, houseAvailability };

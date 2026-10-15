@@ -41,7 +41,9 @@ async function fulfil(pi) {
   try {
     const found = await L.loadRetreat(key, bookingId);
     if (!found || !found.cfg) { console.error('[rb-fulfil-house] retreat/config missing for', bookingId); return { error: 'no retreat' }; }
-    const { bk, cfg } = found;
+    const { bk } = found;
+    const cfg = H.cfgFor(found.cfg, m.rbHouseId || null) || found.cfg;
+    const HL = (cfg.house && cfg.house.label) || 'Casa Master';
     const rec = await L.appStoreGet(key, 'rbhouse:' + pi.id);
     if (!rec) throw new Error('house booking details not found for this payment');
 
@@ -73,7 +75,7 @@ async function fulfil(pi) {
       for (let k = 0; k < units.length; k++) {
         const unit = units[k];
         const existing = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(bookingId)}&room=eq.${encodeURIComponent(unit)}&select=id,notes,amount_paid`);
-        const note = `Booked online (Casa Master, ${r.label}) ${new Date().toISOString().slice(0, 10)} · booked by ${m.rbName}${r.supplement ? ' · includes the individual bed' : ''}${stayTxt}`;
+        const note = `Booked online (${HL}, ${r.label}) ${new Date().toISOString().slice(0, 10)} · booked by ${m.rbName}${r.supplement ? ' · includes the individual bed' : ''}${stayTxt}`;
         const patch = { guests: byUnit[k], amount_paid: perUnit + (Number(existing[0] && existing[0].amount_paid) || 0), notes: (existing[0] && existing[0].notes ? existing[0].notes + ' — ' : '') + note, room_type_id: typeOf[unit] || null };
         if (existing[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${existing[0].id}`, patch, 'return=minimal');
         else await L.sreq(key, 'POST', 'registrations', { booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');
@@ -118,7 +120,7 @@ async function fulfil(pi) {
     if (isDeposit) {
       const sched = (await L.appStoreGet(key, L.BAL_KEY)) || [];
       sched.push({
-        id: 'bal_' + Date.now().toString(36), piId: pi.id, bookingId, retreat: `${cfg.title || bk.retreat_name || bk.leader_name} - Casa Master`,
+        id: 'bal_' + Date.now().toString(36), piId: pi.id, bookingId, retreat: `${cfg.title || bk.retreat_name || bk.leader_name} - ${HL}`,
         customerId: typeof pi.customer === 'string' ? pi.customer : (pi.customer && pi.customer.id) || '',
         paymentMethodId: typeof pi.payment_method === 'string' ? pi.payment_method : (pi.payment_method && pi.payment_method.id) || '',
         amount: roomLater, dueDate: m.rbBalanceDate, status: 'scheduled', tries: 0,
@@ -135,17 +137,17 @@ async function fulfil(pi) {
     const rows = rec.rooms.map(roomHtml).join('');
     const guestHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27;max-width:600px">
       <h2 style="font-weight:400">Thank you for your booking</h2>
-      <p>Hi ${esc((m.rbName || '').split(' ')[0])}, your payment of <b>${money(paidNow)}</b>${isDeposit ? ' (50% of your rooms)' : ''} was received and your Casa Master rooms for <b>${esc(title)}</b> (${esc(dates)}) are reserved.</p>
+      <p>Hi ${esc((m.rbName || '').split(' ')[0])}, your payment of <b>${money(paidNow)}</b>${isDeposit ? ' (50% of your rooms)' : ''} was received and your ${HL} rooms for <b>${esc(title)}</b> (${esc(dates)}) are reserved.</p>
       <table style="width:100%;border-collapse:collapse">${rows}<tr><td style="padding:10px 0;border-top:2px solid #1f2b27;font-weight:700">Total for ${rec.guests} guest${rec.guests > 1 ? 's' : ''} · ${rec.rooms.length} room${rec.rooms.length > 1 ? 's' : ''}</td><td style="padding:10px 0;border-top:2px solid #1f2b27;text-align:right;font-weight:700">${money(rec.total)}</td></tr><tr><td style="padding:2px 0">Paid today</td><td style="text-align:right">${money(paidNow)}</td></tr></table>
       ${isDeposit ? `<p><b>Remaining balance: ${money(roomLater)}.</b> As you authorized, it will be charged automatically to the same card on <b>${esc(m.rbBalanceDate)}</b>. We will email you when it is charged.</p>` : ''}
       ${(cfg.includes || []).length ? `<p style="margin-bottom:4px"><b>What's included</b></p><ul style="margin-top:0">${cfg.includes.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>${cfg.notIncluded ? `<p style="font-size:13px">${esc(cfg.notIncluded)}</p>` : ''}` : ''}
       ${stay.custom ? `<p>Your stay is <b>${esc(stay.checkIn)} to ${esc(stay.checkOut)}</b>. The nights outside the retreat dates include all meals.</p>` : ''}
       <p><a href="${L.recordUrl(pi.id)}" style="color:#3f5147;font-weight:700">Download your booking record (PDF)</a>: every room, guest and price, the cancellation policy and everything you agreed to.</p>
       <p>Questions? Reply to this email or write to retreats@amansala.com.</p><p>Amansala · Tulum</p></div>`;
-    await sendEmail(m.rbEmail, `Thank you for your booking — ${title} · Casa Master`, guestHtml, 'retreats@amansala.com');
+    await sendEmail(m.rbEmail, `Thank you for your booking — ${title} · ${HL}`, guestHtml, 'retreats@amansala.com');
 
     const staffTo = cfg.notifyEmail || 'retreats@amansala.com';
-    const staffHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27;max-width:640px"><h3>${conflicts.length ? '⚠ Casa Master booking — a room was already sold, needs attention' : 'New Casa Master booking'}</h3>
+    const staffHtml = `<div style="font-family:Arial,sans-serif;color:#1f2b27;max-width:640px"><h3>${conflicts.length ? `⚠ ${HL} booking — a room was already sold, needs attention` : `New ${HL} booking`}</h3>
       <p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>${esc(title)} · ${esc(dates)}</p>
       ${extraNote ? `<p><b>Different dates from the retreat:</b> ${esc(extraNote)} Please add the extra nights in Cloudbeds.</p>` : ''}
       ${conflicts.length ? `<p><b>Already sold to another booking:</b> ${conflicts.map((r) => esc(r.label)).join(', ')}. Please place or refund by hand.</p>` : ''}
@@ -153,15 +155,15 @@ async function fulfil(pi) {
       <p>${isDeposit ? 'Paid now ' + money(paidNow) + ' (50%). Balance ' + money(roomLater) + ' auto-charges ' + esc(m.rbBalanceDate) + '.' : 'Total ' + money(rec.total) + ' paid'} · Stripe ${esc(pi.id)} · <a href="${L.recordUrl(pi.id)}">Booking record</a></p>
       <p>${placedUnits.length ? '<b>On the room list now:</b> ' + placedUnits.map(esc).join(', ') + '.' : ''}</p>
       ${placeIssues.length ? '<p><b>Needs a manual look:</b><br>' + placeIssues.map(esc).join('<br>') + '</p>' : ''}</div>`;
-    await sendEmail(staffTo, `${conflicts.length ? 'ACTION NEEDED: ' : ''}New Casa Master booking — ${m.rbName} · ${title}`, staffHtml);
+    await sendEmail(staffTo, `${conflicts.length ? 'ACTION NEEDED: ' : ''}New ${HL} booking — ${m.rbName} · ${title}`, staffHtml);
     return { ok: true, placed: !conflicts.length };
   } catch (err) {
     console.error('[rb-fulfil-house] failed after payment', pi.id, err.message);
     orders[pi.id] = { piId: pi.id, bookingId, type: 'house', status: 'error', error: String(err.message).slice(0, 300), name: m.rbName, email: m.rbEmail, at: new Date().toISOString() };
     try { await L.appStoreSet(key, L.ORDERS_KEY, orders); } catch (e) { /* ignore */ }
     await L.releaseHold(key, m.rbHoldId); // otherwise it just sits until HOLD_TTL_MIN expires, which is fine too
-    await sendEmail('retreats@amansala.com', `ACTION NEEDED: Casa Master booking paid but not recorded — ${m.rbName || ''}`,
-      `<p>A Casa Master booking payment succeeded but could not be fully recorded.</p><p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>Retreat booking id: ${esc(bookingId)}<br>Stripe payment: ${esc(pi.id)}<br>Total: ${esc(m.rbTotal)}<br>Rooms: ${esc(m.rbRooms)}<br>Error: ${esc(err.message)}</p>`);
+    await sendEmail('retreats@amansala.com', `ACTION NEEDED: house booking paid but not recorded — ${m.rbName || ''}`,
+      `<p>A house booking payment succeeded but could not be fully recorded.</p><p><b>${esc(m.rbName)}</b> · ${esc(m.rbEmail)} · ${esc(m.rbPhone)}<br>Retreat booking id: ${esc(bookingId)}<br>Stripe payment: ${esc(pi.id)}<br>Total: ${esc(m.rbTotal)}<br>Rooms: ${esc(m.rbRooms)}<br>Error: ${esc(err.message)}</p>`);
     return { error: true };
   }
 }
