@@ -107,6 +107,10 @@ let SpaAppointments=[];
 let SBRegs=[];
 let SBBookings=[];
 let SBStaffAccounts=[];
+// Staff-editable rotation rules (booking-hub.html's Spa > Auto-Assign screen, modules/
+// spa-rotation-settings.js) -- these defaults are only ever used until staff saves that
+// screen once; after that, whatever they set there takes over automatically.
+let SB_ROT={femaleOrder:['Laura','Laura','Gabby','Graciela'],femaleFallback:'Rosario',malePrimary:'Julian',malePrimaryCap:4,maleSecondary:'Miguel',noPreferenceFirst:'male',mariaName:'Maria Luisa',mariaStageSize:2,mariaBreakMinutes:45,mariaDailyCap:4,generalBreakAfter:3,generalBreakMinutes:30,generalDailyCap:7};
 let SB={step:1,sessionType:null,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
         policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null,tipAmount:0,rotationGroup:null,rotationName:null,
         stayStart:null,stayEnd:null};
@@ -120,18 +124,20 @@ function fmtDateLong(ds){const d=new Date(ds+'T12:00:00');return d.toLocaleDateS
 
 async function init(){
   try{
-    const [{data:sd},{data:ad},{data:rd},{data:bd},{data:scd}]=await Promise.all([
+    const [{data:sd},{data:ad},{data:rd},{data:bd},{data:scd},{data:rot}]=await Promise.all([
       db.from('app_store').select('value').eq('key','spa_data').single(),
       db.from('app_store').select('value').eq('key','spa_appointments').single(),
       db.from('registrations').select('id,booking_id,room,guests,charges'),
       db.from('bookings').select('id,leader_name,booking_type,blocked_rooms,charges'),
       db.from('app_store').select('value').eq('key','staffConfirmAccounts').maybeSingle(),
+      db.from('app_store').select('value').eq('key','spa_rotation_settings').maybeSingle(),
     ]);
     if(sd?.value) SpaData=sd.value;
     SpaAppointments=(ad?.value)||[];
     SBRegs=(rd||[]).map(r=>({id:r.id,bookingId:r.booking_id,room:r.room,guests:r.guests,charges:r.charges}));
     SBBookings=(bd||[]).map(b=>({id:b.id,leaderName:b.leader_name,bookingType:b.booking_type,blockedRooms:b.blocked_rooms,charges:b.charges}));
     SBStaffAccounts=(scd?.value&&Array.isArray(scd.value))?scd.value:[];
+    if(rot?.value) SB_ROT={...SB_ROT,...rot.value};
   }catch(e){}
   const cancelId=new URLSearchParams(location.search).get('cancel');
   if(cancelId) return sbRenderCancelScreen(cancelId);
@@ -518,8 +524,6 @@ function sbIsTherapistAvailable(ther,date,period){
 // Everyone else: a 30-min break after every 3 CONSECUTIVE (back-to-back, no gap) services,
 // capped at 7/day. An explicit per-therapist override (ther.breakMinutes/maxServicesPerDay,
 // settable on their profile) still wins over these defaults when staff has set one.
-const SPA_GENERAL_BREAK_AFTER=3, SPA_GENERAL_BREAK_MINUTES=30, SPA_GENERAL_DAILY_CAP=7;
-const SPA_MARIA_BREAK_MINUTES=45, SPA_MARIA_DAILY_CAP=4;
 function sbSlotFree(therapistId,roomId,dateStr,startMin,duration,excludeApptId){
   const endMin=startMin+duration;
   let brk=0;
@@ -528,14 +532,14 @@ function sbSlotFree(therapistId,roomId,dateStr,startMin,duration,excludeApptId){
     if(ther&&!sbIsTherapistAvailable(ther,dateStr,startMin<720?'AM':'PM'))return false;
     if(ther){
       const todaysSorted=SpaAppointments.filter(a=>a.id!==excludeApptId&&a.date===dateStr&&a.status!=='CANCELLED'&&a.therapistId===therapistId).sort((a,b)=>hhmmToMin(a.start)-hhmmToMin(b.start));
-      if((ther.firstName||'').trim()==='Maria Luisa'){
-        if(todaysSorted.length>=SPA_MARIA_DAILY_CAP)return false;
-        if(todaysSorted.length===2){
-          const last=todaysSorted[1];
-          if(startMin<hhmmToMin(last.start)+(last.duration||60)+SPA_MARIA_BREAK_MINUTES)return false;
+      if((ther.firstName||'').trim()===SB_ROT.mariaName){
+        if(todaysSorted.length>=SB_ROT.mariaDailyCap)return false;
+        if(todaysSorted.length===SB_ROT.mariaStageSize){
+          const last=todaysSorted[todaysSorted.length-1];
+          if(startMin<hhmmToMin(last.start)+(last.duration||60)+SB_ROT.mariaBreakMinutes)return false;
         }
       }else{
-        const cap=parseInt(ther.maxServicesPerDay,10)||SPA_GENERAL_DAILY_CAP;
+        const cap=parseInt(ther.maxServicesPerDay,10)||SB_ROT.generalDailyCap;
         if(todaysSorted.length>=cap)return false;
         // Walk backward from the candidate slot: how many of today's services chain
         // back-to-back (no gap) right up to this new one? 3+ in a row needs a break first.
@@ -545,7 +549,7 @@ function sbSlotFree(therapistId,roomId,dateStr,startMin,duration,excludeApptId){
           if(aEnd===cursorEnd){consecutive++;cursorEnd=aStart;}else break;
         }
         const explicitBreak=Math.max(0,parseInt(ther.breakMinutes,10)||0);
-        brk=explicitBreak||(consecutive>=SPA_GENERAL_BREAK_AFTER?SPA_GENERAL_BREAK_MINUTES:0);
+        brk=explicitBreak||(consecutive>=SB_ROT.generalBreakAfter?SB_ROT.generalBreakMinutes:0);
       }
     }
   }
@@ -703,25 +707,27 @@ function sbRenderSlots(candidates,svc){
 // — the "never leave a booking unfilled" safeguard.
 function sbRotationOrder(){
   const apptsToday=SpaAppointments.filter(a=>a.date===SB.date&&a.status!=='CANCELLED');
-  const order=[];
-  if(SB.prefType!=='female'){
-    const julianToday=apptsToday.filter(a=>a.rotationGroup==='male'&&a.rotationName==='Julian').length;
+  const maleBlock=()=>{
+    const julianToday=apptsToday.filter(a=>a.rotationGroup==='male'&&a.rotationName===SB_ROT.malePrimary).length;
     const totalMale=apptsToday.filter(a=>a.rotationGroup==='male').length;
-    if(julianToday<4) order.push({name:'Julian',group:'male'},{name:'Miguel',group:'male'});
-    else{
-      const alt=totalMale-julianToday;
-      order.push({name:alt%2===0?'Miguel':'Julian',group:'male'},{name:alt%2===0?'Julian':'Miguel',group:'male'});
-    }
-  }
-  if(SB.prefType!=='male'){
+    if(julianToday<SB_ROT.malePrimaryCap) return [{name:SB_ROT.malePrimary,group:'male'},{name:SB_ROT.maleSecondary,group:'male'}];
+    const alt=totalMale-julianToday;
+    return [{name:alt%2===0?SB_ROT.maleSecondary:SB_ROT.malePrimary,group:'male'},{name:alt%2===0?SB_ROT.malePrimary:SB_ROT.maleSecondary,group:'male'}];
+  };
+  const femaleBlock=()=>{
     const totalFemale=apptsToday.filter(a=>a.rotationGroup==='female').length;
-    const pattern=['Laura','Laura','Gabby','Graciela'];
+    const pattern=SB_ROT.femaleOrder;
     const primary=pattern[totalFemale%pattern.length];
     const rest=pattern.filter(n=>n!==primary);
-    [primary,...rest].forEach(n=>order.push({name:n,group:'female'}));
-    order.push({name:'Rosario',group:'female'});
-  }
-  return order;
+    const out=[primary,...rest].map(n=>({name:n,group:'female'}));
+    out.push({name:SB_ROT.femaleFallback,group:'female'});
+    return out;
+  };
+  if(SB.prefType==='female') return femaleBlock();
+  if(SB.prefType==='male') return maleBlock();
+  // "No preference": try whichever rotation is configured first, then fall through to
+  // the other (the "never leave a booking unfilled" safeguard).
+  return SB_ROT.noPreferenceFirst==='female' ? [...femaleBlock(),...maleBlock()] : [...maleBlock(),...femaleBlock()];
 }
 function sbPickAutoSlot(startMin){
   const svc=SpaData.services.find(s=>s.id===SB.serviceId);

@@ -145,7 +145,7 @@ async function spaInit() {
 
 function spaSetView(v) {
   spaCurView = v;
-  ['dashboard', 'confirm', 'calendar', 'services', 'therapists', 'rooms', 'public', 'payroll'].forEach(id => {
+  ['dashboard', 'confirm', 'calendar', 'services', 'therapists', 'rooms', 'public', 'autoassign', 'payroll'].forEach(id => {
     const btn = document.getElementById('spaView' + id.charAt(0).toUpperCase() + id.slice(1));
     if (btn) {
       btn.style.background = id === v ? 'var(--teal,#2d6a6a)' : 'transparent';
@@ -169,6 +169,7 @@ function spaRender() {
   if (spaCurView === 'therapists') { addWrap.innerHTML = addBtn('New Therapist', 'spaShowTherapistForm(null)'); spaRenderTherapists(); }
   if (spaCurView === 'rooms') { addWrap.innerHTML = addBtn('New Room', 'spaShowRoomForm(null)'); spaRenderRooms(); }
   if (spaCurView === 'public') { addWrap.innerHTML = ''; spaRenderPublicPage(); }
+  if (spaCurView === 'autoassign') { addWrap.innerHTML = ''; spaRenderRotationSettings(); }
   if (spaCurView === 'payroll') { addWrap.innerHTML = ''; spaRenderPayroll(); }
 }
 
