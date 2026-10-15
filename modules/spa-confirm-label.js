@@ -67,7 +67,7 @@ function sclDecorate() {
         const d = document.createElement('div');
         d.className = 'scl-label';
         d.style.cssText = 'font-size:9.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + (r === 'therapist' ? '#15803d' : '#92400e');
-        d.textContent = r === 'therapist' ? 'Confirmed by therapist' : 'Awaiting therapist';
+        d.textContent = r === 'therapist' ? 'Confirmed by therapist' : 'Not confirmed';
         box.appendChild(d);
       }
     });
@@ -77,7 +77,7 @@ function sclDecorate() {
       const a = m && sclAppt(m[1]);
       if (!a || !a.confirmed) return;
       const r = sclRole(a);
-      btn.textContent = r === 'therapist' ? '✓ Confirmed by therapist' : 'Awaiting therapist';
+      btn.textContent = r === 'therapist' ? '✓ Confirmed by therapist' : 'Not confirmed';
       btn.title = sclTitle(a);
       btn.style.whiteSpace = 'normal';
       btn.style.lineHeight = '1.25';
