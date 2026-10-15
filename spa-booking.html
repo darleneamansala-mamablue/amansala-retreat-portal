@@ -705,7 +705,7 @@ function renderStep7_Confirm(el){
       <div class="summary-row"><span class="lbl">Time</span><span class="val">${fmtT(SB.start)}</span></div>
       <div class="summary-row"><span class="lbl">Therapist</span><span class="val">${SB.prefType==='specific'?esc(ther.firstName)+' '+esc(ther.lastName||''):'Assigned by our team'}</span></div>
       ${svc.groupPricing?`<div class="summary-row"><span class="lbl">Guests</span><span class="val">${SB.guestCount}</span></div>`:''}
-      <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc.groupPricing?SB.groupTotalPrice:svc.price} USD</span></div>
+      <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc.groupPricing?SB.groupTotalPrice:svc.price} USD${SB.guestType!=='hotel'?' + 13% tax':''}</span></div>
       <div class="summary-row"><span class="lbl">${SB.guestType==='hotel'?'Room':'Contact'}</span><span class="val">${SB.guestType==='hotel'?esc(SB.roomNumber):esc(SB.email)}</span></div>
       <div class="form-group" style="margin-top:16px">
         <label class="form-label">Add a Tip${SB.prefType==='specific'?' for '+esc(ther.firstName):' for your therapist'} (optional)</label>
@@ -1133,7 +1133,7 @@ function sbRenderConfirmationScreen(apptId){
     <div class="summary-row"><span class="lbl">Therapist</span><span class="val">${esc(therName)}</span></div>
     <div class="summary-row"><span class="lbl">Meet at</span><span class="val">${esc(meetAt)}</span></div>
     ${appt.roomNumber?`<div class="summary-row"><span class="lbl">Your room</span><span class="val">${esc(appt.roomNumber)}</span></div>`:''}
-    <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc?.groupPricing?appt.groupTotalPriceUSD:svc?.price} USD</span></div>
+    <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc?.groupPricing?appt.groupTotalPriceUSD:svc?.price} USD${appt.guestType!=='hotel'?' + 13% tax':''}</span></div>
     ${appt.tipAmount>0?`<div class="summary-row"><span class="lbl">Tip</span><span class="val">$${appt.tipAmount} USD</span></div>`:''}
     ${!isCancelled?`<div class="section-sub" style="margin-top:14px">${canCancelOnline?'You can cancel free of charge up to 12 hours before your appointment. Need a different time instead? Please contact us directly — our team handles all time changes personally.':"It's less than 12 hours away, so it can't be cancelled online — please contact us directly if you need to."}</div>`:''}
     ${canCancelOnline?`<button class="btn-primary" style="margin-top:16px;background:#b45309" onclick="location.href='spa-booking.html?cancel=${appt.id}'">Cancel My Appointment</button>`:''}

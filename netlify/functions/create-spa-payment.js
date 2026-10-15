@@ -73,11 +73,16 @@ exports.handler = async (event) => {
 
   if (!priceUSD || priceUSD <= 0) return jsonErr(400, 'Service price not set');
 
-  const totalUSD = +(priceUSD + tipAmount).toFixed(2);
+  // 13% tax on the service price only (same rate chargeFolio already applies to a hotel
+  // guest's room-folio spa charge) -- the tip is the guest's own discretionary amount, not
+  // taxed. Jorge's report 2026-10-13/2026-10-15: this offsite payment link was charging just
+  // the base price with no tax added at all, same bug already fixed in visito-spa-create-booking.js.
+  const taxUSD = +(priceUSD * 0.13).toFixed(2);
+  const totalUSD = +(priceUSD + taxUSD + tipAmount).toFixed(2);
   const amountCents = Math.round(totalUSD * 100);
   if (amountCents < 50) return jsonErr(400, 'Amount too small');
 
-  const desc = `Amansala Spa · ${svc.name}${svc.groupPricing ? ` (${guestCount || 1} guests)` : ''}`;
+  const desc = `Amansala Spa · ${svc.name}${svc.groupPricing ? ` (${guestCount || 1} guests)` : ''} · incl. 13% tax`;
 
   const params = new URLSearchParams({
     amount:                  String(amountCents),
@@ -91,6 +96,7 @@ exports.handler = async (event) => {
     'metadata[email]':       email.slice(0, 200),
     'metadata[guestCount]':  String(guestCount || 1),
     'metadata[tipAmount]':   String(tipAmount),
+    'metadata[taxAmount]':   String(taxUSD),
     'metadata[source]':      'spa_booking',
   });
 
@@ -115,6 +121,7 @@ exports.handler = async (event) => {
       publishableKey:  pubKey,
       amount:          totalUSD,
       servicePrice:    priceUSD,
+      taxAmount:       taxUSD,
       tipAmount,
     }),
   };
