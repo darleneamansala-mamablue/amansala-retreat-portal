@@ -13,16 +13,16 @@
 //   (base + a separate 13% tax line item, same pattern as spa) and hands back a payment
 //   link, instead of Lana quoting a made-up number with no way to actually collect it.
 //
-// Same RATES table as auto-charge-transport.js / visito-transport-check-price.js
-// (duplicated here per this repo's per-function convention).
+// Rate table and tax % are staff-editable in Admin > Settings (Jorge's ask 2026-10-15),
+// read live from Supabase app_store key 'portal_settings' in the handler below -- these
+// are just the fallback defaults if that screen was never saved. Same table
+// auto-charge-transport.js / visito-transport-check-price.js use.
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
-const RATES = {
-  cancun: [195, 100, 80, 65, 55, 45],
-  tulum:  [145,  80, 65, 55, 45, 40],
-};
-function autoRate(airport, pax) {
-  const tbl = RATES[airport];
+const DEFAULT_RATES = { cancun: [195, 100, 80, 65, 55, 45], tulum: [145, 80, 65, 55, 45, 40] };
+const DEFAULT_TAX_RATE_PCT = 13;
+function autoRate(rates, airport, pax) {
+  const tbl = rates[airport];
   if (!tbl) return null;
   return tbl[Math.min(Math.max(pax, 1) - 1, tbl.length - 1)];
 }
@@ -88,10 +88,19 @@ exports.handler = async (event) => {
   const n = Math.round(Number(pax)) || 1;
   const dir = direction === 'departure' ? 'departure' : 'arrival';
 
+  const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}` };
+  let rates = DEFAULT_RATES, TAX_RATE_PCT = DEFAULT_TAX_RATE_PCT;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.portal_settings&select=value`, { headers: hdrs });
+    const [row] = r.ok ? await r.json() : [];
+    if (row?.value?.transportRates) rates = row.value.transportRates;
+    if (row?.value?.spaTransportTaxPct != null) TAX_RATE_PCT = row.value.spaTransportTaxPct;
+  } catch (e) { /* non-fatal — use defaults */ }
+
   const missing = ['firstName', 'lastName', 'guestType', 'airport', 'date']
     .filter(f => !({ firstName, lastName, guestType, airport, date })[f]);
   if (missing.length) return ok({ success: false, message: `Me faltan estos datos: ${missing.join(', ')}.` });
-  if (!RATES[ap]) return ok({ success: false, message: 'El aeropuerto debe ser "cancun" o "tulum".' });
+  if (!rates[ap]) return ok({ success: false, message: 'El aeropuerto debe ser "cancun" o "tulum".' });
   if (guestType !== 'hotel' && guestType !== 'offsite') return ok({ success: false, message: 'guestType debe ser "hotel" u "offsite".' });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return ok({ success: false, message: 'date debe tener formato YYYY-MM-DD.' });
 
@@ -99,12 +108,11 @@ exports.handler = async (event) => {
   if (!isHotel && !email) return ok({ success: false, message: 'Para un visitante necesito su correo para mandarle el link de pago.' });
   if (!isHotel && email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return ok({ success: false, message: 'El correo no parece válido.' });
 
-  const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}` };
-  const perPersonUSD = autoRate(ap, n);
+  const perPersonUSD = autoRate(rates, ap, n);
   const subtotalUSD = Math.round(perPersonUSD * n * 100) / 100;
-  const taxAmount = Math.round(subtotalUSD * 0.13 * 100) / 100;
+  const taxAmount = Math.round(subtotalUSD * TAX_RATE_PCT) / 100;
   const totalUSD = Math.round((subtotalUSD + taxAmount) * 100) / 100;
-  const priceDisplay = `$${perPersonUSD} USD${n > 1 ? ` por persona ($${subtotalUSD.toFixed(2)} USD subtotal)` : ''} + 13% tax`;
+  const priceDisplay = `$${perPersonUSD} USD${n > 1 ? ` por persona ($${subtotalUSD.toFixed(2)} USD subtotal)` : ''} + ${TAX_RATE_PCT}% tax`;
 
   try {
     if (isHotel) {
@@ -192,7 +200,7 @@ exports.handler = async (event) => {
       'line_items[0][price_data][unit_amount]': String(subtotalCents),
       'line_items[0][quantity]': '1',
       'line_items[1][price_data][currency]': 'usd',
-      'line_items[1][price_data][product_data][name]': 'Tax (13%)',
+      'line_items[1][price_data][product_data][name]': `Tax (${TAX_RATE_PCT}%)`,
       'line_items[1][price_data][unit_amount]': String(taxCents),
       'line_items[1][quantity]': '1',
       'payment_intent_data[metadata][source]': 'visito_transport',
@@ -234,7 +242,7 @@ exports.handler = async (event) => {
     <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:6px;margin:20px 0">
       <strong style="color:#1a2332">${label}</strong><br>
       <span style="color:#4a4a4a">${n} passenger${n !== 1 ? 's' : ''}${time ? ' · ' + time : ''}</span><br>
-      <span style="color:#4a4a4a">$${subtotalUSD.toFixed(2)} USD + 13% tax</span><br>
+      <span style="color:#4a4a4a">$${subtotalUSD.toFixed(2)} USD + ${TAX_RATE_PCT}% tax</span><br>
       <span style="color:#4a4a4a;font-weight:700">Total: $${totalUSD.toFixed(2)} USD</span>
     </div>
     <div style="text-align:center;margin:28px 0"><a href="${paymentUrl}" style="background:#0e9494;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block">Complete Payment</a></div>
@@ -249,7 +257,7 @@ exports.handler = async (event) => {
 
     return ok({
       success: true, guestType: 'offsite', direction: dir,
-      priceDisplay, subtotalUSD, taxRatePct: 13, taxAmount, totalUSD,
+      priceDisplay, subtotalUSD, taxRatePct: TAX_RATE_PCT, taxAmount, totalUSD,
       paymentUrl,
       message: `Traslado creado (precio: ${priceDisplay} = $${totalUSD.toFixed(2)} USD total) — comparte este link de pago con el huésped para confirmarlo (también se le mandó por correo): ${paymentUrl}`,
     });

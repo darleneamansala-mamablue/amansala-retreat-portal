@@ -3,19 +3,17 @@
 // Visito AI "Tool" — lets Lana quote the REAL private-transfer price instead of inventing
 // one (Jorge's report 2026-10-15: she was saying "USD 168.15, impuestos incluidos" for a
 // Tulum airport transfer, a number that doesn't match anything in this system at all).
-// Same RATES table already used to auto-charge hotel guests' folios the night before their
-// transfer (netlify/functions/auto-charge-transport.js) -- duplicated here per this repo's
-// per-function convention (see e.g. ROOM_PARENT_TO_BED in get-availability.js/stripe.js/
-// stripe-webhook.js), since this is just a quote, read-only, no booking created.
-// Per-person rate drops as more guests share the same van (same table, same logic).
-const RATES = {
-  cancun: [195, 100, 80, 65, 55, 45],
-  tulum:  [145,  80, 65, 55, 45, 40],
-};
-const TAX_RATE_PCT = 13;
+// Rate table and tax % are staff-editable in Admin > Settings (Jorge's ask 2026-10-15),
+// read live from Supabase app_store key 'portal_settings' -- these are just the fallback
+// defaults if that screen was never saved. Same table auto-charge-transport.js uses to
+// bill hotel guests' folios the night before their transfer. Per-person rate drops as
+// more guests share the same van (same table, same logic).
+const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
+const DEFAULT_RATES = { cancun: [195, 100, 80, 65, 55, 45], tulum: [145, 80, 65, 55, 45, 40] };
+const DEFAULT_TAX_RATE_PCT = 13;
 
-function autoRate(airport, pax) {
-  const tbl = RATES[airport];
+function autoRate(rates, airport, pax) {
+  const tbl = rates[airport];
   if (!tbl) return null;
   return tbl[Math.min(Math.max(pax, 1) - 1, tbl.length - 1)];
 }
@@ -39,10 +37,21 @@ exports.handler = async (event) => {
   const ap = String(airport || '').trim().toLowerCase();
   const n = Math.round(Number(pax));
 
-  if (!RATES[ap]) return ok({ success: false, message: 'El aeropuerto debe ser "cancun" o "tulum".' });
+  let rates = DEFAULT_RATES, TAX_RATE_PCT = DEFAULT_TAX_RATE_PCT;
+  const supaKey = process.env.SUPABASE_SERVICE_KEY;
+  if (supaKey) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.portal_settings&select=value`, { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } });
+      const [row] = r.ok ? await r.json() : [];
+      if (row?.value?.transportRates) rates = row.value.transportRates;
+      if (row?.value?.spaTransportTaxPct != null) TAX_RATE_PCT = row.value.spaTransportTaxPct;
+    } catch (e) { /* non-fatal — use defaults */ }
+  }
+
+  if (!rates[ap]) return ok({ success: false, message: 'El aeropuerto debe ser "cancun" o "tulum".' });
   if (!(n >= 1) || n > 20) return ok({ success: false, message: 'Dame un número de pasajeros válido (1 o más).' });
 
-  const perPersonUSD = autoRate(ap, n);
+  const perPersonUSD = autoRate(rates, ap, n);
   const subtotalUSD = Math.round(perPersonUSD * n * 100) / 100;
   const taxAmount = Math.round(subtotalUSD * TAX_RATE_PCT) / 100;
   const totalUSD = Math.round((subtotalUSD + taxAmount) * 100) / 100;
