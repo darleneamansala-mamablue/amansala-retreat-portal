@@ -860,7 +860,7 @@ function gUpdatePrice(){
       }
     }else{pkgEl.style.display='none';}
   }
-  document.getElementById('pbc-tax-lbl').textContent=`Tax (${bd.pkg>0&&_pkgTr!==0.16?`16% rm / ${_pkgTr===0?'0%':Math.round(_pkgTr*100)+'%'} ext`:'16%'})`;
+  document.getElementById('pbc-tax-lbl').textContent=`Tax (${bd.pkg>0&&_pkgTr!==portalRoomsTaxRate()?`${Math.round(portalRoomsTaxRate()*100)}% rm / ${_pkgTr===0?'0%':Math.round(_pkgTr*100)+'%'} ext`:`${Math.round(portalRoomsTaxRate()*100)}%`})`;
   document.getElementById('pbc-tax').textContent=fmt$(bd.tax);
   document.getElementById('pbc-dip-lbl').textContent=`Tip fee ($${draft.customTipRateOverride!==null?draft.customTipRateOverride:getTip(regSelBk)}×${gc} guest${gc>1?'s':''}×${bd.tipNights} night${bd.tipNights!==1?'s':''})`;
   document.getElementById('pbc-dip').textContent=fmt$(bd.dip);

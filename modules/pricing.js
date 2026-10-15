@@ -47,7 +47,7 @@ function renderEstQuote(lblId,bodyId){
   const estPax=regSelBk.pax||10;
   const tipPer=getTip(regSelBk);
   const pkgTaxRate=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk));   // tax on the package (can differ from room tax)
-  const roomTaxRate=getBkTaxRate(regSelBk)===0?0:0.16;
+  const roomTaxRate=getBkTaxRate(regSelBk)===0?0:portalRoomsTaxRate();
 
   // Add-ons — use calcPkgCost for correct bundle/custom pricing
   const addOnItems=calcPkgItems(regSelBk);
@@ -213,7 +213,7 @@ function showPriceTip(e,rtId){
     const base=+(rate*gc*nights).toFixed(2);
     const _tip=getTip(regSelBk);const dip=_tip*gc*nights;
     const sub=+(base+dip).toFixed(2);
-    const tax=+(base*0.16).toFixed(2);
+    const tax=+(base*portalRoomsTaxRate()).toFixed(2);
     const total=+(sub+tax).toFixed(2);
     html+=`<div class="pt-section">
       <div class="pt-title">${gc===1?'1 Guest':`${gc} Guests`}</div>
@@ -255,7 +255,7 @@ function showRtTooltip(e,rtId){
     const dip=+(_tip*gc*nights).toFixed(2);
     const pkg=+(calcPkgCost(regSelBk,gc)).toFixed(2);
     const pkgTax=+(pkg*pkgTaxRate).toFixed(2);
-    const roomTax=+(base*0.16).toFixed(2);
+    const roomTax=+(base*portalRoomsTaxRate()).toFixed(2);
     const total=+(base+dip+pkg+pkgTax+roomTax).toFixed(2);
     const lbl=rt.maxOcc===1?'Private (1 guest)':gc===1?'Solo (1 guest)':'Sharing (2 guests)';
     html+=`<div class="pt-section">
@@ -298,7 +298,7 @@ function openPriceList(){
       const base=+(rate*gc*nights).toFixed(2);
       const _tipR=getTip(regSelBk);const dip=_tipR*gc*nights;
       const sub=+(base+dip).toFixed(2);
-      const tax=+(base*0.16).toFixed(2);
+      const tax=+(base*portalRoomsTaxRate()).toFixed(2);
       const total=+(sub+tax).toFixed(2);
       const lbl=rt.maxOcc===1?'1 person (private)':gc===1?'1 person':gc===rt.maxOcc?`${gc} people (max)`:gc+' people';
       html+=`<tr><td>${lbl}</td><td>${fmt$(dip)}</td><td>${fmt$(base)} <span style="color:#aaa;font-size:11px">(${fmt$(rate)}/person/night)</span></td><td>${fmt$(sub)}</td><td>${fmt$(tax)}</td><td class="pl-grand-td">${fmt$(total)}</td></tr>`;

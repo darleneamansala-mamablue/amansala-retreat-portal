@@ -454,7 +454,7 @@ function _calcRoomRevenue(bk){
     if(!prev){regByRoom[r.room]=r;return;}
     if((r.guests||[]).filter(g=>g.name).length>(prev.guests||[]).filter(g=>g.name).length)regByRoom[r.room]=r;
   });
-  const tipPer=getTip(bk),pkgTaxRate=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(bk):getBkTaxRate(bk)),roomTaxRate=getBkTaxRate(bk)===0?0:0.16;
+  const tipPer=getTip(bk),pkgTaxRate=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(bk):getBkTaxRate(bk)),roomTaxRate=getBkTaxRate(bk)===0?0:portalRoomsTaxRate();
   const addOnItems=calcPkgItems(bk);
   let total=0;
   Array.from(blockedSet).forEach(room=>{
@@ -1396,7 +1396,7 @@ function buildPipelineSection(retreats,today){
     (bk.blockedRooms||[]).forEach(room=>{
       const rNorm=(room||'').trim().toLowerCase();
       const rt2=AppData.roomTypes.find(t=>(t.rooms||[]).some(r=>r.trim().toLowerCase()===rNorm));
-      if(rt2)potential+=rt2.price1*nights*1.16;
+      if(rt2)potential+=rt2.price1*nights*(1+portalRoomsTaxRate());
     });
     const revenueRow=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #e8dfd4">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px">

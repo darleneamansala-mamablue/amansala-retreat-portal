@@ -295,7 +295,7 @@ function regRender(){
   // Bill well past what was actually charged. Real (non-WeTravel) retreats keep
   // the normal tax behavior untouched.
   const _isWeTravel=regSelBk.source==='wetravel';
-  const _pkgTxR=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk)),_rmTxR=_isWeTravel?0:(getBkTaxRate(regSelBk)===0?0:0.16),_tipPer=getTip(regSelBk);
+  const _pkgTxR=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk)),_rmTxR=_isWeTravel?0:(getBkTaxRate(regSelBk)===0?0:portalRoomsTaxRate()),_tipPer=getTip(regSelBk);
   const _billAddOns=calcPkgItems(regSelBk);
   Array.from(_blockedSetEarly).forEach(room=>{
     const rt=AppData.roomTypes.find(t=>(t.rooms||[]).includes(room));
@@ -727,7 +727,7 @@ function regRender(){
             // add-ons" label should say the actual name he gave it instead).
             const caoLine1=bd1.cao>0?`<div class="pb-row addon"><span>${escHtml((regSelBk.packageCustomPrices?.__custom__||[]).map(c=>c.name).join(', ')||'Custom add-ons')}</span><span>${fmt$(bd1.cao)}</span></div>`:'';
             const rateCell1=IS_TEACHER_MODE?`$${nRate1}`:`$<input type="number" class="rate-inline-input" value="${nRate1}" title="Override nightly rate" onclick="event.stopPropagation()" onchange="regSaveRateOverride('${bedReg.id}',this.value)" style="width:46px;padding:0 3px;border:1px solid var(--border);border-radius:3px;font-size:11px;text-align:right;font-family:inherit;">`;
-            priceTd.innerHTML=`<details class="price-details"><summary><span class="price-summary-total">${fmt$(bd1.total)}</span><span class="price-toggle-arrow">&#9658;</span></summary><div class="price-breakdown-rows"><div class="pb-row"><span>Room (${rateCell1}/nt)</span><span>${fmt$(bd1.base)}</span></div>${pkgLine1}${caoLine1}<div class="pb-row"><span>Tax (16%)</span><span>${fmt$(bd1.tax)}</span></div><div class="pb-row"><span>Tip ($30×${_bdNights}nt)</span><span>${fmt$(bd1.dip)}</span></div></div></details>`;
+            priceTd.innerHTML=`<details class="price-details"><summary><span class="price-summary-total">${fmt$(bd1.total)}</span><span class="price-toggle-arrow">&#9658;</span></summary><div class="price-breakdown-rows"><div class="pb-row"><span>Room (${rateCell1}/nt)</span><span>${fmt$(bd1.base)}</span></div>${pkgLine1}${caoLine1}<div class="pb-row"><span>Tax (${Math.round(portalRoomsTaxRate()*100)}%)</span><span>${fmt$(bd1.tax)}</span></div><div class="pb-row"><span>Tip ($30×${_bdNights}nt)</span><span>${fmt$(bd1.dip)}</span></div></div></details>`;
             tr.appendChild(priceTd);
             const notesTd=document.createElement('td');notesTd.className='r-notes';
             const _bdRoomNoteHtml=bedReg?.notes?`<div style="font-size:9px;color:#b45309;font-style:italic;line-height:1.3;margin-bottom:2px">${bedReg.notes.replace(/</g,'&lt;')}</div>`:'';
@@ -897,7 +897,7 @@ function regRender(){
               ${roomLine}
               ${pkgLine}
               ${caoLine}
-              ${(typeof bkGlobalRate==='function'&&bkGlobalRate(regSelBk))?'':`<div class="pb-row"><span>Tax (${bd.pkg>0&&(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk))!==0.16?`16% rm / ${(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk))===0?'0%':Math.round((typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk))*100)+'%'} ext`:'16%'})</span><span>${fmt$(perTax)}</span></div>
+              ${(typeof bkGlobalRate==='function'&&bkGlobalRate(regSelBk))?'':`<div class="pb-row"><span>Tax (${bd.pkg>0&&(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk))!==portalRoomsTaxRate()?`${Math.round(portalRoomsTaxRate()*100)}% rm / ${(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk))===0?'0%':Math.round((typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(regSelBk):getBkTaxRate(regSelBk))*100)+'%'} ext`:`${Math.round(portalRoomsTaxRate()*100)}%`})</span><span>${fmt$(perTax)}</span></div>
               <div class="pb-row"><span>Tip ($${tipRateDisp}×${gTipNights}nt)</span><span>${fmt$(perTip)}</span></div>`}
               ${creditLine}
             </div>

@@ -5845,9 +5845,9 @@ function getTip(bk){return(bk&&bk.tipPerNight!=null)?bk.tipPerNight:0;}
 function getBkTaxRate(bk){
   // Same nested-vs-top-level split as the package bundle above.
   const r=bk?.taxRate??bk?.packageCustomPrices?.__cfg__?.taxRate;
-  return(r===0||r===0.13||r===0.16)?r:0.16;
+  return(r===0||r===0.13||r===portalRoomsTaxRate())?r:portalRoomsTaxRate();
 }
-function calcPrice(rt,gc,nights,dateStr,bk,reg){if(!rt||!nights)return 0;const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,nights);const base=rate*gc*nights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(bk):getBkTaxRate(bk));const _raw=+(base*1.16+pkg*(1+pkgTr)+getTip(bk)*gc*nights+calcCustomAoCost(bk,gc,reg)).toFixed(2);return applyCancellationAdjustment(reg,_raw);}
+function calcPrice(rt,gc,nights,dateStr,bk,reg){if(!rt||!nights)return 0;const rate=reg?.customRateOverride!=null?reg.customRateOverride:getRoomRate(rt,gc,dateStr,nights);const base=rate*gc*nights;const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(bk):getBkTaxRate(bk));const _raw=+(base*(1+portalRoomsTaxRate())+pkg*(1+pkgTr)+getTip(bk)*gc*nights+calcCustomAoCost(bk,gc,reg)).toFixed(2);return applyCancellationAdjustment(reg,_raw);}
 function calcTeacherDiscount(bk,bkRegs){
   const nights=getNights(bk);
   // Count named guests only — exclude teacher's own room (isTeacherRoom) to avoid double-counting
@@ -5986,7 +5986,7 @@ function calcBD(rt,gc,nights,dateStr,bk,reg){
   // A We Travel booking's customRateOverride already IS the guest's real, final,
   // tax-inclusive total (derived from what they actually paid on WeTravel) — the
   // usual 16% room tax would double-tax it. Real retreats are unaffected.
-  const rmTax=(bk?.source==='wetravel'||(typeof bkGlobalRate==='function'&&bkGlobalRate(bk)))?0:0.16;
+  const rmTax=(bk?.source==='wetravel'||(typeof bkGlobalRate==='function'&&bkGlobalRate(bk)))?0:portalRoomsTaxRate();
   const pkg=reg?.customPkgPrice!=null?reg.customPkgPrice:calcPkgCost(bk,gc);const pkgTr=(typeof getBkPkgTaxRate==='function'?getBkPkgTaxRate(bk):getBkTaxRate(bk));const tax=+(base*rmTax+pkg*pkgTr).toFixed(2);const dip=tipRate*tipNightsSum;const cao=calcCustomAoCost(bk,gc,reg);
   // Per-guest share: each named guest pays for their OWN room nights (guestNightsSplit,
   // including any extraNightRate discount for nights outside the retreat) and their own
