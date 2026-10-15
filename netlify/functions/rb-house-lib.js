@@ -18,7 +18,13 @@ function cfgFor(cfg, houseId) {
   return h ? { ...cfg, house: h } : null;
 }
 
+// perBed (Jorge's ask 2026-10-15, Casita 4's shared rooms): a 'twin' room whose beds sell
+// independently rather than as one fixed 2-guest unit -- 1 bed sold leaves the other bed
+// still bookable by someone else, unlike every other house room (sold as a whole or not at
+// all). Static capacity here is just "how many beds this room HAS"; houseAvailability()
+// below is what actually narrows this down to how many are still free right now.
 function occupancyOptions(room) {
+  if (room.perBed) { const n = Array.isArray(room.units) ? room.units.length : 1; return Array.from({ length: n }, (_, i) => i + 1); }
   if (room.kind === 'single') return [1];
   if (room.kind === 'twin') return [2];
   if (room.kind === 'kingx') return [1, 2, 3];
@@ -34,7 +40,7 @@ function checkSelection(cfg, sel) {
   const raw = Array.isArray(sel.guests) ? sel.guests : [];
   const n = raw.length;
   if (!occupancyOptions(room).includes(n)) {
-    throw new Error(room.kind === 'twin' ? `${room.label} is booked for two guests.` : `${room.label} sleeps up to ${capacity(room)} guest${capacity(room) > 1 ? "s" : ""}.`);
+    throw new Error(room.kind === 'twin' && !room.perBed ? `${room.label} is booked for two guests.` : `${room.label} sleeps up to ${capacity(room)} guest${capacity(room) > 1 ? "s" : ""}.`);
   }
   const guests = raw.map((g) => {
     const name = String((g && g.name) || '').trim().slice(0, 100);
@@ -55,7 +61,7 @@ function priceRoom(cfg, nights, room, n) {
   const teach = cfg.teachingFee && cfg.teachingFee.on ? Number(cfg.teachingFee.amountPP) || 0 : 0;
   const parts = [];                                   // [{ label, guests, rate }]
   if (room.kind === 'single') parts.push({ label: 'private', guests: 1, rate: Number(room.soloRate) });
-  else if (room.kind === 'twin') parts.push({ label: 'sharing', guests: 2, rate: Number(room.shareRate) });
+  else if (room.kind === 'twin') parts.push({ label: 'sharing', guests: room.perBed ? n : 2, rate: Number(room.shareRate) });
   else if (n === 1) parts.push({ label: 'private', guests: 1, rate: Number(room.soloRate) });
   else parts.push({ label: 'sharing the king bed', guests: 2, rate: Number(room.shareRate) });
   let supplement = null;
@@ -133,11 +139,20 @@ async function houseAvailability(key, bk, cfg, range, excludeHoldId) {
   // room codes like "19a", so this is safe without a separate table). Jorge's ask 2026-10-14:
   // prevent two guests paying for the same Casa Master bedroom at once, same as the single rooms.
   const checkoutHeld = await L.activeHoldUnits(key, bk.id, excludeHoldId);
+  // perBed rooms (Jorge's ask 2026-10-15) track "sold" per physical bed, not per bedroom --
+  // retreat_house_rooms (out.taken, keyed by room id for every other room) can safely also hold
+  // unit-string keys for these (e.g. "Casita 4 /2a"), since a unit name never collides with a
+  // room id -- same object, no schema change, just a second kind of key in it.
+  const soldKeys = new Set(Object.keys(out.taken));
   const unit = house.unit || 'Casa Master';
   (house.rooms || []).forEach((r) => {
     const units = Array.isArray(r.units) ? r.units : [];
-    let free, reason = '';
-    if (out.taken[r.id]) { free = false; reason = 'sold'; }
+    let free, reason = '', freeUnits = null;
+    if (r.perBed && units.length) {
+      freeUnits = units.filter((u) => blocked.has(u) && heldOk(u) && !named.has(u) && !soldKeys.has(u) && !checkoutHeld.has(u));
+      free = freeUnits.length > 0;
+      reason = free ? '' : 'sold';
+    } else if (out.taken[r.id]) { free = false; reason = 'sold'; }
     else if (checkoutHeld.has(r.id)) { free = false; reason = 'being booked by someone else right now'; }
     else if (units.length) {
       const notBlocked = units.filter((u) => !blocked.has(u));
@@ -146,7 +161,7 @@ async function houseAvailability(key, bk, cfg, range, excludeHoldId) {
       free = !notBlocked.length && !notHeld.length && !hasGuest.length;
       reason = notBlocked.length ? 'not in the retreat room list' : notHeld.length ? 'not held in Cloudbeds' : hasGuest.length ? 'already has a guest' : '';
     } else { free = blocked.has(unit) && heldOk(unit); reason = free ? '' : 'not in the retreat room list'; }
-    out.rooms[r.id] = { free, reason, units };
+    out.rooms[r.id] = { free, reason, units, freeUnits, freeCount: freeUnits ? freeUnits.length : (free ? (units.length || 1) : 0) };
   });
   // Open dates: the units must also be free of other retreats / reservations on the nights the guest chose
   if (range && house.openDates && range.custom) {

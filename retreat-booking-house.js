@@ -9,6 +9,7 @@
   function money(x) { return '$' + Number(x || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function opt(r, n) { return r.options.filter(function (o) { return o.n === n; })[0]; }
   function occLabel(r, n) {
+    if (r.kind === 'twin' && r.perBed) return n === 1 ? '1 guest · 1 bed' : n + ' guests · ' + n + ' beds';
     if (r.kind === 'twin') return '2 guests (both beds)';
     if (r.kind === 'single') return '1 guest';
     if (r.kind === 'kingx') return n === 1 ? '1 guest · king bed' : n === 2 ? '2 guests · sharing the king bed' : '3 guests · king bed + individual bed';
@@ -104,10 +105,11 @@
     var guests = '';
     for (var i = 0; i < n; i++) guests += '<div class="hg"><input id="hn_' + r.id + '_' + i + '" placeholder="Guest ' + (i + 1) + ' full name" autocomplete="off"><select id="ht_' + r.id + '_' + i + '" data-kid="' + r.id + '" data-i="' + i + '"><option value="adult">Adult</option><option value="child">Child</option></select><input id="ha_' + r.id + '_' + i + '" type="number" min="0" max="17" placeholder="Age" disabled></div>';
     var sold = !r.free ? '<p class="hsold">' + (HOUSE.open ? 'Not available' : 'Not available for these dates') + '</p>' : '';
+    var bedsLeft = (r.free && r.perBed && r.freeCount < r.max) ? '<p class="hsold">Only ' + r.freeCount + ' bed' + (r.freeCount > 1 ? 's' : '') + ' left</p>' : '';
     return '<div class="hroom" id="hroom_' + r.id + '"><div>' + left + '</div><div><h3>' + esc(r.label) + '</h3><div class="hmeta">' + esc(r.beds) + ' · sleeps up to ' + r.max + '</div>' +
       (r.desc ? '<p style="margin:0 0 8px;font-size:14px">' + esc(r.desc) + '</p>' : '') +
       (r.note ? '<div class="hnote">' + esc(r.note) + '</div>' : '') +
-      '<div class="hmeta">' + rateLine(r) + '</div>' + sold +
+      '<div class="hmeta">' + rateLine(r) + '</div>' + sold + bedsLeft +
       (r.free ? occ + '<div>' + guests + '<div class="herr" id="herr_' + r.id + '"></div></div>' +
         '<div class="hprice"><span>' + n + ' guest' + (n > 1 ? 's' : '') + ' · ' + o.nights + ' night' + (o.nights > 1 ? 's' : '') + ', before taxes and fees</span><b>' + money(o.roomSubtotal + o.teaching) + '</b></div>' +
         '<button class="hadd" type="button" data-add="' + r.id + '"' + (inCart ? ' disabled' : '') + '>' + (inCart ? 'Added to your reservation' : 'Add this room') + '</button>' : '') +
@@ -136,7 +138,7 @@
   function lineDetail(c) {
     var r = room(c.id), o = opt(r, c.n), rows = '';
     var rateTxt = o.rateLabel === 'private' ? money(o.nightlyRate) + ' per night' : money(o.nightlyRate) + ' per person, per night';
-    rows += '<div class="row"><span>' + (o.rateLabel === 'private' ? '1 guest' : (o.rateLabel === 'sharing' ? '2 guests' : '2 guests sharing') ) + ' × ' + rateTxt + ' × ' + o.nights + ' nights</span><span>' + money(o.nightlyRate * o.nights * (o.rateLabel === 'private' ? 1 : 2)) + '</span></div>';
+    rows += '<div class="row"><span>' + o.guests + ' guest' + (o.guests > 1 ? 's' : '') + ' × ' + rateTxt + ' × ' + o.nights + ' nights</span><span>' + money(o.nightlyRate * o.nights * o.guests) + '</span></div>';
     if (o.supplement) rows += '<div class="row"><span>Individual bed · ' + money(o.supplement.nightlyRate) + ' × ' + o.nights + ' nights</span><span>' + money(o.supplement.amount) + '</span></div>';
     rows += '<div class="row"><span>Room subtotal</span><span>' + money(o.roomSubtotal) + '</span></div>';
     if (o.teaching) rows += '<div class="row"><span>Teaching fee</span><span>' + money(o.teaching) + '</span></div>';
