@@ -110,6 +110,13 @@ exports.handler = async (event) => {
       } else {
         out.priceUSD = s.price;
       }
+      // priceUSD above is always the BASE price (tax not included) -- the folio/
+      // Stripe charge both add 13% tax on top of it separately. Jorge's report
+      // 2026-10-13: Lana was computing her own tax-inclusive total and saying
+      // just that one number, which didn't match what guests actually got
+      // charged. Give her the exact phrasing instead of making her do the math.
+      out.taxRatePct = 13;
+      if (out.priceUSD != null) out.priceDisplay = `$${out.priceUSD} USD + 13% tax`;
       return out;
     });
 

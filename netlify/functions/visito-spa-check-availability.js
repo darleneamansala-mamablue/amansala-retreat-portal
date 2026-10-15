@@ -141,10 +141,16 @@ exports.handler = async (event) => {
 
     if (!slots.length) return ok({ success: false, message: `No hay horarios disponibles para ${svc.name} el ${date}. Prueba otra fecha.` });
 
+    // priceUSD is always the BASE price (tax not included) -- the folio/Stripe
+    // charge both add 13% tax on top of it separately. Jorge's report
+    // 2026-10-13: Lana was computing her own tax-inclusive total and saying
+    // just that one number, which didn't match what guests actually got
+    // charged. Give her the exact phrasing instead of making her do the math.
     return ok({
       success: true,
       serviceId, serviceName: svc.name, durationMinutes: svc.duration,
-      priceUSD, date, slots,
+      priceUSD, taxRatePct: 13, priceDisplay: priceUSD != null ? `$${priceUSD} USD + 13% tax` : undefined,
+      date, slots,
     });
   } catch (err) {
     console.error('[visito-spa-check-availability]', err.message);

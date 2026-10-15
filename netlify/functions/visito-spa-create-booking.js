@@ -282,7 +282,15 @@ exports.handler = async (event) => {
       const stripeKey = process.env.STRIPE_SECRET_KEY;
       if (!stripeKey) return jsonErr(500, 'Stripe not configured');
       const siteUrl = process.env.URL || 'https://amansalaportal.com';
+      // Base price + 13% tax as TWO separate line items -- same tax the hotel
+      // folio path already adds (chargeFolio's tax_rate:13) -- so the offsite
+      // Stripe charge actually matches what's quoted instead of silently
+      // charging the base price alone with no tax (Jorge's report 2026-10-13:
+      // the text Lana sends should say "$X + tax", and what's actually charged
+      // at payment needs to show and be that same "$X + tax" breakdown, not a
+      // single inclusive number nor a tax-free charge).
       const amountCents = Math.round(priceUSD * 100);
+      const taxCents = Math.round(priceUSD * 0.13 * 100);
       if (amountCents >= 50) {
         const params = new URLSearchParams({
           mode: 'payment',
@@ -293,6 +301,10 @@ exports.handler = async (event) => {
           'line_items[0][price_data][product_data][name]': `Amansala Spa · ${svc.name} · ${date} ${start}`.slice(0, 250),
           'line_items[0][price_data][unit_amount]': String(amountCents),
           'line_items[0][quantity]': '1',
+          'line_items[1][price_data][currency]': 'usd',
+          'line_items[1][price_data][product_data][name]': 'Tax (13%)',
+          'line_items[1][price_data][unit_amount]': String(taxCents),
+          'line_items[1][quantity]': '1',
           'payment_intent_data[metadata][source]': 'visito_spa',
           'payment_intent_data[metadata][apptId]': apptId,
           'payment_intent_data[metadata][serviceName]': svc.name.slice(0, 200),
@@ -333,6 +345,10 @@ exports.handler = async (event) => {
         emailRow('Therapist', esc(therName)), emailRow('Meet at', esc(meetAt)),
         ...(matchedRoomNumber ? [emailRow('Your room', esc(matchedRoomNumber))] : []),
         ...(folioPosted ? [emailRow('Payment', 'Charged to your room folio')] : []),
+        // Offsite guests pay via the Stripe link below, which itself shows this
+        // same base+tax breakdown as two line items -- state it here too so the
+        // email and the actual charge always agree (Jorge's report 2026-10-13).
+        ...(!isHotel ? [emailRow('Price', `$${priceUSD.toFixed(2)} + 13% tax = $${(priceUSD * 1.13).toFixed(2)} USD`)] : []),
       ].join('');
       const payBlock = paymentUrl
         ? `<div style="text-align:center;margin:24px 0"><a href="${paymentUrl}" style="display:inline-block;background:#0e9494;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700">Pay for Your Appointment</a></div><p style="font-size:12.5px;color:#6b7280;text-align:center">Or copy this link: ${paymentUrl}</p>`
