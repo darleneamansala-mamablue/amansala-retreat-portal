@@ -9,7 +9,7 @@
   function money(x) { return '$' + Number(x || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function opt(r, n) { return r.options.filter(function (o) { return o.n === n; })[0]; }
   function occLabel(r, n) {
-    if (r.kind === 'twin' && r.perBed) return n === 1 ? '1 guest · 1 bed' : n + ' guests · ' + n + ' beds';
+    if (r.kind === 'twin' && r.perBed) return n === 1 ? '1 guest · 1 queen bed' : n + ' guests · ' + n + ' queen beds';
     if (r.kind === 'twin') return '2 guests (both beds)';
     if (r.kind === 'single') return '1 guest';
     if (r.kind === 'kingx') return n === 1 ? '1 guest · king bed' : n === 2 ? '2 guests · sharing the king bed' : '3 guests · king bed + individual bed';
@@ -105,7 +105,7 @@
     var guests = '';
     for (var i = 0; i < n; i++) guests += '<div class="hg"><input id="hn_' + r.id + '_' + i + '" placeholder="Guest ' + (i + 1) + ' full name" autocomplete="off"><select id="ht_' + r.id + '_' + i + '" data-kid="' + r.id + '" data-i="' + i + '"><option value="adult">Adult</option><option value="child">Child</option></select><input id="ha_' + r.id + '_' + i + '" type="number" min="0" max="17" placeholder="Age" disabled></div>';
     var sold = !r.free ? '<p class="hsold">' + (HOUSE.open ? 'Not available' : 'Not available for these dates') + '</p>' : '';
-    var bedsLeft = (r.free && r.perBed && r.freeCount < r.max) ? '<p class="hsold">Only ' + r.freeCount + ' bed' + (r.freeCount > 1 ? 's' : '') + ' left</p>' : '';
+    var bedsLeft = (r.free && r.perBed && r.freeCount < r.max) ? '<p class="hsold">Only ' + r.freeCount + ' queen bed' + (r.freeCount > 1 ? 's' : '') + ' left</p>' : '';
     return '<div class="hroom" id="hroom_' + r.id + '"><div>' + left + '</div><div><h3>' + esc(r.label) + '</h3><div class="hmeta">' + esc(r.beds) + ' · sleeps up to ' + r.max + '</div>' +
       (r.desc ? '<p style="margin:0 0 8px;font-size:14px">' + esc(r.desc) + '</p>' : '') +
       (r.note ? '<div class="hnote">' + esc(r.note) + '</div>' : '') +
