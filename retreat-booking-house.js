@@ -258,7 +258,8 @@
   }
   var houses = [
     create({ P: '', houseId: null, pick: function (i) { return i.house; } }),
-    create({ P: 'c4_', houseId: 'casita4', pick: function (i) { return (i.houses || []).filter(function (h) { return h.id === 'casita4'; })[0]; } })
+    create({ P: 'c4_', houseId: 'casita4', pick: function (i) { return (i.houses || []).filter(function (h) { return h.id === 'casita4'; })[0]; } }),
+    create({ P: 'csh_', houseId: 'casashanti', pick: function (i) { return (i.houses || []).filter(function (h) { return h.id === 'casashanti'; })[0]; } })
   ];
   window.rbHouse = { init: function (info) { houses.forEach(function (h) { h.init(info); }); } };
 })();
