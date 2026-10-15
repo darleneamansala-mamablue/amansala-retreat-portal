@@ -12,10 +12,12 @@
 // The signed contract's wording is not affected (tip/tax shown there stay as signed).
 
 let _grSuspend=0;
-// Hard lock: package pricing exists ONLY for Melissa Masella's retreat (Oct 25–30, 2026). Every other booking
-// ignores the setting entirely and shows no editor for it. To allow another booking, add its id here.
-const GR_ALLOWED_BOOKING_IDS=['id_1784817790113_60kq'];
-function grAllowed(bk){return !!bk&&GR_ALLOWED_BOOKING_IDS.includes(bk.id);}
+// Which bookings can use package pricing -- staff-editable in Admin > Settings (Jorge's ask
+// 2026-10-15) instead of a hardcoded allowlist. This default (Melissa Masella's retreat,
+// Oct 25-30 2026) is only used if that screen was never saved. Every other booking ignores
+// the setting entirely and shows no editor for it.
+function grAllowedIds(){return (typeof PortalSettings!=='undefined'&&PortalSettings.specialPricingBookingIds)||['id_1784817790113_60kq'];}
+function grAllowed(bk){return !!bk&&grAllowedIds().includes(bk.id);}
 // Starting prices (Darlene's 5-night package, WhatsApp 2026-06-17); editable per booking in the panel
 const GR_DEFAULT_RATES={
   rt1:{solo:3620,shared:2373}, rt2:{solo:3040,shared:2054}, rt3:{solo:2547,shared:1793}, rt4:{solo:2286,shared:1677},
