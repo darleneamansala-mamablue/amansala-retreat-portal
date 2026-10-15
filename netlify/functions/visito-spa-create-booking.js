@@ -102,6 +102,129 @@ function findGuestBooking(bookings, clientName, roomNumber) {
   }
   return fallback;
 }
+
+// ── Automatic therapist assignment (Darlene's spec 2026-10-15) ───────────────────
+// Server-side port of spa-booking.html's sbIsTherapistAvailable/sbSlotFree/
+// sbRotationOrder, so a guest booked via Lana ("no preference, please assign for
+// me") gets the exact same treatment as one who books through the web page
+// themselves. Keep both in sync if the rules or data shape ever change.
+const SPA_GENERAL_BREAK_AFTER = 3, SPA_GENERAL_BREAK_MINUTES = 30, SPA_GENERAL_DAILY_CAP = 7;
+const SPA_MARIA_BREAK_MINUTES = 45, SPA_MARIA_DAILY_CAP = 4;
+
+function therapistAcct(ther, staffAccounts) {
+  const full = `${ther.firstName || ''} ${ther.lastName || ''}`.trim().toLowerCase();
+  const first = (ther.firstName || '').trim().toLowerCase();
+  return staffAccounts.find(a => { const an = (a.name || '').trim().toLowerCase(); return an === full || an === first; }) || null;
+}
+function isTherapistAvailable(ther, dateStr, period, staffAccounts) {
+  const acct = therapistAcct(ther, staffAccounts);
+  if (!acct) return true;
+  const dateBlocks = (acct.unavailableDates || []).map(d => typeof d === 'string' ? { date: d, period: 'ALL' } : d);
+  if (dateBlocks.some(b => b.date === dateStr && (b.period === 'ALL' || !period || b.period === period))) return false;
+  const rules = acct.dayOfWeekRules || [];
+  const covering = rules.filter(r => dateStr >= r.start && (!r.end || dateStr <= r.end));
+  if (covering.length) {
+    const dow = new Date(dateStr + 'T12:00:00').getDay();
+    if (covering.find(r => r.mode === 'block' && r.days.includes(dow) && (!r.period || r.period === 'ALL' || !period || r.period === period))) return false;
+    const onlyRules = covering.filter(r => r.mode !== 'block');
+    if (onlyRules.length) {
+      const matchingDayRule = onlyRules.find(r => r.days.includes(dow));
+      if (!matchingDayRule) return false;
+      if (matchingDayRule.period && matchingDayRule.period !== 'ALL' && period && matchingDayRule.period !== period) return false;
+    }
+  }
+  return true;
+}
+// Mirrors sbSlotFree's per-therapist break/cap logic exactly (Maria Luisa's staged
+// 2-then-45min-break-then-2, cap 4; everyone else: 30-min break after 3 consecutive
+// back-to-back services, cap 7 unless staff set an explicit override on her profile).
+function therapistSlotFree(ther, appts, dateStr, startMin, duration, staffAccounts) {
+  if (!isTherapistAvailable(ther, dateStr, startMin < 720 ? 'AM' : 'PM', staffAccounts)) return false;
+  const todaysSorted = appts.filter(a => a.date === dateStr && a.status !== 'CANCELLED' && a.therapistId === ther.id).sort((a, b) => hhmmToMin(a.start) - hhmmToMin(b.start));
+  let brk = 0;
+  if ((ther.firstName || '').trim() === 'Maria Luisa') {
+    if (todaysSorted.length >= SPA_MARIA_DAILY_CAP) return false;
+    if (todaysSorted.length === 2) {
+      const last = todaysSorted[1];
+      if (startMin < hhmmToMin(last.start) + (last.duration || 60) + SPA_MARIA_BREAK_MINUTES) return false;
+    }
+  } else {
+    const cap = parseInt(ther.maxServicesPerDay, 10) || SPA_GENERAL_DAILY_CAP;
+    if (todaysSorted.length >= cap) return false;
+    let consecutive = 0, cursorEnd = startMin;
+    for (let i = todaysSorted.length - 1; i >= 0; i--) {
+      const aStart = hhmmToMin(todaysSorted[i].start), aEnd = aStart + (todaysSorted[i].duration || 60);
+      if (aEnd === cursorEnd) { consecutive++; cursorEnd = aStart; } else break;
+    }
+    const explicitBreak = Math.max(0, parseInt(ther.breakMinutes, 10) || 0);
+    brk = explicitBreak || (consecutive >= SPA_GENERAL_BREAK_AFTER ? SPA_GENERAL_BREAK_MINUTES : 0);
+  }
+  const endMin = startMin + duration;
+  return !appts.some(a => {
+    if (a.date !== dateStr || a.status === 'CANCELLED') return false;
+    if (a.therapistId !== ther.id) return false;
+    const aStart = hhmmToMin(a.start), aEnd = aStart + (a.duration || 60);
+    return startMin < aEnd + brk && endMin + brk > aStart;
+  });
+}
+function resolveRoom(spaData, ther, svc, appts, dateStr, startMin, duration) {
+  if (!svc.roomRequired) return null;
+  const endMin = startMin + duration;
+  const freeRooms = (spaData.rooms || []).filter(r => !appts.some(a => a.date === dateStr && a.roomId === r.id && a.status !== 'CANCELLED' && startMin < hhmmToMin(a.start) + (a.duration || 60) && endMin > hhmmToMin(a.start)));
+  if (!freeRooms.length) return undefined; // no room at all -- candidate is not actually bookable
+  const home = ther.defaultRoomId && freeRooms.find(r => r.id === ther.defaultRoomId);
+  return (home || freeRooms[0]).id;
+}
+// Named priority order — identical rules to spa-booking.html's sbRotationOrder():
+// female: Laura×2, Gabby, Graciela, repeat; Rosario only as last resort.
+// male: Julian until 4/day, then alternates with Miguel.
+// "No gender preference" tries the male rotation first (Jorge's confirmation
+// 2026-10-15), falling through to the female rotation, then to a generic
+// least-busy-first fallback, so a booking is never left unfilled.
+function rotationOrder(appts, dateStr, genderPreference) {
+  const apptsToday = appts.filter(a => a.date === dateStr && a.status !== 'CANCELLED');
+  const order = [];
+  if (genderPreference !== 'female') {
+    const julianToday = apptsToday.filter(a => a.rotationGroup === 'male' && a.rotationName === 'Julian').length;
+    const totalMale = apptsToday.filter(a => a.rotationGroup === 'male').length;
+    if (julianToday < 4) order.push({ name: 'Julian', group: 'male' }, { name: 'Miguel', group: 'male' });
+    else {
+      const alt = totalMale - julianToday;
+      order.push({ name: alt % 2 === 0 ? 'Miguel' : 'Julian', group: 'male' }, { name: alt % 2 === 0 ? 'Julian' : 'Miguel', group: 'male' });
+    }
+  }
+  if (genderPreference !== 'male') {
+    const totalFemale = apptsToday.filter(a => a.rotationGroup === 'female').length;
+    const pattern = ['Laura', 'Laura', 'Gabby', 'Graciela'];
+    const primary = pattern[totalFemale % pattern.length];
+    [primary, ...pattern.filter(n => n !== primary)].forEach(n => order.push({ name: n, group: 'female' }));
+    order.push({ name: 'Rosario', group: 'female' });
+  }
+  return order;
+}
+function pickTherapistByRotation(spaData, appts, staffAccounts, svc, dateStr, startMin, genderPreference) {
+  let eligible = (spaData.therapists || []).filter(t => t.active && (t.services || []).some(s => s.serviceId === svc.id));
+  if (svc.fixedTherapistId) { const fixed = eligible.filter(t => t.id === svc.fixedTherapistId); if (fixed.length) eligible = fixed; }
+  if (genderPreference === 'female' || genderPreference === 'male') eligible = eligible.filter(t => t.gender === genderPreference);
+
+  for (const r of rotationOrder(appts, dateStr, genderPreference)) {
+    const ther = eligible.find(t => (t.firstName || '').trim() === r.name);
+    if (!ther) continue;
+    if (!therapistSlotFree(ther, appts, dateStr, startMin, svc.duration, staffAccounts)) continue;
+    const roomId = resolveRoom(spaData, ther, svc, appts, dateStr, startMin, svc.duration);
+    if (roomId === undefined) continue; // room required but none free
+    return { therapist: ther, roomId, rotationGroup: r.group, rotationName: r.name };
+  }
+  // Nobody from either named rotation is eligible/free (e.g. only a specialist like
+  // Eva qualifies for this service) — fall back to least-busy-first among everyone
+  // else eligible, rather than leaving the booking unfilled.
+  const free = eligible.filter(t => therapistSlotFree(t, appts, dateStr, startMin, svc.duration, staffAccounts));
+  const withRoom = free.map(t => ({ t, roomId: resolveRoom(spaData, t, svc, appts, dateStr, startMin, svc.duration) })).filter(x => x.roomId !== undefined);
+  if (!withRoom.length) return null;
+  const liveCount = t => appts.filter(a => a.therapistId === t.id && a.status !== 'CANCELLED').length;
+  withRoom.sort((a, b) => liveCount(a.t) - liveCount(b.t) || String(a.t.firstName).localeCompare(String(b.t.firstName)));
+  return { therapist: withRoom[0].t, roomId: withRoom[0].roomId, rotationGroup: null, rotationName: null };
+}
 function emailShell(headline, bodyHtml) {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f0ea;font-family:'Helvetica Neue',Arial,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f0ea;padding:32px 0"><tr><td align="center">
@@ -137,11 +260,11 @@ exports.handler = async (event) => {
 
   const {
     firstName, lastName, email, phone, guestType, roomNumber,
-    serviceId, date, start, therapistId, roomId, guestCount,
+    serviceId, date, start, therapistId, roomId, guestCount, genderPreference,
   } = payload.arguments || {};
 
-  const missing = ['firstName', 'lastName', 'email', 'phone', 'guestType', 'serviceId', 'date', 'start', 'therapistId']
-    .filter(f => !({ firstName, lastName, email, phone, guestType, serviceId, date, start, therapistId }[f]));
+  const missing = ['firstName', 'lastName', 'email', 'phone', 'guestType', 'serviceId', 'date', 'start']
+    .filter(f => !({ firstName, lastName, email, phone, guestType, serviceId, date, start }[f]));
   if (missing.length) return ok({ success: false, message: `Me faltan estos datos: ${missing.join(', ')}.` });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return ok({ success: false, message: 'El correo no parece válido.' });
   if (guestType !== 'hotel' && guestType !== 'offsite') return ok({ success: false, message: 'guestType debe ser "hotel" u "offsite".' });
@@ -150,26 +273,43 @@ exports.handler = async (event) => {
   const clientName = `${firstName} ${lastName}`.trim();
 
   try {
-    const [sdRes, apRes] = await Promise.all([
+    const [sdRes, apRes, scRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_data&select=value`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_appointments&select=value`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.staffConfirmAccounts&select=value`, { headers: hdrs }),
     ]);
     const [sdRow] = sdRes.ok ? await sdRes.json() : [];
     const spaData = sdRow?.value || {};
     const svc = (spaData.services || []).find(s => s.id === serviceId && s.active);
     if (!svc) return ok({ success: false, message: 'No encontré ese servicio — vuelve a llamar a spa_list_services.' });
-    const ther = (spaData.therapists || []).find(t => t.id === therapistId);
-    if (!ther) return ok({ success: false, message: 'No encontré ese terapeuta — vuelve a llamar a spa_check_availability para obtener un therapistId válido.' });
 
     const [apRow] = apRes.ok ? await apRes.json() : [];
     const appts = apRow?.value || [];
+    const [scRow] = scRes.ok ? await scRes.json() : [];
+    const staffAccounts = scRow?.value || [];
+    const startMin = hhmmToMin(start), endMin0 = startMin + svc.duration;
+
+    let ther = null, resolvedRoomId = roomId || null, rotationGroup = null, rotationName = null;
+    if (therapistId) {
+      ther = (spaData.therapists || []).find(t => t.id === therapistId);
+      if (!ther) return ok({ success: false, message: 'No encontré ese terapeuta — vuelve a llamar a spa_check_availability para obtener un therapistId válido.' });
+    } else {
+      // "No preference — please assign for me" (Darlene's spec 2026-10-15): same named
+      // rotation as the guest booking page (spa-booking.html's sbRotationOrder), so a
+      // guest booked through Lana gets picked the exact same way one booked themselves
+      // would. Shares the SAME spa_appointments rows (rotationGroup/rotationName), so
+      // whichever channel books first, the other's rotation count is still accurate.
+      const pick = pickTherapistByRotation(spaData, appts, staffAccounts, svc, date, startMin, genderPreference);
+      if (!pick) return ok({ success: false, message: 'No hay terapeutas disponibles para ese servicio a esa hora — prueba otra hora o fecha.' });
+      ther = pick.therapist; resolvedRoomId = pick.roomId; rotationGroup = pick.rotationGroup; rotationName = pick.rotationName;
+    }
 
     // Re-verify the slot is still free right before writing — same
     // conflict check as sbFinalConfirm's revalidation.
-    const startMin = hhmmToMin(start), endMin = startMin + svc.duration;
+    const endMin = endMin0;
     const conflict = appts.some(a => {
       if (a.date !== date || a.status === 'CANCELLED') return false;
-      if (a.therapistId !== therapistId) return false;
+      if (a.therapistId !== ther.id) return false;
       const aStart = hhmmToMin(a.start), aEnd = aStart + (a.duration || 60);
       return startMin < aEnd && endMin > aStart;
     });
@@ -233,12 +373,17 @@ exports.handler = async (event) => {
       id: apptId,
       clientName, guestType, sessionType: svc.sessionType || 'individual',
       email, phone, roomNumber: matchedRoomNumber,
-      serviceId, therapistId, roomId: roomId || null,
+      serviceId, therapistId: ther.id, roomId: resolvedRoomId,
       date, start, duration: svc.duration,
       status: isHotel ? 'CONFIRMED' : 'PAYMENT_PENDING',
       paymentStatus: isHotel ? 'NOT_REQUIRED' : 'PENDING',
       folioStatus: isHotel ? 'PENDING' : 'NOT_REQUIRED',
-      therapistPreference: { type: 'specific', requestedTherapistId: therapistId },
+      therapistPreference: therapistId ? { type: 'specific', requestedTherapistId: therapistId } : { type: genderPreference === 'female' || genderPreference === 'male' ? genderPreference : 'none', requestedTherapistId: null },
+      // Set only when auto-picked via the named rotation (not a guest's "specific therapist"
+      // request) -- mirrors spa-booking.html's sbRotationOrder()/rotationGroup exactly, and
+      // both read/write the SAME spa_appointments rows, so the rotation count is shared and
+      // accurate regardless of whether the guest booked via Lana or the web page themselves.
+      rotationGroup, rotationName,
       source: 'guest_booking',
       guestCount: svc.groupPricing ? (parseInt(guestCount) || svc.groupPricing.minGuests || 1) : null,
       groupTotalPriceUSD: svc.groupPricing ? priceUSD : null,
@@ -264,7 +409,7 @@ exports.handler = async (event) => {
           // backfilled) -- folios has no generic booking_id anchor, so this
           // one path still posts to bookings.charges rather than a folio.
           const chargeId = 'chg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-          const charge = { id: chargeId, date, category, description: svc.name, amount: priceUSD, guestName: clientName, therapistName: therName, therapistId, addedAt: new Date().toISOString(), addedBy: 'Visito AI (auto)', source: 'spa' };
+          const charge = { id: chargeId, date, category, description: svc.name, amount: priceUSD, guestName: clientName, therapistName: therName, therapistId: ther.id, addedAt: new Date().toISOString(), addedBy: 'Visito AI (auto)', source: 'spa' };
           const newCharges = [...(bkMatch.bk.charges || []), charge];
           const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/bookings?id=eq.${bkMatch.bk.id}`, {
             method: 'PATCH', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ charges: newCharges }),
