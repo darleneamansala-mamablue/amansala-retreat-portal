@@ -108,8 +108,17 @@ function findGuestBooking(bookings, clientName, roomNumber) {
 // sbRotationOrder, so a guest booked via Lana ("no preference, please assign for
 // me") gets the exact same treatment as one who books through the web page
 // themselves. Keep both in sync if the rules or data shape ever change.
-const SPA_GENERAL_BREAK_AFTER = 3, SPA_GENERAL_BREAK_MINUTES = 30, SPA_GENERAL_DAILY_CAP = 7;
-const SPA_MARIA_BREAK_MINUTES = 45, SPA_MARIA_DAILY_CAP = 4;
+// `rot` (rotation settings) is read from app_store key 'spa_rotation_settings' --
+// staff edit these in booking-hub.html's Spa > Auto-Assign screen (modules/
+// spa-rotation-settings.js); this default is only ever used until they save that
+// screen once.
+const SPA_ROTATION_DEFAULTS = {
+  femaleOrder: ['Laura', 'Laura', 'Gabby', 'Graciela'], femaleFallback: 'Rosario',
+  malePrimary: 'Julian', malePrimaryCap: 4, maleSecondary: 'Miguel',
+  noPreferenceFirst: 'male',
+  mariaName: 'Maria Luisa', mariaStageSize: 2, mariaBreakMinutes: 45, mariaDailyCap: 4,
+  generalBreakAfter: 3, generalBreakMinutes: 30, generalDailyCap: 7,
+};
 
 function therapistAcct(ther, staffAccounts) {
   const full = `${ther.firstName || ''} ${ther.lastName || ''}`.trim().toLowerCase();
@@ -138,18 +147,18 @@ function isTherapistAvailable(ther, dateStr, period, staffAccounts) {
 // Mirrors sbSlotFree's per-therapist break/cap logic exactly (Maria Luisa's staged
 // 2-then-45min-break-then-2, cap 4; everyone else: 30-min break after 3 consecutive
 // back-to-back services, cap 7 unless staff set an explicit override on her profile).
-function therapistSlotFree(ther, appts, dateStr, startMin, duration, staffAccounts) {
+function therapistSlotFree(ther, appts, dateStr, startMin, duration, staffAccounts, rot) {
   if (!isTherapistAvailable(ther, dateStr, startMin < 720 ? 'AM' : 'PM', staffAccounts)) return false;
   const todaysSorted = appts.filter(a => a.date === dateStr && a.status !== 'CANCELLED' && a.therapistId === ther.id).sort((a, b) => hhmmToMin(a.start) - hhmmToMin(b.start));
   let brk = 0;
-  if ((ther.firstName || '').trim() === 'Maria Luisa') {
-    if (todaysSorted.length >= SPA_MARIA_DAILY_CAP) return false;
-    if (todaysSorted.length === 2) {
-      const last = todaysSorted[1];
-      if (startMin < hhmmToMin(last.start) + (last.duration || 60) + SPA_MARIA_BREAK_MINUTES) return false;
+  if ((ther.firstName || '').trim() === rot.mariaName) {
+    if (todaysSorted.length >= rot.mariaDailyCap) return false;
+    if (todaysSorted.length === rot.mariaStageSize) {
+      const last = todaysSorted[todaysSorted.length - 1];
+      if (startMin < hhmmToMin(last.start) + (last.duration || 60) + rot.mariaBreakMinutes) return false;
     }
   } else {
-    const cap = parseInt(ther.maxServicesPerDay, 10) || SPA_GENERAL_DAILY_CAP;
+    const cap = parseInt(ther.maxServicesPerDay, 10) || rot.generalDailyCap;
     if (todaysSorted.length >= cap) return false;
     let consecutive = 0, cursorEnd = startMin;
     for (let i = todaysSorted.length - 1; i >= 0; i--) {
@@ -157,7 +166,7 @@ function therapistSlotFree(ther, appts, dateStr, startMin, duration, staffAccoun
       if (aEnd === cursorEnd) { consecutive++; cursorEnd = aStart; } else break;
     }
     const explicitBreak = Math.max(0, parseInt(ther.breakMinutes, 10) || 0);
-    brk = explicitBreak || (consecutive >= SPA_GENERAL_BREAK_AFTER ? SPA_GENERAL_BREAK_MINUTES : 0);
+    brk = explicitBreak || (consecutive >= rot.generalBreakAfter ? rot.generalBreakMinutes : 0);
   }
   const endMin = startMin + duration;
   return !appts.some(a => {
@@ -181,36 +190,36 @@ function resolveRoom(spaData, ther, svc, appts, dateStr, startMin, duration) {
 // "No gender preference" tries the male rotation first (Jorge's confirmation
 // 2026-10-15), falling through to the female rotation, then to a generic
 // least-busy-first fallback, so a booking is never left unfilled.
-function rotationOrder(appts, dateStr, genderPreference) {
+function rotationOrder(appts, dateStr, genderPreference, rot) {
   const apptsToday = appts.filter(a => a.date === dateStr && a.status !== 'CANCELLED');
-  const order = [];
-  if (genderPreference !== 'female') {
-    const julianToday = apptsToday.filter(a => a.rotationGroup === 'male' && a.rotationName === 'Julian').length;
+  const maleBlock = () => {
+    const primaryToday = apptsToday.filter(a => a.rotationGroup === 'male' && a.rotationName === rot.malePrimary).length;
     const totalMale = apptsToday.filter(a => a.rotationGroup === 'male').length;
-    if (julianToday < 4) order.push({ name: 'Julian', group: 'male' }, { name: 'Miguel', group: 'male' });
-    else {
-      const alt = totalMale - julianToday;
-      order.push({ name: alt % 2 === 0 ? 'Miguel' : 'Julian', group: 'male' }, { name: alt % 2 === 0 ? 'Julian' : 'Miguel', group: 'male' });
-    }
-  }
-  if (genderPreference !== 'male') {
+    if (primaryToday < rot.malePrimaryCap) return [{ name: rot.malePrimary, group: 'male' }, { name: rot.maleSecondary, group: 'male' }];
+    const alt = totalMale - primaryToday;
+    return [{ name: alt % 2 === 0 ? rot.maleSecondary : rot.malePrimary, group: 'male' }, { name: alt % 2 === 0 ? rot.malePrimary : rot.maleSecondary, group: 'male' }];
+  };
+  const femaleBlock = () => {
     const totalFemale = apptsToday.filter(a => a.rotationGroup === 'female').length;
-    const pattern = ['Laura', 'Laura', 'Gabby', 'Graciela'];
+    const pattern = rot.femaleOrder;
     const primary = pattern[totalFemale % pattern.length];
-    [primary, ...pattern.filter(n => n !== primary)].forEach(n => order.push({ name: n, group: 'female' }));
-    order.push({ name: 'Rosario', group: 'female' });
-  }
-  return order;
+    const out = [primary, ...pattern.filter(n => n !== primary)].map(n => ({ name: n, group: 'female' }));
+    out.push({ name: rot.femaleFallback, group: 'female' });
+    return out;
+  };
+  if (genderPreference === 'female') return femaleBlock();
+  if (genderPreference === 'male') return maleBlock();
+  return rot.noPreferenceFirst === 'female' ? [...femaleBlock(), ...maleBlock()] : [...maleBlock(), ...femaleBlock()];
 }
-function pickTherapistByRotation(spaData, appts, staffAccounts, svc, dateStr, startMin, genderPreference) {
+function pickTherapistByRotation(spaData, appts, staffAccounts, svc, dateStr, startMin, genderPreference, rot) {
   let eligible = (spaData.therapists || []).filter(t => t.active && (t.services || []).some(s => s.serviceId === svc.id));
   if (svc.fixedTherapistId) { const fixed = eligible.filter(t => t.id === svc.fixedTherapistId); if (fixed.length) eligible = fixed; }
   if (genderPreference === 'female' || genderPreference === 'male') eligible = eligible.filter(t => t.gender === genderPreference);
 
-  for (const r of rotationOrder(appts, dateStr, genderPreference)) {
+  for (const r of rotationOrder(appts, dateStr, genderPreference, rot)) {
     const ther = eligible.find(t => (t.firstName || '').trim() === r.name);
     if (!ther) continue;
-    if (!therapistSlotFree(ther, appts, dateStr, startMin, svc.duration, staffAccounts)) continue;
+    if (!therapistSlotFree(ther, appts, dateStr, startMin, svc.duration, staffAccounts, rot)) continue;
     const roomId = resolveRoom(spaData, ther, svc, appts, dateStr, startMin, svc.duration);
     if (roomId === undefined) continue; // room required but none free
     return { therapist: ther, roomId, rotationGroup: r.group, rotationName: r.name };
@@ -218,7 +227,7 @@ function pickTherapistByRotation(spaData, appts, staffAccounts, svc, dateStr, st
   // Nobody from either named rotation is eligible/free (e.g. only a specialist like
   // Eva qualifies for this service) — fall back to least-busy-first among everyone
   // else eligible, rather than leaving the booking unfilled.
-  const free = eligible.filter(t => therapistSlotFree(t, appts, dateStr, startMin, svc.duration, staffAccounts));
+  const free = eligible.filter(t => therapistSlotFree(t, appts, dateStr, startMin, svc.duration, staffAccounts, rot));
   const withRoom = free.map(t => ({ t, roomId: resolveRoom(spaData, t, svc, appts, dateStr, startMin, svc.duration) })).filter(x => x.roomId !== undefined);
   if (!withRoom.length) return null;
   const liveCount = t => appts.filter(a => a.therapistId === t.id && a.status !== 'CANCELLED').length;
@@ -273,10 +282,11 @@ exports.handler = async (event) => {
   const clientName = `${firstName} ${lastName}`.trim();
 
   try {
-    const [sdRes, apRes, scRes] = await Promise.all([
+    const [sdRes, apRes, scRes, rotRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_data&select=value`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_appointments&select=value`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.staffConfirmAccounts&select=value`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_rotation_settings&select=value`, { headers: hdrs }),
     ]);
     const [sdRow] = sdRes.ok ? await sdRes.json() : [];
     const spaData = sdRow?.value || {};
@@ -287,6 +297,8 @@ exports.handler = async (event) => {
     const appts = apRow?.value || [];
     const [scRow] = scRes.ok ? await scRes.json() : [];
     const staffAccounts = scRow?.value || [];
+    const [rotRow] = rotRes.ok ? await rotRes.json() : [];
+    const rot = { ...SPA_ROTATION_DEFAULTS, ...(rotRow?.value || {}) };
     const startMin = hhmmToMin(start), endMin0 = startMin + svc.duration;
 
     let ther = null, resolvedRoomId = roomId || null, rotationGroup = null, rotationName = null;
@@ -299,7 +311,7 @@ exports.handler = async (event) => {
       // guest booked through Lana gets picked the exact same way one booked themselves
       // would. Shares the SAME spa_appointments rows (rotationGroup/rotationName), so
       // whichever channel books first, the other's rotation count is still accurate.
-      const pick = pickTherapistByRotation(spaData, appts, staffAccounts, svc, date, startMin, genderPreference);
+      const pick = pickTherapistByRotation(spaData, appts, staffAccounts, svc, date, startMin, genderPreference, rot);
       if (!pick) return ok({ success: false, message: 'No hay terapeutas disponibles para ese servicio a esa hora — prueba otra hora o fecha.' });
       ther = pick.therapist; resolvedRoomId = pick.roomId; rotationGroup = pick.rotationGroup; rotationName = pick.rotationName;
     }
