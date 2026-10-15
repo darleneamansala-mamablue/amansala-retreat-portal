@@ -551,14 +551,15 @@ function trGetUpgrade(bkId,roomNum){
 // Daily Report's upgrade column, and driver-portal.js all depend on them and have no
 // staging equivalent to replace them with (confirmed 2026-09-07).
 
-const TR2_RATES = {
-  cancun: [195, 100, 80, 65, 55, 45],
-  tulum:  [145,  80, 65, 55, 45, 40],
-};
+// Jorge's ask 2026-10-15: staff-editable in Admin > Settings instead of hardcoded here —
+// reads the live PortalSettings global (booking-hub.html), falling back to these same
+// numbers if that screen was never saved.
+function tr2Rates() { return (typeof PortalSettings !== 'undefined' && PortalSettings.transportRates) || { cancun: [195, 100, 80, 65, 55, 45], tulum: [145, 80, 65, 55, 45, 40] }; }
 function tr2AutoRate(e, groupPax) {
   groupPax = groupPax || 1;
   if (e.ot) return 0;
-  const tbl = e.airport === 'cancun' ? TR2_RATES.cancun : e.airport === 'tulum' ? TR2_RATES.tulum : null;
+  const rates = tr2Rates();
+  const tbl = e.airport === 'cancun' ? rates.cancun : e.airport === 'tulum' ? rates.tulum : null;
   if (!tbl) return null;
   return tbl[Math.min(groupPax - 1, tbl.length - 1)];
 }

@@ -31,7 +31,8 @@ function regToggleRoomNote(note){
   saveAll();regRender();
   db.from('bookings').update({package_custom_prices:regSelBk.packageCustomPrices}).eq('id',regSelBk.id).then(()=>{}).catch(()=>{});
 }
-const _TR_RATES={cancun:[195,100,80,65,55,45],tulum:[145,80,65,55,45,40]};
+// Jorge's ask 2026-10-15: staff-editable in Admin > Settings instead of hardcoded here.
+function _trRates(){return (typeof PortalSettings!=='undefined'&&PortalSettings.transportRates)||{cancun:[195,100,80,65,55,45],tulum:[145,80,65,55,45,40]};}
 function _calcTransportTotal(rows,direction){
   let total=0,isCharged=false;
   for(const r of rows){
@@ -42,7 +43,7 @@ function _calcTransportTotal(rows,direction){
     else if(direction==='departure'&&d.folioCharged?.departureFolioItemId){total+=d.folioCharged.departureAmount||0;isCharged=true;}
     else{
       const airport=direction==='arrival'?(d.arrivalAirport||''):(d.departureAirport||'');
-      const c=d.serviceCost!=null?Number(d.serviceCost):(_TR_RATES[airport]?.[0]||0);
+      const c=d.serviceCost!=null?Number(d.serviceCost):(_trRates()[airport]?.[0]||0);
       total+=c;
     }
   }
@@ -4581,8 +4582,8 @@ function _trPricingCardHtml(){
   return`<div style="background:linear-gradient(135deg,#2d6a6a,#3d8080);border-radius:12px;padding:14px 16px;margin-top:20px">
     <div style="font-size:9.5px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,.75);margin-bottom:8px;text-transform:uppercase">Transfer Pricing Reference</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      ${block('Cancún Airport (CUN)',_TR_RATES.cancun)}
-      ${block('Tulum Airport (TQO)',_TR_RATES.tulum)}
+      ${block('Cancún Airport (CUN)',_trRates().cancun)}
+      ${block('Tulum Airport (TQO)',_trRates().tulum)}
     </div>
     <div style="text-align:center;font-size:10px;color:rgba(255,255,255,.65);margin-top:8px">Prices are per person · Amansala coordinates all shared ride groupings</div>
   </div>`;

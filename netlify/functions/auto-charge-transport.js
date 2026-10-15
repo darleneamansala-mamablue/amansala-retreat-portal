@@ -8,7 +8,10 @@
 // Marks each transport row with data.folioCharged.[arrival|departure]* to prevent double-charging.
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
-const RATES = {
+// Jorge's ask 2026-10-15: staff-editable in Admin > Settings (app_store key
+// 'portal_settings') instead of hardcoded here -- reassigned near the top of the
+// handler once that row is fetched; this is just the fallback if it's never saved.
+let RATES = {
   cancun: [195, 100, 80, 65, 55, 45],
   tulum:  [145,  80, 65, 55, 45, 40],
 };
@@ -134,6 +137,10 @@ exports.handler = async (event) => {
 
   const supaKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supaKey) return { statusCode: 500, body: 'Missing SUPABASE_SERVICE_KEY' };
+
+  const settingsRes = await supaFetch(supaKey, 'app_store?key=eq.portal_settings&select=value');
+  const savedRates = settingsRes.ok && Array.isArray(settingsRes.data) && settingsRes.data[0]?.value?.transportRates;
+  if (savedRates) RATES = savedRates;
 
   // Accept optional date and type override via query param or POST body
   let tomorrow = event.queryStringParameters?.date ?? null;
