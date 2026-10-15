@@ -11,6 +11,10 @@
 // therapist's own login (modules/staff-confirm-portal.js, ?mode=confirm) is a
 // completely separate rendering tree that never loads this module or touches
 // switchTab()/the Admin sidebar at all (same reasoning as Spa > Auto-Assign).
+// Small shared readers used by other modules (venues.js, transport.js, booking-detail.js)
+// so every commission calculation reads the same live setting instead of its own copy.
+function portalCommissionRate(){return ((typeof PortalSettings!=='undefined'&&PortalSettings.commissionRatePct)||5)/100;}
+function portalRoomsTaxRate(){return ((typeof PortalSettings!=='undefined'&&PortalSettings.roomsInternalTaxPct)||16)/100;}
 function portalSettingsRender(){
   const el=document.getElementById('portalSettingsContent');
   const s=PortalSettings;

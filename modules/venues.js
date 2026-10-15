@@ -1138,8 +1138,8 @@ async function _rmSyncReservationCommission(bookingId,roomRateTotal){
     const{data}=await db.from('commissions').select('id,commission_rate').eq('booking_id',bookingId).eq('type','reservation').order('created_at',{ascending:false}).limit(1);
     const existing=data&&data[0];
     if(!existing)return;
-    const rate=Number(existing.commission_rate)||0.05;
-    const total=+(roomRateTotal*1.16).toFixed(2);
+    const rate=Number(existing.commission_rate)||portalCommissionRate();
+    const total=+(roomRateTotal*(1+portalRoomsTaxRate())).toFixed(2);
     const commissionAmount=+(roomRateTotal*rate).toFixed(2);
     await db.from('commissions').update({upgrade_pretax:roomRateTotal,upgrade_total:total,commission_amount:commissionAmount}).eq('id',existing.id);
   }catch(e){console.warn('[commission] reservation sync failed:',e.message);}
@@ -1212,11 +1212,11 @@ function rmSaveNewBooking(){
   const staffId=staffSel?staffSel.value:'';
   if(staffId&&roomRateTotal>0){
     const staffName=(typeof staffAccounts!=='undefined'?staffAccounts:[]).find(s=>s.id===staffId)?.name||'';
-    const commissionAmount=+(roomRateTotal*0.05).toFixed(2);
+    const commissionAmount=+(roomRateTotal*portalCommissionRate()).toFixed(2);
     db.from('commissions').insert({
       staff_id:staffId,staff_name:staffName,type:'reservation',guest_name:leader,booking_id:newId,
-      room_from:null,room_to:room,upgrade_pretax:roomRateTotal,upgrade_total:+(roomRateTotal*1.16).toFixed(2),
-      commission_rate:0.05,commission_amount:commissionAmount,date:start,status:'pending',
+      room_from:null,room_to:room,upgrade_pretax:roomRateTotal,upgrade_total:+(roomRateTotal*(1+portalRoomsTaxRate())).toFixed(2),
+      commission_rate:portalCommissionRate(),commission_amount:commissionAmount,date:start,status:'pending',
     }).then(({error})=>{if(error)console.warn('[commission] insert failed:',error.message);});
     showToast(`Reservation created — ${room} · ${leader} ✓ · Comisión $${commissionAmount} para ${staffName} ✓`);
   }else{
