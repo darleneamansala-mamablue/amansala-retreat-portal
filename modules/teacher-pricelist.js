@@ -20,7 +20,7 @@ function renderTeacherPriceList(){
       const rate=getRoomRate(rt,gc,regSelBk.startDate,nights);
       const base=+(rate*gc*nights).toFixed(2);
       const pkg=+(calcPkgCost(regSelBk,gc)).toFixed(2);
-      const roomTax=+(base*0.16).toFixed(2);
+      const roomTax=+(base*portalRoomsTaxRate()).toFixed(2);
       const pkgTax=+(pkg*pkgTr).toFixed(2);
       const tax=+(roomTax+pkgTax).toFixed(2);
       const tip=+(tipR*gc*nights).toFixed(2);
