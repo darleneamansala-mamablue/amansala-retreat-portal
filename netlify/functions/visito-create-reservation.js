@@ -233,6 +233,7 @@ exports.handler = async (event) => {
     <div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:6px;margin:20px 0">
       <strong style="color:#1a2332">${rt.name}</strong><br>
       <span style="color:#4a4a4a">${checkIn} – ${checkOut} · ${nights} night${nights !== 1 ? 's' : ''} · ${numAdults} adult${numAdults !== 1 ? 's' : ''}</span><br>
+      ${taxPct > 0 ? `<span style="color:#4a4a4a">$${(subtotal - discountAmount).toFixed(2)} USD + ${taxPct}% tax</span><br>` : ''}
       <span style="color:#4a4a4a;font-weight:700">Total: $${totalUSD.toFixed(2)} USD</span>
     </div>
     <div style="text-align:center;margin:28px 0"><a href="${paymentUrl}" style="background:#0e9494;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block">Complete Payment</a></div>
@@ -253,6 +254,13 @@ exports.handler = async (event) => {
       console.warn('[visito-create-reservation] email failed (non-fatal):', emailErr.message);
     }
 
+    // Jorge's report 2026-10-15 (same class of bug already fixed for spa): the real Stripe
+    // charge here already includes tax correctly (amountCents is tax-inclusive), but this
+    // response only ever gave Lana one final inclusive `total`, with no subtotal/tax fields
+    // to draw on -- an easy way for her confirmation message to collapse into one bare
+    // number instead of stating the breakdown. visito-check-availability.js (the quoting
+    // step just before this one) already returns subtotal/taxes separately; mirrored here.
+    const priceDisplay = taxPct > 0 ? `$${(subtotal - discountAmount).toFixed(2)} USD + ${taxPct}% tax` : `$${totalUSD.toFixed(2)} USD`;
     return ok({
       success: true,
       roomTypeName: rt.name,
@@ -260,12 +268,16 @@ exports.handler = async (event) => {
       ratePerNight: rate,
       discountCode: validatedCode,
       discountAmount,
+      subtotal: subtotal - discountAmount,
+      taxRatePct: taxPct,
+      taxAmount: taxAmt,
       total: totalUSD,
+      priceDisplay,
       paymentUrl,
       emailedToGuest: emailed,
       message: emailed
-        ? `Reserva pre-creada — comparte este link de pago con el huésped para confirmarla (también se le mandó por correo a ${email}): ${paymentUrl}`
-        : `Reserva pre-creada — comparte este link de pago con el huésped para confirmarla: ${paymentUrl} (no se pudo mandar el correo automático, avísale que revise spam o mándaselo tú por WhatsApp)`,
+        ? `Reserva pre-creada (precio: ${priceDisplay} = $${totalUSD.toFixed(2)} USD total) — comparte este link de pago con el huésped para confirmarla (también se le mandó por correo a ${email}): ${paymentUrl}`
+        : `Reserva pre-creada (precio: ${priceDisplay} = $${totalUSD.toFixed(2)} USD total) — comparte este link de pago con el huésped para confirmarla: ${paymentUrl} (no se pudo mandar el correo automático, avísale que revise spam o mándaselo tú por WhatsApp)`,
     });
   } catch (err) {
     console.error('[visito-create-reservation]', err.message);
