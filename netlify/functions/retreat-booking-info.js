@@ -56,23 +56,29 @@ exports.handler = async (event) => {
       const p = L.priceCart(cfg, nights, { room: { rtId: rm.rtId, mode: 'solo' } });
       return { ...base, ...nightly, soloPerPerson: p.lines[0].perPerson };
     });
-    // Casa Master (house) bedrooms, each priced for every occupancy it allows (rb-house-lib: the one place house prices are calculated)
-    let house = null;
-    if (cfg.house && cfg.house.on) {
-      const hr = H.parseRange(cfg, bk, qs.ci, qs.co) || H.parseRange(cfg, bk, '', '');
-      const hav = isPreview ? { open: true, taken: {}, rooms: {} } : await H.houseAvailability(key, bk, cfg, hr);
-      house = {
-        dates: { checkIn: hr.checkIn, checkOut: hr.checkOut, nights: hr.nights, custom: hr.custom, retreatStart: bk.start_date, retreatEnd: bk.end_date, open: !!cfg.house.openDates }, label: cfg.house.label || 'Casa Master', intro: cfg.house.intro || '', gallery: cfg.house.gallery || [], wholeHouseOnly: !!cfg.house.wholeHouseOnly, open: !!hav.open,
-        rooms: (cfg.house.rooms || []).map((r) => ({
+    // Whole-house sections (Casa Master = cfg.house; others in cfg.houses[], e.g. Casita 4): bedrooms, each priced for every occupancy it allows
+    // (rb-house-lib: the one place house prices are calculated)
+    const buildHouse = async (cfgH, id) => {
+      const hr = H.parseRange(cfgH, bk, qs.ci, qs.co) || H.parseRange(cfgH, bk, '', '');
+      const hav = isPreview ? { open: true, taken: {}, rooms: {} } : await H.houseAvailability(key, bk, cfgH, hr);
+      const h = cfgH.house;
+      return {
+        id, dates: { checkIn: hr.checkIn, checkOut: hr.checkOut, nights: hr.nights, custom: hr.custom, retreatStart: bk.start_date, retreatEnd: bk.end_date, open: !!h.openDates },
+        label: h.label || 'Casa Master', intro: h.intro || '', gallery: h.gallery || [], wholeHouseOnly: !!h.wholeHouseOnly, open: !!hav.open,
+        rooms: (h.rooms || []).map((r) => ({
           id: r.id, label: r.label, beds: r.beds || '', desc: r.desc || '', images: r.images || [], kind: r.kind, max: H.capacity(r), note: r.note || '',
           soloRate: Number(r.soloRate) || 0, shareRate: Number(r.shareRate) || 0, extraRate: Number(r.extraRate) || 0,
           free: isPreview ? true : !!(hav.open && hav.rooms[r.id] && hav.rooms[r.id].free),
-          options: H.occupancyOptions(r).map((n) => ({ n, ...H.priceRoom(cfg, hr.nights, r, n) })),
+          options: H.occupancyOptions(r).map((n) => ({ n, ...H.priceRoom(cfgH, hr.nights, r, n) })),
         })),
       };
-    }
+    };
+    const house = cfg.house && cfg.house.on ? await buildHouse(cfg, null) : null;
+    const houses = [];
+    for (const hh of (cfg.houses || [])) { if (hh && hh.on) houses.push(await buildHouse(H.cfgFor(cfg, hh.id), hh.id)); }
     return L.json(200, {
       house,
+      houses,
       deposit: L.depositOffer(bk, cfg),
       preview: isPreview,
       template: isTemplate,
