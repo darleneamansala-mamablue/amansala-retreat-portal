@@ -1,3 +1,9 @@
+# Force the old Netlify default subdomain to the real custom domain (Jorge's ask 2026-10-15) --
+# Netlify keeps serving amansala-portal.netlify.app side by side with amansalaportal.com even
+# after the custom domain was added, so an old link/bookmark still worked but showed the wrong
+# URL. Must stay first so it wins over every other rule below for that host.
+https://amansala-portal.netlify.app/*  https://amansalaportal.com/:splat  301!
+
 # Spa-only staff link (Rosy/Kike/Host/Rubi etc.) -- redirects to booking-hub.html
 # in spa-staff mode (own login, no access to the rest of the portal). Must be
 # a real redirect (302), not a 200 rewrite -- a rewrite keeps the URL bar as
