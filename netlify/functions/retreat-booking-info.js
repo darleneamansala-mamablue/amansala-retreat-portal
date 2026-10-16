@@ -28,7 +28,7 @@ exports.handler = async (event) => {
     const range = L.stayRange(cfg, bk, qs.ci, qs.co) || L.stayRange(cfg, bk, '', '');
     const nights = range.nights;
     const prop = qs.p === 'chica' ? 'chica' : '';   // Chica-only link
-    const av = isPreview ? null : L.onlyProperty(await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg), range), prop);
+    const av = isPreview ? null : L.onlyProperty(await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg, undefined, prop), range), prop);
     const rooms = (cfg.rooms || []).map((rm) => {
       const freeList = isPreview ? [] : (av[rm.rtId] || { free: [] }).free;
       const freeChica = isPreview ? 9 : freeList.filter(L.isChica).length;      // for guests who tick "I am a leader" (placed at Chica)

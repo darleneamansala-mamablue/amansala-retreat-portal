@@ -74,7 +74,7 @@ function nightsOf(bk) {
 // A unit is free when its registration row has no named guest. Type membership comes from room_types.rooms.
 // excludeHoldId: when fulfillment re-checks availability for the hold IT placed, pass that hold's id so its
 // own held units don't count as "taken by someone else" and block it from using them.
-async function availability(key, bk, cfg, excludeHoldId) {
+async function availability(key, bk, cfg, excludeHoldId, prop) {
   const rts = await sget(key, 'room_types?select=id,rooms');
   const rtRooms = {};
   rts.forEach((t) => { rtRooms[t.id] = new Set(t.rooms || []); });
@@ -93,7 +93,10 @@ async function availability(key, bk, cfg, excludeHoldId) {
   const blocked = bk.blocked_rooms || [];
   const out = {};
   (cfg.rooms || []).forEach((rm) => {
-    const units = blocked.filter((room) => rtRooms[rm.rtId] && rtRooms[rm.rtId].has(room));
+    // Chica-only link: a retreat can list exactly which Chica rooms belong to each room type for that link (cfg.chicaUnits = { rtId: [units] }),
+    // without touching the shared room types other retreats use. No list for this type = the shared room type's rooms.
+    const own = prop === 'chica' && cfg.chicaUnits && Array.isArray(cfg.chicaUnits[rm.rtId]) ? new Set(cfg.chicaUnits[rm.rtId]) : null;
+    const units = blocked.filter((room) => own ? own.has(room) : (rtRooms[rm.rtId] && rtRooms[rm.rtId].has(room)));
     // A room is only offered when Cloudbeds holds it for this retreat (the room has its placeholder reservation there), so the
     // page and the hotel inventory cannot disagree. Turn off per retreat with cfg.requireCloudbeds = false.
     const cbIds = bk.cb_reservation_ids || {};

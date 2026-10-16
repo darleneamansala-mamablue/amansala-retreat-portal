@@ -60,7 +60,7 @@ exports.handler = async (event) => {
     }
 
     const prop = body.prop === 'chica' ? 'chica' : '';
-    const av = L.onlyProperty(await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg), range), prop);
+    const av = L.onlyProperty(await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg, undefined, prop), range), prop);
     const isLeader = acks.leader === true;
     // Pick the room(s) the guest would get (leaders: Chica, else Grande; others: Grande first), then confirm with Cloudbeds that
     // each is still held. A room Cloudbeds says is gone is dropped and the next one is tried.
