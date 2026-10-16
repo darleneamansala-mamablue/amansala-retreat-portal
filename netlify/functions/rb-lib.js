@@ -66,6 +66,9 @@ async function loadRetreat(key, bookingId) {
   return { bk, cfg: all[bookingId] || null };
 }
 
+// A new registrations row needs an id (the column has no default). Same shape the portal itself uses: id_<ms>_<4 chars>.
+function newRegId() { return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6); }
+
 function nightsOf(bk) {
   return Math.max(1, Math.round((new Date(bk.end_date + 'T12:00:00') - new Date(bk.start_date + 'T12:00:00')) / 86400000));
 }
@@ -354,4 +357,4 @@ async function applyStayAvailability(key, bk, av, range) {
   return av;
 }
 
-module.exports = { onlyProperty, stayRange, applyStayAvailability, grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json, placeHold, releaseHold, activeHoldUnits };
+module.exports = { newRegId, onlyProperty, stayRange, applyStayAvailability, grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json, placeHold, releaseHold, activeHoldUnits };

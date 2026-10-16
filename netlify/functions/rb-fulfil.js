@@ -87,7 +87,7 @@ async function fulfil(pi) {
       const rowNote = (existing[0] && existing[0].notes ? existing[0].notes + ' — ' : '') + note;
       const patch = { guests: rowGuests, amount_paid: perRow + (Number(existing[0] && existing[0].amount_paid) || 0), notes: rowNote, room_type_id: room.rtId };
       if (existing[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${existing[0].id}`, patch, 'return=minimal');
-      else await L.sreq(key, 'POST', 'registrations', { booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');
+      else await L.sreq(key, 'POST', 'registrations', { id: L.newRegId(), booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');
     }
   }
 
