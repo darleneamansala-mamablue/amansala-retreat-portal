@@ -47,7 +47,8 @@ exports.handler = async (event) => {
     B.push({ t: 'space', h: 4 });
     B.push({ t: 'h2', text: 'Payment' });
     if (rec.plan === 'deposit') {
-      B.push({ t: 'kv', k: 'Plan', v: '50% of the room now; spa services paid in full now; remaining balance charged automatically to the same card.' });
+      const hasSpa = (rec.lines || []).some((l) => l.type === 'service');   // only mention spa when this booking has spa services
+      B.push({ t: 'kv', k: 'Plan', v: `50% of the room now${hasSpa ? '; spa services paid in full now' : ''}; remaining balance charged automatically to the same card.` });
       B.push({ t: 'kv', k: 'Paid at booking', v: money(rec.dueNow) });
       B.push({ t: 'kv', k: 'Remaining balance', v: `${money(rec.balance)} on ${fmtDay(rec.balanceDate)}` + (sched ? `  (status: ${sched.status}${sched.paidAt ? ', charged ' + tulum(sched.paidAt) : ''})` : '') });
     } else {
