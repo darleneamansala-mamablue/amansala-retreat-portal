@@ -48,7 +48,7 @@ function srEnforce(bk){
     const d=srD(a.date);
     if(!d||!nights.includes(d))return;                       // arrival/departure/outside the stay: a person decides
     if(!srIsEvening(srTime(a))||!srTaken(bk,d,a))return;       // daytime, or the night is free: fine
-    const free=nights.filter(n=>n!==d&&!srTaken(bk,n,a))
+    const free=nights.filter(n=>n!==d&&!srTaken(bk,n,a)&&!(typeof iaClash==='function'&&iaClash(bk,SR_SALSA,n)))
       .sort((x,y)=>Math.abs(new Date(x)-new Date(d))-Math.abs(new Date(y)-new Date(d))||x.localeCompare(y));
     const who=bk.leaderName||bk.retreatName||'this retreat';
     if(free.length){
