@@ -11,7 +11,7 @@
   const css=KINDS.map(k=>`html[data-hide-${k.key}] .${k.cls}{display:none!important}
 html:not([data-open-${k.key}]) .${k.cls}>*:not(.al-head):not(.al-x){display:none!important}
 .${k.cls}>.al-head+*{display:none!important}`).join('\n')+`
-.c4-alert,.cs-alert{position:relative;display:inline-block;vertical-align:top;box-sizing:border-box;width:calc(50% - 34px);margin:8px 16px 0!important;padding:6px 32px 6px 12px!important}
+.c4-alert,.cs-alert{position:relative;display:inline-block;vertical-align:top;box-sizing:border-box;width:calc(50% - 44px);margin:8px 16px 0!important;padding:6px 32px 6px 12px!important}
 @media (max-width:900px){.c4-alert,.cs-alert{display:block;width:auto;margin:8px 16px 0!important}}
 .al-head{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#92400e}
 .al-head .al-n{background:#92400e;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;letter-spacing:0}
