@@ -112,3 +112,75 @@ if(typeof svChangeActivityDate==='function'){
     }catch(e){console.warn('[temazcal-split]',e);}
   };
 }
+
+// ===== teacher's schedule: a large group is offered two Temazcal groups (Darlene 2026-10-16) =====
+// On the Confirmed schedule the prepaid "Temazcal" pill opens "Request a time". For a group bigger than TZ_MAX (or one that is already
+// split) that request form asks for both groups: day, group 1 start, group 2 start (default group 1 + ceremony + break) and how many
+// guests in each. Saving writes both Temazcal entries (the stock request would have replaced them with a single one). The pill shows
+// both times. Groups of 20 or fewer keep the normal single-time form.
+function tzNeedsTwo(bk){return tzPax(bk)>TZ_MAX||tzEntries(bk).length>=2;}
+if(typeof tsToggleActivityRequest==='function'){
+  const _tzOrigToggle=tsToggleActivityRequest;
+  tsToggleActivityRequest=function(aoId){
+    _tzOrigToggle.apply(this,arguments);
+    try{
+      if(aoId!==TZ_AO)return;
+      const wrap=document.getElementById('tsPrepaidRequestWrap');
+      const bk=(AppData.bookings||[]).find(b=>b.id===_tsBkId);
+      if(!wrap||!wrap.innerHTML||!bk||!tzNeedsTwo(bk))return;           // closed again, or a small group: stock form
+      const ents=tzEntries(bk);
+      const g1=ents.find(a=>a.session===1)||ents[0]||{},g2=ents.find(a=>a.session===2)||ents[1]||{};
+      const pax=tzPax(bk);
+      const s1=g1.groupSize||Math.min(TZ_MAX,Math.ceil((pax||TZ_MAX*2)/2)),s2=g2.groupSize||Math.max(1,pax-s1)||s1;
+      const t1=g1.time||'19:15',t2=g2.time||tzAdd(t1,TZ_DURATION+TZ_GAP);
+      const minDate=fmtISO(new Date(pd(bk.startDate).getTime()+DAY_MS));
+      const inp='padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:\'Jost\',sans-serif;font-size:12.5px';
+      wrap.innerHTML=`<div style="padding:10px 12px;background:#fff;border:1.5px solid #6ee7b7;border-radius:9px;margin-bottom:8px;line-height:1.9">
+        <div style="font-weight:600;font-size:13px;color:#065f46">Request a time — Temazcal (2 groups)</div>
+        <div style="font-size:12px;color:#4b7070">The Temazcal fits ${TZ_MAX} people, so a group of ${pax||'this size'} does it twice, back to back, with a ${TZ_GAP}-minute break.</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">Day <input type="date" id="tsActReqDate_${TZ_AO}" value="${g1.date||''}" min="${minDate}" max="${bk.endDate}" style="${inp}"></div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">Group 1: <input type="number" min="1" max="${TZ_MAX}" id="tzTS1" value="${s1}" style="${inp};width:70px"> guests at <input type="time" id="tzTT1" value="${t1}" style="${inp}"></div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">Group 2: <input type="number" min="1" max="${TZ_MAX}" id="tzTS2" value="${s2}" style="${inp};width:70px"> guests at <input type="time" id="tzTT2" value="${t2}" style="${inp}"></div>
+        <div style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-primary" style="padding:7px 16px;font-size:12.5px" onclick="tzTeacherSave()">Send Request</button>
+        <button class="btn btn-secondary" style="padding:7px 16px;font-size:12.5px" onclick="tsToggleActivityRequest('${TZ_AO}')">Cancel</button></div></div>`;
+    }catch(e){console.warn('[temazcal-split]',e);}
+  };
+}
+function tzTeacherSave(){
+  const bk=(AppData.bookings||[]).find(b=>b.id===_tsBkId);if(!bk)return;
+  const v=id=>(document.getElementById(id)||{}).value||'';
+  const date=v('tsActReqDate_'+TZ_AO),t1=v('tzTT1'),t2=v('tzTT2'),s1=parseInt(v('tzTS1'),10)||0,s2=parseInt(v('tzTS2'),10)||0;
+  if(!date){showToast('Please pick a date first.');return;}
+  if(date===bk.startDate){showToast('Activities can\'t be scheduled on the arrival day — please pick a later date.');return;}
+  if(!t1||!t2){showToast('Please enter a start time for both groups.');return;}
+  if(s1<1||s2<1||s1>TZ_MAX||s2>TZ_MAX){showToast(`Each group needs between 1 and ${TZ_MAX} guests.`);return;}
+  if(t2<tzAdd(t1,TZ_DURATION)){showToast('Group 2 has to start after group 1 has finished.');return;}
+  const old=tzEntries(bk)[0];
+  const prepaid=old?old.prepaid:(bk.packages||[]).includes(TZ_AO);
+  bk.retreatActivities=(bk.retreatActivities||[]).filter(a=>a.aoId!==TZ_AO);
+  bk.retreatActivities.push({aoId:TZ_AO,date,time:t1,prepaid,requestedTime:true,session:1,groupSize:s1});
+  bk.retreatActivities.push({aoId:TZ_AO,date,time:t2,prepaid,requestedTime:true,session:2,groupSize:s2});
+  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  saveAll();
+  showToast('Request sent — Amansala will confirm.');
+  _tsActivityRequestOpenId=null;
+  tsRenderCalSection(bk);
+}
+// the pill shows both groups' times
+if(typeof tsConfirmedPrepaidPill==='function'){
+  const _tzOrigPill=tsConfirmedPrepaidPill;
+  tsConfirmedPrepaidPill=function(bk,ao){
+    let html=_tzOrigPill.apply(this,arguments);
+    try{
+      const ents=tzEntries(bk);
+      if(ao&&ao.id===TZ_AO&&ents.length>=2){
+        const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const g1=ents.find(a=>a.session===1)||ents[0],g2=ents.find(a=>a.session===2)||ents[1];
+        const d=new Date(g1.date+'T12:00:00');
+        const label=MON[d.getMonth()]+' '+d.getDate()+' · '+tsFmt(g1.time)+' & '+tsFmt(g2.time)+' · 2 groups';
+        html=html.replace(/(font-style:italic">\()([^)]*)(\)<\/span>)/,(m,a,b,c)=>a+label+c);
+      }
+    }catch(e){console.warn('[temazcal-split]',e);}
+    return html;
+  };
+}
