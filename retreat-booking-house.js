@@ -173,6 +173,7 @@
     var sum = cart.map(function (c) { var r = room(c.id), o = opt(r, c.n); return '<div class="hline"><span>' + esc(r.label) + ' · ' + c.n + ' guest' + (c.n > 1 ? 's' : '') + '</span><span>' + money(o.roomSubtotal + o.teaching) + '</span></div>'; }).join('');
     var tx = cart.reduce(function (a, c) { var o = opt(room(c.id), c.n); return { t: a.t + o.taxes, g: a.g + o.gratuity }; }, { t: 0, g: 0 });
     var dts = HOUSE.dates ? HOUSE.dates.checkIn + ' to ' + HOUSE.dates.checkOut + ' (' + HOUSE.dates.nights + ' nights)' : '';
+    modal();   // the checkout window is created on first use; it has to exist before it is filled in
     $p('hbody').innerHTML = '<h3 style="font-family:var(--display);font-weight:400;font-size:28px;margin:0 0 8px">Checkout</h3>' + (dts ? '<p style="margin:0 0 8px;font-size:13.5px"><b>Your dates:</b> ' + esc(dts) + '</p>' : '') + sum +
       '<div class="hline" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><span>Subtotal</span><span>' + money(subtotal()) + '</span></div>' +
       '<div class="hline"><span>Taxes and fees (' + INFO.taxFeePct + '%)</span><span>' + money(tx.t) + '</span></div>' +
