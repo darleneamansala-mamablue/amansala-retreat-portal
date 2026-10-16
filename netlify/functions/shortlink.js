@@ -60,6 +60,9 @@ exports.handler = async (event) => {
       const rows = await cr.json();
       const all = (rows[0] && rows[0].value) || {};
       const hit = Object.keys(all).find((id) => String(all[id].slug || '').toLowerCase() === slug);
+      // A second link name for the same retreat that only offers its Chica rooms (cfg.chicaSlug), e.g. /wealthandfreedomchica
+      const chit = Object.keys(all).find((id) => all[id].chicaSlug && String(all[id].chicaSlug).toLowerCase() === slug);
+      if (chit) return { statusCode: 302, headers: { Location: `/retreat-booking.html?r=${encodeURIComponent(chit)}&p=chica${qs.preview === '1' ? '&preview=1' : ''}` } };
       if (hit) return { statusCode: 302, headers: { Location: `/retreat-booking.html?r=${encodeURIComponent(hit)}${qs.preview === '1' ? '&preview=1' : ''}` } };
     }
   } catch (e) { /* fall through to the teacher links */ }

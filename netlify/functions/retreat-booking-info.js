@@ -94,6 +94,7 @@ exports.handler = async (event) => {
       preview: isPreview,
       template: isTemplate,
       slug: isTemplate ? '' : String(cfg.slug || ''),
+      chicaSlug: isTemplate ? '' : String(cfg.chicaSlug || ''),
       bookingId: bk.id,
       title: cfg.title || bk.retreat_name || bk.leader_name,
       startDate: range.checkIn,

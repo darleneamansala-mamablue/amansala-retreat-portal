@@ -297,7 +297,8 @@ function init(){
   fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)+REVIEW).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
     if(!x.ok){showClosed(x.j&&x.j.error);return}
     INFO=x.j;INFO.services.forEach(function(s){svcSel[s.id]=s.opts[0].m});
-    if(INFO.slug){try{history.replaceState(null,'','/retreat-booking.html/'+encodeURIComponent(INFO.slug)+(INFO.preview?'?preview=1':(PROP?'?p=chica':'')))}catch(e){}}   // show the short link name, not the id
+    var _slug=(PROP&&INFO.chicaSlug)?INFO.chicaSlug:INFO.slug;
+    if(_slug){try{history.replaceState(null,'','/retreat-booking.html/'+encodeURIComponent(_slug)+(INFO.preview?'?preview=1':((PROP&&!INFO.chicaSlug)?'?p=chica':'')))}catch(e){}}   // show the short link name, not the id
     $('loading').hidden=true;$('app').hidden=false;
     document.title=(INFO.title||'Retreat')+' | Amansala Tulum';
     if(INFO.bannerUrl){$('bannerImg').src=INFO.bannerUrl;$('bannerImg').alt=INFO.title||'';$('bannerWrap').hidden=false}
