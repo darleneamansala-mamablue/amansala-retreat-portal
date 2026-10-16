@@ -29,7 +29,9 @@ exports.handler = async (event) => {
     const nights = range.nights;
     const prop = qs.p === 'chica' ? 'chica' : '';   // Chica-only link
     const av = isPreview ? null : L.onlyProperty(await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg, undefined, prop), range), prop);
-    const rooms = (cfg.rooms || []).map((rm) => {
+    // Chica-only link: a room type the retreat lists with no Chica rooms (cfg.chicaUnits[rtId] = []) is left off the page entirely
+    const noChica = (rm) => prop && cfg.chicaUnits && Array.isArray(cfg.chicaUnits[rm.rtId]) && !cfg.chicaUnits[rm.rtId].length;
+    const rooms = (cfg.rooms || []).filter((rm) => !noChica(rm)).map((rm) => {
       const freeList = isPreview ? [] : (av[rm.rtId] || { free: [] }).free;
       const freeChica = isPreview ? 9 : freeList.filter(L.isChica).length;      // for guests who tick "I am a leader" (placed at Chica)
       const freeGrande = isPreview ? 9 : freeList.filter(L.isGrande).length;    // leader fallback when Chica is out of this room type
