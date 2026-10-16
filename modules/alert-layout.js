@@ -11,8 +11,10 @@
   const css=KINDS.map(k=>`html[data-hide-${k.key}] .${k.cls}{display:none!important}
 html:not([data-open-${k.key}]) .${k.cls}>*:not(.al-head):not(.al-x){display:none!important}
 .${k.cls}>.al-head+*{display:none!important}`).join('\n')+`
-.c4-alert,.cs-alert{position:relative;display:inline-block;vertical-align:top;box-sizing:border-box;width:calc(50% - 44px);margin:8px 16px 0!important;padding:6px 32px 6px 12px!important}
-@media (max-width:900px){.c4-alert,.cs-alert{display:block;width:auto;margin:8px 16px 0!important}}
+.al-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;margin:8px 16px 0}
+html[data-hide-c4][data-hide-cs] .al-row{display:none}
+.al-row>.c4-alert,.al-row>.cs-alert{position:relative;flex:1 1 380px;min-width:0;box-sizing:border-box;margin:0!important;padding:6px 32px 6px 12px!important}
+.c4-alert,.cs-alert{position:relative}
 .al-head{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#92400e}
 .al-head .al-n{background:#92400e;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;letter-spacing:0}
 .al-head .al-chev{margin-left:auto;font-size:12px}
@@ -59,7 +61,19 @@ html:not([data-open-${k.key}]) .${k.cls}>*:not(.al-head):not(.al-x){display:none
       });
     });
   }
+  // The tab panels are flex columns, so the banners cannot share a line on their own: put them in one flex row (Casita 4 first).
+  function group(){
+    const hosts=new Set();
+    document.querySelectorAll('.c4-alert,.cs-alert').forEach(el=>{if(el.parentElement&&!el.parentElement.classList.contains('al-row'))hosts.add(el.parentElement);});
+    hosts.forEach(h=>{
+      const first=h.querySelector(':scope > .c4-alert, :scope > .cs-alert');if(!first)return;
+      let row=h.querySelector(':scope > .al-row');
+      if(!row){row=document.createElement('div');row.className='al-row';h.insertBefore(row,first);}
+      KINDS.forEach(k=>{h.querySelectorAll('.'+k.cls).forEach(el=>row.appendChild(el));});
+    });
+    document.querySelectorAll('.al-row').forEach(r=>{if(!r.children.length)r.remove();});
+  }
   let t=null;
-  new MutationObserver(function(){clearTimeout(t);t=setTimeout(decorate,50);}).observe(document.body,{childList:true,subtree:true});
-  decorate();
+  new MutationObserver(function(){clearTimeout(t);t=setTimeout(function(){decorate();group();},50);}).observe(document.body,{childList:true,subtree:true});
+  decorate();group();
 })();
