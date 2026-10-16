@@ -1,11 +1,11 @@
 // ===== roomcal-collapse.js — accordion for the Room Calendar's header block =====
 // Loaded as a classic script (after alert-layout.js). Layout only: adds a "Hide / Show" toggle next to the "Room Calendar" title that folds
-// the date controls, the action buttons, the month buttons and the stats line, so the calendar itself gets more room. The date range stays
-// visible while folded. Nothing in booking-hub.html or the other modules is edited. The choice is remembered in this browser.
+// the date range and date controls, the action buttons, the month buttons and the stats line, so the calendar itself gets more room. The date range folds away too
+// (only the title and the Show button stay). Nothing in booking-hub.html or the other modules is edited. The choice is remembered in this browser.
 (function(){
   const KEY='rc_header_collapsed';
   const css=`
-#tab-roomcal.rc-folded .panel-toolbar .toolbar-right>*:not(#rcRangeLbl):not(#rcReturnToRetreatBtn){display:none!important}
+#tab-roomcal.rc-folded .panel-toolbar .toolbar-right>*:not(#rcReturnToRetreatBtn){display:none!important}
 #tab-roomcal.rc-folded #rcAvailBar{display:none!important}
 .rc-fold-btn{display:inline-flex;align-items:center;gap:6px;margin-left:12px;padding:4px 12px;font-size:12px;font-weight:600;color:var(--muted,#6b7280);background:#fff;border:1px solid var(--border,#e5e0d5);border-radius:8px;cursor:pointer;vertical-align:middle}
 .rc-fold-btn:hover{background:var(--sand,#f4f1ea)}`;
