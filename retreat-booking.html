@@ -262,7 +262,8 @@ td.p strong{font-size:28px}
 var $=function(i){return document.getElementById(i)};
 var QS=new URLSearchParams(location.search);
 var BK=QS.get('r')||'';
-var REVIEW=(QS.get('template')==='1'?'&template=1':'')+(QS.get('preview')==='1'?'&preview=1':'');   // review modes: payment is off
+var REVIEW=(QS.get('template')==='1'?'&template=1':'')+(QS.get('preview')==='1'?'&preview=1':'');
+var PROP=QS.get('p')==='chica'?'chica':'';REVIEW+=PROP?'&p=chica':'';   // Chica-only link: /retreat-booking.html/<name>?p=chica   // review modes: payment is off
 var INFO=null, cur=null, cart={room:null,svcs:{}}, svcSel={}, stripe=null, elements=null, ackRoommate=false;
 
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
@@ -296,7 +297,7 @@ function init(){
   fetch('/.netlify/functions/retreat-booking-info?r='+encodeURIComponent(BK)+REVIEW).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(x){
     if(!x.ok){showClosed(x.j&&x.j.error);return}
     INFO=x.j;INFO.services.forEach(function(s){svcSel[s.id]=s.opts[0].m});
-    if(INFO.slug){try{history.replaceState(null,'','/retreat-booking.html/'+encodeURIComponent(INFO.slug)+(INFO.preview?'?preview=1':''))}catch(e){}}   // show the short link name, not the id
+    if(INFO.slug){try{history.replaceState(null,'','/retreat-booking.html/'+encodeURIComponent(INFO.slug)+(INFO.preview?'?preview=1':(PROP?'?p=chica':'')))}catch(e){}}   // show the short link name, not the id
     $('loading').hidden=true;$('app').hidden=false;
     document.title=(INFO.title||'Retreat')+' | Amansala Tulum';
     if(INFO.bannerUrl){$('bannerImg').src=INFO.bannerUrl;$('bannerImg').alt=INFO.title||'';$('bannerWrap').hidden=false}
@@ -485,7 +486,7 @@ function others(){return [].map.call(document.querySelectorAll('.othbox'),functi
 function startPayment(){
   if(INFO.preview){say('Preview only: payment is turned off on this page.');return}
   var c=roomCalc(cart.room);
-  var body={bookingId:BK,dates:INFO.datesOpen?{checkIn:INFO.startDate,checkOut:INFO.endDate}:null,cart:{room:{rtId:cart.room.rtId,mode:cart.room.mode,beds:cart.room.beds},services:Object.keys(cart.svcs).map(function(k){return {id:k,m:cart.svcs[k].m,q:cart.svcs[k].q}})},
+  var body={bookingId:BK,prop:PROP,dates:INFO.datesOpen?{checkIn:INFO.startDate,checkOut:INFO.endDate}:null,cart:{room:{rtId:cart.room.rtId,mode:cart.room.mode,beds:cart.room.beds},services:Object.keys(cart.svcs).map(function(k){return {id:k,m:cart.svcs[k].m,q:cart.svcs[k].q}})},
     guest:{name:$('fName').value.trim(),email:$('fEmail').value.trim(),phone:$('fPhone').value.trim(),others:others()},
     plan:planChoice(),
     acks:{cancellation:$('cancelOk').checked,roommate:ackRoommate,shareChoice:shareNeeded()?shareChoice():'',friendName:shareNeeded()&&shareChoice()==='friend'?$('friendName').value.trim():'',leader:isLeader(),balanceAuth:planChoice()==='deposit'&&$('balanceAuth').checked}};

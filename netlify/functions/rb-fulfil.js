@@ -59,13 +59,13 @@ async function fulfil(pi) {
 
   // Exclude this payment's own hold from "taken by someone else" -- it reserved these units for
   // itself back in retreat-booking-intent.js precisely so it could still have them here.
-  const av = await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg, m.rbHoldId), range);
+  const av = L.onlyProperty(await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg, m.rbHoldId), range), m.rbProp);
   const freeAll = (av[room.rtId] || { free: [] }).free;
   const isLeader = (m.rbAck || '').includes('leader=1');
   const needUnits = rm && rm.kind === 'twin' ? guests.length : 1;
   // Leaders: Chica first; if Chica is out of this room type, Grande (and the guest + staff are told). Everyone else: Grande
   // rooms first so Chica stays free for leaders (L.chooseUnits).
-  const ch = L.chooseUnits(freeAll, needUnits, isLeader, L.grandeOnly(rm));
+  const ch = L.chooseUnits(freeAll, needUnits, isLeader, L.grandeOnly(rm) && m.rbProp !== 'chica');
   const units = ch.units, property = ch.property;
   const leaderAtGrande = isLeader && property === 'Grande';
   // The hold has done its job either way (a real registration below now reserves the room, or

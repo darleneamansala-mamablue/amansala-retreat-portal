@@ -59,12 +59,13 @@ exports.handler = async (event) => {
       if (shareChoice === 'alone' && acks.roommate !== true) return L.json(400, { error: 'Please read and agree to the roommate terms.' });
     }
 
-    const av = await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg), range);
+    const prop = body.prop === 'chica' ? 'chica' : '';
+    const av = L.onlyProperty(await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg), range), prop);
     const isLeader = acks.leader === true;
     // Pick the room(s) the guest would get (leaders: Chica, else Grande; others: Grande first), then confirm with Cloudbeds that
     // each is still held. A room Cloudbeds says is gone is dropped and the next one is tried.
     let freeList = (av[rm.rtId] || { free: [] }).free.slice();
-    const gOnly = L.grandeOnly(rm);
+    const gOnly = L.grandeOnly(rm) && !prop;
     let choice = L.chooseUnits(freeList, needed, isLeader, gOnly);
     for (let tries = 0; tries < 4 && choice.units; tries++) {
       const gone = await L.cbGone(bk, choice.units);
@@ -117,6 +118,7 @@ exports.handler = async (event) => {
       'metadata[rbPlan]': plan,
       'metadata[rbDates]': `${range.checkIn}_${range.checkOut}`,
       'metadata[rbHoldId]': holdId,
+      'metadata[rbProp]': prop,
     };
     if (plan === 'deposit') {
       // a Stripe customer + saving the card for later charges (off session), with the guest's explicit authorization

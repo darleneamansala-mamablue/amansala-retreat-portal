@@ -221,6 +221,14 @@ function pickUnits(free, n) {
 // Room types whose Chica rooms are never sold to regular guests (only the Grande rooms of the retreat's block are offered; Chica ones
 // stay for leaders). Override per room in the retreat's booking config with rooms[i].grandeOnly = true / false.
 const GRANDE_ONLY_TYPES = ['rt1'];   // Beachfront King
+// Property-only link (?p=chica): keep only that property's rooms in what availability() returned, so the page, the price check and the
+// room assignment after payment all see the same smaller inventory. No prop = nothing changes.
+function onlyProperty(av, prop) {
+  if (prop !== 'chica') return av;
+  const out = {};
+  Object.keys(av || {}).forEach((k) => { const a = av[k]; out[k] = Object.assign({}, a, { units: (a.units || []).filter(isChica), free: (a.free || []).filter(isChica) }); });
+  return out;
+}
 function grandeOnly(rm) { return rm && rm.grandeOnly !== undefined ? !!rm.grandeOnly : !!(rm && GRANDE_ONLY_TYPES.includes(rm.rtId)); }
 // Leaders: Chica first, Grande when Chica is out of this room type. Everyone else: Grande first (keeps Chica free for leaders);
 // for a Grande-only room type everyone else gets Grande rooms only.
@@ -343,4 +351,4 @@ async function applyStayAvailability(key, bk, av, range) {
   return av;
 }
 
-module.exports = { stayRange, applyStayAvailability, grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json, placeHold, releaseHold, activeHoldUnits };
+module.exports = { onlyProperty, stayRange, applyStayAvailability, grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json, placeHold, releaseHold, activeHoldUnits };
