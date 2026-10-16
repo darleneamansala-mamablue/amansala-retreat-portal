@@ -27,12 +27,15 @@ exports.handler = async (event) => {
     }
     const range = L.stayRange(cfg, bk, qs.ci, qs.co) || L.stayRange(cfg, bk, '', '');
     const nights = range.nights;
-    const av = isPreview ? null : await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg), range);
-    const rooms = (cfg.rooms || []).map((rm) => {
+    const prop = qs.p === 'chica' ? 'chica' : '';   // Chica-only link
+    const av = isPreview ? null : L.onlyProperty(await L.applyStayAvailability(key, bk, await L.availability(key, bk, cfg, undefined, prop), range), prop);
+    // Chica-only link: a room type the retreat lists with no Chica rooms (cfg.chicaUnits[rtId] = []) is left off the page entirely
+    const noChica = (rm) => prop && cfg.chicaUnits && Array.isArray(cfg.chicaUnits[rm.rtId]) && !cfg.chicaUnits[rm.rtId].length;
+    const rooms = (cfg.rooms || []).filter((rm) => !noChica(rm)).map((rm) => {
       const freeList = isPreview ? [] : (av[rm.rtId] || { free: [] }).free;
       const freeChica = isPreview ? 9 : freeList.filter(L.isChica).length;      // for guests who tick "I am a leader" (placed at Chica)
       const freeGrande = isPreview ? 9 : freeList.filter(L.isGrande).length;    // leader fallback when Chica is out of this room type
-      const free = isPreview ? 9 : (L.grandeOnly(rm) ? freeGrande : freeList.length);   // what a regular guest can book (Beachfront: Grande rooms only)
+      const free = isPreview ? 9 : (L.grandeOnly(rm) && !prop ? freeGrande : freeList.length);   // what a regular guest can book (Beachfront: Grande rooms only)
       const base = { rtId: rm.rtId, kind: rm.kind, label: rm.label, desc: rm.desc || '', imageUrl: rm.imageUrl || '', tags: rm.tags || [], free, freeChica, freeGrande };
       const nightly = { rateShare: rm.kind === 'single' ? null : Number(rm.shareRate) || null, rateSolo: rm.kind === 'twin' ? null : Number(rm.soloRate) || null };
       if (rm.kind === 'house') {
@@ -81,9 +84,9 @@ exports.handler = async (event) => {
         }),
       };
     };
-    const house = cfg.house && cfg.house.on ? await buildHouse(cfg, null) : null;
+    const house = !prop && cfg.house && cfg.house.on ? await buildHouse(cfg, null) : null;
     const houses = [];
-    for (const hh of (cfg.houses || [])) { if (hh && hh.on) houses.push(await buildHouse(H.cfgFor(cfg, hh.id), hh.id)); }
+    for (const hh of (prop ? [] : (cfg.houses || []))) { if (hh && hh.on) houses.push(await buildHouse(H.cfgFor(cfg, hh.id), hh.id)); }
     return L.json(200, {
       house,
       houses,
@@ -91,6 +94,7 @@ exports.handler = async (event) => {
       preview: isPreview,
       template: isTemplate,
       slug: isTemplate ? '' : String(cfg.slug || ''),
+      chicaSlug: isTemplate ? '' : String(cfg.chicaSlug || ''),
       bookingId: bk.id,
       title: cfg.title || bk.retreat_name || bk.leader_name,
       startDate: range.checkIn,
