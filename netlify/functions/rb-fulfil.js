@@ -85,9 +85,19 @@ async function fulfil(pi) {
       const rowGuests = rm.kind === 'twin' ? [guests[i]] : guests;     // king: both guests in the one room
       const existing = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(bookingId)}&room=eq.${encodeURIComponent(unit)}&select=id,notes,amount_paid`);
       const rowNote = (existing[0] && existing[0].notes ? existing[0].notes + ' — ' : '') + note;
-      const patch = { guests: rowGuests, amount_paid: perRow + (Number(existing[0] && existing[0].amount_paid) || 0), notes: rowNote, room_type_id: room.rtId };
+      // The guest's real stay (they can book outside the retreat dates) and, for a room two guests share, the room's rate for both, so the
+      // booking screen's Period / Room Total match what was charged. Retreat-length single stays are left as they always were.
+      const svcTotal = Math.max(0, Math.round((paidNow - roomPaidNow) * 100) / 100);
+      const bill = L.regFolioItems({ cfg, rm, mode: room.mode, unit, g: rowGuests.length, nights, range, isDeposit, piId: pi.id, roomName: roomLine.name,
+        paid: perRow + (i === 0 ? svcTotal : 0), rowAmount: roomLine.amount / units.length,
+        svcLines: i === 0 ? priced.lines.filter((l) => l.type === 'service') : [] });
+      const patch = { guests: rowGuests, amount_paid: perRow + (Number(existing[0] && existing[0].amount_paid) || 0), notes: rowNote, room_type_id: room.rtId,
+        ...(range.custom ? { check_in: range.checkIn, check_out: range.checkOut } : {}), ...(rowGuests.length > 1 && bill.rate > 0 ? { custom_rate_override: bill.rate * rowGuests.length } : {}) };
+      const regId = existing[0] ? existing[0].id : L.newRegId();
       if (existing[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${existing[0].id}`, patch, 'return=minimal');
-      else await L.sreq(key, 'POST', 'registrations', { id: L.newRegId(), booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');
+      else await L.sreq(key, 'POST', 'registrations', { id: regId, booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');
+      // the room's bill (what the guest owes and has paid); never allowed to undo the booking
+      await L.addRegFolio(key, regId, rowGuests[0].name || m.rbName, bill.items);
     }
   }
 

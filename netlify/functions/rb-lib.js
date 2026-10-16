@@ -69,6 +69,68 @@ async function loadRetreat(key, bookingId) {
 // A new registrations row needs an id (the column has no default). Same shape the portal itself uses: id_<ms>_<4 chars>.
 function newRegId() { return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6); }
 
+// ---- The guest's bill (folio) for a room-list row, built the way the portal's booking screen expects it ----
+// folio_items: positive rows are charges, a negative 'Payment' row is money received; Balance Due = sum of all rows (with tax).
+// regFolioItems = one room-list row of a normal retreat-booking room (g guests share it). Pure function (no I/O) so it can be tested.
+const r2c = (x) => Math.round(x * 100) / 100;
+function regFolioItems(o) {
+  const { cfg, rm, mode, unit, g, nights, range, paid, svcLines, isDeposit, piId, roomName, rowAmount } = o;
+  const taxPct = Number(cfg.taxFeePct) || 0, grat = Number(cfg.gratuityPerNight) || 0;
+  const teach = cfg.teachingFee && cfg.teachingFee.on ? Number(cfg.teachingFee.amountPP) || 0 : 0;
+  let rate = 0;
+  if (rm && rm.kind === 'king' && mode !== 'trio') rate = Number(mode === 'share' ? rm.shareRate : rm.soloRate);
+  else if (rm && rm.kind === 'twin') rate = Number(rm.shareRate);
+  else if (rm && rm.kind === 'single') rate = Number(rm.soloRate);
+  const items = [];
+  const label = `${unit} ${roomName || ''}`.trim();
+  if (rate > 0) {
+    items.push({ description: `Room charge — ${label} (${g} guest${g > 1 ? 's' : ''} × ${nights} night${nights > 1 ? 's' : ''}, ${range.checkIn} to ${range.checkOut}) + ${taxPct}% taxes & fees`, qty: g * nights, unit_price: rate, tax_rate: taxPct, category: 'Room' });
+    if (teach > 0) items.push({ description: 'Teaching fee', qty: g, unit_price: teach, tax_rate: taxPct, category: 'Room' });
+    if (grat > 0) items.push({ description: `Staff gratuity ($${grat} per guest, per night)`, qty: g * nights, unit_price: grat, tax_rate: 0, category: 'Tip' });
+  } else {
+    items.push({ description: `Room charge — ${label}`, qty: 1, unit_price: r2c(rowAmount), tax_rate: 0, category: 'Room' });   // unusual room kind: one lump line
+  }
+  (svcLines || []).forEach((s) => items.push({ description: `${s.name}`, qty: 1, unit_price: r2c(s.amount), tax_rate: 0, category: 'Spa' }));
+  items.push({ description: `Payment — Credit Card (Stripe)${isDeposit ? ' 50% deposit' : ''} (${piId})`, qty: 1, unit_price: -r2c(paid), tax_rate: 0, category: 'Payment' });
+  return { items, rate };
+}
+// houseFolioItems = one real room (unit) of a Casa Master / Casita 4 / Casa Shanti bedroom r (r comes from rb-house-lib.priceRoom);
+// a bedroom with several units splits its charges evenly across them.
+function houseFolioItems(o) {
+  const { cfg, r, units, unit, range, paid, isDeposit, piId } = o;
+  const taxPct = Number(cfg.taxFeePct) || 0, u = Math.max(1, units);
+  const items = [];
+  items.push({ description: `Room charge — ${unit} ${r.label} (${r.guests} guest${r.guests > 1 ? 's' : ''} × ${r.nights} night${r.nights > 1 ? 's' : ''}, ${range.checkIn} to ${range.checkOut}) + ${taxPct}% taxes & fees`, qty: 1, unit_price: r2c(((Number(r.roomSubtotal) || 0) + (Number(r.teaching) || 0)) / u), tax_rate: taxPct, category: 'Room' });
+  if (Number(r.gratuity) > 0) items.push({ description: `Staff gratuity ($${cfg.gratuityPerNight} per guest, per night)`, qty: 1, unit_price: r2c(Number(r.gratuity) / u), tax_rate: 0, category: 'Tip' });
+  items.push({ description: `Payment — Credit Card (Stripe)${isDeposit ? ' 50% deposit' : ''} (${piId})`, qty: 1, unit_price: -r2c(paid), tax_rate: 0, category: 'Payment' });
+  return items;
+}
+function folioToken() { return 'id' + Date.now() + Math.random().toString(36).slice(2, 6); }
+// Adds the rows to the room's bill, creating the bill first when it does not exist yet. Never throws: a bill problem must not undo a booking.
+async function addRegFolio(key, regId, guestName, items) {
+  try {
+    let folios = await sget(key, `folios?registration_id=eq.${encodeURIComponent(regId)}&select=id,created_at&order=created_at.asc`);
+    let folioId = folios[0] && folios[0].id;
+    if (!folioId) {
+      const r = await sreq(key, 'POST', 'folios', { registration_id: regId, guest_name: guestName, name: guestName, payment_token: folioToken(), status: 'open' }, 'return=representation');
+      const j = await r.json(); folioId = (Array.isArray(j) ? j[0] : j).id;
+    }
+    await sreq(key, 'POST', 'folio_items', items.map((i) => ({ folio_id: folioId, ...i })), 'return=minimal');
+    return folioId;
+  } catch (e) { console.warn('[rb-lib] could not write the bill for', regId, e.message); return null; }
+}
+// A later payment (the 50% balance charged on its date) goes on the same bill as a negative Payment row.
+async function addRegPayment(key, bookingId, unit, amount, desc) {
+  try {
+    const regs = await sget(key, `registrations?booking_id=eq.${encodeURIComponent(bookingId)}&room=eq.${encodeURIComponent(unit)}&select=id`);
+    if (!regs[0]) return false;
+    const folios = await sget(key, `folios?registration_id=eq.${encodeURIComponent(regs[0].id)}&select=id,created_at&order=created_at.asc`);
+    if (!folios[0]) return false;
+    await sreq(key, 'POST', 'folio_items', { folio_id: folios[0].id, description: desc, qty: 1, unit_price: -r2c(amount), tax_rate: 0, category: 'Payment' }, 'return=minimal');
+    return true;
+  } catch (e) { console.warn('[rb-lib] could not add the payment to the bill', e.message); return false; }
+}
+
 function nightsOf(bk) {
   return Math.max(1, Math.round((new Date(bk.end_date + 'T12:00:00') - new Date(bk.start_date + 'T12:00:00')) / 86400000));
 }
@@ -357,4 +419,4 @@ async function applyStayAvailability(key, bk, av, range) {
   return av;
 }
 
-module.exports = { newRegId, onlyProperty, stayRange, applyStayAvailability, grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json, placeHold, releaseHold, activeHoldUnits };
+module.exports = { regFolioItems, houseFolioItems, addRegFolio, addRegPayment, newRegId, onlyProperty, stayRange, applyStayAvailability, grandeOnly, AGREE_TEXT, sign, recordUrl, clientIp, BAL_KEY, balanceDateOf, depositOffer, splitPayment, stripePost, TEMPLATE_KEY, DEFAULT_CFG, pickUnits, chooseUnits, cbCall, cbGone, isChica, isGrande, SUPABASE_URL, CFG_KEY, ORDERS_KEY, SPA_KEY, DEFAULT_POLICY, sget, sreq, appStoreGet, appStoreSet, loadRetreat, nightsOf, availability, priceCart, cors, json, placeHold, releaseHold, activeHoldUnits };

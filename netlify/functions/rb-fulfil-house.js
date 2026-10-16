@@ -83,8 +83,12 @@ async function fulfil(pi) {
         const existing = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(bookingId)}&room=eq.${encodeURIComponent(unit)}&select=id,notes,amount_paid`);
         const note = `Booked online (${HL}, ${r.label}) ${new Date().toISOString().slice(0, 10)} · booked by ${m.rbName}${r.supplement ? ' · includes the individual bed' : ''}${stayTxt}`;
         const patch = { guests: byUnit[k], amount_paid: perUnit + (Number(existing[0] && existing[0].amount_paid) || 0), notes: (existing[0] && existing[0].notes ? existing[0].notes + ' — ' : '') + note, room_type_id: typeOf[unit] || null };
-        if (existing[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${existing[0].id}`, patch, 'return=minimal');
-        else await L.sreq(key, 'POST', 'registrations', { id: L.newRegId(), booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');
+        const stayPatch = rec.dates && rec.dates.custom ? { check_in: rec.dates.checkIn, check_out: rec.dates.checkOut } : {};
+        const regId = existing[0] ? existing[0].id : L.newRegId();
+        if (existing[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${existing[0].id}`, { ...patch, ...stayPatch }, 'return=minimal');
+        else await L.sreq(key, 'POST', 'registrations', { id: regId, booking_id: bookingId, room: unit, is_teacher_room: false, ...patch, ...stayPatch }, 'return=minimal');
+        // the room's bill (what the guest owes and has paid); never allowed to undo the booking
+        await L.addRegFolio(key, regId, (byUnit[k][0] && byUnit[k][0].name) || m.rbName, L.houseFolioItems({ cfg, r, units: units.length, unit, range: rec.dates || { checkIn: bk.start_date, checkOut: bk.end_date }, paid: perUnit, isDeposit: m.rbPlan === 'deposit' && Number(m.rbBalance) > 0, piId: pi.id }));
         placedUnits.push(unit);
         // put the guest name on that room's Cloudbeds reservation so hotel inventory matches the room list
         const ids = bk.cb_reservation_ids || {}, gids = bk.cb_guest_ids || {};

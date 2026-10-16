@@ -51,6 +51,7 @@ async function runDue({ today, dryRun } = {}) {
         try {
           const rows = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(it.bookingId)}&room=eq.${encodeURIComponent(unit)}&select=id,amount_paid,notes`);
           if (rows[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${rows[0].id}`, { amount_paid: Math.round(((Number(rows[0].amount_paid) || 0) + Number(amt)) * 100) / 100, notes: (rows[0].notes || '') + ` — balance ${money(amt)} charged ${today}` }, 'return=minimal');
+          await L.addRegPayment(key, it.bookingId, unit, amt, `Payment — Credit Card (Stripe) remaining balance (${pi.id})`);
         } catch (e) { console.warn('[rb-charge-balances] room list update failed', unit, e.message); }
       }
       summary.charged++;
