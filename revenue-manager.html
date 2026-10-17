@@ -289,7 +289,7 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'
 async function rmRefreshRecs(){
   rmToast('Recomputing…');
   try{
-    await fetch('/.netlify/functions/room-price-recalc');
+    await fetch('/.netlify/functions/room-price-recalc-now');
     const recsRow=await _db.from('app_store').select('value').eq('key','room_price_genie_recommendations').maybeSingle();
     RM_RECS=(recsRow.data&&recsRow.data.value)||null;
     rmRenderCalendar();

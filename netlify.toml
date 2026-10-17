@@ -47,3 +47,8 @@
 [functions."room-price-recalc"]
   schedule = "0 9 * * *"
   timeout = 26
+
+# Same recompute as above, callable on demand (Netlify returns 403 on direct requests to a
+# scheduled function) -- this is what revenue-manager.html's "Refresh recommendations" calls.
+[functions."room-price-recalc-now"]
+  timeout = 26
