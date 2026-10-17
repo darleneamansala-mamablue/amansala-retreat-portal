@@ -19,6 +19,28 @@ let spaCalDate = new Date(); spaCalDate.setHours(0, 0, 0, 0);
 let spaCalMode = 'therapist';
 let spaCalDragApptId = null;
 
+// "Hide hours": when on, the day grid only covers the hours that have appointments (first start to last end, rounded to whole
+// hours; 9 AM to 5 PM when the day is empty), instead of the full 7 AM to 9 PM. The choice is remembered in this browser.
+let spaCalHideHours = false;
+try { spaCalHideHours = localStorage.getItem('spa_cal_hide_hours') === '1'; } catch (e) {}
+let spaCalViewStartH = SPA_CAL_START_H, spaCalViewEndH = SPA_CAL_END_H;   // the hours the grid is showing right now
+function spaCalComputeView(dateStr) {
+  spaCalViewStartH = SPA_CAL_START_H; spaCalViewEndH = SPA_CAL_END_H;
+  if (!spaCalHideHours) return;
+  const day = SpaAppointments.filter(a => a.date === dateStr && a.status !== 'CANCELLED' && a.start);
+  if (!day.length) { spaCalViewStartH = 9; spaCalViewEndH = 17; return; }
+  const first = Math.min(...day.map(a => spaCalHHMMToMin(a.start)));
+  const last = Math.max(...day.map(a => spaCalHHMMToMin(a.start) + (Number(a.duration) || 60)));
+  spaCalViewStartH = Math.max(SPA_CAL_START_H, Math.floor(first / 60));
+  spaCalViewEndH = Math.min(SPA_CAL_END_H, Math.max(spaCalViewStartH + 3, Math.ceil(last / 60)));
+}
+function spaCalToggleHours() {
+  spaCalHideHours = !spaCalHideHours;
+  try { localStorage.setItem('spa_cal_hide_hours', spaCalHideHours ? '1' : '0'); } catch (e) {}
+  spaCalRenderToolbar();
+  spaCalRender();
+}
+
 // One-click filter to a wellness category — Darlene's revised ask: two
 // groups, Body Workers on their own and everything else (Fitness, Yoga,
 // Spirit, Pilates, Dance) combined under one "the rest" bucket, with a
@@ -77,6 +99,7 @@ function spaCalRenderToolbar() {
       <span style="font-size:13px;font-weight:600;min-width:140px;text-align:center;font-family:'Jost',sans-serif">${dateLabel}</span>
       <button onclick="spaCalNav(1)" style="width:28px;height:28px;border:1px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;font-size:16px">&#8250;</button>
       <button onclick="spaCalToday()" data-i18n="btn_today" style="padding:6px 12px;font-size:12px;font-weight:600;border:1.5px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">Today</button>
+      <button onclick="spaCalToggleHours()" title="${spaCalHideHours ? 'Show 7 AM to 9 PM again' : 'Hide the hours with no appointments'}" style="padding:6px 12px;font-size:12px;font-weight:600;border:1.5px solid var(--border);border-radius:7px;background:${spaCalHideHours ? '#e8f3f3' : '#fff'};cursor:pointer;font-family:'Jost',sans-serif">&#128339; ${spaCalHideHours ? ((typeof IS_SPA_STAFF_MODE !== 'undefined' && IS_SPA_STAFF_MODE && typeof spaStaffLang !== 'undefined' && spaStaffLang === 'es') ? 'Mostrar todas las horas' : 'Show all hours') : ((typeof IS_SPA_STAFF_MODE !== 'undefined' && IS_SPA_STAFF_MODE && typeof spaStaffLang !== 'undefined' && spaStaffLang === 'es') ? 'Ocultar horas' : 'Hide hours')}</button>
       <button onclick="spaApptShowForm(null)" style="display:flex;align-items:center;gap:6px;padding:9px 16px;background:var(--teal,#2d6a6a);color:#fff;border:none;border-radius:10px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer;margin-left:6px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span data-i18n="btn_new_appt">New Appointment</span>
       </button>
@@ -102,6 +125,7 @@ function spaCalRender() {
   const el = document.getElementById('spaContent');
   const dateStr = spaCalFmtDateStr(spaCalDate);
   const isTher = spaCalMode === 'therapist';
+  spaCalComputeView(dateStr);
 
   if (!isTher) {
     if (!SpaData.rooms.length) { el.innerHTML = '<p style="color:#9ca3af;font-style:italic;text-align:center;padding:40px">No rooms yet.</p>'; return; }
@@ -147,13 +171,13 @@ function spaCalSectionHtml(title, cols, dateStr) {
 }
 
 function spaCalPanelHtml(cols, isTher, dateStr) {
-  const gridH = (SPA_CAL_END_H - SPA_CAL_START_H) * SPA_CAL_PX_HR;
-  let html = `<div style="display:flex;min-width:${SPA_CAL_TIME_W + cols.length * SPA_CAL_COL_W}px;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e8dfd4">`;
+  const gridH = (spaCalViewEndH - spaCalViewStartH) * SPA_CAL_PX_HR;
+  let html = `<div style="display:flex;min-width:${SPA_CAL_TIME_W + cols.length * SPA_CAL_COL_W}px;background:#fff;border-radius:12px;overflow:clip;border:1px solid #e8dfd4">`;
 
   html += `<div style="width:${SPA_CAL_TIME_W}px;min-width:${SPA_CAL_TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:5;background:#fff;border-right:2px solid #e0d8cc">`;
   html += `<div style="height:40px;border-bottom:1px solid #e8dfd4;position:sticky;top:0;z-index:8;background:#fff"></div><div style="position:relative;height:${gridH}px">`;
-  for (let h = SPA_CAL_START_H; h <= SPA_CAL_END_H; h++) {
-    const top = (h - SPA_CAL_START_H) * SPA_CAL_PX_HR;
+  for (let h = spaCalViewStartH; h <= spaCalViewEndH; h++) {
+    const top = (h - spaCalViewStartH) * SPA_CAL_PX_HR;
     const ap = h >= 12 ? 'PM' : 'AM';
     html += `<div style="position:absolute;top:${top - 7}px;right:6px;font-size:10.5px;color:#9ca3af;font-family:'Jost',sans-serif">${(h % 12) || 12} ${ap}</div>`;
   }
@@ -169,7 +193,7 @@ function spaCalPanelHtml(cols, isTher, dateStr) {
     html += `<div class="spa-cal-col" style="position:relative;height:${gridH}px;background:repeating-linear-gradient(to bottom, transparent, transparent ${SPA_CAL_PX_HR - 1}px, #f1f5f9 ${SPA_CAL_PX_HR - 1}px, #f1f5f9 ${SPA_CAL_PX_HR}px)" onclick="spaCalCellClick(event,'${col.id}')" ondragover="event.preventDefault()" ondrop="spaCalDrop(event,'${col.id}')">`;
     dayAppts.forEach(a => {
       const svc = SpaData.services.find(s => s.id === a.serviceId);
-      const top = (spaCalHHMMToMin(a.start) - SPA_CAL_START_H * 60) * (SPA_CAL_PX_HR / 60);
+      const top = (spaCalHHMMToMin(a.start) - spaCalViewStartH * 60) * (SPA_CAL_PX_HR / 60);
       const height = Math.max(20, a.duration * (SPA_CAL_PX_HR / 60));
       const statusColor = a.status === 'COMPLETED' ? '#059669' : a.status === 'NO_SHOW' ? '#dc2626' : '#2d6a6a';
       const otherLabel = isTher ? (SpaData.rooms.find(r => r.id === a.roomId)?.name || '') : (SpaData.therapists.find(t => t.id === a.therapistId)?.firstName || '');
@@ -207,8 +231,8 @@ function spaCalCellClick(evt, colId) {
   const rect = evt.currentTarget.getBoundingClientRect();
   const y = evt.clientY - rect.top;
   let minutesFromStart = Math.round((y / (SPA_CAL_PX_HR / 60)) / 15) * 15;
-  minutesFromStart = Math.max(0, Math.min(minutesFromStart, (SPA_CAL_END_H - SPA_CAL_START_H) * 60 - 15));
-  spaApptShowForm(null, { colId, start: spaCalMinToHHMM(SPA_CAL_START_H * 60 + minutesFromStart), mode: spaCalMode });
+  minutesFromStart = Math.max(0, Math.min(minutesFromStart, (spaCalViewEndH - spaCalViewStartH) * 60 - 15));
+  spaApptShowForm(null, { colId, start: spaCalMinToHHMM(spaCalViewStartH * 60 + minutesFromStart), mode: spaCalMode });
 }
 
 function spaCalDragStart(evt, apptId) { spaCalDragApptId = apptId; evt.dataTransfer.setData('text/plain', apptId); }
@@ -221,8 +245,8 @@ function spaCalDrop(evt, colId) {
   const rect = evt.currentTarget.getBoundingClientRect();
   const y = evt.clientY - rect.top;
   let minutesFromStart = Math.round((y / (SPA_CAL_PX_HR / 60)) / 15) * 15;
-  minutesFromStart = Math.max(0, Math.min(minutesFromStart, (SPA_CAL_END_H - SPA_CAL_START_H) * 60 - appt.duration));
-  const newStart = spaCalMinToHHMM(SPA_CAL_START_H * 60 + minutesFromStart);
+  minutesFromStart = Math.max(0, Math.min(minutesFromStart, (spaCalViewEndH - spaCalViewStartH) * 60 - appt.duration));
+  const newStart = spaCalMinToHHMM(spaCalViewStartH * 60 + minutesFromStart);
   const newTherapistId = spaCalMode === 'therapist' ? colId : appt.therapistId;
   const newRoomId = spaCalMode === 'room' ? colId : appt.roomId;
   const conflict = spaCalCheckConflict({ ...appt, start: newStart, therapistId: newTherapistId, roomId: newRoomId }, appt.id);
