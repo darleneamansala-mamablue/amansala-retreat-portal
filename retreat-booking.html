@@ -458,7 +458,7 @@ function renderPlan(){
   box.hidden=false;
   $('planFull').textContent=money2(pi.total);
   $('planNow').textContent=money2(pi.now);
-  $('planLater').textContent='Then '+money2(pi.later)+' is charged automatically to the same card on '+fmtD(pi.date)+'. Spa services are paid in full today.';
+  $('planLater').textContent='Then '+money2(pi.later)+' is charged automatically to the same card on '+fmtD(pi.date)+'.'+(Object.keys(cart.svcs).length?' Spa services are paid in full today.':'');   // only mention spa when a spa service is in the cart
   $('authTxt').textContent='I authorize Amansala to charge the remaining balance of '+money2(pi.later)+' to this card on '+fmtD(pi.date)+'.';
   $('authBox').hidden=planChoice()!=='deposit';
 }
