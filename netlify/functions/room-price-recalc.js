@@ -9,11 +9,32 @@
 const L = require('./room-price-lib');
 
 const WINDOW_DAYS = 180;
+const LOCK_KEY = 'room_price_genie_recalc_lock';
+const LOCK_STALE_MS = 5 * 60 * 1000; // a real run finishes in well under a minute; 5min of staleness means something crashed, not that it's still working
 
+// Found live 2026-10-17: a manual "Refresh recommendations" overlapping a still-running
+// scheduled/earlier call (whose HTTP response had already timed out client-side, but kept
+// executing server-side) produced duplicate be_rates rows -- each run's `existing` snapshot
+// missed the other's in-flight inserts. This lock makes overlapping runs impossible instead of
+// just less likely.
 exports.runRecalc = async function runRecalc() {
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!key) throw new Error('Server config error: missing SUPABASE_SERVICE_KEY');
 
+  const lock = await L.appStoreGet(key, LOCK_KEY);
+  if (lock && Date.now() - new Date(lock.startedAt).getTime() < LOCK_STALE_MS) {
+    return { skipped: true, reason: 'another recalc is already running', startedAt: lock.startedAt };
+  }
+  await L.appStoreSet(key, LOCK_KEY, { startedAt: new Date().toISOString() });
+
+  try {
+    return await doRecalc(key);
+  } finally {
+    await L.appStoreSet(key, LOCK_KEY, null);
+  }
+};
+
+async function doRecalc(key) {
   const today = new Date().toISOString().slice(0, 10);
   const endD = new Date(); endD.setDate(endD.getDate() + WINDOW_DAYS);
   const end = endD.toISOString().slice(0, 10);
