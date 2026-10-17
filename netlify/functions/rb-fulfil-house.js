@@ -35,7 +35,11 @@ async function fulfil(pi) {
   if (!key || !bookingId) return { skipped: true };
 
   const orders = (await L.appStoreGet(key, L.ORDERS_KEY)) || {};
-  if (orders[pi.id]) return { duplicate: true };
+  // Only a completed ('placed') or actively-running ('processing') order blocks a re-run --
+  // 'error'/'needs_attention' orders are exactly what Dashboard's manual Retry button is for
+  // (rb-retry-order.js), so they must stay retryable instead of being stuck forever.
+  const prev = orders[pi.id];
+  if (prev && prev.status !== 'error' && prev.status !== 'needs_attention') return { duplicate: true };
   orders[pi.id] = { piId: pi.id, bookingId, status: 'processing', at: new Date().toISOString() };
   await L.appStoreSet(key, L.ORDERS_KEY, orders);
   try {

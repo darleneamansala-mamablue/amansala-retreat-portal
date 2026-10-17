@@ -26,6 +26,19 @@ function bpdGuestLink(bkId){try{const cs=(_bpd.cfg[bkId]||{}).slug;if(cs)return 
   try{const slug=(typeof computeShortSlug==='function')?computeShortSlug(bkId):'';if(slug)return location.origin+'/'+slug+'/book';}catch(e){}return location.origin+'/retreat-booking.html?r='+encodeURIComponent(bkId);}
 function bpdReviewLink(bkId){return location.origin+'/retreat-booking.html?r='+encodeURIComponent(bkId)+'&preview=1';}
 function bpdCopy(txt,label){navigator.clipboard.writeText(txt).then(()=>showToast(label+' copied')).catch(()=>showToast(txt));}
+// Re-runs fulfilment for a payment stuck 'error' (threw) or 'needs_attention' (no room was free
+// at the time -- may be free now) -- see netlify/functions/rb-retry-order.js. No Supabase access
+// needed; safe to click more than once (an already-'placed' order is refused, not re-run).
+async function bpdRetry(piId,btn){
+  if(!piId)return;
+  const orig=btn.textContent;btn.disabled=true;btn.textContent='Retrying…';
+  try{
+    const resp=await fetch('/.netlify/functions/rb-retry-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({piId})});
+    const d=await resp.json().catch(()=>({}));
+    if(resp.ok){showToast(d.placed?'Reprocessed — guest placed in a room':'Reprocessed');_bpd.at=0;await bpdLoad();bpdRender();}
+    else{showToast(d.error||'Retry failed');btn.disabled=false;btn.textContent=orig;}
+  }catch(e){showToast('Retry failed: '+e.message);btn.disabled=false;btn.textContent=orig;}
+}
 function bpdSetup(bkId){openBookingFromNotif(bkId);setTimeout(()=>{if(typeof rbsOpen==='function')rbsOpen();},900);}
 function bpdPages(){
   const ids=Object.keys(_bpd.cfg||{});
@@ -68,7 +81,7 @@ function bpdRender(){
     if(failed.length||attention.length){
       html+=`<div style="margin:6px 0 2px;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#b91c1c">Action needed</div>`;
       failed.forEach(x=>{html+=row(`${chip('Balance failed','#fee2e2','#dc2626','#7f1d1d')}<b>${bpdEsc(x.name)}</b><span>${bpdMoney(x.amount)} · ${bpdEsc(x.retreat||bpdRetreatName(x.bookingId))}</span><span style="color:#7f1d1d">${bpdEsc(x.lastError||'')}</span><a href="#" onclick="openBookingFromNotif('${bpdEsc(x.bookingId)}');return false" style="margin-left:auto;color:#2d6a6a;font-weight:700">Open retreat</a>`);});
-      attention.forEach(o=>{html+=row(`${chip(o.status==='error'?'Paid, not recorded':'Paid, no room','#fee2e2','#dc2626','#7f1d1d')}<b>${bpdEsc(o.name||'')}</b><span>${bpdEsc(o.email||'')} · ${bpdEsc(bpdRetreatName(o.bookingId))}</span>${o.recordUrl?`<a href="${bpdEsc(o.recordUrl)}" target="_blank" rel="noopener" style="margin-left:auto;color:#2d6a6a;font-weight:700">Booking record</a>`:''}`);});
+      attention.forEach(o=>{html+=row(`${chip(o.status==='error'?'Paid, not recorded':'Paid, no room','#fee2e2','#dc2626','#7f1d1d')}<b>${bpdEsc(o.name||'')}</b><span>${bpdEsc(o.email||'')} · ${bpdEsc(bpdRetreatName(o.bookingId))}</span><span style="margin-left:auto;display:flex;gap:10px;align-items:center">${o.piId?`<button class="btn btn-secondary" style="padding:3px 10px;font-size:11.5px" onclick="bpdRetry('${bpdEsc(o.piId)}',this)">Retry</button>`:''}${o.recordUrl?`<a href="${bpdEsc(o.recordUrl)}" target="_blank" rel="noopener" style="color:#2d6a6a;font-weight:700">Booking record</a>`:''}</span>`);});
     }
     if(dueSoon.length){
       html+=`<div style="margin:8px 0 2px;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#92400e">Balances due in the next 30 days</div>`;
