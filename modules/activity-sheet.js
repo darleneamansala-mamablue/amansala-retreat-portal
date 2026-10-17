@@ -1049,7 +1049,7 @@ function actOpsCostHtml(ops, totalSigned, aoId, opsKey) {
 
   // Standard tours (ao1 Tulum 515, ao3 Atik 1000, ao6 Grande 350) and others
   const GUIDE_COST=1000;
-  const guideCount=(ops.guide1?1:0)+(ops.guide2?1:0)||1;
+  const guideCount=(ops.guide1?1:0)+(ops.guide2?1:0)+(ops.guide3?1:0)||1;
   const guideCostEstimate=guideCount*GUIDE_COST;
   const guideCostConfirmed=ops.guideConfirmed?guideCostEstimate:0;
   const vansNeeded=totalSigned>0?Math.ceil(totalSigned/VAN_CAP):0;
