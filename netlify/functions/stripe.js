@@ -109,10 +109,18 @@ exports.handler = async (event) => {
     'Content-Type':  'application/json',
   };
 
-  // Fetch room type + booking engine settings in parallel
-  const [rtRes, settRes] = await Promise.all([
+  // Fetch room type + booking engine settings + any manual be_rates override for check-in's
+  // date in parallel. The comment below ("A Booking Engine override... takes priority") used
+  // to describe this -- it never actually ran: this endpoint only ever read room_types'
+  // seasonal rate, so a manual be_rates row (set via the admin Rates tab, or by the Revenue
+  // Manager's Upload Prices) showed on book.html's calendar teaser (get-rates.js, which DOES
+  // check be_rates) but silently charged the regular seasonal rate anyway at checkout. Found
+  // and fixed 2026-10-17 while wiring up the Revenue Manager, whose entire purpose depends on
+  // a be_rates write actually being the price a guest pays.
+  const [rtRes, settRes, beRes] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,be_price_single,be_price_single_extra_night,be_price_single_extra_night_low,be_price_double,price_single_high,price_single_low,price_double_high`, { headers: supaHdrs }),
     fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: supaHdrs }),
+    fetch(`${SUPABASE_URL}/rest/v1/be_rates?room_type_id=eq.${encodeURIComponent(roomTypeId)}&start_date=lte.${checkIn}&end_date=gte.${checkIn}&select=price_single`, { headers: supaHdrs }),
   ]);
 
   if (!rtRes.ok) return jsonErr(500, 'Could not fetch room type');
@@ -132,17 +140,20 @@ exports.handler = async (event) => {
   const numAdults = Math.max(1, parseInt(adults) || 1);
   const nights    = Math.max(1, Math.round((new Date(checkOut) - new Date(checkIn)) / 86400000));
 
-  // A Booking Engine override (admin Rates tab) takes priority; otherwise our real
-  // seasonal single-occupancy rate — same source get-rates.js uses, so what a guest
-  // sees on the room card matches what they're actually charged. Extra Night has
-  // its OWN separately-adjustable rate (be_price_single_extra_night), falling back
+  // A Booking Engine override (admin Rates tab, or the Revenue Manager) takes priority for
+  // Escape; otherwise our real seasonal single-occupancy rate — same source get-rates.js
+  // uses, so what a guest sees on the room card matches what they're actually charged. Extra
+  // Night has its OWN separately-adjustable rate (be_price_single_extra_night), falling back
   // to the Escape rate when not explicitly set — "derived from Escape" until
   // someone overrides it (Jorge's ask 2026-09-23). Extra Night also gets its own
   // May–Sep LOW season rate (be_price_single_extra_night_low) — same low-season
   // window retreats use (isLow/isLowSeason, May 1 – Sep 30) — Jorge's call
   // 2026-10-08, falling back to the regular (high-season) Extra Night rate when
-  // not set.
+  // not set. Extra Night deliberately does NOT consult be_rates (it's a flat rate,
+  // no seasonal/weekend surcharge either — Jorge's call 2026-10-08 below).
   const isExtraNight = source === 'Extra Night';
+  const beRateRows = beRes.ok ? await beRes.json() : [];
+  const manualRateSingle = !isExtraNight && beRateRows[0] ? beRateRows[0].price_single : null;
   const extraNightRate = isLow(checkIn)
     ? (rt.be_price_single_extra_night_low ?? rt.be_price_single_extra_night ?? rt.be_price_single)
     : (rt.be_price_single_extra_night ?? rt.be_price_single);
@@ -161,7 +172,11 @@ exports.handler = async (event) => {
   // adjustment as Escape (Jorge's 2026-09-23 ask), and is reverted to static
   // here — real case: Elizabeth Wirick quoted $470.69 for one Simple n Small
   // night that should've been the plain $295 + tax.
-  const rate        = isExtraNight ? Math.round(baseRate) : Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
+  // A manual be_rates row (get-rates.js's own precedence: manual override wins, only the
+  // weekend premium still applies on top -- skips the seasonal %, same as get-rates.js).
+  const rate        = isExtraNight ? Math.round(baseRate)
+    : manualRateSingle != null ? Math.round(manualRateSingle * weekendMult)
+    : Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
   const subtotal    = rate * nights;
 
   // Validate and apply discount code server-side
