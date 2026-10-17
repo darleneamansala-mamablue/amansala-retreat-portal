@@ -5,11 +5,12 @@
 //   - "Led by": a dropdown of all the staff (tour guides, class instructors, spa therapists, fire keepers, ceremony leaders)
 //   - "Who does what": a short note (e.g. "Maria Luisa leads, Gaby plays music")
 // Both are saved with the card's other assignments (app_store 'act_ops', fields leader and staffNote) through the sheet's own actOpsSet.
-const AL_EXTRA = ['María Luisa', 'Gaby', 'Golloy', 'Francisco', 'Ignacia'];       // ceremony leads and fire keepers
+const AL_EXTRA = ['María Luisa', 'Gabby', 'Golloy', 'Francisco', 'Ignacia'];       // ceremony leads and fire keepers
 function alTitle(n) { n = String(n || '').trim(); return n ? n.charAt(0).toUpperCase() + n.slice(1) : ''; }
 function alStaff(current) {
   const have = new Map();
-  const add = n => { const t = alTitle(n); if (t && !have.has(t.toLowerCase())) have.set(t.toLowerCase(), t); };
+  const flat = x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();   // Maria / María count as the same person
+  const add = n => { const t = alTitle(n); if (t && !have.has(flat(t))) have.set(flat(t), t); };
   [typeof TOUR_GUIDE_NAMES !== 'undefined' ? TOUR_GUIDE_NAMES : [], typeof BBC_INSTRUCTORS_LIST !== 'undefined' ? BBC_INSTRUCTORS_LIST : [],
    typeof TEMAZCAL_FIRE_KEEPER_NAMES !== 'undefined' ? TEMAZCAL_FIRE_KEEPER_NAMES : [], AL_EXTRA].forEach(l => (l || []).forEach(add));
   try { ((typeof SpaData !== 'undefined' && SpaData.therapists) || []).filter(t => t.active !== false).forEach(t => add(t.firstName)); } catch (e) {}

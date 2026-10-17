@@ -7,6 +7,8 @@
 // the retreat schedules, the printouts and the Schedule calendar. One row per activity per day: a tour two retreats share has one guide row.
 const TCW_TOURS = ['ao1', 'ao2', 'ao3', 'ao6', 'ao7', 'ao16'];
 const TCW_CEREMONIES = ['ao4', 'ao5', 'ao9', 'ao10'];
+const TCW_SHAMANS = ['María Luisa', 'Gabby'];   // every Temazcal needs one shaman and one fire keeper
+function tcwFireKeepers() { return typeof TEMAZCAL_FIRE_KEEPER_NAMES !== 'undefined' ? TEMAZCAL_FIRE_KEEPER_NAMES : ['Golloy', 'Francisco']; }
 let tcwWeek = null;          // ISO date of the Sunday of the week on screen
 let tcwFilter = 'all';       // all | tours | ceremonies
 
@@ -58,6 +60,8 @@ async function tcwRender() {
     <button onclick="tcwNav(7)" style="width:30px;height:30px;border:1px solid #d6cfc4;border-radius:7px;background:#fff;cursor:pointer;font-size:16px">&#8250;</button>
     <button onclick="tcwNav(0)" style="padding:6px 12px;font-size:12px;font-weight:700;border:1.5px solid #d6cfc4;border-radius:7px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">This week</button>
     <span style="width:14px"></span>${chip('all', 'All')}${chip('tours', 'Tours')}${chip('ceremonies', 'Ceremonies')}</div>`;
+  const missing = rows.filter(r => r.aoId === 'ao5').filter(r => { const o = (typeof actOpsData !== 'undefined' && actOpsData[r.key]) || {}; return !o.shaman || !o.fireKeeper; });
+  if (missing.length) html += `<div style="margin:0 0 14px;padding:10px 14px;background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;color:#991b1b;font-size:13px;font-weight:600">${missing.length} Temazcal${missing.length > 1 ? 's' : ''} this week still need${missing.length > 1 ? '' : 's'} a shaman and a fire keeper: ${missing.map(r => tcwEsc(fmtDay(r.date))).join(' · ')}. Every Temazcal needs one of each.</div>`;
   const custom = typeof _agExtra !== 'undefined' ? _agExtra : [];
   html += `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 14px;padding:10px 12px;background:#fff;border:1px solid #e8dfd4;border-radius:10px">
     <span style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px">Add a guide</span>
@@ -74,12 +78,23 @@ async function tcwRender() {
       const tour = TCW_TOURS.includes(r.aoId);
       const times = [...new Set(r.times)].sort().map(tcwFmtT).join(' & ');
       const who = r.groups.map(g => tcwEsc(g.name) + (g.pax ? ' (' + g.pax + ')' : '')).join(', ');
+      const temaz = r.aoId === 'ao5';
+      const reqSel = (field, blank, list) => {
+        const cur = ops[field] || '';
+        return `<select onchange="tcwSet('${r.key}','${field}',this.value)" style="padding:7px 8px;border:2px solid ${cur ? '#d6cfc4' : '#dc2626'};border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;background:${cur ? '#fff' : '#fef2f2'};min-width:150px">` +
+          ['', ...list, ...(cur && !list.includes(cur) ? [cur] : [])].map(n => `<option value="${tcwEsc(n)}" ${n === cur ? 'selected' : ''}>${tcwEsc(n || blank)}</option>`).join('') + '</select>';
+      };
+      const lbl = 'font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px';
+      const people = temaz
+        ? `<div><div style="${lbl}">Shaman <span style="color:#dc2626">*</span></div>${reqSel('shaman', '— choose the shaman —', TCW_SHAMANS)}</div>
+           <div><div style="${lbl}">Fire keeper <span style="color:#dc2626">*</span></div>${reqSel('fireKeeper', '— choose the fire keeper —', tcwFireKeepers())}</div>`
+        : `<div><div style="${lbl}">Guide 1</div>${sel(r, 'guide1', '— choose —')}</div>
+           <div><div style="${lbl}">Guide 2</div>${sel(r, 'guide2', '— optional —')}</div>
+           <div><div style="${lbl}">Guide 3</div>${sel(r, 'guide3', '— optional —')}</div>`;
       html += `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:12px 14px;border-top:1px solid #f0ebe0">
         <div style="min-width:210px;flex:1"><div style="font-weight:700;font-size:14px">${tcwEsc(nm(r.aoId))} <span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:${tour ? '#dbeafe' : '#fae8ff'};color:${tour ? '#1d4ed8' : '#86198f'}">${tour ? 'Tour' : 'Ceremony'}</span></div>
           <div style="font-size:12px;color:#6b7280">${tcwEsc(times)} · ${who}</div></div>
-        <div><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Guide 1</div>${sel(r, 'guide1', '— choose —')}</div>
-        <div><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Guide 2</div>${sel(r, 'guide2', '— optional —')}</div>
-        <div><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Guide 3</div>${sel(r, 'guide3', '— optional —')}</div>
+        ${people}
         <div style="flex:1;min-width:200px"><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Who does what</div><input type="text" value="${tcwEsc(ops.staffNote || '')}" placeholder="e.g. María Luisa leads, Gaby plays music" onchange="tcwSet('${r.key}','staffNote',this.value)" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px"></div>
       </div>`;
     });
@@ -103,7 +118,7 @@ function tcwSetFilter(f) { tcwFilter = f; tcwRender(); }
 function tcwSet(key, field, val) {
   if (typeof actOpsData === 'undefined') return;
   if (!actOpsData[key]) actOpsData[key] = {};
-  actOpsData[key][field] = field === 'staffNote' ? String(val || '') : String(val || '').toLowerCase();   // guides are stored lowercase, like the Activities page
+  actOpsData[key][field] = (field === 'staffNote' || field === 'shaman' || field === 'fireKeeper') ? String(val || '') : String(val || '').toLowerCase();   // guides are stored lowercase like the Activities page; shaman and fire keeper keep their exact name
   if (typeof actOpsSave === 'function') actOpsSave();
   if (typeof showToast === 'function') showToast(field === 'staffNote' ? 'Saved.' : (val ? 'Guide ' + val + ' saved.' : 'Guide cleared.'));
 }
