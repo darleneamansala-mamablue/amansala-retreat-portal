@@ -57,6 +57,7 @@ const DEFAULT_SETTINGS = {
   aggressiveness: 'standard',  // 'very_low' | 'low' | 'standard' -- RoomPriceGenie's own 3 levels
   dayOfWeekOwnedByTool: false, // once true, room-price-settings.js zeroes booking_engine_settings.weekend_premium so it's never double-applied
   roundTo: 5,
+  autoApplyEnabled: false, // Jorge's ask 2026-10-17: once true, room-price-recalc.js pushes every recommendation straight into be_rates on each of its 3x/day runs -- no human review. Guardrails are min/max only (explicitly no rate-of-change cap, Jorge's call).
 };
 const AGGRESSIVENESS_FACTOR = { very_low: 0.25, low: 0.5, standard: 1 };
 
@@ -206,7 +207,27 @@ function currentLivePrice(opts) {
   return Math.round(base * (1 + seasonalPct / 100) * (isWeekend && weekendPremiumPct ? (1 + weekendPremiumPct / 100) : 1));
 }
 
+// Pushes a batch of {room_type_id, date, price_single} changes into `be_rates` (the real
+// table Escape's checkout reads, netlify/functions/stripe.js) and appends an audit entry per
+// change to app_store key LOG_KEY. Shared by room-price-apply.js (human clicks Upload Prices)
+// and room-price-recalc.js's auto-apply path (Jorge's ask 2026-10-17) -- same code either way,
+// only `staffName` differs ("Automatic (Revenue Manager bot)" for the latter).
+async function applyPriceChanges(key, changes, staffName) {
+  if (!changes.length) return { applied: 0 };
+  const existing = await sget(key, `be_rates?select=room_type_id,start_date,end_date,price_single`);
+  const log = (await appStoreGet(key, LOG_KEY)) || [];
+  for (const c of changes) {
+    const prior = existing.find(r => r.room_type_id === c.room_type_id && r.start_date === c.date && r.end_date === c.date);
+    await sreq(key, 'DELETE', `be_rates?room_type_id=eq.${encodeURIComponent(c.room_type_id)}&start_date=eq.${c.date}&end_date=eq.${c.date}`, undefined, 'return=minimal');
+    await sreq(key, 'POST', 'be_rates', { room_type_id: c.room_type_id, start_date: c.date, end_date: c.date, price_single: c.price_single }, 'return=minimal');
+    log.push({ at: new Date().toISOString(), staffName, roomTypeId: c.room_type_id, date: c.date, oldPrice: prior ? prior.price_single : null, newPrice: c.price_single });
+  }
+  await appStoreSet(key, LOG_KEY, log.slice(-2000));
+  return { applied: changes.length };
+}
+
 module.exports = {
+  applyPriceChanges,
   currentLivePrice, isLowSeasonMonth,
   SUPABASE_URL, SETTINGS_KEY, LOG_KEY, RECS_KEY, DEFAULT_SETTINGS, AGGRESSIVENESS_FACTOR,
   sget, sreq, appStoreGet, appStoreSet,

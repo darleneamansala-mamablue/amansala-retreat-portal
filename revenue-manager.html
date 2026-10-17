@@ -124,6 +124,7 @@ svg text{font-family:'Jost',sans-serif}
         <button class="btn" onclick="rmCalShiftMonth(1)">&rarr;</button>
         <button class="btn" onclick="rmRefreshRecs()">Refresh recommendations</button>
         <button class="btn btn-primary" id="calUploadBtn" onclick="rmUploadVisible()">Upload Prices</button>
+        <span id="autoApplyBadge" class="chip" style="margin-left:4px"></span>
       </div>
       <div class="cal-stats">
         <div class="cal-stat"><div class="lbl">Recommendations this month</div><div class="val" id="calRecCount">0</div></div>
@@ -196,6 +197,14 @@ svg text{font-family:'Jost',sans-serif}
       <div class="card">
         <div style="font-weight:700;margin-bottom:10px;font-size:13px">Room nights sold to groups (auto, this month)</div>
         <div id="occGroupNights" style="font-size:13px;color:var(--muted)"></div>
+      </div>
+      <div class="card" style="border:1.5px solid #f59e0b;background:#fffbeb">
+        <div style="font-weight:700;margin-bottom:6px;font-size:13px">Automatic pricing</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">
+          <input type="checkbox" id="autoApply" style="width:16px;height:16px">
+          Let the bot push prices to Escape itself, 3x/day, with no review
+        </label>
+        <div style="font-size:12px;color:#92400e">When this is on, every price shown on the Calendar goes live automatically on the bot's next run (3am/12pm/8pm Tulum) — guardrailed only by each room type's Min/Max on Rooms Setup. There is no cap on how much a price can move between runs. Turn this off any time to go back to reviewing prices by hand.</div>
       </div>
       <button class="btn btn-primary" onclick="rmSaveSettings()">Save</button>
     </div>
@@ -313,6 +322,7 @@ async function rmSaveSettings(){
   for(let m=1;m<=12;m++){const el=document.getElementById('tgt_'+m);if(el)RM_SETTINGS.targetOccupancyPctByMonth[String(m)]=parseFloat(el.value)||0;}
   const med=document.getElementById('occMedian'); if(med) RM_SETTINGS.medianBookingWindowDays=parseInt(med.value)||21;
   const aggr=document.getElementById('occAggr'); if(aggr) RM_SETTINGS.aggressiveness=aggr.value;
+  const autoApply=document.getElementById('autoApply'); if(autoApply) RM_SETTINGS.autoApplyEnabled=autoApply.checked;
   ['6mo','3mo','6w','4w','2w','1w','7d','3d','0d'].forEach(k=>{const el=document.getElementById('lt_'+k);if(el)RM_SETTINGS.leadTimePct[k]=parseFloat(el.value)||0;});
 
   try{
@@ -366,6 +376,7 @@ function rmRenderOccupancy(){
     `<div class="cell"><label>${name}</label><input id="tgt_${i+1}" type="number" value="${RM_SETTINGS.targetOccupancyPctByMonth[String(i+1)]??80}"></div>`).join('');
   document.getElementById('occMedian').value=RM_SETTINGS.medianBookingWindowDays||21;
   document.getElementById('occAggr').value=RM_SETTINGS.aggressiveness||'standard';
+  document.getElementById('autoApply').checked=!!RM_SETTINGS.autoApplyEnabled;
   if(RM_RECS){
     const monthKey=new Date().toISOString().slice(0,7);
     let total=0;
@@ -388,6 +399,9 @@ function rmCalShiftMonth(delta){CAL_MONTH.setMonth(CAL_MONTH.getMonth()+delta);r
 function rmRenderCalendar(){
   const rtId=document.getElementById('calRoomType').value||(RM_ROOM_TYPES[0]&&RM_ROOM_TYPES[0].id);
   document.getElementById('calMonthLbl').textContent=CAL_MONTH.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const autoBadge=document.getElementById('autoApplyBadge');
+  if(RM_SETTINGS&&RM_SETTINGS.autoApplyEnabled){autoBadge.textContent='Automatic pricing: ON';autoBadge.className='chip chip-up';}
+  else{autoBadge.textContent='Automatic pricing: OFF (suggestion only)';autoBadge.className='chip chip-down';}
   const dow=['Su','Mo','Tu','We','Th','Fr','Sa'];
   document.getElementById('calDow').innerHTML=dow.map(d=>`<div class="cal-dow">${d}</div>`).join('');
   const grid=document.getElementById('calGrid');

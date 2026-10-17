@@ -1,9 +1,11 @@
 'use strict';
-// The nightly "bot" half of the Revenue Manager. Recomputes a recommended price for every
-// be_enabled room type over a rolling window and stores it in app_store (does NOT touch
-// `be_rates` -- v1 ships in suggestion mode; a human reviews revenue-manager.html's Calendar
-// and clicks Upload Prices, which calls room-price-apply.js). Scheduled via netlify.toml, same
-// pattern as rb-charge-balances.js.
+// The "bot" half of the Revenue Manager, runs 3x/day (netlify.toml). Recomputes a recommended
+// price for every be_enabled room type over a rolling window and stores it in app_store.
+// Ships suggestion-only by default -- a human reviews revenue-manager.html's Calendar and
+// clicks Upload Prices (room-price-apply.js). Jorge's ask 2026-10-17: when
+// settings.autoApplyEnabled is on, this function pushes every recommendation straight into
+// `be_rates` itself at the end of each run, no human review -- guardrailed only by each room
+// type's min/max (explicitly no rate-of-change cap, Jorge's call).
 const L = require('./room-price-lib');
 
 const WINDOW_DAYS = 180;
@@ -29,6 +31,7 @@ exports.runRecalc = async function runRecalc() {
   const reference = roomTypes.find(rt => rt.id === settings.referenceRoomTypeId) || roomTypes[0];
 
   const byRoomType = {};
+  const changes = [];
   let datesProcessed = 0;
 
   for (const rt of roomTypes) {
@@ -49,14 +52,23 @@ exports.runRecalc = async function runRecalc() {
         seasonalAdjustments,
       });
       byDate[dateStr] = { occPct, groupTaken, totalRooms: rt.rooms.length, current, recommended };
+      if (recommended !== current) changes.push({ room_type_id: rt.id, date: dateStr, price_single: recommended });
       datesProcessed++;
     }
     byRoomType[rt.id] = { name: rt.name, byDate };
   }
 
-  const result = { generatedAt: new Date().toISOString(), windowDays: WINDOW_DAYS, referenceRoomTypeId: settings.referenceRoomTypeId, byRoomType };
+  let applied = 0;
+  if (settings.autoApplyEnabled && changes.length) {
+    const r = await L.applyPriceChanges(key, changes, 'Automatic (Revenue Manager bot)');
+    applied = r.applied;
+    // The snapshot should reflect what's now actually live, not what was live before this run.
+    for (const c of changes) byRoomType[c.room_type_id].byDate[c.date].current = c.price_single;
+  }
+
+  const result = { generatedAt: new Date().toISOString(), windowDays: WINDOW_DAYS, referenceRoomTypeId: settings.referenceRoomTypeId, autoApplied: applied, byRoomType };
   await L.appStoreSet(key, L.RECS_KEY, result);
-  return { roomTypes: roomTypes.length, datesProcessed };
+  return { roomTypes: roomTypes.length, datesProcessed, autoApplied: applied };
 };
 
 exports.handler = async () => {
