@@ -175,7 +175,7 @@ function spaCalPanelHtml(cols, isTher, dateStr) {
   let html = `<div style="display:flex;min-width:${SPA_CAL_TIME_W + cols.length * SPA_CAL_COL_W}px;background:#fff;border-radius:12px;overflow:clip;border:1px solid #e8dfd4">`;
 
   html += `<div style="width:${SPA_CAL_TIME_W}px;min-width:${SPA_CAL_TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:5;background:#fff;border-right:2px solid #e0d8cc">`;
-  html += `<div style="height:40px;border-bottom:1px solid #e8dfd4;position:sticky;top:0;z-index:8;background:#fff"></div><div style="position:relative;height:${gridH}px">`;
+  html += `<div style="height:40px;border-bottom:1px solid #e8dfd4;position:sticky;top:-28px;z-index:8;background:#fff"></div><div style="position:relative;height:${gridH}px">`;
   for (let h = spaCalViewStartH; h <= spaCalViewEndH; h++) {
     const top = (h - spaCalViewStartH) * SPA_CAL_PX_HR;
     const ap = h >= 12 ? 'PM' : 'AM';
@@ -186,7 +186,7 @@ function spaCalPanelHtml(cols, isTher, dateStr) {
   cols.forEach(col => {
     const dayAppts = SpaAppointments.filter(a => a.date === dateStr && a.status !== 'CANCELLED' && (isTher ? a.therapistId === col.id : a.roomId === col.id));
     html += `<div style="width:${SPA_CAL_COL_W}px;min-width:${SPA_CAL_COL_W}px;border-right:1px solid #e8e8e8">`;
-    html += `<div style="height:40px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:12px;font-weight:700;color:#374151;border-bottom:1px solid #e8dfd4;background:#f9f7f4;text-align:center;padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;position:sticky;top:0;z-index:6">
+    html += `<div style="height:40px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:12px;font-weight:700;color:#374151;border-bottom:1px solid #e8dfd4;background:#f9f7f4;text-align:center;padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;position:sticky;top:-28px;z-index:6">
       <span style="overflow:hidden;text-overflow:ellipsis">${isTher ? col.firstName + ' ' + (col.lastName || '') : col.name}</span>
       ${isTher ? `<span onclick="event.stopPropagation();spaCalMuteToggle('${col.id}')" title="Mute ${col.firstName}" style="cursor:pointer;opacity:.4;flex-shrink:0;font-size:12px" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.4'">🔇</span>` : ''}
     </div>`;
