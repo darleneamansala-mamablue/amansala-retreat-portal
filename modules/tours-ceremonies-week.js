@@ -58,6 +58,13 @@ async function tcwRender() {
     <button onclick="tcwNav(7)" style="width:30px;height:30px;border:1px solid #d6cfc4;border-radius:7px;background:#fff;cursor:pointer;font-size:16px">&#8250;</button>
     <button onclick="tcwNav(0)" style="padding:6px 12px;font-size:12px;font-weight:700;border:1.5px solid #d6cfc4;border-radius:7px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">This week</button>
     <span style="width:14px"></span>${chip('all', 'All')}${chip('tours', 'Tours')}${chip('ceremonies', 'Ceremonies')}</div>`;
+  const custom = typeof _agExtra !== 'undefined' ? _agExtra : [];
+  html += `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 14px;padding:10px 12px;background:#fff;border:1px solid #e8dfd4;border-radius:10px">
+    <span style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px">Add a guide</span>
+    <input id="tcwNewGuide" type="text" placeholder="Type a name" onkeydown="if(event.key==='Enter')tcwAddGuide()" style="padding:7px 10px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;width:170px">
+    <button onclick="tcwAddGuide()" style="padding:7px 14px;font-size:12.5px;font-weight:700;border:none;border-radius:7px;background:#2d6a6a;color:#fff;cursor:pointer;font-family:'Jost',sans-serif">+ Add</button>
+    ${custom.length ? '<span style="font-size:11.5px;color:#6b7280;margin-left:8px">Added by you:</span>' + custom.map(n => `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:99px;background:#f0ebe0;font-size:12.5px">${tcwEsc(n)}<button title="Remove ${tcwEsc(n)} from the list" onclick="tcwRemoveGuide('${tcwEsc(n).replace(/'/g, "\\'")}')" style="border:none;background:none;cursor:pointer;color:#b91c1c;font-size:15px;line-height:1;padding:0 4px">&times;</button></span>`).join('') : ''}
+  </div>`;
   if (!rows.length) html += '<div style="padding:40px;text-align:center;color:#9ca3af;background:#fff;border-radius:10px">No tours or ceremonies are scheduled this week.</div>';
   days.forEach(d => {
     const dr = rows.filter(r => r.date === d); if (!dr.length) return;
@@ -79,6 +86,17 @@ async function tcwRender() {
     html += '</div>';
   });
   el.innerHTML = html;
+}
+async function tcwAddGuide() {
+  const inp = document.getElementById('tcwNewGuide'); if (!inp) return;
+  if (typeof agAddGuide !== 'function') { showToast('The guide list is still loading, try again in a moment.'); return; }
+  const r = await agAddGuide(inp.value);
+  showToast(r.msg);
+  if (r.ok) tcwRender();
+}
+async function tcwRemoveGuide(name) {
+  if (!confirm('Remove ' + name + ' from the guide list? Their past assignments stay on the schedules.')) return;
+  await agRemoveGuide(name); tcwRender();
 }
 function tcwNav(n) { tcwWeek = n === 0 ? tcwISO(tcwSunday(new Date())) : tcwAdd(tcwWeek, n); tcwRender(); }
 function tcwSetFilter(f) { tcwFilter = f; tcwRender(); }

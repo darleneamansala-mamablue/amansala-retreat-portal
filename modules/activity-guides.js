@@ -11,6 +11,7 @@ function agRefreshGuides() {
     const have = new Map();
     const add = n => { const t = agTitle(n); if (t && !have.has(t.toLowerCase())) have.set(t.toLowerCase(), t); };
     TOUR_GUIDE_NAMES.forEach(add);
+    _agExtra.forEach(add);
     add('Fernando'); add('Ignacia'); add('Kun'); add('Darlene'); add('Yolanda'); add('Ryan');   // Darlene 2026-10-17: these four are guides too
     try { ((typeof SpaData !== 'undefined' && SpaData.therapists) || []).filter(t => t.primaryCategory === 'tours' && t.active !== false).forEach(t => add(t.firstName)); } catch (e) {}
     try { Object.values(typeof actOpsData !== 'undefined' ? actOpsData : {}).forEach(o => { add(o && o.guide1); add(o && o.guide2); }); } catch (e) {}
@@ -18,7 +19,35 @@ function agRefreshGuides() {
     if (names.length !== TOUR_GUIDE_NAMES.length || names.some((n, i) => n !== TOUR_GUIDE_NAMES[i])) TOUR_GUIDE_NAMES.splice(0, TOUR_GUIDE_NAMES.length, ...names);
   } catch (e) { /* never break the Activity Sheet */ }
 }
+// Guides added from the Tours & Ceremonies page ("+ Add a guide") are kept in app_store 'tour_guide_names' and join every guide dropdown.
+const AG_KEY = 'tour_guide_names';
+let _agExtra = [];
+async function agLoadExtra() {
+  try {
+    const { data } = await db.from('app_store').select('value').eq('key', AG_KEY).maybeSingle();
+    if (data && Array.isArray(data.value)) _agExtra = data.value.map(agTitle).filter(Boolean);
+  } catch (e) {}
+  agRefreshGuides();
+}
+async function agSaveExtra() {
+  try { await db.from('app_store').upsert({ key: AG_KEY, value: _agExtra, updated_at: new Date().toISOString() }); return true; } catch (e) { return false; }
+}
+async function agAddGuide(name) {
+  name = agTitle(String(name || '').trim().replace(/\s+/g, ' ').split(' ').map(agTitle).join(' '));
+  if (!name) return { ok: false, msg: 'Type the name first.' };
+  const known = (typeof TOUR_GUIDE_NAMES !== 'undefined' ? TOUR_GUIDE_NAMES : []).some(n => n.toLowerCase() === name.toLowerCase());
+  if (known) return { ok: true, msg: name + ' is already on the list.' };
+  _agExtra.push(name); agRefreshGuides();
+  const saved = await agSaveExtra();
+  return { ok: saved, msg: saved ? name + ' added to the guides.' : 'Could not save ' + name + ' — try again.' };
+}
+async function agRemoveGuide(name) {
+  _agExtra = _agExtra.filter(n => n.toLowerCase() !== String(name).toLowerCase());
+  if (typeof TOUR_GUIDE_NAMES !== 'undefined') { const i = TOUR_GUIDE_NAMES.findIndex(n => n.toLowerCase() === String(name).toLowerCase()); if (i >= 0) TOUR_GUIDE_NAMES.splice(i, 1); }
+  return agSaveExtra();
+}
 agRefreshGuides();
+agLoadExtra();
 // the spa data and the saved assignments load a moment after the page: refresh a few times while they arrive
 let _agTries = 0;
 const _agTimer = setInterval(() => { agRefreshGuides(); if (++_agTries > 12) clearInterval(_agTimer); }, 1500);
