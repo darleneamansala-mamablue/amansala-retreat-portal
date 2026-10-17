@@ -3022,10 +3022,10 @@ function tsRenderCalSection(bk){
       const dur=ACTS_DUR[a.aoId]||90;
       const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
       if(a.prepaid){
-        prepaidActs.push({time:timeRange,name:ao.name,cat,tag,shala:ACT_SHALA[a.aoId]||'',requestedTime:!!a.requestedTime});
+        prepaidActs.push({time:timeRange,name:ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):''),cat,tag,shala:ACT_SHALA[a.aoId]||'',requestedTime:!!a.requestedTime});
       } else {
         const _aoP=tsAoFor(bk,ao),_sgN=tsSmallGroupN(bk);
-        rows.push({time:timeRange,desc:ao.name+(_aoP.price?' — $'+tsMoney(_aoP.price)+'/person'+(_sgN?' (based on all '+_sgN+' guests joining)':''):''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:'Optional',prepaid:false,sk:a.time||'99:99'});
+        rows.push({time:timeRange,desc:ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(_aoP.price?' — $'+tsMoney(_aoP.price)+'/person'+(_sgN?' (based on all '+_sgN+' guests joining)':''):''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:'Optional',prepaid:false,sk:a.time||'99:99'});
       }
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
@@ -5296,7 +5296,7 @@ function openPrintSchedule(bkId){
       const dur=ACTS_DUR[a.aoId]||90;
       const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
       const _aoP=tsAoFor(bk,ao);
-      const desc=a.prepaid?(ao.name+(a.requestedTime?' (requested this time)':'')):('Optional '+ao.name+(_aoP.price?' — $'+tsMoney(_aoP.price)+' USD per person'+(tsSmallGroupN(bk)?'*':''):''));
+      const desc=a.prepaid?(ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(a.requestedTime?' (requested this time)':'')):('Optional '+ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(_aoP.price?' — $'+tsMoney(_aoP.price)+' USD per person'+(tsSmallGroupN(bk)?'*':''):''));
       rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99',isExtra:true});
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
@@ -5546,7 +5546,7 @@ function buildRetreatSchedulesPanel(){
           const ao=ADD_ONS.find(x=>x.id===a.aoId);if(!ao)return;
           const isTour=['ao1','ao2','ao3','ao6','ao7'].includes(a.aoId);
           const desc=a.prepaid
-            ?(ao.name+' — Pre-Paid Activity')
+            ?(ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+' — Pre-Paid Activity')
             :((isTour?'Optional Tour to ':'Optional: ')+ao.name+(ao.price?' — $'+ao.price+' USD':''));
           rows.push({time:a.time?fmtT(a.time):'11:45 AM',desc,note:'',type:a.prepaid?'prepaid':'optional'});
         });
