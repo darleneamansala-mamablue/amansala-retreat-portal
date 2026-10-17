@@ -958,7 +958,7 @@ function renderRooms() {
     const desc    = rt.be_description ?? getDefaultDesc(rt);
     const feats   = getFeatures(rt);
     const rate    = getRatePerPerson(rt, gc);
-    const { price: adjRate, original: origRate, isOffer } = applyRules(rate, checkIn);
+    const { price: adjRate, original: origRate, isOffer } = applyRules(rate, checkIn, isManualRate(rt));
     const img     = getRoomImage(rt);
     const photos  = rt.be_photos ?? [];
     const imgSrc  = photos[0] ?? img;
@@ -1074,7 +1074,7 @@ function openBooking(rtId) {
   const gc       = _guestCount;
   const nights   = Math.round((new Date(checkOut)-new Date(checkIn))/86400000);
   const rate     = getRatePerPerson(_selectedRt, gc);
-  const { price: adjRate } = applyRules(rate, checkIn);
+  const { price: adjRate } = applyRules(rate, checkIn, isManualRate(_selectedRt));
   const taxes    = _settings.taxes_pct ?? 0;
   const subtotal = adjRate * nights;
   const taxAmt   = Math.round(subtotal * taxes) / 100;
@@ -1177,7 +1177,7 @@ function _refreshSummary() {
   const nights    = Math.round((new Date(_calOut) - new Date(_calIn)) / 86400000);
   const gc        = parseInt(document.getElementById('fm-adults')?.value) || _guestCount;
   const rate      = getRatePerPerson(_selectedRt, gc);
-  const { price: adjRate } = applyRules(rate, _calIn);
+  const { price: adjRate } = applyRules(rate, _calIn, isManualRate(_selectedRt));
   const taxes     = _settings.taxes_pct ?? 0;
   const subtotal  = adjRate * nights;
   const discAmt   = Math.min(_discountAmount, subtotal);
@@ -1224,7 +1224,7 @@ async function applyDiscount() {
     const nights   = Math.round((new Date(_calOut) - new Date(_calIn)) / 86400000);
     const gc       = parseInt(document.getElementById('fm-adults')?.value) || _guestCount;
     const rate     = getRatePerPerson(_selectedRt, gc);
-    const { price: adjRate } = applyRules(rate, _calIn);
+    const { price: adjRate } = applyRules(rate, _calIn, isManualRate(_selectedRt));
     const subtotal = adjRate * nights;
 
     _discountCode   = data.code;
@@ -1339,24 +1339,38 @@ async function confirmPayment() {
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────
-function applyRules(baseRate, dateStr) {
+// A manual be_rates row (set via the admin Rates tab, or the Revenue Manager's Upload Prices)
+// takes priority over the seasonal/weekend formula -- same precedence get-rates.js and
+// stripe.js already use. Found 2026-10-17: this card's displayed price was computed here from
+// rt.be_price_single alone, completely ignoring be_rates (get-availability.js now attaches
+// manualRateSingle per room type for checkIn's date) -- the guest saw the OLD seasonal price on
+// this page but was correctly charged the manual one at checkout, a confusing mismatch.
+function applyRules(baseRate, dateStr, isManual) {
   if (!baseRate || !dateStr) return { price: baseRate ?? 0, original: null, isOffer: false };
   const d          = new Date(dateStr + 'T12:00:00');
-  const month      = d.getMonth() + 1;
   const dow        = d.getDay();
   const isWeekend  = dow === 0 || dow === 5 || dow === 6;
+  const weekendPct = isWeekend ? Number(_settings.weekend_premium ?? 0) : 0;
+  if (isManual) {
+    const adjusted = Math.round(baseRate * (weekendPct ? (1 + weekendPct / 100) : 1));
+    return { price: adjusted, original: null, isOffer: false };
+  }
+  const month       = d.getMonth() + 1;
   const seasonalPct = Number((_settings.seasonal_adjustments ?? {})[String(month)] ?? 0);
-  const weekendPct  = isWeekend ? Number(_settings.weekend_premium ?? 0) : 0;
-  const adjusted   = Math.round(baseRate * (1 + seasonalPct / 100) * (weekendPct ? (1 + weekendPct / 100) : 1));
+  const adjusted    = Math.round(baseRate * (1 + seasonalPct / 100) * (weekendPct ? (1 + weekendPct / 100) : 1));
   return { price: adjusted, original: adjusted < baseRate ? baseRate : null, isOffer: adjusted < baseRate };
 }
 
 function getRatePerPerson(rt, gc) {
+  // A manual be_rates override wins outright (checked separately via isManualRate(rt) at each
+  // call site, since applyRules needs to know to skip the seasonal % for it).
+  if (rt.manualRateSingle != null) return rt.manualRateSingle;
   // be_price_single = flat room rate configured in Booking Engine
   // be_price_double is used for occupancy counts in this property, not a price
   if (rt.be_price_single != null) return rt.be_price_single;
   return rt.price_single_high ?? 0;
 }
+function isManualRate(rt) { return rt.manualRateSingle != null; }
 
 function fmtDate(s) {
   if (!s) return '';

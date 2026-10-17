@@ -137,17 +137,26 @@ exports.handler = async (event) => {
       };
     }
 
-    const [bkRes, rtRes, settingsRes] = await Promise.all([
+    // Manual be_rates override for check-in's date, per room type -- same precedence
+    // get-rates.js/stripe.js already use (manual wins, no seasonal %, weekend premium still
+    // applies on top in book.html's applyRules()). Found 2026-10-17: book.html computed its
+    // displayed room-card price itself from rt.be_price_single, completely independent of
+    // be_rates -- same bug class already fixed in stripe.js, just a third, separate place it
+    // was still happening (the guest saw the manual/Revenue-Manager price nowhere on this page
+    // until checkout, where stripe.js already charged it correctly).
+    const [bkRes, rtRes, settingsRes, beRatesRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/room_types?${rtFilter}&select=${RT_FIELDS}`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: hdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/be_rates?start_date=lte.${checkIn}&end_date=gte.${checkIn}&select=room_type_id,price_single`, { headers: hdrs }),
     ]);
 
     if (!bkRes.ok)  throw new Error('bookings fetch failed');
     if (!rtRes.ok)  throw new Error('room_types fetch failed');
 
-    const [bookings, roomTypes, settingsArr] = await Promise.all([
+    const [bookings, roomTypes, settingsArr, beRates] = await Promise.all([
       bkRes.json(), rtRes.json(), settingsRes.ok ? settingsRes.json() : Promise.resolve([{}]),
+      beRatesRes.ok ? beRatesRes.json() : Promise.resolve([]),
     ]);
 
     const blockedRooms = new Set(
@@ -188,7 +197,8 @@ exports.handler = async (event) => {
     const available = (roomTypes ?? []).map(rt => {
       const rooms = rt.rooms ?? [];
       const availableCount = rooms.filter(r => !blockedRooms.has(r)).length;
-      return { ...rt, available_rooms: availableCount, total_rooms: rooms.length };
+      const manualRate = (beRates ?? []).find(r => r.room_type_id === rt.id);
+      return { ...rt, available_rooms: availableCount, total_rooms: rooms.length, manualRateSingle: manualRate ? manualRate.price_single : null };
     }).filter(rt => rt.available_rooms > 0);
 
     return {
