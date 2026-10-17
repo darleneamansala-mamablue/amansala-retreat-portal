@@ -151,13 +151,18 @@ svg text{font-family:'Jost',sans-serif}
     <!-- Day of week -->
     <div class="page" id="page-weekday">
       <h2>Day-of-the-Week Adjustments</h2>
-      <div class="subtitle">% adjustment applied by weekday, on top of the monthly/seasonal rate.</div>
+      <div class="subtitle">% adjustment applied by weekday, on top of the monthly/seasonal rate. Bars show the reference room type's (<span id="wkRefName"></span>) price for a day with that adjustment — no "Level of Local Market" line since that needs a paid competitor-rate feed we don't have (RoomPriceGenie's own orange line).</div>
+      <div class="card">
+        <svg id="weekdayChartSvg" width="100%" height="280" viewBox="0 0 1000 280" preserveAspectRatio="none"></svg>
+      </div>
       <div class="card">
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:18px;font-size:13px">
-          <input type="checkbox" id="wkOwned" style="width:16px;height:16px">
+          <input type="checkbox" id="wkOwned" style="width:16px;height:16px" onchange="rmRenderWeekday()">
           Let this tool control day-of-week pricing (turns off Escape's flat weekend premium so it isn't applied twice)
         </label>
-        <div class="grid12" id="weekdayGrid"></div>
+        <div class="grid12" id="weekdayGrid" oninput="rmRenderWeekdayChart()"></div>
+        <div style="margin-top:14px;font-size:12px;color:var(--muted)">Base price for the day</div>
+        <div class="grid12" id="weekdayBaseRow" style="margin-top:4px"></div>
       </div>
       <button class="btn btn-primary" onclick="rmSaveSettings()">Save</button>
     </div>
@@ -165,8 +170,15 @@ svg text{font-family:'Jost',sans-serif}
     <!-- Monthly -->
     <div class="page" id="page-monthly">
       <h2>Monthly Adjustments</h2>
-      <div class="subtitle">Seasonal % by calendar month — this is the SAME setting Escape's booking page already uses, just edited here.</div>
-      <div class="card"><div class="grid12" id="monthlyGrid"></div></div>
+      <div class="subtitle">Seasonal % by calendar month — this is the SAME setting Escape's booking page already uses, just edited here. Bars show the reference room type's (<span id="moRefName"></span>) price for the month — no "Level of Local Market" line since that needs a paid competitor-rate feed we don't have (RoomPriceGenie's own orange line).</div>
+      <div class="card">
+        <svg id="monthlyChartSvg" width="100%" height="280" viewBox="0 0 1000 280" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="card">
+        <div class="grid12" id="monthlyGrid" oninput="rmRenderMonthlyChart()"></div>
+        <div style="margin-top:14px;font-size:12px;color:var(--muted)">Base price for the month</div>
+        <div class="grid12" id="monthlyBaseRow" style="margin-top:4px"></div>
+      </div>
       <button class="btn btn-primary" onclick="rmSaveSettings()">Save</button>
     </div>
 
@@ -367,11 +379,62 @@ function rmRenderRoomsSetup(){
 }
 
 // ---- Day of week ----
+// Reference room type's price for a given % adjustment -- same "Base Price for the Month/Day"
+// figure RoomPriceGenie shows under its own grid, so the % you type has a dollar anchor.
+function rmRefRoom(){return RM_ROOM_TYPES.find(r=>r.id===RM_SETTINGS.referenceRoomTypeId)||RM_ROOM_TYPES[0];}
+function rmRefBase(){const ref=rmRefRoom();return ref?ref.be_price_single:0;}
+
+// Generic 2-series grouped bar chart (Base Price vs Price in PMS/Escape) -- no "Level of Local
+// Market" line, that needs a paid competitor-rate feed RoomPriceGenie has and we don't.
+function rmRenderBarChart(svgId,labels,basePrices,pmsPrices){
+  const svg=document.getElementById(svgId);
+  const W=1000,H=280,pad=36,gap=10;
+  const all=[...basePrices,...pmsPrices].filter(v=>v!=null);
+  const yMax=(all.length?Math.max(...all):100)*1.15||100;
+  const y=v=>H-pad-(v/yMax)*(H-2*pad-20);
+  const groupW=(W-2*pad)/labels.length;
+  const barW=(groupW-gap*2)/2;
+  let html='';
+  labels.forEach((lbl,i)=>{
+    const gx=pad+i*groupW;
+    const b=basePrices[i]||0, p=pmsPrices[i]!=null?pmsPrices[i]:b;
+    html+=`<rect x="${gx+gap/2}" y="${y(b)}" width="${barW}" height="${H-pad-y(b)}" fill="#2d6a6a"/>`;
+    html+=`<rect x="${gx+gap/2+barW+4}" y="${y(p)}" width="${barW}" height="${H-pad-y(p)}" fill="#c7c2b8"/>`;
+    html+=`<text x="${gx+groupW/2}" y="${H-12}" font-size="11" fill="#7f8c9a" text-anchor="middle">${lbl}</text>`;
+  });
+  html+=`<text x="${pad}" y="16" font-size="11" fill="#2d6a6a">&#9679; Base Price</text>`;
+  html+=`<text x="${pad+110}" y="16" font-size="11" fill="#9b958a">&#9679; Price in Escape (avg, next 180 days)</text>`;
+  svg.innerHTML=html;
+}
+
 function rmRenderWeekday(){
   document.getElementById('wkOwned').checked=!!RM_SETTINGS.dayOfWeekOwnedByTool;
   const labels={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
   document.getElementById('weekdayGrid').innerHTML=Object.keys(labels).map(k=>
     `<div class="cell"><label>${labels[k]}</label><input id="wd_${k}" type="number" value="${RM_SETTINGS.weekdayPct[k]||0}"></div>`).join('');
+  const ref=rmRefRoom();
+  document.getElementById('wkRefName').textContent=ref?ref.name:'';
+  rmRenderWeekdayChart();
+}
+function rmRenderWeekdayChart(){
+  const labels={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
+  const refBase=rmRefBase();
+  const dowIdx={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
+  const refId=RM_SETTINGS.referenceRoomTypeId;
+  const byDate=(RM_RECS&&RM_RECS.byRoomType[refId])?RM_RECS.byRoomType[refId].byDate:null;
+  const baseVals=[],pmsVals=[];
+  Object.keys(labels).forEach(k=>{
+    const el=document.getElementById('wd_'+k);
+    const pct=el?parseFloat(el.value)||0:(RM_SETTINGS.weekdayPct[k]||0);
+    baseVals.push(Math.round(refBase*(1+pct/100)));
+    if(byDate){
+      const vals=Object.keys(byDate).filter(d=>new Date(d+'T12:00:00').getDay()===dowIdx[k]).map(d=>byDate[d].current);
+      pmsVals.push(vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null);
+    }else pmsVals.push(null);
+  });
+  rmRenderBarChart('weekdayChartSvg',Object.values(labels),baseVals,pmsVals);
+  document.getElementById('weekdayBaseRow').innerHTML=Object.keys(labels).map((k,i)=>
+    `<div class="cell" style="font-weight:700">$${baseVals[i]}</div>`).join('');
 }
 
 // ---- Monthly ----
@@ -379,6 +442,27 @@ const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
 function rmRenderMonthly(){
   document.getElementById('monthlyGrid').innerHTML=MONTH_NAMES.map((name,i)=>
     `<div class="cell"><label>${name}</label><input id="seas_${i+1}" type="number" value="${RM_SEASONAL[String(i+1)]||0}"></div>`).join('');
+  const ref=rmRefRoom();
+  document.getElementById('moRefName').textContent=ref?ref.name:'';
+  rmRenderMonthlyChart();
+}
+function rmRenderMonthlyChart(){
+  const refBase=rmRefBase();
+  const refId=RM_SETTINGS.referenceRoomTypeId;
+  const byDate=(RM_RECS&&RM_RECS.byRoomType[refId])?RM_RECS.byRoomType[refId].byDate:null;
+  const baseVals=[],pmsVals=[];
+  for(let m=1;m<=12;m++){
+    const el=document.getElementById('seas_'+m);
+    const pct=el?parseFloat(el.value)||0:(RM_SEASONAL[String(m)]||0);
+    baseVals.push(Math.round(refBase*(1+pct/100)));
+    if(byDate){
+      const vals=Object.keys(byDate).filter(d=>new Date(d+'T12:00:00').getMonth()+1===m).map(d=>byDate[d].current);
+      pmsVals.push(vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null);
+    }else pmsVals.push(null);
+  }
+  rmRenderBarChart('monthlyChartSvg',MONTH_NAMES,baseVals,pmsVals);
+  document.getElementById('monthlyBaseRow').innerHTML=MONTH_NAMES.map((name,i)=>
+    `<div class="cell" style="font-weight:700">$${baseVals[i]}</div>`).join('');
 }
 
 // ---- Occupancy strategy ----
