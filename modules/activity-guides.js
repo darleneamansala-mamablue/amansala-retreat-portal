@@ -11,7 +11,7 @@ function agRefreshGuides() {
     const have = new Map();
     const add = n => { const t = agTitle(n); if (t && !have.has(t.toLowerCase())) have.set(t.toLowerCase(), t); };
     TOUR_GUIDE_NAMES.forEach(add);
-    add('Fernando'); add('Ignacia');
+    add('Fernando'); add('Ignacia'); add('Kun'); add('Darlene'); add('Yolanda'); add('Ryan');   // Darlene 2026-10-17: these four are guides too
     try { ((typeof SpaData !== 'undefined' && SpaData.therapists) || []).filter(t => t.primaryCategory === 'tours' && t.active !== false).forEach(t => add(t.firstName)); } catch (e) {}
     try { Object.values(typeof actOpsData !== 'undefined' ? actOpsData : {}).forEach(o => { add(o && o.guide1); add(o && o.guide2); }); } catch (e) {}
     const names = [...have.values()];
