@@ -116,7 +116,7 @@ svg text{font-family:'Jost',sans-serif}
     <!-- Calendar -->
     <div class="page active" id="page-calendar">
       <h2>Calendar</h2>
-      <div class="subtitle">Occupancy-driven price suggestions for Escape (the direct booking page). Nothing here is live until you click Upload Prices.</div>
+      <div class="subtitle" id="calSubtitle">Occupancy-driven price suggestions for Escape (the direct booking page).</div>
       <div class="toolbar">
         <select id="calRoomType" onchange="rmRenderCalendar()"></select>
         <button class="btn" onclick="rmCalShiftMonth(-1)">&larr;</button>
@@ -495,8 +495,12 @@ function rmRenderCalendar(){
   const rtId=document.getElementById('calRoomType').value||(RM_ROOM_TYPES[0]&&RM_ROOM_TYPES[0].id);
   document.getElementById('calMonthLbl').textContent=CAL_MONTH.toLocaleDateString('en-US',{month:'long',year:'numeric'});
   const autoBadge=document.getElementById('autoApplyBadge');
-  if(RM_SETTINGS&&RM_SETTINGS.autoApplyEnabled){autoBadge.textContent='Automatic pricing: ON';autoBadge.className='chip chip-up';}
+  const autoOn=RM_SETTINGS&&RM_SETTINGS.autoApplyEnabled;
+  if(autoOn){autoBadge.textContent='Automatic pricing: ON';autoBadge.className='chip chip-up';}
   else{autoBadge.textContent='Automatic pricing: OFF (suggestion only)';autoBadge.className='chip chip-down';}
+  document.getElementById('calSubtitle').textContent=autoOn
+    ?'Occupancy-driven price suggestions for Escape (the direct booking page). Automatic pricing is ON — these prices already went live on the bot\'s last run; Upload Prices is only for a manual override.'
+    :'Occupancy-driven price suggestions for Escape (the direct booking page). Nothing here is live until you click Upload Prices.';
   const dow=['Su','Mo','Tu','We','Th','Fr','Sa'];
   document.getElementById('calDow').innerHTML=dow.map(d=>`<div class="cal-dow">${d}</div>`).join('');
   const grid=document.getElementById('calGrid');
