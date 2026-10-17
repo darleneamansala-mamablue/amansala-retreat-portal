@@ -5,7 +5,7 @@
 //   - "Led by": a dropdown of all the staff (tour guides, class instructors, spa therapists, fire keepers, ceremony leaders)
 //   - "Who does what": a short note (e.g. "Maria Luisa leads, Gaby plays music")
 // Both are saved with the card's other assignments (app_store 'act_ops', fields leader and staffNote) through the sheet's own actOpsSet.
-const AL_EXTRA = ['María Luisa', 'Gaby', 'Golloy', 'Francisco'];       // ceremony leads and fire keepers
+const AL_EXTRA = ['María Luisa', 'Gaby', 'Golloy', 'Francisco', 'Ignacia'];       // ceremony leads and fire keepers
 function alTitle(n) { n = String(n || '').trim(); return n ? n.charAt(0).toUpperCase() + n.slice(1) : ''; }
 function alStaff(current) {
   const have = new Map();
@@ -29,7 +29,9 @@ function alDecorate() {
       const names = alStaff(ops.leader);
       const div = document.createElement('div');
       div.style.cssText = 'display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;flex:1 1 100%;margin-bottom:2px';
-      div.innerHTML = `<div><label style="${lab}">Led by</label><select style="${box}" onchange="actOpsSet(${JSON.stringify(key).replace(/"/g, '&quot;')},'leader',this.value)">` +
+      const g3 = String(ops.guide3 || '').toLowerCase(), g3names = alStaff(g3 ? alTitle(g3) : '');
+      div.innerHTML = `<div><label style="${lab}">Guide 3</label><select style="${box}" onchange="actOpsSet(${JSON.stringify(key).replace(/"/g, '&quot;')},'guide3',this.value)"><option value="">— optional —</option>${g3names.map(n => `<option value="${alEsc(n.toLowerCase())}" ${g3 === n.toLowerCase() ? 'selected' : ''}>${alEsc(n)}</option>`).join('')}</select></div>` +
+        `<div><label style="${lab}">Led by</label><select style="${box}" onchange="actOpsSet(${JSON.stringify(key).replace(/"/g, '&quot;')},'leader',this.value)">` +
         `<option value="">— Who leads this? —</option>${names.map(n => `<option value="${alEsc(n)}" ${ops.leader === n ? 'selected' : ''}>${alEsc(n)}</option>`).join('')}</select></div>` +
         `<div style="flex:1;min-width:220px"><label style="${lab}">Who does what</label><input type="text" value="${alEsc(ops.staffNote || '')}" placeholder="e.g. Maria Luisa leads, Gaby plays music" style="${box};width:100%;box-sizing:border-box" onchange="actOpsSet(${JSON.stringify(key).replace(/"/g, '&quot;')},'staffNote',this.value)"></div>`;
       row.insertBefore(div, row.firstChild);

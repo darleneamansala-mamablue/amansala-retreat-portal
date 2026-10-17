@@ -9,12 +9,12 @@ function schedGuideSuffix(bk, a) {
   try {
     const o = (typeof actOpsData !== 'undefined' && actOpsData[a.aoId + '|' + String(a.date || '').slice(0, 10)]) || {};
     const seen = new Set(), g = [];
-    [o.leader, o.guide1, o.guide2].filter(Boolean).map(schedGuideTitle).forEach(n => { if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); g.push(n); } });
+    [o.leader, o.guide1, o.guide2, o.guide3].filter(Boolean).map(schedGuideTitle).forEach(n => { if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); g.push(n); } });
     return g.length ? ' · ' + (g.length > 1 ? 'Guides' : 'Guide') + ': ' + g.join(' & ') : '';
   } catch (e) { return ''; }
 }
 function schedSetGuide(bkId, idx, val, field) {
-  field = field === 'guide2' ? 'guide2' : 'guide1';
+  field = ['guide1', 'guide2', 'guide3'].includes(field) ? field : 'guide1';
   const bk = (AppData.bookings || []).find(b => b.id === bkId), a = bk && (bk.retreatActivities || [])[idx];
   if (!a) return;
   const key = a.aoId + '|' + String(a.date || '').slice(0, 10);
@@ -33,9 +33,9 @@ if (typeof svActivityEditorHtml === 'function') {
       html = html.replace(/(<input type="time"[^>]*svChangeActivityTime\('([^']+)',(\d+),this\.value\)[^>]*>)/g, (m, whole, id, idx) => {
         const a = (bk.retreatActivities || [])[+idx]; if (!a) return m;
         const o = (typeof actOpsData !== 'undefined' && actOpsData[a.aoId + '|' + String(a.date || '').slice(0, 10)]) || {};
-        const mk = (field, cur, blank) => `<select onchange="schedSetGuide('${id}',${idx},this.value,'${field}')" title="Who guides or leads this (add a second person if needed)" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:var(--sand)">` +
+        const mk = (field, cur, blank) => `<select onchange="schedSetGuide('${id}',${idx},this.value,'${field}')" title="Who guides or leads this (up to 3 people)" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;background:var(--sand)">` +
           ['', ...names].map(n => `<option value="${n}" ${n.toLowerCase() === cur ? 'selected' : ''}>${n || blank}</option>`).join('') + '</select>';
-        return m + mk('guide1', o.guide1 || '', '— Guide 1 —') + mk('guide2', o.guide2 || '', '— Guide 2 —');
+        return m + mk('guide1', o.guide1 || '', '— Guide 1 —') + mk('guide2', o.guide2 || '', '— Guide 2 —') + mk('guide3', o.guide3 || '', '— Guide 3 —');
       });
     } catch (e) { console.warn('[schedule-guides]', e); }
     return html;

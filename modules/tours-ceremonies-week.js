@@ -67,11 +67,12 @@ async function tcwRender() {
       const tour = TCW_TOURS.includes(r.aoId);
       const times = [...new Set(r.times)].sort().map(tcwFmtT).join(' & ');
       const who = r.groups.map(g => tcwEsc(g.name) + (g.pax ? ' (' + g.pax + ')' : '')).join(', ');
-      html += `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:12px 14px;border-top:1px solid #f0ebe0">
+      html += `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:12px 14px;border-top:1px solid #f0ebe0">
         <div style="min-width:210px;flex:1"><div style="font-weight:700;font-size:14px">${tcwEsc(nm(r.aoId))} <span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:${tour ? '#dbeafe' : '#fae8ff'};color:${tour ? '#1d4ed8' : '#86198f'}">${tour ? 'Tour' : 'Ceremony'}</span></div>
           <div style="font-size:12px;color:#6b7280">${tcwEsc(times)} · ${who}</div></div>
         <div><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Guide 1</div>${sel(r, 'guide1', '— choose —')}</div>
         <div><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Guide 2</div>${sel(r, 'guide2', '— optional —')}</div>
+        <div><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Guide 3</div>${sel(r, 'guide3', '— optional —')}</div>
         <div style="flex:1;min-width:200px"><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Who does what</div><input type="text" value="${tcwEsc(ops.staffNote || '')}" placeholder="e.g. María Luisa leads, Gaby plays music" onchange="tcwSet('${r.key}','staffNote',this.value)" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px"></div>
       </div>`;
     });
