@@ -47,9 +47,13 @@ async function appStoreSet(key, k, value) {
 // Casa Master, a whole-villa product, as the reference for regular room derivation).
 const DEFAULT_SETTINGS = {
   referenceRoomTypeId: 'rt1',
-  derivationPct: { rt1: 0, rt2: -17, rt3: -41, rt4: -49, rt5: -49, rt6: 0, rt7: -13, rt8: 6, rt9: 4, c4a: 26, cm1: 352, csh3: 352 },
-  minPrice: { rt1: 345, rt2: 295, rt3: 245, rt4: 185, rt5: 180, rt6: 355, rt7: 320, rt8: 310, rt9: 375, c4a: 520, cm1: 1500, csh3: 1500 },
-  maxPrice: { rt1: 975, rt2: 875, rt3: 685, rt4: 600, rt5: 580, rt6: 875, rt7: 900, rt8: 1200, rt9: 1350, c4a: 1400, cm1: 4500, csh3: 4500 },
+  // 2026-10-17: updated to Jorge's exact RoomPriceGenie trial numbers (full Rooms Setup table,
+  // not the earlier cropped screenshot) -- rt5 (Simple n Small) wasn't in that table, kept its
+  // own numbers from Jorge's separate message. cm1/csh3 (Casa Master/Shanti) corrected from the
+  // first message's "1900/2700" guess to the real table's $1,950 base (+239% derivation).
+  derivationPct: { rt1: 0, rt2: -17, rt3: -41, rt4: -49, rt5: -49, rt6: 0, rt7: -13, rt8: 6, rt9: 4, c4a: 26, cm1: 239, csh3: 239 },
+  minPrice: { rt1: 345, rt2: 295, rt3: 245, rt4: 185, rt5: 140, rt6: 355, rt7: 320, rt8: 310, rt9: 375, c4a: 525, cm1: 1200, csh3: 1200 },
+  maxPrice: { rt1: 975, rt2: 875, rt3: 685, rt4: 600, rt5: 695, rt6: 875, rt7: 900, rt8: 1200, rt9: 1350, c4a: 1200, cm1: 3400, csh3: 3400 },
   weekdayPct: { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 },
   leadTimePct: { '6mo': 0, '3mo': 0, '6w': 0, '4w': 0, '2w': 0, '1w': 0, '7d': 0, '3d': 0, '0d': 0 },
   targetOccupancyPctByMonth: { 1: 80, 2: 80, 3: 80, 4: 80, 5: 80, 6: 80, 7: 80, 8: 80, 9: 80, 10: 80, 11: 80, 12: 80 },
