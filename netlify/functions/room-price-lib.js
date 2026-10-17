@@ -216,14 +216,39 @@ function currentLivePrice(opts) {
 // change to app_store key LOG_KEY. Shared by room-price-apply.js (human clicks Upload Prices)
 // and room-price-recalc.js's auto-apply path (Jorge's ask 2026-10-17) -- same code either way,
 // only `staffName` differs ("Automatic (Revenue Manager bot)" for the latter).
+// Runs `fn` over `items` with at most `limit` in flight at once -- a big settings change (or
+// the Revenue Manager's first-ever run) can produce 1000+ be_rates writes, and doing those
+// fully sequentially (as this used to) blew well past Netlify's 26s function timeout the first
+// time Jorge turned on auto-apply with new Rooms Setup numbers (confirmed live 2026-10-17).
+async function pMap(items, limit, fn) {
+  const results = new Array(items.length);
+  let i = 0;
+  async function worker() {
+    while (i < items.length) {
+      const idx = i++;
+      results[idx] = await fn(items[idx], idx);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 async function applyPriceChanges(key, changes, staffName) {
   if (!changes.length) return { applied: 0 };
   const existing = await sget(key, `be_rates?select=room_type_id,start_date,end_date,price_single`);
   const log = (await appStoreGet(key, LOG_KEY)) || [];
+  // PATCH an existing row (1 request) instead of DELETE+POST (2) when one's already there --
+  // only a brand-new date/room-type combo needs an insert.
+  await pMap(changes, 40, async (c) => {
+    const prior = existing.find(r => r.room_type_id === c.room_type_id && r.start_date === c.date && r.end_date === c.date);
+    if (prior) {
+      await sreq(key, 'PATCH', `be_rates?room_type_id=eq.${encodeURIComponent(c.room_type_id)}&start_date=eq.${c.date}&end_date=eq.${c.date}`, { price_single: c.price_single }, 'return=minimal');
+    } else {
+      await sreq(key, 'POST', 'be_rates', { room_type_id: c.room_type_id, start_date: c.date, end_date: c.date, price_single: c.price_single }, 'return=minimal');
+    }
+  });
   for (const c of changes) {
     const prior = existing.find(r => r.room_type_id === c.room_type_id && r.start_date === c.date && r.end_date === c.date);
-    await sreq(key, 'DELETE', `be_rates?room_type_id=eq.${encodeURIComponent(c.room_type_id)}&start_date=eq.${c.date}&end_date=eq.${c.date}`, undefined, 'return=minimal');
-    await sreq(key, 'POST', 'be_rates', { room_type_id: c.room_type_id, start_date: c.date, end_date: c.date, price_single: c.price_single }, 'return=minimal');
     log.push({ at: new Date().toISOString(), staffName, roomTypeId: c.room_type_id, date: c.date, oldPrice: prior ? prior.price_single : null, newPrice: c.price_single });
   }
   await appStoreSet(key, LOG_KEY, log.slice(-2000));
