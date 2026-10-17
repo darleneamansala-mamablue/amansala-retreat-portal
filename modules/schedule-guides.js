@@ -41,3 +41,18 @@ if (typeof svActivityEditorHtml === 'function') {
     return html;
   };
 }
+
+// The Schedule calendar draws the guides too (teacher-portal.js calls schedGuideSuffix when it builds each activity block). The saved guide
+// assignments are normally loaded only when the Activities page is opened, so load them once the first time the calendar draws, then draw again.
+let _sgLoaded = false;
+if (typeof skedBuild === 'function') {
+  const _origSked = skedBuild;
+  skedBuild = function () {
+    const r = _origSked.apply(this, arguments);
+    if (!_sgLoaded && typeof actOpsLoad === 'function') {
+      _sgLoaded = true;
+      Promise.resolve(actOpsLoad()).then(() => { try { _origSked.apply(window, []); } catch (e) {} }).catch(() => {});
+    }
+    return r;
+  };
+}
