@@ -9,10 +9,11 @@ function agRefreshGuides() {
   try {
     if (typeof TOUR_GUIDE_NAMES === 'undefined') return;
     const have = new Map();
-    const add = n => { const t = agTitle(n); if (t && !have.has(t.toLowerCase())) have.set(t.toLowerCase(), t); };
+    const flat = x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();   // Maria / María count as the same person
+    const add = n => { const t = agTitle(n); if (t && !have.has(flat(t))) have.set(flat(t), t); };
     TOUR_GUIDE_NAMES.forEach(add);
     _agExtra.forEach(add);
-    add('Fernando'); add('Ignacia'); add('Kun'); add('Darlene'); add('Yolanda'); add('Ryan');   // Darlene 2026-10-17: these four are guides too
+    add('Fernando'); add('Ignacia'); add('Kun'); add('Darlene'); add('Yolanda'); add('Ryan'); add('Gabby'); add('Golloy'); add('María Luisa'); add('Francisco');   // Darlene 2026-10-17: these four are guides too
     try { ((typeof SpaData !== 'undefined' && SpaData.therapists) || []).filter(t => t.primaryCategory === 'tours' && t.active !== false).forEach(t => add(t.firstName)); } catch (e) {}
     try { Object.values(typeof actOpsData !== 'undefined' ? actOpsData : {}).forEach(o => { add(o && o.guide1); add(o && o.guide2); }); } catch (e) {}
     const names = [...have.values()];
