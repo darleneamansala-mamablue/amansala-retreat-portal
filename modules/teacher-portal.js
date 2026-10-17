@@ -5840,11 +5840,11 @@ function skedGetRetreatEvents(dateStr){
       if(a.prepaid){
         // Prepaid — show in the activity's own column in green AND in Pre-Paid Activity column
         const rsId=aoMap[a.aoId]||'ruins';
-        evs.push({id:'ret_'+bk.id+'_ao_'+a.aoId+'_'+dateStr,resourceId:rsId,date:dateStr,startTime:startT,endTime:endT,title:ao.name,subtitle:title+' · Pre-Paid Activity',color:'#059669',bg:'#d1fae5',textColor:'#065f46',isRetreat:true,bkId:bk.id});
-        evs.push({id:'ret_'+bk.id+'_ao_'+a.aoId+'_prepaid_opt_'+dateStr,resourceId:'optional',date:dateStr,startTime:startT,endTime:endT,title:ao.name,subtitle:title+' · Pre-Paid Activity',color:'#059669',bg:'#d1fae5',textColor:'#065f46',isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_ao_'+a.aoId+'_'+dateStr,resourceId:rsId,date:dateStr,startTime:startT,endTime:endT,title:ao.name,subtitle:title+' · Pre-Paid Activity'+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):''),color:'#059669',bg:'#d1fae5',textColor:'#065f46',isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_ao_'+a.aoId+'_prepaid_opt_'+dateStr,resourceId:'optional',date:dateStr,startTime:startT,endTime:endT,title:ao.name,subtitle:title+' · Pre-Paid Activity'+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):''),color:'#059669',bg:'#d1fae5',textColor:'#065f46',isRetreat:true,bkId:bk.id});
       } else {
         // Optional — collect for grouping below
-        evs.push({id:'ret_'+bk.id+'_ao_'+a.aoId+'_opt_'+dateStr,resourceId:'optional',date:dateStr,startTime:startT,endTime:endT,title:ao.name,subtitle:title,_price:ao.price,color:'#d97706',bg:'#fef3c7',textColor:'#92400e',isRetreat:true,bkId:bk.id,_isOptional:true});
+        evs.push({id:'ret_'+bk.id+'_ao_'+a.aoId+'_opt_'+dateStr,resourceId:'optional',date:dateStr,startTime:startT,endTime:endT,title:ao.name,subtitle:title+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):''),_price:ao.price,color:'#d97706',bg:'#fef3c7',textColor:'#92400e',isRetreat:true,bkId:bk.id,_isOptional:true});
       }
     });
   });
