@@ -108,6 +108,10 @@ function tcwOpen(btn) {
     btn.className = 'tab-btn tab-btn-sub'; btn.id = 'toursCerTabBtn'; btn.style.color = '#0d9488';
     btn.onclick = function () { tcwOpen(btn); };
     btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/><circle cx="12" cy="12" r="10"/></svg><span class="tab-label">Tours &amp; Ceremonies</span>';
-    if (sub) sub.parentElement.insertBefore(btn, sub.nextSibling); else me.parentElement.appendChild(btn);
+    // right under "Activities" in the main list (easy to find); falls back to the lower group under Menu Editor
+    const act = [...document.querySelectorAll('button.tab-btn')].find(b => /switchTab\('actsheet'/.test(b.getAttribute('onclick') || ''));
+    btn.classList.remove('tab-btn-sub'); btn.style.color = '';
+    if (act) act.parentElement.insertBefore(btn, act.nextSibling);
+    else { btn.classList.add('tab-btn-sub'); btn.style.color = '#0d9488'; if (sub) sub.parentElement.insertBefore(btn, sub.nextSibling); else me.parentElement.appendChild(btn); }
   } catch (e) { console.warn('[tours-ceremonies-week]', e); }
 })();
