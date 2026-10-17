@@ -5,6 +5,8 @@
 // ===== ACTIVITY SHEET TAB =====
 let actSheetMonday = null;
 let actSheetSignups = {}; // { bookingId: [{firstName,lastName,activities,...}] }
+// A retreat that has ended no longer appears on the sign-up (By Retreat list and Summary); it stays on its last day. (Darlene 2026-10-17)
+const actNotPast = b => String((b && b.endDate) || '9999').slice(0, 10) >= new Date().toISOString().slice(0, 10);
 let actOpsData = {}; // { 'aoId|date': {guide, van1, van2, guideConfirmed, driverConfirmed, entranceMXN} }
 let actSummaryFilterBkId = '';
 let actSummaryShowUndated = false;
@@ -316,7 +318,7 @@ function actByRetreatSelect(bkId) {
 function actByRetreatSearchPick(typed) {
   const fmtD = ds=>{if(!ds)return'';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});};
   const retreatLabel = b=>`${b.retreatName||b.leaderName||'Retreat'}${b.startDate?' · '+fmtD(b.startDate)+' – '+fmtD(b.endDate):''}`;
-  const bks = AppData.bookings.filter(b=>b.status!=='cancelled');
+  const bks = AppData.bookings.filter(b=>b.status!=='cancelled'&&actNotPast(b));
   const match = bks.find(b=>retreatLabel(b)===typed);
   if (match) actByRetreatSelect(match.id); // only jumps once the typed text exactly matches a real retreat
 }
@@ -324,7 +326,7 @@ function actByRetreatSearchPick(typed) {
 function actByRetreatRender() {
   const wrap = document.getElementById('actSheetByRetreat');
   if (!wrap) return;
-  const bks = AppData.bookings.filter(b=>b.status!=='cancelled').slice().sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
+  const bks = AppData.bookings.filter(b=>b.status!=='cancelled'&&actNotPast(b)).slice().sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
   if (!actByRetreatBkId || !bks.some(b=>b.id===actByRetreatBkId)) {
     const today = new Date().toISOString().slice(0,10);
     const upcoming = bks.filter(b=>(b.endDate||'')>=today).sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''))[0];
@@ -573,7 +575,7 @@ function actSheetRenderSummary() {
 
   // Collect per-group entries, then combine by aoId+date
   const groupMap = {}; // key: aoId+'|'+date → {ao, date, time, prepaid, groups:[{bkName,bkId,pax,signedUp}]}
-  AppData.bookings.filter(b=>b.status!=='cancelled').forEach(bk=>{
+  AppData.bookings.filter(b=>b.status!=='cancelled'&&actNotPast(b)).forEach(bk=>{
     const sups = actSheetSignups[bk.id]||[];
     const scheduledAoIds = new Set((bk.retreatActivities||[]).map(a=>a.aoId));
     // Existing scheduled activities
@@ -642,7 +644,7 @@ function actSheetRenderSummary() {
     entries.filter(e=>!e.date&&(!actSummaryFilterBkId||e.groups.some(g=>g.bkId===actSummaryFilterBkId))).length;
 
   // Build retreat filter options from bookings that have activities scheduled
-  const bksWithActs = AppData.bookings.filter(b=>b.status!=='cancelled'&&(b.retreatActivities||[]).length>0);
+  const bksWithActs = AppData.bookings.filter(b=>b.status!=='cancelled'&&actNotPast(b)&&(b.retreatActivities||[]).length>0);
   const filterBkOpts = bksWithActs.map(b=>{
     const nm = b.retreatName||b.leaderName||('Booking …'+b.id.slice(-4));
     return `<option value="${b.id}" ${actSummaryFilterBkId===b.id?'selected':''}>${nm}${b.startDate?' · '+fmtD(b.startDate):''}</option>`;
