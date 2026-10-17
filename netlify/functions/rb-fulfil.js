@@ -30,7 +30,11 @@ async function fulfil(pi) {
   if (!key || !bookingId) return { skipped: true };
 
   const orders = (await L.appStoreGet(key, L.ORDERS_KEY)) || {};
-  if (orders[pi.id]) return { duplicate: true };
+  // Only a completed ('placed') or actively-running ('processing') order blocks a re-run --
+  // 'error'/'needs_attention' orders are exactly what Dashboard's manual Retry button is for
+  // (rb-retry-order.js), so they must stay retryable instead of being stuck forever.
+  const prev = orders[pi.id];
+  if (prev && prev.status !== 'error' && prev.status !== 'needs_attention') return { duplicate: true };
   // Claim this PaymentIntent first so a retry or a second delivery can never place the guest twice
   orders[pi.id] = { piId: pi.id, bookingId, status: 'processing', at: new Date().toISOString() };
   await L.appStoreSet(key, L.ORDERS_KEY, orders);
@@ -82,7 +86,7 @@ async function fulfil(pi) {
     const perRow = Math.round((roomPaidNow / units.length) * 100) / 100;
     for (let i = 0; i < units.length; i++) {
       const unit = units[i];
-      const rowGuests = rm.kind === 'twin' ? [guests[i]] : guests;     // king: both guests in the one room
+      const rowGuests = rm && rm.kind === 'twin' ? [guests[i]] : guests;     // king: both guests in the one room
       const existing = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(bookingId)}&room=eq.${encodeURIComponent(unit)}&select=id,notes,amount_paid`);
       const rowNote = (existing[0] && existing[0].notes ? existing[0].notes + ' — ' : '') + note;
       // The guest's real stay (they can book outside the retreat dates) and, for a room two guests share, the room's rate for both, so the
@@ -120,7 +124,7 @@ async function fulfil(pi) {
   if (units) {
     const ids = bk.cb_reservation_ids || {}, gids = bk.cb_guest_ids || {};
     await Promise.all(units.map(async (unit, i) => {
-      const rowGuests = rm.kind === 'twin' ? [guests[i]] : guests;
+      const rowGuests = rm && rm.kind === 'twin' ? [guests[i]] : guests;
       if (!ids[unit]) { cbIssues.push(`${unit}: no Cloudbeds reservation on file (retreat not pushed?)`); return; }
       try {
         const r = await L.cbCall('updateReservationGuest', {
