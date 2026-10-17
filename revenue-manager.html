@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revenue Manager — Amansala</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--teal:#2d6a6a;--teal-l:#3d8080;--dark:#1a2332;--sb:#1e2a3a;--sb-hov:#2d3f52;--text:#2c3e50;--muted:#7f8c9a;--border:#e0d8cc;--sand:#f7f4ef;--up:#15803d;--down:#b45309;--bad:#dc2626}
+body{font-family:'Jost',sans-serif;background:#f0ece4;color:var(--text)}
+input,select,button{font-family:inherit}
+/* ---- Login ---- */
+#loginOverlay{position:fixed;inset:0;background:var(--dark);display:flex;align-items:center;justify-content:center;z-index:999}
+#loginOverlay.hidden{display:none}
+.login-box{background:#fff;border-radius:16px;padding:36px 34px;width:320px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.login-box h1{font-family:'Cormorant Garamond',serif;font-size:26px;margin-bottom:4px}
+.login-box p{font-size:12.5px;color:var(--muted);margin-bottom:20px}
+.login-box input{width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:9px;font-size:14px;margin-bottom:10px}
+.login-box button{width:100%;padding:11px;border:none;border-radius:9px;background:var(--teal);color:#fff;font-weight:600;font-size:14px;cursor:pointer;margin-top:6px}
+.login-err{color:var(--bad);font-size:12.5px;margin-top:8px;display:none}
+/* ---- Shell ---- */
+#app{display:none;min-height:100vh}
+#app.ready{display:flex}
+.sidebar{width:230px;min-width:230px;background:var(--sb);display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.sb-logo{padding:26px 22px 18px;border-bottom:1px solid rgba(255,255,255,.08)}
+.sb-logo .brand{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:600;color:#fff}
+.sb-logo .sub{font-size:10.5px;color:rgba(255,255,255,.4);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+.sb-nav{flex:1;padding:14px 0;overflow-y:auto}
+.sb-nav a{display:flex;align-items:center;gap:10px;padding:10px 22px;color:rgba(255,255,255,.65);text-decoration:none;font-size:13.5px;border-left:3px solid transparent;cursor:pointer;user-select:none}
+.sb-nav a:hover{background:var(--sb-hov);color:#fff}
+.sb-nav a.active{background:rgba(45,106,106,.3);color:#fff;border-left-color:var(--teal-l)}
+.sb-sub a{padding-left:42px;font-size:12.5px}
+.sb-sub{display:none}
+.sb-sub.open{display:block}
+.sb-user{padding:14px 20px;border-top:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.5);font-size:12px}
+.main{flex:1;min-width:0;padding:28px 34px;overflow-y:auto}
+.page{display:none}
+.page.active{display:block}
+h2{font-family:'Jost',sans-serif;font-weight:700;font-size:21px;margin-bottom:4px}
+.subtitle{font-size:12.5px;color:var(--muted);margin-bottom:22px}
+.card{background:#fff;border-radius:14px;padding:22px 26px;margin-bottom:18px}
+.btn{padding:9px 18px;border-radius:9px;border:1.5px solid var(--teal);background:#fff;color:var(--teal);font-size:12.5px;font-weight:700;cursor:pointer}
+.btn:hover{background:#f0f7f7}
+.btn-primary{background:var(--teal);color:#fff}
+.btn-primary:hover{background:var(--teal-l)}
+.btn:disabled{opacity:.5;cursor:default}
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.toolbar select,.toolbar input{padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:12.5px}
+.chip{display:inline-block;padding:2px 9px;border-radius:9px;font-size:10.5px;font-weight:700}
+.chip-up{background:#dcfce7;color:var(--up)}
+.chip-down{background:#fef3c7;color:var(--down)}
+/* ---- Calendar ---- */
+.cal-stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.cal-stat{flex:1;min-width:140px;padding:12px 16px;background:var(--sand);border-radius:10px}
+.cal-stat .lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.cal-stat .val{font-size:19px;font-weight:800;margin-top:2px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.cal-day{background:var(--sand);border-radius:10px;padding:8px 10px;min-height:92px;font-size:11.5px}
+.cal-day.empty{background:transparent}
+.cal-day .dnum{font-weight:700;color:var(--muted);margin-bottom:4px}
+.cal-day .occ{color:var(--muted);font-size:10.5px}
+.cal-day .cur{color:var(--muted);text-decoration:line-through;font-size:11px}
+.cal-day .rec{font-weight:800;font-size:13px}
+.cal-day.diff{border:1.5px solid var(--teal)}
+.cal-dow{font-size:10.5px;font-weight:700;color:var(--muted);text-align:center;padding-bottom:4px}
+/* ---- Tables / forms ---- */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;padding:8px 10px;color:var(--muted);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border)}
+td{padding:9px 10px;border-bottom:1px solid #f0ece4}
+td input{width:80px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12.5px}
+.grid12{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.grid12 .cell{text-align:center}
+.grid12 label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+.grid12 input{width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;text-align:center;font-size:12.5px}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--dark);color:#fff;padding:12px 18px;border-radius:9px;font-size:13px;opacity:0;transform:translateY(10px);transition:all .2s;z-index:1000;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+svg text{font-family:'Jost',sans-serif}
+</style>
+</head>
+<body>
+
+<div id="loginOverlay">
+  <div class="login-box">
+    <h1>Revenue Manager</h1>
+    <p>Staff only &mdash; Amansala pricing engine</p>
+    <input id="liUser" placeholder="Username" autocomplete="username">
+    <input id="liPass" type="password" placeholder="Password" autocomplete="current-password">
+    <button onclick="rmLogin()">Enter</button>
+    <div class="login-err" id="liErr">Not authorized for this tool.</div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="sidebar">
+    <div class="sb-logo"><div class="brand">Amansala</div><div class="sub">Revenue Manager</div></div>
+    <div class="sb-nav">
+      <a data-page="calendar" onclick="rmNav('calendar')" class="active">Calendar</a>
+      <a onclick="rmToggleStrategy()">Pricing Strategy</a>
+      <div class="sb-sub" id="strategySub">
+        <a data-page="rooms" onclick="rmNav('rooms')">Rooms Setup</a>
+        <a data-page="weekday" onclick="rmNav('weekday')">Day-of-the-Week</a>
+        <a data-page="monthly" onclick="rmNav('monthly')">Monthly Adjustments</a>
+        <a data-page="occupancy" onclick="rmNav('occupancy')">Occupancy Strategy</a>
+        <a data-page="leadtime" onclick="rmNav('leadtime')">Lead Time</a>
+      </div>
+      <a data-page="reporting" onclick="rmNav('reporting')">Reporting</a>
+      <a data-page="chart" onclick="rmNav('chart')">Chart</a>
+    </div>
+    <div class="sb-user" id="sbUser"></div>
+  </div>
+
+  <div class="main">
+    <!-- Calendar -->
+    <div class="page active" id="page-calendar">
+      <h2>Calendar</h2>
+      <div class="subtitle">Occupancy-driven price suggestions for Escape (the direct booking page). Nothing here is live until you click Upload Prices.</div>
+      <div class="toolbar">
+        <select id="calRoomType" onchange="rmRenderCalendar()"></select>
+        <button class="btn" onclick="rmCalShiftMonth(-1)">&larr;</button>
+        <span id="calMonthLbl" style="font-weight:700;min-width:140px;text-align:center;display:inline-block"></span>
+        <button class="btn" onclick="rmCalShiftMonth(1)">&rarr;</button>
+        <button class="btn" onclick="rmRefreshRecs()">Refresh recommendations</button>
+        <button class="btn btn-primary" id="calUploadBtn" onclick="rmUploadVisible()">Upload Prices</button>
+      </div>
+      <div class="cal-stats">
+        <div class="cal-stat"><div class="lbl">Recommendations this month</div><div class="val" id="calRecCount">0</div></div>
+        <div class="cal-stat"><div class="lbl">Avg occupancy (visible dates)</div><div class="val" id="calAvgOcc">—</div></div>
+        <div class="cal-stat"><div class="lbl">Recommendations generated</div><div class="val" id="calGeneratedAt" style="font-size:12.5px;font-weight:600">—</div></div>
+      </div>
+      <div class="cal-grid" id="calDow"></div>
+      <div class="cal-grid" id="calGrid" style="margin-top:4px"></div>
+    </div>
+
+    <!-- Rooms Setup -->
+    <div class="page" id="page-rooms">
+      <h2>Rooms Setup</h2>
+      <div class="subtitle">One room type is the Reference — every other type's base price is a fixed % of it. Min/Max are hard floors/ceilings the engine will never cross.</div>
+      <div class="card">
+        <table>
+          <thead><tr><th>Room type</th><th>Rooms</th><th>Reference</th><th>Base price</th><th>Derivation vs reference</th><th>Min price</th><th>Max price</th></tr></thead>
+          <tbody id="roomsSetupBody"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-primary" onclick="rmSaveSettings()">Save</button>
+    </div>
+
+    <!-- Day of week -->
+    <div class="page" id="page-weekday">
+      <h2>Day-of-the-Week Adjustments</h2>
+      <div class="subtitle">% adjustment applied by weekday, on top of the monthly/seasonal rate.</div>
+      <div class="card">
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:18px;font-size:13px">
+          <input type="checkbox" id="wkOwned" style="width:16px;height:16px">
+          Let this tool control day-of-week pricing (turns off Escape's flat weekend premium so it isn't applied twice)
+        </label>
+        <div class="grid12" id="weekdayGrid"></div>
+      </div>
+      <button class="btn btn-primary" onclick="rmSaveSettings()">Save</button>
+    </div>
+
+    <!-- Monthly -->
+    <div class="page" id="page-monthly">
+      <h2>Monthly Adjustments</h2>
+      <div class="subtitle">Seasonal % by calendar month — this is the SAME setting Escape's booking page already uses, just edited here.</div>
+      <div class="card"><div class="grid12" id="monthlyGrid"></div></div>
+      <button class="btn btn-primary" onclick="rmSaveSettings()">Save</button>
+    </div>
+
+    <!-- Occupancy strategy -->
+    <div class="page" id="page-occupancy">
+      <h2>Occupancy Strategy</h2>
+      <div class="subtitle">Set this to the occupancy you expect each month — the engine raises or lowers prices to steer toward it as the date approaches, based on your booking pace.</div>
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:10px;font-size:13px">Target Occupancy by month</div>
+        <div class="grid12" id="occTargetGrid"></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;gap:28px;flex-wrap:wrap">
+          <div>
+            <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px">Median booking window (days)</label>
+            <input id="occMedian" type="number" style="width:100px;padding:8px;border:1px solid var(--border);border-radius:8px">
+          </div>
+          <div>
+            <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px">Aggressiveness</label>
+            <select id="occAggr" style="padding:8px;border:1px solid var(--border);border-radius:8px">
+              <option value="very_low">Very low</option>
+              <option value="low">Low</option>
+              <option value="standard">Standard (recommended)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:10px;font-size:13px">Room nights sold to groups (auto, this month)</div>
+        <div id="occGroupNights" style="font-size:13px;color:var(--muted)"></div>
+      </div>
+      <button class="btn btn-primary" onclick="rmSaveSettings()">Save</button>
+    </div>
+
+    <!-- Lead time -->
+    <div class="page" id="page-leadtime">
+      <h2>Lead Time Adjustments</h2>
+      <div class="subtitle">% adjustment by how far out the stay is, applied on top of monthly/weekday pricing.</div>
+      <div class="card"><div class="grid12" id="leadGrid" style="grid-template-columns:repeat(5,1fr)"></div></div>
+      <button class="btn btn-primary" onclick="rmSaveSettings()">Save</button>
+    </div>
+
+    <!-- Reporting -->
+    <div class="page" id="page-reporting">
+      <h2>Reporting</h2>
+      <div class="subtitle">Estimated from current recommendations data (occupancy on the books × today's live price). Phase 2 will tie this to real payments/registrations for exact figures.</div>
+      <div class="toolbar"><select id="repRoomType" onchange="rmRenderReporting()"></select></div>
+      <div class="cal-stats" id="repStats"></div>
+    </div>
+
+    <!-- Chart -->
+    <div class="page" id="page-chart">
+      <h2>Price Chart</h2>
+      <div class="subtitle">Recommended vs. current Escape price vs. your min/max band, over the recommendation window.</div>
+      <div class="toolbar"><select id="chartRoomType" onchange="rmRenderChart()"></select></div>
+      <div class="card"><svg id="chartSvg" width="100%" height="360" viewBox="0 0 1000 360" preserveAspectRatio="none"></svg></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const _db=supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A');
+
+// Only Jorge and Darlene can use this tool (Jorge's ask 2026-10-17) -- there's no granular
+// role system yet, so this is a simple allow-list on the staff-login session name, same
+// session shape booking-hub.html already uses (netlify/functions/staff-login.js).
+const RM_ALLOWED = ['jorge','darlene'];
+
+function rmToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+
+async function rmLogin(){
+  const username=document.getElementById('liUser').value.trim();
+  const password=document.getElementById('liPass').value;
+  const errEl=document.getElementById('liErr');
+  errEl.style.display='none';
+  try{
+    const r=await fetch('/.netlify/functions/staff-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    const d=await r.json();
+    if(!d.success||!RM_ALLOWED.some(n=>(d.session.name||'').toLowerCase().includes(n))){
+      errEl.textContent=d.success?'Not authorized for this tool.':'Wrong username or password.';
+      errEl.style.display='block';
+      return;
+    }
+    sessionStorage.setItem('rm_session',JSON.stringify(d.session));
+    rmBoot(d.session);
+  }catch(e){errEl.textContent='Login failed: '+e.message;errEl.style.display='block';}
+}
+
+let RM_SETTINGS=null, RM_ROOM_TYPES=[], RM_SEASONAL={}, RM_RECS=null, RM_SESSION=null;
+let CAL_MONTH=new Date(); CAL_MONTH.setDate(1);
+
+async function rmBoot(session){
+  RM_SESSION=session;
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('app').classList.add('ready');
+  document.getElementById('sbUser').textContent=session.name;
+  await rmLoadAll();
+  rmRenderCalendar();
+}
+
+async function rmLoadAll(){
+  const [settingsRes,recsRow]=await Promise.all([
+    fetch('/.netlify/functions/room-price-settings').then(r=>r.json()),
+    _db.from('app_store').select('value').eq('key','room_price_genie_recommendations').maybeSingle(),
+  ]);
+  RM_SETTINGS=settingsRes.settings; RM_ROOM_TYPES=settingsRes.roomTypes; RM_SEASONAL=settingsRes.seasonalAdjustments||{};
+  RM_RECS=(recsRow.data&&recsRow.data.value)||null;
+  rmPopulateRoomTypeSelects();
+  rmRenderRoomsSetup(); rmRenderWeekday(); rmRenderMonthly(); rmRenderOccupancy(); rmRenderLeadTime();
+}
+
+function rmPopulateRoomTypeSelects(){
+  const opts=RM_ROOM_TYPES.map(rt=>`<option value="${rt.id}">${esc(rt.name)}</option>`).join('');
+  ['calRoomType','repRoomType','chartRoomType'].forEach(id=>{const el=document.getElementById(id);const prev=el.value;el.innerHTML=opts;if(prev)el.value=prev;});
+}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+async function rmRefreshRecs(){
+  rmToast('Recomputing…');
+  try{
+    await fetch('/.netlify/functions/room-price-recalc');
+    const recsRow=await _db.from('app_store').select('value').eq('key','room_price_genie_recommendations').maybeSingle();
+    RM_RECS=(recsRow.data&&recsRow.data.value)||null;
+    rmRenderCalendar();
+    rmToast('Recommendations updated');
+  }catch(e){rmToast('Refresh failed: '+e.message);}
+}
+
+async function rmSaveSettings(){
+  // Pull every editable field currently in the DOM into RM_SETTINGS before saving, so
+  // whichever Pricing Strategy page is open, Save always persists the whole settings object.
+  RM_ROOM_TYPES.forEach(rt=>{
+    const ref=document.querySelector(`input[name=ref][value="${rt.id}"]`);
+    if(ref&&ref.checked) RM_SETTINGS.referenceRoomTypeId=rt.id;
+    const d=document.getElementById('deriv_'+rt.id); if(d) RM_SETTINGS.derivationPct[rt.id]=parseFloat(d.value)||0;
+    const mn=document.getElementById('min_'+rt.id); if(mn) RM_SETTINGS.minPrice[rt.id]=parseFloat(mn.value)||0;
+    const mx=document.getElementById('max_'+rt.id); if(mx) RM_SETTINGS.maxPrice[rt.id]=parseFloat(mx.value)||0;
+  });
+  ['mon','tue','wed','thu','fri','sat','sun'].forEach(k=>{const el=document.getElementById('wd_'+k);if(el)RM_SETTINGS.weekdayPct[k]=parseFloat(el.value)||0;});
+  const wkOwned=document.getElementById('wkOwned'); if(wkOwned) RM_SETTINGS.dayOfWeekOwnedByTool=wkOwned.checked;
+  for(let m=1;m<=12;m++){const el=document.getElementById('seas_'+m);if(el)RM_SEASONAL[String(m)]=parseFloat(el.value)||0;}
+  for(let m=1;m<=12;m++){const el=document.getElementById('tgt_'+m);if(el)RM_SETTINGS.targetOccupancyPctByMonth[String(m)]=parseFloat(el.value)||0;}
+  const med=document.getElementById('occMedian'); if(med) RM_SETTINGS.medianBookingWindowDays=parseInt(med.value)||21;
+  const aggr=document.getElementById('occAggr'); if(aggr) RM_SETTINGS.aggressiveness=aggr.value;
+  ['6mo','3mo','6w','4w','2w','1w','7d','3d','0d'].forEach(k=>{const el=document.getElementById('lt_'+k);if(el)RM_SETTINGS.leadTimePct[k]=parseFloat(el.value)||0;});
+
+  try{
+    const r=await fetch('/.netlify/functions/room-price-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({settings:RM_SETTINGS,seasonalAdjustments:RM_SEASONAL})});
+    const d=await r.json();
+    if(d.success){rmToast('Saved — recommendations refresh tonight (or click Refresh on Calendar)');}
+    else rmToast('Save failed: '+(d.error||'unknown error'));
+  }catch(e){rmToast('Save failed: '+e.message);}
+}
+
+// ---- Rooms Setup ----
+function rmRenderRoomsSetup(){
+  const body=document.getElementById('roomsSetupBody');
+  body.innerHTML=RM_ROOM_TYPES.map(rt=>{
+    const isRef=RM_SETTINGS.referenceRoomTypeId===rt.id;
+    const deriv=RM_SETTINGS.derivationPct[rt.id]||0;
+    const ref=RM_ROOM_TYPES.find(x=>x.id===RM_SETTINGS.referenceRoomTypeId)||rt;
+    const base=isRef?rt.be_price_single:Math.round(ref.be_price_single*(1+deriv/100));
+    const min=RM_SETTINGS.minPrice[rt.id]??Math.round(rt.be_price_single*0.6);
+    const max=RM_SETTINGS.maxPrice[rt.id]??Math.round(rt.be_price_single*1.7);
+    return `<tr>
+      <td><b>${esc(rt.name)}</b></td>
+      <td>${rt.rooms.length}</td>
+      <td><input type="radio" name="ref" value="${rt.id}" ${isRef?'checked':''}></td>
+      <td>$${base}</td>
+      <td>${isRef?'<span style="color:var(--muted)">reference</span>':`<input id="deriv_${rt.id}" type="number" value="${deriv}" style="width:70px">%`}</td>
+      <td><input id="min_${rt.id}" type="number" value="${min}"></td>
+      <td><input id="max_${rt.id}" type="number" value="${max}"></td>
+    </tr>`;
+  }).join('');
+}
+
+// ---- Day of week ----
+function rmRenderWeekday(){
+  document.getElementById('wkOwned').checked=!!RM_SETTINGS.dayOfWeekOwnedByTool;
+  const labels={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
+  document.getElementById('weekdayGrid').innerHTML=Object.keys(labels).map(k=>
+    `<div class="cell"><label>${labels[k]}</label><input id="wd_${k}" type="number" value="${RM_SETTINGS.weekdayPct[k]||0}"></div>`).join('');
+}
+
+// ---- Monthly ----
+const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function rmRenderMonthly(){
+  document.getElementById('monthlyGrid').innerHTML=MONTH_NAMES.map((name,i)=>
+    `<div class="cell"><label>${name}</label><input id="seas_${i+1}" type="number" value="${RM_SEASONAL[String(i+1)]||0}"></div>`).join('');
+}
+
+// ---- Occupancy strategy ----
+function rmRenderOccupancy(){
+  document.getElementById('occTargetGrid').innerHTML=MONTH_NAMES.map((name,i)=>
+    `<div class="cell"><label>${name}</label><input id="tgt_${i+1}" type="number" value="${RM_SETTINGS.targetOccupancyPctByMonth[String(i+1)]??80}"></div>`).join('');
+  document.getElementById('occMedian').value=RM_SETTINGS.medianBookingWindowDays||21;
+  document.getElementById('occAggr').value=RM_SETTINGS.aggressiveness||'standard';
+  if(RM_RECS){
+    const monthKey=new Date().toISOString().slice(0,7);
+    let total=0;
+    Object.values(RM_RECS.byRoomType||{}).forEach(rt=>Object.entries(rt.byDate||{}).forEach(([d,v])=>{if(d.startsWith(monthKey))total+=v.groupTaken||0;}));
+    document.getElementById('occGroupNights').textContent=total+' room-nights this month are currently blocked by retreats/groups (auto-detected, not a manual guess).';
+  }else{
+    document.getElementById('occGroupNights').textContent='Run Refresh recommendations on the Calendar page first.';
+  }
+}
+
+// ---- Lead time ----
+function rmRenderLeadTime(){
+  const labels={'6mo':'6mo+','3mo':'3mo+','6w':'4-6wk','4w':'2-4wk','2w':'1-2wk','1w':'4-7d','7d':'2-3d','3d':'Last 3d','0d':'Day of'};
+  document.getElementById('leadGrid').innerHTML=Object.keys(labels).map(k=>
+    `<div class="cell"><label>${labels[k]}</label><input id="lt_${k}" type="number" value="${RM_SETTINGS.leadTimePct[k]||0}"></div>`).join('');
+}
+
+// ---- Calendar ----
+function rmCalShiftMonth(delta){CAL_MONTH.setMonth(CAL_MONTH.getMonth()+delta);rmRenderCalendar();}
+function rmRenderCalendar(){
+  const rtId=document.getElementById('calRoomType').value||(RM_ROOM_TYPES[0]&&RM_ROOM_TYPES[0].id);
+  document.getElementById('calMonthLbl').textContent=CAL_MONTH.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const dow=['Su','Mo','Tu','We','Th','Fr','Sa'];
+  document.getElementById('calDow').innerHTML=dow.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  const grid=document.getElementById('calGrid');
+  if(!RM_RECS||!RM_RECS.byRoomType[rtId]){
+    grid.innerHTML='<div style="grid-column:1/-1;color:var(--muted);padding:20px 0">No recommendations yet — click "Refresh recommendations" above.</div>';
+    document.getElementById('calRecCount').textContent='0'; document.getElementById('calAvgOcc').textContent='—';
+    document.getElementById('calGeneratedAt').textContent='—';
+    return;
+  }
+  document.getElementById('calGeneratedAt').textContent=new Date(RM_RECS.generatedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const byDate=RM_RECS.byRoomType[rtId].byDate;
+  const y=CAL_MONTH.getFullYear(),m=CAL_MONTH.getMonth();
+  const firstDow=new Date(y,m,1).getDay();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  let html='';
+  for(let i=0;i<firstDow;i++) html+='<div class="cal-day empty"></div>';
+  let recCount=0,occSum=0,occN=0;
+  for(let day=1;day<=daysInMonth;day++){
+    const dateStr=`${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const v=byDate[dateStr];
+    if(!v){html+=`<div class="cal-day"><div class="dnum">${day}</div></div>`;continue;}
+    const diff=v.recommended!==v.current;
+    if(diff)recCount++;
+    occSum+=v.occPct; occN++;
+    html+=`<div class="cal-day ${diff?'diff':''}" data-date="${dateStr}">
+      <div class="dnum">${day}</div>
+      <div class="occ">${v.occPct}% occ</div>
+      ${diff?`<div class="cur">$${v.current}</div>`:''}
+      <div class="rec">$${v.recommended}</div>
+    </div>`;
+  }
+  grid.innerHTML=html;
+  document.getElementById('calRecCount').textContent=recCount;
+  document.getElementById('calAvgOcc').textContent=occN?Math.round(occSum/occN)+'%':'—';
+}
+
+async function rmUploadVisible(){
+  const rtId=document.getElementById('calRoomType').value;
+  if(!RM_RECS||!RM_RECS.byRoomType[rtId])return;
+  const byDate=RM_RECS.byRoomType[rtId].byDate;
+  const y=CAL_MONTH.getFullYear(),m=CAL_MONTH.getMonth();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const changes=[];
+  for(let day=1;day<=daysInMonth;day++){
+    const dateStr=`${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const v=byDate[dateStr];
+    if(v&&v.recommended!==v.current) changes.push({room_type_id:rtId,date:dateStr,price_single:v.recommended});
+  }
+  if(!changes.length){rmToast('Nothing to upload — already matches recommendations');return;}
+  if(!confirm(`Upload ${changes.length} new price(s) to Escape for ${esc(RM_ROOM_TYPES.find(r=>r.id===rtId).name)}?`))return;
+  const btn=document.getElementById('calUploadBtn'); btn.disabled=true;
+  try{
+    const r=await fetch('/.netlify/functions/room-price-apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({changes,staffName:RM_SESSION.name})});
+    const d=await r.json();
+    if(d.success){rmToast(`Uploaded ${d.applied} price(s)`); changes.forEach(c=>{byDate[c.date].current=c.price_single;}); rmRenderCalendar();}
+    else rmToast('Upload failed: '+(d.error||'unknown error'));
+  }catch(e){rmToast('Upload failed: '+e.message);}
+  btn.disabled=false;
+}
+
+// ---- Reporting (Phase 1 estimate from recommendations data) ----
+function rmRenderReporting(){
+  const rtId=document.getElementById('repRoomType').value||(RM_ROOM_TYPES[0]&&RM_ROOM_TYPES[0].id);
+  const stats=document.getElementById('repStats');
+  if(!RM_RECS||!RM_RECS.byRoomType[rtId]){stats.innerHTML='<div style="color:var(--muted)">No data yet — visit Calendar and click Refresh recommendations.</div>';return;}
+  const byDate=RM_RECS.byRoomType[rtId].byDate;
+  const entries=Object.values(byDate);
+  const avgOcc=entries.reduce((a,v)=>a+v.occPct,0)/(entries.length||1);
+  const avgAdr=entries.reduce((a,v)=>a+v.current,0)/(entries.length||1);
+  const estRevenue=entries.reduce((a,v)=>a+v.current*(v.occPct/100)*v.totalRooms,0);
+  const stat=(lbl,val)=>`<div class="cal-stat"><div class="lbl">${lbl}</div><div class="val">${val}</div></div>`;
+  stats.innerHTML=stat('Avg occupancy (next '+entries.length+' days)',Math.round(avgOcc)+'%')+stat('Avg current rate (ADR)','$'+Math.round(avgAdr))+stat('Estimated revenue on the books','$'+Math.round(estRevenue).toLocaleString());
+}
+
+// ---- Chart ----
+function rmRenderChart(){
+  const rtId=document.getElementById('chartRoomType').value||(RM_ROOM_TYPES[0]&&RM_ROOM_TYPES[0].id);
+  const svg=document.getElementById('chartSvg');
+  if(!RM_RECS||!RM_RECS.byRoomType[rtId]){svg.innerHTML='';return;}
+  const rt=RM_ROOM_TYPES.find(r=>r.id===rtId);
+  const min=RM_SETTINGS.minPrice[rtId]??Math.round(rt.be_price_single*0.6);
+  const max=RM_SETTINGS.maxPrice[rtId]??Math.round(rt.be_price_single*1.7);
+  const dates=Object.keys(RM_RECS.byRoomType[rtId].byDate).sort();
+  const vals=dates.map(d=>RM_RECS.byRoomType[rtId].byDate[d]);
+  const W=1000,H=360,pad=40;
+  const yMax=Math.max(max,...vals.map(v=>Math.max(v.recommended,v.current)))*1.05;
+  const yMin=Math.min(min,...vals.map(v=>Math.min(v.recommended,v.current)))*0.95;
+  const x=i=>pad+(i/(dates.length-1||1))*(W-2*pad);
+  const y=v=>H-pad-((v-yMin)/(yMax-yMin||1))*(H-2*pad);
+  const path=(key)=>vals.map((v,i)=>`${i===0?'M':'L'}${x(i).toFixed(1)},${y(v[key]).toFixed(1)}`).join(' ');
+  let html='';
+  html+=`<line x1="${pad}" y1="${y(min)}" x2="${W-pad}" y2="${y(min)}" stroke="#dc2626" stroke-dasharray="4,4" stroke-width="1"/>`;
+  html+=`<line x1="${pad}" y1="${y(max)}" x2="${W-pad}" y2="${y(max)}" stroke="#dc2626" stroke-dasharray="4,4" stroke-width="1"/>`;
+  html+=`<path d="${path('current')}" fill="none" stroke="#9ca3af" stroke-width="1.5"/>`;
+  html+=`<path d="${path('recommended')}" fill="none" stroke="#2d6a6a" stroke-width="2.5"/>`;
+  html+=`<text x="${pad}" y="16" font-size="11" fill="#2d6a6a">&#9679; Recommended</text>`;
+  html+=`<text x="${pad+140}" y="16" font-size="11" fill="#9ca3af">&#9679; Current (Escape)</text>`;
+  html+=`<text x="${pad+300}" y="16" font-size="11" fill="#dc2626">- - Min/Max</text>`;
+  svg.innerHTML=html;
+}
+
+// ---- Nav ----
+function rmToggleStrategy(){document.getElementById('strategySub').classList.toggle('open');}
+function rmNav(page){
+  document.querySelectorAll('.sb-nav a[data-page]').forEach(a=>a.classList.toggle('active',a.dataset.page===page));
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+page));
+  if(page==='reporting')rmRenderReporting();
+  if(page==='chart')rmRenderChart();
+  if(['rooms','weekday','monthly','occupancy','leadtime'].includes(page))document.getElementById('strategySub').classList.add('open');
+}
+
+// ---- Boot ----
+(function(){
+  const saved=sessionStorage.getItem('rm_session');
+  if(saved){
+    try{const session=JSON.parse(saved); if(RM_ALLOWED.some(n=>(session.name||'').toLowerCase().includes(n))){rmBoot(session);return;}}catch(e){}
+  }
+})();
+</script>
+</body>
+</html>

@@ -39,3 +39,11 @@
 # 00:00 UTC = 7pm in Tulum (Quintana Roo is UTC-5 fixed, no DST).
 [functions."send-climas-report"]
   schedule = "0 0 * * *"
+
+# Revenue Manager ("our Room Price Genie", Jorge's ask 2026-10-17): nightly recompute of
+# suggested Escape prices for the next 180 days. Suggestion-only -- never writes be_rates
+# itself, see netlify/functions/room-price-recalc.js. 09:00 UTC = 4am in Tulum, well before
+# Jorge/Darlene would open revenue-manager.html in the morning.
+[functions."room-price-recalc"]
+  schedule = "0 9 * * *"
+  timeout = 26
