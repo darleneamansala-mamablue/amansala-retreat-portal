@@ -40,12 +40,12 @@
 [functions."send-climas-report"]
   schedule = "0 0 * * *"
 
-# Revenue Manager ("our Room Price Genie", Jorge's ask 2026-10-17): nightly recompute of
-# suggested Escape prices for the next 180 days. Suggestion-only -- never writes be_rates
-# itself, see netlify/functions/room-price-recalc.js. 09:00 UTC = 4am in Tulum, well before
-# Jorge/Darlene would open revenue-manager.html in the morning.
+# Revenue Manager ("our Room Price Genie", Jorge's ask 2026-10-17): recomputes suggested
+# Escape prices for the next 180 days, 3x/day per Jorge's ask 2026-10-17 -- 3am, 12pm, 8pm
+# Tulum = 08:00, 17:00, 01:00 UTC (Quintana Roo is UTC-5 fixed, no DST). Suggestion-only --
+# never writes be_rates itself, see netlify/functions/room-price-recalc.js.
 [functions."room-price-recalc"]
-  schedule = "0 9 * * *"
+  schedule = "0 1,8,17 * * *"
   timeout = 26
 
 # Same recompute as above, callable on demand (Netlify returns 403 on direct requests to a
