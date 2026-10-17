@@ -78,7 +78,9 @@ async function fulfil(pi) {
   await L.releaseHold(key, m.rbHoldId);
 
   const shareTxt = !m.rbShare ? '' : m.rbShare.startsWith('friend:') ? ` · SHARED ROOM: travelling with friend ${m.rbShare.slice(7)} (friend must also book a shared room)` : ' · SHARED ROOM: travelling alone, to be matched with a guest of the same gender (agreed to pay for a private room if no match)';
-  const note = `Booked online ${new Date().toISOString().slice(0, 10)}${range.custom ? ` · STAY ${range.checkIn} to ${range.checkOut} (retreat ${bk.start_date} to ${bk.end_date}; extra nights include all meals; add the extra nights in Cloudbeds)` : ''}${isLeader ? ' · LEADER (' + (property || 'no room') + ')' : ''}${shareTxt} · agreed to ${agreed}${isDeposit ? ` · PAID 50% (${'$' + roomPaidNow.toFixed(2)}), balance $${roomLater.toFixed(2)} auto-charges ${m.rbBalanceDate}` : ''} · Stripe ${pi.id}`;
+  // The room list note stays empty unless staff have to act on it (a shared room needs a roommate). The booking details are in the staff
+  // email and the booking record; the old long note (Booked online / stay / agreed / paid / Stripe id) is no longer written.
+  const note = shareTxt ? shareTxt.replace(/^ · /, '') : '';
 
   const order = { piId: pi.id, bookingId, at: new Date().toISOString(), name: m.rbName, email: m.rbEmail, phone: m.rbPhone, total: priced.total, paidNow, balance: roomLater, balanceDate: isDeposit ? m.rbBalanceDate : null, units: units || [], status: units ? 'placed' : 'needs_attention' };
 
@@ -88,15 +90,15 @@ async function fulfil(pi) {
       const unit = units[i];
       const rowGuests = rm && rm.kind === 'twin' ? [guests[i]] : guests;     // king: both guests in the one room
       const existing = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(bookingId)}&room=eq.${encodeURIComponent(unit)}&select=id,notes,amount_paid`);
-      const rowNote = (existing[0] && existing[0].notes ? existing[0].notes + ' — ' : '') + note;
-      // The guest's real stay (they can book outside the retreat dates) and, for a room two guests share, the room's rate for both, so the
-      // booking screen's Period / Room Total match what was charged. Retreat-length single stays are left as they always were.
+      const rowNote = [existing[0] && existing[0].notes, note].filter(Boolean).join(' — ');
+      // The guest's real stay (they can book outside the retreat dates), and the tip counted on every night they stay, as charged.
+      // The room rate is left alone: the room list prices each guest at the room type's rate x nights.
       const svcTotal = Math.max(0, Math.round((paidNow - roomPaidNow) * 100) / 100);
       const bill = L.regFolioItems({ cfg, rm, mode: room.mode, unit, g: rowGuests.length, nights, range, isDeposit, piId: pi.id, roomName: roomLine.name,
         paid: perRow + (i === 0 ? svcTotal : 0), rowAmount: roomLine.amount / units.length,
         svcLines: i === 0 ? priced.lines.filter((l) => l.type === 'service') : [] });
       const patch = { guests: rowGuests, amount_paid: perRow + (Number(existing[0] && existing[0].amount_paid) || 0), notes: rowNote, room_type_id: room.rtId,
-        ...(range.custom ? { check_in: range.checkIn, check_out: range.checkOut } : {}), ...(rowGuests.length > 1 && bill.rate > 0 ? { custom_rate_override: bill.rate * rowGuests.length } : {}) };
+        ...(range.custom ? { check_in: range.checkIn, check_out: range.checkOut } : {}), ...(range.custom ? { custom_tip_nights_override: nights } : {}) };
       const regId = existing[0] ? existing[0].id : L.newRegId();
       if (existing[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${existing[0].id}`, patch, 'return=minimal');
       else await L.sreq(key, 'POST', 'registrations', { id: regId, booking_id: bookingId, room: unit, is_teacher_room: false, ...patch }, 'return=minimal');

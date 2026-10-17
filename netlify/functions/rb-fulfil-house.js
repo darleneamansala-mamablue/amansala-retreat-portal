@@ -85,9 +85,9 @@ async function fulfil(pi) {
       for (let k = 0; k < units.length; k++) {
         const unit = units[k];
         const existing = await L.sget(key, `registrations?booking_id=eq.${encodeURIComponent(bookingId)}&room=eq.${encodeURIComponent(unit)}&select=id,notes,amount_paid`);
-        const note = `Booked online (${HL}, ${r.label}) ${new Date().toISOString().slice(0, 10)} · booked by ${m.rbName}${r.supplement ? ' · includes the individual bed' : ''}${stayTxt}`;
-        const patch = { guests: byUnit[k], amount_paid: perUnit + (Number(existing[0] && existing[0].amount_paid) || 0), notes: (existing[0] && existing[0].notes ? existing[0].notes + ' — ' : '') + note, room_type_id: typeOf[unit] || null };
-        const stayPatch = rec.dates && rec.dates.custom ? { check_in: rec.dates.checkIn, check_out: rec.dates.checkOut } : {};
+        const note = '';   // no auto note: the booking details are in the staff email and the booking record
+        const patch = { guests: byUnit[k], amount_paid: perUnit + (Number(existing[0] && existing[0].amount_paid) || 0), notes: [existing[0] && existing[0].notes, note].filter(Boolean).join(' — '), room_type_id: typeOf[unit] || null };
+        const stayPatch = rec.dates && rec.dates.custom ? { check_in: rec.dates.checkIn, check_out: rec.dates.checkOut, custom_tip_nights_override: rec.dates.nights } : {};
         const regId = existing[0] ? existing[0].id : L.newRegId();
         if (existing[0]) await L.sreq(key, 'PATCH', `registrations?id=eq.${existing[0].id}`, { ...patch, ...stayPatch }, 'return=minimal');
         else await L.sreq(key, 'POST', 'registrations', { id: regId, booking_id: bookingId, room: unit, is_teacher_room: false, ...patch, ...stayPatch }, 'return=minimal');
