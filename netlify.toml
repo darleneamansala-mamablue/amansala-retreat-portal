@@ -40,6 +40,10 @@
 [functions."send-climas-report"]
   schedule = "0 0 * * *"
 
+# Unscheduled test-trigger twin of send-climas-report -- scheduled functions 403 on a
+# direct call, so this is the only way to fire a test send on demand.
+[functions."send-climas-report-now"]
+
 # Revenue Manager ("our Room Price Genie", Jorge's ask 2026-10-17): recomputes suggested
 # Escape prices for the next 180 days, 3x/day per Jorge's ask 2026-10-17 -- 3am, 12pm, 8pm
 # Tulum = 08:00, 17:00, 01:00 UTC (Quintana Roo is UTC-5 fixed, no DST). Suggestion-only --

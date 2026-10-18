@@ -7,10 +7,16 @@
 // with Jorge), so this sends the SAME message individually to every number
 // in CLIMAS_REPORT_NUMBERS (comma-separated E.164), covering both teams.
 //
-// Template "amansala_climas_reporte" (es_MX, UTILITY) submitted via Visito's
-// API 2026-10-08, PENDING Meta approval as of this writing -- sends are a
-// no-op (dry run, logged only) until CLIMAS_REPORT_ENABLED=true, same
-// pattern as send-checkout-payment-links.js's CHECKOUT_LINKS_ENABLED.
+// Template "amansala_climas_reporte_v2" (es_MX, UTILITY) submitted via Visito's
+// API 2026-10-18 -- replaces the original single-line "amansala_climas_reporte"
+// (never actually launched) with Darlene's 4-section design: a header line,
+// then AMANSALA / SHANTI room lists grouped by room_types.property, then an
+// "A/C 24 HORAS -- NO APAGAR" section for rooms with registrations.ac_24h set
+// (booking-detail.js's new checkbox) -- those rooms are excluded from the two
+// property lists above them so they're never told to use the normal 9pm rule.
+// PENDING Meta approval as of this writing -- sends are a no-op (dry run,
+// logged only) until CLIMAS_REPORT_ENABLED=true, same pattern as
+// send-checkout-payment-links.js's CHECKOUT_LINKS_ENABLED.
 //
 // Env:
 //   SUPABASE_SERVICE_KEY
@@ -22,18 +28,29 @@ const SUPABASE_URL  = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const PORTAL_URL    = 'https://amansalaportal.com';
 const VISITO_API    = 'https://platform-api.visitoai.com/m2m/v1';
 const CHANNEL_ID    = '6abd2154f6a6b5cd69232824'; // WhatsApp +52 1 984 879 5999, tenant amansala-2
-const TEMPLATE_NAME = 'amansala_climas_reporte';
+const TEMPLATE_NAME = 'amansala_climas_reporte_v2';
 const TEMPLATE_LANG = 'es_MX';
 
 // Hotel-local date (Tulum, UTC-5)
 function localDate(offsetDays = 0) {
   return new Date(Date.now() + offsetDays * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Cancun' });
 }
-function fmtDateEsLong(dateStr) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+// "Sábado 17 de octubre" -- weekday + day + month, no year (Darlene's design,
+// matches the header line in her WhatsApp mockup). Capitalized manually since
+// toLocaleDateString('es-MX') lowercases weekday names.
+function fmtDateEsWeekday(dateStr) {
+  const s = new Date(dateStr + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+// Casa Grande is physically part of the main Amansala complex (unlike Casa
+// Shanti, a separate property across the street) -- grouped under AMANSALA
+// here, same as the Room Calendar's own property banding (modules/venues.js
+// RC_PROP_COLORS).
+function climasGroupFor(property) {
+  return property === 'CASA SHANTI' ? 'SHANTI' : 'AMANSALA';
 }
 
-exports.handler = async () => {
+async function run() {
   const supaKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supaKey) { console.error('[climas-report] SUPABASE_SERVICE_KEY missing'); return { statusCode: 500 }; }
   // Staff-editable in Admin > Settings (Jorge's ask 2026-10-15) instead of the
@@ -61,6 +78,7 @@ exports.handler = async () => {
 
   const today = localDate(0);
   const occupied = new Set();
+  const ac24hRooms = new Set();
 
   // Jorge's ask 2026-10-08: "solo in house" -- a reservation whose dates
   // merely cover tonight isn't enough, staff has to have actually clicked
@@ -77,7 +95,7 @@ exports.handler = async () => {
 
   // Retreat/group guests, checked in and not yet out -- cross-checked
   // against their booking (not cancelled, effective dates cover tonight).
-  const regs = await get(`/rest/v1/registrations?select=room,cancelled,guests,check_in,check_out,booking_id&checked_in_at=not.is.null&checked_out_at=is.null`);
+  const regs = await get(`/rest/v1/registrations?select=room,cancelled,guests,check_in,check_out,booking_id,ac_24h&checked_in_at=not.is.null&checked_out_at=is.null`);
   if (regs.length) {
     const bkIds = [...new Set(regs.map(r => r.booking_id).filter(Boolean))];
     const bks = await get(`/rest/v1/bookings?select=id,status,start_date,end_date&id=in.(${bkIds.join(',')})`);
@@ -90,6 +108,7 @@ exports.handler = async () => {
       const ci = r.check_in || bk.start_date, co = r.check_out || bk.end_date;
       if (!(ci <= today && co > today)) return;
       occupied.add(r.room);
+      if (r.ac_24h) ac24hRooms.add(r.room);
     });
   }
 
@@ -125,17 +144,33 @@ exports.handler = async () => {
     return { statusCode: 200, body: JSON.stringify({ date: today, rooms: 0 }) };
   }
 
-  const dateStr  = fmtDateEsLong(today);
+  // Property lookup for the AMANSALA/SHANTI split -- ac_24h rooms are pulled out
+  // of both lists first (they get their own section, not the 9pm reminder).
+  const roomTypes = await get('/rest/v1/room_types?select=property,rooms');
+  const propertyByRoom = {};
+  roomTypes.forEach(rt => (rt.rooms || []).forEach(r => { propertyByRoom[r] = rt.property || 'AMANSALA'; }));
+  const groups = { AMANSALA: [], SHANTI: [] };
+  roomList.forEach(room => {
+    if (ac24hRooms.has(room)) return;
+    groups[climasGroupFor(propertyByRoom[room])].push(room);
+  });
+  const ac24hList = roomList.filter(r => ac24hRooms.has(r));
+
   // Neither a real "\n" (U+000A, rejected by Meta with a bare 500) nor the
   // Unicode LINE SEPARATOR (U+2028, accepted by Meta but rendered as a
   // mojibake replacement character on Jorge's actual WhatsApp client --
   // confirmed 2026-10-08) survive as a real line break inside a template
-  // PARAMETER. A comma-separated single line is the one format confirmed to
-  // render correctly everywhere.
-  const roomsStr = roomList.map(r => `Habitación ${r}`).join(', ');
+  // PARAMETER -- a single "·"-separated line per section is the one format
+  // confirmed to render correctly everywhere (it still wraps naturally on a
+  // phone screen, just not at a hard-coded line break). A section with no
+  // rooms still needs some text -- Meta rejects an empty parameter value.
+  const dateStr    = fmtDateEsWeekday(today);
+  const amansalaStr = groups.AMANSALA.length ? groups.AMANSALA.join(' · ') : '—';
+  const shantiStr   = groups.SHANTI.length ? groups.SHANTI.join(' · ') : '—';
+  const ac24hStr    = ac24hList.length ? ac24hList.join(' · ') : '—';
 
   if (!enabled) {
-    console.log(`[climas-report] would send to ${numbers.length} numbers: ${roomsStr}`);
+    console.log(`[climas-report] would send to ${numbers.length} numbers -- AMANSALA: ${amansalaStr} | SHANTI: ${shantiStr} | 24H: ${ac24hStr}`);
     return { statusCode: 200, body: JSON.stringify({ date: today, rooms: roomList.length, dryRun: true }) };
   }
 
@@ -150,7 +185,12 @@ exports.handler = async () => {
           template: {
             name: TEMPLATE_NAME,
             language: { code: TEMPLATE_LANG },
-            components: [{ type: 'body', parameters: [{ type: 'text', text: dateStr }, { type: 'text', text: roomsStr }] }],
+            components: [{ type: 'body', parameters: [
+              { type: 'text', text: dateStr },
+              { type: 'text', text: amansalaStr },
+              { type: 'text', text: shantiStr },
+              { type: 'text', text: ac24hStr },
+            ] }],
           },
         }),
       });
@@ -165,4 +205,7 @@ exports.handler = async () => {
 
   console.log(`[climas-report] ${today} -- ${JSON.stringify(results)}`);
   return { statusCode: 200, body: JSON.stringify({ date: today, rooms: roomList.length, ...results }) };
-};
+}
+
+exports.handler = async () => run();
+exports.run = run;
