@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://js.stripe.com/v3/"></script>
-<script src="/retreat-booking-house.js?v=20261016a" defer></script>
+<script src="/retreat-booking-house.js?v=20261018a" defer></script>
 <style>
 /* Same look as book.html: sand + moss + clay, Italiana headings, DM Sans text. Always light. */
 :root{--sand:#eee9df;--sand-light:#f8f5ef;--ink:#1f2b27;--moss:#3f5147;--clay:#9a5f43;--line:#1f2b272e;--paper:#fffdf8;--warn:#f6ebd0;--warn-line:#c9993f;--display:'Cormorant Garamond',Georgia,serif;--body:'DM Sans',system-ui,sans-serif;color-scheme:light}
@@ -240,6 +240,7 @@ td.p strong{font-size:28px}
   </div>
   <div id="paybox" hidden>
     <p class="sub" style="margin-bottom:12px">Secure card payment</p>
+    <p id="cardNote" hidden style="margin:0 0 12px;padding:10px 14px;background:#fbf3df;border-left:3px solid #c9972b;font-size:14px;font-weight:600;color:#5b4a1f"></p>
     <div id="stripe-element"></div>
     <button class="btn" id="pay" type="button"><span>Pay <b id="payAmt"></b></span><span>&rarr;</span></button>
     <button class="plain" id="payback" type="button">Back</button>
@@ -500,7 +501,7 @@ function startPayment(){
      elements=stripe.elements({clientSecret:x.j.clientSecret,appearance:{theme:'stripe',variables:{fontFamily:'DM Sans, sans-serif',borderRadius:'0px',colorPrimary:'#3f5147'}}});
      $('stripe-element').innerHTML='';elements.create('payment').mount('#stripe-element');
      $('payAmt').textContent=money2(x.j.amount);
-     $('checkout').hidden=true;$('paybox').hidden=false;$('mt').textContent='Payment';
+     $('checkout').hidden=true;$('paybox').hidden=false;$('mt').textContent='Payment';var _cn=$('cardNote');if(_cn){_cn.textContent=(INFO&&INFO.cardNotice)||'';_cn.hidden=!(INFO&&INFO.cardNotice)}
      window._rbAmount=x.j.amount;window._rbRecord=x.j.recordUrl||'';window._rbBalance=x.j.plan==='deposit'?{amt:x.j.balance,date:x.j.balanceDate}:null;window._rbLeaderMsg=(x.j.leaderPlacement?leaderMsg(roomOf(cart.room.rtId),roomCalc(cart.room).guests):'');
    }).catch(function(){$('err').textContent='Connection problem. Please try again.';$('go').disabled=false});
 }

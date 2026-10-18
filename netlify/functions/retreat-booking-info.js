@@ -112,6 +112,7 @@ exports.handler = async (event) => {
       roomNote: String(cfg.roomNote || ''),   // optional note under the price when a guest picks a room; replaces the teaching-fee line
       gratuityPerNight: Number(cfg.gratuityPerNight) || 0,
       taxFeePct: Number(cfg.taxFeePct) || 0,
+      cardNotice: String(cfg.cardNotice || ''),          // optional line shown above the card form (e.g. which cards are accepted)
       teachingFeeAmount: (cfg.teachingFee && cfg.teachingFee.on) ? Number(cfg.teachingFee.amountPP) || 0 : 0,
       includes: cfg.includes || [],
       notIncluded: cfg.notIncluded || '',
