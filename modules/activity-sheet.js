@@ -389,6 +389,12 @@ function actByRetreatRender() {
   wrap.innerHTML = html;
 }
 
+// Printed sign-up sheet: no more than 15 guests on a page, and the guests are split EVENLY across the pages needed
+// (Darlene 2026-10-18): 15 or fewer = 1 page; 25 = 13 + 12; 30 = 15 + 15; 35 = 12 + 12 + 11. Never 30 squeezed on one page and 5 on the next.
+function actSheetPageSizes(n, max = 15) {
+  const pages = Math.max(1, Math.ceil(n / max)), base = Math.floor(n / pages), extra = n % pages;
+  return Array.from({ length: pages }, (_, i) => base + (i < extra ? 1 : 0));
+}
 function actByRetreatPrint(bkId) {
   const bk = AppData.bookings.find(b=>b.id===bkId);
   if (!bk) { showToast('Select a retreat first.'); return; }
@@ -448,13 +454,13 @@ function actByRetreatPrint(bkId) {
     </th>`;
   }).join('');
 
-  const guestRows = roster.map(g=>{
+  const guestRowsArr = roster.map(g=>{
     // Included activities are already part of everyone's package, so they're
     // pre-marked — guests only need to mark the optional/paid columns.
     const cells = entries.map(e=>`<td class="mark"><span class="box${e.prepaid?' checked':''}">${e.prepaid?'✓':''}</span></td>`).join('');
     const first=titleCase(g.first), last=titleCase(g.last);
     return `<tr><td class="name-cell">${first}${last?' '+last:''}</td>${cells}</tr>`;
-  }).join('');
+  });
 
   // Staff-only info (headcount tally, guide/driver assignments) lives in its
   // own small panel below the guest grid rather than embedded as extra rows
@@ -476,6 +482,48 @@ function actByRetreatPrint(bkId) {
     </div>` : '';
 
   const signupLink = location.origin+'/activity-signup.html?id='+bkId;
+
+  // one page per chunk of guests; the header repeats on every page and says which page it is
+  const pageSizes = actSheetPageSizes(guestRowsArr.length, 15);
+  const theadHtml = (pi) => `<thead>
+        <tr><td colspan="${entries.length+1}" style="padding:0;border:none">
+          <div class="hdr">
+            <div class="hdr-row">
+              <img class="logo-mark" src="/logo-amansala-retreats-black.png" alt="Amansala Retreats">
+              <div>
+                <div class="title">${retreatName}</div>
+                <div class="sub">${dateRangeLbl}</div>
+              </div>
+            </div>
+            <div class="divider"></div>
+            <div class="instr">Please put a check ✓ or an X in the box by your name for each activity you would like to join</div>
+            <div class="meta-row">
+              <span class="warn-pill">Minimum of 6 people required</span>
+              <span class="pax-pill">${roster.length} guests total</span>
+              ${pageSizes.length>1?`<span class="pax-pill">Page ${pi+1} of ${pageSizes.length}</span>`:''}
+            </div>
+          </div>
+        </td></tr>
+        <tr><th style="text-align:left">Name</th>${colHeaders}</tr>
+      </thead>`;
+  let _ri = 0;
+  const pagesHtml = pageSizes.map((sz, pi) => {
+    const rowsHtml = guestRowsArr.slice(_ri, _ri + sz).join('');
+    _ri += sz;
+    const last = pi === pageSizes.length - 1;
+    return `<div class="sheet-page" style="${last ? '' : 'page-break-after:always;break-after:page;'}">
+    <table>
+      ${theadHtml(pi)}
+      <tbody>
+        ${rowsHtml||`<tr><td class="name-cell" colspan="${entries.length+1}" style="text-align:center;font-style:italic">No guests on the room list yet.</td></tr>`}
+      </tbody>
+    </table>
+    ${last ? opsPanel : ''}
+    <div class="footer">
+      <span class="policy">All services must be cancelled at least 12 hours before your service otherwise you will be charged for it.</span>
+    </div>
+    </div>`;
+  }).join('');
 
   const win = window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head>
@@ -530,35 +578,7 @@ function actByRetreatPrint(bkId) {
     </style>
   </head><body>
     <button class="print-btn no-print" onclick="window.print()">Print</button>
-    <table>
-      <thead>
-        <tr><td colspan="${entries.length+1}" style="padding:0;border:none">
-          <div class="hdr">
-            <div class="hdr-row">
-              <img class="logo-mark" src="/logo-amansala-retreats-black.png" alt="Amansala Retreats">
-              <div>
-                <div class="title">${retreatName}</div>
-                <div class="sub">${dateRangeLbl}</div>
-              </div>
-            </div>
-            <div class="divider"></div>
-            <div class="instr">Please put a check ✓ or an X in the box by your name for each activity you would like to join</div>
-            <div class="meta-row">
-              <span class="warn-pill">Minimum of 6 people required</span>
-              <span class="pax-pill">${roster.length} guests total</span>
-            </div>
-          </div>
-        </td></tr>
-        <tr><th style="text-align:left">Name</th>${colHeaders}</tr>
-      </thead>
-      <tbody>
-        ${guestRows||`<tr><td class="name-cell" colspan="${entries.length+1}" style="text-align:center;font-style:italic">No guests on the room list yet.</td></tr>`}
-      </tbody>
-    </table>
-    ${opsPanel}
-    <div class="footer">
-      <span class="policy">All services must be cancelled at least 12 hours before your service otherwise you will be charged for it.</span>
-    </div>
+    ${pagesHtml}
   </body></html>`);
   win.document.close();
   setTimeout(()=>win.print(), 400);
