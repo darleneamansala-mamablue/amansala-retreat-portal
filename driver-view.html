@@ -290,12 +290,27 @@ async function loadData() {
   const bkMap = {};
   (bookings || []).forEach(b => { bkMap[b.id] = b; });
 
-  // Room lookup by name
-  const roomLookup = {};
+  // Room lookup by name -- exact match, then unique-first-name, then unique-email fallback
+  // (ported from modules/transport.js's admin Transport board, which already had all three;
+  // this standalone driver page only ever had the exact match, confirmed 2026-10-18 as the
+  // cause of "reservas sin habitación" here: an abbreviated/variant submitted name, e.g.
+  // "Billy S" vs the registration's "Billy Stalcup", never resolves a room without a fallback,
+  // even though the admin board shows it correctly).
+  const roomLookup = {}, firstNameIdx = {}, emailRoomIdx = {};
   (regs || []).forEach(r => {
     (r.guests || []).forEach(g => {
-      if (g.name && r.booking_id) {
-        roomLookup[`${r.booking_id}|${g.name.toLowerCase()}`] = r.room || '';
+      if (!g.name || !r.booking_id) return;
+      roomLookup[`${r.booking_id}|${g.name.toLowerCase()}`] = r.room || '';
+      const firstName = g.name.trim().split(/\s+/)[0].toLowerCase();
+      if (firstName.length >= 3) {
+        const fk = `${r.booking_id}|${firstName}`;
+        if (!firstNameIdx[fk]) firstNameIdx[fk] = { room: r.room || '', count: 0 };
+        firstNameIdx[fk].count++;
+      }
+      if (g.email) {
+        const ek = `${r.booking_id}|${g.email.toLowerCase().trim()}`;
+        if (!emailRoomIdx[ek]) emailRoomIdx[ek] = { room: r.room || '', count: 0 };
+        emailRoomIdx[ek].count++;
       }
     });
   });
@@ -334,7 +349,13 @@ async function loadData() {
     const d   = row.data || {};
     const bk  = bkMap[row.booking_id];
     const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
-    const room = roomLookup[`${row.booking_id}|${name.toLowerCase()}`] || '';
+    const room = roomLookup[`${row.booking_id}|${name.toLowerCase()}`] || (() => {
+      const fn = (d.firstName || '').trim().toLowerCase();
+      if (fn.length >= 3) { const fi = firstNameIdx[`${row.booking_id}|${fn}`]; if (fi && fi.count === 1) return fi.room; }
+      const em = (d.email || '').toLowerCase().trim();
+      if (em && row.booking_id) { const ei = emailRoomIdx[`${row.booking_id}|${em}`]; if (ei && ei.count === 1) return ei.room; }
+      return '';
+    })();
     const retreatLabel = bk ? [bk.retreat_name, bk.leader_name].filter(Boolean).join(' · ') : '';
 
     // Arrival

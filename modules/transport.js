@@ -899,10 +899,14 @@ async function tr2LoadData() {
   // freeelliott0@gmail.com, showed up as 2-3 separate "Sin retiro asignado" duplicates) -- the
   // exact-string dedup below never merges those on its own. Scoped strictly to an EXACT
   // matching email -- never guess across different emails, two real people can easily share a
-  // similar-sounding name. Within each email group, cluster full names ("firstName lastName")
-  // within 1 character of each other (Levenshtein distance <= 1) and rewrite every row in a
-  // cluster to the cluster's best-scoring spelling, so the dedup below (keyed on exact name
-  // match) naturally collapses them into one.
+  // similar-sounding name. Within each email group, cluster rows that share the same last name
+  // and whose first names are either within 1 character of each other (Levenshtein, catches a
+  // typo like "Elliot"/"Elliott") OR where one is a nickname-style prefix of the other, length
+  // >= 3 (catches "Elli" -> "Elliott"/"Elliot" -- a straight Levenshtein check alone missed this:
+  // "elli" is 2-3 edits away from "elliot"/"elliott", not 1, confirmed live 2026-10-18 when the
+  // first version of this fix still left Elli Free as a separate unmerged row). Rewrite every
+  // row in a cluster to the cluster's best-scoring spelling, so the dedup below (keyed on exact
+  // name match) naturally collapses them into one.
   const normalizedRows = (() => {
     const byEmail = new Map();
     (rows || []).forEach(row => {
@@ -917,10 +921,15 @@ async function tr2LoadData() {
       const clusters = [];
       group.forEach(row => {
         const d = row.data || {};
-        const full = `${(d.firstName || '').trim()} ${(d.lastName || '').trim()}`.trim().toLowerCase();
-        if (!full) return;
-        const target = clusters.find(c => tr2Levenshtein(c.fullName, full) <= 1);
-        if (target) target.rows.push(row); else clusters.push({ fullName: full, rows: [row] });
+        const fn = (d.firstName || '').trim().toLowerCase();
+        const ln = (d.lastName || '').trim().toLowerCase();
+        if (!fn && !ln) return;
+        const target = clusters.find(c => {
+          if (c.ln !== ln) return false;
+          if (tr2Levenshtein(c.fn, fn) <= 1) return true;
+          return fn.length >= 3 && c.fn.length >= 3 && (fn.startsWith(c.fn) || c.fn.startsWith(fn));
+        });
+        if (target) target.rows.push(row); else clusters.push({ fn, ln, rows: [row] });
       });
       clusters.forEach(c => {
         if (c.rows.length < 2) return;
