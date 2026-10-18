@@ -571,6 +571,7 @@ let tr2DateTo        = '';
 let tr2ShowArchived  = false;
 let tr2AllEntries    = [];
 let tr2ActiveBooks   = [];
+let tr2ActiveRequests = [];
 let tr2RawRows       = {};   // id → full row (for edit modal)
 let tr2NameMap       = {};   // normalizedName → { bkId, retreatLabel, origName }
 let tr2UserGroupMap  = new Map(); // dirId → groupKey (loaded from settings.transport_groups)
@@ -608,6 +609,16 @@ function tr2AvailableRoomsOfType(rtId, bkStart, bkEnd, ownBkId) {
       if (b.id === ownBkId || b.status === 'cancelled') return false;
       if (b.endDate < bkStart || b.startDate > bkEnd) return false;
       return (b.blockedRooms || []).includes(roomName);
+    }) &&
+    // Jorge's report 2026-10-18: a room with an individual (Booking Engine/Direct/OTA)
+    // same-day arrival showed as available for upgrade -- this function only ever checked
+    // retreat/group bookings.blockedRooms, never booking_requests (which has its own `room`
+    // column and isn't part of any bookings row's blockedRooms array at all). Checked-in
+    // status is irrelevant here -- the room is reserved for that guest the moment the
+    // reservation exists, whether or not they've physically checked in yet.
+    !tr2ActiveRequests.some(r => {
+      if (r.check_out < bkStart || r.check_in > bkEnd) return false;
+      return r.room === roomName;
     })
   );
 }
@@ -798,9 +809,10 @@ async function tr2LoadData() {
   const body = document.getElementById('tr2-body');
   if (body) body.innerHTML = `<div style="padding:20px;color:#9ca3af;text-align:center">Loading…</div>`;
 
-  const [{ data: rows }, { data: staffData }] = await Promise.all([
+  const [{ data: rows }, { data: staffData }, { data: reqRows }] = await Promise.all([
     db.from('transport').select('*').order('submitted_at', { ascending: false }),
     db.from('staff').select('id,name,username,role,active').order('name', { ascending: true }),
+    db.from('booking_requests').select('room,check_in,check_out,status').neq('status', 'declined'),
   ]);
 
   tr2StaffList = (staffData || []).filter(s => s.active);
@@ -808,6 +820,9 @@ async function tr2LoadData() {
   AppData.roomTypes.forEach(rt => { (rt.rooms || []).forEach(name => { tr2RoomNameToRtId[name] = rt.id; }); });
 
   tr2ActiveBooks = AppData.bookings.filter(b => b.status !== 'cancelled');
+  // Individual (Booking Engine/Direct/OTA) reservations -- tr2AvailableRoomsOfType() needs
+  // these too, see the comment there (Jorge's report 2026-10-18).
+  tr2ActiveRequests = (reqRows || []).filter(r => r.room && r.check_in && r.check_out);
   const bkMap = {};
   tr2ActiveBooks.forEach(b => { bkMap[b.id] = b; });
 
