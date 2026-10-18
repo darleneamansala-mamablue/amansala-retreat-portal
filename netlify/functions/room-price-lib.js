@@ -79,6 +79,14 @@ const DEFAULT_SETTINGS = {
   // and separately Double -> Beachview Double. room-price-recalc.js's capping pass repeats until
   // stable so a chain this long propagates correctly regardless of processing order.
   priceCeilingRoomTypeId: { rt5: 'rt4', rt4: 'rt3', rt3: 'rt2', rt2: 'rt1', rt7: 'rt6' },
+  // Linked groups (Jorge's ask 2026-10-18): Casa Master and Casa Shanti must always recommend
+  // the EXACT same price, capped at their own (identical) Max Price -- not a one-way ceiling
+  // like priceCeilingRoomTypeId above. Each sells as a single whole-villa unit, so its own
+  // occupancy is always 0% or 100%, nothing in between -- without this, two villas with
+  // identical settings could land on wildly different prices on the same day purely because
+  // one happened to be booked that night and the other wasn't. room-price-recalc.js computes
+  // ONE combined-occupancy price per group and applies it to every member.
+  linkedRoomTypeGroups: [['cm1', 'csh3']],
   minPrice: { rt1: 345, rt2: 295, rt3: 245, rt4: 185, rt5: 140, rt6: 355, rt7: 320, rt8: 310, rt9: 375, c4a: 525, cm1: 1200, csh3: 1200 },
   maxPrice: { rt1: 975, rt2: 875, rt3: 685, rt4: 600, rt5: 695, rt6: 875, rt7: 900, rt8: 1200, rt9: 1350, c4a: 1200, cm1: 3400, csh3: 3400 },
   weekdayPct: { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 },
