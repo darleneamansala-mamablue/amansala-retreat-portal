@@ -1221,7 +1221,9 @@ function tr2BuildView() {
     normalEntries.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
     for (const [date, items] of groups) {
       const isToday = date === today, isTmrw = date === tomorrow;
-      const label = isToday ? 'Today' : isTmrw ? 'Tomorrow' : fmtDate(date);
+      // Same "📍 TODAY — Sunday, October 18" treatment driver-view.html already shows (Jorge's
+      // ask 2026-10-18: the admin board's plain "Today" label stood out less in comparison).
+      const label = isToday ? `📍 TODAY — ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` : isTmrw ? 'Tomorrow' : fmtDate(date);
       const bg = isToday ? '#ccfbf1' : '#f1f5f9', color = isToday ? '#0f766e' : '#374151';
       html += `<tr><td colspan="9" style="padding:8px 12px;background:${bg};font-size:11px;font-weight:700;color:${color};border-top:2px solid #e5e7eb">${label}</td></tr>`;
 
