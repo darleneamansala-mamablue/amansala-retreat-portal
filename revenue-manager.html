@@ -141,7 +141,7 @@ svg text{font-family:'Jost',sans-serif}
       <div class="subtitle">One room type is the Reference — every other type's base price is a fixed % of it. Min/Max are hard floors/ceilings the engine will never cross.</div>
       <div class="card">
         <table>
-          <thead><tr><th>Room type</th><th>Rooms</th><th>Reference</th><th>Base price</th><th>Derivation vs reference</th><th>Min price</th><th>Max price</th></tr></thead>
+          <thead><tr><th>Room type</th><th>Rooms</th><th>Reference</th><th>Base price</th><th>Derivation vs reference</th><th>Min price</th><th>Max price</th><th>Price ceiling</th></tr></thead>
           <tbody id="roomsSetupBody"></tbody>
         </table>
       </div>
@@ -338,6 +338,12 @@ async function rmSaveSettings(){
     const d=document.getElementById('deriv_'+rt.id); if(d) RM_SETTINGS.derivationPct[rt.id]=parseFloat(d.value)||0;
     const mn=document.getElementById('min_'+rt.id); if(mn) RM_SETTINGS.minPrice[rt.id]=parseFloat(mn.value)||0;
     const mx=document.getElementById('max_'+rt.id); if(mx) RM_SETTINGS.maxPrice[rt.id]=parseFloat(mx.value)||0;
+    const ceil=document.getElementById('ceil_'+rt.id);
+    if(ceil){
+      if(!RM_SETTINGS.priceCeilingRoomTypeId) RM_SETTINGS.priceCeilingRoomTypeId={};
+      if(ceil.value) RM_SETTINGS.priceCeilingRoomTypeId[rt.id]=ceil.value;
+      else delete RM_SETTINGS.priceCeilingRoomTypeId[rt.id];
+    }
   });
   ['mon','tue','wed','thu','fri','sat','sun'].forEach(k=>{const el=document.getElementById('wd_'+k);if(el)RM_SETTINGS.weekdayPct[k]=parseFloat(el.value)||0;});
   const wkOwned=document.getElementById('wkOwned'); if(wkOwned) RM_SETTINGS.dayOfWeekOwnedByTool=wkOwned.checked;
@@ -366,6 +372,8 @@ function rmRenderRoomsSetup(){
     const base=isRef?rt.be_price_single:Math.round(ref.be_price_single*(1+deriv/100));
     const min=RM_SETTINGS.minPrice[rt.id]??Math.round(rt.be_price_single*0.6);
     const max=RM_SETTINGS.maxPrice[rt.id]??Math.round(rt.be_price_single*1.7);
+    const ceil=(RM_SETTINGS.priceCeilingRoomTypeId&&RM_SETTINGS.priceCeilingRoomTypeId[rt.id])||'';
+    const ceilOpts=['<option value="">None</option>'].concat(RM_ROOM_TYPES.filter(x=>x.id!==rt.id).map(x=>`<option value="${x.id}" ${ceil===x.id?'selected':''}>${esc(x.name)}</option>`)).join('');
     return `<tr>
       <td><b>${esc(rt.name)}</b></td>
       <td>${rt.rooms.length}</td>
@@ -374,6 +382,7 @@ function rmRenderRoomsSetup(){
       <td>${isRef?'<span style="color:var(--muted)">reference</span>':`<input id="deriv_${rt.id}" type="number" value="${deriv}" style="width:70px">%`}</td>
       <td><input id="min_${rt.id}" type="number" value="${min}"></td>
       <td><input id="max_${rt.id}" type="number" value="${max}"></td>
+      <td><select id="ceil_${rt.id}" title="This room type's price will never exceed the selected type's price on the same date">${ceilOpts}</select></td>
     </tr>`;
   }).join('');
 }
