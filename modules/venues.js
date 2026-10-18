@@ -2546,7 +2546,10 @@ function rcBuild(){
       // modal's conflict check). roomListIncludes itself knows to NOT fold case for the
       // few pairs that are actually two different physical rooms (e.g. "2B" the private
       // King room vs "2b" the unrelated shared bed) — see its definition.
-      AppData.bookings.filter(bk=>bk.status!=='cancelled'&&entry.physical.some(p=>roomListIncludes(bk.blockedRooms,p))).forEach(bk=>{
+      // First pass: resolve each booking's effective start/end (including per-guest
+      // overrides) before any DOM work, so every checkout time in this room is known up
+      // front — needed to detect same-day turnovers for the half-day split below.
+      const _roomBarsRaw=AppData.bookings.filter(bk=>bk.status!=='cancelled'&&entry.physical.some(p=>roomListIncludes(bk.blockedRooms,p))).map(bk=>{
         // getRegForRoom, not a raw .find() — a room can end up with more than one
         // registration row for the same booking (an empty leftover plus the real,
         // named one), and .find() just grabbed whichever came first in AppData.regs,
@@ -2580,9 +2583,15 @@ function rcBuild(){
           _effStart=_starts.reduce((a,b)=>a<b?a:b);
           _effEnd=_ends.reduce((a,b)=>a>b?a:b);
         }
-        const bkS=pd(_effStart).getTime(),bkE=pd(_effEnd).getTime();
+        return{bk,regEntry,bkS:pd(_effStart).getTime(),bkE:pd(_effEnd).getTime()};
+      }).filter(x=>{const winE=startMs+rcShowDays*DAY_MS;return!(x.bkS>=winE||x.bkE<=startMs);});
+      // Every checkout time already known for this room — an arrival landing on one of
+      // these gets pushed to the right half of that day's column instead of overlapping
+      // the departing guest's own half-day bleed (Jorge's ask 2026-10-18: a same-day
+      // turnover should read as side-by-side, not stacked on top of each other).
+      const _roomCheckoutTimes=new Set(_roomBarsRaw.map(x=>x.bkE));
+      _roomBarsRaw.forEach(({bk,regEntry,bkS,bkE})=>{
         const winE=startMs+rcShowDays*DAY_MS;
-        if(bkS>=winE||bkE<=startMs)return;
         const cs=Math.max(bkS,startMs),ce=Math.min(bkE,winE);
         const li=Math.round((cs-startMs)/DAY_MS),wi=Math.round((ce-cs)/DAY_MS);
         if(wi<=0)return;
@@ -2591,6 +2600,10 @@ function rcBuild(){
         // last night — only when the real checkout actually falls inside this view (not
         // when we're just clipped by the window's right edge and the stay continues past it).
         const _checkoutHalfPx=(ce===bkE)?18:0;
+        // This bar's own true start lands on a checkout already happening in this room —
+        // shift it right by the same half-day so it starts where the departing bar's
+        // bleed ends, instead of both bars claiming the same pixels.
+        const _arrivalHalfPx=(cs===bkS&&_roomCheckoutTimes.has(bkS))?18:0;
         const st=STATUS[bk.status]||STATUS.requested;
         const pc=bkPaletteColor(bk);
         // Room Only bookings have no separate guest registration — the leader
@@ -2624,7 +2637,7 @@ function rcBuild(){
         // rule) — it was never meant to stop a staff member from personally
         // choosing to drag it, so manual dragging here ignores it (Darlene's
         // call 2026-09-17: "if we move it here we should be able to move it").
-        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4+_checkoutHalfPx}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:grab;border-left:4px solid ${st.border};${roomOnlyOutline}`;
+        bl.style.cssText=`left:${li*36+2+_arrivalHalfPx}px;width:${wi*36-4+_checkoutHalfPx-_arrivalHalfPx}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:grab;border-left:4px solid ${st.border};${roomOnlyOutline}`;
         bl.draggable=true;
         // Never show retreat/leader name and guest name together on a room row
         // — the retreat is already identifiable via color + the Active in
