@@ -769,6 +769,7 @@ function trInit() {
         </div>
         <button id="tr2-clear-btn" onclick="tr2ClearFilters()" style="display:none;background:#fef2f2;color:#dc2626;border:none;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">✕ Clear</button>
         <div style="flex:1"></div>
+        <button onclick="tr2PrintView()" style="background:#f1f5f9;color:#374151;border:1.5px solid #e5e7eb;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif" title="Imprimir lo que se ve ahora (mismos filtros)">🖨 Imprimir</button>
         <button id="tr2-archive-btn" onclick="tr2ToggleArchived()" style="background:#f1f5f9;color:#6b7280;border:1.5px solid #e5e7eb;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif" title="Ver entradas anteriores">📦 Archived</button>
       </div>
       <div id="tr2-body" style="flex:1;overflow-y:auto;padding:20px"></div>
@@ -829,6 +830,71 @@ function tr2ToggleArchived() {
   const btn = document.getElementById('tr2-archive-btn');
   if (btn) { btn.style.background = tr2ShowArchived ? '#1a2332' : ''; btn.style.color = tr2ShowArchived ? '#fff' : ''; }
   tr2BuildView();
+}
+
+// Print button (Jorge's ask 2026-10-18) -- opens a clean printable sheet with
+// whatever's currently filtered/sorted on screen (same view tab, retreat search,
+// date range, or the today-only default), same pattern as the other print-sheet
+// modules in this codebase (dietary-report.js, activity-sheet.js: a new window,
+// its own minimal styles, a .no-print Print button hidden via @media print).
+function tr2PrintView() {
+  const filtered = tr2FilteredSorted().filter(e => !e.ot);
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  let rangeLabel;
+  if (tr2DateFrom || tr2DateTo) rangeLabel = `${tr2DateFrom ? fmtDate(tr2DateFrom) : '…'} – ${tr2DateTo ? fmtDate(tr2DateTo) : '…'}`;
+  else if (tr2ShowArchived) rangeLabel = 'Todas las fechas';
+  else rangeLabel = `Hoy — ${fmtDate(todayStr)}`;
+  const retreatLabel = tr2RetreatFilter ? (tr2RetreatIdToLabel[tr2RetreatFilter] || '') : 'Todos los retiros';
+  const viewLabel = tr2View === 'arrivals' ? 'Llegadas' : tr2View === 'departures' ? 'Salidas' : 'Llegadas y Salidas';
+
+  const groups = new Map();
+  filtered.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
+
+  const rowsHtml = filtered.length ? [...groups.entries()].map(([date, items]) => `
+    <tr class="grp"><td colspan="8">${date === todayStr ? '📍 HOY — ' : ''}${fmtDate(date)}</td></tr>
+    ${items.map(e => `
+      <tr>
+        <td>${escHtml(e.room || '—')}</td>
+        <td>${escHtml(e.guest || '')}</td>
+        <td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>
+        <td>${escHtml(e.airport === 'cancun' ? 'CUN' : e.airport === 'tulum' ? 'TQO' : (e.airport || ''))}</td>
+        <td>${escHtml(e.type === 'departure' ? (e.pickup ? `${e.pickup} → ${e.time || ''}` : (e.time || '')) : (e.time || ''))}</td>
+        <td>${escHtml(e.retreatLabel || '')}</td>
+        <td>${escHtml(e.notes || '')}</td>
+        <td>${e.cost != null ? `$${e.cost}` : ''}</td>
+      </tr>`).join('')}
+  `).join('') : `<tr><td colspan="8" class="none">No hay entradas para estos filtros.</td></tr>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <link rel="icon" type="image/png" href="/favicon.png"><title>Transport · ${rangeLabel}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      *{box-sizing:border-box}
+      body{font-family:'Jost',sans-serif;margin:0;padding:36px 40px;color:#1a2332;background:#fff;font-size:11pt}
+      .print-btn{padding:9px 20px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;font-size:11pt;font-weight:600;float:right;margin-bottom:18px}
+      .hdr{margin-bottom:18px;clear:both}
+      .title{font-family:'Cormorant Garamond',serif;font-size:24pt;font-weight:700;color:#1a2332;margin-bottom:2px}
+      .sub{font-size:10.5pt;color:#6b7280}
+      table{width:100%;border-collapse:collapse;margin-top:10px}
+      th{text-align:left;padding:6px 8px;font-size:9pt;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;border-bottom:2px solid #e5e7eb}
+      td{padding:6px 8px;font-size:10.5pt;border-bottom:1px solid #f1f5f9;vertical-align:top}
+      tr.grp td{background:#f1f5f9;font-weight:700;font-size:10pt;padding-top:10px}
+      .none{color:#9ca3af;font-style:italic;text-align:center;padding:30px 0}
+      @media print{.print-btn{display:none}tr.grp{break-inside:avoid}}
+    </style></head><body>
+    <button class="print-btn" onclick="window.print()">Print</button>
+    <div class="hdr">
+      <div class="title">Transport</div>
+      <div class="sub">${escHtml(viewLabel)} · ${escHtml(retreatLabel)} · ${escHtml(rangeLabel)}</div>
+    </div>
+    <table>
+      <thead><tr><th>Habitación</th><th>Nombre</th><th>Tipo</th><th>Aeropuerto</th><th>Hora</th><th>Retiro</th><th>Notas</th><th>Costo</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  </body></html>`);
+  win.document.close();
 }
 
 async function tr2LoadData() {
@@ -1184,6 +1250,28 @@ function tr2AssignGroupColors(entries) {
   return colorMap;
 }
 
+// Shared by tr2BuildView() and tr2PrintView() -- same view/retreat/date filters,
+// same today-only default, same sort order, so the printed sheet always matches
+// whatever's currently on screen.
+function tr2FilteredSorted() {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const noFilters = !tr2DateFrom && !tr2DateTo && !tr2RetreatFilter && !tr2ShowArchived;
+  return tr2AllEntries.filter(e => {
+    if (tr2View === 'arrivals' && e.type !== 'arrival') return false;
+    if (tr2View === 'departures' && e.type !== 'departure') return false;
+    if (tr2RetreatFilter && e.retreatId !== tr2RetreatFilter) return false;
+    if (tr2DateFrom && e.date < tr2DateFrom) return false;
+    if (tr2DateTo && e.date > tr2DateTo) return false;
+    if (noFilters && e.date !== todayStr) return false;
+    return true;
+  }).sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    const aSort = a.type === 'departure' ? (a.pickup || a.time || '') : (a.time || '');
+    const bSort = b.type === 'departure' ? (b.pickup || b.time || '') : (b.time || '');
+    return aSort.localeCompare(bSort);
+  });
+}
+
 function tr2BuildView() {
   const body = document.getElementById('tr2-body');
   if (!body) return;
@@ -1199,24 +1287,7 @@ function tr2BuildView() {
     archBtn.style.color = tr2ShowArchived ? '#fff' : '';
   }
 
-  // Default view is today-only (Jorge's ask 2026-10-18: "que siempre muestre los del dia a
-  // menos que cambies en from to") -- once From/To, a retreat search, or Archived is touched,
-  // that takes over and the today-only restriction stops applying.
-  const noFilters = !tr2DateFrom && !tr2DateTo && !tr2RetreatFilter && !tr2ShowArchived;
-  const filtered = tr2AllEntries.filter(e => {
-    if (tr2View === 'arrivals' && e.type !== 'arrival') return false;
-    if (tr2View === 'departures' && e.type !== 'departure') return false;
-    if (tr2RetreatFilter && e.retreatId !== tr2RetreatFilter) return false;
-    if (tr2DateFrom && e.date < tr2DateFrom) return false;
-    if (tr2DateTo && e.date > tr2DateTo) return false;
-    if (noFilters && e.date !== todayStr) return false;
-    return true;
-  }).sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    const aSort = a.type === 'departure' ? (a.pickup || a.time || '') : (a.time || '');
-    const bSort = b.type === 'departure' ? (b.pickup || b.time || '') : (b.time || '');
-    return aSort.localeCompare(bSort);
-  });
+  const filtered = tr2FilteredSorted();
 
   if (!filtered.length) {
     body.innerHTML = `<div style="padding:60px 20px;text-align:center;color:#9ca3af">
