@@ -43,7 +43,7 @@ async function doRecalc(key) {
     L.loadSettings(key),
     L.loadRoomTypes(key),
     L.loadBlocksInRange(key, today, end),
-    L.sget(key, 'be_rates?select=room_type_id,start_date,end_date,price_single'),
+    L.sgetAll(key, 'be_rates?select=room_type_id,start_date,end_date,price_single'),
     L.sget(key, 'booking_engine_settings?id=eq.1&select=weekend_premium,seasonal_adjustments'),
   ]);
   const bes = settingsRow[0] || {};
