@@ -264,6 +264,25 @@ async function supa(path) {
   });
   return r.json();
 }
+// PostgREST caps a plain GET at 1000 rows with no error -- confirmed 2026-10-18 as the real
+// cause of "reservas sin habitación" here: `registrations` has 1900+ rows, so a plain supa()
+// call only ever saw the first 1000, silently missing whichever retreats' registrations
+// happened to sort past that cutoff -- no amount of name-matching fixes helps when the
+// registration itself was never loaded at all. Use for any table that could plausibly exceed
+// 1000 rows (registrations in particular, which only grows).
+async function supaAll(path) {
+  const out = [];
+  const sep = path.includes('?') ? '&' : '?';
+  let offset = 0;
+  const pageSize = 1000;
+  for (;;) {
+    const page = await supa(`${path}${sep}limit=${pageSize}&offset=${offset}`);
+    if (!Array.isArray(page)) return page; // surface an error object as-is rather than loop forever
+    out.push(...page);
+    if (page.length < pageSize) return out;
+    offset += pageSize;
+  }
+}
 
 async function supaUpdate(rowId, body) {
   return fetch(`${SUPA_URL}/rest/v1/transport?id=eq.${rowId}`, {
@@ -280,9 +299,9 @@ async function supaUpdate(rowId, body) {
 
 async function loadData() {
   const [rows, bookings, regs, settingsData] = await Promise.all([
-    supa('transport?select=id,booking_id,data,submitted_at'),
-    supa('bookings?select=id,leader_name,retreat_name,start_date,end_date,status&status=neq.cancelled'),
-    supa('registrations?select=booking_id,room,guests'),
+    supaAll('transport?select=id,booking_id,data,submitted_at'),
+    supaAll('bookings?select=id,leader_name,retreat_name,start_date,end_date,status&status=neq.cancelled'),
+    supaAll('registrations?select=booking_id,room,guests'),
     supa('settings?key=eq.transport_groups&select=value&limit=1'),
   ]);
   _userGroupMap = new Map(settingsData?.[0]?.value ?? []);
