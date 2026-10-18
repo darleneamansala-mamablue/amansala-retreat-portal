@@ -121,7 +121,18 @@ function _bdRoomOptionsForEdit(checkIn,checkOut,currentRoom){
     if(seen.has(rs.room))return;
     let label=rs.room;
     if(!rs.available&&!roomCodesEqual(rs.room,currentRoom)){
-      const occReg=AppData.regs.find(r=>!r.cancelled&&roomCodesEqual(r.room,rs.room)&&(r.guests||[]).some(g=>g.name&&!g.cancelled));
+      // Scoped to THIS stay window -- a room code is reused across many unrelated
+      // retreats over time (real incident 2026-10-18: an unscoped lookup here picked
+      // up a registration from a completely different, non-overlapping retreat and
+      // corrupted it during a swap). Only a registration whose own booking's dates
+      // actually overlap this guest's stay can be a real occupant right now.
+      const occReg=AppData.regs.find(r=>{
+        if(r.cancelled||!roomCodesEqual(r.room,rs.room))return false;
+        if(!(r.guests||[]).some(g=>g.name&&!g.cancelled))return false;
+        const obk=AppData.bookings.find(b=>b.id===r.bookingId);
+        const oStart=r.checkIn||obk?.startDate,oEnd=r.checkOut||obk?.endDate;
+        return oStart&&oEnd&&datesOverlap(checkIn,checkOut,oStart,oEnd);
+      });
       const occGuest=occReg?(occReg.guests||[]).find(g=>g.name&&!g.cancelled):null;
       label=`${rs.room} — ocupado por ${occGuest?occGuest.name:(rs.blockedByLabel||'alguien más')} (clic para intercambiar)`;
     }
@@ -1456,7 +1467,17 @@ async function bdSaveDetails(){
     // 2026-10-18: "cuando cambie de cuarto y en ese cuarto haya reserva que los
     // intercambie") -- trade the two guests' rooms outright instead of just moving
     // this one in on top of the other.
-    const occupantReg=roomChanged?AppData.regs.find(r=>r.id!==reg.id&&!r.cancelled&&roomCodesEqual(r.room,room)&&(r.guests||[]).some(g=>g.name&&!g.cancelled)):null;
+    // Scoped to THIS stay window, not just "same room code anywhere" -- see the identical
+    // comment in _bdRoomOptionsForEdit above for the real incident this fixes (a global,
+    // unscoped lookup here swapped Lisa Squire's room with an unrelated, non-overlapping
+    // registration instead of the actual current occupant, Kat Warner, 2026-10-18).
+    const occupantReg=roomChanged?AppData.regs.find(r=>{
+      if(r.id===reg.id||r.cancelled||!roomCodesEqual(r.room,room))return false;
+      if(!(r.guests||[]).some(g=>g.name&&!g.cancelled))return false;
+      const obk=AppData.bookings.find(b=>b.id===r.bookingId);
+      const oStart=r.checkIn||obk?.startDate,oEnd=r.checkOut||obk?.endDate;
+      return oStart&&oEnd&&checkIn&&checkOut&&datesOverlap(checkIn,checkOut,oStart,oEnd);
+    }):null;
     if(occupantReg){
       const occGuestName=(occupantReg.guests||[]).find(g=>g.name&&!g.cancelled)?.name||'ese huésped';
       if(!confirm(`¿Intercambiar cuartos?\n\n${subjBefore.guestName}: ${subjBefore.room} → ${room}\n${occGuestName}: ${room} → ${subjBefore.room}`))return;
