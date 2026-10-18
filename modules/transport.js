@@ -566,6 +566,8 @@ function tr2AutoRate(e, groupPax) {
 
 let tr2View          = 'arrivals';
 let tr2RetreatFilter = '';
+let tr2RetreatLabelMap  = {}; // label (lowercased) -> booking id, for the retreat search box
+let tr2RetreatIdToLabel = {}; // booking id -> display label
 let tr2DateFrom      = '';
 let tr2DateTo        = '';
 let tr2ShowArchived  = false;
@@ -751,10 +753,10 @@ function trInit() {
         <button onclick="trInit()" style="${tr2Btn('#f3f4f6','#374151')}">↺</button>
       </div>
       <div style="display:flex;align-items:center;gap:10px;padding:10px 20px;background:#f8fafc;border-bottom:1px solid #e5e7eb;flex-wrap:wrap">
-        <select id="tr2-retreat-sel" onchange="tr2SetRetreat(this.value)"
-          style="padding:6px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px;font-family:'Jost',sans-serif;color:#374151;outline:none;min-width:180px;max-width:280px">
-          <option value="">All retreats</option>
-        </select>
+        <input type="text" id="tr2-retreat-search" list="tr2-retreat-list" placeholder="🔍 Buscar retiro…" autocomplete="off"
+          oninput="tr2SetRetreatByLabel(this.value)"
+          style="padding:6px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px;font-family:'Jost',sans-serif;color:#374151;outline:none;min-width:200px;max-width:280px">
+        <datalist id="tr2-retreat-list"></datalist>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">From</span>
           <input type="date" id="tr2-date-from" onchange="tr2SetDateFrom(this.value)"
@@ -791,11 +793,28 @@ function tr2SetRetreat(v) {
   if (btn) btn.textContent = v ? '📋 Copy Retreat Link' : '📋 Copy Guest Link';
   tr2BuildView();
 }
+// Free-text retreat search (Jorge's ask 2026-10-18: typing to find a retreat
+// instead of scrolling a dropdown) -- resolves what's typed against the label
+// map built in tr2LoadData() and only commits once it matches a real retreat
+// exactly (e.g. after picking a <datalist> suggestion); any other text is
+// treated the same as "All retreats" rather than filtering on a partial match.
+function tr2SetRetreatByLabel(label) {
+  const key = (label || '').trim().toLowerCase();
+  tr2SetRetreat(key ? (tr2RetreatLabelMap[key] || '') : '');
+}
 function tr2SetDateFrom(v) { tr2DateFrom = v; tr2SyncClearBtn(); tr2BuildView(); }
 function tr2SetDateTo(v)   { tr2DateTo   = v; tr2SyncClearBtn(); tr2BuildView(); }
+function tr2JumpToday() {
+  const t = new Date().toISOString().slice(0, 10);
+  tr2DateFrom = t; tr2DateTo = t;
+  const df = document.getElementById('tr2-date-from'); if (df) df.value = t;
+  const dt = document.getElementById('tr2-date-to');   if (dt) dt.value = t;
+  tr2SyncClearBtn();
+  tr2BuildView();
+}
 function tr2ClearFilters() {
   tr2RetreatFilter = ''; tr2DateFrom = ''; tr2DateTo = '';
-  const sel = document.getElementById('tr2-retreat-sel'); if (sel) sel.value = '';
+  const search = document.getElementById('tr2-retreat-search'); if (search) search.value = '';
   const df  = document.getElementById('tr2-date-from');   if (df)  df.value  = '';
   const dt  = document.getElementById('tr2-date-to');     if (dt)  dt.value  = '';
   tr2SyncClearBtn();
@@ -879,12 +898,18 @@ async function tr2LoadData() {
     });
   });
 
-  const sel = document.getElementById('tr2-retreat-sel');
-  if (sel) {
+  const datalist = document.getElementById('tr2-retreat-list');
+  tr2RetreatLabelMap = {}; tr2RetreatIdToLabel = {};
+  if (datalist) {
     const sorted = [...tr2ActiveBooks].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
-    sel.innerHTML = `<option value="">All retreats</option>` +
-      sorted.map(b => `<option value="${b.id}">${escHtml(b.leaderName)}${b.retreatName ? ` · ${escHtml(b.retreatName)}` : ''} (${fmtDate(b.startDate)})</option>`).join('');
-    if (tr2RetreatFilter) sel.value = tr2RetreatFilter;
+    sorted.forEach(b => {
+      const label = `${b.leaderName}${b.retreatName ? ` · ${b.retreatName}` : ''} (${fmtDate(b.startDate)})`;
+      tr2RetreatLabelMap[label.toLowerCase()] = b.id;
+      tr2RetreatIdToLabel[b.id] = label;
+    });
+    datalist.innerHTML = sorted.map(b => `<option value="${escHtml(tr2RetreatIdToLabel[b.id])}">`).join('');
+    const search = document.getElementById('tr2-retreat-search');
+    if (search) search.value = tr2RetreatFilter ? (tr2RetreatIdToLabel[tr2RetreatFilter] || '') : '';
   }
 
   const normDate = s => { if (!s) return ''; const p = String(s).trim().split('-'); return p.length === 3 ? `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}` : String(s).trim(); };
@@ -1174,13 +1199,17 @@ function tr2BuildView() {
     archBtn.style.color = tr2ShowArchived ? '#fff' : '';
   }
 
+  // Default view is today-only (Jorge's ask 2026-10-18: "que siempre muestre los del dia a
+  // menos que cambies en from to") -- once From/To, a retreat search, or Archived is touched,
+  // that takes over and the today-only restriction stops applying.
+  const noFilters = !tr2DateFrom && !tr2DateTo && !tr2RetreatFilter && !tr2ShowArchived;
   const filtered = tr2AllEntries.filter(e => {
     if (tr2View === 'arrivals' && e.type !== 'arrival') return false;
     if (tr2View === 'departures' && e.type !== 'departure') return false;
     if (tr2RetreatFilter && e.retreatId !== tr2RetreatFilter) return false;
     if (tr2DateFrom && e.date < tr2DateFrom) return false;
     if (tr2DateTo && e.date > tr2DateTo) return false;
-    if (!tr2ShowArchived && !tr2DateFrom && !tr2DateTo && !tr2RetreatFilter && e.date < todayStr) return false;
+    if (noFilters && e.date !== todayStr) return false;
     return true;
   }).sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
@@ -1221,11 +1250,16 @@ function tr2BuildView() {
     normalEntries.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
     for (const [date, items] of groups) {
       const isToday = date === today, isTmrw = date === tomorrow;
-      // Same "📍 TODAY — Sunday, October 18" treatment driver-view.html already shows (Jorge's
-      // ask 2026-10-18: the admin board's plain "Today" label stood out less in comparison).
+      // Same "📍 TODAY — Sunday, October 18" treatment driver-view.html already shows. Made
+      // into an actual button (Jorge's ask 2026-10-18) -- clicking it jumps the From/To range
+      // back to today, since the default-today view (see tr2BuildView's noFilters above) is
+      // the only time a plain "Today" label with nothing to click would ever show.
       const label = isToday ? `📍 TODAY — ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}` : isTmrw ? 'Tomorrow' : fmtDate(date);
       const bg = isToday ? '#ccfbf1' : '#f1f5f9', color = isToday ? '#0f766e' : '#374151';
-      html += `<tr><td colspan="9" style="padding:8px 12px;background:${bg};font-size:11px;font-weight:700;color:${color};border-top:2px solid #e5e7eb">${label}</td></tr>`;
+      const labelHtml = isToday
+        ? `<button onclick="tr2JumpToday()" title="Ver solo hoy" style="background:#0f766e;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">${label}</button>`
+        : label;
+      html += `<tr><td colspan="9" style="padding:8px 12px;background:${bg};font-size:11px;font-weight:700;color:${color};border-top:2px solid #e5e7eb">${labelHtml}</td></tr>`;
 
       const serviceGroups = [];
       const seen = new Map();
