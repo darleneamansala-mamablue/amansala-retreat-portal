@@ -619,7 +619,14 @@ function tr2AvailableRoomsOfType(rtId, bkStart, bkEnd, ownBkId) {
     !tr2ActiveRequests.some(r => {
       if (r.check_out < bkStart || r.check_in > bkEnd) return false;
       return r.room === roomName;
-    })
+    }) &&
+    // Within the guest's OWN retreat, a room already assigned to a DIFFERENT named guest isn't
+    // free either -- the `b.id === ownBkId` skip above exists so a guest can be offered a room
+    // still free on their own retreat's block, but it accidentally skipped checking same-retreat
+    // occupancy entirely (Jorge's report 2026-10-18: room 33, already Billy S & Michelle M's
+    // room on Marcia Hoffheins' own retreat, kept showing as an upgrade option for Laura Myzk,
+    // a different guest on the SAME retreat).
+    !AppData.regs.some(reg => reg.bookingId === ownBkId && reg.room === roomName && !reg.cancelled && (reg.guests || []).some(g => g.name && !g.cancelled))
   );
 }
 
@@ -883,9 +890,50 @@ async function tr2LoadData() {
     if (score(row) === score(cur) && String(row.id) > String(cur.id)) return row;
     return cur;
   };
+  // Same real person can submit the form more than once with a one-letter name typo/variant
+  // (confirmed live 2026-10-18: "Elliot"/"Elliott"/"Elli" Free, all the same
+  // freeelliott0@gmail.com, showed up as 2-3 separate "Sin retiro asignado" duplicates) -- the
+  // exact-string dedup below never merges those on its own. Scoped strictly to an EXACT
+  // matching email -- never guess across different emails, two real people can easily share a
+  // similar-sounding name. Within each email group, cluster full names ("firstName lastName")
+  // within 1 character of each other (Levenshtein distance <= 1) and rewrite every row in a
+  // cluster to the cluster's best-scoring spelling, so the dedup below (keyed on exact name
+  // match) naturally collapses them into one.
+  const normalizedRows = (() => {
+    const byEmail = new Map();
+    (rows || []).forEach(row => {
+      const em = ((row.data || {}).email || '').toLowerCase().trim();
+      if (!em) return;
+      if (!byEmail.has(em)) byEmail.set(em, []);
+      byEmail.get(em).push(row);
+    });
+    const renameMap = new Map(); // row.id -> {firstName, lastName}
+    byEmail.forEach(group => {
+      if (group.length < 2) return;
+      const clusters = [];
+      group.forEach(row => {
+        const d = row.data || {};
+        const full = `${(d.firstName || '').trim()} ${(d.lastName || '').trim()}`.trim().toLowerCase();
+        if (!full) return;
+        const target = clusters.find(c => tr2Levenshtein(c.fullName, full) <= 1);
+        if (target) target.rows.push(row); else clusters.push({ fullName: full, rows: [row] });
+      });
+      clusters.forEach(c => {
+        if (c.rows.length < 2) return;
+        const best = c.rows.reduce((a, b) => pickBetter(a, b));
+        const bd = best.data || {};
+        c.rows.forEach(row => { if (row.id !== best.id) renameMap.set(row.id, { firstName: bd.firstName, lastName: bd.lastName }); });
+      });
+    });
+    if (!renameMap.size) return rows;
+    return (rows || []).map(row => {
+      const rn = renameMap.get(row.id);
+      return rn ? { ...row, data: { ...(row.data || {}), firstName: rn.firstName, lastName: rn.lastName } } : row;
+    });
+  })();
   const dedupedRows = (() => {
     const map = new Map();
-    for (const row of rows || []) {
+    for (const row of normalizedRows || []) {
       const d = row.data || {};
       const em = (d.email || '').toLowerCase().trim();
       const fn = (d.firstName || '').toLowerCase().trim();
@@ -1799,6 +1847,24 @@ async function tr2DeleteEntry(rowId) {
 // ── Auto-match (name-based, for entries with no retreat assigned) ──
 function tr2NormName(name) {
   return (name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z\s]/g, '').trim().split(/\s+/).sort().join(' ');
+}
+// Standard edit distance (insert/delete/substitute, each cost 1) -- used by tr2LoadData's
+// same-email name-variant clustering ("Elliot"/"Elliott"/"Elli" Free) to catch a one-letter
+// typo/nickname without guessing across different emails.
+function tr2Levenshtein(a, b) {
+  if (a === b) return 0;
+  const al = a.length, bl = b.length;
+  if (!al) return bl;
+  if (!bl) return al;
+  let prev = Array.from({ length: bl + 1 }, (_, i) => i);
+  for (let i = 1; i <= al; i++) {
+    const cur = [i];
+    for (let j = 1; j <= bl; j++) {
+      cur[j] = a[i - 1] === b[j - 1] ? prev[j - 1] : 1 + Math.min(prev[j], cur[j - 1], prev[j - 1]);
+    }
+    prev = cur;
+  }
+  return prev[bl];
 }
 function tr2AutoMatch() {
   const unassignedRowIds = new Set(tr2AllEntries.filter(e => !tr2ActiveBooks.find(b => b.id === e.retreatId)).map(e => e.rowId));
