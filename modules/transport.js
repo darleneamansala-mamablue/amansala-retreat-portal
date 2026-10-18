@@ -673,7 +673,7 @@ function tr2UpgradeCell(e) {
 
   if (!opts.length) {
     const noOptsMsg = upgrades.length === 0 && !TR2_LATERAL_ONLY.has(rtId)
-      ? `<span style="color:#15803d;font-size:11px;font-weight:600">★ Top</span>`
+      ? `<span style="color:#9ca3af;font-size:11px;font-weight:600">N/A</span>`
       : `<span style="color:#9ca3af;font-size:11px">Sin disponibilidad</span>`;
     return confirmedBadgeHtml ? `<div>${confirmedBadgeHtml}${noOptsMsg}</div>` : noOptsMsg;
   }
@@ -856,11 +856,15 @@ async function tr2LoadData() {
         const isCancelled = regCancelled || g.cancelled;
         if (g.name && isCancelled) cancelledKeys.add(`${bk.id}|${tr2NormName(g.name)}`);
         if (g.name && !isCancelled) {
-          roomLookup[`${bk.id}|${g.name.toLowerCase()}`] = reg.room || '';
+          // regId/checkedInAt carried alongside room (Jorge's ask 2026-10-18: a Check In
+          // checkmark right in the Room column) -- same resolution precedence (exact name,
+          // then unique first name, then unique email) the room match already used, just
+          // returning the whole registration instead of only its room string.
+          roomLookup[`${bk.id}|${g.name.toLowerCase()}`] = { room: reg.room || '', regId: reg.id, checkedInAt: reg.checkedInAt || null };
           const firstName = g.name.trim().split(/\s+/)[0].toLowerCase();
           if (firstName.length >= 3) {
             const fk = `${bk.id}|${firstName}`;
-            if (!firstNameIdx[fk]) firstNameIdx[fk] = { room: reg.room || '', count: 0 };
+            if (!firstNameIdx[fk]) firstNameIdx[fk] = { room: reg.room || '', regId: reg.id, checkedInAt: reg.checkedInAt || null, count: 0 };
             firstNameIdx[fk].count++;
           }
           const key = tr2NormName(g.name);
@@ -868,7 +872,7 @@ async function tr2LoadData() {
         }
         if (g.email && !isCancelled) {
           const ek = `${bk.id}|${g.email.toLowerCase().trim()}`;
-          if (!emailRoomIdx[ek]) emailRoomIdx[ek] = { room: reg.room || '', count: 0 };
+          if (!emailRoomIdx[ek]) emailRoomIdx[ek] = { room: reg.room || '', regId: reg.id, checkedInAt: reg.checkedInAt || null, count: 0 };
           emailRoomIdx[ek].count++;
         }
       });
@@ -998,13 +1002,19 @@ async function tr2LoadData() {
     // guess and has no way to fix itself when it's wrong, unlike the room list itself
     // which staff can just edit directly (Jorge's report 2026-09-17: the Transportation
     // tab's Room column had no way to adjust it, unlike My Transportation).
-    const room = (d.roomOverride || '').trim() || (roomLookup[`${bkId}|${name.toLowerCase()}`] ?? (() => {
+    // Same precedence as before (exact name, then unique first name, then unique email) --
+    // now resolving the whole {room, regId, checkedInAt} match instead of just a room string,
+    // so the Check In checkmark (Jorge's ask 2026-10-18) knows which registration to update.
+    const matched = roomLookup[`${bkId}|${name.toLowerCase()}`] ?? (() => {
       const fn = (d.firstName || '').trim().toLowerCase();
-      if (fn.length >= 3) { const fi = firstNameIdx[`${bkId}|${fn}`]; if (fi && fi.count === 1) return fi.room; }
+      if (fn.length >= 3) { const fi = firstNameIdx[`${bkId}|${fn}`]; if (fi && fi.count === 1) return fi; }
       const em = (d.email || '').toLowerCase().trim();
-      if (em && bkId) { const ei = emailRoomIdx[`${bkId}|${em}`]; if (ei && ei.count === 1) return ei.room; }
-      return '';
-    })());
+      if (em && bkId) { const ei = emailRoomIdx[`${bkId}|${em}`]; if (ei && ei.count === 1) return ei; }
+      return null;
+    })();
+    const room = (d.roomOverride || '').trim() || (matched ? matched.room : '');
+    const regId = matched ? matched.regId : null;
+    const checkedIn = !!(matched && matched.checkedInAt);
     const retreatLabel = bk ? [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ') : 'Sin retiro asignado';
 
     // An OT (own transport) guest legitimately has no date/time at all, or a
@@ -1021,6 +1031,7 @@ async function tr2LoadData() {
         ot: !!d.arrivalOT, share: !!d.willingToShare, notes: d.notes || '', room, retreatId: bkId, retreatLabel,
         eta: (d.arrivalOT || !d.arrivalTime) ? null : tr2AddMins(d.arrivalTime, d.arrivalAirport === 'cancun' ? 90 : 45),
         driverConfirmed: !!d.driver_confirmed, cost: d.serviceCost != null ? Number(d.serviceCost) : null,
+        regId, checkedIn,
       });
     }
     if (d.departureOT || (d.departureDate && d.departureTime)) {
@@ -1031,6 +1042,7 @@ async function tr2LoadData() {
         email: d.email || '', flight: d.flightNumber || '', airport: depAirport,
         ot: !!d.departureOT, share: !!d.willingToShare, notes: d.notes || '', room, retreatId: bkId, retreatLabel,
         eta: null, pickup, driverConfirmed: !!d.driver_confirmed, cost: d.serviceCost != null ? Number(d.serviceCost) : null,
+        regId, checkedIn,
       });
     }
   }
@@ -1089,6 +1101,7 @@ async function tr2LoadData() {
           rowId: `synth-${reg.id}-${tr2NormName(g.name)}`, type: 'arrival', date: bk.startDate, time: '',
           guest: g.name, email: g.email || '', flight: '', airport: '', ot: true, share: false, notes: '',
           room, retreatId: bk.id, retreatLabel, eta: null, driverConfirmed: false, cost: null, isSynthetic: true,
+          regId: reg.id, checkedIn: !!reg.checkedInAt,
         });
       });
     });
@@ -1334,7 +1347,7 @@ function tr2RenderRow(e, color, groupPax) {
   const rowBg = color ? `background:${color}` : '';
 
   return `<tr style="${rowBg};cursor:grab" draggable="true" ondragstart="tr2DragStart(event,'${e.type}|${e.rowId}')" ondragend="this.style.opacity=''">
-    ${TD(e.room ? escHtml(e.room) : `<span style="color:#d1d5db">—</span>`, 'font-weight:600')}
+    ${TD(`<div style="display:flex;align-items:center;gap:6px">${e.room ? escHtml(e.room) : `<span style="color:#d1d5db">—</span>`}${e.regId ? `<button onclick="event.stopPropagation();tr2ToggleCheckIn('${e.regId}',${!e.checkedIn})" title="${e.checkedIn ? 'Checked in -- click to undo' : 'Click to check in'}" style="border:none;border-radius:50%;width:20px;height:20px;line-height:1;font-size:12px;cursor:pointer;flex-shrink:0;background:${e.checkedIn ? '#16a34a' : '#f1f5f9'};color:${e.checkedIn ? '#fff' : '#9ca3af'}">✓</button>` : ''}</div>`, 'font-weight:600')}
     ${TD(nameCell)}
     ${TD(typeBadge)}
     ${TD(airportBadge, 'text-align:center')}
@@ -1570,6 +1583,19 @@ async function tr2ClearUpgrade(rowId) {
     fetch('/.netlify/functions/patch-transport', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rawRow.id, data: updatedData }) }).catch(() => {});
     rawRow.data = updatedData;
   }
+  tr2BuildView();
+}
+
+// Check In checkmark right in Transport's Room column (Jorge's ask 2026-10-18) -- same
+// registrations.checked_in_at field/semantics the Reservations tab's resCheckIn() already
+// uses, just reachable from here too so staff don't have to jump to another tab.
+async function tr2ToggleCheckIn(regId, checkIn) {
+  const reg = AppData.regs.find(r => r.id === regId); if (!reg) return;
+  const now = checkIn ? new Date().toISOString() : null;
+  const { error } = await db.from('registrations').update({ checked_in_at: now }).eq('id', regId);
+  if (error) { showToast('Error: ' + error.message); return; }
+  reg.checkedInAt = now;
+  showToast(checkIn ? 'Checked in ✓' : 'Check-in removed');
   tr2BuildView();
 }
 
