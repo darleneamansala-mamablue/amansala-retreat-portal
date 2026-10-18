@@ -20,6 +20,25 @@ async function sget(key, path) {
   if (!r.ok) throw new Error(`supabase GET ${path.split('?')[0]} ${r.status} ${(await r.text()).slice(0, 200)}`);
   return r.json();
 }
+// PostgREST caps an unpaginated GET at 1000 rows with no error/warning -- confirmed 2026-10-18
+// as the root cause of be_rates growing to 12,585 duplicate rows: applyPriceChanges()'s
+// `existing` lookup (via plain sget) silently saw only the first 1000 of 2000+ rows once
+// be_rates grew past that, so every later recalc treated most already-written rows as new and
+// POSTed a fresh duplicate instead of PATCHing. Any query that could plausibly return 1000+
+// rows (be_rates in particular, which is one row per room-type/date and keeps growing) MUST use
+// this instead of sget().
+async function sgetAll(key, path) {
+  const out = [];
+  const sep = path.includes('?') ? '&' : '?';
+  let offset = 0;
+  const pageSize = 1000;
+  for (;;) {
+    const page = await sget(key, `${path}${sep}limit=${pageSize}&offset=${offset}`);
+    out.push(...page);
+    if (page.length < pageSize) return out;
+    offset += pageSize;
+  }
+}
 async function sreq(key, method, path, body, prefer) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     method, headers: { ...hdrs(key), ...(prefer ? { Prefer: prefer } : {}) },
@@ -243,7 +262,7 @@ async function pMap(items, limit, fn) {
 
 async function applyPriceChanges(key, changes, staffName) {
   if (!changes.length) return { applied: 0 };
-  const existing = await sget(key, `be_rates?select=room_type_id,start_date,end_date,price_single`);
+  const existing = await sgetAll(key, `be_rates?select=room_type_id,start_date,end_date,price_single`);
   const log = (await appStoreGet(key, LOG_KEY)) || [];
   // PATCH an existing row (1 request) instead of DELETE+POST (2) when one's already there --
   // only a brand-new date/room-type combo needs an insert.
@@ -267,7 +286,7 @@ module.exports = {
   applyPriceChanges,
   currentLivePrice, isLowSeasonMonth,
   SUPABASE_URL, SETTINGS_KEY, LOG_KEY, RECS_KEY, DEFAULT_SETTINGS, AGGRESSIVENESS_FACTOR,
-  sget, sreq, appStoreGet, appStoreSet,
+  sget, sgetAll, sreq, appStoreGet, appStoreSet,
   loadSettings, saveSettings, loadRoomTypes,
   dateToParts, daysBetween, leadTimeBucket, WEEKDAY_KEYS,
   loadBlocksInRange, occupancyFor, groupTakenFor,
