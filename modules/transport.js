@@ -851,8 +851,8 @@ function tr2PrintView() {
   const groups = new Map();
   filtered.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
 
-  const entryRow = e => `
-      <tr>
+  const entryRow = (e, color) => `
+      <tr${color ? ` style="background:${color}"` : ''}>
         <td>${escHtml(e.room || '—')}</td>
         <td>${escHtml(e.guest || '')}</td>
         <td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>
@@ -863,10 +863,10 @@ function tr2PrintView() {
         <td>${e.cost != null ? `$${e.cost}` : ''}</td>
       </tr>`;
 
-  // Same "shared ride" clustering the on-screen board uses (same flight/time window within
-  // ~20min, or a manual drag-and-drop merge saved in tr2UserGroupMap) -- Jorge's ask 2026-10-18:
-  // the printed sheet also needs these groups set apart, not just the date headers, so a
-  // driver can see at a glance which guests are riding together.
+  // Same "shared ride" clustering AND the same pastel colors the on-screen board uses (same
+  // flight/time window within ~20min, or a manual drag-and-drop merge saved in
+  // tr2UserGroupMap) -- Jorge's ask 2026-10-18: the printed sheet also needs these groups set
+  // apart, not just the date headers, and then (2026-10-18, follow-up) in the same colors.
   const rideGroupsHtml = items => {
     const colorMap = tr2AssignGroupColors(items);
     const serviceGroups = [];
@@ -874,12 +874,12 @@ function tr2PrintView() {
     items.forEach(e => {
       const autoKey = colorMap.get(e.rowId) || ('__solo__' + e.rowId);
       const gk = tr2UserGroupMap.has(`${e.type}|${e.rowId}`) ? tr2UserGroupMap.get(`${e.type}|${e.rowId}`) : autoKey;
-      if (!seen.has(gk)) { seen.set(gk, serviceGroups.length); serviceGroups.push({ entries: [] }); }
+      if (!seen.has(gk)) { seen.set(gk, serviceGroups.length); serviceGroups.push({ color: colorMap.get(e.rowId), entries: [] }); }
       serviceGroups[seen.get(gk)].entries.push(e);
     });
     return serviceGroups.map(svc => `
-      ${svc.entries.length > 1 ? `<tr class="ride"><td colspan="8">${svc.entries.length} pax comparten este viaje</td></tr>` : ''}
-      ${svc.entries.map(entryRow).join('')}
+      ${svc.entries.length > 1 ? `<tr class="ride" style="background:${svc.color || '#f9fafb'}"><td colspan="8">${svc.entries.length} pax comparten este viaje</td></tr>` : ''}
+      ${svc.entries.map(e => entryRow(e, svc.color)).join('')}
       <tr class="ride-end"><td colspan="8"></td></tr>
     `).join('');
   };
