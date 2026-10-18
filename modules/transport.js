@@ -720,6 +720,84 @@ function tr2UpgradeCell(e) {
   return `<div>${confirmedBadgeHtml}<div>${staffSel}<div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">${chips}</div></div></div>`;
 }
 
+// "Options" column (Jorge's ask 2026-10-18): a lateral SAME-category swap between two
+// guests arriving the same day who haven't checked in yet -- e.g. Jorge in GV3, Pedro in
+// GV5 (both Garden View, both arriving today, neither checked in) can trade outright so
+// Jorge ends up in GV5 and Pedro in GV3. This is a logistics move, not an Upgrade (that's
+// a different, better room type with its own price/folio/commission handling below) --
+// only candidates in the SAME room type as this row's own room are ever offered.
+function tr2OptionsCell(e) {
+  if (!e.room || !e.regId || e.type !== 'arrival') return `<span style="color:#9ca3af;font-size:11px">—</span>`;
+  const rtId = tr2RoomNameToRtId[e.room];
+  if (!rtId) return `<span style="color:#9ca3af;font-size:11px">Sin tipo</span>`;
+  const seen = new Set();
+  const candidates = tr2AllEntries.filter(c =>
+    c.type === 'arrival' && c.regId && c.regId !== e.regId && c.room &&
+    c.date === e.date && !c.checkedIn &&
+    c.room.toLowerCase() !== e.room.toLowerCase() &&
+    tr2RoomNameToRtId[c.room] === rtId
+  ).filter(c => { if (seen.has(c.regId)) return false; seen.add(c.regId); return true; });
+
+  if (!candidates.length) return `<span style="color:#9ca3af;font-size:11px">Sin opciones</span>`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:3px">${candidates.map(c => `
+    <button onclick="tr2SwapRooms('${e.rowId}','${c.regId}')" title="Intercambiar cuartos con ${escHtml(c.guest)}"
+      style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:3px 6px;font-size:10px;font-weight:600;color:#374151;cursor:pointer;font-family:'Jost',sans-serif;white-space:nowrap">
+      ↔ ${escHtml(c.room)} · ${escHtml(c.guest.trim().split(/\s+/)[0])}
+    </button>`).join('')}</div>`;
+}
+
+async function tr2SwapRooms(rowId, candidateRegId) {
+  const entry = tr2AllEntries.find(x => x.rowId === rowId);
+  if (!entry?.regId || !entry.room) { showToast('Sin cuarto asignado'); return; }
+  const regA = AppData.regs.find(r => r.id === entry.regId);
+  const regB = AppData.regs.find(r => r.id === candidateRegId);
+  if (!regA || !regB) { showToast('No se encontró el registro del huésped'); return; }
+  const roomA = regA.room, roomB = regB.room;
+  if (!roomA || !roomB) { showToast('Falta cuarto asignado'); return; }
+  const guestBEntry = tr2AllEntries.find(x => x.regId === candidateRegId && x.type === 'arrival');
+  const guestBName = guestBEntry?.guest || 'el otro huésped';
+  if (!confirm(`¿Intercambiar cuartos?\n\n${entry.guest}: ${roomA} → ${roomB}\n${guestBName}: ${roomB} → ${roomA}`)) return;
+
+  try {
+    await db.from('registrations').update({ room: roomB }).eq('id', regA.id);
+    await db.from('registrations').update({ room: roomA }).eq('id', regB.id);
+  } catch (err) { showToast('Error: ' + err.message); return; }
+  regA.room = roomB; regB.room = roomA;
+
+  // Keep each retreat's blocked_rooms list in sync too (same reason tr2ConfirmUpgrade
+  // does this for a real Upgrade) -- one update covering both swaps when it's the same
+  // retreat/booking, two separate ones when the guests belong to different bookings.
+  try {
+    const bkA = tr2ActiveBooks.find(b => b.id === regA.bookingId);
+    const bkB = tr2ActiveBooks.find(b => b.id === regB.bookingId);
+    if (bkA && bkB && bkA.id === bkB.id) {
+      const updated = (bkA.blockedRooms || []).map(r => {
+        const rl = r.trim().toLowerCase();
+        if (rl === roomA.trim().toLowerCase()) return roomB;
+        if (rl === roomB.trim().toLowerCase()) return roomA;
+        return r;
+      });
+      await db.from('bookings').update({ blocked_rooms: updated }).eq('id', bkA.id);
+      bkA.blockedRooms = updated;
+    } else {
+      if (bkA) {
+        const updatedA = (bkA.blockedRooms || []).map(r => r.trim().toLowerCase() === roomA.trim().toLowerCase() ? roomB : r);
+        await db.from('bookings').update({ blocked_rooms: updatedA }).eq('id', bkA.id);
+        bkA.blockedRooms = updatedA;
+      }
+      if (bkB) {
+        const updatedB = (bkB.blockedRooms || []).map(r => r.trim().toLowerCase() === roomB.trim().toLowerCase() ? roomA : r);
+        await db.from('bookings').update({ blocked_rooms: updatedB }).eq('id', bkB.id);
+        bkB.blockedRooms = updatedB;
+      }
+    }
+  } catch (err) { showToast('Cuartos intercambiados — error actualizando blocked_rooms: ' + err.message); }
+
+  saveAll();
+  showToast(`Intercambiado: ${entry.guest} → ${roomB} · ${guestBName} → ${roomA} ✓`);
+  await tr2LoadData();
+}
+
 function tr2ApplyTabStyles() {
   const ACT = `background:#fff;border:none;padding:5px 13px;border-radius:6px;font-size:12.5px;font-weight:600;color:#111827;cursor:pointer;font-family:'Jost',sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.1)`;
   const INA = `background:transparent;border:none;padding:5px 13px;border-radius:6px;font-size:12.5px;font-weight:500;color:#6b7280;cursor:pointer;font-family:'Jost',sans-serif`;
@@ -1345,9 +1423,14 @@ function tr2BuildView() {
   const timeColLabel = tr2View === 'departures' ? 'Pick-up · Hora vuelo' : tr2View === 'arrivals' ? 'Hora vuelo → Hotel' : 'Hora';
   const upgBtn = document.getElementById('tr2-upgrade-btn');
   if (upgBtn) { upgBtn.style.background = tr2UpgradeMode ? '#0d9488' : ''; upgBtn.style.color = tr2UpgradeMode ? '#fff' : ''; }
+  // Jorge's ask 2026-10-18: the Check In checkmark gets its own column instead of sitting
+  // next to the room number, and in Upgrade mode an Options column (lateral same-category
+  // room swaps, see tr2OptionsCell/tr2SwapRooms) sits right before Upgrade. Column count
+  // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
+  const totalCols = tr2UpgradeMode ? 11 : 10;
   const tableHeader = `<thead><tr>
-    ${TH('Habitación','80px')}${TH('Nombre')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}
-    ${tr2UpgradeMode ? TH('Upgrade','200px') : TH('Notas')}
+    ${TH('Habitación','80px')}${TH('Check In','70px')}${TH('Nombre')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}
+    ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}
     ${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
 
@@ -1367,7 +1450,7 @@ function tr2BuildView() {
       const labelHtml = isToday
         ? `<button onclick="tr2JumpToday()" title="Ver solo hoy" style="background:#0f766e;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">${label}</button>`
         : label;
-      html += `<tr><td colspan="9" style="padding:8px 12px;background:${bg};font-size:11px;font-weight:700;color:${color};border-top:2px solid #e5e7eb">${labelHtml}</td></tr>`;
+      html += `<tr><td colspan="${totalCols}" style="padding:8px 12px;background:${bg};font-size:11px;font-weight:700;color:${color};border-top:2px solid #e5e7eb">${labelHtml}</td></tr>`;
 
       const serviceGroups = [];
       const seen = new Map();
@@ -1388,13 +1471,13 @@ function tr2BuildView() {
           ondragover="event.preventDefault();this.style.outline='2px solid #4db6ac'"
           ondragleave="this.style.outline=''"
           ondrop="event.preventDefault();this.style.outline='';tr2Drop('${firstDirId}')">
-          <td colspan="9" style="padding:3px 12px;font-size:10px;font-weight:700;color:#6b7280;letter-spacing:.3px">${pax} pax · <span style="font-weight:400;opacity:.7">arrastra aquí para unir</span></td>
+          <td colspan="${totalCols}" style="padding:3px 12px;font-size:10px;font-weight:700;color:#6b7280;letter-spacing:.3px">${pax} pax · <span style="font-weight:400;opacity:.7">arrastra aquí para unir</span></td>
         </tr>`;
         svc.entries.forEach(e => {
           if (!e.ot) { const c = e.cost ?? tr2AutoRate(e, pax); if (c != null) { if (e.type === 'arrival') arrTotal += c; else depTotal += c; } }
           html += tr2RenderRow(e, svc.color, pax);
         });
-        if (si < serviceGroups.length - 1) html += `<tr><td colspan="9" style="padding:8px;background:#fff;border:none"></td></tr>`;
+        if (si < serviceGroups.length - 1) html += `<tr><td colspan="${totalCols}" style="padding:8px;background:#fff;border:none"></td></tr>`;
       });
     }
   }
@@ -1406,11 +1489,11 @@ function tr2BuildView() {
   const realOtEntries = otEntries.filter(e => !e.isSynthetic);
   const missingEntries = otEntries.filter(e => e.isSynthetic);
   if (realOtEntries.length) {
-    html += `<tr><td colspan="9" style="padding:8px 12px;background:#fef2f2;font-size:11px;font-weight:700;color:#dc2626;border-top:2px solid #e5e7eb">Own Transport (${realOtEntries.length})</td></tr>`;
+    html += `<tr><td colspan="${totalCols}" style="padding:8px 12px;background:#fef2f2;font-size:11px;font-weight:700;color:#dc2626;border-top:2px solid #e5e7eb">Own Transport (${realOtEntries.length})</td></tr>`;
     realOtEntries.forEach(e => { html += tr2RenderRow(e, null); });
   }
   if (missingEntries.length) {
-    html += `<tr><td colspan="9" style="padding:8px 12px;background:#fef9c3;font-size:11px;font-weight:700;color:#92400e;border-top:2px solid #e5e7eb">Missing Transport (${missingEntries.length})</td></tr>`;
+    html += `<tr><td colspan="${totalCols}" style="padding:8px 12px;background:#fef9c3;font-size:11px;font-weight:700;color:#92400e;border-top:2px solid #e5e7eb">Missing Transport (${missingEntries.length})</td></tr>`;
     missingEntries.forEach(e => { html += tr2RenderRow(e, null); });
   }
 
@@ -1499,14 +1582,21 @@ function tr2RenderRow(e, color, groupPax) {
 
   const rowBg = color ? `background:${color}` : '';
 
+  // Check In moved into its own column (Jorge's ask 2026-10-18: it was sitting right next
+  // to the room number, he wants it separated out).
+  const checkInCell = e.regId
+    ? `<button onclick="event.stopPropagation();tr2ToggleCheckIn('${e.regId}',${!e.checkedIn})" title="${e.checkedIn ? 'Checked in -- click to undo' : 'Click to check in'}" style="border:none;border-radius:50%;width:20px;height:20px;line-height:1;font-size:12px;cursor:pointer;flex-shrink:0;background:${e.checkedIn ? '#16a34a' : '#f1f5f9'};color:${e.checkedIn ? '#fff' : '#9ca3af'}">✓</button>`
+    : '';
+
   return `<tr style="${rowBg};cursor:grab" draggable="true" ondragstart="tr2DragStart(event,'${e.type}|${e.rowId}')" ondragend="this.style.opacity=''">
-    ${TD(`<div style="display:flex;align-items:center;gap:6px">${e.room ? escHtml(e.room) : `<span style="color:#d1d5db">—</span>`}${e.regId ? `<button onclick="event.stopPropagation();tr2ToggleCheckIn('${e.regId}',${!e.checkedIn})" title="${e.checkedIn ? 'Checked in -- click to undo' : 'Click to check in'}" style="border:none;border-radius:50%;width:20px;height:20px;line-height:1;font-size:12px;cursor:pointer;flex-shrink:0;background:${e.checkedIn ? '#16a34a' : '#f1f5f9'};color:${e.checkedIn ? '#fff' : '#9ca3af'}">✓</button>` : ''}</div>`, 'font-weight:600')}
+    ${TD(e.room ? escHtml(e.room) : `<span style="color:#d1d5db">—</span>`, 'font-weight:600')}
+    ${TD(checkInCell, 'text-align:center')}
     ${TD(nameCell)}
     ${TD(typeBadge)}
     ${TD(airportBadge, 'text-align:center')}
     ${TD(timeCell)}
     ${TD(e.retreatLabel ? `<span style="font-size:11px;color:#6b7280">${escHtml(e.retreatLabel)}</span>` : '')}
-    ${tr2UpgradeMode ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2UpgradeCell(e)}</td>` : TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.notes)}</span>` : '')}
+    ${tr2UpgradeMode ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2OptionsCell(e)}</td><td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2UpgradeCell(e)}</td>` : TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.notes)}</span>` : '')}
     ${TD(costCell)}
     <td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap">
       ${!e.isSynthetic && groupPax > 1 ? `<button onclick="tr2SplitEntry('${e.type}|${e.rowId}')" title="Separar del grupo" style="background:#fef2f2;border:none;border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;color:#dc2626;line-height:1;margin-right:3px">⊗</button>` : ''}
