@@ -5558,7 +5558,9 @@ function buildRetreatSchedulesPanel(){
         }
       } else if(i===nights){
         const us=_rspUsual;
-        if(us.start){
+        // respect the admin's "Skip this day" (period 'morn') on the departure date, like the scheduler, personal schedule and printed schedule do
+        const _rspDepSkip=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='morn');
+        if(us.start&&!_rspDepSkip){
           const end=fmtT(addMin(us.start,us.dur||60));
           rows.push({time:fmtT(us.start)+' – '+end,desc:tsEffClassLabel(sr,'morning','Morning Class'),note:shalaName(us.shala1||sr.morningShala1),type:'class'});
         }
