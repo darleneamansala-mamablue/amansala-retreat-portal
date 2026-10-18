@@ -2586,6 +2586,11 @@ function rcBuild(){
         const cs=Math.max(bkS,startMs),ce=Math.min(bkE,winE);
         const li=Math.round((cs-startMs)/DAY_MS),wi=Math.round((ce-cs)/DAY_MS);
         if(wi<=0)return;
+        // Bleed the bar half a day into the checkout-day column (ClockPMS-style) so the
+        // departure date itself shows in the grid instead of the bar stopping dead at the
+        // last night — only when the real checkout actually falls inside this view (not
+        // when we're just clipped by the window's right edge and the stay continues past it).
+        const _checkoutHalfPx=(ce===bkE)?18:0;
         const st=STATUS[bk.status]||STATUS.requested;
         const pc=bkPaletteColor(bk);
         // Room Only bookings have no separate guest registration — the leader
@@ -2619,7 +2624,7 @@ function rcBuild(){
         // rule) — it was never meant to stop a staff member from personally
         // choosing to drag it, so manual dragging here ignores it (Darlene's
         // call 2026-09-17: "if we move it here we should be able to move it").
-        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:grab;border-left:4px solid ${st.border};${roomOnlyOutline}`;
+        bl.style.cssText=`left:${li*36+2}px;width:${wi*36-4+_checkoutHalfPx}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:grab;border-left:4px solid ${st.border};${roomOnlyOutline}`;
         bl.draggable=true;
         // Never show retreat/leader name and guest name together on a room row
         // — the retreat is already identifiable via color + the Active in
