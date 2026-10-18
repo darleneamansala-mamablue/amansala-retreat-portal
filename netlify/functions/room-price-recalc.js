@@ -81,18 +81,26 @@ async function doRecalc(key) {
   // default rt5 (Simple n Small) -> rt4 (Garden), Jorge's report 2026-10-18): runs AFTER every
   // room type's own recommendation is computed above, so a capped type's final price can never
   // exceed its referenced type's recommendation on the same date, regardless of its own
-  // occupancy-driven swing. One level of indirection only -- not chased recursively -- so a
-  // misconfigured cycle (A ceils to B, B ceils to A) can't loop; it just means neither cap
-  // actually applies that round.
-  for (const rt of roomTypes) {
-    const ceilId = settings.priceCeilingRoomTypeId && settings.priceCeilingRoomTypeId[rt.id];
-    const ceilType = ceilId && byRoomType[ceilId];
-    if (!ceilType) continue;
-    const byDate = byRoomType[rt.id].byDate;
-    for (const dateStr of Object.keys(byDate)) {
-      const ceilPrice = ceilType.byDate[dateStr] && ceilType.byDate[dateStr].recommended;
-      if (ceilPrice != null && byDate[dateStr].recommended > ceilPrice) byDate[dateStr].recommended = ceilPrice;
+  // occupancy-driven swing. Supports a CHAIN of ceilings (Jorge's ask 2026-10-18: Simple n
+  // Small -> Garden -> Garden Plus -> Superior -> Beachfront King, and Double -> Beachview
+  // Double) -- repeats the full pass once per room type so a cap propagates down an arbitrarily
+  // long chain regardless of what order the referenced types happen to be processed in, not
+  // just when the configured chain happens to match roomTypes' own iteration order. A
+  // misconfigured cycle (A ceils to B, B ceils to A) can't loop since the repeat count is fixed
+  // (roomTypes.length), not "until stable" -- it just stops converging on a cycle, no crash.
+  for (let pass = 0; pass < roomTypes.length; pass++) {
+    let changed = false;
+    for (const rt of roomTypes) {
+      const ceilId = settings.priceCeilingRoomTypeId && settings.priceCeilingRoomTypeId[rt.id];
+      const ceilType = ceilId && byRoomType[ceilId];
+      if (!ceilType) continue;
+      const byDate = byRoomType[rt.id].byDate;
+      for (const dateStr of Object.keys(byDate)) {
+        const ceilPrice = ceilType.byDate[dateStr] && ceilType.byDate[dateStr].recommended;
+        if (ceilPrice != null && byDate[dateStr].recommended > ceilPrice) { byDate[dateStr].recommended = ceilPrice; changed = true; }
+      }
     }
+    if (!changed) break;
   }
 
   const changes = [];
