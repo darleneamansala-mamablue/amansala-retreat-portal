@@ -245,7 +245,7 @@ function confirmCsvImport(){
     if(grp.blockOnly&&!grp.guests.length){
       if(canonRoom){
         const isSystemRoom=!!_findCanonicalRoom(canonRoom);
-        if(isSystemRoom&&!targetBk.blockedRooms.some(r=>r.toLowerCase()===canonRoom.toLowerCase())){targetBk.blockedRooms.push(canonRoom);blocked++;targetBk.blockedRoomsUpdatedAt=new Date().toISOString();}
+        if(isSystemRoom&&!targetBk.blockedRooms.some(r=>r.toLowerCase()===canonRoom.toLowerCase())){targetBk.blockedRooms.push(canonRoom);blocked++;targetBk.blockedRoomsUpdatedAt=targetBk.updatedAt=new Date().toISOString();}
         else if(!isSystemRoom)unknownRooms++;
       }
       return;
@@ -254,7 +254,7 @@ function confirmCsvImport(){
     added++;
     if(canonRoom){
       const isSystemRoom=!!_findCanonicalRoom(canonRoom);
-      if(isSystemRoom){if(!targetBk.blockedRooms.some(r=>r.toLowerCase()===canonRoom.toLowerCase())){targetBk.blockedRooms.push(canonRoom);targetBk.blockedRoomsUpdatedAt=new Date().toISOString();}}
+      if(isSystemRoom){if(!targetBk.blockedRooms.some(r=>r.toLowerCase()===canonRoom.toLowerCase())){targetBk.blockedRooms.push(canonRoom);targetBk.blockedRoomsUpdatedAt=targetBk.updatedAt=new Date().toISOString();}}
       else{unknownRooms++;}
     }
   });

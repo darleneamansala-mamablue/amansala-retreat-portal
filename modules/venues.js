@@ -1908,6 +1908,7 @@ function confirmCancellation(bkId,within16){
   bk.depositAtCancellation=totalPaid;
   cancelCloudbedReservations(bk).catch(e=>console.warn('[CB cancel]',e));
   bk.blockedRooms=[];
+  bk.updatedAt=bk.cancelledAt;
   saveAll();closeModal('cancelConfirmModal');venBuild();buildDashboard();
   logActivity('Retreat cancelled',`${bk.leaderName||bk.retreatName} — ${within16?'within 16 weeks · $750 retained':'no fee'}`,bkId);
   showToast(`Retreat cancelled.${within16?' $750 retained in Cancellation Bank.':''}`);
@@ -2052,6 +2053,7 @@ function crSave(){
   if(skipped.length)msg+=`\n\nSkipped (already taken): ${skipped.join(', ')}`;
   if(!confirm(msg))return;
   bk.blockedRooms=available;
+  bk.updatedAt=new Date().toISOString();
   saveAll();closeModal('copyRoomsModal');venBuild();
   showToast(`${available.length} rooms copied.`);
 }
@@ -2151,6 +2153,7 @@ function venAutoAssign(){
   msg+=`\nProceed with this room block?`;
   if(!confirm(msg))return;
   bk.blockedRooms=selected;
+  bk.updatedAt=new Date().toISOString();
   autoAssignTeacherRoom(bk);
   saveAll();closeModal('venModal');venBuild();buildDashboard();
   logActivity('Rooms auto-assigned',`${selected.length} rooms / ${beds} guest beds for ${pax} guests · ${bk.leaderName||bk.retreatName}`,bk.id);
@@ -3123,7 +3126,7 @@ function _rclApplyLink(m){
   if(!roomListIncludes(bk.blockedRooms,m.room))bk.blockedRooms.push(m.room);
   if(!bk.cbReservationIds)bk.cbReservationIds={};
   bk.cbReservationIds[m.room]=m.r.reservationID;
-  bk.blockedRoomsUpdatedAt=new Date().toISOString();
+  bk.blockedRoomsUpdatedAt=bk.updatedAt=new Date().toISOString();
   logActivity('Cloudbeds reservation linked',`${m.r.guestName} · ${m.room} → ${bk.leaderName||bk.retreatName}`,bk.id);
 }
 function rclLinkOne(i){
@@ -3176,7 +3179,7 @@ function linkExternalReservationToBooking(r,bkId,roomName){
   if(!roomListIncludes(bk.blockedRooms,roomName))bk.blockedRooms.push(roomName);
   if(!bk.cbReservationIds)bk.cbReservationIds={};
   bk.cbReservationIds[roomName]=r.reservationID;
-  bk.blockedRoomsUpdatedAt=new Date().toISOString();
+  bk.blockedRoomsUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();venBuild();rcBuild();
   logActivity('Cloudbeds reservation linked',`${r.guestName} · ${roomName} → ${label}`,bkId);
   showToast(`Linked ✓ — ${roomName} is now part of ${label}'s booking.`);
@@ -3257,6 +3260,13 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
   if(conflict){showToast(`Room ${toRoom} is already blocked by ${conflict.leaderName||conflict.retreatName}.`);return;}
   // Swap in blockedRooms
   bk.blockedRooms=(bk.blockedRooms||[]).map(r=>r===fromRoom?toRoom:r);
+  // Without bumping this, syncToSupabase()'s staleness guard (added specifically to stop
+  // a stale tab from clobbering someone else's more recent edit) compares bk.updatedAt
+  // against the server's current updated_at -- an unbumped, stale-looking bk.updatedAt
+  // here meant THIS move's blockedRooms/Cloudbeds-id changes could get silently skipped
+  // on upload with no error at all. Confirmed real incident 2026-10-18 (same root cause
+  // found and fixed in blockSave()/room-blocking.js already -- rcMoveRoom never had it).
+  bk.updatedAt=new Date().toISOString();
   // Update any guest reg pointing at fromRoom -- if fromRoom has more than one
   // registration (a stale empty duplicate alongside the real named guest), moving
   // the WRONG one here is exactly how a room move can silently orphan a real

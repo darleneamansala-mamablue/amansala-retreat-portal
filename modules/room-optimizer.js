@@ -533,6 +533,11 @@ function ozApplyPortalMove(bk,fromRoom,toRoom){
     if(bk.cbNoteIds){bk.cbNoteIds[toRoom]=bk.cbNoteIds[fromRoom]||null;delete bk.cbNoteIds[fromRoom];}
   }
   bk.blockedRoomsUpdatedAt=new Date().toISOString();
+  // blockedRoomsUpdatedAt alone isn't what syncToSupabase()'s staleness guard checks --
+  // it compares bk.updatedAt against the server's current updated_at, so without this
+  // bump this move's blockedRooms/Cloudbeds-id changes could get silently skipped on
+  // upload (same real incident/fix already applied to rcMoveRoom and regMoveGuest).
+  bk.updatedAt=bk.blockedRoomsUpdatedAt;
   saveAll();
 }
 // In-session only (Phase 2 scope decision) — permanent history lives in the

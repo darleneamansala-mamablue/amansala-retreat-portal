@@ -747,7 +747,7 @@ function autoAssignTeacherRoom(bk){
     AppData.regs.push({id:uid(),bookingId:bk.id,room:chosenRoom,roomTypeId:'rt4',isTeacherRoom:true,
       guests:[{name:bk.leaderName||'Retreat Leader',returning:false,yearsAttending:null,notes:'Teacher room (auto-assigned)'}],
       customPrice:price,amountPaid:0,notes:isComped?'Teacher room — Garden King (comped, 10+ paying guests)':'Teacher room — Garden King (auto-assigned)'});
-    if(!roomListIncludes(bk.blockedRooms,chosenRoom)){if(!bk.blockedRooms)bk.blockedRooms=[];bk.blockedRooms.push(chosenRoom);bk.blockedRoomsUpdatedAt=new Date().toISOString();}
+    if(!roomListIncludes(bk.blockedRooms,chosenRoom)){if(!bk.blockedRooms)bk.blockedRooms=[];bk.blockedRooms.push(chosenRoom);bk.blockedRoomsUpdatedAt=bk.updatedAt=new Date().toISOString();}
     logActivity('Teacher room auto-assigned',`${bk.leaderName||bk.retreatName} — ${chosenRoom} (Garden King) · ${isComped?'comped':'$'+price}`,bk.id);
   }
 }
@@ -765,7 +765,10 @@ function upgradeTeacherRoom(bkId,newRoom){
   teacherReg.notes='Teacher room — upgraded to Garden King';
   if(!bk.blockedRooms)bk.blockedRooms=[];
   if(!roomListIncludes(bk.blockedRooms,newRoom))bk.blockedRooms.push(newRoom);
-  bk.blockedRoomsUpdatedAt=new Date().toISOString();
+  // blockedRoomsUpdatedAt alone isn't what syncToSupabase()'s staleness guard checks --
+  // see the same real incident/fix in rcMoveRoom/regMoveGuest (modules/venues.js,
+  // teacher-portal.js) and room-optimizer.js's ozApplyPortalMove.
+  bk.blockedRoomsUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();buildDashboard();regRender();
   logActivity('Teacher room upgraded',`${bk.leaderName||bk.retreatName} — ${oldRoom} → ${newRoom} (Garden King)`,bkId);
   showToast(`Teacher moved to ${newRoom} (Garden King)`);
