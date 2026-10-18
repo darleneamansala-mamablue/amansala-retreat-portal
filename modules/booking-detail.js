@@ -68,7 +68,7 @@ function _bdSubject(){
     folioCol:'registration_id',bookingType:bk.bookingType,
     stripeCustomerId:reg.stripeCustomerId,stripePaymentMethodId:reg.stripePaymentMethodId,
     stripeCardBrand:reg.stripeCardBrand,stripeCardLast4:reg.stripeCardLast4,
-    cancelled:!!reg.cancelled,
+    cancelled:!!reg.cancelled,ac24h:!!reg.ac24h,
   };
 }
 
@@ -485,6 +485,7 @@ function _bdRender(){
           <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${_bdDetailEditMode?`<select id="bdEditRoom" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px">${_bdAvailableRoomsForEdit(subj.checkIn,subj.checkOut,subj.room).map(r=>`<option value="${escHtml(r)}"${r===subj.room?' selected':''}>${escHtml(r)}</option>`).join('')}</select>`:escHtml(subj.room||'—')}</td></tr>
           ${_splitLineage?`<tr><td style="color:var(--muted);padding:5px 0">Split Stay</td><td style="padding:5px 0;font-size:12px">${_splitLineage.prev?`<span onclick="openBookingDetailForReg('${_splitLineage.prev.id}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">Room ${escHtml(_splitLineage.prev.room)}</span> until ${fmtDate(subj.checkIn)} → `:''}<strong>this room</strong>${_splitLineage.next?` → <span onclick="openBookingDetailForReg('${_splitLineage.next.id}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">Room ${escHtml(_splitLineage.next.room)}</span> from ${fmtDate(subj.checkOut)}`:''}</td></tr>`:''}
           <tr><td style="color:var(--muted);padding:5px 0">Rate</td><td style="padding:5px 0;color:#059669;font-weight:700">${subj.rate!=null?fmt$(subj.rate)+'/night':'—'}</td></tr>
+          ${_bdKind!=='req'?`<tr><td style="color:var(--muted);padding:5px 0">A/C</td><td style="padding:5px 0"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600"><input type="checkbox" id="bdAc24h" ${subj.ac24h?'checked':''} onchange="bdSaveAc24h(this.checked)"> ❄️ 24 horas (no apagar)</label></td></tr>`:''}
         </table>
         <div style="margin-top:10px">
           <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px">${_bdKind==='req'?'Guest Notes':'Notes'}</label>
@@ -1127,6 +1128,20 @@ async function bdSaveNotes(){
     reg.notes=notes;
   }
   showToast('Notes saved ✓');
+}
+
+// Marks this room as needing the A/C left on 24h (never part of the nightly
+// "turn it on before 9pm" reminder) — read by send-climas-report.js's own
+// occupancy pass to split those rooms into their own section instead of the
+// regular reminder list. registrations only (ac_24h column doesn't exist on
+// booking_requests — those guests aren't retreat rooms the climas report tracks
+// the same way).
+async function bdSaveAc24h(checked){
+  const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+  const {error}=await db.from('registrations').update({ac_24h:checked}).eq('id',reg.id);
+  if(error){showToast('Error: '+error.message);return;}
+  reg.ac24h=checked;
+  showToast(checked?'Marcado: A/C 24 horas ❄️':'A/C 24 horas quitado');
 }
 
 // Jorge's correction 2026-10-10: a SEPARATE field from the guest's own Notes
