@@ -672,6 +672,7 @@ function _bdFolioRowHtml(f){
       <div style="display:flex;gap:6px">
         <button class="btn btn-primary btn-sm" onclick="bdSendToGuest('${fid}')">Send to Guest</button>
         ${isOpen?`<button class="btn btn-secondary btn-sm" onclick="bdCloseFolio('${fid}')">Close</button>`:`<button class="btn btn-secondary btn-sm" onclick="bdReopenFolio('${fid}')">Reopen</button>`}
+        <button class="btn btn-secondary btn-sm" onclick="bdOpenTransferFolio('${fid}')" title="Move this whole folio -- charges and payments -- to a different reservation (e.g. an extra night booked separately)">Transfer</button>
         <button class="btn btn-danger btn-sm" onclick="bdDeleteFolioRow('${fid}')">Delete</button>
       </div>
     </div>
@@ -1069,6 +1070,85 @@ async function bdAddFolio(){
   const token=uid().replace(/[^a-z0-9]/gi,'');
   const {error}=await db.from('folios').insert({[subj.folioCol]:_bdFolioAnchorId(subj),guest_name:guestName,name,payment_token:token,status:'open'});
   if(error){showToast('Error: '+error.message);return;}
+  await _bdLoadFolios();
+}
+
+// Transfer Folio -- Jorge's ask 2026-10-18: a guest with an extra night booked as a SEPARATE
+// reservation (its own registration or booking_requests row, not a Split Stay chain -- that
+// case already shares a folio automatically via _bdFolioAnchorId) needs their existing folio
+// (every charge AND every payment -- a payment is just a folio_items row with category:'Payment'
+// and a negative unit_price, bdRecordPayment above, so moving folio_items moves both together,
+// nothing separate to carry over) moved onto the other reservation instead of starting fresh.
+// Same single-column UPDATE _bdReleaseFoliosForDelete already uses to hand a Split Stay's folio
+// to its next segment, generalized to an arbitrary target and to switching the key column
+// itself (registration_id <-> booking_request_id) when the target is a different kind.
+let _bdTransferFid=null;
+let _bdTransferCandidates=[];
+
+function bdOpenTransferFolio(fid){
+  _bdTransferFid=fid;
+  const f=_bdFolios.find(x=>x.folio.id===fid);if(!f)return;
+  const total=f.items.reduce((s,i)=>s+Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100),0);
+  document.getElementById('bdTransferFolioInfo').innerHTML=`Moving <b>${escHtml(f.folio.name)}</b> — ${f.items.length} charge${f.items.length!==1?'s':''}, total ${fmt$(total)} — to a different reservation. Every charge and payment on it moves together.`;
+  document.getElementById('bdTransferSearch').value='';
+  document.getElementById('bdTransferResults').innerHTML='<div style="padding:16px;text-align:center;color:var(--muted);font-size:12.5px">Type a guest name or room to search…</div>';
+  _bdTransferCandidates=[]; // rebuilt fresh on first keystroke so a just-created reservation shows up
+  openModal('bdTransferFolioModal');
+}
+
+// Every live reservation, either kind -- registrations (retreat/Room Only guests already in
+// AppData) and booking_requests (fetched fresh, not part of AppData) -- as one flat pick list,
+// same two sources modules/reservations.js's Advanced Search draws from.
+async function _bdTransferBuildCandidates(){
+  const regRows=[];
+  AppData.regs.forEach(reg=>{
+    if(reg.cancelled)return;
+    const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
+    if(!bk||bk.status==='cancelled')return;
+    const named=(reg.guests||[]).filter(g=>g.name&&!g.cancelled);
+    if(!named.length)return;
+    named.forEach(g=>regRows.push({
+      kind:'reg',id:reg.id,guestName:g.name,room:reg.room||'—',
+      checkIn:reg.checkIn||bk.startDate,checkOut:reg.checkOut||bk.endDate,
+      source:bk.leaderName||bk.retreatName||'Group',
+    }));
+  });
+  let reqRows=[];
+  try{
+    const {data}=await db.from('booking_requests').select('id,first_name,last_name,room,room_type_name,check_in,check_out').neq('status','declined');
+    reqRows=(data||[]).map(r=>({
+      kind:'req',id:r.id,guestName:`${r.first_name||''} ${r.last_name||''}`.trim()||'Guest',
+      room:r.room||r.room_type_name||'—',checkIn:r.check_in,checkOut:r.check_out,source:'Booking Engine',
+    }));
+  }catch(e){/* non-fatal -- registrations alone still work as a target list */}
+  return[...regRows,...reqRows];
+}
+
+async function _bdTransferSearch(q){
+  if(!_bdTransferCandidates.length)_bdTransferCandidates=await _bdTransferBuildCandidates();
+  const term=(q||'').trim().toLowerCase();
+  const el=document.getElementById('bdTransferResults');
+  if(term.length<2){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted);font-size:12.5px">Type at least 2 characters…</div>';return;}
+  // Exclude the folio's own current reservation from its own transfer-target list.
+  const f=_bdFolios.find(x=>x.folio.id===_bdTransferFid);
+  const selfId=f?(f.folio.registration_id||f.folio.booking_request_id):null;
+  const matches=_bdTransferCandidates.filter(c=>c.id!==selfId&&(c.guestName.toLowerCase().includes(term)||c.room.toLowerCase().includes(term))).slice(0,30);
+  if(!matches.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted);font-size:12.5px">No matches</div>';return;}
+  el.innerHTML=matches.map(c=>`
+    <div onclick="bdConfirmTransfer('${c.kind}','${c.id}')" style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+      <div style="font-weight:700;font-size:13px">${escHtml(c.guestName)}</div>
+      <div style="font-size:11.5px;color:var(--muted)">Room ${escHtml(c.room)} · ${fmtDate(c.checkIn)} – ${fmtDate(c.checkOut)} · ${escHtml(c.source)}</div>
+    </div>`).join('');
+}
+
+async function bdConfirmTransfer(kind,id){
+  const target=_bdTransferCandidates.find(c=>c.kind===kind&&c.id===id);if(!target)return;
+  if(!confirm(`Move this folio to ${target.guestName} (Room ${target.room})? All its charges and payments go with it.`))return;
+  const colSet=kind==='req'?{booking_request_id:id,registration_id:null}:{registration_id:id,booking_request_id:null};
+  const {error}=await db.from('folios').update({...colSet,guest_name:target.guestName,name:target.guestName}).eq('id',_bdTransferFid);
+  if(error){showToast('Error: '+error.message);return;}
+  closeModal('bdTransferFolioModal');
+  showToast('Folio transferred ✓');
   await _bdLoadFolios();
 }
 

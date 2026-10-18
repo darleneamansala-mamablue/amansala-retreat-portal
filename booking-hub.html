@@ -2524,6 +2524,18 @@
   </div>
 </div>
 
+<!-- ===== TRANSFER FOLIO MODAL (move a whole folio + its charges/payments to another reservation) ===== -->
+<div class="modal-overlay" id="bdTransferFolioModal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-hdr"><h2>Transfer Folio</h2><button class="modal-x" onclick="closeModal('bdTransferFolioModal')">&times;</button></div>
+    <div class="modal-body">
+      <div id="bdTransferFolioInfo" style="font-size:12.5px;color:var(--muted);margin-bottom:12px"></div>
+      <input id="bdTransferSearch" type="text" placeholder="Search guest name or room…" oninput="_bdTransferSearch(this.value)" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;margin-bottom:10px;box-sizing:border-box">
+      <div id="bdTransferResults" style="max-height:320px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="menuPrintOptionsModal">
   <div class="modal" style="max-width:420px">
     <div class="modal-hdr"><h2>Print Menu</h2><button class="modal-x" onclick="closeModal('menuPrintOptionsModal')">&times;</button></div>
@@ -6487,7 +6499,7 @@ function switchTab(id,btn){
 <script src="modules/payments.js?v=20261009a"></script>
 <script src="modules/room-activities.js"></script>
 <script src="modules/tour-picker.js?v=20260930a"></script>
-<script src="modules/booking-detail.js?v=20261018c"></script>
+<script src="modules/booking-detail.js?v=20261018d"></script>
 <script>
 // ===== PAYMENT RECORDING — moved to modules/payments.js =====
 // ===== PIPELINE STEPS — moved to modules/payments.js (loaded above) =====
