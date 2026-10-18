@@ -226,10 +226,16 @@ async function _bdLoadFolios(){
       // createInitialFolio, wetravel-webhook.js). Seeded here instead, the one
       // place a 'reg' subject's very first folio gets created, so Balance Due
       // matches Room Total from the start. Scoped to folioCol==='registration_id'
-      // only -- booking_requests (folioCol 'booking_request_id') already get their
-      // Room charge seeded by the payment webhook at the moment they're actually
-      // paid, and must not get a second one here before/without payment.
-      if(subj.folioCol==='registration_id'&&subj.rate>0){
+      // AND bookingType==='room_only' only -- booking_requests (folioCol
+      // 'booking_request_id') already get their Room charge seeded by the payment
+      // webhook at the moment they're actually paid, and must not get a second
+      // one here before/without payment. A retreat/group registration must NOT
+      // get one either (Jorge's report 2026-10-18: Elizabeth Swanson/Carter
+      // Foxworth's individual folio showed a $2,875 "Room charge"/Balance Due
+      // that has nothing to do with anything -- retreat room billing is tracked
+      // entirely at the group level, calcBkBalance/the retreat's own BILL/PAID/
+      // BAL DUE bar, never per-guest folios).
+      if(subj.folioCol==='registration_id'&&subj.bookingType==='room_only'&&subj.rate>0){
         const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
         const {error:riErr}=await db.from('folio_items').insert({folio_id:created.id,description:`Room charge — ${subj.room||'Room'}`,qty:nights,unit_price:subj.rate,tax_rate:0,category:'Room'});
         if(riErr)throw riErr;
@@ -247,7 +253,7 @@ async function _bdLoadFolios(){
     // into the oldest folio, the first time one of these old empty folios is
     // opened -- runs at most once per booking, since folio_items is non-empty
     // on every later open.
-    if(!justSeeded&&subj.folioCol==='registration_id'&&subj.rate>0&&!(items&&items.length)){
+    if(!justSeeded&&subj.folioCol==='registration_id'&&subj.bookingType==='room_only'&&subj.rate>0&&!(items&&items.length)){
       const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
       const oldest=[...folios].sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0))[0];
       const {data:backfilled,error:bfErr}=await db.from('folio_items').insert({folio_id:oldest.id,description:`Room charge — ${subj.room||'Room'}`,qty:nights,unit_price:subj.rate,tax_rate:0,category:'Room'}).select().single();
