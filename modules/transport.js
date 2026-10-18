@@ -917,9 +917,20 @@ async function tr2LoadData() {
   tr2RawRows = {};
   for (const row of dedupedRows) {
     const d = row.data || {};
-    const bkId = row.booking_id;
-    const bk = bkMap[bkId];
+    let bkId = row.booking_id;
+    let bk = bkMap[bkId];
     const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
+    // A row's own booking_id can point at a booking that's gone (deleted/recreated with a new
+    // id -- confirmed live 2026-10-18: Carter Foxworth's and Heather Kasey's retreats each had
+    // old transport submissions stuck on a since-deleted booking_id, showing as a permanent
+    // duplicate "Sin retiro asignado" row next to the correctly-matched one). Fall back to the
+    // same name match tr2NameMap already builds from every CURRENT active booking's own
+    // registrations, so a stale booking_id self-heals instead of needing a one-off data fix
+    // every time this happens.
+    if (!bk && name) {
+      const fallback = tr2NameMap[tr2NormName(name)];
+      if (fallback) { bkId = fallback.bkId; bk = bkMap[bkId]; }
+    }
     if (bkId && cancelledKeys.has(`${bkId}|${tr2NormName(name)}`)) continue;
     tr2RawRows[row.id] = row;
     // A manual correction from the edit modal (d.roomOverride) always wins — the
