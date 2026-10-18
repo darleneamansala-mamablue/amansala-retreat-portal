@@ -920,7 +920,19 @@ async function tr2LoadData() {
       });
       clusters.forEach(c => {
         if (c.rows.length < 2) return;
-        const best = c.rows.reduce((a, b) => pickBetter(a, b));
+        // Prefer whichever variant's EXACT spelling matches a real registration's guest name
+        // (keeps the existing exact-name room lookup below working) over just the most
+        // "complete" submission -- confirmed live 2026-10-18: normalizing Elli/Elliot/Elliott
+        // Free to "Elliott" (the most complete submission) broke the exact-name room match
+        // "Elli Free" (the REAL registration spelling) used to provide, leaving the merged row
+        // with no room at all.
+        const registryMatch = c.rows.find(row => {
+          const d = row.data || {};
+          const bk = row.booking_id || d.bookingId || '';
+          const full = `${(d.firstName || '').trim()} ${(d.lastName || '').trim()}`.trim().toLowerCase();
+          return bk && full && roomLookup[`${bk}|${full}`] !== undefined;
+        });
+        const best = registryMatch || c.rows.reduce((a, b) => pickBetter(a, b));
         const bd = best.data || {};
         c.rows.forEach(row => { if (row.id !== best.id) renameMap.set(row.id, { firstName: bd.firstName, lastName: bd.lastName }); });
       });
