@@ -851,10 +851,7 @@ function tr2PrintView() {
   const groups = new Map();
   filtered.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
 
-  const rowsHtml = filtered.length ? [...groups.entries()].map(([date, items], gi) => `
-    ${gi > 0 ? `<tr class="spacer"><td colspan="8"></td></tr>` : ''}
-    <tr class="grp"><td colspan="8">${date === todayStr ? '📍 HOY — ' : ''}${fmtDate(date)}</td></tr>
-    ${items.map(e => `
+  const entryRow = e => `
       <tr>
         <td>${escHtml(e.room || '—')}</td>
         <td>${escHtml(e.guest || '')}</td>
@@ -864,7 +861,33 @@ function tr2PrintView() {
         <td>${escHtml(e.retreatLabel || '')}</td>
         <td>${escHtml(e.notes || '')}</td>
         <td>${e.cost != null ? `$${e.cost}` : ''}</td>
-      </tr>`).join('')}
+      </tr>`;
+
+  // Same "shared ride" clustering the on-screen board uses (same flight/time window within
+  // ~20min, or a manual drag-and-drop merge saved in tr2UserGroupMap) -- Jorge's ask 2026-10-18:
+  // the printed sheet also needs these groups set apart, not just the date headers, so a
+  // driver can see at a glance which guests are riding together.
+  const rideGroupsHtml = items => {
+    const colorMap = tr2AssignGroupColors(items);
+    const serviceGroups = [];
+    const seen = new Map();
+    items.forEach(e => {
+      const autoKey = colorMap.get(e.rowId) || ('__solo__' + e.rowId);
+      const gk = tr2UserGroupMap.has(`${e.type}|${e.rowId}`) ? tr2UserGroupMap.get(`${e.type}|${e.rowId}`) : autoKey;
+      if (!seen.has(gk)) { seen.set(gk, serviceGroups.length); serviceGroups.push({ entries: [] }); }
+      serviceGroups[seen.get(gk)].entries.push(e);
+    });
+    return serviceGroups.map(svc => `
+      ${svc.entries.length > 1 ? `<tr class="ride"><td colspan="8">${svc.entries.length} pax comparten este viaje</td></tr>` : ''}
+      ${svc.entries.map(entryRow).join('')}
+      <tr class="ride-end"><td colspan="8"></td></tr>
+    `).join('');
+  };
+
+  const rowsHtml = filtered.length ? [...groups.entries()].map(([date, items], gi) => `
+    ${gi > 0 ? `<tr class="spacer"><td colspan="8"></td></tr>` : ''}
+    <tr class="grp"><td colspan="8">${date === todayStr ? '📍 HOY — ' : ''}${fmtDate(date)}</td></tr>
+    ${rideGroupsHtml(items)}
   `).join('') : `<tr><td colspan="8" class="none">No hay entradas para estos filtros.</td></tr>`;
 
   const win = window.open('', '_blank');
@@ -886,6 +909,11 @@ function tr2PrintView() {
          shows up with no color at all, on top of the background for whoever has it enabled. */
       tr.grp td{background:#f1f5f9;font-weight:700;font-size:10pt;letter-spacing:.5px;text-transform:uppercase;padding:8px;border-top:2px solid #1a2332;border-bottom:1px solid #d1d5db}
       tr.spacer td{padding:0;border:none;height:14px}
+      /* Same "shared ride" cluster the on-screen board shows -- a dashed top rule + small caps
+         label makes the group visible even with no color, plus the end-spacer leaves a real gap
+         (border-bottom alone reads as just another row, which is what Jorge reported). */
+      tr.ride td{padding:5px 8px 2px;border:none;border-top:1.5px dashed #9ca3af;font-size:8.5pt;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#6b7280}
+      tr.ride-end td{padding:0;border:none;height:8px}
       .none{color:#9ca3af;font-style:italic;text-align:center;padding:30px 0}
       @media print{.print-btn{display:none}tr.grp{break-inside:avoid}tr{break-inside:avoid}}
     </style></head><body>
