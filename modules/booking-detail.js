@@ -68,7 +68,7 @@ function _bdSubject(){
     folioCol:'registration_id',bookingType:bk.bookingType,
     stripeCustomerId:reg.stripeCustomerId,stripePaymentMethodId:reg.stripePaymentMethodId,
     stripeCardBrand:reg.stripeCardBrand,stripeCardLast4:reg.stripeCardLast4,
-    cancelled:!!reg.cancelled,ac24h:!!reg.ac24h,
+    cancelled:!!reg.cancelled,ac24h:!!reg.ac24h,internalNotes:reg.internalNotes||'',
   };
 }
 
@@ -492,11 +492,11 @@ function _bdRender(){
           <textarea id="bdNotes" placeholder="${_bdKind==='req'?'Notes the guest submitted...':'Internal notes...'}" style="width:100%;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;resize:vertical">${escHtml(subj.notes||'')}</textarea>
           <button class="btn btn-secondary btn-sm" onclick="bdSaveNotes()" style="margin-top:6px">Save</button>
         </div>
-        ${_bdKind==='req'?`<div style="margin-top:14px">
+        <div style="margin-top:14px">
           <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px">Internal Notes</label>
           <textarea id="bdInternalNotes" placeholder="Staff-only notes..." style="width:100%;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;resize:vertical">${escHtml(subj.internalNotes||'')}</textarea>
           <button class="btn btn-secondary btn-sm" onclick="bdSaveInternalNotes()" style="margin-top:6px">Save</button>
-        </div>`:''}
+        </div>
       </div>
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">👤 Guest${subj.allGuests.length>1?'s':''}</div>
@@ -1145,17 +1145,25 @@ async function bdSaveAc24h(checked){
 }
 
 // Jorge's correction 2026-10-10: a SEPARATE field from the guest's own Notes
-// above -- req-kind (Booking Engine reservations) only. Shares
-// booking_requests.internal_notes with the Reservations tab's own Internal
-// Notes input (beSaveNotes() in booking-engine-admin.js, same column), so
-// editing either one shows up in the other.
+// above. req-kind (Booking Engine reservations) shares booking_requests.internal_notes
+// with the Reservations tab's own Internal Notes input (beSaveNotes() in
+// booking-engine-admin.js, same column), so editing either one shows up in the
+// other. Jorge's ask 2026-10-18: registration-backed bookings (retreat rooms)
+// need the same field -- registrations.internal_notes, a separate one-time
+// ALTER TABLE from ac_24h's.
 async function bdSaveInternalNotes(){
-  if(_bdKind!=='req')return;
   const internalNotes=document.getElementById('bdInternalNotes')?.value||'';
-  const {error}=await db.from('booking_requests').update({internal_notes:internalNotes}).eq('id',_bdId);
-  if(error){showToast('Error: '+error.message);return;}
-  if(_bdReqCache)_bdReqCache.internalNotes=internalNotes;
-  _bdNotifyReqChanged();
+  if(_bdKind==='req'){
+    const {error}=await db.from('booking_requests').update({internal_notes:internalNotes}).eq('id',_bdId);
+    if(error){showToast('Error: '+error.message);return;}
+    if(_bdReqCache)_bdReqCache.internalNotes=internalNotes;
+    _bdNotifyReqChanged();
+  }else{
+    const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
+    const {error}=await db.from('registrations').update({internal_notes:internalNotes}).eq('id',reg.id);
+    if(error){showToast('Error: '+error.message);return;}
+    reg.internalNotes=internalNotes;
+  }
   showToast('Internal notes saved ✓');
 }
 
