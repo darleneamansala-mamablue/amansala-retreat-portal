@@ -205,7 +205,7 @@
         if (!x.ok) { $p('hbErr').textContent = (x.j && x.j.error) || 'Could not start the payment.'; $p('hbGo').disabled = false; if (x.s === 409) refresh(); return; }
         stripe = Stripe(x.j.publishableKey);
         elements = stripe.elements({ clientSecret: x.j.clientSecret, appearance: { theme: 'stripe', variables: { fontFamily: 'DM Sans, sans-serif', borderRadius: '0px', colorPrimary: '#3f5147' } } });
-        $p('hbody').innerHTML = '<h3 style="font-family:var(--display);font-weight:400;font-size:28px;margin:0 0 8px">Payment</h3><p style="font-size:14px">Paying today: <b>' + money(x.j.amount) + '</b>' +
+        $p('hbody').innerHTML = '<h3 style="font-family:var(--display);font-weight:400;font-size:28px;margin:0 0 8px">Payment</h3>' + (INFO && INFO.cardNotice ? '<p style="margin:0 0 12px;padding:10px 14px;background:#fbf3df;border-left:3px solid #c9972b;font-size:14px;font-weight:600;color:#5b4a1f">' + esc(INFO.cardNotice) + '</p>' : '') + '<p style="font-size:14px">Paying today: <b>' + money(x.j.amount) + '</b>' +
           (x.j.plan === 'deposit' ? ' · remaining ' + money(x.j.balance) + ' on ' + esc(x.j.balanceDate) : '') + '</p><div id="' + P + 'hbStripe"></div><div class="herr" id="' + P + 'hbErr"></div><button class="hadd" style="margin-top:12px" type="button" id="' + P + 'hbPay" data-hpay="1">Pay ' + money(x.j.amount) + '</button>';
         elements.create('payment').mount('#' + P + 'hbStripe');
         doneInfo = { amount: x.j.amount, record: x.j.recordUrl, balance: x.j.plan === 'deposit' ? { amt: x.j.balance, date: x.j.balanceDate } : null };
