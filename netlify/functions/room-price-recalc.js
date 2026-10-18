@@ -52,7 +52,6 @@ async function doRecalc(key) {
   const reference = roomTypes.find(rt => rt.id === settings.referenceRoomTypeId) || roomTypes[0];
 
   const byRoomType = {};
-  const changes = [];
   let datesProcessed = 0;
 
   for (const rt of roomTypes) {
@@ -73,10 +72,36 @@ async function doRecalc(key) {
         seasonalAdjustments,
       });
       byDate[dateStr] = { occPct, groupTaken, totalRooms: rt.rooms.length, current, recommended };
-      if (recommended !== current) changes.push({ room_type_id: rt.id, date: dateStr, price_single: recommended });
       datesProcessed++;
     }
     byRoomType[rt.id] = { name: rt.name, byDate };
+  }
+
+  // Price ceiling pass (Rooms Setup's "Price Ceiling" column -- settings.priceCeilingRoomTypeId,
+  // default rt5 (Simple n Small) -> rt4 (Garden), Jorge's report 2026-10-18): runs AFTER every
+  // room type's own recommendation is computed above, so a capped type's final price can never
+  // exceed its referenced type's recommendation on the same date, regardless of its own
+  // occupancy-driven swing. One level of indirection only -- not chased recursively -- so a
+  // misconfigured cycle (A ceils to B, B ceils to A) can't loop; it just means neither cap
+  // actually applies that round.
+  for (const rt of roomTypes) {
+    const ceilId = settings.priceCeilingRoomTypeId && settings.priceCeilingRoomTypeId[rt.id];
+    const ceilType = ceilId && byRoomType[ceilId];
+    if (!ceilType) continue;
+    const byDate = byRoomType[rt.id].byDate;
+    for (const dateStr of Object.keys(byDate)) {
+      const ceilPrice = ceilType.byDate[dateStr] && ceilType.byDate[dateStr].recommended;
+      if (ceilPrice != null && byDate[dateStr].recommended > ceilPrice) byDate[dateStr].recommended = ceilPrice;
+    }
+  }
+
+  const changes = [];
+  for (const rt of roomTypes) {
+    const byDate = byRoomType[rt.id].byDate;
+    for (const dateStr of Object.keys(byDate)) {
+      const { current, recommended } = byDate[dateStr];
+      if (recommended !== current) changes.push({ room_type_id: rt.id, date: dateStr, price_single: recommended });
+    }
   }
 
   let applied = 0;

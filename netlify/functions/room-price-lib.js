@@ -52,6 +52,13 @@ const DEFAULT_SETTINGS = {
   // own numbers from Jorge's separate message. cm1/csh3 (Casa Master/Shanti) corrected from the
   // first message's "1900/2700" guess to the real table's $1,950 base (+239% derivation).
   derivationPct: { rt1: 0, rt2: -17, rt3: -41, rt4: -49, rt5: -49, rt6: 0, rt7: -13, rt8: 6, rt9: 4, c4a: 26, cm1: 239, csh3: 239 },
+  // Price ceiling (Rooms Setup's "Price Ceiling" column, Jorge's report 2026-10-18): Simple n
+  // Small (rt5) and Garden (rt4) share the same derivation %, but Simple n Small has far fewer
+  // rooms (8 vs 26) so the same booking count swings its occupancy % much harder, letting
+  // occupancy-driven pricing push it above Garden on some dates even though they're meant to
+  // be the same tier. One level of indirection only (see room-price-recalc.js's capping pass)
+  // -- not chased recursively, so a misconfigured cycle just means neither cap applies.
+  priceCeilingRoomTypeId: { rt5: 'rt4' },
   minPrice: { rt1: 345, rt2: 295, rt3: 245, rt4: 185, rt5: 140, rt6: 355, rt7: 320, rt8: 310, rt9: 375, c4a: 525, cm1: 1200, csh3: 1200 },
   maxPrice: { rt1: 975, rt2: 875, rt3: 685, rt4: 600, rt5: 695, rt6: 875, rt7: 900, rt8: 1200, rt9: 1350, c4a: 1200, cm1: 3400, csh3: 3400 },
   weekdayPct: { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 },
@@ -71,7 +78,7 @@ async function loadSettings(key) {
 }
 function deepMerge(base, over) {
   const out = { ...base, ...over };
-  for (const k of ['derivationPct', 'minPrice', 'maxPrice', 'weekdayPct', 'leadTimePct', 'targetOccupancyPctByMonth']) {
+  for (const k of ['derivationPct', 'minPrice', 'maxPrice', 'weekdayPct', 'leadTimePct', 'targetOccupancyPctByMonth', 'priceCeilingRoomTypeId']) {
     out[k] = { ...(base[k] || {}), ...(over[k] || {}) };
   }
   return out;
