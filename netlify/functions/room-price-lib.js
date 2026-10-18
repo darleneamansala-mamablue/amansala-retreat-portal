@@ -70,7 +70,12 @@ const DEFAULT_SETTINGS = {
   // not the earlier cropped screenshot) -- rt5 (Simple n Small) wasn't in that table, kept its
   // own numbers from Jorge's separate message. cm1/csh3 (Casa Master/Shanti) corrected from the
   // first message's "1900/2700" guess to the real table's $1,950 base (+239% derivation).
-  derivationPct: { rt1: 0, rt2: -17, rt3: -41, rt4: -49, rt5: -49, rt6: 0, rt7: -13, rt8: 6, rt9: 4, c4a: 26, cm1: 239, csh3: 239 },
+  // rt3/rt4 corrected 2026-10-18 from Jorge's real base prices ($575 ref/$475 Superior/$390
+  // Garden Plus/$345 Garden/$295 Simple n Small) -- the earlier -41/-49% guesses left Garden
+  // Plus and Garden's base too close to Simple n Small's, so Simple n Small's own occupancy
+  // swings (fewer rooms = bigger % moves per booking) pinned it to Garden's price-ceiling cap
+  // almost every night instead of that cap being a rare safety net.
+  derivationPct: { rt1: 0, rt2: -17, rt3: -32, rt4: -40, rt5: -49, rt6: 0, rt7: -13, rt8: 6, rt9: 4, c4a: 26, cm1: 239, csh3: 239 },
   // Price ceiling (Rooms Setup's "Price Ceiling" column, Jorge's report 2026-10-18): a type's
   // recommendation can never exceed its referenced type's recommendation on the same date --
   // smaller-inventory types swing harder on occupancy for the same booking count, which could
