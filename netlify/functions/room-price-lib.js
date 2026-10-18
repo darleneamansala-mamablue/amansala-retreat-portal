@@ -104,6 +104,8 @@ const DEFAULT_SETTINGS = {
   autoApplyEnabled: false, // Jorge's ask 2026-10-17: once true, room-price-recalc.js pushes every recommendation straight into be_rates on each of its 3x/day runs -- no human review. Guardrails are min/max only (explicitly no rate-of-change cap, Jorge's call).
 };
 const AGGRESSIVENESS_FACTOR = { very_low: 0.25, low: 0.5, standard: 1 };
+// See recommendPrice()'s invDamping -- full occupancy-swing effect at this many rooms or more.
+const INVENTORY_DAMPENING_FULL_AT = 20;
 
 async function loadSettings(key) {
   const saved = await appStoreGet(key, SETTINGS_KEY);
@@ -219,7 +221,18 @@ function recommendPrice(opts) {
   price *= (1 + leadPct / 100);
 
   const expectedOcc = expectedOccupancy(settings.targetOccupancyPctByMonth[String(month)] ?? 80, settings.medianBookingWindowDays, daysOut);
-  const gap = actualOcc - expectedOcc; // >0: fuller than expected -> raise; <0: emptier -> lower
+  // A smaller-inventory room type swings much harder in occupancy % for the same number of
+  // bookings -- one retreat room taken in an 8-room category (Simple n Small) moves its
+  // occupancy 12.5 points; the same one room in a 26-room category (Garden) moves it 3.8
+  // points. Undamped, the smaller category chases its own noisier signal and can leapfrog a
+  // nominally higher-tier (bigger) category's price on an ordinary busy night (Jorge's report
+  // 2026-10-18: Simple n Small hitting Garden's price-ceiling cap on more than half of
+  // November even after widening the base-price gap between them). Scale the occupancy gap by
+  // room count, full effect at INVENTORY_DAMPENING_FULL_AT or more (Garden's own 26 clears it
+  // comfortably) -- same intuition as a small sample size needing a wider confidence interval
+  // before you trust it as a signal.
+  const invDamping = Math.min(1, (roomType.rooms ? roomType.rooms.length : INVENTORY_DAMPENING_FULL_AT) / INVENTORY_DAMPENING_FULL_AT);
+  const gap = (actualOcc - expectedOcc) * invDamping; // >0: fuller than expected -> raise; <0: emptier -> lower
   const factor = AGGRESSIVENESS_FACTOR[settings.aggressiveness] ?? 1;
   price *= (1 + gap * factor);
 
