@@ -84,6 +84,11 @@ const DEFAULT_SETTINGS = {
   // and separately Double -> Beachview Double. room-price-recalc.js's capping pass repeats until
   // stable so a chain this long propagates correctly regardless of processing order.
   priceCeilingRoomTypeId: { rt5: 'rt4', rt4: 'rt3', rt3: 'rt2', rt2: 'rt1', rt7: 'rt6' },
+  // How far BELOW the referenced type's price a capped type's ceiling actually sits (Jorge's
+  // follow-up 2026-10-18: "un 25% menos siempre abajo porfavor para que se vea la diferencia")
+  // -- a plain "never exceed" cap still let a capped type land exactly even with its reference
+  // on plenty of nights. Applied uniformly to every link in priceCeilingRoomTypeId's chain.
+  priceCeilingMarginPct: 25,
   // Linked groups (Jorge's ask 2026-10-18): Casa Master and Casa Shanti must always recommend
   // the EXACT same price, capped at their own (identical) Max Price -- not a one-way ceiling
   // like priceCeilingRoomTypeId above. Each sells as a single whole-villa unit, so its own

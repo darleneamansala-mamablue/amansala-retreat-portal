@@ -121,6 +121,15 @@ async function doRecalc(key) {
   // just when the configured chain happens to match roomTypes' own iteration order. A
   // misconfigured cycle (A ceils to B, B ceils to A) can't loop since the repeat count is fixed
   // (roomTypes.length), not "until stable" -- it just stops converging on a cycle, no crash.
+  // priceCeilingMarginPct (Jorge's follow-up 2026-10-18: "un 25% menos siempre abajo porfavor
+  // para que se vea la diferencia") -- a plain "never exceed" cap still let a capped type land
+  // exactly AT its reference's price on plenty of nights (confirmed live: Simple n Small tied
+  // Garden on 17/30 November dates even after widening their base-price gap and damping the
+  // occupancy swing). Capping at (1 - margin%) of the reference's price instead guarantees a
+  // real, visible gap every single day, not just "not more than." Applies uniformly to every
+  // link in the chain. Still floored at the capped type's OWN min price -- the margin should
+  // never push it below its configured floor.
+  const ceilMarginPct = settings.priceCeilingMarginPct || 0;
   for (let pass = 0; pass < roomTypes.length; pass++) {
     let changed = false;
     for (const rt of roomTypes) {
@@ -128,9 +137,13 @@ async function doRecalc(key) {
       const ceilType = ceilId && byRoomType[ceilId];
       if (!ceilType) continue;
       const byDate = byRoomType[rt.id].byDate;
+      const ownMin = settings.minPrice[rt.id];
       for (const dateStr of Object.keys(byDate)) {
         const ceilPrice = ceilType.byDate[dateStr] && ceilType.byDate[dateStr].recommended;
-        if (ceilPrice != null && byDate[dateStr].recommended > ceilPrice) { byDate[dateStr].recommended = ceilPrice; changed = true; }
+        if (ceilPrice == null) continue;
+        let cap = L.round(ceilPrice * (1 - ceilMarginPct / 100), settings.roundTo || 5);
+        if (ownMin != null) cap = Math.max(cap, ownMin);
+        if (byDate[dateStr].recommended > cap) { byDate[dateStr].recommended = cap; changed = true; }
       }
     }
     if (!changed) break;
