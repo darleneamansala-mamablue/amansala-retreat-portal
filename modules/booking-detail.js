@@ -1441,6 +1441,27 @@ async function bdSaveDetails(){
     const {error}=await db.from('registrations').update({guests:reg.guests,room,room_type_id:reg.roomTypeId,check_in:checkIn,check_out:checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id);
     if(error){showToast('Error: '+error.message);return;}
     reg.room=room;reg.checkIn=checkIn;reg.checkOut=checkOut;
+    // Keep the retreat's own blocked_rooms in sync -- the Room Calendar's drag-and-drop
+    // (rcMoveRoom, modules/venues.js) already does this swap, but THIS edit form never did.
+    // Real incidents 2026-10-18: Jennifer Marvel (moved into room 24) and Chelsea Hylton
+    // (moved from GV15 into 34) both vanished from Transport -- and everything else that
+    // trusts blocked_rooms -- because the new room was never added here (and, for Chelsea,
+    // the old room GV15 was also never removed, leaving it falsely still blocked).
+    if(roomChanged){
+      const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
+      if(bk){
+        const oldRoom=(subjBefore.room||'').trim();
+        let blocked=bk.blockedRooms||[];
+        if(oldRoom&&blocked.some(r=>r.toLowerCase()===oldRoom.toLowerCase())){
+          blocked=blocked.map(r=>r.toLowerCase()===oldRoom.toLowerCase()?room:r);
+        }else if(!blocked.some(r=>r.toLowerCase()===room.toLowerCase())){
+          blocked=[...blocked,room];
+        }
+        bk.blockedRooms=blocked;
+        try{await db.from('bookings').update({blocked_rooms:blocked}).eq('id',bk.id);}
+        catch(err){showToast('Cuarto guardado — error sincronizando blocked_rooms: '+err.message);}
+      }
+    }
   }
   _bdDetailEditMode=false;
   showToast('Guardado ✓');
