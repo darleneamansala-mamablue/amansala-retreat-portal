@@ -77,6 +77,33 @@ async function doRecalc(key) {
     byRoomType[rt.id] = { name: rt.name, byDate };
   }
 
+  // Linked-group pass (settings.linkedRoomTypeGroups, default [['cm1','csh3']], Jorge's ask
+  // 2026-10-18): Casa Master and Casa Shanti must always recommend the exact same price. Each
+  // sells as a single whole-villa unit, so its own occupancy is always 0% or 100% -- combine
+  // the group's rooms into one shared occupancy signal, run recommendPrice() ONCE per date using
+  // the first member's settings (derivation/min/max are meant to be identical across a linked
+  // group by convention), and overwrite every member's recommendation with that one number.
+  for (const group of (settings.linkedRoomTypeGroups || [])) {
+    const members = group.map(id => roomTypes.find(rt => rt.id === id)).filter(Boolean);
+    if (members.length < 2) continue;
+    const combinedRooms = members.reduce((n, rt) => n + rt.rooms.length, 0);
+    if (!combinedRooms) continue;
+    const lead = members[0];
+    for (let d = new Date(today + 'T12:00:00'); d <= endD; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().slice(0, 10);
+      const combinedTaken = members.reduce((n, rt) => n + Math.round(L.occupancyFor(dateStr, rt.rooms, blocks) * rt.rooms.length), 0);
+      const sharedPrice = L.recommendPrice({
+        settings, roomType: lead, dateStr, today,
+        actualOcc: combinedTaken / combinedRooms,
+        referenceBasePrice: reference ? reference.be_price_single : lead.be_price_single,
+        seasonalAdjustments,
+      });
+      for (const rt of members) {
+        if (byRoomType[rt.id] && byRoomType[rt.id].byDate[dateStr]) byRoomType[rt.id].byDate[dateStr].recommended = sharedPrice;
+      }
+    }
+  }
+
   // Price ceiling pass (Rooms Setup's "Price Ceiling" column -- settings.priceCeilingRoomTypeId,
   // default rt5 (Simple n Small) -> rt4 (Garden), Jorge's report 2026-10-18): runs AFTER every
   // room type's own recommendation is computed above, so a capped type's final price can never
