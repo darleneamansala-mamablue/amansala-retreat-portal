@@ -106,6 +106,19 @@ function _bdAvailableRoomsForEdit(checkIn,checkOut,currentRoom){
   if(currentRoom)rooms.add(currentRoom);
   return[...rooms].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
 }
+// Jorge's ask 2026-10-18: swap candidates are about day-of room shuffling around
+// check-in, not any two guests whose multi-day stays happen to overlap at all --
+// e.g. Jennifer Marvel (room 3, arrives today) and Sheryl Cohen (room 20, arrives
+// today) should swap, but not someone whose stay overlaps today's date while they
+// actually arrived weeks ago or won't arrive for another two months. Only a
+// candidate arriving the SAME day as this guest or within the next 5 days counts.
+const BD_SWAP_ARRIVAL_WINDOW_DAYS=5;
+function _bdWithinSwapWindow(myCheckIn,otherCheckIn){
+  if(!myCheckIn||!otherCheckIn)return false;
+  const diffDays=Math.round((pd(otherCheckIn)-pd(myCheckIn))/DAY_MS);
+  return diffDays>=0&&diffDays<=BD_SWAP_ARRIVAL_WINDOW_DAYS;
+}
+
 // Retreat-guest version of the Room dropdown (Jorge's ask 2026-10-18): ALSO lists
 // occupied rooms, clearly labeled with who's in them, so picking one is a deliberate
 // choice to swap -- bdSaveDetails() does the actual swap when it sees the chosen room
@@ -121,17 +134,16 @@ function _bdRoomOptionsForEdit(checkIn,checkOut,currentRoom){
     if(seen.has(rs.room))return;
     let label=rs.room;
     if(!rs.available&&!roomCodesEqual(rs.room,currentRoom)){
-      // Scoped to THIS stay window -- a room code is reused across many unrelated
-      // retreats over time (real incident 2026-10-18: an unscoped lookup here picked
-      // up a registration from a completely different, non-overlapping retreat and
-      // corrupted it during a swap). Only a registration whose own booking's dates
-      // actually overlap this guest's stay can be a real occupant right now.
+      // Scoped to arrivals near THIS guest's own check-in (see
+      // _bdWithinSwapWindow above) -- not just "any overlapping stay", which
+      // pulled in guests who arrived weeks apart just because their stays
+      // happened to span the same date range.
       const occReg=AppData.regs.find(r=>{
         if(r.cancelled||!roomCodesEqual(r.room,rs.room))return false;
         if(!(r.guests||[]).some(g=>g.name&&!g.cancelled))return false;
         const obk=AppData.bookings.find(b=>b.id===r.bookingId);
-        const oStart=r.checkIn||obk?.startDate,oEnd=r.checkOut||obk?.endDate;
-        return oStart&&oEnd&&datesOverlap(checkIn,checkOut,oStart,oEnd);
+        const oStart=r.checkIn||obk?.startDate;
+        return _bdWithinSwapWindow(checkIn,oStart);
       });
       const occGuest=occReg?(occReg.guests||[]).find(g=>g.name&&!g.cancelled):null;
       label=`${rs.room} — ocupado por ${occGuest?occGuest.name:(rs.blockedByLabel||'alguien más')} (clic para intercambiar)`;
@@ -1467,16 +1479,18 @@ async function bdSaveDetails(){
     // 2026-10-18: "cuando cambie de cuarto y en ese cuarto haya reserva que los
     // intercambie") -- trade the two guests' rooms outright instead of just moving
     // this one in on top of the other.
-    // Scoped to THIS stay window, not just "same room code anywhere" -- see the identical
-    // comment in _bdRoomOptionsForEdit above for the real incident this fixes (a global,
-    // unscoped lookup here swapped Lisa Squire's room with an unrelated, non-overlapping
-    // registration instead of the actual current occupant, Kat Warner, 2026-10-18).
+    // Scoped to arrivals near THIS guest's own check-in (see _bdWithinSwapWindow
+    // above), not just "same room code anywhere" or "any overlapping stay" -- a
+    // global, unscoped lookup here once swapped Lisa Squire's room with an
+    // unrelated, non-overlapping registration instead of the actual current
+    // occupant, Kat Warner (2026-10-18), and an overlap-only check still pulled in
+    // guests who arrived weeks apart from each other.
     const occupantReg=roomChanged?AppData.regs.find(r=>{
       if(r.id===reg.id||r.cancelled||!roomCodesEqual(r.room,room))return false;
       if(!(r.guests||[]).some(g=>g.name&&!g.cancelled))return false;
       const obk=AppData.bookings.find(b=>b.id===r.bookingId);
-      const oStart=r.checkIn||obk?.startDate,oEnd=r.checkOut||obk?.endDate;
-      return oStart&&oEnd&&checkIn&&checkOut&&datesOverlap(checkIn,checkOut,oStart,oEnd);
+      const oStart=r.checkIn||obk?.startDate;
+      return _bdWithinSwapWindow(checkIn,oStart);
     }):null;
     if(occupantReg){
       const occGuestName=(occupantReg.guests||[]).find(g=>g.name&&!g.cancelled)?.name||'ese huésped';
