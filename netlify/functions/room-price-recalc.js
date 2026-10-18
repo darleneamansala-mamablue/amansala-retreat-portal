@@ -59,15 +59,35 @@ async function doRecalc(key) {
     const beRatesForType = beRates.filter(r => r.room_type_id === rt.id);
     for (let d = new Date(today + 'T12:00:00'); d <= endD; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().slice(0, 10);
-      const occPct = Math.round(L.occupancyFor(dateStr, rt.rooms, blocks) * 100);
+      const takenRooms = L.occupancyFor(dateStr, rt.rooms, blocks) * rt.rooms.length;
+      const occPct = Math.round(takenRooms / rt.rooms.length * 100);
       const groupTaken = L.groupTakenFor(dateStr, rt.rooms, blocks);
       const current = L.currentLivePrice({
         roomType: rt, dateStr, beRatesForType, seasonalAdjustments, weekendPremiumPct,
         isLowSeason: L.isLowSeasonMonth(d.getMonth() + 1),
       });
+      // Occupancy-driven pricing must react to TRANSIENT demand only -- a retreat/group block
+      // (already counted separately in groupTaken) isn't a direct guest competing for the room,
+      // it's inventory that was never for sale to one in the first place. Previously `occPct`
+      // (every taken room, group included) drove the price directly, so a retreat holding 100%
+      // of a type pushed it straight to max even though zero rooms were ever actually available
+      // to price-test against a transient guest (Jorge's "revisa profundamente tarifas" audit,
+      // 2026-10-18: Garden/Garden Plus/Superior all hit max purely on group-held nights). Sellable
+      // rooms = total minus group-held; when a group holds EVERY room of a type, there's no
+      // transient signal to react to at all -- treat that as neutral (gap=0, same as the
+      // occupancy curve's own expected value) rather than forcing it to read as "sold out".
+      const sellableRooms = rt.rooms.length - groupTaken;
+      let transientOcc;
+      if (sellableRooms > 0) {
+        transientOcc = (takenRooms - groupTaken) / sellableRooms;
+      } else {
+        const { month } = L.dateToParts(dateStr);
+        const daysOut = Math.max(0, L.daysBetween(today, dateStr));
+        transientOcc = L.expectedOccupancy(settings.targetOccupancyPctByMonth[String(month)] ?? 80, settings.medianBookingWindowDays, daysOut);
+      }
       const recommended = L.recommendPrice({
         settings, roomType: rt, dateStr, today,
-        actualOcc: occPct / 100,
+        actualOcc: transientOcc,
         referenceBasePrice: reference ? reference.be_price_single : rt.be_price_single,
         seasonalAdjustments,
       });
