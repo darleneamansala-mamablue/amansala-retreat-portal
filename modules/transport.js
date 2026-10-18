@@ -868,7 +868,7 @@ function tr2PrintView() {
   // tr2UserGroupMap) -- Jorge's ask 2026-10-18: the printed sheet also needs these groups set
   // apart, not just the date headers, and then (2026-10-18, follow-up) in the same colors.
   const rideGroupsHtml = items => {
-    const colorMap = tr2AssignGroupColors(items);
+    const colorMap = tr2AssignGroupColors(items, TR2_PRINT_PASTEL);
     const serviceGroups = [];
     const seen = new Map();
     items.forEach(e => {
@@ -1260,8 +1260,12 @@ async function tr2LoadData() {
 }
 
 const TR2_PASTEL = ['#eff6ff','#f0fdf4','#faf5ff','#fffbeb','#fdf2f8','#f0fdfa','#fff7ed','#f0f9ff'];
+// Same idea but stronger -- the on-screen palette above is a near-white tint that's fine next
+// to the admin table's own borders/shading, but printed/screenshotted it reads as no color at
+// all (Jorge's report 2026-10-18: "sigue sin mostrar colores" on the print sheet).
+const TR2_PRINT_PASTEL = ['#dbeafe','#dcfce7','#ede9fe','#fef3c7','#fce7f3','#ccfbf1','#fed7aa','#e0f2fe'];
 function tr2ToMins(t) { if (!t) return null; const [h,m] = t.split(':').map(Number); return h*60+(m||0); }
-function tr2AssignGroupColors(entries) {
+function tr2AssignGroupColors(entries, palette = TR2_PASTEL) {
   const colorMap = new Map();
   const clusters = [];
   for (const e of entries) {
@@ -1279,7 +1283,7 @@ function tr2AssignGroupColors(entries) {
     if (!joined) clusters.push({ key, idxs: [e.rowId] });
   }
   let ci = 0;
-  clusters.forEach(cl => { const color = TR2_PASTEL[ci++ % TR2_PASTEL.length]; cl.idxs.forEach(id => colorMap.set(id, color)); });
+  clusters.forEach(cl => { const color = palette[ci++ % palette.length]; cl.idxs.forEach(id => colorMap.set(id, color)); });
   return colorMap;
 }
 
