@@ -34,6 +34,7 @@ async function resInit(){
           <button id="res-tab-inhotel"    onclick="resSetTab('inhotel')"    style="${_RES_TAB_INA}">In House</button>
           <button id="res-tab-departures" onclick="resSetTab('departures')" style="${_RES_TAB_INA}">Departures</button>
           <button id="res-tab-search"     onclick="resSetTab('search')"     style="${_RES_TAB_INA}">Advanced Search</button>
+          <button id="res-tab-ac24h"      onclick="resSetTab('ac24h')"      style="${_RES_TAB_INA}">AC 24hrs</button>
         </div>
       </div>
       <div id="res-body" style="flex:1;overflow-y:auto;padding:20px"></div>
@@ -67,7 +68,7 @@ async function _resFetchRequests(){
 
 function resSetTab(t){
   _resTab=t;
-  ['arrivals','inhotel','departures','search'].forEach(id=>{
+  ['arrivals','inhotel','departures','search','ac24h'].forEach(id=>{
     document.getElementById('res-tab-'+id)?.setAttribute('style',t===id?_RES_TAB_ACT:_RES_TAB_INA);
   });
   _resRender();
@@ -76,11 +77,12 @@ function resSetTab(t){
 async function _resRender(){
   const body=document.getElementById('res-body');if(!body)return;
   const mySeq=++_resRenderSeq;
-  if(_resTab==='inhotel'||_resTab==='arrivals'||_resTab==='departures')body.innerHTML=`<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>`;
+  if(_resTab==='inhotel'||_resTab==='arrivals'||_resTab==='departures'||_resTab==='ac24h')body.innerHTML=`<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>`;
   let html;
   if(_resTab==='inhotel') html=await _resBuildInHotelView();
   else if(_resTab==='arrivals') html=await _resBuildMovementView('arrivals');
   else if(_resTab==='departures') html=await _resBuildMovementView('departures');
+  else if(_resTab==='ac24h') html=await _resBuildAc24hView();
   else{body.innerHTML=_resBuildSearchView();return;}
   if(mySeq!==_resRenderSeq)return; // superseded by a newer render (tab switched mid-fetch)
   body.innerHTML=html;
@@ -129,7 +131,7 @@ function _resGroupRows(){
       // Whole-room cancel (Booking Detail's "Cancel" button, Jorge's ask
       // 2026-09-26) -- excluded from Arrivals/In House/Departures below, but
       // still shown (tagged) in Advanced Search so it's a findable record.
-      cancelled:!!reg.cancelled,
+      cancelled:!!reg.cancelled,ac24h:!!reg.ac24h,
       isSplitContinuation:!!_lineage?.prev, // this segment's checkIn is really just a room change -- not a new arrival
       isSplitMidStay:!!_lineage?.next,      // this segment's checkOut is really just a room change -- not a real departure
     };
@@ -358,7 +360,7 @@ async function _resBuildInHotelView(){
   ]);
   await _resAttachFolioBalances(rows);
 
-  return `<div style="max-width:1000px;margin:0 auto">
+  return `<div style="max-width:1300px;margin:0 auto">
     ${_resBuildOccupancyPanel(d)}
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
       <span style="font-size:14px;font-weight:700;color:#1d4ed8">In House</span>
@@ -385,7 +387,7 @@ async function _resBuildMovementView(type){
   const todayStr=fmtISO(new Date());
   const dateLabel=date===todayStr?'Today':fmtDate(date);
 
-  return `<div style="max-width:960px;margin:0 auto">
+  return `<div style="max-width:1300px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap">
       <span style="font-size:14px;font-weight:700;color:${color}">${title} for</span>
       <input type="date" value="${date}" onchange="${setter}(this.value)" style="font-size:13px;font-weight:600;border:2px solid ${color}40;border-radius:8px;padding:5px 10px;color:${color};outline:none;cursor:pointer;background:#fff">
@@ -397,6 +399,24 @@ async function _resBuildMovementView(type){
 }
 function resSetArrDate(d){_resArrDate=d;_resRender();}
 function resSetDepDate(d){_resDepDate=d;_resRender();}
+
+// ─── AC 24 HORAS ──────────────────────────────────────────────
+// Jorge's ask 2026-10-18: a quick reference list of every room currently
+// flagged "❄️ 24 horas (no apagar)" (the checkbox in Booking Detail, see
+// modules/booking-detail.js's bdSaveAc24h) -- the same ac_24h flag
+// send-climas-report.js reads to pull these rooms out of its nightly 9pm
+// reminder. booking_requests has no ac_24h column, so group rows only.
+async function _resBuildAc24hView(){
+  const rows=_resSortRows(_resGroupRows().filter(r=>!r.cancelled&&r.ac24h));
+  await _resAttachFolioBalances(rows);
+  return `<div style="max-width:1300px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+      <span style="font-size:14px;font-weight:700;color:#0e7490">❄️ A/C 24 Horas</span>
+      <span style="background:#e0f2fe;color:#0e7490;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px">${rows.length} room${rows.length!==1?'s':''}</span>
+    </div>
+    ${rows.length===0?_resEmptyState('❄️','No rooms marked A/C 24 horas'):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkout',cardCol:true,balanceCol:true})}
+  </div>`;
+}
 
 function _resEmptyState(emoji,msg){
   return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:48px;text-align:center">
@@ -449,7 +469,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol,di
           ${cardCol?`<td style="padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:${r.cardOnFile?'#059669':'#dc2626'}">${r.cardOnFile?'Yes':'No'}</td>`:''}
           ${discountCol?`<td style="padding:11px 16px;font-size:12px;color:#7c3aed;font-family:monospace">${escHtml(r.discountCode||'—')}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;color:var(--muted);max-width:220px;white-space:pre-wrap">${escHtml(r.notes)}</td>
-          <td style="padding:11px 16px;text-align:center" onclick="event.stopPropagation()">${actionCell(r)}</td>
+          <td style="padding:11px 16px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">${actionCell(r)}</td>
         </tr>`).join('')}
       </tbody>
     </table>
