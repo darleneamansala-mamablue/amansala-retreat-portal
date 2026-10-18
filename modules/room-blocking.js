@@ -204,6 +204,17 @@ function _renderBlockRoomsGrid(bkId){
     const bedRt=AppData.roomTypes.find(rt=>BED_RT_IDS.has(rt.id)&&(rt.rooms||[]).some(s=>childRe.test(s)));
     if(bedRt){myBlocked.delete(r);(bedRt.rooms||[]).filter(s=>childRe.test(s)).forEach(s=>myBlocked.add(s));}
   });
+  // General parent<->bed (rt6/bd1, rt7/bd2, rt8/bd3, rt9/bd4) and whole-villa<->sub-room
+  // (Casa Master/Casa Shanti) siblings of a room THIS retreat already has -- shown as an
+  // info-only badge below (mySiblingOf), never added to myBlocked itself: myBlocked drives
+  // the actual checkbox `checked` state, and a checked checkbox (even disabled) still gets
+  // included by Save's `:checked` selector -- auto-checking "GV13a" here would silently add
+  // it as its OWN separately-blocked room (and its own Cloudbeds reservation) the moment
+  // someone hits Save without noticing, double-blocking the same physical space GV13 already
+  // covers. Jorge's report 2026-10-17: GV13 blocked for Carter Foxworth's retreat, but
+  // GV13a/GV13b still showed as plain available here with no indication they're the same room.
+  const mySiblingOf=new Map(); // physical room -> the already-blocked room it's a sibling of
+  [...myBlocked].forEach(r=>getRoomCounterparts(r).forEach(cp=>{if(!myBlocked.has(cp)&&!mySiblingOf.has(cp))mySiblingOf.set(cp,r);}));
 
   // Back-to-back predecessor on same row: pre-select their rooms for calendar continuity
   const predecessor=AppData.bookings.find(other=>
@@ -303,6 +314,10 @@ function _renderBlockRoomsGrid(bkId){
       const isOther=entry.physical.some(p=>conflictMap.has(p.toLowerCase()));
       const isSuggested=entry.physical.some(p=>suggestedRooms.has(p));
       const isChecked=entry.physical.some(p=>myBlocked.has(p))||(noRoomsYet&&isSuggested);
+      // Info-only: this physical unit is the same space as a room THIS retreat already has
+      // blocked (e.g. "GV13a" when "GV13" is blocked) -- see mySiblingOf's comment above for
+      // why this never touches isChecked/myBlocked itself.
+      const mySiblingRoom=!isChecked?entry.physical.map(p=>mySiblingOf.get(p)).find(Boolean):null;
       const guestNames=[];
       entry.physical.forEach(p=>{
         const roomReg=getRegForRoom(blockEditBkId,p);
@@ -333,7 +348,7 @@ function _renderBlockRoomsGrid(bkId){
       item.dataset.room=room;
       item.dataset.physical=JSON.stringify(entry.physical);
       item.dataset.hasGuests=hasGuests?'1':'';
-      item.title=hasGuests?'Guests: '+guestNames.join(', '):(isOther?'Booked by: '+conflict:'')+(entry.merged?'\n(Cloudbeds: '+entry.physical.join(', ')+')':'');
+      item.title=hasGuests?'Guests: '+guestNames.join(', '):(isOther?'Booked by: '+conflict:mySiblingRoom?`Same physical space as ${mySiblingRoom}, already blocked for this retreat`:'')+(entry.merged?'\n(Cloudbeds: '+entry.physical.join(', ')+')':'');
       const lbl=entry.merged?`${room} <span style="font-size:9px;font-weight:600;color:#8a7e74">double</span>`:room;
       // A room already on THIS retreat's list must stay uncheckable-off even if it also
       // conflicts with another retreat (e.g. it was double-blocked by mistake) — only block
@@ -342,6 +357,7 @@ function _renderBlockRoomsGrid(bkId){
         +`<span class="br-lbl">${lbl}</span>`
         +(hasGuests?`<span style="display:inline-flex;align-items:center;gap:2px;font-size:9px;font-weight:800;color:#0e9494;letter-spacing:.2px;margin-left:2px" title="${guestNames.join(', ')}"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${guestNames.length}</span><span onclick="clearBlockRoomGuests('${room.replace(/\\/g,'\\\\').replace(/'/g,'\\\'')}')" title="Remove ghost guest registrations" style="cursor:pointer;color:#9ca3af;font-size:11px;font-weight:900;margin-left:1px;line-height:1;padding:0 1px" onmouseenter="this.style.color='#dc2626'" onmouseleave="this.style.color='#9ca3af'">×</span>`:'')
         +(isOther?`<span style="font-size:9px;font-weight:800;color:#dc2626;letter-spacing:.3px;margin-left:2px${conflictNoGuestYet?';background:#fee2e2;padding:1px 4px;border-radius:3px':''}" title="Booked by: ${conflict}">BOOKED · ${conflict}</span>`:'')
+        +(!isOther&&mySiblingRoom?`<span style="font-size:9px;font-weight:800;color:#0e5a5a;letter-spacing:.3px;margin-left:2px;background:#e6f4f4;padding:1px 4px;border-radius:3px" title="Same physical space as ${mySiblingRoom}, already blocked for this retreat">= ${mySiblingRoom}</span>`:'')
         +(isSuggested&&!isOther?`<span style="font-size:9px;font-weight:800;color:#b91c1c;letter-spacing:.3px;margin-left:2px">↔</span>`:'');
       grid.appendChild(item);
     });

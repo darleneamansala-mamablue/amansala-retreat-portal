@@ -2701,14 +2701,23 @@ function rcBuild(){
     const counterOccDays=new Map(); // iso -> label, whichever booking occupies a counterpart that day
     AppData.bookings.filter(bk=>bk.status!=='cancelled'&&counterparts.some(cp=>roomListIncludes(bk.blockedRooms,cp))).forEach(bk=>{
       const bkS=pd(bk.startDate).getTime(),bkE=pd(bk.endDate).getTime();
-      const label=bk.leaderName||bk.retreatName||'Blocked';
+      // Prefer the real guest name(s) registered on whichever counterpart room this booking
+      // actually occupies, over the generic retreat leader name -- Jorge's ask 2026-10-17:
+      // GV13's occupants should show as "Alexandria Mirzayan & Molly Maclean" on the GV13a/
+      // GV13b derivative bars, not just "Carter Foxworth". Falls back to the leader name when
+      // no specific registration is found (e.g. the room is blocked but not yet assigned).
+      const occCounterpart=counterparts.find(cp=>roomListIncludes(bk.blockedRooms,cp));
+      const occReg=occCounterpart?AppData.regs.find(r=>r.bookingId===bk.id&&roomCodesEqual(r.room,occCounterpart)):null;
+      const guestNames=occReg?(occReg.guests||[]).filter(g=>g.name).map(g=>g.name).join(' & '):'';
+      const label=guestNames||bk.leaderName||bk.retreatName||'Blocked';
       days.forEach(d=>{const t=d.getTime();if(t>=bkS&&t<bkE)counterOccDays.set(fmtISO(d),label);});
     });
     let rs=-1,curLabel=null;
     const flush=i=>{
       if(rs<0)return;
       const bl=document.createElement('div');
-      bl.style.cssText=`position:absolute;left:${rs*36+2}px;width:${(i-rs)*36-4}px;top:5px;height:34px;background:rgba(220,38,38,0.10);border:1.5px dashed rgba(220,38,38,0.35);border-left:4px solid rgba(220,38,38,0.45);border-radius:4px;pointer-events:none;`;
+      bl.style.cssText=`position:absolute;left:${rs*36+2}px;width:${(i-rs)*36-4}px;top:5px;height:34px;background:rgba(220,38,38,0.10);border:1.5px dashed rgba(220,38,38,0.35);border-left:4px solid rgba(220,38,38,0.45);border-radius:4px;pointer-events:none;display:flex;align-items:center;overflow:hidden;`;
+      bl.innerHTML=`<span style="font-size:10.5px;color:#7f1d1d;font-weight:600;white-space:nowrap;padding:0 6px;overflow:hidden;text-overflow:ellipsis">${escHtml(curLabel||'')}</span>`;
       bl.title=`Ocupado por su derivado (${counterparts.join(' / ')}) — ${curLabel||''}`;
       physTrack.appendChild(bl);rs=-1;curLabel=null;
     };
