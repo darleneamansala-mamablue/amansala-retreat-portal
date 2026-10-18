@@ -851,7 +851,8 @@ function tr2PrintView() {
   const groups = new Map();
   filtered.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
 
-  const rowsHtml = filtered.length ? [...groups.entries()].map(([date, items]) => `
+  const rowsHtml = filtered.length ? [...groups.entries()].map(([date, items], gi) => `
+    ${gi > 0 ? `<tr class="spacer"><td colspan="8"></td></tr>` : ''}
     <tr class="grp"><td colspan="8">${date === todayStr ? '📍 HOY — ' : ''}${fmtDate(date)}</td></tr>
     ${items.map(e => `
       <tr>
@@ -871,7 +872,7 @@ function tr2PrintView() {
     <link rel="icon" type="image/png" href="/favicon.png"><title>Transport · ${rangeLabel}</title>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-      *{box-sizing:border-box}
+      *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
       body{font-family:'Jost',sans-serif;margin:0;padding:36px 40px;color:#1a2332;background:#fff;font-size:11pt}
       .print-btn{padding:9px 20px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;font-size:11pt;font-weight:600;float:right;margin-bottom:18px}
       .hdr{margin-bottom:18px;clear:both}
@@ -880,9 +881,13 @@ function tr2PrintView() {
       table{width:100%;border-collapse:collapse;margin-top:10px}
       th{text-align:left;padding:6px 8px;font-size:9pt;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;border-bottom:2px solid #e5e7eb}
       td{padding:6px 8px;font-size:10.5pt;border-bottom:1px solid #f1f5f9;vertical-align:top}
-      tr.grp td{background:#f1f5f9;font-weight:700;font-size:10pt;padding-top:10px}
+      /* Background alone isn't reliable -- most browsers print with "background graphics" off
+         by default, so the date-group bar needs a border + bold/uppercase treatment that still
+         shows up with no color at all, on top of the background for whoever has it enabled. */
+      tr.grp td{background:#f1f5f9;font-weight:700;font-size:10pt;letter-spacing:.5px;text-transform:uppercase;padding:8px;border-top:2px solid #1a2332;border-bottom:1px solid #d1d5db}
+      tr.spacer td{padding:0;border:none;height:14px}
       .none{color:#9ca3af;font-style:italic;text-align:center;padding:30px 0}
-      @media print{.print-btn{display:none}tr.grp{break-inside:avoid}}
+      @media print{.print-btn{display:none}tr.grp{break-inside:avoid}tr{break-inside:avoid}}
     </style></head><body>
     <button class="print-btn" onclick="window.print()">Print</button>
     <div class="hdr">
