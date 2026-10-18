@@ -583,6 +583,7 @@ function bldConfirmBlock(){
   const conflicts=selected.filter(r=>conflictMap.has(r));
   if(conflicts.length){alert('Cannot confirm — rooms already blocked:\n'+conflicts.map(r=>`Room ${r} → ${conflictMap.get(r)}`).join('\n'));return;}
   bk.blockedRooms=selected;
+  bk.updatedAt=new Date().toISOString();
   saveAll();venBuild();buildDashboard();
   // Build step 3
   bldStep3Build();bldStep(3);

@@ -979,16 +979,18 @@ function regMoveGuest(dragPayload,targetRoom,targetRtId){
   const existing=getRegForRoom(reg.bookingId,physicalTarget);
   if(existing&&existing.locked){showToast(`Room ${targetRoom} is locked — unlock it first.`);return;}
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);
-  // Warn (don't block) a move to a room outside this retreat's official block -- staff's
-  // call to make (the guest's already in-house), but this room never gets added to
-  // bk.blockedRooms/Cloudbeds automatically, so without a heads-up the room silently drops
-  // off the retreat's own room list/Cloudbeds and looks "lost" even though the registration
-  // itself is untouched (Jorge's report 2026-10-17, Carter Foxworth/Alexandria Mirzayan,
-  // room GV13). Rate is already frozen on any move (customRateOverride untouched below),
-  // matching feedback_rate_never_moves_on_edit -- this only warns about the block/Cloudbeds
-  // side, never touches price.
-  if(bk&&typeof roomListIncludes==='function'&&!roomListIncludes(bk.blockedRooms,physicalTarget)){
-    if(!confirm(`Room ${targetRoom} is not part of this retreat's official room block yet.\n\nThe guest will show here, but this room won't appear in the retreat's block or have a Cloudbeds reservation until someone adds it via Actions → Add More Rooms.\n\nMove anyway?`))return;
+  // A move to a room outside this retreat's official block used to just WARN and let
+  // staff click through ("Move anyway?"), never actually adding the room to
+  // bk.blockedRooms -- so the guest's registration moved but silently dropped off the
+  // retreat's own room list (and everything that trusts it: Transport, registeredCount,
+  // Upgrades/Options availability), looking "lost" even though the row itself was
+  // untouched (Jorge's report 2026-10-17, Carter Foxworth/Alexandria Mirzayan, GV13 --
+  // and the exact same symptom again 2026-10-18 via a different edit path). Now the
+  // room gets added automatically -- Cloudbeds is the only thing that still needs a
+  // manual follow-up (Actions → Add More Rooms), since that creates a real reservation.
+  const _outsideBlock=bk&&typeof roomListIncludes==='function'&&!roomListIncludes(bk.blockedRooms,physicalTarget);
+  if(_outsideBlock){
+    if(!confirm(`Room ${targetRoom} is not part of this retreat's official room block yet.\n\nIt'll be added to the retreat's room list automatically, but won't have its own Cloudbeds reservation until someone adds it via Actions → Add More Rooms.\n\nMove anyway?`))return;
   }
   const guestNames=(reg.guests||[]).filter(g=>g.name).map(g=>g.name).join(' & ')||'';
   const fromRoom=reg.room;
@@ -998,6 +1000,21 @@ function regMoveGuest(dragPayload,targetRoom,targetRtId){
     if(!confirm(`Room ${physicalTarget} already has ${existingNames}. Swap with room ${reg.room}?`))return;
     const oldRoom=reg.room,oldRtId=reg.roomTypeId;
     existing.room=oldRoom;existing.roomTypeId=oldRtId;existing.customPrice=null;existing.updatedAt=_moveTs;
+  }
+  if(bk&&_outsideBlock){
+    const blocked=bk.blockedRooms||[];
+    // No swap partner means fromRoom is now genuinely empty -- replace it instead of
+    // leaving a stale, unoccupied room stuck in the block forever (the exact "ghost"
+    // room pattern found in Carter Foxworth's data today, e.g. GV4/"15"). With a swap
+    // partner, fromRoom is still legitimately occupied by `existing` -- just add the
+    // new room.
+    bk.blockedRooms=(!existing&&roomListIncludes(blocked,fromRoom))
+      ?blocked.map(r=>r.toLowerCase()===fromRoom.toLowerCase()?physicalTarget:r)
+      :[...blocked,physicalTarget];
+    // Without this, syncToSupabase()'s staleness guard can silently skip uploading this
+    // exact change -- same real incident/fix as rcMoveRoom (modules/venues.js) and
+    // blockSave() (room-blocking.js), ported here too.
+    bk.updatedAt=_moveTs;
   }
   reg.room=physicalTarget;reg.roomTypeId=targetRtId;reg.customPrice=null;reg.updatedAt=_moveTs;
   saveAll();regRender();
@@ -1101,9 +1118,16 @@ function regSplitGuestToRoom(reg,guestIdx,targetRoom,targetRtId){
   if(destReg&&destReg.locked){showToast(`Room ${targetRoom} is locked — unlock it first.`);return;}
   const destNamed=destReg?(destReg.guests||[]).filter(g=>g.name):[];
   if(destReg&&destNamed.length>=(targetRt?.maxOcc||1)){showToast(`Room ${targetRoom} is already full.`);return;}
-  // Same warn-don't-block as regMoveGuest -- see its comment for the incident this covers.
+  // Same auto-add-to-blocked_rooms fix as regMoveGuest -- see its comment for the
+  // incident this covers. Only adds the destination room here (never removes fromRoom
+  // -- the rest of that registration/room stays occupied, this only moves ONE guest out).
   const _outsideBlock=bk&&typeof roomListIncludes==='function'&&!roomListIncludes(bk.blockedRooms,physicalTarget);
-  if(!confirm(`Move ${movingGuest.name} to room ${targetRoom}${destNamed.length?` (with ${destNamed.map(g=>g.name).join(' & ')})`:''}?\n\nThe rest of room ${reg.room} stays put.${_outsideBlock?`\n\n⚠ Room ${targetRoom} is not part of this retreat's official room block yet — it won't have a Cloudbeds reservation until someone adds it via Actions → Add More Rooms.`:''}`))return;
+  if(!confirm(`Move ${movingGuest.name} to room ${targetRoom}${destNamed.length?` (with ${destNamed.map(g=>g.name).join(' & ')})`:''}?\n\nThe rest of room ${reg.room} stays put.${_outsideBlock?`\n\n⚠ Room ${targetRoom} is not part of this retreat's official room block yet — it'll be added automatically, but won't have its own Cloudbeds reservation until someone adds it via Actions → Add More Rooms.`:''}`))return;
+  if(bk&&_outsideBlock){
+    bk.blockedRooms=[...(bk.blockedRooms||[]),physicalTarget];
+    // Same staleness-guard fix as regMoveGuest -- see its comment.
+    bk.updatedAt=new Date().toISOString();
+  }
 
   const fromRoom=reg.room;
   const _moveTs=new Date().toISOString();
