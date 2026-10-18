@@ -106,6 +106,30 @@ function _bdAvailableRoomsForEdit(checkIn,checkOut,currentRoom){
   if(currentRoom)rooms.add(currentRoom);
   return[...rooms].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
 }
+// Retreat-guest version of the Room dropdown (Jorge's ask 2026-10-18): ALSO lists
+// occupied rooms, clearly labeled with who's in them, so picking one is a deliberate
+// choice to swap -- bdSaveDetails() does the actual swap when it sees the chosen room
+// already has someone else registered in it. Only used for kind='reg' (retreat
+// guests) -- individual Booking Engine reservations (kind='req') keep the
+// available-only dropdown above, swapping with a retreat guest's registration from
+// that different data model is out of scope here.
+function _bdRoomOptionsForEdit(checkIn,checkOut,currentRoom){
+  if(!checkIn||!checkOut||typeof rsComputeAvailability!=='function')return currentRoom?[{room:currentRoom,label:currentRoom}]:[];
+  const byType=rsComputeAvailability(checkIn,checkOut,[]);
+  const seen=new Map();
+  byType.forEach(t=>(t.roomStatus||[]).forEach(rs=>{
+    if(seen.has(rs.room))return;
+    let label=rs.room;
+    if(!rs.available&&!roomCodesEqual(rs.room,currentRoom)){
+      const occReg=AppData.regs.find(r=>!r.cancelled&&roomCodesEqual(r.room,rs.room)&&(r.guests||[]).some(g=>g.name&&!g.cancelled));
+      const occGuest=occReg?(occReg.guests||[]).find(g=>g.name&&!g.cancelled):null;
+      label=`${rs.room} — ocupado por ${occGuest?occGuest.name:(rs.blockedByLabel||'alguien más')} (clic para intercambiar)`;
+    }
+    seen.set(rs.room,{room:rs.room,label});
+  }));
+  if(currentRoom&&!seen.has(currentRoom))seen.set(currentRoom,{room:currentRoom,label:currentRoom});
+  return[...seen.values()].sort((a,b)=>a.room.localeCompare(b.room,'es',{numeric:true}));
+}
 
 // Jorge's ask 2026-10-08: a WhatsApp alert (via notify-payment.js's Meta
 // template) for every payment anywhere in the system, including a manually
@@ -488,7 +512,7 @@ function _bdRender(){
           ${_fullStay?`<tr><td style="color:var(--muted);padding:5px 0">Full Stay</td><td style="padding:5px 0">${fmtDate(_fullStay.checkIn)} — ${fmtDate(_fullStay.checkOut)} <span style="color:var(--muted)">(${_fullStay.nights} night${_fullStay.nights!==1?'s':''} total, across ${_splitChain.length} rooms)</span></td></tr>`:''}
           ${subj.retreatLabel!=null?`<tr><td style="color:var(--muted);padding:5px 0">Retreat</td><td style="padding:5px 0"><span onclick="_bdGoToRegistration('${subj.retreatBkId}')" title="Open this retreat's Registration tab" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">${escHtml(subj.retreatLabel)}</span></td></tr>`:''}
           ${subj.sourceLabel?`<tr><td style="color:var(--muted);padding:5px 0">Source</td><td style="padding:5px 0;color:#1d4ed8;font-weight:600">${escHtml(subj.sourceLabel)}</td></tr>`:''}
-          <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${_bdDetailEditMode?`<select id="bdEditRoom" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px">${_bdAvailableRoomsForEdit(subj.checkIn,subj.checkOut,subj.room).map(r=>`<option value="${escHtml(r)}"${r===subj.room?' selected':''}>${escHtml(r)}</option>`).join('')}</select>`:escHtml(subj.room||'—')}</td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0">Room</td><td style="padding:5px 0;font-weight:700">${_bdDetailEditMode?`<select id="bdEditRoom" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px">${(_bdKind==='reg'?_bdRoomOptionsForEdit(subj.checkIn,subj.checkOut,subj.room):_bdAvailableRoomsForEdit(subj.checkIn,subj.checkOut,subj.room).map(r=>({room:r,label:r}))).map(o=>`<option value="${escHtml(o.room)}"${o.room===subj.room?' selected':''}>${escHtml(o.label)}</option>`).join('')}</select>`:escHtml(subj.room||'—')}</td></tr>
           ${_splitLineage?`<tr><td style="color:var(--muted);padding:5px 0">Split Stay</td><td style="padding:5px 0;font-size:12px">${_splitLineage.prev?`<span onclick="openBookingDetailForReg('${_splitLineage.prev.id}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">Room ${escHtml(_splitLineage.prev.room)}</span> until ${fmtDate(subj.checkIn)} → `:''}<strong>this room</strong>${_splitLineage.next?` → <span onclick="openBookingDetailForReg('${_splitLineage.next.id}')" style="color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px">Room ${escHtml(_splitLineage.next.room)}</span> from ${fmtDate(subj.checkOut)}`:''}</td></tr>`:''}
           <tr><td style="color:var(--muted);padding:5px 0">Rate</td><td style="padding:5px 0;color:#059669;font-weight:700">${subj.rate!=null?fmt$(subj.rate)+'/night':'—'}</td></tr>
           ${_bdKind!=='req'?`<tr><td style="color:var(--muted);padding:5px 0">A/C</td><td style="padding:5px 0"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600"><input type="checkbox" id="bdAc24h" ${subj.ac24h?'checked':''} onchange="bdSaveAc24h(this.checked)"> ❄️ 24 horas (no apagar)</label></td></tr>`:''}
@@ -1416,6 +1440,33 @@ async function bdSaveDetails(){
     const checkIn=document.getElementById('bdEditCheckIn')?.value||null;
     const checkOut=document.getElementById('bdEditCheckOut')?.value||null;
     const roomChanged=room!==(subjBefore.room||'');
+    // filter() returns the SAME guest object references as reg.guests -- editing
+    // namedGuests[gi] here mutates reg.guests in place, no re-merge needed.
+    const namedGuests=(reg.guests||[]).filter(g=>g.name&&!g.cancelled);
+    for(let gi=0;gi<namedGuests.length;gi++){
+      const name=(document.getElementById(`bdEditName-${gi}`)?.value||'').trim();
+      if(!name){showToast('El nombre no puede quedar vacío');return;}
+      namedGuests[gi].name=name;
+      namedGuests[gi].email=(document.getElementById(`bdEditEmail-${gi}`)?.value||'').trim();
+      namedGuests[gi].phone=(document.getElementById(`bdEditPhone-${gi}`)?.value||'').trim();
+    }
+
+    // Picking an already-occupied room from the dropdown (_bdRoomOptionsForEdit labels
+    // these explicitly as "ocupado por X") is a deliberate swap request (Jorge's ask
+    // 2026-10-18: "cuando cambie de cuarto y en ese cuarto haya reserva que los
+    // intercambie") -- trade the two guests' rooms outright instead of just moving
+    // this one in on top of the other.
+    const occupantReg=roomChanged?AppData.regs.find(r=>r.id!==reg.id&&!r.cancelled&&roomCodesEqual(r.room,room)&&(r.guests||[]).some(g=>g.name&&!g.cancelled)):null;
+    if(occupantReg){
+      const occGuestName=(occupantReg.guests||[]).find(g=>g.name&&!g.cancelled)?.name||'ese huésped';
+      if(!confirm(`¿Intercambiar cuartos?\n\n${subjBefore.guestName}: ${subjBefore.room} → ${room}\n${occGuestName}: ${room} → ${subjBefore.room}`))return;
+      await _bdSwapGuestRooms(reg,occupantReg,subjBefore.room,room,checkIn,checkOut);
+      _bdDetailEditMode=false;
+      showToast(`Intercambiado: ${subjBefore.guestName} → ${room} · ${occGuestName} → ${subjBefore.room} ✓`);
+      _bdRender();
+      return;
+    }
+
     const datesChanged=checkIn!==(subjBefore.checkIn||null)||checkOut!==(subjBefore.checkOut||null);
     if(reg.customRateOverride==null&&(roomChanged||datesChanged)){
       reg.customRateOverride=subjBefore.rate;
@@ -1427,16 +1478,6 @@ async function bdSaveDetails(){
     if(roomChanged){
       const newRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(room));
       if(newRt)reg.roomTypeId=newRt.id;
-    }
-    // filter() returns the SAME guest object references as reg.guests -- editing
-    // namedGuests[gi] here mutates reg.guests in place, no re-merge needed.
-    const namedGuests=(reg.guests||[]).filter(g=>g.name&&!g.cancelled);
-    for(let gi=0;gi<namedGuests.length;gi++){
-      const name=(document.getElementById(`bdEditName-${gi}`)?.value||'').trim();
-      if(!name){showToast('El nombre no puede quedar vacío');return;}
-      namedGuests[gi].name=name;
-      namedGuests[gi].email=(document.getElementById(`bdEditEmail-${gi}`)?.value||'').trim();
-      namedGuests[gi].phone=(document.getElementById(`bdEditPhone-${gi}`)?.value||'').trim();
     }
     const {error}=await db.from('registrations').update({guests:reg.guests,room,room_type_id:reg.roomTypeId,check_in:checkIn,check_out:checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id);
     if(error){showToast('Error: '+error.message);return;}
@@ -1466,6 +1507,70 @@ async function bdSaveDetails(){
   _bdDetailEditMode=false;
   showToast('Guardado ✓');
   _bdRender();
+}
+
+// Trades regA (the registration open in Booking Detail, already moved into roomB)
+// with regB (whoever is currently in roomB) so regB ends up in regA's old room
+// (roomA) -- see the "swap" branch in bdSaveDetails() above. Mirrors
+// tr2SwapRooms (Transport's Options column, modules/transport.js) for the
+// blocked_rooms sync, plus the same pre-move rate freeze bdSaveDetails/
+// rcMoveRoom already apply to a single-guest category change, applied here to
+// BOTH guests since a swap can change either side's category.
+async function _bdSwapGuestRooms(regA,regB,roomA,roomB,checkInA,checkOutA){
+  const bkA=AppData.bookings.find(b=>b.id===regA.bookingId);
+  const bkB=AppData.bookings.find(b=>b.id===regB.bookingId);
+  const rtA_before=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(roomA));
+  const rtB_before=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(roomB));
+  const categoryChanged=!!(rtA_before&&rtB_before&&rtA_before.id!==rtB_before.id);
+
+  if(categoryChanged&&regA.customRateOverride==null){
+    const gcA=(regA.guests||[]).filter(g=>g.name&&!g.cancelled).length||1;
+    const ciA=regA.checkIn||bkA?.startDate,coA=regA.checkOut||bkA?.endDate;
+    const nightsA=Math.max(1,Math.round((pd(coA)-pd(ciA))/DAY_MS));
+    const rateA=getRoomRate(rtA_before,gcA,ciA,nightsA);
+    if(rateA!=null)regA.customRateOverride=rateA;
+  }
+  if(categoryChanged&&regB.customRateOverride==null){
+    const gcB=(regB.guests||[]).filter(g=>g.name&&!g.cancelled).length||1;
+    const ciB=regB.checkIn||bkB?.startDate,coB=regB.checkOut||bkB?.endDate;
+    const nightsB=Math.max(1,Math.round((pd(coB)-pd(ciB))/DAY_MS));
+    const rateB=getRoomRate(rtB_before,gcB,ciB,nightsB);
+    if(rateB!=null)regB.customRateOverride=rateB;
+  }
+
+  regA.room=roomB;if(rtB_before)regA.roomTypeId=rtB_before.id;
+  regA.checkIn=checkInA;regA.checkOut=checkOutA;
+  regB.room=roomA;if(rtA_before)regB.roomTypeId=rtA_before.id;
+
+  await db.from('registrations').update({guests:regA.guests,room:regA.room,room_type_id:regA.roomTypeId,check_in:regA.checkIn,check_out:regA.checkOut,custom_rate_override:regA.customRateOverride}).eq('id',regA.id);
+  await db.from('registrations').update({room:regB.room,room_type_id:regB.roomTypeId,custom_rate_override:regB.customRateOverride}).eq('id',regB.id);
+
+  // One blocked_rooms update covering both swaps when it's the same retreat,
+  // two separate ones when the guests belong to different bookings.
+  if(bkA&&bkB&&bkA.id===bkB.id){
+    const updated=(bkA.blockedRooms||[]).map(r=>{
+      const rl=r.toLowerCase();
+      if(rl===roomA.toLowerCase())return roomB;
+      if(rl===roomB.toLowerCase())return roomA;
+      return r;
+    });
+    bkA.blockedRooms=updated;
+    try{await db.from('bookings').update({blocked_rooms:updated}).eq('id',bkA.id);}
+    catch(err){showToast('Intercambiados — error sincronizando blocked_rooms: '+err.message);}
+  }else{
+    if(bkA){
+      const updatedA=(bkA.blockedRooms||[]).map(r=>r.toLowerCase()===roomA.toLowerCase()?roomB:r);
+      bkA.blockedRooms=updatedA;
+      try{await db.from('bookings').update({blocked_rooms:updatedA}).eq('id',bkA.id);}
+      catch(err){showToast('Intercambiados — error sincronizando blocked_rooms: '+err.message);}
+    }
+    if(bkB){
+      const updatedB=(bkB.blockedRooms||[]).map(r=>r.toLowerCase()===roomB.toLowerCase()?roomA:r);
+      bkB.blockedRooms=updatedB;
+      try{await db.from('bookings').update({blocked_rooms:updatedB}).eq('id',bkB.id);}
+      catch(err){showToast('Intercambiados — error sincronizando blocked_rooms: '+err.message);}
+    }
+  }
 }
 
 async function bdCheckIn(){
