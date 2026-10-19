@@ -993,7 +993,13 @@ function tr2PrintView() {
     });
     return serviceGroups.map(svc => `
       ${svc.entries.length > 1 ? `<tr class="ride" style="background:${svc.color || '#f9fafb'}"><td colspan="7">${svc.entries.length} pax comparten este viaje</td></tr>` : ''}
-      ${_printSortEntries(svc.entries).map(e => entryRow(e, svc.color)).join('')}
+      ${_printSortEntries(svc.entries).map((e, i, arr) => {
+        // Jorge's ask 2026-10-19: a blank row between room categories within the same
+        // shared-ride group, so the (now pure-category) order is easy to scan visually.
+        const sep = (i > 0 && tr2LookupRtId(e.room) !== tr2LookupRtId(arr[i - 1].room))
+          ? `<tr class="cat-spacer"><td colspan="7"></td></tr>` : '';
+        return sep + entryRow(e, svc.color);
+      }).join('')}
       <tr class="ride-end"><td colspan="7"></td></tr>
     `).join('');
   };
@@ -1028,6 +1034,7 @@ function tr2PrintView() {
          (border-bottom alone reads as just another row, which is what Jorge reported). */
       tr.ride td{padding:5px 8px 2px;border:none;border-top:1.5px dashed #9ca3af;font-size:8.5pt;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#6b7280}
       tr.ride-end td{padding:0;border:none;height:8px}
+      tr.cat-spacer td{padding:0;border:none;height:8px}
       .none{color:#9ca3af;font-style:italic;text-align:center;padding:30px 0}
       @media print{.print-btn{display:none}tr.grp{break-inside:avoid}tr{break-inside:avoid}}
     </style></head><body>
