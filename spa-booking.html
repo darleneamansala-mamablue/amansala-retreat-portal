@@ -1143,8 +1143,8 @@ async function sbWriteAppointment(paymentIntentId){
       }catch(e){}
     }
 
-    latest.push(appt);
-    await db.from('app_store').upsert({key:'spa_appointments',value:latest,updated_at:new Date().toISOString()});
+    const saved=await spaApptMutate(list=>list.some(a=>a.id===appt.id)?list:[...list,appt]);
+    latest.length=0;saved.forEach(a=>latest.push(a));
     const ther=SpaData.therapists.find(t=>t.id===appt.therapistId)||SpaData.therapists.find(t=>t.id===SB.therapistId);
     const roomLoc=SpaData.rooms.find(r=>r.id===appt.roomId);
     const meetAt=roomLoc?(roomLoc.location?`${roomLoc.name} — ${roomLoc.location}`:roomLoc.name):'Our spa reception';
@@ -1244,6 +1244,28 @@ function sbRenderCancelScreen(apptId){
     <button class="btn-primary" style="background:#b45309" id="sbCancelBtn" onclick="sbDoCancel('${apptId}')">Yes, Cancel My Appointment</button>
   </div>`;
 }
+// Saves ONE appointment change safely (Darlene 2026-10-19): re-reads the saved list, applies only this change, and writes it back only if nobody
+// else saved in between (compare-and-swap on updated_at); otherwise re-reads and redoes it. Replaces overwriting the whole list, which lost bookings.
+async function spaApptMutate(fn){
+  let lastErr=null;
+  for(let i=0;i<12;i++){
+    try{
+      const {data:row,error:re}=await db.from('app_store').select('value,updated_at').eq('key','spa_appointments').maybeSingle();
+      if(re) throw re;
+      const next=fn(row&&Array.isArray(row.value)?row.value.slice():[]);
+      if(row){
+        const {data:upd,error:ue}=await db.from('app_store').update({value:next,updated_at:new Date().toISOString()}).eq('key','spa_appointments').eq('updated_at',row.updated_at).select('key');
+        if(ue) throw ue;
+        if(upd&&upd.length) return next;
+      }else{
+        const {error:ie}=await db.from('app_store').insert({key:'spa_appointments',value:next,updated_at:new Date().toISOString()});
+        if(ie) throw ie; return next;
+      }
+      await new Promise(r=>setTimeout(r,80+Math.random()*220));
+    }catch(e){lastErr=e;await new Promise(r=>setTimeout(r,400));}
+  }
+  throw new Error('Could not save the appointment: '+((lastErr&&lastErr.message)||'busy'));
+}
 async function sbDoCancel(apptId){
   const btn=document.getElementById('sbCancelBtn');
   if(btn){btn.disabled=true;btn.textContent='Cancelling…';}
@@ -1281,9 +1303,8 @@ async function sbDoCancel(apptId){
     appt.status='CANCELLED';
     appt.cancelledAt=new Date().toISOString();
     appt.folioStatus=appt.folioStatus==='POSTED'?'REVERSED':appt.folioStatus;
-    latest[idx]=appt;
-    await db.from('app_store').upsert({key:'spa_appointments',value:latest,updated_at:new Date().toISOString()});
-    SpaAppointments=latest;
+    const savedC=await spaApptMutate(list=>list.map(a=>a.id===apptId?appt:a));
+    SpaAppointments=savedC;
     const svc=SpaData.services.find(s=>s.id===appt.serviceId);
     const ther=appt.therapistId?SpaData.therapists.find(t=>t.id===appt.therapistId):null;
     if(appt.email) await sbSendCancelEmail(appt,svc,ther);

@@ -486,12 +486,29 @@ exports.handler = async (event) => {
     }
 
     // Write the appointment last, once payment link (if any) is ready.
-    const latest = [...appts, appt];
-    const upsertRes = await fetch(`${SUPABASE_URL}/rest/v1/app_store?on_conflict=key`, {
-      method: 'POST', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ key: 'spa_appointments', value: latest, updated_at: new Date().toISOString() }),
-    });
-    if (!upsertRes.ok) throw new Error('Could not save the appointment: ' + await upsertRes.text());
+    // Compare-and-swap append (Darlene 2026-10-19): re-read the saved list right now and add ONLY this appointment, writing it back only if
+    // updated_at is unchanged since we read it; if someone else saved in between, re-read and redo. Never overwrites with an older copy.
+    let saved = false, lastErr = '';
+    for (let i = 0; i < 12 && !saved; i++) {
+      const gr = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_appointments&select=value,updated_at`, { headers: hdrs });
+      if (!gr.ok) { lastErr = 'read ' + gr.status; await new Promise((r) => setTimeout(r, 400)); continue; }
+      const [row] = await gr.json();
+      const cur = row && Array.isArray(row.value) ? row.value : [];
+      const next = cur.some((a) => a.id === appt.id) ? cur : [...cur, appt];
+      if (row) {
+        const pr = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_appointments&updated_at=eq.${encodeURIComponent(row.updated_at)}`, {
+          method: 'PATCH', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify({ value: next, updated_at: new Date().toISOString() }),
+        });
+        if (!pr.ok) { lastErr = 'write ' + pr.status + ' ' + (await pr.text()).slice(0, 120); await new Promise((r) => setTimeout(r, 400)); continue; }
+        const done = await pr.json();
+        if (Array.isArray(done) && done.length) saved = true; else await new Promise((r) => setTimeout(r, 80 + Math.random() * 220));
+      } else {
+        const ir = await fetch(`${SUPABASE_URL}/rest/v1/app_store`, { method: 'POST', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ key: 'spa_appointments', value: next, updated_at: new Date().toISOString() }) });
+        if (ir.ok) saved = true; else lastErr = 'insert ' + ir.status;
+      }
+    }
+    if (!saved) throw new Error('Could not save the appointment: ' + lastErr);
 
     // Confirmation + therapist-notification emails (best-effort, non-fatal).
     const roomLoc = (spaData.rooms || []).find(r => r.id === roomId);
