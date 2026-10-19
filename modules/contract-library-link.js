@@ -87,7 +87,7 @@ function clcDropSnapshot(bk){
 }
 
 // "Edit wording for this retreat" keys → section titles
-const CLC_OVERRIDE_KEYS=[[/^payment/i,'paymentTerms'],[/^cancellation/i,'cancellationPolicy'],[/complimentary/i,'teacherPolicy'],[/shala/i,'yogaPolicy'],[/^property/i,'propertyPolicy'],[/liabilit/i,'liabilityPolicy']];
+const CLC_OVERRIDE_KEYS=[[/^payment/i,'paymentTerms'],[/^cancellation/i,'cancellationPolicy'],[/complimentary/i,'teacherPolicy'],[/shala/i,'yogaPolicy'],[/^property/i,'propertyPolicy'],[/liabilit/i,'liabilityPolicy'],[/includ/i,'inclusions']];
 function clcOverrideKey(title){const m=CLC_OVERRIDE_KEYS.find(([re])=>re.test(title||''));return m?m[1]:null;}
 function clcBody(bk,s){
   const k=clcOverrideKey(s.title);
@@ -163,6 +163,27 @@ function clcBuildText(t,bk,isLow,legacy){
   };
   wrap('generateContractHTML',clcBuildHTML);
   wrap('generateContractText',clcBuildText);
+
+  // "Edit this contract" (contracts.js contractOpenEditor/contractEditorReset) builds each
+  // textarea's starting value from contractTemplateSectionText() -- without this, it always
+  // showed the old plain contracts.js default for a section (e.g. the one-line generic
+  // "What's Included" sentence), never the ACTIVE library template's real section body, so a
+  // section whose title only exists in the library (no plain contracts.js counterpart) looked
+  // impossible to edit: the textarea's content never matched what the contract preview
+  // actually showed, and "Reset to template" always reset back to that same wrong text.
+  // Jorge's report 2026-10-19: What's Included showed the generic sentence while the real
+  // contract showed a different, library-authored bullet list.
+  const prevTmplText=window.contractTemplateSectionText;
+  if(typeof prevTmplText==='function'){
+    window.contractTemplateSectionText=function(key,isLow,tmpl){
+      try{
+        const t=clcActiveTemplate(isLow);
+        const sec=t&&t.sections.find(s=>clcOverrideKey(s.title)===key);
+        if(sec&&typeof sec.body==='string')return sec.body;
+      }catch(e){}
+      return prevTmplText.apply(this,arguments);
+    };
+  }
 
   // freeze the wording when a contract is sent / signed; unfreeze when a signature is voided so the new template applies
   const before=(name,fn)=>{
