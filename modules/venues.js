@@ -1223,6 +1223,59 @@ function rmSaveNewBooking(){
     showToast(`Reservation created — ${room} · ${leader} ✓`);
   }
 }
+
+// ── Block Room (maintenance / custom reason) — Jorge's ask 2026-10-19 ──
+// A lightweight sibling to the guest-facing Room Only flow above: no email/
+// phone/rate/folio, just a room + date range + free-text reason. Created as
+// bookingType:'room_only' (same conflict-check everywhere already honors --
+// blockedRooms + status!=='cancelled' is all any availability check needs,
+// confirmed across rsComputeAvailability/Transport upgrades/get-availability.js)
+// but deliberately WITHOUT a matching registration -- there's no guest, so no
+// Booking Detail/Folio view is needed. Clicking an existing one on the Room
+// Calendar already opens rmOpenEditBooking() like any other Room Only booking,
+// so changing dates or cancelling it early needs no new code.
+function rmOpenMaintenanceBlock(){
+  const sel=document.getElementById('rmMaint-room');
+  const opts=[];
+  AppData.roomTypes.forEach(rt=>{
+    (rt.rooms||[]).forEach(room=>opts.push(`<option value="${escHtml(room)}|${rt.id}">${escHtml(room)} — ${escHtml(rt.name)}</option>`));
+  });
+  sel.innerHTML=opts.join('');
+  const today=fmtISO(new Date());
+  document.getElementById('rmMaint-start').value=today;
+  document.getElementById('rmMaint-end').value=fmtISO(addDays(pd(today),1));
+  document.getElementById('rmMaint-reason').value='';
+  const err=document.getElementById('rmMaint-err');err.textContent='';err.style.display='none';
+  document.getElementById('rmMaintModal').style.display='flex';
+  document.getElementById('rmMaintModal').classList.add('open');
+  setTimeout(()=>document.getElementById('rmMaint-reason').focus(),80);
+}
+function rmMaintClose(){
+  const m=document.getElementById('rmMaintModal');m.style.display='none';m.classList.remove('open');
+}
+function rmSaveMaintenanceBlock(){
+  const [room,rtId]=(document.getElementById('rmMaint-room').value||'').split('|');
+  const start=document.getElementById('rmMaint-start').value;
+  const end=document.getElementById('rmMaint-end').value;
+  const reason=document.getElementById('rmMaint-reason').value.trim()||'Mantenimiento';
+  const err=document.getElementById('rmMaint-err');err.style.display='none';
+  if(!room){err.textContent='Selecciona un cuarto.';err.style.display='block';return;}
+  if(!start||!end||end<=start){err.textContent='Fechas inválidas.';err.style.display='block';return;}
+  const conflict=AppData.bookings.some(b=>b.status!=='cancelled'&&roomListIncludes(b.blockedRooms,room)&&datesOverlap(start,end,b.startDate,b.endDate));
+  if(conflict){err.textContent=`El cuarto ${room} ya está ocupado parte de estas fechas.`;err.style.display='block';return;}
+  const nights=Math.max(1,Math.round((pd(end)-pd(start))/DAY_MS));
+  const newId=uid();
+  AppData.bookings.push({
+    id:newId,bookingType:'room_only',leaderName:`🚧 ${reason}`,leaderEmail:'',leaderPhone:'',
+    notes:reason,mealPlan:'none',retreatName:'Maintenance Block',startDate:start,endDate:end,
+    row:findAvailableRow(start,end,null),pax:0,status:'confirmed',docLink:'',roomAssignments:[],
+    roomTypeId:rtId,blockedRooms:[room],roomRateTotal:0,roomRateNights:nights,charges:[],payments:[],
+  });
+  saveAll();rmMaintClose();venBuild();rcBuild();
+  logActivity('Room blocked',`${room} · ${reason} · ${fmtDate(start)} – ${fmtDate(end)}`,newId);
+  showToast(`Cuarto ${room} bloqueado ✓`);
+}
+
 async function rmSendPaymentLink(){
   if(!_rmEditId)return;
   const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
