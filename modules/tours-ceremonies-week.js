@@ -7,7 +7,7 @@
 // the retreat schedules, the printouts and the Schedule calendar. One row per activity per day: a tour two retreats share has one guide row.
 const TCW_TOURS = ['ao1', 'ao2', 'ao3', 'ao6', 'ao7', 'ao16'];
 const TCW_CEREMONIES = ['ao4', 'ao5', 'ao9', 'ao10'];
-const TCW_SHAMANS = ['María Luisa', 'Gabby'];   // every Temazcal needs one shaman and one fire keeper
+const TCW_SHAMANS = ['María Luisa', 'Gabby', 'Francisco'];   // every Temazcal needs one shaman and one fire keeper
 function tcwFireKeepers() { return typeof TEMAZCAL_FIRE_KEEPER_NAMES !== 'undefined' ? TEMAZCAL_FIRE_KEEPER_NAMES : ['Golloy', 'Francisco']; }
 let tcwWeek = null;          // ISO date of the Sunday of the week on screen
 let tcwFilter = 'all';       // all | tours | ceremonies
@@ -59,6 +59,7 @@ async function tcwRender() {
     <span style="font-size:15px;font-weight:700;min-width:210px;text-align:center;font-family:'Jost',sans-serif">${tcwEsc(wk)}</span>
     <button onclick="tcwNav(7)" style="width:30px;height:30px;border:1px solid #d6cfc4;border-radius:7px;background:#fff;cursor:pointer;font-size:16px">&#8250;</button>
     <button onclick="tcwNav(0)" style="padding:6px 12px;font-size:12px;font-weight:700;border:1.5px solid #d6cfc4;border-radius:7px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">This week</button>
+    <button onclick="tcwReport()" style="padding:6px 12px;font-size:12px;font-weight:700;border:1.5px solid #2d6a6a;color:#2d6a6a;border-radius:7px;background:#fff;cursor:pointer;font-family:'Jost',sans-serif">Download report (CSV)</button>
     <span style="width:14px"></span>${chip('all', 'All')}${chip('tours', 'Tours')}${chip('ceremonies', 'Ceremonies')}</div>`;
   const missing = rows.filter(r => r.aoId === 'ao5').filter(r => { const o = (typeof actOpsData !== 'undefined' && actOpsData[r.key]) || {}; return !o.shaman || !o.fireKeeper; });
   if (missing.length) html += `<div style="margin:0 0 14px;padding:10px 14px;background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;color:#991b1b;font-size:13px;font-weight:600">${missing.length} Temazcal${missing.length > 1 ? 's' : ''} this week still need${missing.length > 1 ? '' : 's'} a shaman and a fire keeper: ${missing.map(r => tcwEsc(fmtDay(r.date))).join(' · ')}. Every Temazcal needs one of each.</div>`;
@@ -95,12 +96,37 @@ async function tcwRender() {
         <div style="min-width:210px;flex:1"><div style="font-weight:700;font-size:14px">${tcwEsc(nm(r.aoId))} <span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:${tour ? '#dbeafe' : '#fae8ff'};color:${tour ? '#1d4ed8' : '#86198f'}">${tour ? 'Tour' : 'Ceremony'}</span></div>
           <div style="font-size:12px;color:#6b7280">${tcwEsc(times)} · ${who}</div></div>
         ${people}
+        <div><div style="${lbl}">Status</div><select onchange="tcwSet('${r.key}','status',this.value);tcwRender()" style="padding:7px 8px;border:2px solid ${ops.status === 'cancelled' ? '#dc2626' : '#d6cfc4'};border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;background:${ops.status === 'cancelled' ? '#fef2f2' : '#fff'}"><option value="" ${ops.status === 'cancelled' ? '' : 'selected'}>Running</option><option value="cancelled" ${ops.status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></div>
+        <div><div style="${lbl}">${ops.status === 'cancelled' ? 'Reason' : '# of pax'}</div>${ops.status === 'cancelled'
+          ? `<input type="text" value="${tcwEsc(ops.cancelReason || '')}" placeholder="e.g. not enough ppl" onchange="tcwSet('${r.key}','cancelReason',this.value)" style="padding:7px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;width:150px">`
+          : ''}<input type="number" min="0" value="${tcwEsc(ops.paxCount == null ? '' : ops.paxCount)}" placeholder="${ops.status === 'cancelled' ? '# signed up' : 'signed up'}" onchange="tcwSet('${r.key}','paxCount',this.value)" style="padding:7px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;width:${ops.status === 'cancelled' ? '90' : '110'}px;${ops.status === 'cancelled' ? 'margin-left:6px' : ''}"></div>
         <div style="flex:1;min-width:200px"><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Who does what</div><input type="text" value="${tcwEsc(ops.staffNote || '')}" placeholder="e.g. María Luisa leads, Gaby plays music" onchange="tcwSet('${r.key}','staffNote',this.value)" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px"></div>
       </div>`;
     });
     html += '</div>';
   });
   el.innerHTML = html;
+}
+// Report of the weeks you choose: every tour/ceremony with expected pax, status (Running / Cancelled + reason) and the signed-up count.
+function tcwReport() {
+  const ids = [...TCW_TOURS, ...TCW_CEREMONIES], rows = {};
+  (AppData.bookings || []).forEach(bk => {
+    if (bk.status === 'cancelled' || (bk.flags || []).includes('archived')) return;
+    (bk.retreatActivities || []).forEach(a => {
+      const d = String(a && a.date || '').slice(0, 10); if (!a || !ids.includes(a.aoId) || !d) return;
+      const k = a.aoId + '|' + d, r = rows[k] = rows[k] || { key: k, aoId: a.aoId, date: d, times: [], groups: [] };
+      if (a.time) r.times.push(a.time); r.groups.push((bk.leaderName || bk.retreatName || 'Retreat') + (Number(bk.pax) ? ' (' + bk.pax + ')' : ''));
+    });
+  });
+  const nm = id => ((typeof ADD_ONS !== 'undefined' ? ADD_ONS : []).find(a => a.id === id) || {}).name || id;
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const out = [['Date', 'Time', 'Activity', 'Type', 'Groups (guests)', 'Status', 'Cancel reason', 'Pax signed up', 'Guides / shaman', 'Fire keeper'].map(q).join(',')];
+  Object.values(rows).sort((x, y) => x.date.localeCompare(y.date) || (x.times[0] || '').localeCompare(y.times[0] || '')).forEach(r => {
+    const o = (typeof actOpsData !== 'undefined' && actOpsData[r.key]) || {};
+    out.push([r.date, [...new Set(r.times)].sort().map(tcwFmtT).join(' & '), nm(r.aoId), TCW_TOURS.includes(r.aoId) ? 'Tour' : 'Ceremony', r.groups.join('; '), o.status === 'cancelled' ? 'Cancelled' : 'Running', o.cancelReason || '', o.paxCount == null ? '' : o.paxCount,
+      r.aoId === 'ao5' ? o.shaman || '' : [o.guide1, o.guide2, o.guide3].filter(Boolean).join(' & '), o.fireKeeper || ''].map(q).join(','));
+  });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + out.join('\n')], { type: 'text/csv' })); a.download = 'tours-ceremonies-report.csv'; a.click();
 }
 async function tcwAddGuide() {
   const inp = document.getElementById('tcwNewGuide'); if (!inp) return;
@@ -118,9 +144,9 @@ function tcwSetFilter(f) { tcwFilter = f; tcwRender(); }
 function tcwSet(key, field, val) {
   if (typeof actOpsData === 'undefined') return;
   if (!actOpsData[key]) actOpsData[key] = {};
-  actOpsData[key][field] = (field === 'staffNote' || field === 'shaman' || field === 'fireKeeper') ? String(val || '') : String(val || '').toLowerCase();   // guides are stored lowercase like the Activities page; shaman and fire keeper keep their exact name
+  actOpsData[key][field] = (['staffNote', 'shaman', 'fireKeeper', 'status', 'cancelReason', 'paxCount'].includes(field)) ? String(val || '') : String(val || '').toLowerCase();   // guides are stored lowercase like the Activities page; shaman and fire keeper keep their exact name
   if (typeof actOpsSave === 'function') actOpsSave();
-  if (typeof showToast === 'function') showToast(field === 'staffNote' ? 'Saved.' : (val ? 'Guide ' + val + ' saved.' : 'Guide cleared.'));
+  if (typeof showToast === 'function') showToast(['staffNote', 'status', 'cancelReason', 'paxCount'].includes(field) ? 'Saved.' : (val ? 'Guide ' + val + ' saved.' : 'Guide cleared.'));
 }
 function tcwOpen(btn) {
   const prev = localStorage.getItem('ama_last_tab');
