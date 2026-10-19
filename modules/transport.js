@@ -946,12 +946,27 @@ function tr2PrintView() {
   // those can be checked in right away -- the rest follow sorted by their current room
   // category (same order room types are defined in, matching Rooms/Rooms Calendar).
   const _printNoUpgrade = rtId => !!rtId && (TR2_UPGRADE_PATH[rtId] || []).length === 0 && !TR2_LATERAL_ONLY.has(rtId);
-  const _printRtOrder = rtId => { const i = AppData.roomTypes.findIndex(rt => rt.id === rtId); return i === -1 ? 9999 : i; };
+  // AppData.roomTypes' own array order doesn't reliably match the canonical category
+  // order (that's only true once loadFromSupabase()'s own re-sort has run) -- call
+  // _roomSortKey() (modules/pricing.js's ROOM_ORDER, the same key Teachers/the Night
+  // Audit chart use) directly instead of trusting array position, so this is correct
+  // regardless (Jorge's report 2026-10-19: printed order didn't match room type at all).
+  const _printRtOrder = rtId => {
+    const rt = AppData.roomTypes.find(r => r.id === rtId);
+    return (rt && typeof _roomSortKey === 'function') ? _roomSortKey(rt) : 9999;
+  };
+  const _printRoomPos = (rtId, room) => {
+    const rt = AppData.roomTypes.find(r => r.id === rtId);
+    const i = rt ? (rt.rooms || []).indexOf(room) : -1;
+    return i === -1 ? 9999 : i;
+  };
   const _printSortEntries = entries => entries.slice().sort((a, b) => {
     const ra = tr2RoomNameToRtId[a.room], rb = tr2RoomNameToRtId[b.room];
     const na = _printNoUpgrade(ra), nb = _printNoUpgrade(rb);
     if (na !== nb) return na ? -1 : 1;
-    return _printRtOrder(ra) - _printRtOrder(rb);
+    const ro = _printRtOrder(ra) - _printRtOrder(rb);
+    if (ro !== 0) return ro;
+    return _printRoomPos(ra, a.room) - _printRoomPos(rb, b.room);
   });
 
   // Same "shared ride" clustering AND the same pastel colors the on-screen board uses (same
