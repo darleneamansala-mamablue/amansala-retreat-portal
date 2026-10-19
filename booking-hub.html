@@ -1253,6 +1253,7 @@
       <button class="btn-nav" onclick="rcGoToday()" style="font-weight:600;color:var(--teal);border-color:var(--teal)">Today</button>
       <button class="btn-nav" onclick="rcShift(rcShowDays)">Next &rsaquo;</button>
       <button class="btn btn-primary btn-sm" onclick="rsOpen()" style="white-space:nowrap">+ Book a Room</button>
+      <button class="btn btn-secondary btn-sm" onclick="rmOpenMaintenanceBlock()" style="white-space:nowrap">🚧 Block Room</button>
       <button class="btn btn-secondary btn-sm" onclick="rclOpen()" style="white-space:nowrap">🔗 Check Cloudbeds Links</button>
       <button class="btn btn-secondary btn-sm" onclick="ozOpenStraightline()" style="white-space:nowrap;border-color:#7c3aed;color:#6d28d9">✨ Straightline Rooms</button>
       <span id="ozOverbookBadge" onclick="ozOpenOverbookModal()" style="display:none;white-space:nowrap;cursor:pointer;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;font-weight:700;font-size:12px;border-radius:8px;padding:6px 12px;"></span>
@@ -2419,6 +2420,20 @@
       <div id="rm-folio-wrap" style="display:none;margin-top:10px;padding-top:12px;border-top:1px solid var(--border)"></div>
     </div>
     <div class="modal-foot"><div class="l"><button class="btn btn-danger btn-sm" id="rmDelBtn" onclick="rmDeleteBooking()" style="display:none">🗑 Delete</button></div><div class="r"><button class="btn btn-secondary" onclick="rmClose()">Cancel</button><button class="btn btn-primary" onclick="rmSaveNewBooking()">Create Reservation</button></div></div>
+  </div>
+</div>
+
+<!-- ===== BLOCK ROOM (maintenance / custom reason) — Jorge's ask 2026-10-19 ===== -->
+<div class="modal-overlay" id="rmMaintModal" style="display:none">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-hdr"><h2>🚧 Bloquear Cuarto</h2><button class="modal-x" onclick="rmMaintClose()">&times;</button></div>
+    <div class="modal-body">
+      <div class="frow full"><div class="fg"><label>Cuarto</label><select id="rmMaint-room"></select></div></div>
+      <div class="frow"><div class="fg"><label>Desde</label><input type="date" id="rmMaint-start"></div><div class="fg"><label>Hasta</label><input type="date" id="rmMaint-end"></div></div>
+      <div class="frow full"><div class="fg"><label>Motivo</label><input type="text" id="rmMaint-reason" placeholder="ej. Mantenimiento A/C" maxlength="80"></div></div>
+      <div id="rmMaint-err" style="display:none;color:#dc2626;font-size:12px;margin-top:4px"></div>
+    </div>
+    <div class="modal-foot"><div class="l"></div><div class="r"><button class="btn btn-secondary" onclick="rmMaintClose()">Cancelar</button><button class="btn btn-primary" onclick="rmSaveMaintenanceBlock()">Bloquear cuarto</button></div></div>
   </div>
 </div>
 
@@ -6454,7 +6469,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/venues.js?v=20261018d"></script>
+<script src="modules/venues.js?v=20261019a"></script>
 <script src="modules/room-optimizer.js?v=20261018a"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js?v=20261017a"></script>
