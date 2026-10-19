@@ -5,7 +5,7 @@
 // The guide is the same one the Activities page uses (Guide 1 / Guide 2 in app_store 'act_ops', key "<activity id>|<date>"), so setting it in
 // either place shows in both. teacher-portal.js only calls schedGuideSuffix(); everything else lives here.
 function schedGuideTitle(n) { n = String(n || '').trim(); return n ? n.charAt(0).toUpperCase() + n.slice(1) : ''; }
-const SCHED_SHAMANS = ['María Luisa', 'Gabby'];
+const SCHED_SHAMANS = ['María Luisa', 'Gabby', 'Francisco'];
 function schedFireKeepers() { return typeof TEMAZCAL_FIRE_KEEPER_NAMES !== 'undefined' ? TEMAZCAL_FIRE_KEEPER_NAMES : ['Golloy', 'Francisco']; }
 function schedGuideSuffix(bk, a) {
   try {
