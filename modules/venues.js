@@ -895,6 +895,7 @@ function venRoNightRate(rt,dateStr){
 }
 // ── "New Reservation" — room-only booking modal, opened by clicking an empty cell on a room's row in the Rooms grid ──
 let _rmEditId=null,_rmRoom=null,_rmRtId=null,_rmRateMode='solo';
+let _rmMaintEditId=null;
 function rmClose(){const m=document.getElementById('rmModal');m.style.display='none';m.classList.remove('open');}
 function rmSetRateMode(mode){
   _rmRateMode=mode;
@@ -1230,12 +1231,19 @@ function rmSaveNewBooking(){
 // bookingType:'room_only' (same conflict-check everywhere already honors --
 // blockedRooms + status!=='cancelled' is all any availability check needs,
 // confirmed across rsComputeAvailability/Transport upgrades/get-availability.js)
-// but deliberately WITHOUT a matching registration -- there's no guest, so no
-// Booking Detail/Folio view is needed. Clicking an existing one on the Room
-// Calendar already opens rmOpenEditBooking() like any other Room Only booking,
-// so changing dates or cancelling it early needs no new code.
+// but deliberately WITHOUT a matching registration -- there's no guest.
+// Tagged via retreatName==='Maintenance Block' so the Room Calendar's click
+// handler (rcBuild, the `bl.addEventListener('click',...)` block) routes it
+// to THIS modal instead of openBookingFolio() -- Jorge's follow-up report
+// 2026-10-19: without that tag check it opened the full guest Folio view
+// ("Room/Package $0.00 · Balance Paid in full · +Add Charge"), with no way
+// to edit or delete it from there at all.
 function rmOpenMaintenanceBlock(){
+  _rmMaintEditId=null;
+  document.getElementById('rmMaintModalTitle').textContent='🚧 Bloquear Cuarto';
+  document.getElementById('rmMaintDelBtn').style.display='none';
   const sel=document.getElementById('rmMaint-room');
+  sel.disabled=false;
   const opts=[];
   AppData.roomTypes.forEach(rt=>{
     (rt.rooms||[]).forEach(room=>opts.push(`<option value="${escHtml(room)}|${rt.id}">${escHtml(room)} — ${escHtml(rt.name)}</option>`));
@@ -1250,8 +1258,29 @@ function rmOpenMaintenanceBlock(){
   document.getElementById('rmMaintModal').classList.add('open');
   setTimeout(()=>document.getElementById('rmMaint-reason').focus(),80);
 }
+function rmOpenEditMaintenanceBlock(id){
+  const bk=AppData.bookings.find(b=>b.id===id);if(!bk)return;
+  _rmMaintEditId=id;
+  const room=(bk.blockedRooms||[])[0]||'';
+  document.getElementById('rmMaintModalTitle').textContent='🚧 Editar Bloqueo';
+  document.getElementById('rmMaintDelBtn').style.display='inline-flex';
+  const sel=document.getElementById('rmMaint-room');
+  // Room can't be changed on an existing block -- same room-swap complexity
+  // real reservations have (moving a block to a different room is just as
+  // easily done by deleting this one and creating a new one on the right
+  // room) -- keep this edit path to dates/reason only.
+  sel.innerHTML=`<option value="${escHtml(room)}|${bk.roomTypeId||''}">${escHtml(room)}</option>`;
+  sel.disabled=true;
+  document.getElementById('rmMaint-start').value=bk.startDate;
+  document.getElementById('rmMaint-end').value=bk.endDate;
+  document.getElementById('rmMaint-reason').value=bk.notes||(bk.leaderName||'').replace(/^🚧\s*/,'');
+  const err=document.getElementById('rmMaint-err');err.textContent='';err.style.display='none';
+  document.getElementById('rmMaintModal').style.display='flex';
+  document.getElementById('rmMaintModal').classList.add('open');
+}
 function rmMaintClose(){
   const m=document.getElementById('rmMaintModal');m.style.display='none';m.classList.remove('open');
+  document.getElementById('rmMaint-room').disabled=false;
 }
 function rmSaveMaintenanceBlock(){
   const [room,rtId]=(document.getElementById('rmMaint-room').value||'').split('|');
@@ -1261,9 +1290,17 @@ function rmSaveMaintenanceBlock(){
   const err=document.getElementById('rmMaint-err');err.style.display='none';
   if(!room){err.textContent='Selecciona un cuarto.';err.style.display='block';return;}
   if(!start||!end||end<=start){err.textContent='Fechas inválidas.';err.style.display='block';return;}
-  const conflict=AppData.bookings.some(b=>b.status!=='cancelled'&&roomListIncludes(b.blockedRooms,room)&&datesOverlap(start,end,b.startDate,b.endDate));
+  const conflict=AppData.bookings.some(b=>b.id!==_rmMaintEditId&&b.status!=='cancelled'&&roomListIncludes(b.blockedRooms,room)&&datesOverlap(start,end,b.startDate,b.endDate));
   if(conflict){err.textContent=`El cuarto ${room} ya está ocupado parte de estas fechas.`;err.style.display='block';return;}
   const nights=Math.max(1,Math.round((pd(end)-pd(start))/DAY_MS));
+  if(_rmMaintEditId){
+    const bk=AppData.bookings.find(b=>b.id===_rmMaintEditId);if(!bk)return;
+    Object.assign(bk,{leaderName:`🚧 ${reason}`,notes:reason,startDate:start,endDate:end,roomRateNights:nights});
+    saveAll();rmMaintClose();venBuild();rcBuild();
+    logActivity('Room block updated',`${room} · ${reason} · ${fmtDate(start)} – ${fmtDate(end)}`,bk.id);
+    showToast(`Bloqueo de ${room} actualizado ✓`);
+    return;
+  }
   const newId=uid();
   AppData.bookings.push({
     id:newId,bookingType:'room_only',leaderName:`🚧 ${reason}`,leaderEmail:'',leaderPhone:'',
@@ -1274,6 +1311,15 @@ function rmSaveMaintenanceBlock(){
   saveAll();rmMaintClose();venBuild();rcBuild();
   logActivity('Room blocked',`${room} · ${reason} · ${fmtDate(start)} – ${fmtDate(end)}`,newId);
   showToast(`Cuarto ${room} bloqueado ✓`);
+}
+function rmDeleteMaintenanceBlock(){
+  if(!_rmMaintEditId||!confirm('¿Quitar este bloqueo?'))return;
+  const id=_rmMaintEditId;
+  deletedBookingIds.add(id);
+  AppData.bookings=AppData.bookings.filter(b=>b.id!==id);
+  saveAll();rmMaintClose();venBuild();rcBuild();
+  logActivity('Room block removed','',id);
+  showToast('Bloqueo eliminado ✓');
 }
 
 async function rmSendPaymentLink(){
@@ -2724,6 +2770,12 @@ function rcBuild(){
         bl.addEventListener('mouseenter',e=>showNoteTip(e,bk,regEntry?.notes));bl.addEventListener('mousemove',moveTip);bl.addEventListener('mouseleave',hideTip);
         bl.addEventListener('click',e=>{
           e.stopPropagation();
+          // Maintenance/custom-reason blocks (rmOpenMaintenanceBlock) are not a guest
+          // reservation at all -- route to their own simple edit/delete modal instead
+          // of the guest Folio view below (Jorge's report 2026-10-19: opening one showed
+          // a "Room/Package $0.00 · Balance Paid in full · +Add Charge" guest folio with
+          // no way to edit or delete the block itself).
+          if(bk.retreatName==='Maintenance Block'){rmOpenEditMaintenanceBlock(bk.id);return;}
           if(regEntry&&hasGuest){openBookingDetailForReg(regEntry.id,guestNames[0]);return;}
           // Room Only bookings (Walk-in/Direct/Bikini Bootcamp/Restore & Renew/OTA)
           // have no `reg` at all — they're an in-house guest, not a retreat with a
