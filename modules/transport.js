@@ -937,9 +937,22 @@ function tr2PrintView() {
         <td>${escHtml(e.airport === 'cancun' ? 'CUN' : e.airport === 'tulum' ? 'TQO' : (e.airport || ''))}</td>
         <td>${escHtml(e.type === 'departure' ? (e.pickup ? `${e.pickup} → ${e.time || ''}` : (e.time || '')) : (e.time || ''))}</td>
         <td>${escHtml(e.retreatLabel || '')}</td>
-        <td>${escHtml(e.notes || '')}</td>
         <td>${e.cost != null ? `$${e.cost}` : ''}</td>
       </tr>`;
+
+  // Jorge's ask 2026-10-19: within a shared-ride group, put guests who have NO possible
+  // upgrade (already top-category, e.g. Beachfront King/bd1 -- same "N/A" rule
+  // tr2UpgradeCell uses, TR2_UPGRADE_PATH empty and not lateral-only) at the very top, so
+  // those can be checked in right away -- the rest follow sorted by their current room
+  // category (same order room types are defined in, matching Rooms/Rooms Calendar).
+  const _printNoUpgrade = rtId => !!rtId && (TR2_UPGRADE_PATH[rtId] || []).length === 0 && !TR2_LATERAL_ONLY.has(rtId);
+  const _printRtOrder = rtId => { const i = AppData.roomTypes.findIndex(rt => rt.id === rtId); return i === -1 ? 9999 : i; };
+  const _printSortEntries = entries => entries.slice().sort((a, b) => {
+    const ra = tr2RoomNameToRtId[a.room], rb = tr2RoomNameToRtId[b.room];
+    const na = _printNoUpgrade(ra), nb = _printNoUpgrade(rb);
+    if (na !== nb) return na ? -1 : 1;
+    return _printRtOrder(ra) - _printRtOrder(rb);
+  });
 
   // Same "shared ride" clustering AND the same pastel colors the on-screen board uses (same
   // flight/time window within ~20min, or a manual drag-and-drop merge saved in
@@ -956,17 +969,17 @@ function tr2PrintView() {
       serviceGroups[seen.get(gk)].entries.push(e);
     });
     return serviceGroups.map(svc => `
-      ${svc.entries.length > 1 ? `<tr class="ride" style="background:${svc.color || '#f9fafb'}"><td colspan="8">${svc.entries.length} pax comparten este viaje</td></tr>` : ''}
-      ${svc.entries.map(e => entryRow(e, svc.color)).join('')}
-      <tr class="ride-end"><td colspan="8"></td></tr>
+      ${svc.entries.length > 1 ? `<tr class="ride" style="background:${svc.color || '#f9fafb'}"><td colspan="7">${svc.entries.length} pax comparten este viaje</td></tr>` : ''}
+      ${_printSortEntries(svc.entries).map(e => entryRow(e, svc.color)).join('')}
+      <tr class="ride-end"><td colspan="7"></td></tr>
     `).join('');
   };
 
   const rowsHtml = filtered.length ? [...groups.entries()].map(([date, items], gi) => `
-    ${gi > 0 ? `<tr class="spacer"><td colspan="8"></td></tr>` : ''}
-    <tr class="grp"><td colspan="8">${date === todayStr ? '📍 HOY — ' : ''}${fmtDate(date)}</td></tr>
+    ${gi > 0 ? `<tr class="spacer"><td colspan="7"></td></tr>` : ''}
+    <tr class="grp"><td colspan="7">${date === todayStr ? '📍 HOY — ' : ''}${fmtDate(date)}</td></tr>
     ${rideGroupsHtml(items)}
-  `).join('') : `<tr><td colspan="8" class="none">No hay entradas para estos filtros.</td></tr>`;
+  `).join('') : `<tr><td colspan="7" class="none">No hay entradas para estos filtros.</td></tr>`;
 
   const win = window.open('', '_blank');
   win.document.write(`<!DOCTYPE html><html><head>
@@ -1001,7 +1014,7 @@ function tr2PrintView() {
       <div class="sub">${escHtml(viewLabel)} · ${escHtml(retreatLabel)} · ${escHtml(rangeLabel)}</div>
     </div>
     <table>
-      <thead><tr><th>Habitación</th><th>Nombre</th><th>Tipo</th><th>Aeropuerto</th><th>Hora</th><th>Retiro</th><th>Notas</th><th>Costo</th></tr></thead>
+      <thead><tr><th>Habitación</th><th>Nombre</th><th>Tipo</th><th>Aeropuerto</th><th>Hora</th><th>Retiro</th><th>Costo</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
   </body></html>`);
