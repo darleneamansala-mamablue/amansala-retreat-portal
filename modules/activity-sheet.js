@@ -455,9 +455,9 @@ function actByRetreatPrint(bkId) {
   }).join('');
 
   const guestRowsArr = roster.map(g=>{
-    // Included activities are already part of everyone's package, so they're
-    // pre-marked — guests only need to mark the optional/paid columns.
-    const cells = entries.map(e=>`<td class="mark"><span class="box${e.prepaid?' checked':''}">${e.prepaid?'✓':''}</span></td>`).join('');
+    // Included activities are already part of everyone's package, but not every guest
+    // joins them (Darlene 2026-10-19), so the boxes are left blank for guests to mark.
+    const cells = entries.map(e=>`<td class="mark"><span class="box"></span></td>`).join('');
     const first=titleCase(g.first), last=titleCase(g.last);
     return `<tr><td class="name-cell">${first}${last?' '+last:''}</td>${cells}</tr>`;
   });
