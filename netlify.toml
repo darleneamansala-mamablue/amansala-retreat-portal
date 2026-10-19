@@ -23,6 +23,11 @@
   schedule = "0 15 * * *"
   timeout = 26
 
+# Spa: copies the whole appointment list every 2 hours (keeps 7 days) and notes any appointment that disappeared since the last copy.
+[functions."spa-appointments-backup"]
+  schedule = "0 */2 * * *"
+  timeout = 26
+
 [[headers]]
   for = "/*.html"
   [headers.values]
