@@ -198,6 +198,7 @@ function _openContractModalRender(bkId){
 // so later template changes still reach every section nobody customized. The
 // teacher portal renders the same generateContractHTML, so it shows the edits.
 const CONTRACT_EDIT_SECTIONS=[
+  {key:'inclusions',label:"What's Included"},
   {key:'paymentTerms',label:'Payment Terms'},
   {key:'cancellationPolicy',label:'Cancellation Policy'},
   {key:'teacherPolicy',label:'Teacher / Leader Complimentary Policy'},
@@ -206,7 +207,9 @@ const CONTRACT_EDIT_SECTIONS=[
   {key:'liabilityPolicy',label:'Liability & Governing Terms'},
 ];
 function contractTemplateSectionText(key,isLow,tmpl){
-  const raw=key==='teacherPolicy'?(isLow?tmpl.teacherPolicyLow:tmpl.teacherPolicyHigh):tmpl[key];
+  const raw=key==='teacherPolicy'?(isLow?tmpl.teacherPolicyLow:tmpl.teacherPolicyHigh)
+    :key==='inclusions'?(isLow?tmpl.lowInclusions:tmpl.highInclusions)
+    :tmpl[key];
   return applyTmplVars(raw,tmpl);
 }
 function contractSectionText(bk,key,isLow,tmpl){
@@ -391,8 +394,8 @@ function generateContractHTML(bk,isLow,signDate){
     t+='</table>';
     return t;
   }
-  const ratesHigh=buildRatesTable(contractRatesForBk(bk,'high',tmpl),'high')+`<p style="font-size:11px;color:#92400e;margin-top:6px">${tmpl.highInclusions}</p>`;
-  const ratesLow=buildRatesTable(contractRatesForBk(bk,'low',tmpl),'low')+`<p style="font-size:11.5px;color:#15803d;margin-top:8px;line-height:1.7">${tmpl.lowInclusions}</p>`;
+  const ratesHigh=buildRatesTable(contractRatesForBk(bk,'high',tmpl),'high')+`<p style="font-size:11px;color:#92400e;margin-top:6px">${contractSectionText(bk,'inclusions',false,tmpl)}</p>`;
+  const ratesLow=buildRatesTable(contractRatesForBk(bk,'low',tmpl),'low')+`<p style="font-size:11.5px;color:#15803d;margin-top:8px;line-height:1.7">${contractSectionText(bk,'inclusions',true,tmpl)}</p>`;
   return `<div style="max-width:720px;margin:0 auto">
     <div style="text-align:center;margin-bottom:24px">
       <img src="/logo-amansala.png" alt="Amansala" style="height:42px;margin-bottom:6px">
