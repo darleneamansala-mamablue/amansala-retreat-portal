@@ -4702,6 +4702,20 @@ async function syncToSupabase(){
       if(_staleOverwriteBks.length){
         console.warn('[sync guard] skipped overwriting',_staleOverwriteBks.length,'booking(s) with an older local copy:',_staleOverwriteBks);
         if(typeof showToast==='function')showToast('⚠ Un cambio no se guardó — esta pestaña tiene datos desactualizados. Recarga la página (Cmd+Shift+R) antes de seguir editando.');
+        // Self-heal (real incident 2026-10-19): without this, THIS tab's own in-memory
+        // copy of these bookings stays wrong forever -- and the very next unrelated save
+        // in this same tab (anywhere in the app) re-offers that same stale data as a
+        // candidate again, silently re-reverting someone else's fix on a booking this
+        // tab never even touched. Pulling the current real rows in for just these ids
+        // stops this tab from being a standing threat to overwrite them again.
+        try{
+          const{data:freshRows}=await db.from('bookings').select('*').in('id',_staleOverwriteBks);
+          (freshRows||[]).forEach(row=>{
+            const fresh=sqlBookingToApp(row);
+            const existing=AppData.bookings.find(b=>b.id===fresh.id);
+            if(existing)Object.assign(existing,fresh);
+          });
+        }catch(e){console.warn('[sync guard] could not self-heal stale bookings:',e);}
       }
 
       const _regCandidates=AppData.regs.filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId));
@@ -4725,6 +4739,16 @@ async function syncToSupabase(){
         // never reaching Supabase. Surface it instead of only logging it, or the person
         // finds out on their next reload with no idea why.
         if(typeof showToast==='function')showToast('⚠ Un cambio no se guardó — esta pestaña tiene datos desactualizados. Recarga la página (Cmd+Shift+R) antes de seguir editando.');
+        // Same self-heal as the bookings guard above -- pull the current real rows in
+        // for just these ids so this tab stops carrying (and re-asserting) stale data.
+        try{
+          const{data:freshRegs}=await db.from('registrations').select('*').in('id',_staleOverwriteRegs);
+          (freshRegs||[]).forEach(row=>{
+            const fresh=sqlRegToApp(row);
+            const existing=AppData.regs.find(r=>r.id===fresh.id);
+            if(existing)Object.assign(existing,fresh);
+          });
+        }catch(e){console.warn('[sync guard] could not self-heal stale registrations:',e);}
       }
 
       // payments is a separate table (booking_id FK) — flatten every booking's embedded
