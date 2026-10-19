@@ -336,12 +336,12 @@ function _resRoomSortKey(room){
   }
   return[9999,9999];
 }
-// Jorge's ask 2026-09-26: group multiple sources (retreats) together, room-
-// ordered within each group, instead of interleaving different retreats.
+// Jorge's ask 2026-10-19: sort purely by room (same order Rooms/the Room
+// Calendar uses), ignoring which retreat/source a guest belongs to -- this
+// replaces the earlier source-first grouping (2026-09-26) per his explicit
+// confirmation that room order should win outright now.
 function _resSortRows(rows){
   rows.sort((a,b)=>{
-    const sc=(a.source||'').localeCompare(b.source||'');
-    if(sc!==0)return sc;
     const ka=_resRoomSortKey(a.room),kb=_resRoomSortKey(b.room);
     return ka[0]!==kb[0]?ka[0]-kb[0]:ka[1]-kb[1];
   });
@@ -366,9 +366,58 @@ async function _resBuildInHotelView(){
       <span style="font-size:14px;font-weight:700;color:#1d4ed8">In House</span>
       <span style="background:#dbeafe;color:#1d4ed8;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px">${rows.length} guest${rows.length!==1?'s':''}</span>
       <span style="font-size:12px;color:var(--muted)">${fmtDate(d)}</span>
+      <button onclick="resPrintInHouse()" style="margin-left:auto;background:#f1f5f9;color:#374151;border:1.5px solid var(--border);padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">🖨 Print</button>
     </div>
     ${rows.length===0?_resEmptyState('🏨','No guests in hotel today'):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkout',cardCol:true,balanceCol:true})}
   </div>`;
+}
+// Jorge's ask 2026-10-19: a print sheet for In House with just the essentials
+// (room/name/dates/source) -- same new-window print-sheet pattern used
+// elsewhere (dietary-report.js, Transport's print) instead of printing the
+// full on-screen table (rate/balance/card-on-file/notes/action column).
+function resPrintInHouse(){
+  const d=_resAuditDate;
+  const rows=_resSortRows([
+    ..._resGroupRows().filter(r=>!r.cancelled&&r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&!r.checkedOutAt),
+    ..._resIndivRows().filter(r=>r.checkIn<=d&&r.checkOut>d&&r.checkedInAt&&r.status!=='checked_out'),
+  ]);
+  const rowsHtml=rows.length?rows.map(r=>`
+    <tr>
+      <td>${escHtml(r.room||'—')}</td>
+      <td>${escHtml(r.name||'')}</td>
+      <td>${fmtDate(r.checkIn)}</td>
+      <td>${fmtDate(r.checkOut)}</td>
+      <td>${escHtml(r.source||'')}</td>
+    </tr>`).join('') : `<tr><td colspan="5" class="none">No hay huéspedes en casa para esta fecha.</td></tr>`;
+
+  const win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <link rel="icon" type="image/png" href="/favicon.png"><title>In House · ${fmtDate(d)}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      body{font-family:'Jost',sans-serif;margin:0;padding:36px 40px;color:#1a2332;background:#fff;font-size:11pt}
+      .print-btn{padding:9px 20px;background:#2d6a6a;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;font-size:11pt;font-weight:600;float:right;margin-bottom:18px}
+      .hdr{margin-bottom:18px;clear:both}
+      .title{font-family:'Cormorant Garamond',serif;font-size:24pt;font-weight:700;color:#1a2332;margin-bottom:2px}
+      .sub{font-size:10.5pt;color:#6b7280}
+      table{width:100%;border-collapse:collapse;margin-top:10px}
+      th{text-align:left;padding:6px 8px;font-size:9pt;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;border-bottom:2px solid #e5e7eb}
+      td{padding:6px 8px;font-size:10.5pt;border-bottom:1px solid #f1f5f9;vertical-align:top}
+      .none{color:#9ca3af;font-style:italic;text-align:center;padding:30px 0}
+      @media print{.print-btn{display:none}}
+    </style></head><body>
+    <button class="print-btn" onclick="window.print()">Print</button>
+    <div class="hdr">
+      <div class="title">In House</div>
+      <div class="sub">${rows.length} guest${rows.length!==1?'s':''} · ${fmtDate(d)}</div>
+    </div>
+    <table>
+      <thead><tr><th>Room</th><th>Name</th><th>Check-in</th><th>Check-out</th><th>Source</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  </body></html>`);
+  win.document.close();
 }
 
 // ─── ARRIVALS / DEPARTURES ────────────────────────────────────
