@@ -360,10 +360,10 @@ function actByRetreatRender() {
     const renderCard = e=>{
       const border = e.prepaid?'#059669':'#3b82f6';
       const bg = e.prepaid?'#f0fdf4':'#eff6ff';
-      const priceTxt = e.prepaid?'Included':(e.ao.price?'$'+actMoney(e.ao.price)+'/person':'');
+      const priceTxt = e.prepaid?'✓ Included':(e.ao.price?'$'+actMoney(e.ao.price)+'/person':'');
       const signedCount = e.guests.filter(g=>g.signedUp).length;
       const guestList = e.guests.map((g,i)=>{
-        const box = e.prepaid ? '' : `<span style="display:inline-block;width:13px;height:13px;border:1.5px solid ${g.signedUp?'#059669':'#c8bfb5'};border-radius:3px;background:${g.signedUp?'#059669':'#fff'};margin-right:7px;vertical-align:middle;text-align:center;line-height:12px;font-size:10px;color:#fff">${g.signedUp?'✓':''}</span>`;
+        const box = e.prepaid ? `<span style="display:inline-block;width:13px;height:13px;border:1.5px solid #059669;border-radius:3px;background:#059669;margin-right:7px;vertical-align:middle;text-align:center;line-height:12px;font-size:10px;color:#fff">✓</span>` : `<span style="display:inline-block;width:13px;height:13px;border:1.5px solid ${g.signedUp?'#059669':'#c8bfb5'};border-radius:3px;background:${g.signedUp?'#059669':'#fff'};margin-right:7px;vertical-align:middle;text-align:center;line-height:12px;font-size:10px;color:#fff">${g.signedUp?'✓':''}</span>`;
         return `<div style="font-size:12.5px;color:var(--dark);padding:2px 0">${box}${g.last?g.last+', '+g.first:g.first}${g.room?` <span style="color:#9ca3af;font-size:11px">(Rm ${g.room})</span>`:''}</div>`;
       }).join('');
       return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden">
@@ -440,7 +440,7 @@ function actByRetreatPrint(bkId) {
   // everywhere else in the app) stay as-is in ADD_ONS.
   const ACT_SHEET_SHORT_NAMES = {ao4:'Sound Healing', ao9:'Mayan Clay'};
   const colHeaders = entries.map(e=>{
-    const priceTxt = e.prepaid ? 'Included' : (e.ao.price?'$'+actMoney(e.ao.price):'');
+    const priceTxt = e.prepaid ? '✓ Included' : (e.ao.price?'$'+actMoney(e.ao.price):'');
     const displayName = ACT_SHEET_SHORT_NAMES[e.ao.id] || e.ao.name;
     const nameTxt = e.prepaid ? displayName : `<span class="col-optional-tag">Optional</span>${displayName}`;
     const dur = (typeof ACTS_DUR!=='undefined'&&ACTS_DUR[e.ao.id])||90;
