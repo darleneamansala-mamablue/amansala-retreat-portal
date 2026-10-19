@@ -383,11 +383,11 @@ function resPrintInHouse(){
   ]);
   const rowsHtml=rows.length?rows.map(r=>`
     <tr>
-      <td>${escHtml(r.room||'—')}</td>
+      <td class="room-col">${escHtml(r.room||'—')}</td>
       <td>${escHtml(r.name||'')}</td>
+      <td>${escHtml(r.source||'')}</td>
       <td>${fmtDate(r.checkIn)}</td>
       <td>${fmtDate(r.checkOut)}</td>
-      <td>${escHtml(r.source||'')}</td>
     </tr>`).join('') : `<tr><td colspan="5" class="none">No hay huéspedes en casa para esta fecha.</td></tr>`;
 
   const win=window.open('','_blank');
@@ -401,9 +401,10 @@ function resPrintInHouse(){
       .hdr{margin-bottom:18px;clear:both}
       .title{font-family:'Cormorant Garamond',serif;font-size:24pt;font-weight:700;color:#1a2332;margin-bottom:2px}
       .sub{font-size:10.5pt;color:#6b7280}
-      table{width:100%;border-collapse:collapse;margin-top:10px}
+      table{width:100%;border-collapse:collapse;margin-top:10px;table-layout:fixed}
       th{text-align:left;padding:6px 8px;font-size:9pt;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;border-bottom:2px solid #e5e7eb}
-      td{padding:6px 8px;font-size:10.5pt;border-bottom:1px solid #f1f5f9;vertical-align:top}
+      td{padding:6px 8px;font-size:10.5pt;border-bottom:1px solid #f1f5f9;vertical-align:top;overflow-wrap:break-word}
+      th.room-col,td.room-col{width:70px}
       .none{color:#9ca3af;font-style:italic;text-align:center;padding:30px 0}
       @media print{.print-btn{display:none}}
     </style></head><body>
@@ -413,7 +414,7 @@ function resPrintInHouse(){
       <div class="sub">${rows.length} guest${rows.length!==1?'s':''} · ${fmtDate(d)}</div>
     </div>
     <table>
-      <thead><tr><th>Room</th><th>Name</th><th>Check-in</th><th>Check-out</th><th>Source</th></tr></thead>
+      <thead><tr><th class="room-col">Room</th><th>Name</th><th>Source</th><th>Check-in</th><th>Check-out</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
   </body></html>`);
