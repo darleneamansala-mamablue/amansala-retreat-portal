@@ -1482,6 +1482,17 @@ function tr2BuildView() {
     }
   }
 
+  // Jorge's report 2026-10-19: the "📍 TODAY" header above only ever renders while
+  // looping over normalEntries' own dates -- when today's ONLY entries are Own
+  // Transport/Missing ones (e.g. a lone Missing-Transport guest, no real submitted
+  // arrivals yet), that loop never runs at all and staff see the Missing Transport
+  // section with no date context whatsoever. Show the same header here too, once,
+  // whenever that's the case.
+  if (!normalEntries.some(e => e.date === today) && otEntries.some(e => e.date === today)) {
+    const label = `📍 TODAY — ${new Date(today + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`;
+    html += `<tr><td colspan="${totalCols}" style="padding:8px 12px;background:#ccfbf1;font-size:11px;font-weight:700;color:#0f766e;border-top:2px solid #e5e7eb"><button onclick="tr2JumpToday()" title="Ver solo hoy" style="background:#0f766e;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">${label}</button></td></tr>`;
+  }
+
   // Real OT (guest told us they're arranging their own transport) and synthetic
   // "Missing" (registered but never submitted anything) are both ot:true internally,
   // but they mean opposite things for staff — split them into their own headed
