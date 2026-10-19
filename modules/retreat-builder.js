@@ -128,6 +128,7 @@ function recoverBuildBookings(){
   builds.forEach(b=>{
     if(b.bkId&&b.startDate&&b.endDate&&!AppData.bookings.find(bk=>bk.id===b.bkId)&&!deletedBookingIds.has(b.bkId)){
       AppData.bookings.push({id:b.bkId,row:b.venRow||AppData.venRows[0]||'RETREAT 1',leaderName:b.leaderName,retreatName:b.retreatName,startDate:b.startDate,endDate:b.endDate,pax:b.estPax||10,status:'requested',notes:b.notes||'',roomAssignments:[],blockedRooms:[]});
+      logActivity('Booking recovered',`${b.leaderName||b.retreatName} · its booking record had gone missing, re-created from the Builder draft`,b.bkId);
       recovered=true;
     }
   });
@@ -381,6 +382,10 @@ function bldSaveSoftHold(){
   } else {
     const newBk={id:uid(),row:effectiveRow,leaderName:leader,leaderEmail,retreatName:name,startDate:start,endDate:end,pax:bldPaxN,status:'requested',notes:bldNotesVal,roomAssignments:[],blockedRooms:[]};
     AppData.bookings.push(newBk);bldCurBkId=newBk.id;
+    // Jorge's ask 2026-10-19: Retreat Builder never logged who created a new retreat --
+    // venSave() (Venues' own "+ New Booking" modal) already does this, the Builder wizard
+    // just never had it. logActivity() pulls the current staff session automatically.
+    logActivity('Booking created',`${leader||name} · ${fmtDate(start)} – ${fmtDate(end)} · ${effectiveRow}`,newBk.id);
     sendGroupConfirmationEmail(newBk);
   }
   const sel=bldGetSelected();
@@ -448,6 +453,9 @@ function bldNext1(){
   } else {
     const newBk={id:uid(),row:effectiveRow,leaderName:leader,leaderEmail,retreatName:name,startDate:start,endDate:end,pax:bldPaxN,status:'contract_sent',notes:bldNotesVal,roomAssignments:[],blockedRooms:[]};
     AppData.bookings.push(newBk);bldCurBkId=newBk.id;
+    // Same gap as bldSaveSoftHold() above -- this is the OTHER Retreat Builder entry
+    // point that creates a brand-new booking (Step 1 → 2), and it never logged it either.
+    logActivity('Booking created',`${leader||name} · ${fmtDate(start)} – ${fmtDate(end)} · ${effectiveRow}`,newBk.id);
     sendGroupConfirmationEmail(newBk);
   }
   // Save build
@@ -470,6 +478,7 @@ function bldStep2Build(){
     if(b){
       bk={id:bldCurBkId,row:b.venRow||AppData.venRows[0]||'RETREAT 1',leaderName:b.leaderName,retreatName:b.retreatName,startDate:b.startDate,endDate:b.endDate,pax:b.estPax||bldPaxN,status:'contract_sent',notes:b.notes||'',roomAssignments:[],blockedRooms:[]};
       AppData.bookings.push(bk);saveAll();
+      logActivity('Booking recovered',`${bk.leaderName||bk.retreatName} · its booking record had gone missing, re-created from the Builder draft`,bk.id);
     }
   }
   if(!bk)return;
