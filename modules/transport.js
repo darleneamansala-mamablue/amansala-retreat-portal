@@ -582,7 +582,17 @@ let tr2DragSrc       = null;
 let tr2UgCounter     = 0;
 let tr2UpgradeMode   = false;
 let tr2RoomNameToRtId = {};
+let tr2RoomNameToRtIdNorm = {};
 let tr2StaffList     = [];
+
+// Some stored room values don't match the canonical room-list casing/spacing exactly
+// (e.g. a guest's room saved as "2b" when the canonical list has "2B", or "Casita 4/1"
+// vs "Casita 4 / 1") -- Jorge's report 2026-10-19: the print's room-type sort scrambled
+// these entries because the exact-match lookup returned undefined for them. Normalize
+// (lowercase, strip whitespace) as a fallback so a stray case/spacing difference doesn't
+// silently break the room->room-type lookup anywhere it's used.
+const _tr2NormRoom = s => String(s || '').toLowerCase().replace(/\s+/g, '');
+const tr2LookupRtId = room => (room && (tr2RoomNameToRtId[room] || tr2RoomNameToRtIdNorm[_tr2NormRoom(room)])) || undefined;
 const tr2ConfirmedUpgrades = new Map();
 
 const TR2_UPGRADE_PATH = {
@@ -648,7 +658,7 @@ function tr2UpgradeCell(e) {
     </div>`;
   }
 
-  const rtId = tr2RoomNameToRtId[e.room];
+  const rtId = tr2LookupRtId(e.room);
   if (!rtId) return confirmedBadgeHtml || `<span style="color:#9ca3af;font-size:11px">Sin tipo</span>`;
   const bk = tr2ActiveBooks.find(b => b.id === e.retreatId);
   if (!bk) return confirmedBadgeHtml || `<span style="color:#9ca3af;font-size:11px">—</span>`;
@@ -728,14 +738,14 @@ function tr2UpgradeCell(e) {
 // only candidates in the SAME room type as this row's own room are ever offered.
 function tr2OptionsCell(e) {
   if (!e.room || !e.regId || e.type !== 'arrival') return `<span style="color:#9ca3af;font-size:11px">—</span>`;
-  const rtId = tr2RoomNameToRtId[e.room];
+  const rtId = tr2LookupRtId(e.room);
   if (!rtId) return `<span style="color:#9ca3af;font-size:11px">Sin tipo</span>`;
   const seen = new Set();
   const candidates = tr2AllEntries.filter(c =>
     c.type === 'arrival' && c.regId && c.regId !== e.regId && c.room &&
     c.date === e.date && !c.checkedIn &&
     c.room.toLowerCase() !== e.room.toLowerCase() &&
-    tr2RoomNameToRtId[c.room] === rtId
+    tr2LookupRtId(c.room) === rtId
   ).filter(c => { if (seen.has(c.regId)) return false; seen.add(c.regId); return true; });
 
   if (!candidates.length) return `<span style="color:#9ca3af;font-size:11px">Sin opciones</span>`;
@@ -961,7 +971,7 @@ function tr2PrintView() {
     return i === -1 ? 9999 : i;
   };
   const _printSortEntries = entries => entries.slice().sort((a, b) => {
-    const ra = tr2RoomNameToRtId[a.room], rb = tr2RoomNameToRtId[b.room];
+    const ra = tr2LookupRtId(a.room), rb = tr2LookupRtId(b.room);
     const na = _printNoUpgrade(ra), nb = _printNoUpgrade(rb);
     if (na !== nb) return na ? -1 : 1;
     const ro = _printRtOrder(ra) - _printRtOrder(rb);
@@ -1048,7 +1058,8 @@ async function tr2LoadData() {
 
   tr2StaffList = (staffData || []).filter(s => s.active);
   tr2RoomNameToRtId = {};
-  AppData.roomTypes.forEach(rt => { (rt.rooms || []).forEach(name => { tr2RoomNameToRtId[name] = rt.id; }); });
+  tr2RoomNameToRtIdNorm = {};
+  AppData.roomTypes.forEach(rt => { (rt.rooms || []).forEach(name => { tr2RoomNameToRtId[name] = rt.id; tr2RoomNameToRtIdNorm[_tr2NormRoom(name)] = rt.id; }); });
 
   tr2ActiveBooks = AppData.bookings.filter(b => b.status !== 'cancelled');
   // Individual (Booking Engine/Direct/OTA) reservations -- tr2AvailableRoomsOfType() needs
@@ -1755,7 +1766,7 @@ async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, 
   const reg = getRegForRoom(entry.retreatId, entry.room);
   if (!reg) { showToast('No se encontró el registro del huésped'); return; }
 
-  const lateral = toRtId === tr2RoomNameToRtId[entry.room];
+  const lateral = toRtId === tr2LookupRtId(entry.room);
   const bk = tr2ActiveBooks.find(b => b.id === entry.retreatId);
 
   const regUpdate = { room: newRoom, room_type_id: toRtId };
@@ -1770,7 +1781,7 @@ async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, 
   // custom rate was already set (that's the real negotiated group rate,
   // already frozen -- don't overwrite it with a computed one).
   if (!lateral && bk && reg.customRateOverride == null) {
-    const fromRtId = tr2RoomNameToRtId[entry.room];
+    const fromRtId = tr2LookupRtId(entry.room);
     const fromRt = fromRtId ? AppData.roomTypes.find(r => r.id === fromRtId) : null;
     if (fromRt) {
       const gc = (reg.guests || []).filter(g => g.name && !g.cancelled).length || 1;
