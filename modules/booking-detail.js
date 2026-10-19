@@ -1381,16 +1381,27 @@ async function bdSyncCloudbeds(){
     }
     if(!bk.cbReservationIds)bk.cbReservationIds={};
     bk.cbReservationIds[realRoom]=exactMatch.reservationID;
-    if(realRoom!==reg.room){
+    // Keep blocked_rooms in sync whenever Cloudbeds' real room differs from the
+    // portal's -- same bug/fix as bdSaveDetails's room-edit swap (real incident
+    // 2026-10-19: Heidi Calchera's room got updated here but blocked_rooms never
+    // got "20" added, so she vanished from Transport/everything that trusts it).
+    const oldRoom=reg.room;
+    if(realRoom!==oldRoom){
       reg.room=realRoom;
       const newRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(realRoom));
       if(newRt)reg.roomTypeId=newRt.id;
+      const blocked=bk.blockedRooms||[];
+      if(oldRoom&&blocked.some(r=>r.toLowerCase()===oldRoom.toLowerCase())){
+        bk.blockedRooms=blocked.map(r=>r.toLowerCase()===oldRoom.toLowerCase()?realRoom:r);
+      }else if(!blocked.some(r=>r.toLowerCase()===realRoom.toLowerCase())){
+        bk.blockedRooms=[...blocked,realRoom];
+      }
     }
     reg.checkIn=realCheckIn;reg.checkOut=realCheckOut;
     try{
       await Promise.all([
         db.from('registrations').update({room:reg.room,room_type_id:reg.roomTypeId,check_in:reg.checkIn,check_out:reg.checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id),
-        db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id),
+        db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds,blocked_rooms:bk.blockedRooms}).eq('id',bk.id),
       ]);
     }catch(e){bdStickyAlert('Error guardando el enlace: '+e.message,'error');return;}
     bdStickyAlert(`Vinculado con la reserva de Cloudbeds "${exactMatch.guestName}" en ${realRoom}${datesChanged?` (fechas ajustadas: ${fmtDate(realCheckIn)} — ${fmtDate(realCheckOut)})`:''} ✓`,'success');
