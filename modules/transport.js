@@ -950,12 +950,12 @@ function tr2PrintView() {
         <td>${e.cost != null ? `$${e.cost}` : ''}</td>
       </tr>`;
 
-  // Jorge's ask 2026-10-19: within a shared-ride group, put guests who have NO possible
-  // upgrade (already top-category, e.g. Beachfront King/bd1 -- same "N/A" rule
-  // tr2UpgradeCell uses, TR2_UPGRADE_PATH empty and not lateral-only) at the very top, so
-  // those can be checked in right away -- the rest follow sorted by their current room
-  // category (same order room types are defined in, matching Rooms/Rooms Calendar).
-  const _printNoUpgrade = rtId => !!rtId && (TR2_UPGRADE_PATH[rtId] || []).length === 0 && !TR2_LATERAL_ONLY.has(rtId);
+  // Jorge's ask 2026-10-19, then follow-up same day: pure category order within a shared-ride
+  // group (same order room types are defined in, matching Rooms/Rooms Calendar) -- an earlier
+  // version also put "no upgrade possible" guests (Beachfront King, but also Casa Grande/Casita 4,
+  // which don't participate in the upgrade system at all) at the very top, but that broke the
+  // category order visually (those room types aren't adjacent in ROOM_ORDER), so Jorge asked to
+  // drop that rule and sort purely by category.
   // AppData.roomTypes' own array order doesn't reliably match the canonical category
   // order (that's only true once loadFromSupabase()'s own re-sort has run) -- call
   // _roomSortKey() (modules/pricing.js's ROOM_ORDER, the same key Teachers/the Night
@@ -972,8 +972,6 @@ function tr2PrintView() {
   };
   const _printSortEntries = entries => entries.slice().sort((a, b) => {
     const ra = tr2LookupRtId(a.room), rb = tr2LookupRtId(b.room);
-    const na = _printNoUpgrade(ra), nb = _printNoUpgrade(rb);
-    if (na !== nb) return na ? -1 : 1;
     const ro = _printRtOrder(ra) - _printRtOrder(rb);
     if (ro !== 0) return ro;
     return _printRoomPos(ra, a.room) - _printRoomPos(rb, b.room);
