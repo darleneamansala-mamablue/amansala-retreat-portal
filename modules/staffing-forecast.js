@@ -13,9 +13,9 @@ const SF_DEFAULTS = {
   arrivalsBusy: 8, arrivalsVeryBusy: 15, checkoutsBusy: 10, checkoutsVeryBusy: 18,
   lateCutoffHour: 15, bellboyOverAfterCutoff: 12, receptionistOverPerHour: 4,
   offHoursBefore: 6, offHoursAfter: 21,
-  redWithinDays: 14, amberWithinDays: 30, horizonDays: 60,
+  redWithinDays: 14, amberWithinDays: 30, horizonDays: 60, roomsPerHousekeeper: 0,
 };
-const SF_NEEDS = { bellboy: 'Extra bellboy', receptionist: '2nd receptionist', checkout: 'Check-out help', offhours: 'Off-hours cover' };
+const SF_NEEDS = { bellboy: 'Extra bellboy', receptionist: '2nd receptionist', checkout: 'Check-out help', offhours: 'Off-hours cover', housekeeping: 'Housekeeping help' };
 let sfCfg = { ...SF_DEFAULTS }, sfCov = {}, sfLoaded = false, sfShowQuiet = false, sfHorizon = null, sfSettingsOpen = false;
 
 function sfEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
@@ -83,6 +83,31 @@ function sfDay(date, ix) {
   if (d.off.length) need('offhours', 'required', d.off.join(', '), 'arrival or pickup outside ' + sfHr(c.offHoursBefore) + ' – ' + sfHr(c.offHoursAfter));
   if (d.arrivals && d.checkouts >= c.checkoutsBusy) d.notes.push('Crossover: ' + d.checkouts + ' check-outs and ' + d.arrivals + ' arrivals');
   if (d.unknown) d.notes.push(d.unknown + ' arriving guest' + (d.unknown === 1 ? ' has' : 's have') + ' no flight time yet, so the hours above are incomplete');
+  // compare with the real schedules (modules/staff-schedules.js); a week nobody entered is flagged, never treated as zero staff
+  if (typeof ssWorkersOn === 'function') {
+    const sch = ssWorkersOn(date); d.sched = sch;
+    const rn = d.needs.find(n => n.key === 'receptionist');
+    if (rn) {
+      if (!sch.reception) rn.sched = 'front desk schedule for this week not entered';
+      else {
+        const fd = sch.reception.filter(w => w.working && w.tag !== 'RSV'), timed = fd.filter(w => w.start != null);
+        const hrs = hours.map((n, h) => (rn.level === 'required' ? n > c.receptionistOverPerHour : n > 0) ? h : -1).filter(h => h >= 0);
+        if (fd.length && fd.length > timed.length) rn.sched = 'front desk shift hours are not in the schedule (AM/PM only)';
+        else {
+          const short = hrs.filter(h => timed.filter(w => w.start <= h && h < w.end).length < 2);
+          if (!short.length) rn.auto = 'Covered by schedule: ' + timed.map(w => w.name).join(', ');
+          else rn.short = 'Only ' + Math.min(...short.map(h => timed.filter(w => w.start <= h && h < w.end).length)) + ' front desk on at ' + short.map(sfHr).join(', ') + (fd.length ? ' (on today: ' + timed.map(w => w.name + ' ' + sfHr(w.start) + '-' + sfHr(w.end)).join(', ') + ')' : ' (nobody on the front desk schedule)');
+        }
+      }
+    }
+    if (d.checkouts > 0) {
+      if (!sch.housekeeping) d.notes.push('Housekeeping schedule for this week not entered');
+      else {
+        const hk = sch.housekeeping.filter(w => w.working).length; d.hkRatio = hk ? Math.round((d.checkouts / hk) * 10) / 10 : null;
+        if (c.roomsPerHousekeeper > 0 && (!hk || d.checkouts / hk > c.roomsPerHousekeeper)) d.needs.push({ key: 'housekeeping', level: 'required', window: '', why: d.checkouts + ' check-outs, ' + hk + ' camarista' + (hk === 1 ? '' : 's') + ' working (' + (hk ? d.hkRatio : 'n/a') + ' each, limit ' + c.roomsPerHousekeeper + ')', short: hk + ' working' });
+      }
+    }
+  }
   d.level = lvl => (lvl === 'a' ? (d.arrivals >= c.arrivalsVeryBusy ? 2 : d.arrivals >= c.arrivalsBusy ? 1 : 0) : (d.checkouts >= c.checkoutsVeryBusy ? 2 : d.checkouts >= c.checkoutsBusy ? 1 : 0));
   return d;
 }
@@ -90,7 +115,7 @@ function sfCovered(date, key) { return ((sfCov[date] || {})[key] || '').trim(); 
 // every uncovered need ("required" ones are gaps; "consider" ones are shown but not counted)
 function sfGaps(daysAhead) {
   const ix = sfIndex(), today = sfISO(new Date()), out = [];
-  for (let i = 0; i <= daysAhead; i++) { const d = sfDay(sfAdd(today, i), ix); d.needs.filter(n => n.level === 'required' && !sfCovered(d.date, n.key)).forEach(n => out.push({ date: d.date, in: i, key: n.key, window: n.window })); }
+  for (let i = 0; i <= daysAhead; i++) { const d = sfDay(sfAdd(today, i), ix); d.needs.filter(n => n.level === 'required' && !n.auto && !sfCovered(d.date, n.key)).forEach(n => out.push({ date: d.date, in: i, key: n.key, window: n.window })); }
   return out;
 }
 
@@ -123,7 +148,7 @@ async function sfRender() {
       ${f('checkoutsBusy', 'Busy check-out day (guests)')}${f('checkoutsVeryBusy', 'Very busy check-out day (guests) = check-out help')}
       ${f('lateCutoffHour', 'Bellboy: afternoon starts at (24h)')}${f('bellboyOverAfterCutoff', 'Bellboy needed if MORE than this many arrive after that')}
       ${f('receptionistOverPerHour', '2nd receptionist if MORE than this many arrive in one hour')}${f('offHoursBefore', 'Off-hours: before (24h)')}${f('offHoursAfter', 'Off-hours: after (24h)')}
-      ${f('redWithinDays', 'Gap is RED within (days)')}${f('amberWithinDays', 'Gap is AMBER within (days)')}</div></div>`;
+      ${f('roomsPerHousekeeper', 'Housekeeping: most check-out rooms per camarista (0 = don\'t check)')}${f('redWithinDays', 'Gap is RED within (days)')}${f('amberWithinDays', 'Gap is AMBER within (days)')}</div></div>`;
   }
   const rows = days.filter(d => sfShowQuiet || d.needs.length || d.notes.length || d.arrivals || d.checkouts);
   if (!rows.length) html += '<div style="padding:40px;text-align:center;color:#9ca3af;background:#fff;border-radius:10px">Nothing is booked in this period.</div>';
@@ -133,18 +158,24 @@ async function sfRender() {
     const wd = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }), inDays = Math.round((new Date(d.date + 'T12:00:00') - new Date(today + 'T12:00:00')) / 86400000);
     const hrs = d.hours.map((n, h) => n ? `<span style="display:inline-block;margin:1px 3px 1px 0;padding:1px 7px;border-radius:6px;font-size:11.5px;font-weight:600;${n > c.receptionistOverPerHour ? 'background:#fed7aa;color:#9a3412' : 'background:#fef9c3;color:#854d0e'}">${sfHr(h)} · ${n}</span>` : '').join('') || '<span style="color:#9ca3af">—</span>';
     const needs = d.needs.map(n => {
-      const cov = sfCovered(d.date, n.key), gap = n.level === 'required' && !cov, col = gap ? (inDays <= c.redWithinDays ? '#b91c1c' : inDays <= c.amberWithinDays ? '#b45309' : '#6b7280') : '#166534';
+      const cov = sfCovered(d.date, n.key), gap = n.level === 'required' && !cov && !n.auto, col = gap ? (inDays <= c.redWithinDays ? '#b91c1c' : inDays <= c.amberWithinDays ? '#b45309' : '#6b7280') : '#166534';
       const opts = ['', ...sfStaffList(cov)].filter((v, i, a) => a.indexOf(v) === i);
       return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:3px 0"><b style="min-width:122px;color:${col}">${n.level === 'consider' ? '(maybe) ' : ''}${SF_NEEDS[n.key]}</b><span style="min-width:130px;font-size:12px;color:#6b7280">${sfEsc(n.window)}</span>
-        <select onchange="sfCover('${d.date}','${n.key}',this.value)" style="padding:4px 7px;border:1.5px solid ${gap ? col : '#d6cfc4'};border-radius:7px;font-size:12.5px;background:${gap ? '#fef2f2' : '#fff'}">${opts.map(o => `<option value="${sfEsc(o)}" ${o === cov ? 'selected' : ''}>${sfEsc(o || (n.level === 'required' ? '— nobody yet —' : '— not needed / nobody —'))}</option>`).join('')}</select>
-        <span style="font-size:11.5px;color:#9ca3af">${sfEsc(n.why)}</span></div>`;
+        ${n.auto ? `<span style="font-size:12.5px;font-weight:700;color:#166534">&#10003; ${sfEsc(n.auto)}</span>` : `<select onchange="sfCover('${d.date}','${n.key}',this.value)" style="padding:4px 7px;border:1.5px solid ${gap ? col : '#d6cfc4'};border-radius:7px;font-size:12.5px;background:${gap ? '#fef2f2' : '#fff'}">${opts.map(o => `<option value="${sfEsc(o)}" ${o === cov ? 'selected' : ''}>${sfEsc(o || (n.level === 'required' ? '— nobody yet —' : '— not needed / nobody —'))}</option>`).join('')}</select>`}
+        <span style="font-size:11.5px;color:#9ca3af">${sfEsc(n.why)}</span>${n.short ? `<div style="width:100%;font-size:12px;font-weight:700;color:${gap ? col : '#166534'}">${sfEsc(n.short)}${cov ? ' (covered by ' + sfEsc(cov) + ')' : ''}</div>` : ''}${n.sched ? `<div style="width:100%;font-size:11.5px;color:#b45309">&#9888; ${sfEsc(n.sched)}</div>` : ''}</div>`;
     }).join('');
     html += `<tr style="border-top:1px solid #f0ebe0;vertical-align:top"><td style="padding:8px;font-weight:700;white-space:nowrap">${sfEsc(wd)}<div style="font-size:11px;font-weight:500;color:#9ca3af">${inDays === 0 ? 'today' : 'in ' + inDays + ' days'}</div></td>
       <td style="padding:8px"><span style="padding:2px 9px;border-radius:99px;font-weight:700;${SF_LV[d.level('a')]}">${d.arrivals}</span></td><td style="padding:8px"><span style="padding:2px 9px;border-radius:99px;font-weight:700;${SF_CV[d.level('o')]}">${d.checkouts}</span>${d.firstPickup != null ? `<div style="font-size:11px;color:#6b7280">first pickup ${sfClock(d.firstPickup)}</div>` : ''}</td>
       <td style="padding:8px;min-width:200px">${hrs}${d.unknown ? `<div style="font-size:11.5px;color:#b45309;font-weight:600">+ ${d.unknown} time unknown</div>` : ''}</td>
-      <td style="padding:8px;min-width:420px">${needs || '<span style="color:#9ca3af">Normal day, no extra staff needed</span>'}${d.notes.map(x => `<div style="font-size:11.5px;color:#92400e;margin-top:2px">&#9888; ${sfEsc(x)}</div>`).join('')}</td></tr>`;
+      <td style="padding:8px;min-width:420px">${needs || '<span style="color:#9ca3af">Normal day, no extra staff needed</span>'}${d.notes.map(x => `<div style="font-size:11.5px;color:#92400e;margin-top:2px">&#9888; ${sfEsc(x)}</div>`).join('')}${sfOnShift(d)}</td></tr>`;
   });
   el.innerHTML = html + '</tbody></table></div><div style="font-size:11.5px;color:#9ca3af;margin-top:10px">Guest counts come from the room list. Arrival hours come from guests\' transport forms (flight landing time + transfer time). Nobody is counted as arriving at an hour unless they gave a flight time. Who is actually scheduled to work is not connected to the portal yet, so "covered" means someone was named here.</div>';
+}
+function sfOnShift(d) {
+  if (!d.sched) return '';
+  const L = { reception: 'Front desk', kitchen: 'Kitchen', waitstaff: 'Restaurant', housekeeping: 'Housekeeping', maintenance: 'Maintenance' }, parts = [];
+  Object.keys(L).forEach(k => { const w = d.sched[k]; if (w) parts.push(L[k] + ' ' + w.filter(x => x.working).length); });
+  return parts.length ? `<div style="font-size:11.5px;color:#6b7280;margin-top:4px">Working: ${parts.join(' · ')}${d.hkRatio != null ? ' · ' + d.hkRatio + ' check-outs per camarista' : ''}</div>` : '';
 }
 async function sfCover(date, key, name) {
   try { sfCov = await sfMutate(SF_COV_KEY, v => { v[date] = v[date] || {}; if (name) v[date][key] = name; else delete v[date][key]; return v; }); showToast(name ? name + ' covers ' + SF_NEEDS[key] + '.' : 'Cleared.'); }
