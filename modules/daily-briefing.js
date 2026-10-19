@@ -115,6 +115,7 @@ function dbBuildTasks(g) {
     add('driver:' + t.aoId, `Driver for ${t.name}`, t.driver ? { done: true, note: t.driver } : null);
   });
   g.special.forEach(s => add('special:' + s.id, `${s.who}: ${s.text}`));
+  (dbDay().carried || []).forEach(c => add(c.id, `Carried from ${c.from}: ${c.text}`));   // unfinished tasks a manager carried in from an earlier day (daily-reports.js)
   return T;
 }
 
@@ -257,9 +258,15 @@ async function dbRender() {
     if (!v) pend.push('Attendance: ' + d);
     return dbRow(`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b style="min-width:150px">${d}</b><input type="text" value="${dbEsc(v)}" placeholder="Who is working today" onchange="dbSet('attendance.${d.replace(/\s+/g, '_')}.present',this.value);dbRender()" style="padding:6px 10px;border:1.5px solid ${v ? '#d6cfc4' : '#fca5a5'};border-radius:7px;min-width:300px;flex:1">${v ? '' : PENDING}</div>`);
   }).join(''));
+  // 11. Staff hours (from the Team Pendings staff records; managers and admins only, nothing invented)
+  let hours = null;
+  if (typeof dbCanSeeHours === 'function' && dbCanSeeHours() && typeof shLoad === 'function') {
+    hours = await shLoad(dbDate);
+    html += dbCard('Staff hours <span style="font-weight:500;color:#6b7280">— scheduled and actual are shown separately</span>', shHtml(hours), hours.ok ? hours.rows.length + ' staff' : 'not connected');
+  }
   // summary strip on top
   const strip = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${[['Arrivals', g.arrivals.length, '#1d4ed8'], ['Departures', g.departures.length, '#475569'], ['Tours', g.tours.length, '#0d9488'], ['Open tasks', openTasks.length, openTasks.length ? '#b91c1c' : '#166534'], ['Pending confirmation', [...new Set(pend)].length, pend.length ? '#b45309' : '#166534']].map(([l, n, c]) => `<div style="background:#fff;border:1.5px solid ${c}55;border-radius:10px;padding:8px 16px;min-width:110px"><div style="font-size:22px;font-weight:700;color:${c}">${n}</div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b7280">${l}</div></div>`).join('')}</div>`;
-  dbCtx = { g, tasks, openTasks, pend: [...new Set(pend)], buckets, fmtLong };
+  dbCtx = { g, tasks, openTasks, pend: [...new Set(pend)], buckets, fmtLong, hours };
   el.innerHTML = `<div style="font-size:12px;color:#6b7280;margin:0 0 10px">${dbEsc(fmtLong)}. Pulled from the portal; classes, circles, tours and activities are the main scheduler's own list.</div>` + strip + html;
   const lab = document.getElementById('dbriefDate'); if (lab) lab.textContent = fmtLong;
 }
@@ -283,7 +290,9 @@ async function dbSaveReport() {
   sec('Classes', c.buckets.class); sec('Opening circles', c.buckets.circle); sec('Tours', c.buckets.tour); sec('Extra activities', c.buckets.extra);
   sec('Tasks', c.tasks.map(t => `[${(t.auto ? t.auto.done : dbGet('tasks.' + t.id + '.done')) ? 'x' : ' '}] ${t.text} — ${dbGet('tasks.' + t.id + '.assignee') || 'NOT ASSIGNED'}`));
   sec('Pending confirmation', c.pend);
-  dbReports[dbDate] = { savedAt: new Date().toISOString(), savedBy: dbWho(), text: lines.join('\n'), openTasks: c.openTasks.length, pending: c.pend.length, state: dbDay() };
+  if (c.hours) sec('Staff hours', typeof shLines === 'function' ? shLines(c.hours) : []);
+  const tasksOpen = c.openTasks.map(t => ({ text: t.text.replace(/^Carried from \d{4}-\d{2}-\d{2}: /, ''), assignee: dbGet('tasks.' + t.id + '.assignee') || '', from: (dbDay().carried || []).filter(x => x.id === t.id).map(x => x.from)[0] || dbDate }));
+  dbReports[dbDate] = { savedAt: new Date().toISOString(), savedBy: dbWho(), text: lines.join('\n'), openTasks: c.openTasks.length, pending: c.pend.length, tasksOpen, staffHours: c.hours ? { ok: c.hours.ok, rows: c.hours.rows, flags: c.hours.flags } : null, state: dbDay() };
   try { await db.from('app_store').upsert({ key: DB_REPORTS, value: dbReports, updated_at: new Date().toISOString() }); showToast('Report for ' + dbDate + ' saved.'); } catch (e) { showToast('Could not save the report.'); }
   dbRenderReports();
 }
