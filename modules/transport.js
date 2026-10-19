@@ -970,6 +970,16 @@ function tr2PrintView() {
     const i = rt ? (rt.rooms || []).indexOf(room) : -1;
     return i === -1 ? 9999 : i;
   };
+  // Jorge's ask 2026-10-19: Casa Grande (cg1-cg6) and Casita 4 (c4a-c4c) are each a single
+  // physical house split into several bookable room types -- no blank row needed BETWEEN
+  // their own sub-types, only when moving to a genuinely different house/category.
+  const _printSpacerGroup = rtId => {
+    if (!rtId) return rtId;
+    if (rtId.startsWith('cg')) return 'cg';
+    if (rtId.startsWith('c4')) return 'c4';
+    if (rtId.startsWith('csh')) return 'csh';
+    return rtId;
+  };
   const _printSortEntries = entries => entries.slice().sort((a, b) => {
     const ra = tr2LookupRtId(a.room), rb = tr2LookupRtId(b.room);
     const ro = _printRtOrder(ra) - _printRtOrder(rb);
@@ -996,7 +1006,7 @@ function tr2PrintView() {
       ${_printSortEntries(svc.entries).map((e, i, arr) => {
         // Jorge's ask 2026-10-19: a blank row between room categories within the same
         // shared-ride group, so the (now pure-category) order is easy to scan visually.
-        const sep = (i > 0 && tr2LookupRtId(e.room) !== tr2LookupRtId(arr[i - 1].room))
+        const sep = (i > 0 && _printSpacerGroup(tr2LookupRtId(e.room)) !== _printSpacerGroup(tr2LookupRtId(arr[i - 1].room)))
           ? `<tr class="cat-spacer"><td colspan="7"></td></tr>` : '';
         return sep + entryRow(e, svc.color);
       }).join('')}
