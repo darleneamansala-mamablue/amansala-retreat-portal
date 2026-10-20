@@ -2044,8 +2044,11 @@ function tr2DefaultPickup(d) {
 // else can still see it, just not edit it.
 const TR2_PICKUP_EDIT_STAFF = ['hilario', 'jorge'];
 function tr2CanEditPickup() {
-  const name = (typeof getCurrentSession === 'function' ? getCurrentSession()?.name : '') || '';
-  return TR2_PICKUP_EDIT_STAFF.includes(name.trim().toLowerCase());
+  // Substring match, not exact equality -- a staff account's display name can be
+  // "Jorge Canales"/"Jorge C." etc, not necessarily the bare first name (Jorge's
+  // report 2026-10-20: logged in as himself, field still showed locked).
+  const name = ((typeof getCurrentSession === 'function' ? getCurrentSession()?.name : '') || '').trim().toLowerCase();
+  return TR2_PICKUP_EDIT_STAFF.some(n => name.includes(n));
 }
 function tr2FmtTime(t) {
   if (!t) return '';
