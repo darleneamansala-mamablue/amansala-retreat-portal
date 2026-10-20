@@ -1404,20 +1404,32 @@ const TR2_PRINT_PASTEL = ['#dbeafe','#dcfce7','#ede9fe','#fef3c7','#fce7f3','#cc
 function tr2ToMins(t) { if (!t) return null; const [h,m] = t.split(':').map(Number); return h*60+(m||0); }
 function tr2AssignGroupColors(entries, palette = TR2_PASTEL) {
   const colorMap = new Map();
-  const clusters = [];
+  const clusters = []; // {key, idxs}
+  const sortTimeOf = e => tr2ToMins(e.type === 'departure' ? (e.pickup || e.time) : e.time);
   for (const e of entries) {
-    const sortTime = e.type === 'departure' ? (e.pickup || e.time) : e.time;
-    const mins = tr2ToMins(sortTime);
+    const mins = sortTimeOf(e);
     if (!e.date || mins === null) continue;
     const key = `${e.date}|${e.airport}|${e.type}`;
-    let joined = false;
-    for (const cl of clusters) {
-      if (cl.key !== key) continue;
-      if (cl.idxs.some(id => Math.abs(tr2ToMins(entries.find(x => x.rowId === id)?.[e.type === 'departure' ? 'pickup' : 'time'] || '') - mins) <= 20)) {
-        cl.idxs.push(e.rowId); joined = true; break;
-      }
+    // A guest can be within 20 min of members from MORE THAN ONE already-formed
+    // cluster at once (e.g. 8:30 and 8:44 are each already their own cluster;
+    // an 8:36 guest bridges both) -- collect EVERY matching cluster, not just
+    // the first, and merge them all into one. Jorge's report 2026-10-20: a
+    // transitively-chained group (8:30..9:15, each neighbor within 20 min but
+    // the far ends 45 min apart) was silently splitting into separate clusters
+    // depending on processing order, since the old version joined only the
+    // first match and never merged two clusters that both turned out to fit.
+    const matchIdxs = [];
+    clusters.forEach((cl, ci) => {
+      if (cl.key !== key) return;
+      if (cl.idxs.some(id => Math.abs(sortTimeOf(entries.find(x => x.rowId === id)) - mins) <= 20)) matchIdxs.push(ci);
+    });
+    if (!matchIdxs.length) { clusters.push({ key, idxs: [e.rowId] }); continue; }
+    const first = matchIdxs[0];
+    for (let i = matchIdxs.length - 1; i >= 1; i--) {
+      clusters[first].idxs.push(...clusters[matchIdxs[i]].idxs);
+      clusters.splice(matchIdxs[i], 1);
     }
-    if (!joined) clusters.push({ key, idxs: [e.rowId] });
+    clusters[first].idxs.push(e.rowId);
   }
   let ci = 0;
   clusters.forEach(cl => { const color = palette[ci++ % palette.length]; cl.idxs.forEach(id => colorMap.set(id, color)); });
@@ -1790,7 +1802,14 @@ async function tr2SplitEntry(dirId) {
     ? [...tr2GroupKeyMap.entries()].filter(([dk, gk]) => gk === oldGroupKey && dk !== dirId && dk.startsWith(direction + '|'))
         .filter(([dk]) => !!tr2RawRows[dk.split('|')[1]]?.data?.folioCharged?.[dirKey]).map(([dk]) => dk.split('|')[1])
     : [];
-  tr2UserGroupMap.delete(dirId);
+  // Jorge's report 2026-10-20: clicking "✕ Split" on a guest who was only ever
+  // in an AUTO-cluster (never dragged into a manual group) did nothing -- there
+  // was no tr2UserGroupMap entry for them to delete, so the exact same
+  // time-proximity auto-cluster just re-formed on the next render. A unique
+  // key nobody else will ever share forces this one row solo from now on,
+  // same as deleting does for an actual manual-group member.
+  if (tr2UserGroupMap.has(dirId)) tr2UserGroupMap.delete(dirId);
+  else tr2UserGroupMap.set(dirId, '__forced_solo__' + actualRowId);
   tr2BlendGroupPickups();
   tr2BuildView();
   await tr2SaveGroupSetting();

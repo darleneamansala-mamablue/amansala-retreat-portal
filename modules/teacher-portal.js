@@ -4559,20 +4559,42 @@ function _trAssignRideGroups(guests,type,allTr){
     // still respects willingToShare (Jorge's call 2026-09-21 — this kept needing a
     // one-off willingToShare data fix every time a retreat had someone who forgot
     // to check the box, so fixed the grouping logic itself instead).
-    let joined=false;
+    // A guest can be within 20 min of members from MORE THAN ONE already-formed
+    // group at once (e.g. 8:30 and 8:44 are each already their own group; an
+    // 8:36 guest bridges both) -- collect EVERY matching group, not just the
+    // first, and merge them all into one. Jorge's report 2026-10-20: a
+    // transitively-chained group (8:30..9:15, each neighbor within 20 min but
+    // the far ends 45 min apart) silently split depending on processing order,
+    // since the old version joined only the first match. Groups are never
+    // actually removed from the array (just drained to idxs:[]) so every
+    // existing groupOf[] index -- including ones already assigned above --
+    // keeps pointing at a stable slot.
+    const matchGis=[];
     for(let gi=0;gi<groups.length;gi++){
       const grp=groups[gi];
-      if(grp.userGroup||grp.ap!==e.ap||grp.date!==e.date)continue;
+      if(grp.userGroup||!grp.idxs.length||grp.ap!==e.ap||grp.date!==e.date)continue;
       // 20-minute window -- matches the admin Transport board and
       // driver-view.html exactly (Jorge's report 2026-10-06: Marcia's
       // Oct 18 retreat showed different ride groupings/pricing between
       // Teacher view and admin, because this window was still 30 here
       // despite the comment above already claiming parity with admin).
-      if(grp.idxs.some(mi=>Math.abs(info[mi].mins-e.mins)<=20)){
-        grp.idxs.push(e.idx);grp.minMins=Math.min(grp.minMins,e.mins);grp.minPickupMins=safeMin(grp.minPickupMins,e.pickupMins);groupOf[e.idx]=gi;joined=true;break;
-      }
+      if(grp.idxs.some(mi=>Math.abs(info[mi].mins-e.mins)<=20))matchGis.push(gi);
     }
-    if(!joined){groupOf[e.idx]=groups.length;groups.push({ap:e.ap,date:e.date,idxs:[e.idx],minMins:e.mins,minPickupMins:e.pickupMins});}
+    if(matchGis.length){
+      const first=matchGis[0];
+      for(let k=1;k<matchGis.length;k++){
+        const gi=matchGis[k];
+        groups[gi].idxs.forEach(mi=>{groupOf[mi]=first;});
+        groups[first].idxs.push(...groups[gi].idxs);
+        groups[first].minMins=Math.min(groups[first].minMins,groups[gi].minMins);
+        groups[first].minPickupMins=safeMin(groups[first].minPickupMins,groups[gi].minPickupMins);
+        groups[gi].idxs=[];
+      }
+      groups[first].idxs.push(e.idx);
+      groups[first].minMins=Math.min(groups[first].minMins,e.mins);
+      groups[first].minPickupMins=safeMin(groups[first].minPickupMins,e.pickupMins);
+      groupOf[e.idx]=first;
+    }else{groupOf[e.idx]=groups.length;groups.push({ap:e.ap,date:e.date,idxs:[e.idx],minMins:e.mins,minPickupMins:e.pickupMins});}
   }
   const PASTEL=['#eff6ff','#f0fdf4','#faf5ff','#fffbeb','#fdf2f8','#f0fdfa','#fff7ed','#f0f9ff'];
   let colorIdx=0;
