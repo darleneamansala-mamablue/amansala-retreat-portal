@@ -1645,28 +1645,25 @@ function tr2BuildView() {
   const filtered = tr2FilteredSorted();
 
   if (tr2ShowWeekSummary) {
-    let entries = filtered;
-    if (!tr2DateFrom && !tr2DateTo && !tr2ShowArchived) {
-      const end = new Date(todayStr + 'T00:00:00Z'); end.setUTCDate(end.getUTCDate() + 6);
-      const endStr = end.toISOString().slice(0, 10);
-      entries = tr2AllEntries.filter(e => {
-        if (tr2View === 'arrivals' && e.type !== 'arrival') return false;
-        if (tr2View === 'departures' && e.type !== 'departure') return false;
-        if (tr2RetreatFilter && e.retreatId !== tr2RetreatFilter) return false;
-        return e.date >= todayStr && e.date <= endStr;
-      });
-    }
+    // Always counts both arrivals and departures (ignores the Arrivals/Departures
+    // tab) and lists every day in the range, with 0 when nothing's scheduled.
+    // Missing range ends default to a 7-day window; capped at 62 days.
+    const addDays = (ds, n) => { const d = new Date(ds + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+    let from = tr2DateFrom, to = tr2DateTo;
+    if (!from && !to) { from = todayStr; to = addDays(todayStr, 6); }
+    else if (!to) to = addDays(from, 6);
+    else if (!from) from = addDays(to, -6);
+    if (to < from) [from, to] = [to, from];
+    if (to > addDays(from, 61)) to = addDays(from, 61);
     const byDay = new Map();
-    entries.filter(e => !e.isSynthetic && e.date).forEach(e => {
-      if (!byDay.has(e.date)) byDay.set(e.date, { arrivals: 0, departures: 0 });
+    for (let ds = from; ds <= to; ds = addDays(ds, 1)) byDay.set(ds, { arrivals: 0, departures: 0 });
+    tr2AllEntries.forEach(e => {
+      if (e.isSynthetic || !byDay.has(e.date)) return;
+      if (tr2RetreatFilter && e.retreatId !== tr2RetreatFilter) return;
       const d = byDay.get(e.date);
       if (e.type === 'arrival') d.arrivals++; else d.departures++;
     });
-    const days = [...byDay.keys()].sort();
-    if (!days.length) {
-      body.innerHTML = `<div style="padding:60px 20px;text-align:center;color:#9ca3af">No hay entradas en este rango.</div>`;
-      return;
-    }
+    const days = [...byDay.keys()];
     const th = 'padding:7px 14px;font-size:10.5px;font-weight:700;text-transform:uppercase;color:#6b7280;text-align:left;border-bottom:2px solid #e5e7eb';
     const rows = days.map(dateStr => {
       const d = byDay.get(dateStr);
