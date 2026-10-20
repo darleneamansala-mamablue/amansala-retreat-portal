@@ -4900,7 +4900,13 @@ function appRegToSqlRow(r){const row={};_REG_COLUMNS.forEach(col=>{const field=_
 // the app's booking objects embed it as bk.payments, so attach/flatten it at the boundary.
 const _PAYMENT_COL_TO_FIELD={created_at:'ts'};
 const _PAYMENT_FIELD_TO_COL={ts:'created_at'};
-const _PAYMENT_COLUMNS=['id','booking_id','amount','date','method','ref','note'];
+// staff_name was never in this list despite modules/payments.js setting
+// p.staffName on every push() (Jorge's ask 2026-09-29, same as folio_items) --
+// it silently never made it to Supabase, so every payment came back
+// "Unattributed" in Daily Report after a reload no matter who recorded it.
+// Requires a one-time SQL (Jorge runs by hand, see reports.js comment):
+//   ALTER TABLE payments ADD COLUMN IF NOT EXISTS staff_name text;
+const _PAYMENT_COLUMNS=['id','booking_id','amount','date','method','ref','note','staff_name'];
 function sqlPaymentToApp(row){const p={};for(const col in row) p[_PAYMENT_COL_TO_FIELD[col]||_s2c(col)]=row[col];return p;}
 function appPaymentToSqlRow(p,bookingId){const row={};_PAYMENT_COLUMNS.forEach(col=>{if(col==='booking_id'){row.booking_id=bookingId;return;}const field=_PAYMENT_FIELD_TO_COL[col]||_s2c(col);row[col]=p[field]!==undefined?p[field]:null;});return row;}
 // room_types: the price columns don't follow the plain snake_case->camelCase pattern
@@ -6486,7 +6492,7 @@ function switchTab(id,btn){
 <script src="modules/admin-items.js"></script>
 <script src="modules/commissions.js?v=20261003a"></script>
 <script src="modules/contract-library.js?v=20261009a"></script>
-<script src="modules/reports.js?v=20261020c"></script>
+<script src="modules/reports.js?v=20261020d"></script>
 <script src="modules/admin-bot-log.js"></script>
 <script src="modules/teacher-portal.js?v=20261020f"></script>
 <script src="modules/dietary-report.js"></script>
