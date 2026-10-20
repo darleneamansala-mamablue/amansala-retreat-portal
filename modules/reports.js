@@ -469,7 +469,7 @@ function _rptCard(label,value,bg,color,sub){
   return`<div style="background:${bg};border-radius:12px;padding:16px 20px;border:1px solid var(--border)">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:6px">${label}</div>
     <div style="font-size:22px;font-weight:800;color:${color}">${value}</div>
-    ${sub?`<div style="font-size:10.5px;color:#9ca3af;margin-top:4px">${sub}</div>`:''}
+    ${sub?`<div style="font-size:13px;font-weight:700;color:#6b7280;margin-top:5px">${sub}</div>`:''}
   </div>`;
 }
 
@@ -738,7 +738,7 @@ function _rptRenderDailyView(){
             <div>
               <div style="font-size:12px;font-weight:600;color:#374151">${escHtml(u)}</div>
               <div style="font-size:15px;font-weight:800;color:#15803d">${fmt$(amt)}</div>
-              <div style="font-size:10.5px;color:#9ca3af;margin-top:2px">${Object.entries(byUserMethod[u]||{}).sort((a,b)=>b[1]-a[1]).map(([m,a])=>`${escHtml(m)} ${fmt$(a)}`).join(' · ')}</div>
+              <div style="font-size:13px;font-weight:700;color:#6b7280;margin-top:3px">${Object.entries(byUserMethod[u]||{}).sort((a,b)=>b[1]-a[1]).map(([m,a])=>`${escHtml(m)} ${fmt$(a)}`).join(' · ')}</div>
             </div>
           </div>`).join('')}
       </div>
