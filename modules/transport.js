@@ -951,22 +951,28 @@ function tr2PrintView() {
   else rangeLabel = `Hoy — ${fmtDate(todayStr)}`;
   const retreatLabel = tr2RetreatFilter ? (tr2RetreatIdToLabel[tr2RetreatFilter] || '') : 'Todos los retiros';
   const viewLabel = tr2View === 'arrivals' ? 'Llegadas' : tr2View === 'departures' ? 'Salidas' : 'Llegadas y Salidas';
+  // Jorge's ask 2026-10-20: the Tipo column ("Salida"/"Llegada" on every single
+  // row) is only useful when the print mixes both -- printing just one of them
+  // already says so in the page subtitle, so it's dead weight. Costo comes off
+  // entirely, same ask. Column count (used for every colspan below) follows.
+  const showTypeCol = tr2View === 'all';
+  const printCols = showTypeCol ? 7 : 6;
 
   const groups = new Map();
   filtered.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
 
   // Jorge's ask 2026-10-20: Pick-up and Flight time are their own columns now,
-  // not crammed into one "08:30 → 12:15" cell.
+  // not crammed into one "08:30 → 12:15" cell. Tipo only shows up when the
+  // print mixes arrivals and departures; Costo is gone entirely.
   const entryRow = (e, color) => `
       <tr${color ? ` style="background:${color}"` : ''}>
         <td>${escHtml(e.room || '—')}</td>
         <td>${escHtml(e.guest || '')}</td>
-        <td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>
+        ${showTypeCol ? `<td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>` : ''}
         <td>${escHtml(e.airport === 'cancun' ? 'CUN' : e.airport === 'tulum' ? 'TQO' : (e.airport || ''))}</td>
         <td>${escHtml(e.type === 'departure' ? ((e.groupPickup || e.pickup) || '—') : '—')}</td>
         <td>${escHtml(e.time || '')}</td>
         <td>${escHtml(e.retreatLabel || '')}</td>
-        <td>${e.cost != null ? `$${e.cost}` : ''}</td>
       </tr>`;
 
   // Jorge's ask 2026-10-19, then follow-up same day: pure category order within a shared-ride
@@ -1021,25 +1027,29 @@ function tr2PrintView() {
       // the first entry is enough.
       const isDep = svc.entries[0]?.type === 'departure';
       const rows = isDep ? _printSortEntries(svc.entries) : svc.entries;
+      // Jorge's ask 2026-10-20: a solo rider never got this header at all before
+      // (only groups of 2+ did), so they silently looked like they belonged to
+      // whichever group happened to print right above them. Every group now
+      // gets one, including "1 pax".
       return `
-      ${svc.entries.length > 1 ? `<tr class="ride" style="background:${svc.color || '#f9fafb'}"><td colspan="8">${svc.entries.length} pax comparten este viaje</td></tr>` : ''}
+      <tr class="ride" style="background:${svc.color || '#f9fafb'}"><td colspan="${printCols}">${svc.entries.length > 1 ? `${svc.entries.length} pax comparten este viaje` : '1 pax en este viaje'}</td></tr>
       ${rows.map((e, i, arr) => {
         // Jorge's ask 2026-10-19: a blank row between room categories within the same
         // shared-ride group, so the (now pure-category) order is easy to scan visually.
         const sep = (isDep && i > 0 && _printSpacerGroup(tr2LookupRtId(e.room)) !== _printSpacerGroup(tr2LookupRtId(arr[i - 1].room)))
-          ? `<tr class="cat-spacer"><td colspan="8"></td></tr>` : '';
+          ? `<tr class="cat-spacer"><td colspan="${printCols}"></td></tr>` : '';
         return sep + entryRow(e, svc.color);
       }).join('')}
-      <tr class="ride-end"><td colspan="8"></td></tr>
+      <tr class="ride-end"><td colspan="${printCols}"></td></tr>
     `;
     }).join('');
   };
 
   const rowsHtml = filtered.length ? [...groups.entries()].map(([date, items], gi) => `
-    ${gi > 0 ? `<tr class="spacer"><td colspan="8"></td></tr>` : ''}
-    <tr class="grp"><td colspan="8">${date === todayStr ? '📍 HOY — ' : ''}${fmtDate(date)}</td></tr>
+    ${gi > 0 ? `<tr class="spacer"><td colspan="${printCols}"></td></tr>` : ''}
+    <tr class="grp"><td colspan="${printCols}">${date === todayStr ? '📍 HOY — ' : ''}${fmtDate(date)}</td></tr>
     ${rideGroupsHtml(items)}
-  `).join('') : `<tr><td colspan="8" class="none">No hay entradas para estos filtros.</td></tr>`;
+  `).join('') : `<tr><td colspan="${printCols}" class="none">No hay entradas para estos filtros.</td></tr>`;
 
   const win = window.open('', '_blank');
   win.document.write(`<!DOCTYPE html><html><head>
@@ -1075,7 +1085,7 @@ function tr2PrintView() {
       <div class="sub">${escHtml(viewLabel)} · ${escHtml(retreatLabel)} · ${escHtml(rangeLabel)}</div>
     </div>
     <table>
-      <thead><tr><th>Habitación</th><th>Nombre</th><th>Tipo</th><th>Aeropuerto</th><th>Pick-up</th><th>Hora Vuelo</th><th>Retiro</th><th>Costo</th></tr></thead>
+      <thead><tr><th>Habitación</th><th>Nombre</th>${showTypeCol ? '<th>Tipo</th>' : ''}<th>Aeropuerto</th><th>Pick-up</th><th>Hora Vuelo</th><th>Retiro</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
   </body></html>`);
