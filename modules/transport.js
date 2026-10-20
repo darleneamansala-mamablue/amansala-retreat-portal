@@ -1176,11 +1176,35 @@ async function tr2LoadData() {
   }
 
   const normDate = s => { if (!s) return ''; const p = String(s).trim().split('-'); return p.length === 3 ? `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}` : String(s).trim(); };
+  // Jorge's report 2026-10-20 (Jennifer Marvel): her real submission (room 23,
+  // flight Delta 1773, needs a real transfer) kept losing to a placeholder
+  // stub row (no room, no airport, both directions marked Own Transport, a
+  // generic "AA1234" flight) because the two scored EXACTLY equal on the old
+  // signals (both happened to have every date field + a flight number filled
+  // in) and the tie-break was a meaningless raw string compare of `id` --
+  // whichever id string happened to sort higher won, with no relation to
+  // which row was actually real. Added two more completeness signals (a real
+  // room assignment; NOT being Own-Transport in both directions at once,
+  // which is the exact shape of an empty placeholder) and replaced the id
+  // tie-break with `submitted_at` (the real row is always a genuine, timestamped
+  // submission -- newest wins, same idea as pickBetter already favoring "more
+  // complete").
   const pickBetter = (cur, row) => {
-    const score = r => { const d = r.data || {}; return (d.arrivalDate?2:0)+(d.flightNumber?1:0)+(d.departureDate?1:0)+(r.booking_id?1:0); };
-    if (score(row) > score(cur)) return row;
-    if (score(row) === score(cur) && String(row.id) > String(cur.id)) return row;
-    return cur;
+    const score = r => {
+      const d = r.data || {};
+      let s = (d.arrivalDate?2:0)+(d.flightNumber?1:0)+(d.departureDate?1:0)+(r.booking_id?1:0);
+      if (d.roomOverride) s += 2;
+      if (d.arrivalAirport) s += 1;
+      if (d.departureAirport) s += 1;
+      if (!(d.arrivalOT && d.departureOT)) s += 2;
+      return s;
+    };
+    const sRow = score(row), sCur = score(cur);
+    if (sRow > sCur) return row;
+    if (sRow < sCur) return cur;
+    const aRow = row.submitted_at || '', aCur = cur.submitted_at || '';
+    if (aRow && aCur) return aRow > aCur ? row : cur;
+    return String(row.id) > String(cur.id) ? row : cur;
   };
   // Same real person can submit the form more than once with a one-letter name typo/variant
   // (confirmed live 2026-10-18: "Elliot"/"Elliott"/"Elli" Free, all the same
@@ -1196,6 +1220,55 @@ async function tr2LoadData() {
   // row in a cluster to the cluster's best-scoring spelling, so the dedup below (keyed on exact
   // name match) naturally collapses them into one.
   const normalizedRows = (() => {
+    const renameMap = new Map(); // row.id -> {firstName, lastName}
+    const fuzzyPart = (a, b) => a === b || tr2Levenshtein(a, b) <= 1 || (a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a)));
+    // Clusters rows within one `groups` Map (groupKey -> rows) using the fuzzy
+    // first/last name rule, writing any merges into the shared renameMap.
+    // Called once scoped by email, once scoped by booking_id (see below) --
+    // Jorge's report 2026-10-20: "Kat Warner" / "Kat Wawner" (one letter off
+    // in the LAST name) never merged under the email-only pass because they'd
+    // submitted with two genuinely different email addresses; booking_id
+    // catches that case (two real, different-email submissions for the same
+    // guest on the SAME retreat) without the risk email-only scoping avoided
+    // in the first place (two unrelated people merging across DIFFERENT
+    // retreats) -- booking_id already rules that out structurally.
+    const clusterAndRename = groups => {
+      groups.forEach(group => {
+        if (group.length < 2) return;
+        const clusters = [];
+        group.forEach(row => {
+          const d = row.data || {};
+          const fn = (d.firstName || '').trim().toLowerCase();
+          const ln = (d.lastName || '').trim().toLowerCase();
+          if (!fn && !ln) return;
+          const target = clusters.find(c => fuzzyPart(c.fn, fn) && fuzzyPart(c.ln, ln));
+          if (target) target.rows.push(row); else clusters.push({ fn, ln, rows: [row] });
+        });
+        clusters.forEach(c => {
+          if (c.rows.length < 2) return;
+          // Prefer whichever variant's EXACT spelling matches a real registration's guest name
+          // (keeps the existing exact-name room lookup below working) over just the most
+          // "complete" submission -- confirmed live 2026-10-18: normalizing Elli/Elliot/Elliott
+          // Free to "Elliott" (the most complete submission) broke the exact-name room match
+          // "Elli Free" (the REAL registration spelling) used to provide, leaving the merged row
+          // with no room at all.
+          const registryMatch = c.rows.find(row => {
+            const d = row.data || {};
+            const bk = row.booking_id || d.bookingId || '';
+            const full = `${(d.firstName || '').trim()} ${(d.lastName || '').trim()}`.trim().toLowerCase();
+            return bk && full && roomLookup[`${bk}|${full}`] !== undefined;
+          });
+          const best = registryMatch || c.rows.reduce((a, b) => pickBetter(a, b));
+          const bd = best.data || {};
+          c.rows.forEach(row => { if (row.id !== best.id) renameMap.set(row.id, { firstName: bd.firstName, lastName: bd.lastName }); });
+        });
+      });
+    };
+    // Same real person can submit the form more than once with a one-letter name typo/variant
+    // (confirmed live 2026-10-18: "Elliot"/"Elliott"/"Elli" Free, all the same
+    // freeelliott0@gmail.com, showed up as 2-3 separate "Sin retiro asignado" duplicates) --
+    // scoped strictly to an EXACT matching email, never guessing across different emails (two
+    // real people can easily share a similar-sounding name across different households).
     const byEmail = new Map();
     (rows || []).forEach(row => {
       const em = ((row.data || {}).email || '').toLowerCase().trim();
@@ -1203,41 +1276,15 @@ async function tr2LoadData() {
       if (!byEmail.has(em)) byEmail.set(em, []);
       byEmail.get(em).push(row);
     });
-    const renameMap = new Map(); // row.id -> {firstName, lastName}
-    byEmail.forEach(group => {
-      if (group.length < 2) return;
-      const clusters = [];
-      group.forEach(row => {
-        const d = row.data || {};
-        const fn = (d.firstName || '').trim().toLowerCase();
-        const ln = (d.lastName || '').trim().toLowerCase();
-        if (!fn && !ln) return;
-        const target = clusters.find(c => {
-          if (c.ln !== ln) return false;
-          if (tr2Levenshtein(c.fn, fn) <= 1) return true;
-          return fn.length >= 3 && c.fn.length >= 3 && (fn.startsWith(c.fn) || c.fn.startsWith(fn));
-        });
-        if (target) target.rows.push(row); else clusters.push({ fn, ln, rows: [row] });
-      });
-      clusters.forEach(c => {
-        if (c.rows.length < 2) return;
-        // Prefer whichever variant's EXACT spelling matches a real registration's guest name
-        // (keeps the existing exact-name room lookup below working) over just the most
-        // "complete" submission -- confirmed live 2026-10-18: normalizing Elli/Elliot/Elliott
-        // Free to "Elliott" (the most complete submission) broke the exact-name room match
-        // "Elli Free" (the REAL registration spelling) used to provide, leaving the merged row
-        // with no room at all.
-        const registryMatch = c.rows.find(row => {
-          const d = row.data || {};
-          const bk = row.booking_id || d.bookingId || '';
-          const full = `${(d.firstName || '').trim()} ${(d.lastName || '').trim()}`.trim().toLowerCase();
-          return bk && full && roomLookup[`${bk}|${full}`] !== undefined;
-        });
-        const best = registryMatch || c.rows.reduce((a, b) => pickBetter(a, b));
-        const bd = best.data || {};
-        c.rows.forEach(row => { if (row.id !== best.id) renameMap.set(row.id, { firstName: bd.firstName, lastName: bd.lastName }); });
-      });
+    clusterAndRename(byEmail);
+    const byBooking = new Map();
+    (rows || []).forEach(row => {
+      const bk = row.booking_id || (row.data || {}).bookingId || '';
+      if (!bk) return;
+      if (!byBooking.has(bk)) byBooking.set(bk, []);
+      byBooking.get(bk).push(row);
     });
+    clusterAndRename(byBooking);
     if (!renameMap.size) return rows;
     return (rows || []).map(row => {
       const rn = renameMap.get(row.id);
