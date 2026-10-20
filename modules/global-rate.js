@@ -128,14 +128,19 @@ function grSave(){
     regs.forEach(r=>{
       const gc=Math.max(1,(r.guests||[]).filter(g=>g.name).length);
       const rate=grRateFor(bk,r.roomTypeId,gc);
-      if(rate!=null)r.customRateOverride=rate;else unpriced++;
+      if(rate!=null){r.customRateOverride=rate;r.updatedAt=new Date().toISOString();}else unpriced++;
     });
+    // syncToSupabase()'s staleness guard checks each mutated reg's OWN updatedAt (bumped
+    // above) and bk's own updatedAt for packageCustomPrices -- neither was bumped here
+    // before (2026-10-20 audit), so this toggle could silently fail to upload and revert.
+    bk.updatedAt=new Date().toISOString();
     saveAll();try{regRender();}catch(e){}
     showToast(unpriced?`Package applied ✓ — ${unpriced} room${unpriced===1?'':'s'} have no package price (room type left blank)`:'Package pricing applied ✓');
   }else{
     if(!confirm('Turn off the special package pricing? Rooms go back to their regular rates, and tax and tip are charged again.'))return;
-    if(was)regs.forEach(r=>{const gc=Math.max(1,(r.guests||[]).filter(g=>g.name).length);if(r.customRateOverride!=null&&Math.abs(Number(r.customRateOverride)-(grRateFor(bk,r.roomTypeId,gc)||-1))<0.01)r.customRateOverride=null;});
+    if(was)regs.forEach(r=>{const gc=Math.max(1,(r.guests||[]).filter(g=>g.name).length);if(r.customRateOverride!=null&&Math.abs(Number(r.customRateOverride)-(grRateFor(bk,r.roomTypeId,gc)||-1))<0.01){r.customRateOverride=null;r.updatedAt=new Date().toISOString();}});
     bk.packageCustomPrices.__cfg__={...(bk.packageCustomPrices.__cfg__||{}),globalRate:{...cfgIn,on:false}};
+    bk.updatedAt=new Date().toISOString();
     saveAll();try{regRender();}catch(e){}
     showToast('Package pricing turned off');
   }

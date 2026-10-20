@@ -225,8 +225,12 @@ function regSetRoomTypeOverride(room,newRtId){
   // alone on purpose). Only clear it when the effective type is actually changing.
   if(newRtId!==prevEffRtId){
     const reg=getRegForRoom(regSelBk.id,room);
-    if(reg)reg.customRateOverride=null;
+    if(reg){reg.customRateOverride=null;reg.updatedAt=new Date().toISOString();}
   }
+  // syncToSupabase()'s staleness guard checks regSelBk's OWN updatedAt for the
+  // packageCustomPrices change above (2026-10-20 audit) -- without this the
+  // reclassification could silently fail to upload and revert on next load.
+  regSelBk.updatedAt=new Date().toISOString();
   saveAll();regRender();
   showToast('Reclassified for this retreat only.');
 }
@@ -252,6 +256,8 @@ function regSetRetreatColor(idx){
   if(!regSelBk.packageCustomPrices.__cfg__)regSelBk.packageCustomPrices.__cfg__={};
   if(idx==null)delete regSelBk.packageCustomPrices.__cfg__.colorIdx;
   else regSelBk.packageCustomPrices.__cfg__.colorIdx=idx;
+  // Same staleness-guard bump the other packageCustomPrices setters need (2026-10-20 audit).
+  regSelBk.updatedAt=new Date().toISOString();
   saveAll();_regRenderColorPicker();
   showToast(idx==null?'Color reset to automatic.':'Retreat color updated.');
 }

@@ -772,8 +772,11 @@ function upgradeTeacherRoom(bkId,newRoom){
   if(!roomListIncludes(bk.blockedRooms,newRoom))bk.blockedRooms.push(newRoom);
   // blockedRoomsUpdatedAt alone isn't what syncToSupabase()'s staleness guard checks --
   // see the same real incident/fix in rcMoveRoom/regMoveGuest (modules/venues.js,
-  // teacher-portal.js) and room-optimizer.js's ozApplyPortalMove.
+  // teacher-portal.js) and room-optimizer.js's ozApplyPortalMove. teacherReg.updatedAt
+  // needs the same bump (2026-10-20 audit) -- the guard checks each mutated object's
+  // OWN updatedAt, and bk.updatedAt alone doesn't cover this reg's room/price/notes change.
   bk.blockedRoomsUpdatedAt=bk.updatedAt=new Date().toISOString();
+  teacherReg.updatedAt=new Date().toISOString();
   saveAll();buildDashboard();regRender();
   logActivity('Teacher room upgraded',`${bk.leaderName||bk.retreatName} — ${oldRoom} → ${newRoom} (Garden King)`,bkId);
   showToast(`Teacher moved to ${newRoom} (Garden King)`);
