@@ -578,20 +578,36 @@ function buildPickupGroups(entries) {
     const ugKey = _userGroupMap.get(`${e.type}|${e.rowId}`);
     if (ugKey) {
       if (ugAssigned.has(ugKey)) {
-        groups[ugAssigned.get(ugKey)].members.push(e);
+        ugAssigned.get(ugKey).members.push(e);
       } else {
-        ugAssigned.set(ugKey, groups.length);
-        groups.push({ pickup: t, airport: e.airport, members: [e], userGroup: true });
+        // Keyed by the group OBJECT itself, not its array index -- the
+        // auto-cluster merge below can splice entries out of `groups`,
+        // which would silently shift a stale index out from under this map.
+        const grp = { pickup: t, airport: e.airport, members: [e], userGroup: true };
+        ugAssigned.set(ugKey, grp);
+        groups.push(grp);
       }
       continue;
     }
-    let joined = false;
-    for (const g of groups) {
-      if (g.userGroup) continue;
-      if (g.airport !== e.airport) continue;
-      if (Math.abs(toMins(g.pickup) - toMins(t)) <= 20) { g.members.push(e); joined = true; break; }
+    // A guest can be within 20 min of members from MORE THAN ONE already-formed
+    // group at once -- collect every matching group (checking every member's
+    // own pickup, not just the group's single evolving reference time) and
+    // merge them all into one, instead of joining only the first match found.
+    const matches = [];
+    groups.forEach((g, gi) => {
+      if (g.userGroup || g.airport !== e.airport) return;
+      if (g.members.some(m => Math.abs(toMins(m.pickup || m.time) - toMins(t)) <= 20)) matches.push(gi);
+    });
+    if (matches.length) {
+      const first = groups[matches[0]];
+      for (let k = matches.length - 1; k >= 1; k--) {
+        first.members.push(...groups[matches[k]].members);
+        groups.splice(matches[k], 1);
+      }
+      first.members.push(e);
+    } else {
+      groups.push({ pickup: t, airport: e.airport, members: [e] });
     }
-    if (!joined) groups.push({ pickup: t, airport: e.airport, members: [e] });
   }
   groups.forEach(g => {
     const minT = g.members.reduce((mn, e) => {
