@@ -1264,10 +1264,18 @@ async function tr2LoadData() {
       const cur = map.get(key);
       map.set(key, cur ? pickBetter(cur, row) : row);
     }
+    // Jorge's report 2026-10-20 (Carter Foxworth: Riley Colins/Kat Warner/
+    // Jennifer Marvel each showing twice): this key used to include
+    // arrivalDate, so a guest who resubmitted the form with a CORRECTED date
+    // (not just more detail on the same date -- exactly what Hilario does when
+    // he adjusts someone's info) never matched their own earlier row here and
+    // both survived forever. booking_id already disambiguates two different
+    // real people across different retreats, so the date was never needed to
+    // avoid a false match within the same booking -- dropped.
     const map2 = new Map();
     for (const row of map.values()) {
       const d = row.data || {};
-      const key2 = `${row.booking_id || (d.bookingId||'')}|${(d.firstName||'').toLowerCase().trim()}_${(d.lastName||'').toLowerCase().trim()}|${normDate(d.arrivalDate)}`;
+      const key2 = `${row.booking_id || (d.bookingId||'')}|${(d.firstName||'').toLowerCase().trim()}_${(d.lastName||'').toLowerCase().trim()}`;
       const cur2 = map2.get(key2);
       map2.set(key2, cur2 ? pickBetter(cur2, row) : row);
     }
