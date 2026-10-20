@@ -1696,9 +1696,17 @@ async function bcPostCharges() {
   if (!itemId) { alert('Please select an item first.'); return; }
   const cbItemId = opt?.dataset.cbid || '';
   const itemName = opt?.dataset.name || '';
-  const itemPrice = parseFloat(opt?.dataset.price) || 0;
   const itemTax = parseFloat(opt?.dataset.tax) || 0;
   const itemCategory = opt?.dataset.category || null;
+  // Jorge's report 2026-10-20 (Marcia Hoffheins' whole group): the Items
+  // catalog stores a Credit item's price as a plain positive magnitude (e.g.
+  // "Credit Spa Service" $95), same as any other item -- but Bulk Charge
+  // posted it straight through as a POSITIVE folio charge, adding $95 to
+  // every guest's balance instead of crediting $95 off it. A credit always
+  // has to land negative on the folio (same sign convention every real
+  // credit in the system has -- see reports.js' _rptDailyFolioCharges
+  // comment), so negate it here for category:'Credit' specifically.
+  const itemPrice=(parseFloat(opt?.dataset.price)||0)*(itemCategory==='Credit'?-1:1);
   const itemQuantity = parseInt((qtyInput ? qtyInput.value : '') || '1', 10) || 1;
 
   const checked = Array.from(document.querySelectorAll('#bcGuestList .bc-guest-chk:checked'));

@@ -888,7 +888,12 @@ function bdPickItem(fid){
   const catEl=document.getElementById(`bdc-cat-${fid}`);
   if(opt&&opt.value){
     if(descEl){descEl.value=opt.dataset.name||'';descEl.style.display='none';}
-    if(priceEl)priceEl.value=opt.dataset.price||'';
+    // A Credit catalog item stores its price as a plain positive magnitude,
+    // same as any other item -- pre-fill it already negated so a credit
+    // doesn't silently post as a positive charge unless staff notices and
+    // manually flips the sign (same bug just fixed in Bulk Charge, modules/
+    // payments.js's bcPostCharges, for this same category).
+    if(priceEl)priceEl.value=opt.dataset.category==='Credit'?-Math.abs(Number(opt.dataset.price)||0):(opt.dataset.price||'');
     if(taxEl)taxEl.value=opt.dataset.tax||'0';
     // Pre-filled from the item's own category but still a normal, editable
     // text field -- Jorge's report 2026-09-30: "no veo category para
