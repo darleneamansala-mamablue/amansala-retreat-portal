@@ -10,6 +10,7 @@ const CONTRACT_TMPL_DEFAULTS={
   acFee:'$25',
   highInclusions:'High Season Inclusions: All meals except one dinner, use of yoga shala, housekeeping every other day, one cooking demonstration, and one Latin Grooves dance class.',
   lowInclusions:'Low Season Rates Include: All meals except one dinner, use of yoga shala, housekeeping every other day, one cooking demonstration, and one Latin Grooves dance class — all complimentary.',
+  notIncluded:'We coordinate airport transport but it is not included.\nAlcoholic beverages, speciality coffees, smoothies and fresh juices are not included.\nTeachers for your classes are available for an additional fee, but not included.\nMics are not included — if you use a mic please bring your own bluetooth mic.\nOne offsite dinner; you can choose to eat on site for an additional fee.',
   highRates:[
     {room:'Beachfront King',solo:'$575',sharing:'$360 pp'},
     {room:'Superior King',solo:'$475',sharing:'$305 pp'},
@@ -199,6 +200,7 @@ function _openContractModalRender(bkId){
 // teacher portal renders the same generateContractHTML, so it shows the edits.
 const CONTRACT_EDIT_SECTIONS=[
   {key:'inclusions',label:"What's Included"},
+  {key:'notIncluded',label:'What is NOT Included'},
   {key:'paymentTerms',label:'Payment Terms'},
   {key:'cancellationPolicy',label:'Cancellation Policy'},
   {key:'teacherPolicy',label:'Teacher / Leader Complimentary Policy'},
