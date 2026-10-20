@@ -1380,38 +1380,29 @@ async function bdSyncCloudbeds(){
   const sameDuration=c=>Math.max(1,Math.round((pd(c.endDate)-pd(c.startDate))/DAY_MS))===portalNights;
   const exactMatch=nameMatches.find(c=>sameDuration(c)&&(c.rooms||[]).some(rn=>ownRt?.rooms?.includes(rn)));
   if(exactMatch){
-    const realRoom=(exactMatch.rooms||[])[0]||reg.room;
+    // Jorge's call 2026-10-20: (re)sync only LINKS the Cloudbeds reservation
+    // (cbReservationIds) -- it must never move the portal's own room. Cloudbeds'
+    // room for this reservation can legitimately differ (it only has to match
+    // room TYPE + duration to count as the "same stay" above), but the portal's
+    // room is the source of truth here, same as the rate-never-moves-on-edit
+    // rule for Rooms edits/drag-and-drop. The dates ARE still pulled from
+    // Cloudbeds below (that's an existing, separate behavior Jorge hasn't
+    // flagged) -- only the room assignment itself stops being overwritten.
     const realCheckIn=exactMatch.startDate||subj.checkIn,realCheckOut=exactMatch.endDate||subj.checkOut;
     const datesChanged=realCheckIn!==subj.checkIn||realCheckOut!==subj.checkOut;
     if(reg.customRateOverride==null&&datesChanged){
       reg.customRateOverride=subj.rate;
     }
     if(!bk.cbReservationIds)bk.cbReservationIds={};
-    bk.cbReservationIds[realRoom]=exactMatch.reservationID;
-    // Keep blocked_rooms in sync whenever Cloudbeds' real room differs from the
-    // portal's -- same bug/fix as bdSaveDetails's room-edit swap (real incident
-    // 2026-10-19: Heidi Calchera's room got updated here but blocked_rooms never
-    // got "20" added, so she vanished from Transport/everything that trusts it).
-    const oldRoom=reg.room;
-    if(realRoom!==oldRoom){
-      reg.room=realRoom;
-      const newRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(realRoom));
-      if(newRt)reg.roomTypeId=newRt.id;
-      const blocked=bk.blockedRooms||[];
-      if(oldRoom&&blocked.some(r=>r.toLowerCase()===oldRoom.toLowerCase())){
-        bk.blockedRooms=blocked.map(r=>r.toLowerCase()===oldRoom.toLowerCase()?realRoom:r);
-      }else if(!blocked.some(r=>r.toLowerCase()===realRoom.toLowerCase())){
-        bk.blockedRooms=[...blocked,realRoom];
-      }
-    }
+    bk.cbReservationIds[reg.room]=exactMatch.reservationID;
     reg.checkIn=realCheckIn;reg.checkOut=realCheckOut;
     try{
       await Promise.all([
-        db.from('registrations').update({room:reg.room,room_type_id:reg.roomTypeId,check_in:reg.checkIn,check_out:reg.checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id),
-        db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds,blocked_rooms:bk.blockedRooms}).eq('id',bk.id),
+        db.from('registrations').update({check_in:reg.checkIn,check_out:reg.checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id),
+        db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id),
       ]);
     }catch(e){bdStickyAlert('Error guardando el enlace: '+e.message,'error');return;}
-    bdStickyAlert(`Vinculado con la reserva de Cloudbeds "${exactMatch.guestName}" en ${realRoom}${datesChanged?` (fechas ajustadas: ${fmtDate(realCheckIn)} — ${fmtDate(realCheckOut)})`:''} ✓`,'success');
+    bdStickyAlert(`Vinculado con la reserva de Cloudbeds "${exactMatch.guestName}" (cuarto de Cloudbeds: ${(exactMatch.rooms||[])[0]||'—'}, se mantiene el cuarto del portal: ${reg.room})${datesChanged?` · fechas ajustadas: ${fmtDate(realCheckIn)} — ${fmtDate(realCheckOut)}`:''} ✓`,'success');
     _bdRender();
     return;
   }
