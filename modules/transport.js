@@ -248,9 +248,25 @@ function getTransportRoster(bkId){
   });
   const usedIdx=new Set();
   const guestSub=new Map(); // guest (roster entry) → matched sub, for a 1:1 per-guest view
+  // Jorge's report 2026-10-20 (Carter Foxworth): the admin Transport tab and the
+  // teacher's own "My Transport" showed different ride groupings for the same
+  // retreat. Root cause: a guest who resubmitted the form (updated flight info)
+  // leaves an old, stale duplicate row alongside the new one -- the admin board
+  // already picks the most complete/newest one (tr2LoadData's pickBetter), but
+  // this match used to just take whichever duplicate happened to come first in
+  // allSubs, with no preference for which one was actually current. When more
+  // than one unused submission matches a guest, pick the same way: most
+  // complete info, then highest id as a tiebreak.
+  const _trSubScore=s=>(s.arrivalDate?2:0)+(s.flightNumber?1:0)+(s.departureDate?1:0)+(s.bookingId?1:0);
   const matchGuest=(guest,predicate)=>{
     if(guestSub.has(guest))return;
-    const idx=allSubs.findIndex((s,i)=>!usedIdx.has(i)&&predicate(s));
+    let idx=-1;
+    allSubs.forEach((s,i)=>{
+      if(usedIdx.has(i)||!predicate(s))return;
+      if(idx<0)return void(idx=i);
+      const sa=_trSubScore(allSubs[idx]),sb=_trSubScore(s);
+      if(sb>sa||(sb===sa&&String(s.id)>String(allSubs[idx].id)))idx=i;
+    });
     if(idx>=0){usedIdx.add(idx);guestSub.set(guest,allSubs[idx]);}
   };
 
