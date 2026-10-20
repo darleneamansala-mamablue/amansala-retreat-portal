@@ -1301,8 +1301,9 @@ async function tr2LoadData() {
     }
     if (d.departureOT || (d.departureDate && d.departureTime)) {
       const depAirport = d.departureAirport || '';
-      // Jorge's ask 2026-10-20: Cancun departure lead time 4h -> 3.5h (210 min).
-      const pickup = (!d.departureOT && depAirport && d.departureTime) ? tr2AddMins(d.departureTime, depAirport === 'cancun' ? -210 : -150) : null;
+      // d.departurePickupOverride (editable only by Hilario/Jorge, see
+      // tr2EditEntry/tr2CanEditPickup below) wins over the auto-calculated time.
+      const pickup = (!d.departureOT && depAirport && d.departureTime) ? (d.departurePickupOverride || tr2DefaultPickup(d)) : null;
       tr2AllEntries.push({
         rowId: row.id, type: 'departure', date: d.departureDate || '', time: d.departureTime || '', guest: name,
         email: d.email || '', flight: d.flightNumber || '', airport: depAirport,
@@ -2031,6 +2032,21 @@ function tr2AddMins(timeStr, mins) {
   const total = ((h * 60 + m + mins) % 1440 + 1440) % 1440;
   return `${String(Math.floor(total / 60)).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
 }
+// The auto-calculated pickup time (no manual override) -- shared by the main
+// row-building loop above and the edit modal's default display below, so they
+// can never drift apart.
+function tr2DefaultPickup(d) {
+  if (!d || d.departureOT || !d.departureAirport || !d.departureTime) return null;
+  return tr2AddMins(d.departureTime, d.departureAirport === 'cancun' ? -210 : -150);
+}
+// Jorge's ask 2026-10-20: the departure pickup time can be manually overridden
+// per guest, but only Hilario and Jorge should be able to change it -- everyone
+// else can still see it, just not edit it.
+const TR2_PICKUP_EDIT_STAFF = ['hilario', 'jorge'];
+function tr2CanEditPickup() {
+  const name = (typeof getCurrentSession === 'function' ? getCurrentSession()?.name : '') || '';
+  return TR2_PICKUP_EDIT_STAFF.includes(name.trim().toLowerCase());
+}
 function tr2FmtTime(t) {
   if (!t) return '';
   const [h, m] = t.split(':').map(Number);
@@ -2086,6 +2102,11 @@ function tr2EditEntry(rowId) {
         <div><label style="${TR2_LBL_S}">Fecha</label>${inp('tr2-e-dep-date','date',d.departureDate)}</div>
         <div><label style="${TR2_LBL_S}">Hora</label>${inp('tr2-e-dep-time','time',d.departureTime)}</div>
         <div><label style="${TR2_LBL_S}">Aeropuerto</label>${sel('tr2-e-dep-airport',airportOpts,d.departureAirport||'cancun')}</div>
+        <div>
+          <label style="${TR2_LBL_S}">Pick up${tr2CanEditPickup()?'':' 🔒'}</label>
+          <input id="tr2-e-dep-pickup" type="time" value="${escHtml(d.departurePickupOverride||tr2DefaultPickup(d)||'')}" ${tr2CanEditPickup()?'':'disabled'} style="${TR2_INPUT_S}${tr2CanEditPickup()?'':';background:#f3f4f6;color:#6b7280'}">
+          <div style="font-size:10.5px;color:#9ca3af;margin-top:2px">${tr2CanEditPickup()?'Calculado automático — cámbialo aquí solo si necesita una hora distinta.':'Solo Hilario y Jorge pueden editar la hora de pick up.'}</div>
+        </div>
         <div style="grid-column:1/-1">${chk('tr2-e-dep-ot',!!d.departureOT,'Own Transport (no necesita transfer)')}</div>
       </div>
       <div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Extra</div>
@@ -2120,6 +2141,15 @@ async function tr2SaveEdit(rowId) {
     departureOT: g('tr2-e-dep-ot')?.checked || false, willingToShare: g('tr2-e-share')?.checked || false, notes: g('tr2-e-notes')?.value.trim() || '',
     serviceCost: g('tr2-e-cost')?.value !== '' ? Number(g('tr2-e-cost').value) : null,
   };
+  // Pick up override: field is read-only for everyone except Hilario/Jorge (see
+  // tr2CanEditPickup), so a non-privileged save must never touch the stored
+  // override -- it's already carried over unchanged via ...oldData above.
+  // Clearing it back to exactly the auto-calculated time drops the override
+  // entirely, so later flight-time edits keep auto-adjusting the pickup.
+  if (tr2CanEditPickup()) {
+    const pickupVal = g('tr2-e-dep-pickup')?.value || '';
+    updatedData.departurePickupOverride = (pickupVal && pickupVal !== (tr2DefaultPickup(updatedData) || '')) ? pickupVal : null;
+  }
 
   const hadArrCharge = !!oldData.folioCharged?.arrivalFolioItemId, hadDepCharge = !!oldData.folioCharged?.departureFolioItemId;
   const arrChanged = hadArrCharge && (oldData.arrivalTime !== updatedData.arrivalTime || oldData.arrivalAirport !== updatedData.arrivalAirport || !!oldData.arrivalOT !== updatedData.arrivalOT);
