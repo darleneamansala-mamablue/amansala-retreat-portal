@@ -229,6 +229,36 @@ function _rptFolioPayMethod(desc){
   if(/we travel/i.test(body))return'We Travel';
   return body.split(/[:(]/)[0].trim()||'Other';
 }
+// Jorge's ask 2026-10-20: with many payment methods in one range, the plain
+// "Method $X · Method $Y · ..." text line wraps across 2-3 lines and reads as
+// a wall of text -- a small pie + colored legend reads at a glance instead.
+// Hand-built as inline SVG (no chart library) -- fine for a handful of
+// slices, which is all a payment-method breakdown ever has.
+const _RPT_PIE_PALETTE=['#0e5a5a','#7c3aed','#2563eb','#dc2626','#ca8a04','#16a34a','#db2777','#0891b2','#ea580c','#64748b'];
+function _rptMethodBreakdownHtml(byMethodObj,pieSize){
+  const entries=Object.entries(byMethodObj||{}).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length)return'';
+  const size=pieSize||56,r=size/2,cx=r,cy=r;
+  const total=entries.reduce((s,[,a])=>s+a,0);
+  let angle=-90;
+  const toXY=a=>{const rad=a*Math.PI/180;return[cx+r*Math.cos(rad),cy+r*Math.sin(rad)];};
+  const slices=entries.map(([,amt],i)=>{
+    const sweep=total>0?(amt/total)*360:0;
+    const color=_RPT_PIE_PALETTE[i%_RPT_PIE_PALETTE.length];
+    if(sweep>=359.99)return`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}"/>`;
+    const start=angle,end=angle+sweep;angle=end;
+    const[x1,y1]=toXY(start),[x2,y2]=toXY(end);
+    const large=sweep>180?1:0;
+    return`<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${large} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${color}"/>`;
+  }).join('');
+  const legend=entries.map(([m,a],i)=>
+    `<div style="display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;color:#4b5563;white-space:nowrap"><span style="width:8px;height:8px;border-radius:50%;background:${_RPT_PIE_PALETTE[i%_RPT_PIE_PALETTE.length]};flex-shrink:0"></span>${escHtml(m)} ${fmt$(a)}</div>`
+  ).join('');
+  return`<div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0">${slices}</svg>
+    <div style="display:flex;flex-direction:column;gap:3px">${legend}</div>
+  </div>`;
+}
 const _rptFmtMonth=d=>d?pd(d+'-01').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'—';
 const _rptTabBtn=(id,label,active)=>`<button onclick="_rptSetTab('${id}')" style="padding:5px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif;border:1.5px solid ${active?'#0e5a5a':'#e5e7eb'};background:${active?'#0e5a5a':'#f3f4f6'};color:${active?'#fff':'#6b7280'}">${label}</button>`;
 
@@ -722,7 +752,7 @@ function _rptRenderDailyView(){
     ${_dailyError?`<div style="font-size:12px;color:#dc2626;margin-bottom:14px;padding:8px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">⚠ ${escHtml(_dailyError)}</div>`:''}
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
-      ${_rptCard('Payments In',fmt$(totalIn),'#f0fdf4','#15803d',Object.entries(byMethod).sort((a,b)=>b[1]-a[1]).map(([m,a])=>`${escHtml(m)} ${fmt$(a)}`).join(' · '))}
+      ${_rptCard('Payments In',fmt$(totalIn),'#f0fdf4','#15803d',_rptMethodBreakdownHtml(byMethod,72))}
       ${_rptCard('Folio Charges',fmt$(totalCharges),'#fdf4ff','#7e22ce')}
       ${_rptCard('Total Records',String(payEntries.length+folioCharges.length+folioPayments.length),'#f8fafc','#374151')}
       ${_rptCard('Range',rangeLabel,'#f0f9ff','#0369a1')}
@@ -738,7 +768,7 @@ function _rptRenderDailyView(){
             <div>
               <div style="font-size:12px;font-weight:600;color:#374151">${escHtml(u)}</div>
               <div style="font-size:15px;font-weight:800;color:#15803d">${fmt$(amt)}</div>
-              <div style="font-size:13px;font-weight:700;color:#6b7280;margin-top:3px">${Object.entries(byUserMethod[u]||{}).sort((a,b)=>b[1]-a[1]).map(([m,a])=>`${escHtml(m)} ${fmt$(a)}`).join(' · ')}</div>
+              ${_rptMethodBreakdownHtml(byUserMethod[u],36)}
             </div>
           </div>`).join('')}
       </div>
