@@ -465,10 +465,11 @@ function _rptRenderBody(){
   </div>`;
 }
 
-function _rptCard(label,value,bg,color){
+function _rptCard(label,value,bg,color,sub){
   return`<div style="background:${bg};border-radius:12px;padding:16px 20px;border:1px solid var(--border)">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:6px">${label}</div>
     <div style="font-size:22px;font-weight:800;color:${color}">${value}</div>
+    ${sub?`<div style="font-size:10.5px;color:#9ca3af;margin-top:4px">${sub}</div>`:''}
   </div>`;
 }
 
@@ -621,11 +622,19 @@ function _rptDailyPayEntries(){
 // (real cash -- Stripe, wire, cash, etc., always inserted with that exact
 // category) counts as a payment; everything else is a charge/adjustment
 // regardless of sign.
+// A real payment is category:'Payment' AND negative (every real payment-
+// recording path always writes a negative unit_price -- see
+// bdRecordPayment/bdRecordTotalPayment, the Stripe webhook, rb-lib.js,
+// wetravel-webhook.js). Requiring both catches a miscategorized charge too
+// (real incident 2026-10-20: a $20+tax Gym charge got filed under category
+// 'Payment' by mistake -- a POSITIVE amount under that category can't
+// actually be cash received, so it now falls back to being a charge instead
+// of inflating Payments In/Payments by User).
 function _rptDailyFolioCharges(){
-  return _dailyFolioItems.filter(i=>i.category!=='Payment'&&(_dailyUser==='all'||i.staff_name==null||i.staff_name===_dailyUser));
+  return _dailyFolioItems.filter(i=>!(i.category==='Payment'&&i.amount<0)&&(_dailyUser==='all'||i.staff_name==null||i.staff_name===_dailyUser));
 }
 function _rptDailyFolioPayments(){
-  return _dailyFolioItems.filter(i=>i.category==='Payment'&&(_dailyUser==='all'||i.staff_name==null||i.staff_name===_dailyUser));
+  return _dailyFolioItems.filter(i=>i.category==='Payment'&&i.amount<0&&(_dailyUser==='all'||i.staff_name==null||i.staff_name===_dailyUser));
 }
 
 async function _rptRenderDaily(){
@@ -672,6 +681,13 @@ function _rptRenderDailyView(){
     byUser[u]=(byUser[u]||0)+Math.abs(e.amount);
     _bumpMethod(u,_rptFolioPayMethod(e.description),Math.abs(e.amount));
   });
+  // Same breakdown, collapsed across every user -- Jorge's ask 2026-10-20: the
+  // Payments In card itself should show the Clip/Cash/Stripe split too, not
+  // just each staff member's own card.
+  const byMethod={};
+  Object.values(byUserMethod).forEach(methods=>{
+    Object.entries(methods).forEach(([m,amt])=>{byMethod[m]=(byMethod[m]||0)+amt;});
+  });
 
   const isSameDay=_dailyFrom===_dailyTo;
   const rangeLabel=isSameDay?fmtDate(_dailyFrom):`${fmtDate(_dailyFrom)} – ${fmtDate(_dailyTo)}`;
@@ -706,7 +722,7 @@ function _rptRenderDailyView(){
     ${_dailyError?`<div style="font-size:12px;color:#dc2626;margin-bottom:14px;padding:8px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">⚠ ${escHtml(_dailyError)}</div>`:''}
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
-      ${_rptCard('Payments In',fmt$(totalIn),'#f0fdf4','#15803d')}
+      ${_rptCard('Payments In',fmt$(totalIn),'#f0fdf4','#15803d',Object.entries(byMethod).sort((a,b)=>b[1]-a[1]).map(([m,a])=>`${escHtml(m)} ${fmt$(a)}`).join(' · '))}
       ${_rptCard('Folio Charges',fmt$(totalCharges),'#fdf4ff','#7e22ce')}
       ${_rptCard('Total Records',String(payEntries.length+folioCharges.length+folioPayments.length),'#f8fafc','#374151')}
       ${_rptCard('Range',rangeLabel,'#f0f9ff','#0369a1')}
