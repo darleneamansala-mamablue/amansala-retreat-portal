@@ -1176,6 +1176,11 @@ function rmSaveNewBooking(){
     let reg=getRegForRoom(_rmEditId,room);
     if(!reg){reg={id:uid(),bookingId:_rmEditId,room,roomTypeId:rtId,guests:[{name:leader,email:leaderEmail||'',phone:leaderPhone||'',notes:''}],charges:[],notes:''};AppData.regs.push(reg);}
     else{reg.room=room;reg.roomTypeId=rtId;if(reg.guests&&reg.guests[0]){reg.guests[0].name=leader;reg.guests[0].email=leaderEmail||'';reg.guests[0].phone=leaderPhone||'';}}
+    // Same staleness-guard gap found and fixed in rcMoveRoom/ozApplyPortalMove --
+    // this edits an EXISTING reg's room/guest fields and relies on saveAll()'s
+    // guarded upload, same as those, so it needs the same reg.updatedAt bump or
+    // the room change can silently fail to upload and later get reverted.
+    reg.updatedAt=new Date().toISOString();
     saveAll();rmClose();venBuild();rcBuild();
     logActivity('Room-only booking updated',`${leader} · ${room} · ${fmtDate(start)} – ${fmtDate(end)}`,_rmEditId);
     _rmSyncReservationCommission(_rmEditId,roomRateTotal);
@@ -3399,6 +3404,16 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
     reg.room=toRoom;
     if(targetRt)reg.roomTypeId=targetRt.id;
     reg.customPrice=null;
+    // Jorge's report 2026-10-20 (Amy Reich, room 29 -> 3B): the move looked fine
+    // right after dragging, then "se perdió la reserva" -- blockedRooms landed in
+    // Supabase (bk.updatedAt is bumped above) but reg.room reverted to the old
+    // room. Root cause: syncToSupabase()'s staleness guard (booking-hub.html)
+    // only uploads a registration whose OWN reg.updatedAt is newer than what's
+    // already in Supabase -- same convention room-blocking.js's blockSave()
+    // already follows for its own reg edits, but this function never bumped it,
+    // so the guard treated this reg as unchanged, silently skipped the upload,
+    // and then self-healed the in-memory copy back from the (still-old) server row.
+    reg.updatedAt=new Date().toISOString();
   }
   // Transfer Cloudbeds IDs to the new room and move the reservation in Cloudbeds
   const _cbResId=(bk.cbReservationIds||{})[fromRoom];
