@@ -4629,6 +4629,27 @@ function sendRoomsSoldOutEmail(bkId){
     .catch(err=>showToast('⚠ Could not send email — '+err.message));
 }
 
+// "Real PMS" sync — 2026-10-20, Jorge's ask after the Amy Reich room-move
+// incident ("quiero que lo hagamos como un pms real"). The staleness guard
+// below (kept as CAS_SYNC_ENABLED's fallback) requires every mutating
+// function across the whole app to remember to bump its own object's
+// .updatedAt, or that edit silently never uploads -- a structural bug class
+// found today in ~25 functions beyond the ones already patched one at a time
+// (rcMoveRoom, teacherSignContract, etc.). modules/cas-sync.js replaces that
+// with a real compare-and-swap (same pattern modules/spa-appt-merge.js
+// already proved in production for the spa calendar): dirtiness is COMPUTED
+// by diffing against a remembered snapshot, never a manually-set flag, so
+// there's nothing left for a new call site to forget. Behind a flag during
+// rollout -- the old path stays untouched as the fallback.
+const CAS_SYNC_ENABLED=localStorage.getItem('amansala_cas_sync')==='1'||location.search.includes('cas=1');
+if(location.search.includes('cas=0'))localStorage.removeItem('amansala_cas_sync');
+if(location.search.includes('cas=1'))localStorage.setItem('amansala_cas_sync','1');
+// Snapshots casSyncTable reads/updates for bookings and registrations --
+// built once in loadFromSupabase() right after those arrays are populated
+// (the only trustworthy baseline: the REAL updated_at each row came back
+// with from SQL), and kept current by casSyncTable itself after that. Plain
+// objects, not used at all when CAS_SYNC_ENABLED is off.
+let _bkBase=new Map(),_regBase=new Map();
 async function syncToSupabase(){
   // Never write to Supabase from local file:// — prevents local dev from corrupting live data
   if(location.protocol==='file:')return;
@@ -4671,6 +4692,26 @@ async function syncToSupabase(){
   }
   const _bkRegSync=(async()=>{
     try{
+      if(CAS_SYNC_ENABLED){
+        const payRows=[];
+        AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
+        const[bkResult,regResult]=await Promise.all([
+          casSyncTable({db,table:'bookings',rows:AppData.bookings,idOf:b=>b.id,toSqlRow:appBookingToSqlRow,fromSqlRow:sqlBookingToApp,base:_bkBase,deletedIds:deletedBookingIds,isRecentLocalId:_isRecentLocalId}),
+          casSyncTable({db,table:'registrations',rows:AppData.regs,idOf:r=>r.id,toSqlRow:appRegToSqlRow,fromSqlRow:sqlRegToApp,base:_regBase,deletedIds:deletedRegIds,isRecentLocalId:_isRecentLocalId}),
+          deletedBookingIds.size?db.from('bookings').delete().in('id',[...deletedBookingIds]):null,
+          deletedRegIds.size?db.from('registrations').delete().in('id',[...deletedRegIds]):null,
+          payRows.length?db.from('payments').upsert(payRows):null,
+          deletedPaymentIds.size?db.from('payments').delete().in('id',[...deletedPaymentIds]):null,
+        ]);
+        deletedBookingIds.forEach(id=>_bkBase.delete(id));
+        deletedRegIds.forEach(id=>_regBase.delete(id));
+        const allFailed=[...(bkResult?.failed||[]),...(regResult?.failed||[])];
+        if(allFailed.length){
+          console.warn('[cas-sync] could not save',allFailed.length,'record(s) after every retry — staying dirty, will retry next save:',allFailed.map(f=>f.id));
+          if(typeof showToast==='function')showToast('⚠ No se pudo guardar '+allFailed.length+' cambio(s) ahora mismo — nada se perdió en pantalla, se reintentará solo en el próximo guardado.');
+        }
+        return;
+      }
       // registrations can exceed PostgREST's 1000-row page cap (1900+ rows in
       // production) — a plain .select() would silently truncate remoteRegMap and
       // make every registration past row 1000 look "missing from Supabase", which
@@ -4979,6 +5020,15 @@ async function loadFromSupabase(){
       sqlPayments.map(sqlPaymentToApp).filter(p=>!deletedPaymentIds.has(p.id)).forEach(p=>{const arr=_paysByBk.get(p.bookingId)||[];arr.push(p);_paysByBk.set(p.bookingId,arr);});
       AppData.bookings.forEach(bk=>{bk.payments=_paysByBk.get(bk.id)||[];});
       AppData.regs=sqlRegs.map(sqlRegToApp).filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId));
+      // CAS sync baseline (see cas-sync.js / syncToSupabase's CAS_SYNC_ENABLED
+      // branch) -- the REAL updated_at each row just came back with from SQL
+      // is the only trustworthy "last known good" snapshot to diff future
+      // edits against. Rebuilt fresh on every load; casSyncTable keeps it
+      // current after that.
+      const _bkUpdatedAtById=new Map(sqlBookings.map(r=>[r.id,r.updated_at]));
+      const _regUpdatedAtById=new Map(sqlRegs.map(r=>[r.id,r.updated_at]));
+      _bkBase=casBuildBase(AppData.bookings,b=>b.id,appBookingToSqlRow,b=>_bkUpdatedAtById.get(b.id));
+      _regBase=casBuildBase(AppData.regs,r=>r.id,appRegToSqlRow,r=>_regUpdatedAtById.get(r.id));
       if(typeof regSelBk!=='undefined'&&regSelBk){
         const _synced=AppData.bookings.find(b=>b.id===regSelBk.id);
         if(_synced){
@@ -5708,6 +5758,16 @@ let _lastLocalSaveAt=0;
 // used by syncToSupabase()'s _blobSync to skip overwriting a key someone else has changed
 // more recently than this tab knows about (same guard as bookings/registrations/room_types).
 let _appStoreUpdatedAt={};
+// Jorge's ask 2026-10-20 ("quiero que lo hagamos como un pms real"), Phase 0:
+// saveAll() could already fire a second syncToSupabase() before the first one
+// finished (the comment on _bkRegSync above admits "Push to CB...runs
+// saveAll() twice") -- two overlapping syncs racing each other on the exact
+// same AppData objects is exactly the kind of extra risk a future CAS-based
+// sync (see modules/cas-sync.js, not yet wired in) must not have to deal
+// with. Chain every saveAll() onto the last one instead of firing in
+// parallel -- same reasoning modules/spa-appt-merge.js already uses for its
+// own save chain (_sam_busy).
+let _saveAllBusy=Promise.resolve();
 function saveAll(){
   _lastLocalSaveAt=Date.now();
   localStorage.setItem('amansala_venue_bookings',JSON.stringify(AppData.bookings));
@@ -5721,7 +5781,11 @@ function saveAll(){
   localStorage.setItem('amansala_rt_version',    RT_VERSION);
   localStorage.setItem('amansala_program_blocks',JSON.stringify(AppData.programBlocks));
   localStorage.setItem('amansala_special_events',JSON.stringify(AppData.specialEvents));
-  syncToSupabase(); // fire-and-forget background sync
+  // Still fire-and-forget from the caller's point of view (nothing awaits
+  // saveAll() today) -- this only serializes the background syncs relative
+  // to EACH OTHER, one at a time, in call order.
+  _saveAllBusy=_saveAllBusy.then(syncToSupabase,syncToSupabase);
+  return _saveAllBusy;
 }
 
 function exportData(){
@@ -6478,6 +6542,7 @@ function switchTab(id,btn){
 }
 
 </script>
+<script src="modules/cas-sync.js?v=20261020a"></script>
 <script src="modules/venues.js?v=20261020a"></script>
 <script src="modules/room-optimizer.js?v=20261020a"></script>
 <script src="modules/sales-pipeline.js"></script>
