@@ -977,6 +977,25 @@ async function _bdSyncLinkedCommission(itemId,qty,unitPrice,taxRate){
   }catch(e){console.warn('[commission] linked sync failed:',e.message);}
 }
 
+// Jorge's report 2026-10-20: Category Report had "Julian tip" and two
+// "Boutique: ..." charges sitting under "Sin categoría" instead of Tip/
+// Boutique, undercounting both totals -- staff typed the category straight
+// into the Description box ("Boutique: Dress") or just wrote a tip note
+// ("Julian tip") and left the Category dropdown on "— None —". Only a
+// fallback for when the dropdown is genuinely left blank -- an explicit
+// staff selection (including an explicit "— None —") always wins.
+function _bdInferCategory(desc){
+  if(!desc)return null;
+  const prefixMatch=/^([a-záéíóúñ ]+):/i.exec(desc);
+  if(prefixMatch){
+    const cats=new Set(BD_EXTRA_CATEGORIES);
+    _bdCatalogItems.forEach(it=>{if(it.category)cats.add(it.category);});
+    const hit=[...cats].find(c=>c.toLowerCase()===prefixMatch[1].trim().toLowerCase());
+    if(hit)return hit;
+  }
+  if(/\btip\b/i.test(desc))return'Tip';
+  return null;
+}
 async function bdAddItem(fid){
   const descEl=document.getElementById(`bdc-desc-${fid}`);
   const desc=descEl?.value.trim();
@@ -985,7 +1004,7 @@ async function bdAddItem(fid){
   // picker, but always a normal editable field -- staff can type/change it
   // for a freely-typed manual charge too (Jorge's ask 2026-09-30: track
   // category on every charge, manual and automatic alike).
-  const category=document.getElementById(`bdc-cat-${fid}`)?.value.trim()||null;
+  const category=document.getElementById(`bdc-cat-${fid}`)?.value.trim()||_bdInferCategory(desc);
   const isComm=category==='Comisión';
   const price=parseFloat(document.getElementById(`bdc-price-${fid}`)?.value);
   // Jorge's report 2026-10-19: no way to charge more than one unit of the
@@ -1017,7 +1036,7 @@ async function bdToggleEditItem(itemId){
 async function bdSaveEditItem(fid,itemId){
   const desc=document.getElementById(`bde-desc-${itemId}`)?.value.trim();
   const tax=parseFloat(document.getElementById(`bde-tax-${itemId}`)?.value)||0;
-  const category=document.getElementById(`bde-cat-${itemId}`)?.value.trim()||null;
+  const category=document.getElementById(`bde-cat-${itemId}`)?.value.trim()||_bdInferCategory(desc);
   const isComm=category==='Comisión';
   const price=parseFloat(document.getElementById(`bde-price-${itemId}`)?.value);
   const qty=parseInt(document.getElementById(`bde-qty-${itemId}`)?.value,10)||1;
