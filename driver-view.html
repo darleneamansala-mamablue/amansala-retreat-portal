@@ -215,7 +215,8 @@ const SUPA_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
 
 const PASTEL = ['#eff6ff','#f0fdf4','#faf5ff','#fffbeb','#fdf2f8','#f0fdfa','#fff7ed','#f0f9ff'];
-const TR_LEAD = { cancun: 240, tulum: 150 };
+// Jorge's ask 2026-10-20: Cancun departure lead time 4h -> 3.5h (210 min).
+const TR_LEAD = { cancun: 210, tulum: 150 };
 const TR_ETA  = { cancun: 90,  tulum: 45  };
 
 // Parse URL param
@@ -412,7 +413,7 @@ async function loadData() {
     if (d.departureDate && d.departureTime && !d.departureOT) {
       const ap = (d.departureAirport || '').toLowerCase();
       if (matchesCo(ap, 'departure')) {
-        const leadMins = TR_LEAD[ap] ?? 240;
+        const leadMins = TR_LEAD[ap] ?? 210;
         _entries.push({
           rowId: row.id, rawData: d,
           confirmed: !!d.driver_confirmed,

@@ -4503,7 +4503,8 @@ function _trGlobalGroupPax(type,groupKey,allTr){
 function _trMinsToTime(m){const w=((m%1440)+1440)%1440;return String(Math.floor(w/60)).padStart(2,'0')+':'+String(w%60).padStart(2,'0');}
 function _trPickupTime(airport,flightTime){
   if(!flightTime)return null;
-  const lead=(airport||'').toLowerCase()==='tulum'?150:240;
+  // Jorge's ask 2026-10-20: Cancun departure lead time 4h -> 3.5h (210 min).
+  const lead=(airport||'').toLowerCase()==='tulum'?150:210;
   return _trMinsToTime(trTimeToMins(flightTime)-lead);
 }
 // Ported from staging's retreat-portal.html Transport tab: a single flat table per

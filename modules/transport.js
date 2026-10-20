@@ -1301,7 +1301,8 @@ async function tr2LoadData() {
     }
     if (d.departureOT || (d.departureDate && d.departureTime)) {
       const depAirport = d.departureAirport || '';
-      const pickup = (!d.departureOT && depAirport && d.departureTime) ? tr2AddMins(d.departureTime, depAirport === 'cancun' ? -240 : -150) : null;
+      // Jorge's ask 2026-10-20: Cancun departure lead time 4h -> 3.5h (210 min).
+      const pickup = (!d.departureOT && depAirport && d.departureTime) ? tr2AddMins(d.departureTime, depAirport === 'cancun' ? -210 : -150) : null;
       tr2AllEntries.push({
         rowId: row.id, type: 'departure', date: d.departureDate || '', time: d.departureTime || '', guest: name,
         email: d.email || '', flight: d.flightNumber || '', airport: depAirport,
