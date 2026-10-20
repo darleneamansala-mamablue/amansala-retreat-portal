@@ -956,7 +956,11 @@ function tr2PrintView() {
   // already says so in the page subtitle, so it's dead weight. Costo comes off
   // entirely, same ask. Column count (used for every colspan below) follows.
   const showTypeCol = tr2View === 'all';
-  const printCols = showTypeCol ? 7 : 6;
+  // Jorge's ask 2026-10-20: Pick-up is a departure-only concept (arrivals have
+  // no "pick up before the flight" step) -- drop the column entirely when
+  // printing arrivals only, instead of showing an empty "—" on every row.
+  const showPickupCol = tr2View !== 'arrivals';
+  const printCols = 5 + (showTypeCol ? 1 : 0) + (showPickupCol ? 1 : 0);
 
   const groups = new Map();
   filtered.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
@@ -970,7 +974,7 @@ function tr2PrintView() {
         <td>${escHtml(e.guest || '')}</td>
         ${showTypeCol ? `<td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>` : ''}
         <td>${escHtml(e.airport === 'cancun' ? 'CUN' : e.airport === 'tulum' ? 'TQO' : (e.airport || ''))}</td>
-        <td>${escHtml(e.type === 'departure' ? ((e.groupPickup || e.pickup) || '—') : '—')}</td>
+        ${showPickupCol ? `<td>${escHtml(e.type === 'departure' ? ((e.groupPickup || e.pickup) || '—') : '—')}</td>` : ''}
         <td>${escHtml(e.time || '')}</td>
         <td>${escHtml(e.retreatLabel || '')}</td>
       </tr>`;
@@ -1019,14 +1023,11 @@ function tr2PrintView() {
   const rideGroupsHtml = items => {
     const serviceGroups = tr2GroupByRide(items, TR2_PRINT_PASTEL);
     return serviceGroups.map(svc => {
-      // Jorge's ask 2026-10-20: the room-category sort/spacer is for DEPARTURES
-      // only (it's just loading people into the van and closing balances there) --
-      // arrivals print must stay exactly as it was (sorted by time), untouched,
-      // since that order is what staff use for fast check-in. A ride group is
-      // always one single type (grouping keys on date|airport|type), so checking
-      // the first entry is enough.
-      const isDep = svc.entries[0]?.type === 'departure';
-      const rows = isDep ? _printSortEntries(svc.entries) : svc.entries;
+      // Jorge's ask 2026-10-20 (reversing the same-day scoping to departures
+      // only): room-category sort/spacer applies to BOTH arrivals and
+      // departures prints again, same as before that scoping -- "como lo
+      // teniamos". Departures print itself is unchanged either way.
+      const rows = _printSortEntries(svc.entries);
       // Jorge's ask 2026-10-20: a solo rider never got this header at all before
       // (only groups of 2+ did), so they silently looked like they belonged to
       // whichever group happened to print right above them. Every group now
@@ -1036,7 +1037,7 @@ function tr2PrintView() {
       ${rows.map((e, i, arr) => {
         // Jorge's ask 2026-10-19: a blank row between room categories within the same
         // shared-ride group, so the (now pure-category) order is easy to scan visually.
-        const sep = (isDep && i > 0 && _printSpacerGroup(tr2LookupRtId(e.room)) !== _printSpacerGroup(tr2LookupRtId(arr[i - 1].room)))
+        const sep = (i > 0 && _printSpacerGroup(tr2LookupRtId(e.room)) !== _printSpacerGroup(tr2LookupRtId(arr[i - 1].room)))
           ? `<tr class="cat-spacer"><td colspan="${printCols}"></td></tr>` : '';
         return sep + entryRow(e, svc.color);
       }).join('')}
@@ -1085,7 +1086,7 @@ function tr2PrintView() {
       <div class="sub">${escHtml(retreatLabel)} · ${escHtml(rangeLabel)}</div>
     </div>
     <table>
-      <thead><tr><th>Habitación</th><th>Nombre</th>${showTypeCol ? '<th>Tipo</th>' : ''}<th>Aeropuerto</th><th>Pick-up</th><th>Hora Vuelo</th><th>Retiro</th></tr></thead>
+      <thead><tr><th>Habitación</th><th>Nombre</th>${showTypeCol ? '<th>Tipo</th>' : ''}<th>Aeropuerto</th>${showPickupCol ? '<th>Pick-up</th>' : ''}<th>Hora Vuelo</th><th>Retiro</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
   </body></html>`);
