@@ -636,8 +636,8 @@ function _rptRenderDailyView(){
   const totalIn=totalPay+totalFolioPay;
 
   const byUser={};
-  payEntries.forEach(e=>{const u=e.staffName||'Unattributed';byUser[u]=(byUser[u]||0)+Number(e.amount||0);});
-  folioPayments.forEach(e=>{const u=e.staff_name||'Unattributed';byUser[u]=(byUser[u]||0)+Math.abs(e.amount);});
+  payEntries.forEach(e=>{const u=e.staffName||'Payment Link';byUser[u]=(byUser[u]||0)+Number(e.amount||0);});
+  folioPayments.forEach(e=>{const u=e.staff_name||'Payment Link';byUser[u]=(byUser[u]||0)+Math.abs(e.amount);});
 
   const isSameDay=_dailyFrom===_dailyTo;
   const rangeLabel=isSameDay?fmtDate(_dailyFrom):`${fmtDate(_dailyFrom)} – ${fmtDate(_dailyTo)}`;
@@ -711,7 +711,7 @@ function _rptRenderDailyView(){
                 <td style="${_rptTd()};font-size:12px">
                   <div style="display:flex;align-items:center;gap:6px">
                     <div style="width:22px;height:22px;border-radius:50%;background:#0e5a5a22;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#0e5a5a;flex-shrink:0">${escHtml((e.staffName||'?')[0].toUpperCase())}</div>
-                    <span style="color:#374151;font-weight:600">${escHtml(e.staffName||'Unattributed')}</span>
+                    <span style="color:#374151;font-weight:600">${escHtml(e.staffName||'Payment Link')}</span>
                   </div>
                 </td>
                 <td style="${_rptTd()};font-size:12px;color:#374151;max-width:180px">${escHtml(e.bk?.retreatName||e.bk?.leaderName||'—')}</td>
