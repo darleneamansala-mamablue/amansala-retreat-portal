@@ -525,6 +525,11 @@ function ozApplyPortalMove(bk,fromRoom,toRoom){
     reg.room=toRoom;
     if(targetRt)reg.roomTypeId=targetRt.id;
     reg.customPrice=null;
+    // Same staleness-guard gap found and fixed in rcMoveRoom (modules/venues.js,
+    // Jorge's report 2026-10-20, Amy Reich 29->3B): without bumping reg.updatedAt,
+    // syncToSupabase() can silently skip uploading this room change and self-heal
+    // the in-memory reg back to its old room, even though blockedRooms below did save.
+    reg.updatedAt=new Date().toISOString();
   }
   if(bk.cbReservationIds&&bk.cbReservationIds[fromRoom]){
     bk.cbReservationIds[toRoom]=bk.cbReservationIds[fromRoom];delete bk.cbReservationIds[fromRoom];
