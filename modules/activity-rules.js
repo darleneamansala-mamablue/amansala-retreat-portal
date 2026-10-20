@@ -34,7 +34,12 @@ function cleanRetreatActivities(bk){
   });
   keep.length=0;keep2.forEach(a=>keep.push(a));
   const removed=acts.length-keep.length;
-  if(removed){bk.retreatActivities=keep;bk.retreatActivitiesUpdatedAt=new Date().toISOString();}
+  // bk.updatedAt (not just retreatActivitiesUpdatedAt) needs bumping here too --
+  // this runs inside the saveAll() monkey-patch below, right before the real
+  // upload, so without it syncToSupabase()'s staleness guard can treat this
+  // cleanup as unchanged and silently drop it, and the removed tour reappears
+  // on the next load (2026-10-20 audit, same gap as rcMoveRoom/tpToggle/etc).
+  if(removed){bk.retreatActivities=keep;bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();}
   return removed;
 }
 if(typeof saveAll==='function'){

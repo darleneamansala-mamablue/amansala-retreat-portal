@@ -65,7 +65,10 @@ function tpToggle(bkId,aoId,checked){
       if(date){
         if(!bk.retreatActivities)bk.retreatActivities=[];
         bk.retreatActivities.push({aoId,date,time:(typeof tourDefaultTime==='function'?tourDefaultTime(aoId):'11:45'),prepaid:(bk.packages||[]).includes(aoId)});
-        bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+        // retreatActivitiesUpdatedAt isn't what syncToSupabase()'s staleness guard checks --
+        // that's bk.updatedAt (2026-10-20 audit, same gap as rcMoveRoom/ozApplyPortalMove) --
+        // without it this add could silently fail to upload and revert on next load.
+        bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
         showToast(`${name} added on ${fmtDate(date)}.`);
       }else{
         showToast(`${name} is included — it doesn't normally run on these days, so add it below with a date.`);
@@ -75,7 +78,7 @@ function tpToggle(bkId,aoId,checked){
     off.add(aoId);
     const before=(bk.retreatActivities||[]).length;
     bk.retreatActivities=(bk.retreatActivities||[]).filter(a=>a.aoId!==aoId);
-    if(bk.retreatActivities.length!==before){bk.retreatActivitiesUpdatedAt=new Date().toISOString();}
+    if(bk.retreatActivities.length!==before){bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();}
     showToast(`${name} removed for this group — it won't be auto-assigned again.`);
   }
   tpSetOff(bk,off);
