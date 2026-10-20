@@ -874,6 +874,7 @@ function trInit() {
         <button id="tr2-clear-btn" onclick="tr2ClearFilters()" style="display:none;background:#fef2f2;color:#dc2626;border:none;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">✕ Clear</button>
         <div style="flex:1"></div>
         <button onclick="tr2PrintView()" style="background:#f1f5f9;color:#374151;border:1.5px solid #e5e7eb;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif" title="Imprimir lo que se ve ahora (mismos filtros)">🖨 Imprimir</button>
+        <button id="tr2-week-btn" onclick="tr2ToggleWeekSummary()" style="background:#eef2ff;color:#4338ca;border:1.5px solid #e5e7eb;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif" title="Ver cuántas llegadas y salidas hay cada día">📅 Resumen semanal</button>
         <button id="tr2-archive-btn" onclick="tr2ToggleArchived()" style="background:#f1f5f9;color:#6b7280;border:1.5px solid #e5e7eb;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif" title="Ver entradas anteriores">📦 Archived</button>
       </div>
       <div id="tr2-body" style="flex:1;overflow-y:auto;padding:20px"></div>
@@ -881,6 +882,7 @@ function trInit() {
 
   tr2View = localStorage.getItem('ama_tr2_view') || 'arrivals';
   tr2ApplyTabStyles();
+  tr2SyncWeekBtn();
   tr2LoadData();
 }
 
@@ -933,6 +935,27 @@ function tr2ToggleArchived() {
   tr2ShowArchived = !tr2ShowArchived;
   const btn = document.getElementById('tr2-archive-btn');
   if (btn) { btn.style.background = tr2ShowArchived ? '#1a2332' : ''; btn.style.color = tr2ShowArchived ? '#fff' : ''; }
+  tr2BuildView();
+}
+// Weekly summary (Jorge's ask 2026-10-20) -- arrivals/departures per day; click a
+// day to jump to it. With no date range it covers today + 6 days.
+let tr2ShowWeekSummary = false;
+function tr2SyncWeekBtn() {
+  const btn = document.getElementById('tr2-week-btn');
+  if (btn) { btn.style.background = tr2ShowWeekSummary ? '#4338ca' : '#eef2ff'; btn.style.color = tr2ShowWeekSummary ? '#fff' : '#4338ca'; }
+}
+function tr2ToggleWeekSummary() {
+  tr2ShowWeekSummary = !tr2ShowWeekSummary;
+  tr2SyncWeekBtn();
+  tr2BuildView();
+}
+function tr2JumpToDay(dateStr) {
+  tr2ShowWeekSummary = false;
+  tr2SyncWeekBtn();
+  tr2DateFrom = dateStr; tr2DateTo = dateStr;
+  const df = document.getElementById('tr2-date-from'); if (df) df.value = dateStr;
+  const dt = document.getElementById('tr2-date-to');   if (dt) dt.value = dateStr;
+  tr2SyncClearBtn();
   tr2BuildView();
 }
 
@@ -1620,6 +1643,46 @@ function tr2BuildView() {
   }
 
   const filtered = tr2FilteredSorted();
+
+  if (tr2ShowWeekSummary) {
+    let entries = filtered;
+    if (!tr2DateFrom && !tr2DateTo && !tr2ShowArchived) {
+      const end = new Date(todayStr + 'T00:00:00Z'); end.setUTCDate(end.getUTCDate() + 6);
+      const endStr = end.toISOString().slice(0, 10);
+      entries = tr2AllEntries.filter(e => {
+        if (tr2View === 'arrivals' && e.type !== 'arrival') return false;
+        if (tr2View === 'departures' && e.type !== 'departure') return false;
+        if (tr2RetreatFilter && e.retreatId !== tr2RetreatFilter) return false;
+        return e.date >= todayStr && e.date <= endStr;
+      });
+    }
+    const byDay = new Map();
+    entries.filter(e => !e.isSynthetic && e.date).forEach(e => {
+      if (!byDay.has(e.date)) byDay.set(e.date, { arrivals: 0, departures: 0 });
+      const d = byDay.get(e.date);
+      if (e.type === 'arrival') d.arrivals++; else d.departures++;
+    });
+    const days = [...byDay.keys()].sort();
+    if (!days.length) {
+      body.innerHTML = `<div style="padding:60px 20px;text-align:center;color:#9ca3af">No hay entradas en este rango.</div>`;
+      return;
+    }
+    const th = 'padding:7px 14px;font-size:10.5px;font-weight:700;text-transform:uppercase;color:#6b7280;text-align:left;border-bottom:2px solid #e5e7eb';
+    const rows = days.map(dateStr => {
+      const d = byDay.get(dateStr);
+      const label = new Date(dateStr + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short' });
+      return `<tr onclick="tr2JumpToDay('${dateStr}')" style="cursor:pointer;border-bottom:1px solid #e5e7eb" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+        <td style="padding:10px 14px;font-size:13.5px;font-weight:600;color:#111827;text-transform:capitalize">${label}</td>
+        <td style="padding:10px 14px;font-size:13px;color:#059669">${d.arrivals} llegada${d.arrivals !== 1 ? 's' : ''}</td>
+        <td style="padding:10px 14px;font-size:13px;color:#dc2626">${d.departures} salida${d.departures !== 1 ? 's' : ''}</td>
+      </tr>`;
+    }).join('');
+    body.innerHTML = `<div style="padding:0 0 20px"><table style="width:100%;border-collapse:collapse;font-family:'Jost',sans-serif">
+      <thead><tr><th style="${th}">Día</th><th style="${th}">Llegadas</th><th style="${th}">Salidas</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+    return;
+  }
 
   if (!filtered.length) {
     body.innerHTML = `<div style="padding:60px 20px;text-align:center;color:#9ca3af">
