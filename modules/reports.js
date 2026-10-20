@@ -1259,10 +1259,6 @@ function _rptRenderGratuitySheet(){
         Show cancelled
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280">
-        $/noche
-        <input type="number" step="1" min="0" value="${_gsRate}" onchange="_gsSetSettings('rate',this.value)" style="width:56px;padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:'Jost',sans-serif;color:#374151">
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6b7280">
         Tipo de cambio
         <input type="number" step="0.01" min="0" value="${_gsFx}" onchange="_gsSetSettings('fx',this.value)" style="width:64px;padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:'Jost',sans-serif;color:#374151">
       </label>
