@@ -993,17 +993,27 @@ function tr2PrintView() {
   // apart, not just the date headers, and then (2026-10-18, follow-up) in the same colors.
   const rideGroupsHtml = items => {
     const serviceGroups = tr2GroupByRide(items, TR2_PRINT_PASTEL);
-    return serviceGroups.map(svc => `
+    return serviceGroups.map(svc => {
+      // Jorge's ask 2026-10-20: the room-category sort/spacer is for DEPARTURES
+      // only (it's just loading people into the van and closing balances there) --
+      // arrivals print must stay exactly as it was (sorted by time), untouched,
+      // since that order is what staff use for fast check-in. A ride group is
+      // always one single type (grouping keys on date|airport|type), so checking
+      // the first entry is enough.
+      const isDep = svc.entries[0]?.type === 'departure';
+      const rows = isDep ? _printSortEntries(svc.entries) : svc.entries;
+      return `
       ${svc.entries.length > 1 ? `<tr class="ride" style="background:${svc.color || '#f9fafb'}"><td colspan="7">${svc.entries.length} pax comparten este viaje</td></tr>` : ''}
-      ${_printSortEntries(svc.entries).map((e, i, arr) => {
+      ${rows.map((e, i, arr) => {
         // Jorge's ask 2026-10-19: a blank row between room categories within the same
         // shared-ride group, so the (now pure-category) order is easy to scan visually.
-        const sep = (i > 0 && _printSpacerGroup(tr2LookupRtId(e.room)) !== _printSpacerGroup(tr2LookupRtId(arr[i - 1].room)))
+        const sep = (isDep && i > 0 && _printSpacerGroup(tr2LookupRtId(e.room)) !== _printSpacerGroup(tr2LookupRtId(arr[i - 1].room)))
           ? `<tr class="cat-spacer"><td colspan="7"></td></tr>` : '';
         return sep + entryRow(e, svc.color);
       }).join('')}
       <tr class="ride-end"><td colspan="7"></td></tr>
-    `).join('');
+    `;
+    }).join('');
   };
 
   const rowsHtml = filtered.length ? [...groups.entries()].map(([date, items], gi) => `
