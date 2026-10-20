@@ -4530,7 +4530,17 @@ function _trAssignRideGroups(guests,type,allTr){
     const ap=((isArr?tr?.arrivalAirport:tr?.departureAirport)||'').toLowerCase();
     const ugKey=(tr?.id&&typeof tr2UserGroupMap!=='undefined')?tr2UserGroupMap.get(`${isArr?'arrival':'departure'}|${tr.id}`):null;
     const pickupMins=(!isArr&&!ot&&time)?trTimeToMins(tr?.departurePickupOverride||_trPickupTime(ap,time)):null;
-    return{idx,hasTr:!!tr,ot:!!ot,date:date||'',ap,mins:trTimeToMins(time),pickupMins,share:!!tr?.willingToShare,ugKey};
+    const mins=trTimeToMins(time);
+    // Clustering itself must compare the same quantity the admin Transport
+    // board clusters departures by -- PICKUP time (which a manual override can
+    // move independently of the raw flight time), not the flight time itself.
+    // Jorge's report 2026-10-20: Celia Spartachino's own pickup (computed,
+    // 10:30) exactly matched a group of guests who each had a manual 10:30
+    // override, but their flight times were 25+ min apart from hers -- so
+    // clustering by flight time alone never joined her to that group even
+    // though her EFFECTIVE pickup was identical.
+    const clusterMins=isArr?mins:pickupMins;
+    return{idx,hasTr:!!tr,ot:!!ot,date:date||'',ap,mins,pickupMins,clusterMins,share:!!tr?.willingToShare,ugKey};
   });
   const groups=[];
   const groupOf=new Array(guests.length).fill(null);
@@ -4578,7 +4588,7 @@ function _trAssignRideGroups(guests,type,allTr){
       // Oct 18 retreat showed different ride groupings/pricing between
       // Teacher view and admin, because this window was still 30 here
       // despite the comment above already claiming parity with admin).
-      if(grp.idxs.some(mi=>Math.abs(info[mi].mins-e.mins)<=20))matchGis.push(gi);
+      if(grp.idxs.some(mi=>Math.abs(info[mi].clusterMins-e.clusterMins)<=20))matchGis.push(gi);
     }
     if(matchGis.length){
       const first=matchGis[0];
@@ -4631,7 +4641,7 @@ function _trAssignRideGroups(guests,type,allTr){
       }
     });
   });
-  return{groups,groupOf,prices};
+  return{groups,groupOf,prices,info};
 }
 // Compact teal pricing-reference card, styled after staging's "TRANSFER PRICING
 // REFERENCE" panel — placed at the very bottom of the page, below everything else.
@@ -4688,7 +4698,7 @@ async function remindTransportGuest(btn){
   }catch(e){btn.disabled=false;btn.textContent=old;showToast(`⚠ Could not send the reminder to ${name} — check their email address`);}
 }
 function _trBuildTransportTable(guests,type,result){
-  const{prices,groupOf,groups}=result;
+  const{prices,groupOf,groups,info}=result;
   const isArr=type==='arr';
   if(!guests.length)return`<div style="padding:28px;text-align:center;color:#8a7e74;font-size:12px">No guests registered yet.</div>`;
   const thS=`padding:9px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:#8a7e74;text-align:left;font-weight:700`;
@@ -4709,11 +4719,22 @@ function _trBuildTransportTable(guests,type,result){
   const indexed=guests.map((g,i)=>{
     const ot=isArr?g.tr?.arrivalOT:g.tr?.departureOT;
     const date=isArr?g.tr?.arrivalDate:g.tr?.departureDate;
-    return{g,i,gi:groupOf[i]??-1,date,ot:!!ot,cat:date?0:ot?1:2};
+    const gi=groupOf[i]??-1;
+    // Jorge's report 2026-10-20: rows need to read top-to-bottom chronologically
+    // (same as the admin Transport board), not just clustered together with no
+    // guarantee the CLUSTERS themselves appear in time order -- sorting by raw
+    // group-creation index (gi) put a 9:45 guest's group above a 9:15 group's
+    // just because it happened to form first while scanning guests in a
+    // different order. A grouped departure uses the group's own blended pickup
+    // (groups[gi].minPickupMins); everyone else (solo departures, all arrivals)
+    // uses their own time.
+    const timeMins=gi>=0?(isArr?groups[gi].minMins:groups[gi].minPickupMins):(isArr?info[i].mins:info[i].pickupMins);
+    return{g,i,gi,date,ot:!!ot,cat:date?0:ot?1:2,timeMins};
   });
   indexed.sort((a,b)=>{
     if(a.cat!==b.cat)return a.cat-b.cat;
     if(a.cat===0&&a.date!==b.date)return a.date.localeCompare(b.date);
+    if(a.cat===0&&a.timeMins!=null&&b.timeMins!=null&&a.timeMins!==b.timeMins)return a.timeMins-b.timeMins;
     if(a.gi!==b.gi)return(a.gi===-1?999:a.gi)-(b.gi===-1?999:b.gi);
     return a.g.name.localeCompare(b.g.name);
   });
