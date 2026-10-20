@@ -65,10 +65,25 @@ async function _gsLoadSettings(){
     }
   }catch(e){}
 }
-function _gsSetSettings(field,v){
+// Jorge's report 2026-10-20: this (and every other setter below) used to save
+// whatever this tab's OWN in-memory copy of the shared blob currently held --
+// if a coworker's tab had already saved a newer change (e.g. the Area/Semanal
+// split, or another retreat's Gratuity Daily rate) that this tab never saw,
+// saving from here blindly overwrote it back to whatever this tab last
+// loaded, silently erasing the coworker's entry. Re-fetching the current
+// server value and merging just this one field into THAT, right before
+// saving, means two tabs editing different fields at the same time can never
+// clobber each other.
+async function _gsSetSettings(field,v){
   const n=parseFloat(v)||0;
   if(field==='rate')_gsRate=n;else _gsFx=n;
-  db.from('app_store').upsert({key:'gratuitySheetSettings',value:{rate:_gsRate,fx:_gsFx},updated_at:new Date().toISOString()}).catch(()=>{});
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','gratuitySheetSettings').maybeSingle();
+    const fresh=(data&&data.value&&typeof data.value==='object')?data.value:{rate:_gsRate,fx:_gsFx};
+    fresh[field==='rate'?'rate':'fx']=n;
+    _gsRate=Number(fresh.rate)||25;_gsFx=Number(fresh.fx)||17;
+    await db.from('app_store').upsert({key:'gratuitySheetSettings',value:fresh,updated_at:new Date().toISOString()});
+  }catch(e){}
   _rptRenderGratuitySheet();
 }
 async function _gsLoadExtraTips(){
@@ -82,21 +97,56 @@ async function _gsLoadExtraTips(){
     }
   }catch(e){}
 }
-function _gsSetExtraTip(bkId,field,v){
+async function _gsSetExtraTip(bkId,field,v){
   const n=parseFloat(v)||0;
-  const cur=_gsExtraTips[bkId]||{usd:0,mxn:0};
-  cur[field]=n;
-  _gsExtraTips[bkId]=cur;
-  db.from('app_store').upsert({key:'gratuityExtraTips',value:_gsExtraTips,updated_at:new Date().toISOString()}).catch(()=>{});
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','gratuityExtraTips').maybeSingle();
+    const fresh=(data&&data.value&&typeof data.value==='object')?data.value:{};
+    const cur=fresh[bkId]||{usd:0,mxn:0};
+    cur[field]=n;
+    fresh[bkId]=cur;
+    _gsExtraTips=fresh;
+    await db.from('app_store').upsert({key:'gratuityExtraTips',value:_gsExtraTips,updated_at:new Date().toISOString()});
+  }catch(e){}
+  _rptRenderGratuitySheet();
+}
+// Jorge's ask 2026-10-20: the $/noche rate used to be ONE global number
+// applied to every retreat -- no way to see or change it for just one event.
+// Per-retreat override (defaults to the global _gsRate when a retreat has
+// never had its own value set), shown as its own "Gratuity Daily" column.
+let _gsDailyRates={};
+let _gsDailyRatesLoaded=false;
+async function _gsLoadDailyRates(){
+  if(_gsDailyRatesLoaded)return;
+  _gsDailyRatesLoaded=true;
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','gratuityDailyRates').maybeSingle();
+    if(data&&data.value&&typeof data.value==='object'){
+      _gsDailyRates=data.value;
+      if(_rptActiveTab==='gratuitysheet')_rptRenderGratuitySheet();
+    }
+  }catch(e){}
+}
+function _gsRateFor(bkId){const v=_gsDailyRates[bkId];return v!=null&&v!==''?Number(v):_gsRate;}
+async function _gsSetDailyRate(bkId,v){
+  const n=v===''?null:(parseFloat(v)||0);
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','gratuityDailyRates').maybeSingle();
+    const fresh=(data&&data.value&&typeof data.value==='object')?data.value:{};
+    if(n==null)delete fresh[bkId];else fresh[bkId]=n;
+    _gsDailyRates=fresh;
+    await db.from('app_store').upsert({key:'gratuityDailyRates',value:_gsDailyRates,updated_at:new Date().toISOString()});
+  }catch(e){}
   _rptRenderGratuitySheet();
 }
 function _gsRowCalc(r){
   const et=_gsExtraTips[r.bk.id]||{usd:0,mxn:0};
-  const gratuityDls=r.guests*_gsRate*r.nights;
+  const dailyRate=_gsRateFor(r.bk.id);
+  const gratuityDls=r.guests*dailyRate*r.nights;
   const propinaPesos=gratuityDls*_gsFx;
   const extraUsd=Number(et.usd)||0,extraMxn=Number(et.mxn)||0;
   const totalCobrado=propinaPesos+(extraUsd*_gsFx)+extraMxn;
-  return{gratuityDls,propinaPesos,extraUsd,extraMxn,totalCobrado};
+  return{dailyRate,gratuityDls,propinaPesos,extraUsd,extraMxn,totalCobrado};
 }
 
 // Area/Propina 100% side table (J/K columns in the Sheet) -- a department
@@ -121,12 +171,17 @@ async function _gsLoadDeptSplits(){
     }
   }catch(e){}
 }
-function _gsSetDeptSplit(monthKey,dept,v){
+async function _gsSetDeptSplit(monthKey,dept,v){
   const n=parseFloat(v)||0;
-  const cur=_gsDeptSplits[monthKey]||{};
-  cur[dept]=n;
-  _gsDeptSplits[monthKey]=cur;
-  db.from('app_store').upsert({key:'gratuityDeptSplits',value:_gsDeptSplits,updated_at:new Date().toISOString()}).catch(()=>{});
+  try{
+    const{data}=await db.from('app_store').select('value').eq('key','gratuityDeptSplits').maybeSingle();
+    const fresh=(data&&data.value&&typeof data.value==='object')?data.value:{};
+    const cur=fresh[monthKey]||{};
+    cur[dept]=n;
+    fresh[monthKey]=cur;
+    _gsDeptSplits=fresh;
+    await db.from('app_store').upsert({key:'gratuityDeptSplits',value:_gsDeptSplits,updated_at:new Date().toISOString()});
+  }catch(e){}
   _rptRenderGratuitySheet();
 }
 // Area/Propina 100% panel for one month -- same formulas as the Sheet's J/K
@@ -1111,6 +1166,7 @@ function _rptRenderGratuitySheet(){
   if(!el)return;
   _gsLoadSettings();
   _gsLoadExtraTips();
+  _gsLoadDailyRates();
   _gsLoadDeptSplits();
   // We Travel bookings (bk.source==='wetravel') aren't real gratuity-tracked
   // retreats -- they're priced/settled entirely on WeTravel's own platform,
@@ -1145,6 +1201,9 @@ function _rptRenderGratuitySheet(){
         <td style="${_rptTd()};white-space:nowrap;font-size:12px;color:#6b7280">${fmtDate(r.bk.startDate)} – ${fmtDate(r.bk.endDate)}</td>
         <td style="${_rptTd('center')};font-size:13px;color:#374151">${r.nights}</td>
         <td style="${_rptTd('center')};font-size:13px;font-weight:700;color:#374151">${r.guests||'—'}</td>
+        <td style="${_rptTd('right')}">
+          <input type="number" step="1" min="0" value="${c.dailyRate}" placeholder="${_gsRate}" style="${inputStyle}" onchange="_gsSetDailyRate('${r.bk.id}',this.value)">
+        </td>
         <td style="${_rptTd('right')};font-size:13px;font-weight:600;color:#6b7280">${fmt$(c.gratuityDls)}</td>
         <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#0e5a5a">$${c.propinaPesos.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
         <td style="${_rptTd('right')}">
@@ -1169,6 +1228,7 @@ function _rptRenderGratuitySheet(){
                 <th style="${_rptTh()}">Fechas</th>
                 <th style="${_rptTh('center')}">Noches</th>
                 <th style="${_rptTh('center')}">Pax</th>
+                <th style="${_rptTh('right')}">Gratuity Daily</th>
                 <th style="${_rptTh('right')}">Gratuity Dls</th>
                 <th style="${_rptTh('right')}">Propina Pesos</th>
                 <th style="${_rptTh('right')}">Extra Tips USD</th>
@@ -1176,10 +1236,10 @@ function _rptRenderGratuitySheet(){
                 <th style="${_rptTh('right')}">Total Cobrado</th>
               </tr>
             </thead>
-            <tbody>${rowsHtml||`<tr><td colspan="9" style="padding:20px;text-align:center;color:#9ca3af;font-size:12px">No retreats this month</td></tr>`}</tbody>
+            <tbody>${rowsHtml||`<tr><td colspan="10" style="padding:20px;text-align:center;color:#9ca3af;font-size:12px">No retreats this month</td></tr>`}</tbody>
             <tfoot>
               <tr style="background:#f8fafc;border-top:2px solid var(--border)">
-                <td colspan="5" style="${_rptTd()};font-weight:800;font-size:12.5px">TOTAL ${_rptFmtMonth(m.key)}</td>
+                <td colspan="6" style="${_rptTd()};font-weight:800;font-size:12.5px">TOTAL ${_rptFmtMonth(m.key)}</td>
                 <td style="${_rptTd('right')};font-weight:800;font-size:12.5px;color:#0e5a5a">$${mPropina.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
                 <td style="${_rptTd('right')};font-weight:800;font-size:12.5px">${mExtraUsd?fmt$(mExtraUsd):'—'}</td>
                 <td style="${_rptTd('right')};font-weight:800;font-size:12.5px">${mExtraMxn?'$'+mExtraMxn.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}</td>
@@ -1243,13 +1303,14 @@ function _rptRenderGratuitySheet(){
 
 function _gsExportCsv(){
   const rows=_rptFiltered().filter(r=>r.bk.source!=='wetravel').slice().sort((a,b)=>(a.bk.startDate||'').localeCompare(b.bk.startDate||''));
-  const header=['Retreat','Fechas','Noches','Pax','Gratuity Dls','Propina Pesos','Extra Tips USD','Extra Tips Pesos','Total Cobrado','Status'];
+  const header=['Retreat','Fechas','Noches','Pax','Gratuity Daily','Gratuity Dls','Propina Pesos','Extra Tips USD','Extra Tips Pesos','Total Cobrado','Status'];
   const lines=[header,...rows.map(r=>{
     const c=_gsRowCalc(r);
     return[
       r.bk.retreatName||r.bk.leaderName||'',
       `${fmtDate(r.bk.startDate)} – ${fmtDate(r.bk.endDate)}`,
       r.nights,r.guests,
+      c.dailyRate,
       c.gratuityDls.toFixed(2),c.propinaPesos.toFixed(2),
       c.extraUsd.toFixed(2),c.extraMxn.toFixed(2),
       c.totalCobrado.toFixed(2),
