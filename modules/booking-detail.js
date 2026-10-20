@@ -1380,14 +1380,14 @@ async function bdSyncCloudbeds(){
   const sameDuration=c=>Math.max(1,Math.round((pd(c.endDate)-pd(c.startDate))/DAY_MS))===portalNights;
   const exactMatch=nameMatches.find(c=>sameDuration(c)&&(c.rooms||[]).some(rn=>ownRt?.rooms?.includes(rn)));
   if(exactMatch){
-    // Jorge's call 2026-10-20: (re)sync only LINKS the Cloudbeds reservation
-    // (cbReservationIds) -- it must never move the portal's own room. Cloudbeds'
-    // room for this reservation can legitimately differ (it only has to match
-    // room TYPE + duration to count as the "same stay" above), but the portal's
-    // room is the source of truth here, same as the rate-never-moves-on-edit
-    // rule for Rooms edits/drag-and-drop. The dates ARE still pulled from
-    // Cloudbeds below (that's an existing, separate behavior Jorge hasn't
-    // flagged) -- only the room assignment itself stops being overwritten.
+    // Jorge's call 2026-10-20: (re)sync links the Cloudbeds reservation
+    // (cbReservationIds) and the portal's own room is always the source of
+    // truth -- it never gets overwritten by whatever room Cloudbeds happens to
+    // have (that can legitimately differ: exactMatch only requires matching
+    // room TYPE + duration, not the exact room). Follow-up same day: when the
+    // two DO disagree, push the portal's room to Cloudbeds instead of leaving
+    // the mismatch in place -- same moveReservationRoom call the Room Calendar
+    // drag-and-drop already uses (modules/venues.js's rcMoveRoom).
     const realCheckIn=exactMatch.startDate||subj.checkIn,realCheckOut=exactMatch.endDate||subj.checkOut;
     const datesChanged=realCheckIn!==subj.checkIn||realCheckOut!==subj.checkOut;
     if(reg.customRateOverride==null&&datesChanged){
@@ -1402,7 +1402,21 @@ async function bdSyncCloudbeds(){
         db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id),
       ]);
     }catch(e){bdStickyAlert('Error guardando el enlace: '+e.message,'error');return;}
-    bdStickyAlert(`Vinculado con la reserva de Cloudbeds "${exactMatch.guestName}" (cuarto de Cloudbeds: ${(exactMatch.rooms||[])[0]||'—'}, se mantiene el cuarto del portal: ${reg.room})${datesChanged?` · fechas ajustadas: ${fmtDate(realCheckIn)} — ${fmtDate(realCheckOut)}`:''} ✓`,'success');
+    const cbRoom=(exactMatch.rooms||[])[0]||'';
+    let moveMsg=` (cuarto ${reg.room}, ya coincidía con Cloudbeds)`;
+    if(cbRoom&&cbRoom!==reg.room){
+      showToast(`Moviendo cuarto en Cloudbeds: ${cbRoom} → ${reg.room}…`);
+      try{
+        const _cbCfgMv=JSON.parse(localStorage.getItem('ama_cb_config')||'{}');
+        const _mappedMv=(_cbCfgMv.mapping||[]).find(m=>m.portalRoom===reg.room);
+        const moveRes=await fetch(`${CLOUDBEDS_PROXY}?action=moveReservationRoom`,{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({reservationId:exactMatch.reservationID,newRoomName:reg.room,newCbRoomId:_mappedMv?.cbId||null,startDate:realCheckIn,endDate:realCheckOut})
+        });
+        const moveData=await moveRes.json();
+        moveMsg=moveData?.success?` · cuarto movido en Cloudbeds: ${cbRoom} → ${reg.room}`:` · ⚠ no se pudo mover el cuarto en Cloudbeds (${moveData?.error||'error desconocido'}) — verifica ahí manualmente`;
+      }catch(e){moveMsg=` · ⚠ no se pudo mover el cuarto en Cloudbeds: ${e.message} — verifica ahí manualmente`;}
+    }
+    bdStickyAlert(`Vinculado con la reserva de Cloudbeds "${exactMatch.guestName}"${moveMsg}${datesChanged?` · fechas ajustadas: ${fmtDate(realCheckIn)} — ${fmtDate(realCheckOut)}`:''} ✓`,'success');
     _bdRender();
     return;
   }
