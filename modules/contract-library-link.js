@@ -87,7 +87,11 @@ function clcDropSnapshot(bk){
 }
 
 // "Edit wording for this retreat" keys → section titles
-const CLC_OVERRIDE_KEYS=[[/^payment/i,'paymentTerms'],[/^cancellation/i,'cancellationPolicy'],[/complimentary/i,'teacherPolicy'],[/shala/i,'yogaPolicy'],[/^property/i,'propertyPolicy'],[/liabilit/i,'liabilityPolicy'],[/includ/i,'inclusions']];
+// "not included" must be checked BEFORE the generic "included" pattern -- both titles
+// contain "includ", so without this order "What's Included" and "What is NOT Included"
+// collided onto the same override key (Jorge's report 2026-10-20: editing one changed
+// both, since whichever matched first in the old single-pattern list won every time).
+const CLC_OVERRIDE_KEYS=[[/^payment/i,'paymentTerms'],[/^cancellation/i,'cancellationPolicy'],[/complimentary/i,'teacherPolicy'],[/shala/i,'yogaPolicy'],[/^property/i,'propertyPolicy'],[/liabilit/i,'liabilityPolicy'],[/not.{0,3}includ/i,'notIncluded'],[/includ/i,'inclusions']];
 function clcOverrideKey(title){const m=CLC_OVERRIDE_KEYS.find(([re])=>re.test(title||''));return m?m[1]:null;}
 function clcBody(bk,s){
   const k=clcOverrideKey(s.title);
