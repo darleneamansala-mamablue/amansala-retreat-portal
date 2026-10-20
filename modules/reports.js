@@ -214,6 +214,21 @@ function _gsDeptPanelHtml(monthKey,mTotalCobrado){
 
 const _RPT_METHOD_LABELS={wire:'Wire Transfer',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',cash:'Cash',cheque:'Cheque',paypal:'Paypal',clip:'Clip',other:'Other'};
 const _RPT_METHOD_COLORS={wire:'#dbeafe:#1d4ed8',zelle:'#fce7f3:#9d174d',venmo:'#ede9fe:#5b21b6',card:'#dcfce7:#15803d',cash:'#fef9c3:#854d0e',cheque:'#f3f4f6:#374151',paypal:'#e0f2fe:#0369a1',clip:'#fdf4ff:#7e22ce',other:'#f3f4f6:#374151'};
+// Pulls the method back out of a folio_items Payment description -- see the
+// "Payments by User" comment above for why there's no method column to read
+// instead. Stripe/Card on File/We Travel are recognized first since their
+// descriptions carry extra text (a payment-intent id, "50% deposit", etc.)
+// that isn't the method itself; everything else is a manual folio payment
+// whose description IS the method the staff picked (_BD_PAY_METHODS in
+// booking-detail.js), optionally followed by ": <ref>" or a stray "(" -- cut
+// at the first of either.
+function _rptFolioPayMethod(desc){
+  const body=(desc||'').replace(/^Payment\s*—\s*/,'');
+  if(/credit card \(stripe\)/i.test(body))return'Stripe';
+  if(/card on file/i.test(body))return'Card on File';
+  if(/we travel/i.test(body))return'We Travel';
+  return body.split(/[:(]/)[0].trim()||'Other';
+}
 const _rptFmtMonth=d=>d?pd(d+'-01').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'—';
 const _rptTabBtn=(id,label,active)=>`<button onclick="_rptSetTab('${id}')" style="padding:5px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif;border:1.5px solid ${active?'#0e5a5a':'#e5e7eb'};background:${active?'#0e5a5a':'#f3f4f6'};color:${active?'#fff':'#6b7280'}">${label}</button>`;
 
@@ -635,9 +650,28 @@ function _rptRenderDailyView(){
   const totalCharges=folioCharges.reduce((s,e)=>s+e.amount,0);
   const totalIn=totalPay+totalFolioPay;
 
-  const byUser={};
-  payEntries.forEach(e=>{const u=e.staffName||'Payment Link';byUser[u]=(byUser[u]||0)+Number(e.amount||0);});
-  folioPayments.forEach(e=>{const u=e.staff_name||'Payment Link';byUser[u]=(byUser[u]||0)+Math.abs(e.amount);});
+  // Jorge's ask 2026-10-20: "Payments by User" should also break down HOW each
+  // staff member took their payments (Clip, Cash, Stripe, etc.), not just the
+  // total. bk.payments already has a clean method code (_RPT_METHOD_LABELS);
+  // folio_items payments have no method COLUMN at all -- every payment-recording
+  // path (bdRecordPayment/bdRecordTotalPayment, the Stripe webhook, rb-lib.js,
+  // wetravel-webhook.js) writes it into the description instead, always as
+  // "Payment — <method>..." -- _rptFolioPayMethod() below pulls it back out.
+  const byUser={},byUserMethod={};
+  const _bumpMethod=(u,method,amt)=>{
+    if(!byUserMethod[u])byUserMethod[u]={};
+    byUserMethod[u][method]=(byUserMethod[u][method]||0)+amt;
+  };
+  payEntries.forEach(e=>{
+    const u=e.staffName||'Payment Link';
+    byUser[u]=(byUser[u]||0)+Number(e.amount||0);
+    _bumpMethod(u,_RPT_METHOD_LABELS[e.method]||e.method||'Other',Number(e.amount||0));
+  });
+  folioPayments.forEach(e=>{
+    const u=e.staff_name||'Payment Link';
+    byUser[u]=(byUser[u]||0)+Math.abs(e.amount);
+    _bumpMethod(u,_rptFolioPayMethod(e.description),Math.abs(e.amount));
+  });
 
   const isSameDay=_dailyFrom===_dailyTo;
   const rangeLabel=isSameDay?fmtDate(_dailyFrom):`${fmtDate(_dailyFrom)} – ${fmtDate(_dailyTo)}`;
@@ -684,10 +718,11 @@ function _rptRenderDailyView(){
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${Object.entries(byUser).sort((a,b)=>b[1]-a[1]).map(([u,amt])=>
           `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:10px">
-            <div style="width:28px;height:28px;border-radius:50%;background:#0e5a5a22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0e5a5a">${escHtml((u[0]||'?').toUpperCase())}</div>
+            <div style="width:28px;height:28px;border-radius:50%;background:#0e5a5a22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0e5a5a;flex-shrink:0">${escHtml((u[0]||'?').toUpperCase())}</div>
             <div>
               <div style="font-size:12px;font-weight:600;color:#374151">${escHtml(u)}</div>
               <div style="font-size:15px;font-weight:800;color:#15803d">${fmt$(amt)}</div>
+              <div style="font-size:10.5px;color:#9ca3af;margin-top:2px">${Object.entries(byUserMethod[u]||{}).sort((a,b)=>b[1]-a[1]).map(([m,a])=>`${escHtml(m)} ${fmt$(a)}`).join(' · ')}</div>
             </div>
           </div>`).join('')}
       </div>
