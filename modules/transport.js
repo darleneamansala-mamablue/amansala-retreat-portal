@@ -945,7 +945,7 @@ function tr2PrintView() {
         <td>${escHtml(e.guest || '')}</td>
         <td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>
         <td>${escHtml(e.airport === 'cancun' ? 'CUN' : e.airport === 'tulum' ? 'TQO' : (e.airport || ''))}</td>
-        <td>${escHtml(e.type === 'departure' ? (e.pickup ? `${e.pickup} → ${e.time || ''}` : (e.time || '')) : (e.time || ''))}</td>
+        <td>${escHtml(e.type === 'departure' ? ((e.groupPickup || e.pickup) ? `${e.groupPickup || e.pickup} → ${e.time || ''}` : (e.time || '')) : (e.time || ''))}</td>
         <td>${escHtml(e.retreatLabel || '')}</td>
         <td>${e.cost != null ? `$${e.cost}` : ''}</td>
       </tr>`;
@@ -992,15 +992,7 @@ function tr2PrintView() {
   // tr2UserGroupMap) -- Jorge's ask 2026-10-18: the printed sheet also needs these groups set
   // apart, not just the date headers, and then (2026-10-18, follow-up) in the same colors.
   const rideGroupsHtml = items => {
-    const colorMap = tr2AssignGroupColors(items, TR2_PRINT_PASTEL);
-    const serviceGroups = [];
-    const seen = new Map();
-    items.forEach(e => {
-      const autoKey = colorMap.get(e.rowId) || ('__solo__' + e.rowId);
-      const gk = tr2UserGroupMap.has(`${e.type}|${e.rowId}`) ? tr2UserGroupMap.get(`${e.type}|${e.rowId}`) : autoKey;
-      if (!seen.has(gk)) { seen.set(gk, serviceGroups.length); serviceGroups.push({ color: colorMap.get(e.rowId), entries: [] }); }
-      serviceGroups[seen.get(gk)].entries.push(e);
-    });
+    const serviceGroups = tr2GroupByRide(items, TR2_PRINT_PASTEL);
     return serviceGroups.map(svc => `
       ${svc.entries.length > 1 ? `<tr class="ride" style="background:${svc.color || '#f9fafb'}"><td colspan="7">${svc.entries.length} pax comparten este viaje</td></tr>` : ''}
       ${_printSortEntries(svc.entries).map((e, i, arr) => {
@@ -1390,6 +1382,7 @@ async function tr2LoadData() {
     }
   } catch (e) {}
 
+  tr2BlendGroupPickups();
   tr2BuildView();
 }
 
@@ -1420,6 +1413,59 @@ function tr2AssignGroupColors(entries, palette = TR2_PASTEL) {
   clusters.forEach(cl => { const color = palette[ci++ % palette.length]; cl.idxs.forEach(id => colorMap.set(id, color)); });
   return colorMap;
 }
+// Real "who's actually riding together" grouping -- a manual tr2UserGroupMap
+// entry for a specific row wins over the auto-cluster colors above (which can
+// put unrelated same-day clusters under the same recycled palette color once
+// there are more clusters than colors, so color alone is never a safe way to
+// tell who's really grouped). Shared by tr2BuildView(), tr2PrintView(), and
+// tr2BlendGroupPickups() below so all three agree on the exact same groups.
+function tr2GroupByRide(items, palette = TR2_PASTEL) {
+  const colorMap = tr2AssignGroupColors(items, palette);
+  const groups = [];
+  const seen = new Map();
+  items.forEach(e => {
+    const autoKey = colorMap.get(e.rowId) || ('__solo__' + e.rowId);
+    const gk = tr2UserGroupMap.has(`${e.type}|${e.rowId}`) ? tr2UserGroupMap.get(`${e.type}|${e.rowId}`) : autoKey;
+    if (!seen.has(gk)) { seen.set(gk, groups.length); groups.push({ key: gk, color: colorMap.get(e.rowId), entries: [] }); }
+    groups[seen.get(gk)].entries.push(e);
+  });
+  return groups;
+}
+// Jorge's ask 2026-10-20: guests sharing one ride must all show the SAME pickup
+// time -- the earliest one actually needed in the group -- not each their own
+// individually-computed time (a later flight in the same shared ride doesn't
+// mean a later pickup; the van leaves once, at the earliest time anyone in it
+// needs). Same idea driver-view.html's buildPickupGroups() and the teacher
+// portal's _trAssignRideGroups() already use for their own views.
+//
+// Sets e.groupPickup (the DISPLAY value) rather than overwriting e.pickup (the
+// guest's own TRUE auto-calculated-or-overridden time) -- tr2AssignGroupColors'
+// own clustering, "Editar transporte"'s default, and re-grouping after a manual
+// drag-and-drop all need that real per-guest value to stay intact; only
+// mutating a guest's real pickup would make it unrecoverable the moment a
+// drag-and-drop pulls them into or out of a group. Every place that DISPLAYS or
+// SORTS a departure's pickup reads `e.groupPickup || e.pickup`.
+//
+// Runs once, right after tr2AllEntries/tr2UserGroupMap are ready and again
+// after any manual regroup (tr2Drop/tr2SplitEntry/tr2ResetGroups), so the
+// admin table, print and sort order all agree with no further wiring.
+function tr2BlendGroupPickups() {
+  tr2AllEntries.forEach(e => { if (e.type === 'departure') delete e.groupPickup; });
+  const byDate = new Map();
+  tr2AllEntries.forEach(e => {
+    if (e.type !== 'departure' || !e.pickup) return;
+    if (!byDate.has(e.date)) byDate.set(e.date, []);
+    byDate.get(e.date).push(e);
+  });
+  byDate.forEach(items => {
+    tr2GroupByRide(items).forEach(g => {
+      if (g.entries.length < 2) return;
+      const minMins = Math.min(...g.entries.map(e => tr2ToMins(e.pickup)));
+      const blended = `${String(Math.floor(minMins / 60)).padStart(2, '0')}:${String(minMins % 60).padStart(2, '0')}`;
+      g.entries.forEach(e => { e.groupPickup = blended; });
+    });
+  });
+}
 
 // Shared by tr2BuildView() and tr2PrintView() -- same view/retreat/date filters,
 // same today-only default, same sort order, so the printed sheet always matches
@@ -1437,8 +1483,8 @@ function tr2FilteredSorted() {
     return true;
   }).sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
-    const aSort = a.type === 'departure' ? (a.pickup || a.time || '') : (a.time || '');
-    const bSort = b.type === 'departure' ? (b.pickup || b.time || '') : (b.time || '');
+    const aSort = a.type === 'departure' ? (a.groupPickup || a.pickup || a.time || '') : (a.time || '');
+    const bSort = b.type === 'departure' ? (b.groupPickup || b.pickup || b.time || '') : (b.time || '');
     return aSort.localeCompare(bSort);
   });
 }
@@ -1471,7 +1517,6 @@ function tr2BuildView() {
 
   const otEntries = filtered.filter(e => e.ot);
   const normalEntries = filtered.filter(e => !e.ot);
-  const colorMap = tr2AssignGroupColors(normalEntries);
   const today = new Date().toISOString().slice(0,10);
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0,10);
 
@@ -1508,16 +1553,7 @@ function tr2BuildView() {
         : label;
       html += `<tr><td colspan="${totalCols}" style="padding:8px 12px;background:${bg};font-size:11px;font-weight:700;color:${color};border-top:2px solid #e5e7eb">${labelHtml}</td></tr>`;
 
-      const serviceGroups = [];
-      const seen = new Map();
-      items.forEach(e => {
-        const autoKey = colorMap.get(e.rowId) || ('__solo__' + e.rowId);
-        const dirKey = `${e.type}|${e.rowId}`;
-        const gk = tr2UserGroupMap.has(dirKey) ? tr2UserGroupMap.get(dirKey) : autoKey;
-        if (!seen.has(gk)) { seen.set(gk, serviceGroups.length); serviceGroups.push({ key: gk, color: colorMap.get(e.rowId), entries: [] }); }
-        serviceGroups[seen.get(gk)].entries.push(e);
-        if (serviceGroups[seen.get(gk)].entries.length === 1) serviceGroups[seen.get(gk)].color = colorMap.get(e.rowId);
-      });
+      const serviceGroups = tr2GroupByRide(items);
 
       serviceGroups.forEach((svc, si) => {
         const pax = svc.entries.length;
@@ -1636,7 +1672,7 @@ function tr2RenderRow(e, color, groupPax) {
 
   const timeCell = isArr
     ? (e.time ? `<span style="font-weight:700">${tr2FmtTime(e.time)}</span>${e.eta ? `<span style="color:#9ca3af;font-size:11px"> → ~${tr2FmtTime(e.eta)}</span>` : ''}${(e.flight || flightStatusBadge) ? `<div style="font-size:10.5px;color:#6b7280;margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">${e.flight ? escHtml(e.flight) : ''}${flightStatusBadge}</div>` : ''}` : '—')
-    : (e.pickup ? `<span style="color:#7e22ce;font-weight:700">🚐 ${tr2FmtTime(e.pickup)}</span>${e.time ? `<span style="color:#9ca3af;font-size:11px"> ✈ ${tr2FmtTime(e.time)}</span>` : ''}` : (e.time ? tr2FmtTime(e.time) : '—'));
+    : ((e.groupPickup || e.pickup) ? `<span style="color:#7e22ce;font-weight:700">🚐 ${tr2FmtTime(e.groupPickup || e.pickup)}</span>${e.time ? `<span style="color:#9ca3af;font-size:11px"> ✈ ${tr2FmtTime(e.time)}</span>` : ''}` : (e.time ? tr2FmtTime(e.time) : '—'));
 
   const nameCell = `<div style="font-weight:700;color:#111827">${escHtml(e.guest)}</div>
     ${e.driverConfirmed ? `<span style="font-size:9px;padding:1px 5px;border-radius:10px;background:#d1fae5;color:#065f46;font-weight:600">✓ Chofer</span>` : ''}
@@ -1706,6 +1742,7 @@ async function tr2Drop(targetFirstDirId) {
     targetKey = ugKey;
   }
   tr2UserGroupMap.set(src, targetKey);
+  tr2BlendGroupPickups();
   tr2BuildView();
   await tr2SaveGroupSetting();
 
@@ -1734,7 +1771,7 @@ async function tr2Drop(targetFirstDirId) {
 async function tr2SaveGroupSetting() {
   try { await db.from('settings').upsert({ key: 'transport_groups', value: [...tr2UserGroupMap], updated_at: new Date().toISOString() }, { onConflict: 'key' }); } catch (e) {}
 }
-async function tr2ResetGroups() { tr2UserGroupMap.clear(); tr2BuildView(); await tr2SaveGroupSetting(); }
+async function tr2ResetGroups() { tr2UserGroupMap.clear(); tr2BlendGroupPickups(); tr2BuildView(); await tr2SaveGroupSetting(); }
 async function tr2SplitEntry(dirId) {
   const actualRowId = dirId.split('|')[1], direction = dirId.split('|')[0];
   const dirKey = direction === 'arrival' ? 'arrivalFolioItemId' : 'departureFolioItemId';
@@ -1744,6 +1781,7 @@ async function tr2SplitEntry(dirId) {
         .filter(([dk]) => !!tr2RawRows[dk.split('|')[1]]?.data?.folioCharged?.[dirKey]).map(([dk]) => dk.split('|')[1])
     : [];
   tr2UserGroupMap.delete(dirId);
+  tr2BlendGroupPickups();
   tr2BuildView();
   await tr2SaveGroupSetting();
   const thisHasCharge = !!tr2RawRows[actualRowId]?.data?.folioCharged?.[dirKey];
