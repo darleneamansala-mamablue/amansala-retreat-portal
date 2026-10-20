@@ -594,11 +594,23 @@ function _rptDailyPayEntries(){
   });
   return out;
 }
+// Jorge's report 2026-10-20: Cyan's entire $2,065 "Payments by User" total
+// turned out to be two Credit items ("Credit from Cancelled booking" -$2,000,
+// "Sound Healing Credit" -$65), no real payment at all -- splitting charges
+// vs. payments by SIGN alone (amount>0 / amount<0) treats any credit/discount
+// as if it were cash coming in, just because it happens to be stored as a
+// negative unit_price. A credit reduces what the guest owes -- it belongs
+// with the charges it's offsetting (nets against the Folio Charges total,
+// same category or not: a "Credit-Boutique" item stays in Boutique's own
+// total), not mixed into Payments/Payments by User. Only category:'Payment'
+// (real cash -- Stripe, wire, cash, etc., always inserted with that exact
+// category) counts as a payment; everything else is a charge/adjustment
+// regardless of sign.
 function _rptDailyFolioCharges(){
-  return _dailyFolioItems.filter(i=>i.amount>0&&(_dailyUser==='all'||i.staff_name==null||i.staff_name===_dailyUser));
+  return _dailyFolioItems.filter(i=>i.category!=='Payment'&&(_dailyUser==='all'||i.staff_name==null||i.staff_name===_dailyUser));
 }
 function _rptDailyFolioPayments(){
-  return _dailyFolioItems.filter(i=>i.amount<0&&(_dailyUser==='all'||i.staff_name==null||i.staff_name===_dailyUser));
+  return _dailyFolioItems.filter(i=>i.category==='Payment'&&(_dailyUser==='all'||i.staff_name==null||i.staff_name===_dailyUser));
 }
 
 async function _rptRenderDaily(){
@@ -742,7 +754,7 @@ function _rptRenderDailyView(){
                 <td style="${_rptTd()};font-size:12px;color:#374151;max-width:200px">${escHtml(guestLine)}</td>
                 <td style="${_rptTd()};font-size:12px;color:#374151;max-width:240px">${escHtml(r.description||'—')}</td>
                 <td style="${_rptTd('center')}">${r.category?`<span style="background:#f3f4f6;color:#374151;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap">${escHtml(r.category)}</span>`:'<span style="color:#d1d5db">—</span>'}</td>
-                <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#7e22ce">${fmt$(r.amount)}</td>
+                <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:${r.amount<0?'#16a34a':'#7e22ce'}">${fmt$(r.amount)}</td>
               </tr>`;
             }).join('')}
           </tbody>
