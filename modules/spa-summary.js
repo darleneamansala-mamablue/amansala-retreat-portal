@@ -1,21 +1,25 @@
 // ===== spa-summary.js — "Summary" view on the Spa tab =====
 // Loaded as a classic script AFTER spa.js / spa-calendar.js; shares global scope. Standalone: spaSetView and spaRender are wrapped, not edited.
-// One printable page for a chosen day, laid out like the team's daily briefing (SPA Y TAROT / AGENDA DE SERVICIOS / pendientes):
-// the spa host at Chica (click to choose), Grande and Chica start times, tarot location, who is working and in which room,
-// the day's agenda (confirmed / prepaid / charged / no room match, using the portal's own spaResolveGuestForAppt rule),
-// open gaps to sell per therapist, things to sort out, and the services we sell. Spanish or English.
+// The spa part of the team's daily briefing, as WhatsApp-style text (*bold*, • bullets) that can be copied or printed:
+//   💆 SPA Y TAROT  (Grande / Chica start times, who attends Chica, the spa host, tarot room, early-booking warning, extra lines)
+//   📋 SERVICIOS POR TERAPEUTA  (one block per therapist: confirmed or pending, then each service with its charge status,
+//   using the portal's own spaResolveGuestForAppt rule for "Sin habitación vinculada")
+// Below it, a separate "selling sheet": who is working, in which room, open gaps to sell, and the services we sell.
 // Data: reads SpaData + SpaAppointments (read-only). Writes ONLY its own app_store key spa_summary_settings:
-//   { hosts:{date:'Name'}, defaultHost, starts:{date:{grande,chica}}, defaultStarts:{grande,chica}, tarot:{date:'text'},
-//     working:{date:[therapistId,...]}, sellStart:'09:00', sellEnd:'18:00', minGap:45, lang:'es' }
+//   { hosts:{date:'Name'}, hostRoles:{date:'de Seguridad'}, attendants:{date:'Name'}, defaultHost, defaultHostRole, defaultAttendant,
+//     starts:{date:{grande,chica}}, defaultStarts:{grande,chica}, tarot:{date:'habitación 1A'}, notes:{date:'one line per row'},
+//     working:{date:[therapistId,...]}, sellStart:'09:00', sellEnd:'18:00', minGap:45, lang:'es' (selling-sheet labels only) }
 
-let _sss={hosts:{},defaultHost:'',starts:{},defaultStarts:{},tarot:{},working:{},sellStart:'09:00',sellEnd:'18:00',minGap:45,lang:'es'};
+let _sss={hosts:{},hostRoles:{},attendants:{},notes:{},defaultHost:'',defaultHostRole:'',defaultAttendant:'',starts:{},defaultStarts:{},tarot:{},working:{},sellStart:'09:00',sellEnd:'18:00',minGap:45,lang:'es'};
 let _sssDate='';
 function sssEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function sssToMin(t){const [h,m]=String(t||'0:0').split(':').map(Number);return (h||0)*60+(m||0);}
 function sssFromMin(n){return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');}
-function sssFmt(t){const n=sssToMin(t);const h=Math.floor(n/60),m=n%60;return ((h%12)||12)+(m?':'+String(m).padStart(2,'0'):'')+(h>=12?' pm':' am');}
+function sssFmt(t){const n=sssToMin(t);const h=Math.floor(n/60),m=n%60;return ((h%12)||12)+':'+String(m).padStart(2,'0')+(h>=12?' pm':' am');}
 function sssDayLabel(ds){try{return new Date(ds+'T12:00:00').toLocaleDateString(_sss.lang==='en'?'en-US':'es-MX',{weekday:'long',month:'long',day:'numeric',year:'numeric'});}catch(e){return ds;}}
 function sssToday(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+// First names as the team writes them (the Therapists list stores them without accents).
+const SSS_ACCENTS={julian:'Julián',maria:'María',rubi:'Rubí',ivan:'Iván'};
 function sssTherName(t){return ((t.firstName||'')+' '+(t.lastName||'')).trim();}
 function sssRoomName(id){return (SpaData.rooms||[]).find(r=>r.id===id)?.name||'';}
 
@@ -30,7 +34,7 @@ async function sssSave(mutate){
   try{
     const r=await db.from('app_store').select('value').eq('key','spa_summary_settings').maybeSingle();
     const cur={..._sss,...((r.data&&r.data.value)||{})};
-    ['hosts','starts','tarot','working','defaultStarts'].forEach(k=>{cur[k]={...(cur[k]||{})};});
+    ['hosts','hostRoles','attendants','notes','starts','tarot','working','defaultStarts'].forEach(k=>{cur[k]={...(cur[k]||{})};});
     mutate(cur);
     const w=await db.from('app_store').upsert({key:'spa_summary_settings',value:cur,updated_at:new Date().toISOString()});
     if(w&&w.error)throw w.error;
@@ -61,14 +65,20 @@ function sssApptCount(t,ds){return (SpaAppointments||[]).filter(a=>a.date===ds&&
 function sssUnavailable(t,ds){try{return typeof scIsAvailable==='function'&&!scIsAvailable(sssTherName(t),ds);}catch(e){return false;}}
 
 function sssSetDate(v){if(v){_sssDate=v;sssRender();}}
-function sssSetHost(name){sssSave(c=>{c.hosts[_sssDate]=name;});}
+function sssSetHost(name){sssSave(c=>{c.hosts[_sssDate]=String(name||'').trim();});}
+function sssSetHostRole(v){sssSave(c=>{c.hostRoles[_sssDate]=String(v||'').trim();});}
+function sssSetAttendant(v){sssSave(c=>{c.attendants[_sssDate]=String(v||'').trim();});}
+function sssSetNotes(v){sssSave(c=>{c.notes[_sssDate]=v;});}
 function sssSetStart(which,v){sssSave(c=>{c.starts[_sssDate]={...(c.starts[_sssDate]||{}),[which]:v};});}
 function sssSetTarot(v){sssSave(c=>{c.tarot[_sssDate]=v;});}
 function sssSetLang(l){sssSave(c=>{c.lang=l;});}
 function sssSetDefaultHost(){
-  const name=_sss.hosts[_sssDate]||_sss.defaultHost||'';
-  if(!name){showToast('Pick a host first.');return;}
-  sssSave(c=>{c.defaultHost=name;c.defaultStarts={...(c.defaultStarts||{}),...(c.starts[_sssDate]||{})};});showToast(name+' and the spa start times now apply to every day without its own pick.');
+  const d=_sssDate;
+  sssSave(c=>{
+    c.defaultHost=c.hosts[d]||c.defaultHost||'';c.defaultHostRole=c.hostRoles[d]||c.defaultHostRole||'';c.defaultAttendant=c.attendants[d]||c.defaultAttendant||'';
+    c.defaultStarts={...(c.defaultStarts||{}),...(c.starts[d]||{})};
+  });
+  showToast('Host, Chica attendant and start times now apply to every day without its own pick.');
 }
 function sssToggleWorking(id){
   const cur=sssWorking(_sssDate).map(t=>t.id);
@@ -81,7 +91,7 @@ function sssSetHours(){
   sssSave(c=>{c.sellStart=s;c.sellEnd=e;c.minGap=g;});
 }
 
-// The report itself (used on screen and in the print window).
+// ---- Selling sheet + briefing text ----
 const SSS_T={
   es:{title:'Resumen del Spa',host:'Anfitriona/o del spa en Chica',nohost:'sin elegir todavía',spaTarot:'SPA Y TAROT',grande:'Spa Grande: inicio a las',chica:'Spa Chica: inicio a las',
     hostLine:n=>`${n} estará en Chica atendiendo el spa.`,early:(n,t)=>`Hay ${n===1?'un servicio registrado':n+' servicios registrados'} antes del inicio del spa (${t}): confirmar ubicación.`,
@@ -112,58 +122,113 @@ function sssPay(a){
   let r=null;try{r=spaResolveGuestForAppt(a);}catch(e){}
   return (r&&(r.match||r.bkMatch))?'pending':'noRoom';
 }
-function sssReportHtml(ds,forPrint){
+
+// Selling sheet: who is working and where, open gaps to sell, and the services we sell.
+function sssSellingHtml(ds){
   const T=SSS_T[_sss.lang==='en'?'en':'es'];
-  const host=_sss.hosts[ds]||_sss.defaultHost||'';
-  const st={...(_sss.defaultStarts||{}),...(_sss.starts[ds]||{})};
-  const tarot=_sss.tarot[ds]||'';
   const working=sssWorking(ds);
-  const therName=id=>{const t=(SpaData.therapists||[]).find(x=>x.id===id);return t?(t.firstName||''):'—';};
-  const svcName=id=>(SpaData.services||[]).find(x=>x.id===id)?.name||'—';
-  const appts=(SpaAppointments||[]).filter(a=>a.date===ds&&a.status!=='CANCELLED'&&a.start).slice().sort((a,b)=>a.start.localeCompare(b.start));
   const services=(SpaData.services||[]).filter(s=>s.active!==false).slice().sort((a,b)=>(a.category||'').localeCompare(b.category||'')||a.name.localeCompare(b.name));
   const money=n=>n==null||n===''?'—':'$'+Number(n);
   const th='style="text-align:left;padding:6px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b5f52;border-bottom:2px solid #e8dfd0"';
   const td='style="padding:6px 8px;border-bottom:1px solid #f0ebe0;font-size:13px;vertical-align:top"';
-  const h2='style="font-family:\'Cormorant Garamond\',serif;font-size:20px;margin:22px 0 8px;color:#2d2520"';
-  const firstStart=[st.grande,st.chica].filter(Boolean).sort()[0];
-  const early=firstStart?appts.filter(a=>a.start<firstStart):[];
-  let html=`<div style="font-family:'Jost',sans-serif;color:#2d2520"><div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:600">${T.title}</div><div style="font-size:14px;color:#6b5f52">${sssEsc(sssDayLabel(ds))}</div>
-  <div ${h2}>${T.spaTarot}</div><div style="font-size:14px;line-height:1.8">`;
-  if(st.grande)html+=`• ${T.grande} <b>${sssFmt(st.grande)}</b><br>`;
-  if(st.chica)html+=`• ${T.chica} <b>${sssFmt(st.chica)}</b><br>`;
-  html+=host?`• <b>${T.hostLine(sssEsc(host))}</b><br>`:`• <b>${T.host}:</b> <span style="color:#b45309">${T.nohost}</span><br>`;
-  if(tarot)html+=`• ${sssEsc(tarot)}<br>`;
-  if(early.length)html+=`• ${T.early(early.length,sssFmt(firstStart))}<br>`;
-  html+=`</div><div ${h2}>${T.who}</div>`;
+  const h2='style="font-family:\'Cormorant Garamond\',serif;font-size:20px;margin:18px 0 8px;color:#2d2520"';
+  let html=`<div style="font-family:'Jost',sans-serif;color:#2d2520"><div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600">${T.title} — ${sssEsc(sssDayLabel(ds))}</div><div ${h2}>${T.who}</div>`;
   if(!working.length)html+=`<div style="font-size:13px;color:#b45309">${T.noRoster}</div>`;
   else html+=`<table style="width:100%;border-collapse:collapse"><tr><th ${th}>${T.th[0]}</th><th ${th}>${T.th[1]}</th><th ${th}>${T.th[2]}</th><th ${th}>${T.th[3]} (${sssFmt(_sss.sellStart)}–${sssFmt(_sss.sellEnd)})</th></tr>${working.map(t=>{
     const gaps=sssGaps(t,ds);
     const gapTxt=sssUnavailable(t,ds)?`<span style="color:#b45309">${T.unavail}</span>`:(gaps.length?gaps.map(g=>`${sssFmt(sssFromMin(g[0]))} – ${sssFmt(sssFromMin(g[1]))}`).join('<br>'):T.full);
     return `<tr><td ${td}><b>${sssEsc(sssTherName(t))}</b></td><td ${td}>${sssEsc(sssRoomName(t.defaultRoomId)||'—')}</td><td ${td}>${T.appts(sssApptCount(t,ds))}</td><td ${td}>${gapTxt}</td></tr>`;}).join('')}</table>`;
-  html+=`<div ${h2}>${T.agenda}</div><div style="font-size:12px;color:#6b5f52;margin-bottom:6px">${T.legend}</div>`;
-  const payTxt={prepaid:'💳 '+T.prepaid,charged:'✓ '+T.charged,pending:'🧾 '+T.pending,noRoom:'⚠️ '+T.noRoom,'':''};
-  if(!appts.length)html+=`<div style="font-size:13px;color:#6b5f52">${T.noAppts}</div>`;
-  else html+=`<table style="width:100%;border-collapse:collapse"><tr>${T.ath.map(x=>`<th ${th}>${x}</th>`).join('')}</tr>${appts.map(a=>`<tr><td ${td}>${sssFmt(a.start)}</td><td ${td}>${sssEsc(svcName(a.serviceId))}${a.duration?' · '+a.duration+' '+T.min:''}</td><td ${td}>${sssEsc(a.clientName||'')}</td><td ${td}>${sssEsc(therName(a.therapistId))}</td><td ${td}>${a.confirmed?'✅':'⏳'}${payTxt[sssPay(a)]?' · '+payTxt[sssPay(a)]:''}</td></tr>`).join('')}</table>`;
-  // Things to sort out, built from the same agenda.
-  const todo=[];
-  const unconf=appts.filter(a=>!a.confirmed);
-  if(unconf.length)todo.push(T.confirmPend(sssList(unconf.map(a=>therName(a.therapistId)),T)));
-  const pend=appts.filter(a=>sssPay(a)==='pending');
-  if(pend.length)todo.push(T.charge(sssList(pend.map(a=>a.clientName||'—'),T)));
-  const noRoom=appts.filter(a=>sssPay(a)==='noRoom');
-  if(noRoom.length)todo.push(T.room(sssList(noRoom.map(a=>a.clientName||'—'),T)));
-  const tight=new Set();
-  const byTher={};appts.forEach(a=>{(byTher[a.therapistId]=byTher[a.therapistId]||[]).push(a);});
-  Object.keys(byTher).forEach(id=>{const l=byTher[id];for(let i=1;i<l.length;i++){if(sssToMin(l[i].start)-(sssToMin(l[i-1].start)+(Number(l[i-1].duration)||60))<15)tight.add(therName(id));}});
-  if(tight.size)todo.push(T.rest(sssList([...tight],T)));
-  html+=`<div ${h2}>${T.todo}</div>${todo.length?'<div style="font-size:14px;line-height:1.8">'+todo.map(x=>'• '+x).join('<br>')+'</div>':`<div style="font-size:13px;color:#6b5f52">${T.none}</div>`}`;
   html+=`<div ${h2}>${T.services(services.length)}</div><table style="width:100%;border-collapse:collapse"><tr>${T.sth.map(x=>`<th ${th}>${x}</th>`).join('')}</tr>${services.map(s=>`<tr><td ${td}>${sssEsc(s.name)}</td><td ${td}>${s.duration?s.duration+' '+T.min:'—'}</td><td ${td}>${money(s.price)}</td></tr>`).join('')}</table></div>`;
   return html;
 }
-function sssPrint(){
+
+// ---- The briefing text (always Spanish: it is the message to the team) ----
+const SSS_ES_DAYS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const SSS_ES_MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function sssEsDate(ds){const d=new Date(ds+'T12:00:00');const w=SSS_ES_DAYS[d.getDay()];return w.charAt(0).toUpperCase()+w.slice(1)+' '+d.getDate()+' de '+SSS_ES_MONTHS[d.getMonth()]+' de '+d.getFullYear();}
+// "Masaje 60 min", "Sanación maya 90 min", "Reflexología" — the short names the team uses.
+function sssShortService(a){
+  const sv=(SpaData.services||[]).find(x=>x.id===a.serviceId);const n=sv?.name||'';
+  const dur=Number(a.duration)||Number(sv?.duration)||0;const mins=dur?' '+dur+' min':'';
+  if(/tarot/i.test(n))return '';
+  if(/reflex/i.test(n))return 'Reflexología';
+  if(/mayan healing|mayan egg/i.test(n))return 'Sanación maya'+mins;
+  if(/crystal/i.test(n))return 'Cristales'+mins;
+  if(/massage|masaje|deep tissue|foot/i.test(n))return 'Masaje'+mins;
+  return n+mins;
+}
+function sssPayWord(k){return {prepaid:'Prepagado',charged:'Cargo realizado',pending:'Cargo pendiente'}[k]||'';}
+function sssBriefText(ds){
+  const st={...(_sss.defaultStarts||{}),...(_sss.starts[ds]||{})};
+  const host=_sss.hosts[ds]||_sss.defaultHost||'',role=_sss.hostRoles[ds]??_sss.defaultHostRole??'';
+  const att=_sss.attendants[ds]||_sss.defaultAttendant||'';
+  const tarotRoom=(_sss.tarot[ds]||'').trim();
+  const extra=String(_sss.notes[ds]||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  const appts=(SpaAppointments||[]).filter(a=>a.date===ds&&a.status!=='CANCELLED'&&a.start).slice().sort((a,b)=>a.start.localeCompare(b.start));
+  const therFirst=id=>{const t=(SpaData.therapists||[]).find(x=>x.id===id);const f=t?(t.firstName||''):'';return SSS_ACCENTS[f.toLowerCase()]||f;};
+  const isTarot=a=>/tarot/i.test((SpaData.services||[]).find(x=>x.id===a.serviceId)?.name||'');
+  const L=[];
+  L.push('☀️ *¡BUENOS DÍAS, EQUIPO!*','*'+sssEsDate(ds)+'*','','💆 *SPA Y TAROT*','');
+  if(st.grande)L.push('• Spa Grande inicia: *'+sssFmt(st.grande)+'*');
+  if(st.chica)L.push('• Spa Chica inicia: *'+sssFmt(st.chica)+'*');
+  if(att)L.push('• '+att+' estará en Chica atendiendo el spa.');
+  if(host)L.push('• *'+host+(role?', '+role:'')+', estará en Chica y será el anfitrión del spa.*');
+  const tarotAppts=appts.filter(isTarot);
+  if(tarotAppts.length&&tarotRoom){const tn=therFirst(tarotAppts[0].therapistId)||'El terapeuta';L.push('• '+tn+' realizará el tarot en *'+tarotRoom+'*.');}
+  const first=[st.grande,st.chica].filter(Boolean).sort()[0];
+  const early=first?appts.filter(a=>a.start<first):[];
+  early.forEach(a=>{
+    const word=/^Masaje/.test(sssShortService(a))?'Masaje':'Servicio';
+    L.push('• '+word+' de las *'+sssFmt(a.start)+'*'+(early.length>1&&a.clientName?' ('+a.clientName+')':'')+': ubicación por confirmar, por ser anterior al inicio '+(st.grande&&st.chica?'de ambos spas.':'del spa.'));
+  });
+  extra.forEach(x=>L.push('• '+x));
+  L.push('','📋 *SERVICIOS POR TERAPEUTA*');
+  if(!appts.length)L.push('','No hay servicios registrados este día.');
+  // Group by therapist, biggest block of the day first (by first appointment time).
+  const groups=[];const idx={};
+  appts.forEach(a=>{const k=a.therapistId||'_none';if(!(k in idx)){idx[k]=groups.length;groups.push({id:k,list:[]});}groups[idx[k]].list.push(a);});
+  const gTarotOnly=g=>g.list.every(isTarot);
+  groups.sort((a,b)=>(gTarotOnly(a)-gTarotOnly(b))||(b.list.length-a.list.length));
+  groups.forEach(g=>{
+    const name=(g.id==='_none'?'SIN ASIGNAR':therFirst(g.id).toUpperCase());
+    const tarotOnly=g.list.every(isTarot);
+    L.push('','*'+name+(tarotOnly&&tarotRoom?' — TAROT EN '+tarotRoom.replace(/^habitaci[oó]n\s*/i,'').toUpperCase():'')+'*');
+    const conf=g.list.filter(a=>a.confirmed),unc=g.list.filter(a=>!a.confirmed);
+    const single=g.list.length===1;
+    if(!single){
+      if(!unc.length)L.push(tarotOnly?'✅ Lecturas confirmadas.':'✅ Servicios confirmados por el terapeuta.');
+      else if(!conf.length)L.push(tarotOnly?'⏳ Confirmación pendiente de las lecturas.':'⏳ Confirmación pendiente.');
+      else L.push('⏳ Confirmación pendiente, excepto '+sssList(conf.map(a=>a.clientName||'—'),SSS_T.es)+'.');
+    }
+    g.list.forEach(a=>{
+      const pay=sssPay(a),svc=sssShortService(a);
+      const showConf=unc.length&&conf.length&&a.confirmed;   // only when it differs from the block header
+      L.push('','• *'+sssFmt(a.start)+' — '+(a.clientName||'—')+'*');
+      if(single){
+        if(svc)L.push(svc);
+        L.push([a.confirmed?'✅ Confirmado':'⏳ Sin confirmar',sssPayWord(pay)].filter(Boolean).join(' | '));
+      }else{
+        const bits=[];
+        if(svc)bits.push(svc);
+        if(showConf)bits.push('✅ Confirmado');
+        if(sssPayWord(pay))bits.push(sssPayWord(pay));
+        if(bits.length)L.push(bits.join(' | '));
+      }
+      if(pay==='noRoom')L.push('⚠️ Sin habitación vinculada');
+    });
+  });
+  return L.join('\n');
+}
+// WhatsApp-style text -> HTML (bold only; everything else stays as typed).
+function sssTextHtml(t){return sssEsc(t).replace(/\*([^*\n]+)\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
+function sssCopy(){
+  const t=sssBriefText(_sssDate);
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>showToast('Copied — paste it into WhatsApp.')).catch(()=>showToast('Could not copy — select the text and copy it.'));
+}
+
+function sssPrint(withSheet){
   const w=window.open('','_blank');if(!w){showToast('Allow pop-ups to print.');return;}
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Spa Summary ${sssEsc(_sssDate)}</title><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Jost:wght@400;600&display=swap" rel="stylesheet"><style>body{margin:28px}@media print{body{margin:12mm}}</style></head><body>${sssReportHtml(_sssDate,true)}<script>setTimeout(function(){window.print()},600)<\/script></body></html>`);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Spa Summary ${sssEsc(_sssDate)}</title><link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Jost:wght@400;600&display=swap" rel="stylesheet"><style>body{margin:28px}@media print{body{margin:12mm}}</style></head><body><div style="font-family:'Jost',sans-serif;font-size:15px;line-height:1.55">${sssTextHtml(sssBriefText(_sssDate))}</div>${withSheet?'<div style="page-break-before:always"></div>'+sssSellingHtml(_sssDate):''}<script>setTimeout(function(){window.print()},600)<\/script></body></html>`);
   w.document.close();
 }
 
@@ -173,31 +238,41 @@ function sssRender(){
   const ds=_sssDate;
   const active=(SpaData.therapists||[]).filter(t=>t.active!==false);
   const workingIds=new Set(sssWorking(ds).map(t=>t.id));
-  const host=_sss.hosts[ds]||_sss.defaultHost||'';
+  const host=_sss.hosts[ds]||_sss.defaultHost||'',role=_sss.hostRoles[ds]??_sss.defaultHostRole??'',att=_sss.attendants[ds]||_sss.defaultAttendant||'';
   const stv={...(_sss.defaultStarts||{}),...(_sss.starts[ds]||{})};
   const names=active.map(sssTherName).filter(Boolean).sort((a,b)=>a.localeCompare(b));
-  const hostOpts=`<option value="">— choose —</option>`+names.map(n=>`<option value="${sssEsc(n)}" ${n===host?'selected':''}>${sssEsc(n)}</option>`).join('')+(host&&!names.includes(host)?`<option value="${sssEsc(host)}" selected>${sssEsc(host)}</option>`:'');
   const box='style="background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;padding:16px 18px;margin-bottom:16px"';
   const inp='style="padding:7px 9px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:\'Jost\',sans-serif;font-size:13px"';
+  const lbl='style="font-size:12px;font-weight:700;color:#6b5f52"';
   el.style.textAlign='left';
   el.innerHTML=`<div style="max-width:900px;margin:0 auto">
-    <div ${box}><div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-      <label style="font-size:12px;font-weight:700;color:#6b5f52">DAY<br><input type="date" value="${ds}" onchange="sssSetDate(this.value)" ${inp}></label>
-      <label style="font-size:12px;font-weight:700;color:#6b5f52">SPA HOST AT CHICA<br><select onchange="sssSetHost(this.value)" ${inp}>${hostOpts}</select></label>
-      <label style="font-size:12px;font-weight:700;color:#6b5f52">GRANDE SPA STARTS<br><input type="time" value="${sssEsc(stv.grande||'')}" onchange="sssSetStart('grande',this.value)" ${inp}></label>
-      <label style="font-size:12px;font-weight:700;color:#6b5f52">CHICA SPA STARTS<br><input type="time" value="${sssEsc(stv.chica||'')}" onchange="sssSetStart('chica',this.value)" ${inp}></label>
-      <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px" onclick="sssSetDefaultHost()" title="Use this host and these start times on every day that has no pick of its own">Use every day</button>
-      <label style="font-size:12px;font-weight:700;color:#6b5f52">LANGUAGE<br><select onchange="sssSetLang(this.value)" ${inp}><option value="es" ${_sss.lang!=='en'?'selected':''}>Español</option><option value="en" ${_sss.lang==='en'?'selected':''}>English</option></select></label>
-      <button class="btn btn-primary" style="padding:7px 16px;font-size:12.5px;margin-left:auto" onclick="sssPrint()">🖨 Print / Save PDF</button></div>
-      <label style="display:block;margin-top:12px;font-size:12px;font-weight:700;color:#6b5f52">TAROT / NOTE FOR THE SPA SECTION<br><input type="text" value="${sssEsc(_sss.tarot[ds]||'')}" placeholder="e.g. Darlene will do the tarot readings in room 1A" onchange="sssSetTarot(this.value)" style="width:100%;box-sizing:border-box;padding:7px 9px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px"></label>
-      <div style="margin-top:14px;font-size:12px;font-weight:700;color:#6b5f52">WHO IS WORKING THIS DAY — tick everyone on shift</div>
-      <div style="display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:6px">${active.map(t=>`<label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" ${workingIds.has(t.id)?'checked':''} onchange="sssToggleWorking('${sssEsc(t.id)}')">${sssEsc(sssTherName(t))}</label>`).join('')}</div>
-      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;font-size:12px;font-weight:700;color:#6b5f52">
-        <label>SELLING HOURS FROM<br><input type="time" id="sssSellStart" value="${sssEsc(_sss.sellStart)}" ${inp}></label>
+    <div ${box}>
+      <datalist id="sssNames">${names.map(n=>`<option value="${sssEsc(n)}">`).join('')}</datalist>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <label ${lbl}>DAY<br><input type="date" value="${ds}" onchange="sssSetDate(this.value)" ${inp}></label>
+        <label ${lbl}>GRANDE SPA STARTS<br><input type="time" value="${sssEsc(stv.grande||'')}" onchange="sssSetStart('grande',this.value)" ${inp}></label>
+        <label ${lbl}>CHICA SPA STARTS<br><input type="time" value="${sssEsc(stv.chica||'')}" onchange="sssSetStart('chica',this.value)" ${inp}></label>
+        <label ${lbl}>ATTENDS THE SPA AT CHICA<br><input type="text" list="sssNames" value="${sssEsc(att)}" placeholder="e.g. Rubí" onchange="sssSetAttendant(this.value)" ${inp}></label></div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:10px">
+        <label ${lbl}>SPA HOST AT CHICA<br><input type="text" list="sssNames" value="${sssEsc(host)}" placeholder="pick or type a name" onchange="sssSetHost(this.value)" ${inp}></label>
+        <label ${lbl}>HOST'S ROLE (optional)<br><input type="text" value="${sssEsc(role)}" placeholder="e.g. de Seguridad" onchange="sssSetHostRole(this.value)" ${inp}></label>
+        <label ${lbl}>TAROT ROOM<br><input type="text" value="${sssEsc(_sss.tarot[ds]||'')}" placeholder="e.g. habitación 1A" onchange="sssSetTarot(this.value)" ${inp}></label>
+        <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px" onclick="sssSetDefaultHost()" title="Use this host, attendant and these start times on every day that has no pick of its own">Use every day</button></div>
+      <label style="display:block;margin-top:10px;${lbl.slice(7,-1)}">EXTRA LINES FOR THE SPA SECTION (one per line)<br><textarea rows="2" onchange="sssSetNotes(this.value)" placeholder="e.g. Registro por aclarar respecto al temazcal de las 7:15 pm." style="width:100%;box-sizing:border-box;padding:7px 9px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px">${sssEsc(_sss.notes[ds]||'')}</textarea></label>
+      <div style="margin-top:12px;font-size:12px;font-weight:700;color:#6b5f52">WHO IS WORKING THIS DAY — tick everyone on shift (used for the selling sheet)</div>
+      <div style="display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:6px">${active.map(t=>`<label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" ${workingIds.has(t.id)?'checked':''} onchange="sssToggleWorking('${sssEsc(t.id)}')">${sssEsc(sssTherName(t))}</label>`).join('')}</div></div>
+    <div ${box}><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px"><b style="font-size:15px;flex:1">Briefing text</b>
+      <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px" onclick="sssCopy()">Copy for WhatsApp</button>
+      <button class="btn btn-primary" style="padding:6px 14px;font-size:12px" onclick="sssPrint(false)">🖨 Print / Save PDF</button></div>
+      <div style="font-family:'Jost',sans-serif;font-size:14.5px;line-height:1.55;color:#2d2520">${sssTextHtml(sssBriefText(ds))}</div></div>
+    <div ${box}><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;font-size:12px;font-weight:700;color:#6b5f52;margin-bottom:10px"><b style="font-size:15px;color:#2d2520;flex:1">Selling sheet — open gaps and services</b>
+        <label>FROM<br><input type="time" id="sssSellStart" value="${sssEsc(_sss.sellStart)}" ${inp}></label>
         <label>TO<br><input type="time" id="sssSellEnd" value="${sssEsc(_sss.sellEnd)}" ${inp}></label>
-        <label>SHORTEST GAP WORTH LISTING<br><select id="sssMinGap" ${inp}>${[30,45,60,90].map(m=>`<option value="${m}" ${Number(_sss.minGap)===m?'selected':''}>${m} min</option>`).join('')}</select></label>
-        <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px" onclick="sssSetHours()">Save hours</button></div></div>
-    <div ${box}>${sssReportHtml(ds,false)}</div></div>`;
+        <label>SHORTEST GAP<br><select id="sssMinGap" ${inp}>${[30,45,60,90].map(m=>`<option value="${m}" ${Number(_sss.minGap)===m?'selected':''}>${m} min</option>`).join('')}</select></label>
+        <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px" onclick="sssSetHours()">Save hours</button>
+        <label>LANGUAGE<br><select onchange="sssSetLang(this.value)" ${inp}><option value="es" ${_sss.lang!=='en'?'selected':''}>Español</option><option value="en" ${_sss.lang==='en'?'selected':''}>English</option></select></label>
+        <button class="btn btn-secondary" style="padding:6px 12px;font-size:12px" onclick="sssPrint(true)">🖨 Print both</button></div>
+      ${sssSellingHtml(ds)}</div></div>`;
 }
 
 (function(){
