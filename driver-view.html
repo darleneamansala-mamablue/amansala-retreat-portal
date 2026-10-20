@@ -419,7 +419,7 @@ async function loadData() {
           confirmed: !!d.driver_confirmed,
           type: 'departure', date: d.departureDate, time: d.departureTime,
           airport: ap, flight: d.flightNumber || '', name, room,
-          pickup: addMins(d.departureTime, -leadMins),
+          pickup: d.departurePickupOverride || addMins(d.departureTime, -leadMins),
           share: !!d.willingToShare, notes: d.notes || '',
           retreatLabel, ot: false,
         });

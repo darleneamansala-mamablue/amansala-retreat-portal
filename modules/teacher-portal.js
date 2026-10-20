@@ -4750,7 +4750,10 @@ function _trBuildTransportTable(guests,type,result){
       :'';
 
     const puFlight=(!isArr&&grp&&grp.minMins!=null)?_trMinsToTime(grp.minMins):time;
-    const pu=(!isArr&&!ot&&puFlight)?_trPickupTime(ap,puFlight):null;
+    // A manually-set pickup override (admin "Editar transporte", Hilario/Jorge only)
+    // always wins for that guest's own row, even when the ride-group display
+    // otherwise blends everyone onto the earliest flight's computed time.
+    const pu=(!isArr&&!ot&&puFlight)?(tr?.departurePickupOverride||_trPickupTime(ap,puFlight)):null;
     const pickupCell=!isArr
       ?`<td style="padding:10px 12px;font-size:12px">${pu?`<span style="font-weight:700;color:#b45309">${tsFmt(pu)}</span>`:dash}</td>`
       :'';
