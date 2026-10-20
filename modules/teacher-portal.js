@@ -4514,6 +4514,14 @@ function _trPickupTime(airport,flightTime){
 // airport/date, and everyone else gets their own private-rate row.
 function _trAssignRideGroups(guests,type,allTr){
   const isArr=type==='arr';
+  // Jorge's report 2026-10-20: a manual pickup override (admin "Editar
+  // transporte", Hilario/Jorge only) on ONE guest in a shared-ride group didn't
+  // reach the others here -- this view used to blend the group onto its
+  // earliest FLIGHT time, with no idea an override even exists. Track each
+  // guest's own EFFECTIVE pickup (override, else auto-calculated) instead, and
+  // blend the group onto the earliest of those -- same quantity
+  // tr2BlendGroupPickups() (modules/transport.js, the admin board) blends on.
+  const safeMin=(a,b)=>a==null?b:(b==null?a:Math.min(a,b));
   const info=guests.map((g,idx)=>{
     const tr=g.tr;
     const ot=isArr?tr?.arrivalOT:tr?.departureOT;
@@ -4521,7 +4529,8 @@ function _trAssignRideGroups(guests,type,allTr){
     const time=isArr?tr?.arrivalTime:tr?.departureTime;
     const ap=((isArr?tr?.arrivalAirport:tr?.departureAirport)||'').toLowerCase();
     const ugKey=(tr?.id&&typeof tr2UserGroupMap!=='undefined')?tr2UserGroupMap.get(`${isArr?'arrival':'departure'}|${tr.id}`):null;
-    return{idx,hasTr:!!tr,ot:!!ot,date:date||'',ap,mins:trTimeToMins(time),share:!!tr?.willingToShare,ugKey};
+    const pickupMins=(!isArr&&!ot&&time)?trTimeToMins(tr?.departurePickupOverride||_trPickupTime(ap,time)):null;
+    return{idx,hasTr:!!tr,ot:!!ot,date:date||'',ap,mins:trTimeToMins(time),pickupMins,share:!!tr?.willingToShare,ugKey};
   });
   const groups=[];
   const groupOf=new Array(guests.length).fill(null);
@@ -4532,11 +4541,12 @@ function _trAssignRideGroups(guests,type,allTr){
       if(ugAssigned.has(e.ugKey)){
         const gi=ugAssigned.get(e.ugKey);
         groups[gi].idxs.push(e.idx);groups[gi].minMins=Math.min(groups[gi].minMins,e.mins);
+        groups[gi].minPickupMins=safeMin(groups[gi].minPickupMins,e.pickupMins);
         groupOf[e.idx]=gi;
       }else{
         const gi=groups.length;
         ugAssigned.set(e.ugKey,gi);
-        groups.push({ap:e.ap,date:e.date,idxs:[e.idx],userGroup:true,ugKey:e.ugKey,minMins:e.mins});
+        groups.push({ap:e.ap,date:e.date,idxs:[e.idx],userGroup:true,ugKey:e.ugKey,minMins:e.mins,minPickupMins:e.pickupMins});
         groupOf[e.idx]=gi;
       }
       continue;
@@ -4559,10 +4569,10 @@ function _trAssignRideGroups(guests,type,allTr){
       // Teacher view and admin, because this window was still 30 here
       // despite the comment above already claiming parity with admin).
       if(grp.idxs.some(mi=>Math.abs(info[mi].mins-e.mins)<=20)){
-        grp.idxs.push(e.idx);grp.minMins=Math.min(grp.minMins,e.mins);groupOf[e.idx]=gi;joined=true;break;
+        grp.idxs.push(e.idx);grp.minMins=Math.min(grp.minMins,e.mins);grp.minPickupMins=safeMin(grp.minPickupMins,e.pickupMins);groupOf[e.idx]=gi;joined=true;break;
       }
     }
-    if(!joined){groupOf[e.idx]=groups.length;groups.push({ap:e.ap,date:e.date,idxs:[e.idx],minMins:e.mins});}
+    if(!joined){groupOf[e.idx]=groups.length;groups.push({ap:e.ap,date:e.date,idxs:[e.idx],minMins:e.mins,minPickupMins:e.pickupMins});}
   }
   const PASTEL=['#eff6ff','#f0fdf4','#faf5ff','#fffbeb','#fdf2f8','#f0fdfa','#fff7ed','#f0f9ff'];
   let colorIdx=0;
@@ -4749,11 +4759,12 @@ function _trBuildTransportTable(guests,type,result){
       ?`<td style="padding:10px 12px;font-size:12px">${tr?.willingToShare?`<span style="font-size:11px;font-weight:600;color:#0e9494">✓</span>`:dash}</td>`
       :'';
 
-    const puFlight=(!isArr&&grp&&grp.minMins!=null)?_trMinsToTime(grp.minMins):time;
-    // A manually-set pickup override (admin "Editar transporte", Hilario/Jorge only)
-    // always wins for that guest's own row, even when the ride-group display
-    // otherwise blends everyone onto the earliest flight's computed time.
-    const pu=(!isArr&&!ot&&puFlight)?(tr?.departurePickupOverride||_trPickupTime(ap,puFlight)):null;
+    // The whole group shows the SAME pickup time -- the earliest one actually
+    // needed among its members (grp.minPickupMins, computed in
+    // _trAssignRideGroups from each guest's own override-or-calculated pickup),
+    // not just the earliest flight time. A solo/ungrouped guest falls back to
+    // their own override-or-calculated time directly.
+    const pu=(!isArr&&!ot)?(grp&&grp.minPickupMins!=null?_trMinsToTime(grp.minPickupMins):(time?(tr?.departurePickupOverride||_trPickupTime(ap,time)):null)):null;
     const pickupCell=!isArr
       ?`<td style="padding:10px 12px;font-size:12px">${pu?`<span style="font-weight:700;color:#b45309">${tsFmt(pu)}</span>`:dash}</td>`
       :'';
