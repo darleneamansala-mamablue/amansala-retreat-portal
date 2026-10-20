@@ -677,16 +677,59 @@ async function _rptRenderDaily(){
   _rptRenderDailyView();
 }
 
+// Shared table markup for both the Room Sales and Folio Charges sections
+// below (same columns, just a different pre-filtered row set) -- split out
+// 2026-10-20 when Room Sales became its own section.
+function _rptFolioChargesTableHtml(rows,emptyMsg){
+  if(rows.length===0)return`<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:40px;text-align:center;color:#9ca3af;font-size:13px">${escHtml(emptyMsg)}</div>`;
+  return`<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse">
+      <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
+        <tr><th style="${_rptTh()}">Date / Time</th><th style="${_rptTh()}">User</th><th style="${_rptTh()}">Guest</th><th style="${_rptTh()}">Description</th><th style="${_rptTh('center')}">Category</th><th style="${_rptTh('right')}">Amount</th></tr>
+      </thead>
+      <tbody>
+        ${rows.map(r=>{
+          const d=new Date(r.created_at);
+          const ds=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+          const ts=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+          const retreat=r.bk?.retreatName||r.bk?.leaderName||null;
+          const guestLine=[r.guestName,retreat].filter(Boolean).join(' · ')||'—';
+          const hasUser=!!r.staff_name;
+          return`<tr style="border-bottom:1px solid #f3f4f6">
+            <td style="${_rptTd()};white-space:nowrap;font-size:12px"><div style="font-weight:600;color:#111827">${ds}</div><div style="color:#9ca3af">${ts}</div></td>
+            <td style="${_rptTd()};font-size:12px">${hasUser
+              ?`<div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:50%;background:#7e22ce22;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#7e22ce;flex-shrink:0">${escHtml(r.staff_name[0].toUpperCase())}</div><span style="color:#374151;font-weight:600">${escHtml(r.staff_name)}</span></div>`
+              :`<span style="color:#d1d5db">—</span>`}</td>
+            <td style="${_rptTd()};font-size:12px;color:#374151;max-width:200px">${escHtml(guestLine)}</td>
+            <td style="${_rptTd()};font-size:12px;color:#374151;max-width:240px">${escHtml(r.description||'—')}</td>
+            <td style="${_rptTd('center')}">${r.category?`<span style="background:#f3f4f6;color:#374151;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap">${escHtml(r.category)}</span>`:'<span style="color:#d1d5db">—</span>'}</td>
+            <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:${r.amount<0?'#16a34a':'#7e22ce'}">${fmt$(r.amount)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
 function _rptRenderDailyView(){
   const el=document.getElementById('reportsContent');
   if(!el)return;
   const payEntries=_rptDailyPayEntries();
   const folioCharges=_rptDailyFolioCharges();
   const folioPayments=_rptDailyFolioPayments();
+  // Jorge's ask 2026-10-20: Folio Charges was mixing actual room sales
+  // (Escape/extra-night/WeTravel bookings, always category:'Room' -- see
+  // rb-lib.js/wetravel-webhook.js) in with everything else (spa, boutique,
+  // tips, transport...), so the card didn't answer either question cleanly.
+  // Split in two: Room Sales is its own card/table, Folio Charges keeps
+  // everything else. Category Report is unaffected (it already breaks room
+  // out as its own category row).
+  const roomCharges=folioCharges.filter(r=>r.category==='Room');
+  const nonRoomCharges=folioCharges.filter(r=>r.category!=='Room');
 
   const totalPay=payEntries.reduce((s,e)=>s+Number(e.amount||0),0);
   const totalFolioPay=folioPayments.reduce((s,e)=>s+Math.abs(e.amount),0);
-  const totalCharges=folioCharges.reduce((s,e)=>s+e.amount,0);
+  const totalRoomCharges=roomCharges.reduce((s,e)=>s+e.amount,0);
+  const totalCharges=nonRoomCharges.reduce((s,e)=>s+e.amount,0);
   const totalIn=totalPay+totalFolioPay;
 
   // Jorge's ask 2026-10-20: "Payments by User" should also break down HOW each
@@ -751,8 +794,9 @@ function _rptRenderDailyView(){
 
     ${_dailyError?`<div style="font-size:12px;color:#dc2626;margin-bottom:14px;padding:8px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">⚠ ${escHtml(_dailyError)}</div>`:''}
 
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px">
       ${_rptCard('Payments In',fmt$(totalIn),'#f0fdf4','#15803d',_rptMethodBreakdownHtml(byMethod,72))}
+      ${_rptCard('Room Sales',fmt$(totalRoomCharges),'#eff6ff','#1d4ed8')}
       ${_rptCard('Folio Charges',fmt$(totalCharges),'#fdf4ff','#7e22ce')}
       ${_rptCard('Total Records',String(payEntries.length+folioCharges.length+folioPayments.length),'#f8fafc','#374151')}
       ${_rptCard('Range',rangeLabel,'#f0f9ff','#0369a1')}
@@ -811,36 +855,13 @@ function _rptRenderDailyView(){
     </div>
 
     <div style="margin-bottom:24px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:10px">Folio Charges (${folioCharges.length})</div>
-      ${folioCharges.length===0
-        ?`<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:40px;text-align:center;color:#9ca3af;font-size:13px">No folio charges in this range</div>`
-        :`<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden">
-        <table style="width:100%;border-collapse:collapse">
-          <thead style="background:#f8fafc;border-bottom:2px solid var(--border)">
-            <tr><th style="${_rptTh()}">Date / Time</th><th style="${_rptTh()}">User</th><th style="${_rptTh()}">Guest</th><th style="${_rptTh()}">Description</th><th style="${_rptTh('center')}">Category</th><th style="${_rptTh('right')}">Amount</th></tr>
-          </thead>
-          <tbody>
-            ${folioCharges.map(r=>{
-              const d=new Date(r.created_at);
-              const ds=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-              const ts=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-              const retreat=r.bk?.retreatName||r.bk?.leaderName||null;
-              const guestLine=[r.guestName,retreat].filter(Boolean).join(' · ')||'—';
-              const hasUser=!!r.staff_name;
-              return`<tr style="border-bottom:1px solid #f3f4f6">
-                <td style="${_rptTd()};white-space:nowrap;font-size:12px"><div style="font-weight:600;color:#111827">${ds}</div><div style="color:#9ca3af">${ts}</div></td>
-                <td style="${_rptTd()};font-size:12px">${hasUser
-                  ?`<div style="display:flex;align-items:center;gap:6px"><div style="width:22px;height:22px;border-radius:50%;background:#7e22ce22;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#7e22ce;flex-shrink:0">${escHtml(r.staff_name[0].toUpperCase())}</div><span style="color:#374151;font-weight:600">${escHtml(r.staff_name)}</span></div>`
-                  :`<span style="color:#d1d5db">—</span>`}</td>
-                <td style="${_rptTd()};font-size:12px;color:#374151;max-width:200px">${escHtml(guestLine)}</td>
-                <td style="${_rptTd()};font-size:12px;color:#374151;max-width:240px">${escHtml(r.description||'—')}</td>
-                <td style="${_rptTd('center')}">${r.category?`<span style="background:#f3f4f6;color:#374151;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap">${escHtml(r.category)}</span>`:'<span style="color:#d1d5db">—</span>'}</td>
-                <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:${r.amount<0?'#16a34a':'#7e22ce'}">${fmt$(r.amount)}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>`}
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:10px">Room Sales (${roomCharges.length})</div>
+      ${_rptFolioChargesTableHtml(roomCharges,'No room sales in this range')}
+    </div>
+
+    <div style="margin-bottom:24px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:10px">Folio Charges (${nonRoomCharges.length})</div>
+      ${_rptFolioChargesTableHtml(nonRoomCharges,'No folio charges in this range')}
     </div>
 
     <div>
