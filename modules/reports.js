@@ -110,38 +110,22 @@ async function _gsSetExtraTip(bkId,field,v){
   }catch(e){}
   _rptRenderGratuitySheet();
 }
-// Jorge's ask 2026-10-20: the $/noche rate used to be ONE global number
-// applied to every retreat -- no way to see or change it for just one event.
-// Per-retreat override (defaults to the global _gsRate when a retreat has
-// never had its own value set), shown as its own "Gratuity Daily" column.
-let _gsDailyRates={};
-let _gsDailyRatesLoaded=false;
-async function _gsLoadDailyRates(){
-  if(_gsDailyRatesLoaded)return;
-  _gsDailyRatesLoaded=true;
-  try{
-    const{data}=await db.from('app_store').select('value').eq('key','gratuityDailyRates').maybeSingle();
-    if(data&&data.value&&typeof data.value==='object'){
-      _gsDailyRates=data.value;
-      if(_rptActiveTab==='gratuitysheet')_rptRenderGratuitySheet();
-    }
-  }catch(e){}
-}
-function _gsRateFor(bkId){const v=_gsDailyRates[bkId];return v!=null&&v!==''?Number(v):_gsRate;}
-async function _gsSetDailyRate(bkId,v){
-  const n=v===''?null:(parseFloat(v)||0);
-  try{
-    const{data}=await db.from('app_store').select('value').eq('key','gratuityDailyRates').maybeSingle();
-    const fresh=(data&&data.value&&typeof data.value==='object')?data.value:{};
-    if(n==null)delete fresh[bkId];else fresh[bkId]=n;
-    _gsDailyRates=fresh;
-    await db.from('app_store').upsert({key:'gratuityDailyRates',value:_gsDailyRates,updated_at:new Date().toISOString()});
-  }catch(e){}
-  _rptRenderGratuitySheet();
+// Jorge's ask 2026-10-20: the "Gratuity Daily" column shows each retreat's
+// OWN already-configured gratuity rate (bk.tipPerNight -- the same "TIP/NT"
+// field on the retreat's own Teacher Reg bar, getTip() everywhere else in the
+// app) -- not a flat $25 for every event, and not a separately-editable
+// number either ("eso no deberia de ser modificable, eso deberia de traer esa
+// informacion por retiro"). Read-only here on purpose: change a retreat's
+// rate from its own Teacher Reg bar (TIP/NT), and it updates here too. Only
+// falls back to the global $/noche field above for a retreat with no tip
+// rate configured at all.
+function _gsRateFor(r){
+  const tip=getTip(r.bk);
+  return tip>0?tip:_gsRate;
 }
 function _gsRowCalc(r){
   const et=_gsExtraTips[r.bk.id]||{usd:0,mxn:0};
-  const dailyRate=_gsRateFor(r.bk.id);
+  const dailyRate=_gsRateFor(r);
   const gratuityDls=r.guests*dailyRate*r.nights;
   const propinaPesos=gratuityDls*_gsFx;
   const extraUsd=Number(et.usd)||0,extraMxn=Number(et.mxn)||0;
@@ -1166,7 +1150,6 @@ function _rptRenderGratuitySheet(){
   if(!el)return;
   _gsLoadSettings();
   _gsLoadExtraTips();
-  _gsLoadDailyRates();
   _gsLoadDeptSplits();
   // We Travel bookings (bk.source==='wetravel') aren't real gratuity-tracked
   // retreats -- they're priced/settled entirely on WeTravel's own platform,
@@ -1201,9 +1184,7 @@ function _rptRenderGratuitySheet(){
         <td style="${_rptTd()};white-space:nowrap;font-size:12px;color:#6b7280">${fmtDate(r.bk.startDate)} – ${fmtDate(r.bk.endDate)}</td>
         <td style="${_rptTd('center')};font-size:13px;color:#374151">${r.nights}</td>
         <td style="${_rptTd('center')};font-size:13px;font-weight:700;color:#374151">${r.guests||'—'}</td>
-        <td style="${_rptTd('right')}">
-          <input type="number" step="1" min="0" value="${c.dailyRate}" placeholder="${_gsRate}" style="${inputStyle}" onchange="_gsSetDailyRate('${r.bk.id}',this.value)">
-        </td>
+        <td style="${_rptTd('right')};font-size:13px;color:#374151">${fmt$(c.dailyRate)}</td>
         <td style="${_rptTd('right')};font-size:13px;font-weight:600;color:#6b7280">${fmt$(c.gratuityDls)}</td>
         <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#0e5a5a">$${c.propinaPesos.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
         <td style="${_rptTd('right')}">
