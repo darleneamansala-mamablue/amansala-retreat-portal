@@ -942,7 +942,15 @@ function tr2ToggleArchived() {
 // modules in this codebase (dietary-report.js, activity-sheet.js: a new window,
 // its own minimal styles, a .no-print Print button hidden via @media print).
 function tr2PrintView() {
-  const filtered = tr2FilteredSorted().filter(e => !e.ot);
+  // Jorge's ask 2026-10-20: real Own Transport guests ("ya avisaron, no
+  // necesitan transfer") were silently dropped from every print -- staff still
+  // need them on the sheet (room list / closing balances), just labeled "OT"
+  // instead of an airport/pickup. Synthetic "Missing" rows (nobody submitted
+  // anything, also internally ot:true -- see tr2RenderRow above) stay out,
+  // same as before, since there's nothing real to print for them. A real OT
+  // entry with no date at all (edge case) is also skipped -- no day section
+  // to put it under.
+  const filtered = tr2FilteredSorted().filter(e => !e.isSynthetic && (!e.ot || e.date));
   const todayStr = new Date().toISOString().slice(0, 10);
 
   let rangeLabel;
@@ -973,9 +981,9 @@ function tr2PrintView() {
         <td>${escHtml(e.room || '—')}</td>
         <td>${escHtml(e.guest || '')}</td>
         ${showTypeCol ? `<td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>` : ''}
-        <td>${escHtml(e.airport === 'cancun' ? 'CUN' : e.airport === 'tulum' ? 'TQO' : (e.airport || ''))}</td>
-        ${showPickupCol ? `<td>${escHtml(e.type === 'departure' ? ((e.groupPickup || e.pickup) || '—') : '—')}</td>` : ''}
-        <td>${escHtml(e.time || '')}</td>
+        <td>${e.ot ? '<strong>OT</strong>' : escHtml(e.airport === 'cancun' ? 'CUN' : e.airport === 'tulum' ? 'TQO' : (e.airport || ''))}</td>
+        ${showPickupCol ? `<td>${e.ot ? '—' : escHtml(e.type === 'departure' ? ((e.groupPickup || e.pickup) || '—') : '—')}</td>` : ''}
+        <td>${e.ot ? '—' : escHtml(e.time || '')}</td>
         <td>${escHtml(e.retreatLabel || '')}</td>
       </tr>`;
 
