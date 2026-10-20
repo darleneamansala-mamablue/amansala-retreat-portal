@@ -1081,8 +1081,8 @@ function tr2PrintView() {
     </style></head><body>
     <button class="print-btn" onclick="window.print()">Print</button>
     <div class="hdr">
-      <div class="title">Transport</div>
-      <div class="sub">${escHtml(viewLabel)} · ${escHtml(retreatLabel)} · ${escHtml(rangeLabel)}</div>
+      <div class="title">Transport ${escHtml(viewLabel)}</div>
+      <div class="sub">${escHtml(retreatLabel)} · ${escHtml(rangeLabel)}</div>
     </div>
     <table>
       <thead><tr><th>Habitación</th><th>Nombre</th>${showTypeCol ? '<th>Tipo</th>' : ''}<th>Aeropuerto</th><th>Pick-up</th><th>Hora Vuelo</th><th>Retiro</th></tr></thead>
