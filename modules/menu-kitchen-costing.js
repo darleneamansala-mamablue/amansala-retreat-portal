@@ -79,8 +79,8 @@ function kcPaxFor(dateStr, key) { return ((menuSchedule[dateStr] || {})[key] || 
 // The week's meals: [{day, date, meals:[{label, pax, dishes:[{name, plates, star}]}]}]
 function kcWeek() {
   const days = [];
-  for (let di = 1; di <= 7; di++) {
-    const date = kcAddDays(menuCurrentMonday, di - 1), d = menuDataForIdx(di) || {}, meals = [];
+  for (let i = 0; i < 7; i++) { // the portal's week starts on Sunday (menuGetSunday); Sunday uses menu day 7, Monday day 1 … Saturday day 6
+    const date = kcAddDays(menuCurrentMonday, i), di = menuDayIndex(date), d = menuDataForIdx(di) || {}, meals = [];
     const lbPax = kcPaxFor(date, 'lightBreakfast');
     const light = ((d.lightBreakfast || []).join(' · ')).split(/\s*·\s*/).filter(Boolean);
     if (lbPax && light.length) meals.push({ label: 'Fruit, Coffee & Tea', pax: lbPax, dishes: light.map(n => ({ name: n, plates: lbPax })) });
@@ -152,7 +152,9 @@ function kcRender() {
   const tile = (label, big, sub, color) => `<div style="${KC_CARD}"><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74">${label}</div><div style="font-size:22px;font-weight:700;color:${color || '#2d2520'}">${big}</div><div style="font-size:11.5px;color:#6b7280">${sub}</div></div>`;
   const dayBtn = (v, label, amt) => `<button onclick="kcSetDay(${v})" style="padding:8px 14px;border-radius:10px;border:1.5px solid ${kcDay === v ? 'var(--teal,#2d6a6a)' : '#e8dfd4'};background:${kcDay === v ? 'var(--teal,#2d6a6a)' : '#fff'};color:${kcDay === v ? '#fff' : '#2d2520'};cursor:pointer;font-family:'Jost',sans-serif;text-align:left"><div style="font-size:11.5px;font-weight:700">${label}</div><div style="font-size:13px;font-weight:700">${kcMoney(amt)}</div></button>`;
   const maxDay = Math.max(1, ...c.week.map(d => d.cost));
-  const use = kcUsage(c);
+  const use = kcUsage(c), seen = {};
+  days.forEach(d => d.meals.forEach(m => m.dishes.forEach(x => { seen[kcNorm(x.name)] = x.portion.hasRecipe; })));
+  const cover = { all: Object.keys(seen).length, have: Object.values(seen).filter(Boolean).length };
 
   const menuHtml = days.map(day => `<div style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid #e8dfd4;padding-bottom:4px"><div style="${KC_H}">${D[day.di]} · ${day.date} <span style="font-size:12px;color:#8a7e74;font-family:Jost,sans-serif">Day ${day.di}</span></div><div style="font-weight:700;color:#059669">${kcMoney(day.cost)}</div></div>
     ${day.meals.length ? day.meals.map(m => `<div style="margin-top:8px"><div style="font-size:12px;font-weight:700;color:#2d2520">${m.label} <span style="color:#8a7e74;font-weight:400">· ${m.pax} pax</span></div>
@@ -176,7 +178,7 @@ function kcRender() {
     ${!kc.ingredients.length || !kc.recipes.length ? `<div style="${KC_CARD};margin-top:14px;background:#fff7ed;border-color:#fdba74;font-size:13px">No ${!kc.ingredients.length ? 'price list' : 'recipes'} loaded yet, so everything shows $0. Open <b>Import prices &amp; recipes</b> and paste in the spreadsheet.</div>` : ''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${dayBtn(0, 'Whole week', weekCost)}${c.week.map(d => dayBtn(d.di, D[d.di] + ' ' + d.date.slice(8), d.cost)).join('')}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:14px">
-      ${tile('Food cost', kcMoney(selCost), kcDay ? D[kcDay] : 'whole week', '#059669')}
+      ${tile('Food cost', kcMoney(selCost), (kcDay ? D[kcDay] : 'whole week') + ' · ' + cover.have + ' of ' + cover.all + ' dishes costed' + (cover.have < cover.all ? ' so far' : ''), '#059669')}
       ${tile('Per guest per day', selGuestDays ? kcMoney(selCost / selGuestDays) : '—', selGuestDays + ' guest-days (largest meal each day)')}
       ${tile('To buy', Math.round(kgTotal) + ' kg', eggs ? '+ ' + Math.round(eggs) + ' eggs' : 'plus pieces listed below')}
       ${tile('Used over plan', use.rows.length ? kcMoney(use.overCost) : '—', use.rows.length ? use.flagged.length + ' item' + (use.flagged.length !== 1 ? 's' : '') + ' over this week' : 'enter what was used to track', use.overCost ? '#dc2626' : '#059669')}
