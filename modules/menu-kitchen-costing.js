@@ -8,6 +8,9 @@
 // in app_store under 'kitchenCosting' (also cached in localStorage). Dishes with no recipe are listed, never costed as $0 silently.
 let kc = { ingredients: [], recipes: [] };   // ingredients:[{name,category,unit:'kg'|'pza',price,supplier}], recipes:[{dish,ingredient,qty}] qty = grams (kg items) or pieces (pza items)
 let kcOpen = false, kcDay = 0, kcShowImport = false;
+// Used vs planned: what the kitchen actually used each day, entered by hand after service. { 'YYYY-MM-DD': { <normalised ingredient>: qty } } qty in kg (or pieces for pza items).
+let kcAct = {};
+const KC_ACT_KEY = 'kitchenActuals', KC_ACT_LS = 'amansala_kitchen_actuals', KC_TOL = 0.10; // more than 10% over plan is flagged
 const KC_KEY = 'kitchenCosting', KC_LS = 'amansala_kitchen_costing';
 const KC_CATS = ['Proteína', 'Verduras', 'Fruta', 'Lácteos', 'Abarrotes'];
 
@@ -32,6 +35,28 @@ async function kcMutate(fn) {
   try { const { error } = await db.from('app_store').upsert({ key: KC_KEY, value: kc, updated_at: new Date().toISOString() }); if (error) throw error; }
   catch (e) { console.warn('[kitchen costing] save failed', e); showToast('Could not save to the server — change is only on this computer.'); }
   kcRender();
+}
+
+function kcActLoadLocal() { try { const v = JSON.parse(localStorage.getItem(KC_ACT_LS) || 'null'); if (v && typeof v === 'object') kcAct = v; } catch (e) {} }
+async function kcActPull() {
+  try {
+    const { data } = await db.from('app_store').select('value').eq('key', KC_ACT_KEY).maybeSingle();
+    if (data && data.value && typeof data.value === 'object') { kcAct = data.value; try { localStorage.setItem(KC_ACT_LS, JSON.stringify(kcAct)); } catch (e) {} }
+  } catch (e) { console.warn('[kitchen costing] actuals load failed', e); }
+}
+// Same re-read-then-write rule as kcMutate, so two people entering different days can't overwrite each other.
+async function kcActMutate(fn) {
+  await kcActPull();
+  fn(kcAct);
+  try { localStorage.setItem(KC_ACT_LS, JSON.stringify(kcAct)); } catch (e) {}
+  try { const { error } = await db.from('app_store').upsert({ key: KC_ACT_KEY, value: kcAct, updated_at: new Date().toISOString() }); if (error) throw error; }
+  catch (e) { console.warn('[kitchen costing] actuals save failed', e); showToast('Could not save to the server — only saved on this computer.'); }
+  kcRender();
+}
+function kcSetActual(date, name, v) {
+  const val = v === '' ? null : kcNum(v);
+  if (v !== '' && val == null) return;
+  kcActMutate(a => { a[date] = a[date] || {}; if (val == null) delete a[date][kcNorm(name)]; else a[date][kcNorm(name)] = val; });
 }
 
 // ---- costing ----
@@ -83,7 +108,7 @@ function kcCompute() {
   const week = kcWeek(), noRecipe = new Set(), noPrice = new Set(), dishTotals = {}, ing = {};
   let cost = 0, guestDays = 0;
   week.forEach(day => {
-    day.cost = 0;
+    day.cost = 0; day.ing = {};
     day.maxPax = Math.max(0, ...day.meals.map(m => m.pax));
     day.meals.forEach(m => m.dishes.forEach(dish => {
       const p = kcDishPortion(dish.name);
@@ -94,6 +119,9 @@ function kcCompute() {
       const key = dish.name.replace(/\s*★/g, '');
       dishTotals[key] = (dishTotals[key] || 0) + dish.total;
       p.lines.forEach(l => {
+        const dk = kcNorm(l.ing.name);
+        if (!day.ing[dk]) day.ing[dk] = { ing: l.ing, qty: 0 };
+        day.ing[dk].qty += l.qty * dish.plates;
         const k = kcNorm(l.ing.name);
         if (!ing[k]) ing[k] = { ing: l.ing, plates: 0, qty: 0, cost: 0 };
         ing[k].plates += dish.plates; ing[k].qty += l.qty * dish.plates;
@@ -124,6 +152,7 @@ function kcRender() {
   const tile = (label, big, sub, color) => `<div style="${KC_CARD}"><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74">${label}</div><div style="font-size:22px;font-weight:700;color:${color || '#2d2520'}">${big}</div><div style="font-size:11.5px;color:#6b7280">${sub}</div></div>`;
   const dayBtn = (v, label, amt) => `<button onclick="kcSetDay(${v})" style="padding:8px 14px;border-radius:10px;border:1.5px solid ${kcDay === v ? 'var(--teal,#2d6a6a)' : '#e8dfd4'};background:${kcDay === v ? 'var(--teal,#2d6a6a)' : '#fff'};color:${kcDay === v ? '#fff' : '#2d2520'};cursor:pointer;font-family:'Jost',sans-serif;text-align:left"><div style="font-size:11.5px;font-weight:700">${label}</div><div style="font-size:13px;font-weight:700">${kcMoney(amt)}</div></button>`;
   const maxDay = Math.max(1, ...c.week.map(d => d.cost));
+  const use = kcUsage(c);
 
   const menuHtml = days.map(day => `<div style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid #e8dfd4;padding-bottom:4px"><div style="${KC_H}">${D[day.di]} · ${day.date} <span style="font-size:12px;color:#8a7e74;font-family:Jost,sans-serif">Day ${day.di}</span></div><div style="font-weight:700;color:#059669">${kcMoney(day.cost)}</div></div>
     ${day.meals.length ? day.meals.map(m => `<div style="margin-top:8px"><div style="font-size:12px;font-weight:700;color:#2d2520">${m.label} <span style="color:#8a7e74;font-weight:400">· ${m.pax} pax</span></div>
@@ -150,6 +179,7 @@ function kcRender() {
       ${tile('Food cost', kcMoney(selCost), kcDay ? D[kcDay] : 'whole week', '#059669')}
       ${tile('Per guest per day', selGuestDays ? kcMoney(selCost / selGuestDays) : '—', selGuestDays + ' guest-days (largest meal each day)')}
       ${tile('To buy', Math.round(kgTotal) + ' kg', eggs ? '+ ' + Math.round(eggs) + ' eggs' : 'plus pieces listed below')}
+      ${tile('Used over plan', use.rows.length ? kcMoney(use.overCost) : '—', use.rows.length ? use.flagged.length + ' item' + (use.flagged.length !== 1 ? 's' : '') + ' over this week' : 'enter what was used to track', use.overCost ? '#dc2626' : '#059669')}
       ${tile('Most expensive dish', top && top[1] > 0 ? kcEsc(top[0]) : '—', top && top[1] > 0 ? kcMoney(top[1]) + ' · ' + Math.round(top[1] / (selCost || 1) * 100) + '% of the cost' : '')}
     </div>
     ${warn.length ? `<div style="${KC_CARD};margin-top:12px;font-size:12.5px;color:#b45309;background:#fffbeb;border-color:#fde68a">${warn.join('<br>')}</div>` : ''}
@@ -157,9 +187,44 @@ function kcRender() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:28px"><div><div style="${KC_H}">Shopping list</div><div style="font-size:12px;color:#6b7280">People = plates that use it. Change a price and it saves for everyone.</div></div>
       <button onclick="kcCopyList()" style="padding:7px 14px;border:none;border-radius:8px;background:var(--teal,#2d6a6a);color:#fff;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600">Copy list for WhatsApp</button></div>
     <div style="${KC_CARD};margin-top:8px;padding:6px 6px 12px">${shop.length ? shopHtml : '<div style="padding:24px;text-align:center;color:#8a7e74">Nothing to buy yet — it fills in once recipes and guest counts are in.</div>'}</div>
+    ${kcUsageHtml(c, days, use)}
     <div style="${KC_H};margin-top:28px">Where the money goes</div>
     <div style="${KC_CARD};margin-top:8px">${c.week.map(d => `<div onclick="kcSetDay(${d.di})" style="display:grid;grid-template-columns:90px 1fr 80px;gap:10px;align-items:center;margin:5px 0;cursor:pointer;font-size:12.5px"><span>${D[d.di]} ${d.date.slice(5)}</span><span style="background:#f0ebe0;border-radius:6px;height:14px"><span style="display:block;height:14px;border-radius:6px;background:#0d9488;width:${(d.cost / maxDay * 100).toFixed(1)}%"></span></span><b style="text-align:right">${kcMoney(d.cost)}</b></div>`).join('')}</div>
   </div>`;
+}
+
+// Every entered "used" figure compared with that day's plan. Units: kg for weighed items, pieces for pza items.
+function kcPlanUnits(e) { return e.ing.unit === 'pza' ? e.qty : e.qty / 1000; }
+function kcUsage(c) {
+  const rows = [];
+  c.week.forEach(day => {
+    const act = kcAct[day.date] || {};
+    Object.keys(act).forEach(k => {
+      const e = day.ing[k] || (kcIngredient(k) && { ing: kcIngredient(k), qty: 0 }); if (!e) return;
+      const planned = kcPlanUnits(e), actual = Number(act[k]) || 0, diff = actual - planned;
+      rows.push({ day, ing: e.ing, planned, actual, diff, pct: planned ? diff / planned : (actual ? 1 : 0), cost: Math.max(0, diff) * (e.ing.price || 0) });
+    });
+  });
+  const flagged = rows.filter(r => r.diff > 0 && r.pct > KC_TOL).sort((a, b) => b.cost - a.cost);
+  return { rows, flagged, overCost: flagged.reduce((s, r) => s + r.cost, 0), protein: flagged.filter(r => r.ing.category === 'Proteína').reduce((s, r) => s + r.cost, 0) };
+}
+function kcUsageHtml(c, days, use) {
+  const D = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], u = i => (i.unit === 'pza' ? 'pza' : 'kg');
+  const qty = (n, i) => (i.unit === 'pza' ? Math.round(n) : (+n.toFixed(2))) + ' ' + u(i);
+  let entry = '';
+  if (kcDay) {
+    const day = days[0], ings = Object.values(day.ing).sort((a, b) => ((a.ing.category === 'Proteína' ? 0 : 1) - (b.ing.category === 'Proteína' ? 0 : 1)) || b.qty * b.ing.price - a.qty * a.ing.price);
+    entry = ings.length ? `<div style="margin-top:8px;font-size:12px;color:#6b7280">${D[day.di]} ${day.date} — type what the kitchen actually used, in ${'kg (pieces for eggs, lettuce etc.)'}. Leave blank if not measured.</div>
+      <div style="${KC_CARD};margin-top:6px;padding:6px 6px 10px">${ings.map(e => {
+        const planned = kcPlanUnits(e), raw = (kcAct[day.date] || {})[kcNorm(e.ing.name)], has = raw != null, diff = has ? raw - planned : 0, pct = planned ? diff / planned : 0;
+        const state = !has ? '' : (diff > 0 && pct > KC_TOL ? `<b style="color:#dc2626">▲ ${qty(diff, e.ing)} over (${Math.round(pct * 100)}%) · ${kcMoney(diff * e.ing.price)}</b>` : (diff < 0 && -pct > KC_TOL ? `<span style="color:#2563eb">▼ ${qty(-diff, e.ing)} under (${Math.round(-pct * 100)}%)</span>` : '<span style="color:#059669">✓ on plan</span>'));
+        return `<div style="display:grid;grid-template-columns:1.5fr 100px 130px 1.6fr;gap:8px;align-items:center;font-size:12.5px;padding:5px 10px;border-bottom:1px solid #f0ebe0${e.ing.category === 'Proteína' ? ';background:#fffbf5' : ''}"><span>${kcEsc(e.ing.name)}</span><span style="color:#6b7280">plan ${qty(planned, e.ing)}</span><span><input type="number" step="0.01" min="0" value="${has ? raw : ''}" placeholder="used" onchange="kcSetActual('${day.date}','${kcEsc(e.ing.name).replace(/'/g, "\\'")}',this.value)" style="width:70px;padding:3px 5px;border:1px solid #c8bfb5;border-radius:6px"> ${u(e.ing)}</span><span>${state}</span></div>`;
+      }).join('')}</div>` : '<div style="margin-top:8px;font-size:12px;color:#8a7e74">Nothing is planned for this day yet.</div>';
+  } else entry = '<div style="margin-top:8px;font-size:12px;color:#6b7280">Pick a day above to type in what the kitchen actually used. The list below fills in for the whole week.</div>';
+  const list = use.flagged.length ? `<div style="${KC_CARD};margin-top:10px;padding:6px 6px 10px;border-color:#fecaca"><div style="font-weight:700;font-size:13px;padding:6px 10px;color:#b91c1c">Used more than planned (over ${Math.round(KC_TOL * 100)}%) — ${kcMoney(use.overCost)} extra, of which protein ${kcMoney(use.protein)}</div>
+    ${use.flagged.map(r => `<div style="display:grid;grid-template-columns:90px 1.4fr 1fr 1fr 90px;gap:8px;font-size:12.5px;padding:4px 10px;border-top:1px solid #fee2e2"><span>${D[r.day.di]} ${r.day.date.slice(5)}</span><span>${kcEsc(r.ing.name)}</span><span style="color:#6b7280">plan ${qty(r.planned, r.ing)}</span><span>used ${qty(r.actual, r.ing)} <b style="color:#dc2626">(+${Math.round(r.pct * 100)}%)</b></span><b style="text-align:right">${kcMoney(r.cost)}</b></div>`).join('')}</div>`
+    : (use.rows.length ? `<div style="${KC_CARD};margin-top:10px;font-size:12.5px;color:#059669">Nothing over plan so far this week (${use.rows.length} item${use.rows.length !== 1 ? 's' : ''} checked).</div>` : '');
+  return `<div style="${KC_H};margin-top:28px">Used vs planned</div><div style="font-size:12px;color:#6b7280">Shows when the kitchen serves more food or protein than the menu needs. Plan = guests × recipe grams.</div>${entry}${list}`;
 }
 
 function kcImportHtml() {
@@ -212,7 +277,7 @@ function kcToggle() {
   grid.style.display = kcOpen ? 'none' : 'block'; if (cost) cost.style.display = 'none';
   panel.style.display = kcOpen ? 'block' : 'none';
   if (btn) { btn.style.background = kcOpen ? 'var(--teal,#2d6a6a)' : '#f0f9f9'; btn.style.color = kcOpen ? '#fff' : 'var(--teal,#2d6a6a)'; }
-  if (kcOpen) { kcLoadLocal(); kcRender(); kcPull().then(kcRender); }
+  if (kcOpen) { kcLoadLocal(); kcActLoadLocal(); kcRender(); Promise.all([kcPull(), kcActPull()]).then(kcRender); }
 }
 (function () {
   const costBtn = document.getElementById('menuCostBtn'), costPanel = document.getElementById('menuCostPanel');
