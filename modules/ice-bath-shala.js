@@ -5,13 +5,31 @@
 // (bk.retreatActivities[i].shala), the same place its date and time live, and goes out with the normal save.
 // An ice bath with no shala yet shows an amber "Assign shala" warning so none gets forgotten. Choosing a shala that another group's
 // ice bath already uses within 90 minutes the same day shows a warning (it still saves — two small groups can share a shala).
+// The assigned shala also puts a 30-minute "Breathwork" block into that shala's column on the real Schedule grid (wraps
+// skedGetRetreatEvents), starting when the ice bath starts, so the shala shows as taken and class clashes are visible. It follows the
+// ice bath's own rules: only on a retreat whose schedule is confirmed, never on the arrival day.
 // Asked by Darlene 2026-10-21. Teacher-facing schedules are NOT changed here (they say ice bath has no shala, by an earlier decision).
+const IBS_BREATH_MIN = 30;
 const IBS_AO = 'ao10';
 let ibsQueue = {};   // per booking: the ice bath entries (array index) in the week being drawn, in the order their cards are drawn
 
 function ibsShalaName(id) { const s = (typeof SHALAS !== 'undefined' ? SHALAS : []).find(x => x.id === id); return s ? s.name : id; }
 
 function ibsMin(t) { if (!t) return null; const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); }
+
+// The 30-minute breathwork blocks for one date, as Schedule-grid events
+function ibsBreathEvents(dateStr) {
+  const out = [];
+  AppData.bookings.filter(b => b.status !== 'cancelled' && b.scheduleRequest && b.scheduleRequest.adminStatus === 'confirmed').forEach(bk => {
+    if (dateStr < bk.startDate || dateStr > bk.endDate || dateStr === bk.startDate) return;
+    (bk.retreatActivities || []).filter(a => a.aoId === IBS_AO && a.shala && (a.date || '').slice(0, 10) === dateStr && a.time).forEach(a => {
+      out.push({ id: 'ret_' + bk.id + '_ibs_' + dateStr, resourceId: a.shala, date: dateStr, startTime: a.time, endTime: skedMinToTime(skedTimeToMin(a.time) + IBS_BREATH_MIN),
+        title: 'Breathwork', subtitle: (bk.leaderName || bk.retreatName || 'Retreat') + ' · Ice Bath & Breathwork (30 min)',
+        color: '#0e7490', bg: '#cffafe', textColor: '#155e75', isRetreat: true, bkId: bk.id, _ibs: true });
+    });
+  });
+  return out;
+}
 
 function ibsSet(bkId, idx, shalaId) {
   const bk = AppData.bookings.find(b => b.id === bkId), act = bk && (bk.retreatActivities || [])[idx];
@@ -20,9 +38,13 @@ function ibsSet(bkId, idx, shalaId) {
   bk.retreatActivitiesUpdatedAt = bk.updatedAt = new Date().toISOString();
   saveAll();
   if (shalaId) {
-    const mine = ibsMin(act.time), clash = AppData.bookings.some(o => o.id !== bk.id && o.status !== 'cancelled' && (o.retreatActivities || []).some(a =>
-      a.aoId === IBS_AO && a.shala === shalaId && (a.date || '').slice(0, 10) === (act.date || '').slice(0, 10) && (mine == null || ibsMin(a.time) == null || Math.abs(ibsMin(a.time) - mine) < 90)));
-    showToast(clash ? `⚠ ${ibsShalaName(shalaId)} is already used by another group's ice bath around that time. Saved anyway.` : `Breathwork shala saved: ${ibsShalaName(shalaId)}.`);
+    // Is that shala already taken for those 30 minutes? (any class, ceremony or another group's breathwork on the real Schedule)
+    const date = (act.date || '').slice(0, 10), t0 = ibsMin(act.time), mineId = 'ret_' + bk.id + '_ibs_' + date;
+    let busy = null;
+    if (t0 != null && typeof skedGetRetreatEvents === 'function') {
+      busy = skedGetRetreatEvents(date).find(e => e.id !== mineId && e.resourceId === shalaId && e.startTime && e.endTime && ibsMin(e.startTime) < t0 + IBS_BREATH_MIN && ibsMin(e.endTime) > t0);
+    }
+    showToast(busy ? `⚠ ${ibsShalaName(shalaId)} is already in use then: ${busy.title}${busy.subtitle ? ' — ' + String(busy.subtitle).split(' · ')[0] : ''} (${busy.startTime}–${busy.endTime}). Saved anyway.` : `Breathwork shala saved: ${ibsShalaName(shalaId)}, ${act.time ? act.time + ' for 30 min' : 'time to be set'}.`);
   } else showToast('Breathwork shala cleared.');
   if (typeof actSheetRenderWeek === 'function') actSheetRenderWeek();
 }
@@ -41,6 +63,14 @@ function ibsSet(bkId, idx, shalaId) {
     } catch (e) { console.warn('[ice bath shala] could not prepare', e); }
     return origWeek.apply(this, arguments);
   };
+  if (typeof skedGetRetreatEvents === 'function' && typeof skedMinToTime === 'function' && typeof skedTimeToMin === 'function') {
+    const origEv = window.skedGetRetreatEvents;
+    window.skedGetRetreatEvents = function (dateStr) {
+      const evs = origEv.apply(this, arguments);
+      try { ibsBreathEvents(dateStr).forEach(e => evs.push(e)); } catch (e) { console.warn('[ice bath shala] could not add breathwork block', e); }
+      return evs;
+    };
+  }
   window.actSheetActCard = function (a) {
     const html = origCard.apply(this, arguments);
     if (!a || a.aoId !== IBS_AO) return html;
@@ -48,7 +78,7 @@ function ibsSet(bkId, idx, shalaId) {
       const q = ibsQueue[a.bkId], pick = q && q.shift(); if (!pick) return html;
       const cur = pick.a.shala || '', opts = (typeof SHALAS !== 'undefined' ? SHALAS : []).map(s => `<option value="${s.id}"${s.id === cur ? ' selected' : ''}>${s.name}</option>`).join('');
       const box = `<div style="margin-top:5px;padding:4px 5px;border-radius:5px;background:${cur ? '#ecfdf5' : '#fef3c7'};border:1px solid ${cur ? '#a7f3d0' : '#fcd34d'}">
-        <div style="font-size:9.5px;font-weight:700;color:${cur ? '#065f46' : '#92400e'};margin-bottom:2px">${cur ? '📍 Breathwork shala' : '⚠ Assign shala for breathwork'}</div>
+        <div style="font-size:9.5px;font-weight:700;color:${cur ? '#065f46' : '#92400e'};margin-bottom:2px">${cur ? '📍 Breathwork shala (30 min)' : '⚠ Assign shala for breathwork'}</div>
         <select onchange="ibsSet('${String(a.bkId).replace(/'/g, "\\'")}',${pick.i},this.value)" style="width:100%;font-size:11px;padding:2px 3px;border:1px solid #d6cfc4;border-radius:4px;background:#fff"><option value="">— choose shala —</option>${opts}</select></div>`;
       return html.replace(/<\/div>\s*$/, box + '</div>');
     } catch (e) { console.warn('[ice bath shala] could not add dropdown', e); return html; }
