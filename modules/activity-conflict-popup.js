@@ -2,7 +2,8 @@
 // Loaded as a classic script AFTER teacher-portal.js; shares global scope. Darlene 2026-10-21: "if another group has sound healing that night then
 // I would get a pop up." Wraps the two places an admin sets the date of an activity in a retreat's Schedule box (svChangeActivityDate when a day is
 // picked in an assigned activity's dropdown, svAddActivity when a new one is added). If any OTHER current retreat already has Sound Healing & Cacao on
-// that same date, a confirm pop-up names the group, the time and the headcount; OK keeps the choice, Cancel leaves the date as it was.
+// that same date, a pop-up names the group, the time and the headcount and says it can't be booked that night; the date is left as it was (Darlene:
+// "you can not book that"). Nothing else about editing activities is blocked.
 // The ceremony exists as two catalog entries (ao4 and ao19), so both count. To get the same pop-up for another activity, add its id below.
 const ACP_WATCH = new Set(['ao4', 'ao19']);   // Sound Healing & Cacao Ceremony
 
@@ -25,7 +26,7 @@ function acpConflicts(bk, aoId, date) {
 }
 function acpAsk(aoId, date, conflicts) {
   const lines = conflicts.map(c => `• ${c.group}${c.pax ? ` (${c.pax} people)` : ''}${acpFmtTime(c.time)}`).join('\n');
-  return `⚠ Another group already has ${acpName(aoId)} on ${acpFmtDate(date)}:\n\n${lines}\n\nDo you still want to schedule it that night?\n\nOK = keep this night     Cancel = don't change it`;
+  return `⚠ You can't book ${acpName(aoId)} on ${acpFmtDate(date)} — another group already has it that night:\n\n${lines}\n\nPlease pick a different night. Nothing was changed.`;
 }
 
 (function () {
@@ -36,7 +37,7 @@ function acpAsk(aoId, date, conflicts) {
         const bk = AppData.bookings.find(b => b.id === bkId), act = bk && (bk.retreatActivities || [])[idx];
         if (bk && act && newDate && newDate !== bk.startDate && newDate !== bk.endDate && String(act.date || '').slice(0, 10) !== newDate) {
           const c = acpConflicts(bk, act.aoId, newDate);
-          if (c.length && !window.confirm(acpAsk(act.aoId, newDate, c))) { if (typeof svRefreshActivityView === 'function') svRefreshActivityView(bkId); return; }
+          if (c.length) { window.alert(acpAsk(act.aoId, newDate, c)); if (typeof svRefreshActivityView === 'function') svRefreshActivityView(bkId); return; }
         }
       } catch (e) { console.warn('[activity conflict popup]', e); }
       return origChange.apply(this, arguments);
@@ -50,7 +51,7 @@ function acpAsk(aoId, date, conflicts) {
         const aoId = (document.getElementById('svAddAoId') || {}).value, date = (document.getElementById('svAddAoDate') || {}).value;
         if (bk && aoId && date && date !== bk.startDate && date !== bk.endDate) {
           const c = acpConflicts(bk, aoId, date);
-          if (c.length && !window.confirm(acpAsk(aoId, date, c))) return;
+          if (c.length) { window.alert(acpAsk(aoId, date, c)); return; }
         }
       } catch (e) { console.warn('[activity conflict popup]', e); }
       return origAdd.apply(this, arguments);
