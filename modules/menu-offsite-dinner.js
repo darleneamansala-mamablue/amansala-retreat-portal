@@ -62,3 +62,21 @@ function menuOffsiteMessages() {
     return r;
   };
 })();
+
+// ---- Visible note on the dinner block (Darlene 2026-10-21: the menu should show the group's offsite schedule, so a group that is missing from the
+// dinner list reads as "out, not counted" and not as a mistake). Added under that night's dinner total; nothing else in the block changes.
+function menuOffsiteNoteHtml(dateStr) {
+  const items = Object.values(menuOffsiteLog).filter(x => x.date === String(dateStr).slice(0, 10) && x.kind !== 'check');
+  if (!items.length) return '';
+  const txt = items.map(x => x.kind === 'partial' ? `${x.group} (${x.out} of ${x.head} out)` : x.kind === 'undecided' ? `${x.group} (${x.head}) — choice not set yet` : `${x.group} (${x.head})`).join(' · ');
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return `<div style="margin-top:6px;padding:5px 8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:11px;line-height:1.35;color:#991b1b"><b>🚌 Off-site dinner — not counted, not cooked for:</b><br>${esc(txt)}</div>`;
+}
+(function () {
+  if (typeof menuRenderDinner !== 'function') return;
+  const origDinner = window.menuRenderDinner;
+  window.menuRenderDinner = function (dateStr) {
+    const html = origDinner.apply(this, arguments);
+    try { const note = menuOffsiteNoteHtml(dateStr); return note ? String(html).replace(/<\/div>\s*$/, note + '</div>') : html; } catch (e) { return html; }
+  };
+})();
