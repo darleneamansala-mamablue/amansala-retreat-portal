@@ -37,7 +37,7 @@ MENU2[5].dinner={protein:'Slow Cooked Ribs',dishes:['Sopa de Champiñones','Rose
 // Sunday: chicken added to the Phad Thai
 MENU2[7].dinner={protein:'Phad Thai con Pollo',dishes:['Thai Slaw'],dessert:'Coconut Ice Cream'};
 // Costing for Menu 2's changed dinners (ids from the protein catalog in menu.js)
-const MV_MENU2_ASSIGN={1:'molida',5:'',7:'pollo'}; // 5: ribs aren't in the protein catalog yet, so no (wrong) chicken cost. Saturday = Friday's fish, see menuAssignForIdx
+const MV_MENU2_ASSIGN={1:'molida',5:'shortribs',7:'pollo'}; // 5: Slow Cooked Ribs = short ribs, 400 pesos/kg (Darlene 2026-10-21). Saturday = Friday's fish, see menuAssignForIdx
 
 function menuVariantForWeek(sundayISO){return menuWeekVariants[sundayISO]==='menu2'?'menu2':'menu1';}
 function menuDataFor(dateStr){
