@@ -1202,11 +1202,12 @@ function menuRunPrintOptions(){
 // from the kitchen's own costing sheet). Together these give a per-day food
 // cost estimate. Both lists are starting points she'll keep filling in over
 // time, so everything here is editable and persists like any other admin data.
+// Prices 2026-10-21 (Darlene, from the Deliplaya quote, menu items only): pollo 100, filete de mero 355, basa 67; short ribs 400.
 const DEF_MENU_PROTEIN_PRICES=[
-  {id:'pollo',     name:'Pechuga de Pollo sin Hueso',        unit:'KG', price:104, portionG:220},
+  {id:'pollo',     name:'Pechuga de Pollo sin Hueso',        unit:'KG', price:100, portionG:220},
   {id:'res',       name:'Arrachera de Res Marinado Texana',  unit:'KG', price:390, portionG:220},
-  {id:'robalo',    name:'Filete de Mero',                    unit:'KG', price:440, portionG:220}, // renamed from Filete Fresco de Róbalo Nacional (Darlene 2026-10-21); price stays until the new list is uploaded
-  {id:'basa',      name:'Filete Congelado de Basa',          unit:'KG', price:98,  portionG:220},
+  {id:'robalo',    name:'Filete de Mero',                    unit:'KG', price:355, portionG:220}, // renamed from Filete Fresco de Róbalo Nacional (Darlene 2026-10-21); price stays until the new list is uploaded
+  {id:'basa',      name:'Filete Congelado de Basa',          unit:'KG', price:67,  portionG:220},
   {id:'salmon',    name:'Filete de Salmón Natural',          unit:'KG', price:350, portionG:220},
   {id:'camaron15', name:'Camarón U15',                       unit:'KG', price:450, portionG:220},
   {id:'camaronpz', name:'Camarón Pelado y Desvenado 21/25',  unit:'PZA',price:250, portionG:null},
@@ -1220,6 +1221,7 @@ const DEF_MENU_PROTEIN_PRICES=[
   {id:'molida',    name:'Carne Molida 80/20',                unit:'KG', price:225, portionG:220},
   {id:'ribeye',    name:'Rib Eye Sterling',                  unit:'KG', price:606, portionG:220},
   {id:'chicharra', name:'Chicharra',                         unit:'KG', price:350, portionG:220},
+  {id:'shortribs', name:'Costilla Corta de Res (Short Ribs)',unit:'KG', price:400, portionG:220}, // Darlene 2026-10-21: short ribs are 400 pesos/kg (Menu 2 Friday: Slow Cooked Ribs)
 ];
 const DEF_MENU_RECIPE_COSTS=[
   {name:'Pan de Plátano',                portions:48, totalCost:417.48},
