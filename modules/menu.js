@@ -1205,7 +1205,7 @@ function menuRunPrintOptions(){
 const DEF_MENU_PROTEIN_PRICES=[
   {id:'pollo',     name:'Pechuga de Pollo sin Hueso',        unit:'KG', price:104, portionG:220},
   {id:'res',       name:'Arrachera de Res Marinado Texana',  unit:'KG', price:390, portionG:220},
-  {id:'robalo',    name:'Filete Fresco de Róbalo Nacional',  unit:'KG', price:440, portionG:220},
+  {id:'robalo',    name:'Filete de Mero',                    unit:'KG', price:440, portionG:220}, // renamed from Filete Fresco de Róbalo Nacional (Darlene 2026-10-21); price stays until the new list is uploaded
   {id:'basa',      name:'Filete Congelado de Basa',          unit:'KG', price:98,  portionG:220},
   {id:'salmon',    name:'Filete de Salmón Natural',          unit:'KG', price:350, portionG:220},
   {id:'camaron15', name:'Camarón U15',                       unit:'KG', price:450, portionG:220},
