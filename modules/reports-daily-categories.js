@@ -61,11 +61,11 @@ function rdcHtml() {
   const row = (name, o, note) => `<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:9px 14px;font-size:13px;font-weight:600;color:#111827">${name}${note ? `<div style="font-size:11px;font-weight:400;color:#9ca3af">${note}</div>` : ''}</td><td style="padding:9px 14px;text-align:center;font-size:12px;color:#6b7280">${o ? o.n : 0}</td><td style="padding:9px 14px;text-align:right;font-size:14px;font-weight:700;color:${o && o.amt < 0 ? '#16a34a' : '#111827'}">${fmt$(o ? o.amt : 0)}</td></tr>`;
   const other = s.Other, otherNote = other ? Object.entries(other.names).map(([k, v]) => `${escHtml(k)} ${fmt$(v)}`).join(' · ') : '';
   return `<div id="rdcCard" style="margin-bottom:24px">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:8px">Sales by Category — for the day</div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:8px">Income by Category — for the day</div>
     <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;max-width:620px"><table style="width:100%;border-collapse:collapse">
       <thead style="background:#f8fafc"><tr><th style="${th};text-align:left">Category</th><th style="${th};text-align:center">Charges</th><th style="${th};text-align:right">Amount</th></tr></thead>
       <tbody>${RDC_ROWS.map(n => row(n, s[n], n === 'Rooms' ? 'Earned by nights stayed (bookings spread evenly per night, incl. packages, tax &amp; gratuity)' : '')).join('')}${other ? row('Other', other, otherNote) : ''}
-        <tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:800;font-size:13px">Total for the day</td><td></td><td style="padding:10px 14px;text-align:right;font-weight:800;font-size:15px">${fmt$(total)}</td></tr></tbody></table></div>
+        <tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:800;font-size:13px">Total income for the day</td><td></td><td style="padding:10px 14px;text-align:right;font-weight:800;font-size:15px">${fmt$(total)}</td></tr></tbody></table></div>
     <div style="font-size:11.5px;color:#6b7280;margin-top:6px;max-width:620px">Rooms = nights stayed in the range. Room charges posted in the same range (${fmt$(posted)}, the Room Sales card) are not added again. Everything else = charged on the day.</div></div>`;
 }
 
