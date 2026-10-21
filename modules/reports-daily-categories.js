@@ -14,6 +14,14 @@
 // TIPS (Darlene 2026-10-21: "the tip we collect is 30 usd per person per day"): collected inside the retreat price too, so each night
 // guests in the house x that booking's tip per night (the portal's getTip, normally $30) is taken out of Rooms and shown as its own
 // "Tips collected" line, together with any Tip / Yoga Gratuity charges posted on folios. Tips go to staff, so they are NOT in the income total.
+// ONLY CONFIRMED BOOKINGS earn Rooms: a booking still at status "requested" (a new request nobody has confirmed) is left out and listed
+// in a note under the table (Darlene 2026-10-21: "these are 5 new bookings that came in").
+// TAX (Darlene 2026-10-21: "separate tax"): every row shows Before tax, Tax and Amount. Folio charges are exact (each charge's own tax
+// rate). Rooms and Meal Plan come from booking totals that include tax, so their tax is ESTIMATED at the booking's own room tax rate
+// (getBkTaxRate) — tips are never taxed.
+// TIPS are split by kind, below the total and never counted as income: yoga tip ($30/person/night, worked out from the guests in the house),
+// staff gratuity already posted on folios (online bookings, yoga gratuity), restaurant / waiter tips (Tip charges that mention the
+// restaurant, waiter, mesero or propina) and spa / other staff tips.
 // Categories asked for by Darlene 2026-10-21: Rooms, Meal Plan, Boutique, Spa, Transport, Bar, Restaurant, Tours, Rituals.
 // Folio items today only carry Room, Spa, Restaurant, Transport/Transportation, Tour, Boutique (+ Tip, Credit, Upgrade...), so
 // Meal Plan, Bar and Rituals are recognised from the category OR the wording of the description; anything not recognised lands in
@@ -47,11 +55,12 @@ function rdcCategory(i) {
 // Nights in [from, to] (inclusive ISO dates) → [ISO date, ...]
 function rdcDays(from, to) { const out = []; for (let d = pd(from); d <= pd(to) && out.length < 400; d = new Date(d.getTime() + DAY_MS)) out.push(fmtISO(d)); return out; }
 function rdcRoomsEarned() {
-  const days = rdcDays(_dailyFrom, _dailyTo); let rooms = 0, roomNights = 0, meals = 0, mealDays = 0, tips = 0; const by = {};
+  const days = rdcDays(_dailyFrom, _dailyTo); let rooms = 0, roomNights = 0, meals = 0, mealDays = 0, tips = 0, roomsTax = 0, mealsTax = 0; const by = {}, skipped = [];
   (AppData.bookings || []).forEach(bk => {
-    if (bk.status === 'cancelled' || !bk.startDate || !bk.endDate) return;
+    if (bk.status === 'cancelled' || bk.status === 'declined' || !bk.startDate || !bk.endDate) return;
     const nights = getNights(bk); if (!nights) return;
     const inHouse = days.filter(d => d >= bk.startDate && d < bk.endDate); if (!inHouse.length) return;
+    if (bk.status === 'requested' || bk.status === 'inquiry') { skipped.push(bk.leaderName || bk.retreatName || 'Booking'); return; }
     const isRoomOnly = bk.bookingType === 'room_only';
     let total = 0;
     try { total = isRoomOnly ? (bk.roomRateTotal || 0) : (typeof _calcRoomRevenue === 'function' ? _calcRoomRevenue(bk) : 0); } catch (e) { total = 0; }
@@ -66,25 +75,36 @@ function rdcRoomsEarned() {
       });
       const meal = Math.min(perNight, heads * rdcMealRate); // never take out more than the night is worth
       const tipRate = typeof getTip === 'function' ? (Number(getTip(bk)) || 0) : 30, tip = isRoomOnly ? 0 : Math.min(perNight - meal, heads * tipRate);
+      const tr = (() => { try { const r = typeof getBkTaxRate === 'function' ? Number(getBkTaxRate(bk)) : 0.16; return r >= 0 && r < 1 ? r : 0; } catch (e) { return 0; } })();
       meals += meal; mealDays += heads; tips += tip; rooms += perNight - meal - tip; roomNights++;
+      mealsTax += meal * tr / (1 + tr); roomsTax += (perNight - meal - tip) * tr / (1 + tr);
       if (heads) { const b = by[bk.id] = by[bk.id] || { name: bk.leaderName || bk.retreatName || 'Retreat', heads: 0, meal: 0, tip: 0, tipRate }; b.heads += heads; b.meal += meal; b.tip += tip; }
     });
   });
   const r2 = n => Math.round(n * 100) / 100;
-  return { amt: r2(rooms), nights: roomNights, meals: r2(meals), mealDays, tips: r2(tips), retreats: Object.values(by).sort((a, b) => b.heads - a.heads) };
+  return { amt: r2(rooms), roomsTax: r2(roomsTax), mealsTax: r2(mealsTax), skipped: [...new Set(skipped)], nights: roomNights, meals: r2(meals), mealDays, tips: r2(tips), retreats: Object.values(by).sort((a, b) => b.heads - a.heads) };
 }
 
+// What kind of tip is this folio Tip charge?
+function rdcTipKind(i) {
+  const t = (String(i.category || '') + ' ' + String(i.description || '')).toLowerCase();
+  if (/gratuity/.test(t)) return 'gratuity';
+  if (/restaurant|waiter|mesero|propina|consumo|comida/.test(t)) return 'restaurant';
+  return 'other';
+}
 function rdcSummary() {
-  const rows = _rptDailyFolioCharges(), out = {};
+  const rows = _rptDailyFolioCharges(), out = {}, tipKinds = { gratuity: { n: 0, amt: 0 }, restaurant: { n: 0, amt: 0 }, other: { n: 0, amt: 0, names: {} } };
   rows.forEach(i => {
     const k = rdcCategory(i); if (k === 'Rooms') return; // rooms come from the nights stayed, below
-    const o = out[k] = out[k] || { n: 0, amt: 0, names: {} };
-    o.n++; o.amt += Number(i.amount) || 0;
-    if (k === 'Other') { const nm = i.category || 'No category'; o.names[nm] = (o.names[nm] || 0) + (Number(i.amount) || 0); }
+    const amt = Number(i.amount) || 0, pre = (Number(i.qty) || 0) * (Number(i.unit_price) || 0);
+    if (k === 'Tips') { const t = tipKinds[rdcTipKind(i)]; t.n++; t.amt += amt; if (t.names) t.names[i.description || 'Tip'] = 1; return; }
+    const o = out[k] = out[k] || { n: 0, amt: 0, tax: 0, names: {} };
+    o.n++; o.amt += amt; o.tax += amt - pre;
+    if (k === 'Other') { const nm = i.category || 'No category'; o.names[nm] = (o.names[nm] || 0) + amt; }
   });
-  const re = rdcRoomsEarned(); out.Rooms = { n: re.nights, amt: re.amt, unit: 'room-nights' };
-  const mp = out['Meal Plan'] = out['Meal Plan'] || { n: 0, amt: 0, names: {} }; mp.n += re.mealDays; mp.amt += re.meals;
-  const tp = out.Tips = out.Tips || { n: 0, amt: 0, names: {} }; tp.n += re.mealDays; tp.amt += re.tips;
+  const re = rdcRoomsEarned(); out.Rooms = { n: re.nights, amt: re.amt, tax: re.roomsTax };
+  const mp = out['Meal Plan'] = out['Meal Plan'] || { n: 0, amt: 0, tax: 0, names: {} }; mp.n += re.mealDays; mp.amt += re.meals; mp.tax += re.mealsTax;
+  out._tips = { yoga: { n: re.mealDays, amt: re.tips }, ...tipKinds }; out._skipped = re.skipped;
   return out;
 }
 
@@ -101,20 +121,32 @@ function rdcRetreatsHtml() {
 }
 
 function rdcHtml() {
-  const s = rdcSummary(), posted = _rptDailyFolioCharges().filter(i => rdcCategory(i) === 'Rooms').reduce((t, i) => t + (Number(i.amount) || 0), 0), total = Object.entries(s).reduce((t, [k, o]) => (k === 'Tips' ? t : t + o.amt), 0);
+  const s = rdcSummary(), tips = s._tips, posted = _rptDailyFolioCharges().filter(i => rdcCategory(i) === 'Rooms').reduce((t, i) => t + (Number(i.amount) || 0), 0);
+  const rowsIn = [...RDC_ROWS, ...(s.Other ? ['Other'] : [])].filter(n => s[n] || RDC_ROWS.includes(n));
+  const tot = rowsIn.reduce((t, n) => ({ amt: t.amt + ((s[n] || {}).amt || 0), tax: t.tax + ((s[n] || {}).tax || 0) }), { amt: 0, tax: 0 });
   const th = 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;padding:8px 14px;border-bottom:2px solid var(--border)';
-  const row = (name, o, note) => `<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:9px 14px;font-size:13px;font-weight:600;color:#111827">${name}${note ? `<div style="font-size:11px;font-weight:400;color:#9ca3af">${note}</div>` : ''}</td><td style="padding:9px 14px;text-align:center;font-size:12px;color:#6b7280">${o ? o.n : 0}</td><td style="padding:9px 14px;text-align:right;font-size:14px;font-weight:700;color:${o && o.amt < 0 ? '#16a34a' : '#111827'}">${fmt$(o ? o.amt : 0)}</td></tr>`;
+  const tdn = 'padding:9px 14px;text-align:right;font-size:13px;color:#374151';
+  const est = n => (n === 'Rooms' || n === 'Meal Plan') ? '≈ ' : '';
+  const row = (name, o, note, key) => `<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:9px 14px;font-size:13px;font-weight:600;color:#111827">${name}${note ? `<div style="font-size:11px;font-weight:400;color:#9ca3af">${note}</div>` : ''}</td><td style="padding:9px 14px;text-align:center;font-size:12px;color:#6b7280">${o ? o.n : 0}</td><td style="${tdn}">${fmt$((o ? o.amt - (o.tax || 0) : 0))}</td><td style="${tdn}">${est(key)}${fmt$(o ? (o.tax || 0) : 0)}</td><td style="padding:9px 14px;text-align:right;font-size:14px;font-weight:700;color:${o && o.amt < 0 ? '#16a34a' : '#111827'}">${fmt$(o ? o.amt : 0)}</td></tr>`;
   const other = s.Other, otherNote = other ? Object.entries(other.names).map(([k, v]) => `${escHtml(k)} ${fmt$(v)}`).join(' · ') : '';
+  const tipRow = (label, o, note) => `<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:8px 14px;font-size:12.5px;color:#374151">${label}${note ? `<div style="font-size:11px;color:#9ca3af">${note}</div>` : ''}</td><td style="padding:8px 14px;text-align:center;font-size:12px;color:#6b7280">${o.n}</td><td colspan="2"></td><td style="padding:8px 14px;text-align:right;font-size:13px;font-weight:700;color:#374151">${fmt$(o.amt)}</td></tr>`;
+  const tipTotal = tips.yoga.amt + tips.gratuity.amt + tips.restaurant.amt + tips.other.amt;
+  const otherTipNames = Object.keys(tips.other.names || {}).slice(0, 4).map(escHtml).join(', ');
   return `<div id="rdcCard" style="margin-bottom:24px">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af;margin-bottom:8px">Income by Category — for the day</div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;max-width:620px"><table style="width:100%;border-collapse:collapse">
-      <thead style="background:#f8fafc"><tr><th style="${th};text-align:left">Category</th><th style="${th};text-align:center">Charges</th><th style="${th};text-align:right">Amount</th></tr></thead>
-      <tbody>${RDC_ROWS.map(n => row(n, s[n], n === 'Rooms' ? 'Earned by nights stayed (bookings spread evenly per night, incl. packages, tax &amp; gratuity), minus the meal plan and tips below'
-      : n === 'Meal Plan' ? `Retreat guests in the house × <input type="number" min="0" step="1" value="${rdcMealRate}" onchange="rdcSetMealRate(this.value)" style="width:56px;padding:1px 4px;border:1px solid #c8bfb5;border-radius:5px;font-size:11px"> per person per day — "Charges" is person-days` : '')).join('')}${other ? row('Other', other, otherNote) : ''}
-        <tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:800;font-size:13px">Total income for the day</td><td></td><td style="padding:10px 14px;text-align:right;font-weight:800;font-size:15px">${fmt$(total)}</td></tr>
-        ${s.Tips ? row('Retreat Tip (not income)', s.Tips, "Guests in the house × the retreat's tip per night (usually $30), plus Tip charges on folios. Goes to staff.") : ''}</tbody></table></div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden;max-width:820px"><table style="width:100%;border-collapse:collapse">
+      <thead style="background:#f8fafc"><tr><th style="${th};text-align:left">Category</th><th style="${th};text-align:center">Charges</th><th style="${th};text-align:right">Before tax</th><th style="${th};text-align:right">Tax</th><th style="${th};text-align:right">Amount</th></tr></thead>
+      <tbody>${rowsIn.map(n => row(n, s[n], n === 'Rooms' ? 'Confirmed bookings, earned by nights stayed (spread evenly per night, incl. packages), minus the meal plan and tips'
+        : n === 'Meal Plan' ? `Retreat guests in the house × <input type="number" min="0" step="1" value="${rdcMealRate}" onchange="rdcSetMealRate(this.value)" style="width:56px;padding:1px 4px;border:1px solid #c8bfb5;border-radius:5px;font-size:11px"> per person per day — "Charges" is person-days`
+        : n === 'Other' ? otherNote : '', n)).join('')}
+        <tr style="background:#f8fafc"><td style="padding:10px 14px;font-weight:800;font-size:13px">Total income for the day</td><td></td><td style="padding:10px 14px;text-align:right;font-weight:700;font-size:13px">${fmt$(tot.amt - tot.tax)}</td><td style="padding:10px 14px;text-align:right;font-weight:700;font-size:13px">${fmt$(tot.tax)}</td><td style="padding:10px 14px;text-align:right;font-weight:800;font-size:15px">${fmt$(tot.amt)}</td></tr>
+        <tr><td colspan="5" style="padding:10px 14px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#9ca3af">Tips collected — goes to staff, not income (${fmt$(tipTotal)})</td></tr>
+        ${tipRow('Yoga tip', tips.yoga, 'Retreat guests in the house × the retreat tip per night (usually $30). "Charges" is person-days.')}
+        ${tipRow('Restaurant / waiter tips', tips.restaurant, tips.restaurant.n ? '' : 'None found — no Tip charge mentions the restaurant, a waiter or propina.')}
+        ${tipRow('Staff gratuity posted on folios', tips.gratuity, 'Online-booking "$30 per guest, per night" and Yoga Gratuity charges.')}
+        ${tipRow('Spa &amp; other staff tips', tips.other, otherTipNames)}</tbody></table></div>
     ${rdcRetreatsHtml()}
-    <div style="font-size:11.5px;color:#6b7280;margin-top:6px;max-width:620px">Rooms = nights stayed in the range. Room charges posted in the same range (${fmt$(posted)}, the Room Sales card) are not added again. Everything else = charged on the day.</div></div>`;
+    <div style="font-size:11.5px;color:#6b7280;margin-top:6px;max-width:820px">Tax on Rooms and Meal Plan (≈) is estimated at each booking's tax rate; tax on everything else is exact from each charge. Rooms = nights stayed in the range; room charges posted in the same range (${fmt$(posted)}, the Room Sales card) are not added again. Everything else = charged on the day.${s._skipped.length ? `<br><b>Not counted — requested, not confirmed:</b> ${s._skipped.map(escHtml).join(', ')}.` : ''}</div></div>`;
 }
 
 (function () {
