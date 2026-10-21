@@ -556,6 +556,8 @@ function menuPopulateFromRetreats(silent=false){
         menuEnsure(dateStr,actualMeal);
         // A group out for the offsite (Gitano) dinner isn't cooked for (modules/menu-offsite-dinner.js)
         const rowPx=(actualMeal==='dinner'&&typeof menuOffsiteDinnerPax==='function')?menuOffsiteDinnerPax(bk,dateStr,px):px;
+        // A group that is out for the offsite dinner is not on that night's dinner list at all, so the kitchen never orders for it
+        if(actualMeal==='dinner'&&rowPx==='0'&&px!=='0'&&px!==0)return;
         menuSchedule[dateStr][actualMeal].push({time:t,group:grp,pax:rowPx});
         added++;
       });
