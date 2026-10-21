@@ -180,6 +180,7 @@ async function rbsSave(){
     all[_rbsBk.id]=c;
     const {error}=await db.from('app_store').upsert({key:RBS_KEY,value:all,updated_at:new Date().toISOString()});
     if(error)throw error;
+    _rbsLinkCfgs=all;
     // room list is admin-only for a retreat where Amansala collects payments (same lock as Actions > Lock for Teacher)
     if(c.enabled||c.lockRoomList===false){const want=!!c.lockRoomList;if(!!_rbsBk.allLocked!==want){_rbsBk.allLocked=want;saveAll();try{regRender();}catch(e){}}}
     showToast(c.enabled?'Saved. The guest booking page is OPEN.':'Saved. The page is still closed to guests.');
@@ -215,13 +216,60 @@ function rbsCopy(){
   const l=rbsLink(_rbsBk);
   navigator.clipboard.writeText(l).then(()=>showToast('Guest link copied')).catch(()=>showToast('Link: '+l));
 }
+// Actions → "🔗 Guest Links: Grande / Chica": one place to see and copy both guest links of a retreat that also has a Chica-only
+// link (cfg.chicaSlug / cfg.chicaUnits, see rb-lib.js). Only retreats with that setup get the menu item. The configs are read
+// once in the background (_rbsLinkCfgs) and the menu is rebuilt when they arrive.
+let _rbsLinkCfgs=null,_rbsLinkLoading=false;
+function rbsHasChica(c){return !!(c&&(c.chicaSlug||(c.chicaUnits&&typeof c.chicaUnits==='object')));}
+function rbsGuestLinks(bkId,c){
+  const id=encodeURIComponent(bkId);
+  return {
+    grande:c.slug?`${location.origin}/retreat-booking.html/${c.slug}`:`${location.origin}/retreat-booking.html?r=${id}`,
+    chica:c.chicaSlug?`${location.origin}/retreat-booking.html/${c.chicaSlug}`:`${location.origin}/retreat-booking.html?r=${id}&p=chica`
+  };
+}
+function rbsLoadLinkCfgs(){
+  if(_rbsLinkLoading)return;
+  _rbsLinkLoading=true;
+  rbsLoadAll().then(all=>{_rbsLinkCfgs=all;if(typeof regSelBk!=='undefined'&&regSelBk)regBuildActionsMenu(regSelBk);})
+    .catch(()=>{}).finally(()=>{_rbsLinkLoading=false;});
+}
+async function rbsOpenGuestLinks(){
+  if(typeof regSelBk==='undefined'||!regSelBk){showToast('Select a retreat first');return;}
+  const bk=regSelBk;
+  let c;
+  try{c=(await rbsLoadAll())[bk.id];}catch(e){showToast('Could not load the links: '+(e.message||e));return;}
+  if(!rbsHasChica(c)){showToast('This retreat has no Chica-only link.');return;}
+  const L=rbsGuestLinks(bk.id,c);
+  document.getElementById('rbsLinksOv')?.remove();
+  const ov=document.createElement('div');ov.id='rbsLinksOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  const row=(label,note,url)=>`<div style="margin-top:12px">
+      <b style="font-size:13px">${label}</b> <span style="font-size:11.5px;color:#7f8c9a">${note}</span>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <input readonly value="${rbsEsc(url)}" onclick="this.select()" style="flex:1;min-width:0;padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-size:12.5px;font-family:inherit">
+        <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${rbsEsc(url)}').then(()=>showToast('Copied: ${rbsEsc(url)}')).catch(()=>showToast('Link: ${rbsEsc(url)}'))">Copy</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.open('${rbsEsc(url)}','_blank')">Open</button>
+      </div></div>`;
+  ov.innerHTML=`<div style="background:#fff;border-radius:12px;width:min(620px,100%);padding:20px">
+    <div style="display:flex;align-items:center;gap:10px"><b style="font-size:16px;flex:1">Guest links · ${rbsEsc(c.title||bk.retreatName||bk.leaderName||'')}</b><button class="btn btn-secondary btn-sm" onclick="document.getElementById('rbsLinksOv').remove()">Close</button></div>
+    ${c.enabled?'':'<div style="margin-top:8px;font-size:12.5px;color:#b45309">The guest booking page is closed: both links show "not open yet" until it is opened in We Take Payment.</div>'}
+    ${row('Grande','regular link: all the retreat\'s rooms',L.grande)}
+    ${row('Chica','only the Chica rooms',L.chica)}
+  </div>`;
+  document.body.appendChild(ov);
+}
 (function(){
   const prev=regBuildActionsMenu;
   regBuildActionsMenu=function(bk){
     prev.apply(this,arguments);
     const menu=document.getElementById('regActionsMenu');
-    if(menu&&bk&&!(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE&&!document.body.classList.contains('admin-preview')))
-      menu.insertAdjacentHTML('afterbegin',_regActionMenuItem('🌐 Guest booking page',"rbsOpen()"));
+    if(menu&&bk&&!(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE&&!document.body.classList.contains('admin-preview'))){
+      const chica=_rbsLinkCfgs&&rbsHasChica(_rbsLinkCfgs[bk.id]);
+      menu.insertAdjacentHTML('afterbegin',_regActionMenuItem('🌐 Guest booking page',"rbsOpen()")+(chica?_regActionMenuItem('🔗 Guest Links: Grande / Chica',"rbsOpenGuestLinks()"):''));
+      if(!_rbsLinkCfgs)rbsLoadLinkCfgs();
+    }
   };
 })();
 
