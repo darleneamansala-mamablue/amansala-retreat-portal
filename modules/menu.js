@@ -554,7 +554,9 @@ function menuPopulateFromRetreats(silent=false){
           actualMeal='brunch';
         }
         menuEnsure(dateStr,actualMeal);
-        menuSchedule[dateStr][actualMeal].push({time:t,group:grp,pax:px});
+        // A group out for the offsite (Gitano) dinner isn't cooked for (modules/menu-offsite-dinner.js)
+        const rowPx=(actualMeal==='dinner'&&typeof menuOffsiteDinnerPax==='function')?menuOffsiteDinnerPax(bk,dateStr,px):px;
+        menuSchedule[dateStr][actualMeal].push({time:t,group:grp,pax:rowPx});
         added++;
       });
     });
