@@ -169,7 +169,7 @@ function spaStaffShowDashboard(){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   panel.classList.add('active');
   panel.style.cssText='display:flex;flex-direction:column;position:fixed;inset:0;background:#f0ece4;z-index:9998;overflow-y:auto;padding:20px;box-sizing:border-box';
-  ['spaViewDashboard','spaViewConfirm','spaViewServices','spaViewTherapists','spaViewRooms','spaViewPublic','spaViewPayroll'].forEach(id=>{
+  ['spaViewDashboard','spaViewConfirm','spaViewServices','spaViewTherapists','spaViewRooms','spaViewPublic','spaViewPayroll','spaViewUncharged'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.style.display='none';
   });
   if(typeof spaCurView!=='undefined')spaCurView='calendar';

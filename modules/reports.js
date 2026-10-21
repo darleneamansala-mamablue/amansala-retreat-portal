@@ -600,7 +600,9 @@ let _dailyFolioItems=[],_dailyStaffNames=[],_dailyLoaded=false,_dailyError=null;
 
 async function _rptLoadDaily(){
   try{
-    const fromTs=_dailyFrom+'T00:00:00.000Z',toTs=_dailyTo+'T23:59:59.999Z';
+    // A "day" here is a Tulum day (UTC-5, no daylight saving). Using UTC midnight cut the day at 7pm local, so evening charges
+    // from the 20th showed up under the 21st (Darlene 2026-10-21: picked 21-21 and still saw the 20th).
+    const fromTs=_dailyFrom+'T00:00:00.000-05:00',toTs=_dailyTo+'T23:59:59.999-05:00';
     const[itemsRes,staffRes]=await Promise.all([
       db.from('folio_items').select('id,folio_id,description,qty,unit_price,tax_rate,staff_name,category,created_at').gte('created_at',fromTs).lte('created_at',toTs).order('created_at',{ascending:false}),
       db.from('staff').select('name,active').order('name',{ascending:true}),
