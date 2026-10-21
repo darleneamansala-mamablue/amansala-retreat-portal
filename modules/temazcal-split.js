@@ -63,7 +63,7 @@ function tzSplit(bkId){
   if(t2<=a.time){showToast('Group 2 has to start after group 1 has finished.');return;}
   a.session=1;a.groupSize=s1;
   bk.retreatActivities.push({aoId:TZ_AO,date:a.date,time:t2,prepaid:a.prepaid,session:2,groupSize:s2});
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();svRefreshActivityView(bkId);
   showToast(`Temazcal split: group 1 (${s1}) at ${tzFmt(a.time)}, group 2 (${s2}) at ${tzFmt(t2)}.`);
 }
@@ -74,7 +74,7 @@ function tzSaveSizes(bkId){
   const ents=tzEntries(bk);
   const g1=ents.find(a=>a.session===1)||ents[0],g2=ents.find(a=>a.session===2)||ents[1];
   g1.groupSize=s1;g2.groupSize=s2;
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();svRefreshActivityView(bkId);
 }
 function tzMerge(bkId){
@@ -83,7 +83,7 @@ function tzMerge(bkId){
   const g1=ents.find(a=>a.session===1)||ents[0],g2=ents.find(a=>a.session===2)||ents[1];
   bk.retreatActivities=bk.retreatActivities.filter(a=>a!==g2);
   delete g1.session;delete g1.groupSize;
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();svRefreshActivityView(bkId);
   showToast('Temazcal is back to one group.');
 }
@@ -107,7 +107,7 @@ if(typeof svChangeActivityDate==='function'){
       if(act&&act.aoId===TZ_AO&&act.date&&act.date!==before){
         let moved=false;
         tzEntries(bk).forEach(a=>{if(a!==act&&a.date!==act.date){a.date=act.date;moved=true;}});
-        if(moved){bk.retreatActivitiesUpdatedAt=new Date().toISOString();saveAll();svRefreshActivityView(bkId);}
+        if(moved){bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();saveAll();svRefreshActivityView(bkId);}
       }
     }catch(e){console.warn('[temazcal-split]',e);}
   };
@@ -160,7 +160,7 @@ function tzTeacherSave(){
   bk.retreatActivities=(bk.retreatActivities||[]).filter(a=>a.aoId!==TZ_AO);
   bk.retreatActivities.push({aoId:TZ_AO,date,time:t1,prepaid,requestedTime:true,session:1,groupSize:s1});
   bk.retreatActivities.push({aoId:TZ_AO,date,time:t2,prepaid,requestedTime:true,session:2,groupSize:s2});
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();
   showToast('Request sent — Amansala will confirm.');
   _tsActivityRequestOpenId=null;
