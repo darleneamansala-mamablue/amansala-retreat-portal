@@ -1200,22 +1200,23 @@ function menuRunPrintOptions(){
 // from the kitchen's own costing sheet). Together these give a per-day food
 // cost estimate. Both lists are starting points she'll keep filling in over
 // time, so everything here is editable and persists like any other admin data.
+// Prices updated 2026-10-21 from the Deliplaya quote no. 5157 (pollo, filete de mero, basa, salmón, camarón, molida, lonja de salmón fresco).
 const DEF_MENU_PROTEIN_PRICES=[
-  {id:'pollo',     name:'Pechuga de Pollo sin Hueso',        unit:'KG', price:104, portionG:220},
+  {id:'pollo',     name:'Pechuga de Pollo sin Hueso',        unit:'KG', price:100, portionG:220},
   {id:'res',       name:'Arrachera de Res Marinado Texana',  unit:'KG', price:390, portionG:220},
-  {id:'robalo',    name:'Filete de Mero',                    unit:'KG', price:440, portionG:220}, // renamed from Filete Fresco de Róbalo Nacional (Darlene 2026-10-21); price stays until the new list is uploaded
-  {id:'basa',      name:'Filete Congelado de Basa',          unit:'KG', price:98,  portionG:220},
-  {id:'salmon',    name:'Filete de Salmón Natural',          unit:'KG', price:350, portionG:220},
-  {id:'camaron15', name:'Camarón U15',                       unit:'KG', price:450, portionG:220},
+  {id:'robalo',    name:'Filete de Mero',                    unit:'KG', price:355, portionG:220}, // renamed from Filete Fresco de Róbalo Nacional (Darlene 2026-10-21); price stays until the new list is uploaded
+  {id:'basa',      name:'Filete Congelado de Basa',          unit:'KG', price:67,  portionG:220},
+  {id:'salmon',    name:'Filete de Salmón Natural',          unit:'KG', price:270, portionG:220},
+  {id:'camaron15', name:'Camarón U15',                       unit:'KG', price:445, portionG:220},
   {id:'camaronpz', name:'Camarón Pelado y Desvenado 21/25',  unit:'PZA',price:250, portionG:null},
   {id:'entero',    name:'Pescado Fresco Entero',             unit:'KG', price:310, portionG:220}, // June 2026 catalog lists no price for this cut — worth reconfirming with the supplier
   // Added from the June 2026 supplier catalog (CATALOGO JUNIO2026 ACT):
-  {id:'salmonlonja',name:'Salmón Fresco Lonja',              unit:'KG', price:340, portionG:220},
+  {id:'salmonlonja',name:'Salmón Fresco Lonja',              unit:'KG', price:380, portionG:220},
   {id:'arracheraCh',name:'Arrachera Choice',                 unit:'KG', price:368, portionG:220},
   {id:'pulpo',     name:'Pulpo',                             unit:'KG', price:230, portionG:220},
-  {id:'camaronsc',  name:'Camarón 21-25 Sin Cabeza Con Cáscara',unit:'KG',price:270, portionG:220},
+  {id:'camaronsc',  name:'Camarón 21-25 Sin Cabeza Con Cáscara',unit:'KG',price:190, portionG:220},
   {id:'langosta',  name:'Cola de Langosta',                  unit:'KG', price:1300,portionG:220},
-  {id:'molida',    name:'Carne Molida 80/20',                unit:'KG', price:225, portionG:220},
+  {id:'molida',    name:'Carne Molida 80/20',                unit:'KG', price:220, portionG:220},
   {id:'ribeye',    name:'Rib Eye Sterling',                  unit:'KG', price:606, portionG:220},
   {id:'chicharra', name:'Chicharra',                         unit:'KG', price:350, portionG:220},
 ];
