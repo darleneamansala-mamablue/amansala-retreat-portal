@@ -1,0 +1,150 @@
+// ===== double-charges.js — Report and alert for charges posted twice on a room =====
+// Loaded as a classic script AFTER booking-detail.js and admin-staff.js; shares global scope. Standalone: adds a "Double Charges" tab
+// to the sidebar (same opener pattern as daily-reports.js) and a red count on it. Read-only: it never deletes or edits a charge — staff
+// open the booking and remove the extra one there, or press "It's correct" to hide a legitimate repeat.
+// What counts as doubled: two or more lines on the SAME folio with the same text, the same total, and the same day (or, when the text
+// carries a service date like "Departure Transport 2026-10-23", the same service date whatever day they were posted). Lines posted
+// within 2 minutes of each other are marked "Likely mistake" (a system or double-click repeat); anything slower is "Check" because a
+// guest can legitimately buy the same item twice. Looks at the folio_items table plus the older charges lists on registrations and
+// bookings. Real case 2026-10-21: auto-charge-transport posted Departure Transport twice, seconds apart, on ten folios.
+let dcState = { days: 30, showDismissed: false, groups: [], dismissed: {}, loading: false, loadedAt: 0, error: '' };
+const DC_KEY = 'doubleChargesDismissed', DC_SEEN = 'amansala_dc_seen';
+
+const dcEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const dcNorm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+const dcMoney = n => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+function dcTime(iso) { try { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: 'America/Cancun' }); } catch (e) { return iso || ''; } }
+
+async function dcFetchAll(table, build) {
+  const out = [];
+  for (let from = 0; from < 30000; from += 1000) {
+    const { data, error } = await build(db.from(table)).range(from, from + 999);
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
+function dcGroupKey(owner, desc, total, createdIso) {
+  const d = dcNorm(desc), hasServiceDate = /\d{4}-\d{2}-\d{2}/.test(d);
+  return [owner, d, total, hasServiceDate ? '' : String(createdIso || '').slice(0, 10)].join('|');
+}
+function dcAdd(map, key, base, line) { (map[key] = map[key] || { base, lines: [] }).lines.push(line); }
+
+async function dcScan() {
+  const since = new Date(Date.now() - dcState.days * 86400000).toISOString();
+  const [items, folios] = await Promise.all([
+    dcFetchAll('folio_items', q => q.select('*').gte('created_at', since).order('created_at', { ascending: false }).order('id')),
+    dcFetchAll('folios', q => q.select('id,registration_id,guest_name,status').order('id')),
+  ]);
+  const folioById = {}; folios.forEach(f => { folioById[f.id] = f; });
+  const regById = {}; (AppData.regs || []).forEach(r => { regById[r.id] = r; });
+  const map = {};
+  items.forEach(i => {
+    const total = Math.round((Number(i.qty) || 1) * (Number(i.unit_price) || 0) * 100) / 100; if (!total) return;
+    const f = folioById[i.folio_id] || {}, reg = regById[f.registration_id];
+    dcAdd(map, dcGroupKey('f:' + i.folio_id, i.description, total, i.created_at), { src: 'folio', total, desc: i.description, category: i.category, regId: f.registration_id, guest: f.guest_name, room: reg ? reg.room : '?' }, { at: i.created_at, staff: i.staff_name || '' });
+  });
+  // Older charge lists kept on the registration / booking itself
+  const legacy = (owner, list, base) => (list || []).forEach(c => {
+    const total = Math.round((Number(c.amount) || 0) * 100) / 100, at = c.addedAt || (c.date ? c.date + 'T12:00:00Z' : ''); if (!total || (at && at < since)) return;
+    dcAdd(map, dcGroupKey(owner, c.description, total, at || c.date), Object.assign({ src: 'legacy', total, desc: c.description, category: c.category }, base), { at, staff: c.addedBy || '' });
+  });
+  (AppData.regs || []).forEach(r => legacy('r:' + r.id, r.charges, { regId: r.id, guest: ((r.guests || []).find(g => g.name) || {}).name || '', room: r.room }));
+  (AppData.bookings || []).forEach(b => legacy('b:' + b.id, b.charges, { regId: null, guest: b.leaderName || '', room: (b.blockedRooms || [])[0] || '' }));
+  const groups = [];
+  Object.entries(map).forEach(([key, g]) => {
+    if (g.lines.length < 2) return;
+    const times = g.lines.map(l => Date.parse(l.at)).filter(t => !isNaN(t)), gap = times.length > 1 ? (Math.max(...times) - Math.min(...times)) / 1000 : null;
+    groups.push(Object.assign({ key, count: g.lines.length, extra: Math.round(g.base.total * (g.lines.length - 1) * 100) / 100, lines: g.lines.sort((a, b) => String(a.at).localeCompare(String(b.at))), gap, likely: gap != null && gap <= 120 }, g.base));
+  });
+  groups.sort((a, b) => (b.likely - a.likely) || b.extra - a.extra);
+  return groups;
+}
+
+async function dcLoadDismissed() {
+  try { const { data } = await db.from('app_store').select('value').eq('key', DC_KEY).maybeSingle(); dcState.dismissed = (data && data.value) || {}; } catch (e) {}
+}
+async function dcSetDismissed(key, on) {
+  await dcLoadDismissed(); // re-read first so two people's clicks don't overwrite each other
+  if (on) dcState.dismissed[key] = { by: (getCurrentSession() || {}).name || 'Staff', at: new Date().toISOString() }; else delete dcState.dismissed[key];
+  try { const { error } = await db.from('app_store').upsert({ key: DC_KEY, value: dcState.dismissed, updated_at: new Date().toISOString() }); if (error) throw error; }
+  catch (e) { showToast('Could not save — try again.'); return; }
+  dcBadge(); dcRender();
+}
+function dcDismiss(i, on) { const g = dcVisibleAll()[i]; if (g) dcSetDismissed(g.key, on); }
+const dcVisibleAll = () => dcState.groups.filter(g => dcState.showDismissed || !dcState.dismissed[g.key]);
+const dcOpenCount = () => dcState.groups.filter(g => !dcState.dismissed[g.key]).length;
+
+function dcBadge() {
+  const b = document.getElementById('dcBadge'); if (!b) return;
+  const n = dcOpenCount(); b.textContent = n; b.style.display = n ? 'inline-block' : 'none';
+}
+async function dcRefresh(quiet) {
+  if (dcState.loading) return; dcState.loading = true; dcState.error = '';
+  try { await dcLoadDismissed(); dcState.groups = await dcScan(); dcState.loadedAt = Date.now(); }
+  catch (e) { console.warn('[double charges] scan failed', e); dcState.error = e.message || String(e); }
+  dcState.loading = false; dcBadge(); dcRender();
+  if (!quiet) return;
+  // Alert once per new doubled charge, so the same one doesn't pop up every half hour
+  let seen = []; try { seen = JSON.parse(localStorage.getItem(DC_SEEN) || '[]'); } catch (e) {}
+  const fresh = dcState.groups.filter(g => !dcState.dismissed[g.key] && !seen.includes(g.key));
+  if (fresh.length) {
+    try { localStorage.setItem(DC_SEEN, JSON.stringify([...new Set([...seen, ...fresh.map(g => g.key)])].slice(-500))); } catch (e) {}
+    showToast(`⚠ ${fresh.length} possible double charge${fresh.length !== 1 ? 's' : ''} on rooms (${fresh.slice(0, 3).map(g => 'Room ' + g.room).join(', ')}${fresh.length > 3 ? '…' : ''}) — see Double Charges.`);
+  }
+}
+
+function dcRender() {
+  const el = document.getElementById('dcContent'); if (!el) return;
+  const rows = dcVisibleAll(), open = rows.filter(g => !dcState.dismissed[g.key]), extra = open.reduce((s, g) => s + g.extra, 0);
+  const btn = 'padding:6px 12px;border:1.5px solid #c8bfb5;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px';
+  el.innerHTML = `<div style="max-width:1150px;margin:0 auto;font-family:'Jost',sans-serif;color:#2d2520;text-align:left">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div><div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600">Double Charges</div>
+        <div style="font-size:12.5px;color:#6b7280">Charges posted more than once on the same room. Open the booking to remove the extra one. Checked every 30 minutes.</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select onchange="dcState.days=+this.value;dcRefresh()" style="${btn}">${[7, 14, 30, 60, 90].map(d => `<option value="${d}"${d === dcState.days ? ' selected' : ''}>Last ${d} days</option>`).join('')}</select>
+        <label style="font-size:12px;cursor:pointer"><input type="checkbox" ${dcState.showDismissed ? 'checked' : ''} onchange="dcState.showDismissed=this.checked;dcRender()"> Show hidden</label>
+        <button onclick="dcRefresh()" style="${btn}">${dcState.loading ? 'Checking…' : '↻ Check now'}</button>
+      </div></div>
+    ${dcState.error ? `<div style="margin-top:12px;padding:12px;border-radius:10px;background:#fef2f2;color:#b91c1c;font-size:12.5px">Could not read the charges: ${dcEsc(dcState.error)}</div>` : ''}
+    <div style="margin-top:14px;font-size:13px;font-weight:700">${open.length ? `${open.length} possible double charge${open.length !== 1 ? 's' : ''} · <span style="color:#dc2626">${dcMoney(extra)} charged extra</span>` : (dcState.loadedAt ? '<span style="color:#059669">No double charges found.</span>' : 'Checking…')}</div>
+    <div style="margin-top:10px">${rows.map((g, i) => {
+      const hidden = !!dcState.dismissed[g.key];
+      return `<div style="background:#fff;border:1.5px solid ${g.likely && !hidden ? '#fecaca' : '#e8dfd4'};border-radius:12px;padding:12px 14px;margin-bottom:10px;${hidden ? 'opacity:.55' : ''}">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
+          <div><b style="font-size:15px">Room ${dcEsc(g.room)}</b> · ${dcEsc(g.guest)} <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px;${g.likely ? 'background:#fee2e2;color:#b91c1c' : 'background:#fef3c7;color:#92400e'}">${g.likely ? 'Likely mistake' : 'Check'}</span></div>
+          <div style="font-weight:800;color:#dc2626">${g.count} × ${dcMoney(g.total)} · extra ${dcMoney(g.extra)}</div></div>
+        <div style="font-size:13px;margin-top:4px">${dcEsc(g.desc)}${g.category ? ` <span style="color:#8a7e74">(${dcEsc(g.category)})</span>` : ''}</div>
+        <div style="font-size:11.5px;color:#6b7280;margin-top:4px">${g.lines.map(l => `${dcTime(l.at)} · ${l.staff ? dcEsc(l.staff) : 'automatic'}`).join('  |  ')}${g.gap != null ? ` — ${g.gap < 120 ? Math.round(g.gap) + ' seconds apart' : (g.gap < 7200 ? Math.round(g.gap / 60) + ' minutes apart' : Math.round(g.gap / 3600) + ' hours apart')}` : ''}</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          ${g.regId ? `<button onclick="openBookingDetailForReg('${dcEsc(g.regId)}','${dcEsc(g.guest).replace(/'/g, "\\'")}')" style="${btn};background:var(--teal,#2d6a6a);color:#fff;border-color:var(--teal,#2d6a6a)">Open booking</button>` : ''}
+          <button onclick="dcDismiss(${i},${hidden ? 'false' : 'true'})" style="${btn}">${hidden ? 'Show again' : "It's correct — hide"}</button></div></div>`;
+    }).join('')}</div></div>`;
+}
+
+function dcOpen(btn) {
+  const prev = localStorage.getItem('ama_last_tab');
+  switchTab('doublecharges', btn);
+  try { localStorage.setItem('ama_last_tab', prev || 'dashboard'); } catch (e) {}
+  dcRender(); dcRefresh();
+}
+
+(function () {
+  const side = document.getElementById('staffSideBtn'), reports = document.getElementById('tab-reports');
+  if (!side || !reports || document.getElementById('tab-doublecharges')) return;
+  const panel = document.createElement('div');
+  panel.className = 'tab-panel'; panel.id = 'tab-doublecharges'; panel.style.flexDirection = 'column';
+  panel.innerHTML = '<div id="dcContent" style="flex:1;overflow:auto;padding:28px 36px;background:#f5f1eb"></div>';
+  reports.parentNode.insertBefore(panel, reports.nextSibling);
+  const b = document.createElement('button');
+  b.className = 'tab-btn tab-btn-sub'; b.id = 'doublechargesTabBtn'; b.setAttribute('onclick', 'dcOpen(this)'); b.style.color = '#ef4444';
+  b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span class="tab-label">Double Charges</span><span id="dcBadge" style="display:none;margin-left:6px;background:#dc2626;color:#fff;border-radius:99px;font-size:10.5px;font-weight:700;padding:1px 7px"></span>';
+  side.parentNode.insertBefore(b, side);
+  // Background check: staff on the admin portal only (not spa-staff, teacher or driver views); first run after the data has loaded
+  const adminOk = () => !(typeof IS_SPA_STAFF_MODE !== 'undefined' && IS_SPA_STAFF_MODE) && typeof getCurrentSession === 'function' && getCurrentSession();
+  const tick = () => { if (adminOk() && (AppData.regs || []).length) dcRefresh(true); };
+  setTimeout(tick, 12000); setInterval(tick, 30 * 60 * 1000);
+})();
