@@ -58,7 +58,7 @@ function srEnforce(bk){
       a.time=SR_DAY_TIME;
       bk.salsaNotice=`Every night has the offsite dinner or a ceremony, so Salsa is offered in the DAYTIME instead (${srFmt(d)} at ${SR_DAY_TIME}). Change it in the Activity Sheet if you prefer another time.`;
     }
-    bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+    bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
     changed++;
     if(typeof showToast==='function')showToast(`${who}: ${bk.salsaNotice}`);
   });
@@ -115,7 +115,7 @@ function srEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g
 function srIsTeacherView(){try{return !!(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE&&!document.body.classList.contains('admin-preview'));}catch(e){return false;}}
 function srDismiss(bkId){
   const bk=(AppData.bookings||[]).find(b=>b.id===bkId);
-  if(bk){delete bk.salsaNotice;bk.retreatActivitiesUpdatedAt=new Date().toISOString();}
+  if(bk){delete bk.salsaNotice;bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();}
   if(typeof saveAll==='function')saveAll();
   srRender();
 }

@@ -99,7 +99,7 @@ if(typeof svAutoAssignActivities==='function'){
       });
       (bk.retreatActivities||[]).forEach(x=>{delete x._iaDone;});
       if(moved||stuck.length){
-        bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+        bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
         if(typeof saveAll==='function')saveAll();
         if(typeof svRefreshActivityView==='function')svRefreshActivityView(bkId);
         if(typeof showToast==='function')showToast((moved?`${moved} included activit${moved>1?'ies':'y'} moved to a day no other group has it. `:'')+(stuck.length?`No free day for ${stuck.join(', ')} — another group already has it every day. Please schedule it by hand.`:''));

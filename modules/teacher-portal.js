@@ -1887,7 +1887,7 @@ function tsAutoAssignPrepaid(){
     bk.retreatActivities.push({aoId:id,date:fmtISO(d),time:'11:45',prepaid:true});
     added++;
   });
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();
   showToast(added?`Assigned ${added} activit${added!==1?'ies':'y'} to your schedule.`:'Nothing to assign.');
   tsRenderPrepaidActivities(bk);
@@ -1901,7 +1901,7 @@ function tsSaveManualActivity(aoId){
   if(!bk.retreatActivities)bk.retreatActivities=[];
   bk.retreatActivities=bk.retreatActivities.filter(a=>a.aoId!==aoId);
   bk.retreatActivities.push({aoId,date:dateEl.value,time:timeEl?.value||'11:45',prepaid:true,requestedTime:true});
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();
   showToast('Saved.');
   tsRenderPrepaidActivities(bk);
@@ -2044,7 +2044,7 @@ function tsInit(bkId){
       const ds=fmtISO(d);
       tmpls.forEach(t=>bk.retreatActivities.push({aoId:t.aoId,date:ds,time:t.time,prepaid:!!(bk.packages||[]).includes(t.aoId)}));
     }
-    bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+    bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
     saveAll();
   }
   tsRenderCalSection(bk);
@@ -2213,7 +2213,7 @@ function tsDailyTimeSlots(startM,endM){
   }
   return slots;
 }
-const TS_DAILY_MORNING_TIME_SLOTS=tsDailyTimeSlots(7*60+30,10*60);   // 7:30 – 10:00 AM
+const TS_DAILY_MORNING_TIME_SLOTS=tsDailyTimeSlots(7*60+30,10*60+30);   // 7:30 – 10:30 AM (Darlene 2026-10-21: morning classes can start up to 10:30)
 const TS_DAILY_AFTERNOON_TIME_SLOTS=tsDailyTimeSlots(15*60+30,21*60); // 3:30 – 9:00 PM (covers both the 3:30–5:30 and 5:45-onward blocks, back to back in 15-min steps)
 
 function tsRenderWorkshopDays(){
@@ -2888,7 +2888,7 @@ function tsSubmitSchedule(){
       // Teacher chose onsite or undecided — remove Gitano from packages
       if(bk.packages)bk.packages=bk.packages.filter(p=>p!=='ao13');
     }
-    bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+    bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
     saveAll();
   }
   tsRenderStatus(bk);
@@ -2937,7 +2937,7 @@ function tsSaveConfirmedActivityRequest(aoId){
   const prepaid=existing?existing.prepaid:(bk.packages||[]).includes(aoId);
   bk.retreatActivities=bk.retreatActivities.filter(a=>a.aoId!==aoId);
   bk.retreatActivities.push({aoId,date:dateEl.value,time:timeEl?.value||'11:45',prepaid,requestedTime:true});
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();
   showToast('Request sent — Amansala will confirm.');
   _tsActivityRequestOpenId=null;
@@ -3499,7 +3499,7 @@ function tsAdminStatus(bkId,status){
       else{bk.retreatActivities.push({aoId,date:reqDate,time:tourDefaultTime(aoId),prepaid:true});}
     });
     logActivity('Activities auto-assigned',`${bk.leaderName||bk.retreatName} — tours & ceremonies set`,bkId);
-    bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+    bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   }
   saveAll();buildDashboard();venBuild();
   logActivity('Schedule '+(status==='confirmed'?'confirmed':status==='changes'?'changes requested':'marked pending'),`${bk.leaderName||bk.retreatName}`,bkId);
@@ -3616,13 +3616,13 @@ function svAddActivity(bkId){
       }
     }
   }
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();svRefreshActivityView(bkId);
 }
 function svRemoveActivity(bkId,idx){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
   bk.retreatActivities.splice(idx,1);
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();svRefreshActivityView(bkId);
 }
 function svChangeActivityDate(bkId,idx,newDate){
@@ -3630,21 +3630,21 @@ function svChangeActivityDate(bkId,idx,newDate){
   const act=bk.retreatActivities[idx];if(!act)return;
   if(!newDate||newDate===bk.startDate||newDate===bk.endDate){showToast('Activities can\'t be scheduled on the arrival or departure day.');svRefreshActivityView(bkId);return;}
   act.date=newDate;
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();svRefreshActivityView(bkId);
 }
 function svChangeActivityTime(bkId,idx,newTime){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
   const act=bk.retreatActivities[idx];if(!act)return;
   act.time=newTime;
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();svRefreshActivityView(bkId);
 }
 function svToggleActivityPrepaid(bkId,idx){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||!bk.retreatActivities)return;
   const act=bk.retreatActivities[idx];if(!act)return;
   act.prepaid=!act.prepaid;
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();svRefreshActivityView(bkId);
 }
 
@@ -3766,7 +3766,7 @@ function svAutoAssignActivities(bkId){
     if(existing){existing.date=reqDate;}
     else{bk.retreatActivities.push({aoId,date:reqDate,time:tourDefaultTime(aoId),prepaid:true});added++;}
   });
-  bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();
   showToast(`Activities assigned — ${added} tour${added!==1?'s/ceremonies':'/ceremony'} across retreat dates.`);
   svRefreshActivityView(bkId);
@@ -3862,7 +3862,7 @@ function svSyncPrepaidFlags(bkId){
     const shouldBe=pkgs.has(a.aoId);
     if(a.prepaid!==shouldBe){a.prepaid=shouldBe;changed++;}
   });
-  if(changed)bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+  if(changed)bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   saveAll();
   svRefreshActivityView(bkId);
   showToast(changed?`Prepaid flags updated — ${changed} activit${changed!==1?'ies':'y'} corrected.`:'All prepaid flags already match packages.');

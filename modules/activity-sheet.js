@@ -1127,7 +1127,7 @@ function actSummarySetDate(aoId, bkIds, dateInputId, timeInputId) {
       bk.retreatActivities.push({aoId, date:newDate, time:newTime, prepaid});
       updated++;
     }
-    bk.retreatActivitiesUpdatedAt=new Date().toISOString();
+    bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   });
   saveAll();
   showToast('Date saved for ' + updated + ' group' + (updated!==1?'s':'') + '.' + (skippedArrival?' Skipped '+skippedArrival+' — can\'t schedule on the arrival day.':''));
@@ -1147,7 +1147,7 @@ function actSummaryDeleteDate(aoId, date, aoName) {
   if (!confirm(`Remove ${aoName} on ${date} for: ${names}? This unschedules it for them — it does not just hide the suggestion.`)) return;
   affected.forEach(bk => {
     bk.retreatActivities = (bk.retreatActivities||[]).filter(a => !(a.aoId===aoId && a.date===date));
-    bk.retreatActivitiesUpdatedAt = new Date().toISOString();
+    bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();
   });
   saveAll();
   showToast(`Removed for ${affected.length} group${affected.length!==1?'s':''}.`);
