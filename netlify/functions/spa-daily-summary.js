@@ -3,7 +3,7 @@
 // Runs at 8:30 PM Tulum (01:30 UTC). Texts each therapist their booked services for TOMORROW:
 // time, type of service, client name. Uses the same spa_text_alerts_config (enabled, onlyTherapists) as spa-text-alerts.js.
 // WhatsApp template (VISITO_SPA_SUMMARY_TEMPLATE) takes 3 variables: {{1}} first name, {{2}} date, {{3}} the list (WhatsApp variables
-// can't hold line breaks, so the list is joined with " | "). Falls back to Twilio SMS (with line breaks) when no template is set.
+// can't hold line breaks, so the list is joined with "   •   "). Falls back to Twilio SMS (with line breaks) when no template is set.
 // Sent once per therapist per day (spa_text_alerts_sent key "summary|date|therapistId").
 
 const { TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady } = require('./spa-alert-lib');
@@ -28,11 +28,11 @@ exports.handler = async () => {
     if (only && !only.includes(String(t.firstName || '').toLowerCase())) continue;
     const mine = (appts || []).filter(a => a && a.therapistId === t.id && a.date === day && a.status !== 'CANCELLED' && a.status !== 'NO_SHOW').sort((x, y) => String(x.start).localeCompare(String(y.start)));
     if (!mine.length) continue;
-    const lines = mine.map(a => `${fmtTime(a.start)} ${(services.find(s => s.id === a.serviceId) || {}).name || 'Service'} - ${a.clientName || 'Guest'}`);
+    const lines = mine.map(a => { const sv = services.find(s => s.id === a.serviceId) || {}; return `${fmtTime(a.start)} | ${sv.name || 'Service'}${sv.duration ? ' ' + sv.duration + ' min' : ''} | ${a.clientName || 'Guest'}`; });
     const template = process.env.VISITO_SPA_SUMMARY_TEMPLATE;
     const res = waReady(template)
-      ? await sendWhatsApp(toE164(t.phone), [t.firstName || 'there', pretty, lines.join(' | ')], `spa-sum-${day}-${t.id}`, template)
-      : await sendSms(toE164(t.phone), `Amansala spa, ${pretty}:\n${lines.join('\n')}`);
+      ? await sendWhatsApp(toE164(t.phone), [t.firstName || 'there', pretty, lines.join('   •   ')], `spa-sum-${day}-${t.id}`, template)
+      : await sendSms(toE164(t.phone), `Hi ${t.firstName || 'there'}, your services booked for tomorrow, ${pretty}, are:\n${lines.join('\n')}\nPlease confirm all your services through the portal: https://amansalaportal.com/booking-hub.html?mode=confirm\nIf you can't provide any of them, contact the Spa Concierge so we can arrange coverage.`);
     if (res.ok) { sent[sk] = new Date().toISOString(); texted++; } else if (res.reason !== 'twilio_not_configured') sent[sk] = 'failed: ' + res.reason;
   }
   await supa(key, 'app_store', 'POST', { key: 'spa_text_alerts_sent', value: sent });
