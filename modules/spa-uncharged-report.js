@@ -9,7 +9,7 @@
 // list so you can see which ones and what the line says.
 // Why: Hotel Guest + Confirmed appointments auto-charge on save, but when the room number or name doesn't line up the charge is
 // silently skipped, and nobody sees it until checkout (Darlene's ask 2026-10-21).
-let spaUnchView = { upcoming: false, linesReady: false, loading: false };
+let spaUnchView = { upcoming: false, days: 14, linesReady: false, loading: false };
 
 function spaUnchReason(a) {
   const { match, bkMatch, roomHint } = spaResolveGuestForAppt(a);
@@ -30,6 +30,8 @@ function spaUnchCollect() {
   const today = new Date().toISOString().slice(0, 10);
   return (SpaAppointments || [])
     .filter(a => a.guestType === 'hotel' && !a.prepaid && a.folioStatus !== 'POSTED' && (a.status === 'CONFIRMED' || a.status === 'COMPLETED'))
+    .filter(a => !/\btest\b/i.test(a.clientName || '')) // practice bookings ("TEST CYAN", "Rubi Test") are never real charges
+    .filter(a => !spaUnchView.days || (a.date || '') >= new Date(Date.now() - 5 * 3600000 - spaUnchView.days * 86400000).toISOString().slice(0, 10))
     .filter(a => spaUnchView.upcoming || (a.date || '') <= today)
     .sort((x, y) => (x.date || '').localeCompare(y.date || '') || (x.time || '').localeCompare(y.time || ''));
 }
@@ -78,7 +80,7 @@ function spaRenderUncharged() {
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
       <div><div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:#2d2520">Not Charged to a Room</div>
         <div style="font-size:12px;color:#6b7280">Hotel Guest services that are Confirmed or Completed but never posted to a folio. Pre-Paid ones are left out.</div></div>
-      <div style="display:flex;gap:12px;align-items:center"><label style="font-size:12px;color:#2d2520;cursor:pointer"><input type="checkbox" ${spaUnchView.upcoming ? 'checked' : ''} onchange="spaUnchToggleUpcoming(this.checked)"> Include upcoming dates</label>
+      <div style="display:flex;gap:12px;align-items:center"><select onchange="spaUnchView.days=+this.value;spaRenderUncharged()" style="${btn}border:1.5px solid #c8bfb5;background:#fff;color:#2d2520">${[7, 14, 30, 60, 0].map(d => `<option value="${d}"${d === spaUnchView.days ? ' selected' : ''}>${d ? 'Last ' + d + ' days' : 'All time'}</option>`).join('')}</select><label style="font-size:12px;color:#2d2520;cursor:pointer"><input type="checkbox" ${spaUnchView.upcoming ? 'checked' : ''} onchange="spaUnchToggleUpcoming(this.checked)"> Include upcoming dates</label>
         <button onclick="spaUnchRecheck()" style="${btn}border:1.5px solid #c8bfb5;background:#fff;color:#2d2520">↻ Check again</button></div>
     </div>
     ${doneRows.length ? `<div style="margin-bottom:14px;padding:12px 16px;border-radius:12px;background:#f0fdf4;border:1.5px solid #bbf7d0;font-size:13px;color:#14532d;line-height:1.5">
