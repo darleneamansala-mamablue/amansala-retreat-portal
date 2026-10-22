@@ -532,7 +532,8 @@ function sbSlotFree(therapistId,roomId,dateStr,startMin,duration,excludeApptId){
     if(ther&&!sbIsTherapistAvailable(ther,dateStr,startMin<720?'AM':'PM'))return false;
     if(ther){
       const todaysSorted=SpaAppointments.filter(a=>a.id!==excludeApptId&&a.date===dateStr&&a.status!=='CANCELLED'&&a.therapistId===therapistId).sort((a,b)=>hhmmToMin(a.start)-hhmmToMin(b.start));
-      if((ther.firstName||'').trim()===SB_ROT.mariaName){
+      // Maria's record is first name "Maria" + last name "Luisa" while the Auto-Assign setting says "Maria Luisa", so match the full name as well (before, her own rule never applied here)
+      if((ther.firstName||'').trim()===SB_ROT.mariaName||`${(ther.firstName||'').trim()} ${(ther.lastName||'').trim()}`.trim()===SB_ROT.mariaName){
         if(todaysSorted.length>=SB_ROT.mariaDailyCap)return false;
         if(todaysSorted.length===SB_ROT.mariaStageSize){
           const last=todaysSorted[todaysSorted.length-1];
