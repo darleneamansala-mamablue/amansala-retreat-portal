@@ -136,7 +136,7 @@ async function loadAndRenderPayroll(){
   const services=(sd?.value?.services)||[];
   const therapists=(sd?.value?.therapists)||[];
   const appointments=(ad?.value)||[];
-  const completed=appointments.filter(a=>a.status==='COMPLETED');
+  const completed=appointments.filter(a=>a.status==='COMPLETED'||(a.status!=='CANCELLED'&&a.status!=='NO_SHOW'&&a.confirmed===true&&a.confirmedByRole==='therapist')); // Completed, or marked by the therapist
 
   const rows=therapists.map(t=>{
     const own=completed.filter(a=>a.therapistId===t.id);
