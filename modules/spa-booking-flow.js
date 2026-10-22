@@ -204,3 +204,20 @@ function sbfPick(startMin) {
   SB.rotationGroup = null; SB.rotationName = null; // gap-filling chose the therapist, so this booking does not advance the rotation count
   sbPickSlot(startMin, picked.therapist.id, picked.room ? picked.room.id : '');
 }
+
+
+// ---------- where to meet (Darlene 2026-10-22), shown in the confirmation email, the "You're Booked!" screen and the confirmation page ----------
+//  - Tarot Card Reading            -> meet in the Restaurant
+//  - a booking with Maria Luisa    -> meet in the Grande Reception
+//  - everyone else                 -> the rooftop of Chica; the therapist comes out and looks for the guest on the deck
+// The therapist is whoever the booking holds at the time it is sent or shown (staff can still reassign later in the admin calendar).
+function sbfMeet(appt) {
+  try {
+    const svc = SpaData.services.find(s => s.id === appt.serviceId), ther = SpaData.therapists.find(t => t.id === appt.therapistId);
+    if (svc && /tarot/i.test(svc.name || '')) return { where: 'The Restaurant', text: 'Please meet in the Restaurant.' };
+    const maria = ((SB_ROT && SB_ROT.mariaName) || 'Maria Luisa').trim().toLowerCase();
+    if (ther && (String(ther.firstName || '').trim().toLowerCase() === maria || `${ther.firstName || ''} ${ther.lastName || ''}`.trim().toLowerCase() === maria))
+      return { where: 'Grande Reception', text: 'Please meet in the Grande Reception.' };
+    return { where: 'The rooftop of Chica', text: 'You can meet your therapist on the rooftop of Chica. Your therapist will come out and look for you on the deck.' };
+  } catch (e) { return { where: '', text: '' }; }
+}
