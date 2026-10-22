@@ -13,7 +13,7 @@
 //     Ties fall back to the staff-set rotation order (sbRotationOrder). A specifically requested therapist is always honoured.
 //     Breaks, daily caps, rooms and availability still come from the page's own sbSlotFree / sbAllFreeAssignments, so none of those rules change.
 // Treatment list as FOLDERS (Darlene 2026-10-22), for massage / one-on-one bookings: Body Work (60 and 90 minute massage, Reflexology, Foot & Scalp,
-// Thai Massage), Mayan Healing (60 and 90 minute Mayan Healing, Crystal Balancing Massage), Facial (Facial, Combo Facial & Massage),
+// Thai Massage, 60 minute Crystal Balancing), Mayan Healing (60 and 90 minute Mayan Healing, Crystal Balancing Massage), Facial (Facial, Combo Facial & Massage),
 // Tarot Card Reading (on its own) and Spirit Work (Mayan Egg Ritual, Aura Reading).
 // Each folder opens when clicked. "60 minute Deep Tissue" is not offered (it is the same as the 60 minute massage). Anything else that is bookable
 // and is a massage (e.g. Facial, Thai Massage) is not dropped silently: it sits in a "More Treatments" folder until staff decide. Ceremonies and
@@ -59,7 +59,7 @@ function sbfPickKind(kind) { SB.onlyMassage = kind === 'massage'; SB.sessionType
 
 // ---------- step 2: only massages when asked; back goes to the right page ----------
 const SBF_FOLDERS = [
-  { label: 'Body Work', names: ['60 Minute Massage', '90 Minute Massage', 'Reflexology', 'Foot & Scalp', 'Thai Massage'] },
+  { label: 'Body Work', names: ['60 Minute Massage', '90 Minute Massage', 'Reflexology', 'Foot & Scalp', 'Thai Massage', '60 minute Crystal Balancing'] },
   { label: 'Mayan Healing', names: ['60 minute Mayan Healing massage', '90 minute Mayan Healing massage', 'Crystal Balancing massage'] },
   { label: 'Facial', names: ['Facial', 'Combo Massage ( Facial & Massage )'] },
   { label: 'Tarot Card Reading', names: ['Tarot Card Reading'] },
