@@ -27,7 +27,7 @@ function ppWhen(iso) { try { return new Date(iso).toLocaleString('en-US', { mont
 // The day range at the top of the page applies to everything: spa services on or after the cut-off date, and tours that went since then (0 = all time).
 function ppFromDate() { return ppState.days ? new Date(Date.now() - 5 * 3600000 - ppState.days * 86400000).toISOString().slice(0, 10) : '0000-00-00'; }
 // ---- already on the room account? ----
-const ppNormTxt = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const ppNormTxt = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\bmasage\b/g, 'massage').replace(/\s+/g, ' ').trim(); // staff often type "masage"
 async function ppFetchAll(table, build) {
   const out = [];
   for (let from = 0; from < 20000; from += 1000) { const { data, error } = await build(db.from(table)).range(from, from + 999); if (error) throw error; out.push(...(data || [])); if (!data || data.length < 1000) break; }
@@ -37,15 +37,34 @@ async function ppLoadSpaLines() {
   const since = new Date(Date.now() - 125 * 86400000).toISOString();
   const [folios, items] = await Promise.all([
     ppFetchAll('folios', q => q.select('id,registration_id,guest_name').order('id')),
-    ppFetchAll('folio_items', q => q.select('id,folio_id,description,qty,unit_price,created_at').eq('category', 'Spa').gte('created_at', since).order('created_at').order('id')),
+    ppFetchAll('folio_items', q => q.select('id,folio_id,description,qty,unit_price,created_at').in('category', ['Spa', 'Massage']).gte('created_at', since).order('created_at').order('id')),
   ]);
   const fm = {}; folios.forEach(f => { fm[f.id] = f; });
   ppState.spaLines = items.filter(i => fm[i.folio_id]).map(i => ({ id: i.id, regId: fm[i.folio_id].registration_id, guest: fm[i.folio_id].guest_name, date: String(i.created_at).slice(0, 10), desc: i.description, price: Number(i.unit_price) || 0 }));
 }
+// Other ways staff write the same treatment on a bill: "60 Minute Massage" can be "Massage 1 hr ( laura )", "1 hour massage", "massage 60"; "90 Minute Massage" can be
+// "massage 90", "1.5 hr massage", "massage 1 hr 30".
+function ppSvcAliases(name) {
+  let n = ppNormTxt(name); const out = [n]; if (!n) return out;
+  if (/deep tissue/.test(n)) { n = n.replace(/deep tissue/, 'massage'); out.push(n); } // deep tissue is the same as the 60 minute massage (Darlene 2026-10-22)
+  const dur = /(\d+) minute/.exec(n), rest = n.replace(/\d+ minute\s*/, '').trim();
+  if (dur && rest) {
+    const m = +dur[1], hrs = m % 60 === 0 ? [m / 60 + ' hr', m / 60 + ' hour', m / 60 + ' h'] : m === 90 ? ['1 5 hr', '1 5 hour', '1 hr 30', '1 hour 30'] : [];
+    hrs.forEach(h => { out.push(rest + ' ' + h); out.push(h + ' ' + rest); }); out.push(rest + ' ' + m); out.push(m + ' ' + rest); out.push(m + ' min ' + rest); out.push(m + ' mins ' + rest);
+  }
+  return out;
+}
 function ppLineMatches(a, line, svc, ther) {
   if (Math.abs((new Date(line.date + 'T12:00:00') - new Date(a.date + 'T12:00:00')) / 86400000) > 1) return false;
-  const desc = ppNormTxt(line.desc), s = ppNormTxt(svc && svc.name);
-  return !!(s && desc.includes(s)); // the line must name the same treatment: matching on therapist + price could hide a different service that was never charged
+  const desc = ppNormTxt(line.desc);
+  return !!(svc && ppSvcAliases(svc.name).some(v => v && desc.includes(v))); // the line must name the same treatment: matching on therapist + price could hide a different service that was never charged
+}
+// When the guest can't be tied to a reservation (room number or name slightly off), look for the same guest NAME on any room account instead.
+function ppNameKey(s) { const w = ppNormTxt(s).split(' ').filter(Boolean); return w.length ? w[0] + '|' + w[w.length - 1].slice(0, 3) : ''; }
+function ppFindByName(a, lines, svc, ther) {
+  const k = ppNameKey(a.clientName); if (!k) return null;
+  const full = ppNormTxt(a.clientName); // also matches a shared account such as "Elisabeth Watkins / Laura Luscinski"
+  return (lines || []).find(l => (ppNameKey(l.guest) === k || (full.includes(' ') && ppNormTxt(l.guest).includes(full))) && ppLineMatches(a, l, svc, ther)) || null;
 }
 // Looks through a list of lines ({regId,guest,date,desc,price,id}) for this appointment's guest; also the older charges kept on a Room Only booking.
 function ppFindCharged(a, lines) {
@@ -54,12 +73,13 @@ function ppFindCharged(a, lines) {
     const { match, bkMatch } = spaResolveGuestForAppt(a);
     if (match) {
       const names = new Set([ppNormTxt(a.clientName), ppNormTxt(match.guest && match.guest.name)]);
-      return (lines || []).find(l => l.regId === match.reg.id && names.has(ppNormTxt(l.guest)) && ppLineMatches(a, l, svc, ther)) || null;
+      return (lines || []).find(l => l.regId === match.reg.id && names.has(ppNormTxt(l.guest)) && ppLineMatches(a, l, svc, ther)) || ppFindByName(a, lines, svc, ther);
     }
     if (bkMatch) {
       const cl = (bkMatch.bk.charges || []).filter(c => c.source === 'spa' || c.category === 'Spa').map(c => ({ id: c.id, date: String(c.date || c.addedAt || '').slice(0, 10), desc: c.description, price: Number(c.amount) || 0 }));
-      return cl.find(l => l.date && ppLineMatches(a, l, svc, ther)) || null;
+      return cl.find(l => l.date && ppLineMatches(a, l, svc, ther)) || ppFindByName(a, lines, svc, ther);
     }
+    return ppFindByName(a, lines, svc, ther);
   } catch (e) { console.warn('[pending charges] already-charged check failed', e); }
   return null;
 }
@@ -71,7 +91,7 @@ async function ppFreshCharged(a) {
     const { data: fol } = await db.from('folios').select('id,guest_name,registration_id').eq('registration_id', match.reg.id);
     const ids = (fol || []).map(f => f.id); if (!ids.length) return null;
     const d0 = new Date(a.date + 'T12:00:00'), lo = new Date(d0.getTime() - 2 * 86400000).toISOString(), hi = new Date(d0.getTime() + 3 * 86400000).toISOString();
-    const { data: its } = await db.from('folio_items').select('id,folio_id,description,qty,unit_price,created_at').in('folio_id', ids).eq('category', 'Spa').gte('created_at', lo).lte('created_at', hi);
+    const { data: its } = await db.from('folio_items').select('id,folio_id,description,qty,unit_price,created_at').in('folio_id', ids).in('category', ['Spa', 'Massage']).gte('created_at', lo).lte('created_at', hi);
     const fm = {}; (fol || []).forEach(f => { fm[f.id] = f; });
     return ppFindCharged(a, (its || []).map(i => ({ id: i.id, regId: fm[i.folio_id].registration_id, guest: fm[i.folio_id].guest_name, date: String(i.created_at).slice(0, 10), desc: i.description, price: Number(i.unit_price) || 0 })));
   } catch (e) { console.warn('[pending charges] fresh check failed', e); return null; }
