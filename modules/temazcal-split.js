@@ -1,6 +1,7 @@
 // ===== temazcal-split.js — split a Temazcal into two groups (Darlene 2026-10-16) =====
 // Loaded as a classic script AFTER teacher-portal.js (and salsa-rule.js); shares global scope. Standalone: no other module is edited.
-// The Temazcal fits 20 people. A bigger group does it twice, back to back, with a 30-minute break between the two:
+// The Temazcal usually fits 20 people. A bigger group CAN stay together as one group (Darlene 2026-10-22, e.g. 22 people at once is fine); splitting is only a
+// choice, never forced. If a group is split, it does the ceremony twice, back to back, with a 30-minute break between the two:
 //   group 2 starts SPLIT_TZ_DURATION + SPLIT_TZ_GAP minutes after group 1 (default 90 + 30 = 2 hours later).
 // Adds a "Temazcal groups" panel under "Assigned Activities" in Review Schedule. Splitting keeps the existing Temazcal entry as
 // group 1 and adds a second Temazcal entry (same day, later time) as group 2, so every screen that lists activities simply shows
@@ -28,7 +29,7 @@ function tzPanel(bk,bkId){
   if(!ents.length)return '';
   const pax=tzPax(bk);
   const box='margin-top:12px;border:1.5px solid var(--border);border-radius:10px;overflow:hidden';
-  const head='<div style="padding:8px 10px;background:#f8f5f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Temazcal groups — the Temazcal fits '+TZ_MAX+' people</div>';
+  const head='<div style="padding:8px 10px;background:#f8f5f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Temazcal groups — usually '+TZ_MAX+' people; a bigger group may stay together (splitting is optional)</div>';
   const inp='padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-family:\'Jost\',sans-serif;font-size:12px;background:var(--sand)';
   const btn='font-size:12px;white-space:nowrap';
   if(ents.length>=2){
@@ -42,7 +43,7 @@ function tzPanel(bk,bkId){
   }
   const a=ents[0];
   const g1=Math.min(TZ_MAX,Math.ceil((pax||TZ_MAX*2)/2)),g2=Math.max(1,(pax||g1*2)-g1);
-  const warn=pax>TZ_MAX?`<div style="color:#b45309;font-weight:600">${pax} guests — more than the ${TZ_MAX} the Temazcal fits, so it needs two groups.</div>`:`<div style="color:var(--muted)">${pax?pax+' guests.':''} One group is fine up to ${TZ_MAX}.</div>`;
+  const warn=pax>TZ_MAX?`<div style="color:#92400e;font-weight:600">${pax} guests — more than the usual ${TZ_MAX}. They can all do it together as one group (nothing is forced); splitting into two groups is optional.</div>`:`<div style="color:var(--muted)">${pax?pax+' guests.':''} One group is fine up to ${TZ_MAX}.</div>`;
   return `<div style="${box}">${head}<div style="padding:10px;font-size:12.5px;line-height:1.7">${warn}
     <div>Group 1: <input type="number" min="1" max="${TZ_MAX}" id="tzS1" value="${g1}" style="${inp};width:64px"> guests at <b>${tzFmt(a.time)}</b></div>
     <div>Group 2: <input type="number" min="1" max="${TZ_MAX}" id="tzS2" value="${g2}" style="${inp};width:64px"> guests at <input type="time" id="tzT2" value="${tzAdd(a.time,TZ_DURATION+TZ_GAP)}" style="${inp}"> <span style="color:var(--muted);font-size:11.5px">(${TZ_DURATION}-minute ceremony + ${TZ_GAP}-minute break)</span></div>
