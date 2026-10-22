@@ -6,7 +6,8 @@
 //       No   -> "What would you like to book?" Massage or Ceremony; advance payment as before.
 //  2. Treatment.   3. (the old "are you staying?" page is skipped, we already know)   4. Details (name is pre-filled).
 //  5. Therapist preference (unchanged: hotel guests may pick a specific therapist; everyone can pick female / male / no preference).
-//  6. "Choose your desired time": the guest TYPES the time they want, with am or pm (e.g. "2:30 pm"; 24-hour like 14:30 also works). If it is free they get it; if not they are offered the times CLOSEST to it.
+//  6. "Choose your desired time": the guest TYPES the time they want (e.g. "2:30"). am/pm is optional: we are open SB_START_H to SB_END_H (10 AM to 7 PM),
+//     so "11" is morning and "12", "2", "7" are afternoon; "2:30 pm", "2pm" and 24-hour "14:30" also work. If it is free they get it; if not they are offered the times CLOSEST to it.
 //     Which therapist gets the booking: among those free at that time, the one whose day it fits best, i.e. a therapist who already has
 //     appointments that day and would have the least idle time left around it (so gaps get filled); therapists with an empty day come last.
 //     Ties fall back to the staff-set rotation order (sbRotationOrder). A specifically requested therapist is always honoured.
@@ -144,14 +145,15 @@ window.renderStep6_DateTime = function (el) {
       <div class="section-sub">${esc(svc.name)} · ${svc.duration} min</div>
       <div class="date-scroller" id="sbDateScroller">${days.map(d => { const ds = d.toISOString().slice(0, 10); return `<div class="date-pill ${ds === SB.date ? 'on' : ''}" onclick="sbfPickDate('${ds}')"><div class="dow">${d.toLocaleDateString('en-US', { weekday: 'short' })}</div><div class="dnum">${d.getDate()}</div></div>`; }).join('')}</div>
       <div class="form-group" style="margin-top:12px"><label class="form-label">What time would you like?</label>
-        <div style="display:flex;gap:8px"><input class="form-input" id="sbfDesiredTxt" placeholder="Type a time, for example 2:30 pm" value="${esc(SBF.text)}" onkeydown="if(event.key==='Enter')sbfCheckTime()" autocomplete="off"><button class="slot-btn" style="width:auto;padding:10px 18px;white-space:nowrap" onclick="sbfCheckTime()">Check</button></div>
-        <div class="cd" style="font-size:12px;color:#8a7e74;margin-top:4px">Please include am or pm. We are open ${fmtT(minToHHMM(SB_START_H * 60))} to ${fmtT(minToHHMM(SB_END_H * 60))}.</div></div>
+        <div style="display:flex;gap:8px"><input class="form-input" id="sbfDesiredTxt" placeholder="Type a time, for example 2:30" value="${esc(SBF.text)}" onkeydown="if(event.key==='Enter')sbfCheckTime()" autocomplete="off"><button class="slot-btn" style="width:auto;padding:10px 18px;white-space:nowrap" onclick="sbfCheckTime()">Check</button></div>
+        <div class="cd" style="font-size:12px;color:#8a7e74;margin-top:4px">We are open ${fmtT(minToHHMM(SB_START_H * 60))} to ${fmtT(minToHHMM(SB_END_H * 60))}.</div></div>
       <div id="sbfResults"></div>
     </div>`;
   sbfRenderResults();
 };
 function sbfPickDate(ds) { SB.date = ds; renderStep6_DateTime(document.getElementById('mainContent')); }
-// "2pm", "2:30 pm", "2.30PM", "14:30", "noon" -> minutes since midnight; null if it can't be read; 'ampm' if am/pm is missing
+// "2pm", "2:30 pm", "2.30PM", "14:30", "noon", or just "2:30" -> minutes since midnight; null if it can't be read.
+// Without am/pm, the reading that falls inside opening hours wins ("11" = 11 AM, "2" = 2 PM); if neither does, the one closest to opening hours.
 function sbfParseTime(txt) {
   const t = String(txt || '').trim().toLowerCase();
   if (!t) return null;
@@ -162,22 +164,28 @@ function sbfParseTime(txt) {
   if (min > 59 || h > 24) return null;
   if (m[3]) { if (h < 1 || h > 12) return null; h = h % 12 + (m[3] === 'p' ? 12 : 0); }
   else if (h > 12) { /* 24-hour clock like 14:30 */ }
-  else return 'ampm';
+  else { // no am/pm: use the opening hours to decide
+    const am = (h % 12) * 60 + min, pm = (h % 12 + 12) * 60 + min, lo = SB_START_H * 60, hi = SB_END_H * 60;
+    const inside = v => v >= lo && v <= hi, dist = v => v < lo ? lo - v : v > hi ? v - hi : 0;
+    return inside(am) ? am : inside(pm) ? pm : (dist(am) <= dist(pm) ? am : pm);
+  }
   return h * 60 + min;
 }
 function sbfCheckTime() {
   const inp = document.getElementById('sbfDesiredTxt'), wrap = document.getElementById('sbfResults');
   SBF.text = inp ? inp.value : SBF.text;
   const v = sbfParseTime(SBF.text);
-  if (v === 'ampm') { SBF.desired = null; if (wrap) wrap.innerHTML = '<div class="no-slots">Please add am or pm to your time, for example <b>2:30 pm</b>.</div>'; return; }
-  if (v == null) { SBF.desired = null; if (wrap) wrap.innerHTML = SBF.text.trim() ? '<div class="no-slots">We could not read that time. Please type it like <b>2:30 pm</b>.</div>' : '<div class="section-sub" style="margin-top:6px">Type the time you would like, with am or pm, and we will check it for you.</div>'; return; }
-  SBF.desired = v; sbfRenderResults();
+  if (v == null) { SBF.desired = null; if (wrap) wrap.innerHTML = SBF.text.trim() ? '<div class="no-slots">We could not read that time. Please type it like <b>2:30</b>.</div>' : '<div class="section-sub" style="margin-top:6px">Type the time you would like and we will check it for you.</div>'; return; }
+  SBF.desired = v;
+  const pretty = fmtT(minToHHMM(Math.max(0, Math.min(v, 1439)))); // show what we understood: "2" becomes "2:00 PM"
+  SBF.text = pretty; if (inp) inp.value = pretty;
+  sbfRenderResults();
 }
 function sbfRenderResults() {
   const wrap = document.getElementById('sbfResults'); if (!wrap) return;
   const svc = SpaData.services.find(s => s.id === SB.serviceId), candidates = sbCandidateTherapists();
   if (!candidates.length) { wrap.innerHTML = '<div class="no-slots">No therapists available for this service yet. Please try a different preference or contact us directly.</div>'; return; }
-  if (SBF.desired == null) { wrap.innerHTML = '<div class="section-sub" style="margin-top:6px">Type the time you would like, with am or pm, and we will check it for you.</div>'; return; }
+  if (SBF.desired == null) { wrap.innerHTML = '<div class="section-sub" style="margin-top:6px">Type the time you would like and we will check it for you.</div>'; return; }
   const open = sbfOpenSlots(candidates, svc), want = SBF.desired;
   if (!open.length) { wrap.innerHTML = '<div class="no-slots">No open times on this day — try another date.</div>'; return; }
   const exact = open.includes(want);
