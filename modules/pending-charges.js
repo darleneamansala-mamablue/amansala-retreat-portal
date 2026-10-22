@@ -4,7 +4,7 @@
 // Two lists, grouped by day:
 //  1. SPA services for Hotel Guests that are Confirmed/Completed but not posted to a room folio (online bookings stay PENDING when the room
 //     number or name didn't match). Each shows why, with Charge / Edit buttons. Uses the same matching as the Charge button (spaUnchReason).
-//     Front desk can also press "Mark charged" (or "No charge needed") when a service was charged some other way; the mark keeps their name and the
+//     Front desk can also use "Mark as…" (Already on the room / Paid via Whistle / Paid via terminal (Clip) / No charge needed) when a service was settled some other way; the mark keeps their name and the
 //     time, takes it off the list and out of the count, and can be undone. Marks live next to the tour marks (key 'spa|<appointment id>').
 //     Already charged by hand? Front desk often charges a service straight on the guest's room account without touching the appointment, so the appointment
 //     stays "not posted". The page looks at the guest's Spa lines (same reservation, within a day of the service, naming the same treatment) and, when it finds one, leaves the service OFF the list and the count and shows a small grey "already on the room account" note. The Charge
@@ -16,6 +16,11 @@
 // Charge button (existing spaChargeApptToRoom) and the tour marks.
 let ppState = { days: 14, spa: [], spaLines: [], tours: [], marks: {}, loading: false, loadedAt: 0, error: '' };
 const PP_MARKS = 'tourChargeMarks', PP_SEEN = 'amansala_pp_seen';
+// How a service was settled when staff mark it (Darlene 2026-10-22). 'charged' is what older marks were saved as.
+const PP_HOW = { room: 'Already on the room', whistle: 'Paid via Whistle', clip: 'Paid via terminal (Clip)', none: 'No charge needed', charged: 'Charged' };
+const ppHowLabel = how => PP_HOW[how] || 'Charged';
+// One compact "Mark as…" menu used on every row (spa and tours)
+const ppMarkMenu = (fn, arg) => `<select onchange="if(this.value){${fn}(${arg},this.value);this.value=''}" style="padding:4px 6px;border:1.5px solid #c8bfb5;border-radius:8px;font-family:inherit;font-size:11px;font-weight:700;background:#fff;cursor:pointer"><option value="">✓ Mark as…</option><option value="room">Already on the room</option><option value="whistle">Paid via Whistle</option><option value="clip">Paid via terminal (Clip)</option><option value="none">No charge needed</option></select>`;
 
 const ppEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const ppMoney = n => '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -183,8 +188,8 @@ function ppRender() {
   const openTours = ppState.tours.filter(t => !ppState.marks[t.key]);
   const spaRow = x => { const a = x.a, svc = (SpaData.services || []).find(s => s.id === a.serviceId), ther = (SpaData.therapists || []).find(t => t.id === a.therapistId), m = ppState.marks['spa|' + a.id];
     const act = m
-      ? `<span style="color:#15803d;font-weight:700">✓ ${m.how === 'none' ? 'No charge needed' : 'Charged'} — ${ppEsc(m.by)}</span> <span style="font-size:11px;color:#6b7280">${ppWhen(m.at)}</span> <button onclick="ppSpaUnmark('${ppEsc(a.id)}')" style="${btn};padding:2px 8px;font-size:11px">Undo</button>`
-      : `<button onclick="spaApptShowForm('${ppEsc(a.id)}')" style="${btn};padding:4px 9px;font-size:11px">Edit</button><button onclick="ppCharge('${ppEsc(a.id)}')" title="${x.why.fixable ? 'Post this service to the guest\'s room account' : 'The guest can\'t be matched yet — this will tell you why. Fix the room or name with Edit first.'}" style="${btn};padding:4px 9px;font-size:11px;border-color:${x.why.fixable ? '#0d9488' : '#fcd34d'};background:${x.why.fixable ? '#f0fdfa' : '#fffbeb'};color:${x.why.fixable ? '#0f766e' : '#92400e'};font-weight:700">🧾 Charge to Room</button> <button onclick="ppSpaMark('${ppEsc(a.id)}','charged')" style="${btn};padding:4px 9px;font-size:11px;font-weight:700">✓ Mark charged</button> <button onclick="ppSpaMark('${ppEsc(a.id)}','none')" style="${btn};padding:4px 9px;font-size:11px">No charge needed</button> <button onclick="ppDelete('${ppEsc(a.id)}')" style="${btn};padding:4px 9px;font-size:11px;border-color:#fca5a5;color:#b91c1c">🗑 Delete</button>`;
+      ? `<span style="color:#15803d;font-weight:700">✓ ${ppEsc(ppHowLabel(m.how))} — ${ppEsc(m.by)}</span> <span style="font-size:11px;color:#6b7280">${ppWhen(m.at)}</span> <button onclick="ppSpaUnmark('${ppEsc(a.id)}')" style="${btn};padding:2px 8px;font-size:11px">Undo</button>`
+      : `<button onclick="spaApptShowForm('${ppEsc(a.id)}')" style="${btn};padding:4px 9px;font-size:11px">Edit</button><button onclick="ppCharge('${ppEsc(a.id)}')" title="${x.why.fixable ? 'Post this service to the guest\'s room account' : 'The guest can\'t be matched yet — this will tell you why. Fix the room or name with Edit first.'}" style="${btn};padding:4px 9px;font-size:11px;border-color:${x.why.fixable ? '#0d9488' : '#fcd34d'};background:${x.why.fixable ? '#f0fdfa' : '#fffbeb'};color:${x.why.fixable ? '#0f766e' : '#92400e'};font-weight:700">🧾 Charge to Room</button> ${ppMarkMenu('ppSpaMark', "'" + ppEsc(a.id) + "'")} <button onclick="ppDelete('${ppEsc(a.id)}')" style="${btn};padding:4px 9px;font-size:11px;border-color:#fca5a5;color:#b91c1c">🗑 Delete</button>`;
     return `<div style="display:grid;grid-template-columns:60px 1.1fr 1.1fr 60px 1.5fr 300px;gap:10px;align-items:center;padding:8px 14px;border-top:1px solid #f0ebe0;font-size:12.5px;${m ? 'background:#f0fdf4' : ''}">
       <span>${ppEsc(a.time || '')}</span><b>${ppEsc(a.clientName || '(no name)')}</b><span>${ppEsc(svc ? svc.name : 'Service')}${ther ? `<div style="font-size:11px;color:#8a7e74">${ppEsc(ther.firstName)}</div>` : ''}</span>
       <span>${ppEsc(a.guestRoom || a.roomNumber || '—')}</span><span style="color:${m ? '#6b7280' : x.why.fixable ? '#0f766e' : '#b45309'}">${m ? '' : ppEsc(x.why.text)}</span>
@@ -193,8 +198,8 @@ function ppRender() {
     return `<div style="display:grid;grid-template-columns:1.3fr 1.2fr 1.6fr 230px;gap:10px;align-items:center;padding:8px 14px;border-top:1px solid #f0ebe0;font-size:12.5px;${m ? 'background:#f0fdf4' : ''}">
       <b>${ppEsc(t.ao.name)}</b><span>${ppEsc(t.group)}${t.time ? ` <span style="color:#8a7e74">${ppEsc(t.time)}</span>` : ''}</span>
       <span>${t.guests ? `${t.guests} guest${t.guests !== 1 ? 's' : ''} × ${ppMoney(t.ao.price)} = <b>${ppMoney(t.amount)}</b><div style="font-size:11px;color:#8a7e74">${ppEsc(t.names.slice(0, 4).join(', '))}${t.names.length > 4 ? ' +' + (t.names.length - 4) + ' more' : ''}</div>` : '<span style="color:#b45309">no sign-ups recorded</span>'}</span>
-      <span style="text-align:right">${m ? `<span style="color:#15803d;font-weight:700">✓ ${m.how === 'none' ? 'No charge needed' : 'Charged'} — ${ppEsc(m.by)}</span> <span style="font-size:11px;color:#6b7280">${ppWhen(m.at)}</span> <button onclick="ppUnmark(${i})" style="${btn};padding:2px 8px;font-size:11px">Undo</button>`
-        : `<button onclick="ppMark(${i},'charged')" style="${btn};padding:4px 10px;font-size:11.5px;border-color:#0d9488;background:#f0fdfa;color:#0f766e;font-weight:700">✓ Mark charged</button> <button onclick="ppMark(${i},'none')" style="${btn};padding:4px 10px;font-size:11.5px">No charge needed</button>`}</span></div>`; };
+      <span style="text-align:right">${m ? `<span style="color:#15803d;font-weight:700">✓ ${ppEsc(ppHowLabel(m.how))} — ${ppEsc(m.by)}</span> <span style="font-size:11px;color:#6b7280">${ppWhen(m.at)}</span> <button onclick="ppUnmark(${i})" style="${btn};padding:2px 8px;font-size:11px">Undo</button>`
+        : ppMarkMenu('ppMark', String(i))}</span></div>`; };
   el.innerHTML = `<div style="max-width:1150px;margin:0 auto;font-family:'Jost',sans-serif;color:#2d2520;text-align:left">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <div><div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600">Pending Charges</div>
@@ -244,7 +249,7 @@ function ppOpen(btn) {
           }
           const svc = (SpaData.services || []).find(s => s.id === a.serviceId);
           if (!window.confirm(`⚠ ${a.clientName}'s room account already has "${dup.desc}"${dup.price ? ' ($' + dup.price + ')' : ''} for this day.\n\nCharge ${svc ? svc.name : 'this service'} AGAIN?\n\nOK = charge again anyway     Cancel = don't charge (it's already there)`)) {
-            if (typeof showToast === 'function') showToast('Not charged — it is already on the room account. Use "Mark charged" to clear it from the list.');
+            if (typeof showToast === 'function') showToast('Not charged — it is already on the room account. Use "Mark as… > Already on the room" to clear it from the list.');
             return;
           }
         }
