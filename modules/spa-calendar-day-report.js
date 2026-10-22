@@ -3,7 +3,7 @@
 // "Day Report" button next to New Appointment, and opens a pop-up for the day being viewed. Read-only; changes no appointment.
 // Admin side only (hidden in the spa-staff view) and behind the same access code as the Payroll tab, since it shows revenue and pay.
 // Money: guests are priced in USD, therapists are paid in pesos. Pay is worked out in pesos from each therapist's own rate row
-// (a USD rate is converted at SPA_MXN_PER_USD). Only COMPLETED services count as earned; Confirmed-but-not-completed ones are shown
+// (a USD rate is converted at SPA_MXN_PER_USD). Only done services count as earned (status Completed, or confirmed by the therapist themselves); the rest are shown
 // separately so "who to pay" can't silently miss someone whose service was never marked Completed.
 let spaDrDate = '';
 
@@ -23,7 +23,8 @@ function spaDrPayMXN(a) {
 
 function spaDrCompute(ds) {
   const day = (SpaAppointments || []).filter(a => a.date === ds && (a.status === 'CONFIRMED' || a.status === 'COMPLETED'));
-  const done = day.filter(a => a.status === 'COMPLETED'), open = day.filter(a => a.status === 'CONFIRMED');
+  const isDone = a => (typeof spaIsDone === 'function' ? spaIsDone(a) : a.status === 'COMPLETED'); // Completed, or confirmed by the therapist themselves
+  const done = day.filter(isDone), open = day.filter(a => !isDone(a));
   const sum = (list, f) => list.reduce((s, a) => s + f(a), 0);
   const cost = a => { const svc = SpaData.services.find(s => s.id === a.serviceId); return svc ? spaSvcDirectCostTotal(svc) : 0; };
   const t = {
@@ -98,7 +99,7 @@ function spaDrRender() {
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><b style="font-family:'Cormorant Garamond',serif;font-size:17px">${spaDrEsc(p.name)}</b><b style="font-size:17px;color:#059669">${spaDrMx(p.totalMXN)}</b></div>
       ${Object.entries(lines).map(([k, l]) => `<div style="display:flex;justify-content:space-between;font-size:12.5px;color:#4b5563;padding:2px 0"><span>${l.n} × ${spaDrEsc(k)}${l.why ? ` <span style="color:#b45309">⚠ ${l.why} — pays $0</span>` : ''}</span><span>${spaDrMx(l.mxn)}</span></div>`).join('')}
       ${p.tipCount ? `<div style="display:flex;justify-content:space-between;font-size:12.5px;color:#4b5563;padding:2px 0"><span>${p.tipCount} tip${p.tipCount !== 1 ? 's' : ''} (${spaDrUs(p.tipsUSD)} USD)</span><span>${spaDrMx(p.tipsMXN)}</span></div>` : ''}
-      ${p.open.length ? `<div style="font-size:11.5px;color:#b45309;margin-top:4px">⚠ ${p.open.length} more Confirmed but not marked Completed (${spaDrMx(p.openMXN)}) — mark them Completed on the calendar to include them.</div>` : ''}
+      ${p.open.length ? `<div style="font-size:11.5px;color:#b45309;margin-top:4px">⚠ ${p.open.length} more not yet marked done by the therapist (${spaDrMx(p.openMXN)}) — they count once the therapist marks them (or you mark them Completed on the calendar).</div>` : ''}
     </div>`;
   }).join('') : '<div style="padding:24px;text-align:center;color:#8a7e74">No confirmed or completed services on this day.</div>';
   ov.innerHTML = box(`
