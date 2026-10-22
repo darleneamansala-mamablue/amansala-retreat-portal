@@ -555,9 +555,11 @@ function menuPopulateFromRetreats(silent=false){
         }
         menuEnsure(dateStr,actualMeal);
         // A group out for the offsite (Gitano) dinner isn't cooked for (modules/menu-offsite-dinner.js)
-        const rowPx=(actualMeal==='dinner'&&typeof menuOffsiteDinnerPax==='function')?menuOffsiteDinnerPax(bk,dateStr,px):px;
-        // A group that is out for the offsite dinner is not on that night's dinner list at all, so the kitchen never orders for it
-        if(actualMeal==='dinner'&&rowPx==='0'&&px!=='0'&&px!==0)return;
+        let rowPx=(actualMeal==='dinner'&&typeof menuOffsiteDinnerPax==='function')?menuOffsiteDinnerPax(bk,dateStr,px):px;
+        // Guests who have already left for the airport (Transportation section) are not counted at a departure-day meal (modules/menu-departure-meals.js)
+        if(actualMeal!=='dinner'&&typeof menuDepartureMealPax==='function')rowPx=menuDepartureMealPax(bk,dateStr,actualMeal,t,px);
+        // A group with nobody left to feed (out for the offsite dinner, or all gone to the airport) is not on that meal's list at all, so the kitchen never orders for it
+        if(rowPx==='0'&&px!=='0'&&px!==0)return;
         menuSchedule[dateStr][actualMeal].push({time:t,group:grp,pax:rowPx});
         added++;
       });
