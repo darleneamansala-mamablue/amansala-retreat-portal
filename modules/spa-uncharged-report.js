@@ -39,6 +39,19 @@ function spaUnchCollect() {
 function spaUnchToggleUpcoming(on) { spaUnchView.upcoming = !!on; spaRenderUncharged(); }
 async function spaUnchCharge(id) { await spaChargeApptToRoom(id); spaRenderUncharged(); }
 
+// Delete an appointment from this list (stray test bookings, duplicates). It removes the appointment from the calendar, reports and payroll, never a charge on a room account.
+async function spaApptDeleteFromList(id) {
+  const a = (SpaAppointments || []).find(x => x.id === id); if (!a) return false;
+  const svc = (SpaData.services || []).find(s => s.id === a.serviceId);
+  if (!window.confirm(`Delete this appointment?\n\n${a.clientName || '(no name)'} — ${svc ? svc.name : 'service'} — ${a.date} ${a.time || ''}\n\nThis removes it from the calendar, the reports and payroll. It does NOT remove any charge already on a room account.\n\nIf the service really happened and was charged, press "Mark charged" instead, so the therapist is still paid.`)) return false;
+  SpaAppointments = SpaAppointments.filter(x => x.id !== id);
+  if (typeof spaCalSave === 'function') await spaCalSave();
+  try { if (typeof logActivity === 'function') logActivity('Spa appointment deleted', `${a.clientName || ''} — ${svc ? svc.name : ''} — ${a.date} ${a.time || ''} (from the Not Charged list)`); } catch (e) {}
+  if (typeof showToast === 'function') showToast('Appointment deleted.');
+  return true;
+}
+async function spaUnchDelete(id) { if (await spaApptDeleteFromList(id)) spaRenderUncharged(); }
+async function spaUnchMark(id, how) { if (typeof ppSpaMark === 'function') { await ppSpaMark(id, how); spaRenderUncharged(); } }
 function spaUnchRecheck() { spaUnchView.linesReady = false; spaRenderUncharged(); }
 function spaRenderUncharged() {
   const el = document.getElementById('spaContent'); if (!el) return;
@@ -60,15 +73,17 @@ function spaRenderUncharged() {
     const ther = (SpaData.therapists || []).find(t => t.id === a.therapistId);
     const r = spaUnchReason(a);
     const room = a.guestRoom || a.roomNumber || '—';
-    return `<div style="display:grid;grid-template-columns:96px 1.2fr 1.2fr 70px 1.6fr 170px;gap:10px;padding:10px 16px;border-top:1px solid #f0ebe0;align-items:center;font-size:12.5px;color:#2d2520;text-align:left">
+    return `<div style="display:grid;grid-template-columns:96px 1.1fr 1.1fr 60px 1.4fr 330px;gap:10px;padding:10px 16px;border-top:1px solid #f0ebe0;align-items:center;font-size:12.5px;color:#2d2520;text-align:left">
       <div>${escHtml(a.date || '')}<div style="font-size:11px;color:#8a7e74">${escHtml(a.time || '')}</div></div>
       <div style="font-weight:600">${escHtml(a.clientName || '(no name)')}</div>
       <div>${escHtml(svc?.name || 'Service')}${ther ? `<div style="font-size:11px;color:#8a7e74">${escHtml(ther.firstName)}</div>` : ''}</div>
       <div>${escHtml(String(room))}</div>
       <div style="color:${r.fixable ? '#0f766e' : '#b45309'}">${escHtml(r.text)}</div>
-      <div style="display:flex;gap:6px;justify-content:flex-end">
+      <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
         <button onclick="spaApptShowForm('${a.id}')" style="${btn}border:1.5px solid #c8bfb5;background:#fff;color:#2d2520">Edit</button>
-        ${r.fixable ? `<button onclick="spaUnchCharge('${a.id}')" style="${btn}border:1.5px solid #0d9488;background:#f0fdfa;color:#0f766e">🧾 Charge</button>` : ''}
+        <button onclick="spaUnchCharge('${a.id}')" title="${r.fixable ? 'Post this service to the guest\'s room account' : 'The guest can\'t be matched yet — this will tell you why. Fix the room or name with Edit first.'}" style="${btn}border:1.5px solid ${r.fixable ? '#0d9488' : '#fcd34d'};background:${r.fixable ? '#f0fdfa' : '#fffbeb'};color:${r.fixable ? '#0f766e' : '#92400e'}">🧾 Charge to Room</button>
+        ${typeof ppSpaMark === 'function' ? `<button onclick="spaUnchMark('${a.id}','charged')" style="${btn}border:1.5px solid #c8bfb5;background:#fff;color:#2d2520">✓ Mark charged</button>` : ''}
+        <button onclick="spaUnchDelete('${a.id}')" style="${btn}border:1.5px solid #fca5a5;background:#fff;color:#b91c1c">🗑 Delete</button>
       </div></div>`;
   };
   const total = rows.reduce((s, a) => {
@@ -88,7 +103,7 @@ function spaRenderUncharged() {
       <b>${rows.length}</b> ${rows.length === 1 ? 'really still needs' : 'really still need'} charging.
       <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:600">Show the ${doneRows.length} already charged</summary><div style="margin-top:6px;font-size:12px;line-height:1.7">${doneRows.map(x => `${escHtml(x.a.date)} ${escHtml(x.a.time || '')} · <b>${escHtml(x.a.clientName || '')}</b> — ${escHtml(x.line.desc || '')}${x.line.price ? ' $' + x.line.price : ''}`).join('<br>')}</div></details></div>` : ''}
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
-      ${rows.length ? `<div style="display:grid;grid-template-columns:96px 1.2fr 1.2fr 70px 1.6fr 170px;gap:10px;padding:10px 16px;background:#f8f5f0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74"><div>Date</div><div>Client</div><div>Service</div><div>Room</div><div>Why not charged</div><div></div></div>${rows.map(row).join('')}`
+      ${rows.length ? `<div style="display:grid;grid-template-columns:96px 1.1fr 1.1fr 60px 1.4fr 330px;gap:10px;padding:10px 16px;background:#f8f5f0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74"><div>Date</div><div>Client</div><div>Service</div><div>Room</div><div>Why not charged</div><div></div></div>${rows.map(row).join('')}`
         : `<div style="padding:40px;text-align:center;color:#6b7280">${doneRows.length ? 'Nothing left to charge — everything listed above is already on a room account.' : 'Everything is charged. Nothing to fix.'}</div>`}
     </div>
     ${rows.length ? `<div style="margin-top:14px;text-align:right;font-size:13px;font-weight:700;color:#1a2332">${rows.length} service${rows.length !== 1 ? 's' : ''} · $${total.toFixed(0)} not yet charged</div>` : ''}
