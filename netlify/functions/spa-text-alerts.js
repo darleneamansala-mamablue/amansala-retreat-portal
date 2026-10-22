@@ -1,6 +1,6 @@
 'use strict';
 
-// Runs every 5 minutes. Texts a therapist when a last-minute booking (made less than
+// Runs every 5 minutes. Texts a therapist when a same-day booking (made today for today) or a last-minute booking (made less than
 // LM_HOURS before the service) is assigned to them. OFF until app_store key
 // spa_text_alerts_config is {"enabled":true}. Only bookings made after "enabledAt" are
 // texted, so switching it on never blasts old bookings. Each booking is texted once
@@ -30,14 +30,15 @@ exports.handler = async () => {
     const created = new Date(a.createdAt).getTime();
     if (isNaN(created) || created < since) continue;
     const start = new Date(`${a.date}T${a.start || '00:00'}:00-05:00`).getTime();
-    if ((!cfg.notifyAllBookings && (start - created) / 3600000 >= hours) || start < Date.now()) continue;
+    const sameDay = a.date === new Date(created - 5 * 3600000).toISOString().slice(0, 10); // booked today for today (Tulum)
+    if ((!cfg.notifyAllBookings && !sameDay && (start - created) / 3600000 >= hours) || start < Date.now()) continue;
     const t = therapists.find(x => x.id === a.therapistId);
     if (!t || !t.phone) { skipped++; continue; }
     if (only && !only.includes(String(t.firstName || '').toLowerCase())) continue;
     const svc = (services.find(s => s.id === a.serviceId) || {}).name || 'Service';
     const when = new Date(created).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: TZ });
     const useWa = waReady(process.env.VISITO_SPA_ALERT_TEMPLATE);
-    const res = useWa ? await sendWhatsApp(toE164(t.phone), [a.clientName || 'Guest', svc, `${fmtTime(a.start)} on ${a.date}`], `spa-lm-${a.id}`, process.env.VISITO_SPA_ALERT_TEMPLATE) : await sendSms(toE164(t.phone), `Amansala spa: last-minute booking for you. ${a.clientName || 'Guest'}, ${svc} at ${fmtTime(a.start)} on ${a.date} (booked at ${when}).`);
+    const res = useWa ? await sendWhatsApp(toE164(t.phone), [a.clientName || 'Guest', svc, `${fmtTime(a.start)} on ${a.date}`], `spa-lm-${a.id}`, process.env.VISITO_SPA_ALERT_TEMPLATE) : await sendSms(toE164(t.phone), `Amansala spa: new same-day booking for you. ${a.clientName || 'Guest'}, ${svc} at ${fmtTime(a.start)} on ${a.date} (booked at ${when}).`);
     if (res.ok) { sent[a.id] = new Date().toISOString(); texted++; } else console.error(`[spa-text-alerts] send failed for ${a.id}: ${res.reason}`);
   }
   // A future booking that was on a therapist's page last run and is now cancelled, deleted, or moved to someone else: tell that therapist.
