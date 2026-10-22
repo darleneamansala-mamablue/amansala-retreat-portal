@@ -61,3 +61,7 @@
 # scheduled function) -- this is what revenue-manager.html's "Refresh recommendations" calls.
 [functions."room-price-recalc-now"]
   timeout = 26
+
+# Texts therapists about last-minute spa bookings. Does nothing until app_store spa_text_alerts_config has enabled:true.
+[functions."spa-text-alerts"]
+  schedule = "*/5 * * * *"
