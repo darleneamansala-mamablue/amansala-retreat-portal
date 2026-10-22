@@ -65,3 +65,7 @@
 # Texts therapists about last-minute spa bookings. Does nothing until app_store spa_text_alerts_config has enabled:true.
 [functions."spa-text-alerts"]
   schedule = "*/5 * * * *"
+
+# 8:30 PM Tulum (01:30 UTC): texts each therapist tomorrow's services. Same on/off setting as spa-text-alerts.
+[functions."spa-daily-summary"]
+  schedule = "30 1 * * *"
