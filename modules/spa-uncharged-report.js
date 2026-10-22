@@ -43,7 +43,7 @@ async function spaUnchCharge(id) { await spaChargeApptToRoom(id); spaRenderUncha
 async function spaApptDeleteFromList(id) {
   const a = (SpaAppointments || []).find(x => x.id === id); if (!a) return false;
   const svc = (SpaData.services || []).find(s => s.id === a.serviceId);
-  if (!window.confirm(`Delete this appointment?\n\n${a.clientName || '(no name)'} — ${svc ? svc.name : 'service'} — ${a.date} ${a.time || ''}\n\nThis removes it from the calendar, the reports and payroll. It does NOT remove any charge already on a room account.\n\nIf the service really happened and was charged, press "Mark charged" instead, so the therapist is still paid.`)) return false;
+  if (!window.confirm(`Delete this appointment?\n\n${a.clientName || '(no name)'} — ${svc ? svc.name : 'service'} — ${a.date} ${a.time || ''}\n\nThis removes it from the calendar, the reports and payroll. It does NOT remove any charge already on a room account.\n\nIf the service really happened and was charged, use "Mark as…" instead, so the therapist is still paid.`)) return false;
   SpaAppointments = SpaAppointments.filter(x => x.id !== id);
   if (typeof spaCalSave === 'function') await spaCalSave();
   try { if (typeof logActivity === 'function') logActivity('Spa appointment deleted', `${a.clientName || ''} — ${svc ? svc.name : ''} — ${a.date} ${a.time || ''} (from the Not Charged list)`); } catch (e) {}
@@ -64,7 +64,7 @@ function spaRenderUncharged() {
     return;
   }
   const all = spaUnchCollect();
-  const lineOf = a => { try { if (typeof ppFindCharged !== 'function' || typeof ppState === 'undefined') return null; const m = ppState.marks && ppState.marks['spa|' + a.id]; return ppFindCharged(a, ppState.spaLines) || (m ? { desc: 'marked ' + (m.how === 'none' ? 'no charge needed' : 'charged') + ' by ' + m.by, price: 0 } : null); } catch (e) { return null; } };
+  const lineOf = a => { try { if (typeof ppFindCharged !== 'function' || typeof ppState === 'undefined') return null; const m = ppState.marks && ppState.marks['spa|' + a.id]; return ppFindCharged(a, ppState.spaLines) || (m ? { desc: 'marked "' + (typeof ppHowLabel === 'function' ? ppHowLabel(m.how) : 'charged') + '" by ' + m.by, price: 0 } : null); } catch (e) { return null; } };
   const doneRows = all.map(a => ({ a, line: lineOf(a) })).filter(x => x.line);
   const rows = all.filter(a => !doneRows.some(x => x.a.id === a.id));
   const btn = 'font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;cursor:pointer;white-space:nowrap;';
@@ -82,7 +82,7 @@ function spaRenderUncharged() {
       <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
         <button onclick="spaApptShowForm('${a.id}')" style="${btn}border:1.5px solid #c8bfb5;background:#fff;color:#2d2520">Edit</button>
         <button onclick="spaUnchCharge('${a.id}')" title="${r.fixable ? 'Post this service to the guest\'s room account' : 'The guest can\'t be matched yet — this will tell you why. Fix the room or name with Edit first.'}" style="${btn}border:1.5px solid ${r.fixable ? '#0d9488' : '#fcd34d'};background:${r.fixable ? '#f0fdfa' : '#fffbeb'};color:${r.fixable ? '#0f766e' : '#92400e'}">🧾 Charge to Room</button>
-        ${typeof ppSpaMark === 'function' ? `<button onclick="spaUnchMark('${a.id}','charged')" style="${btn}border:1.5px solid #c8bfb5;background:#fff;color:#2d2520">✓ Mark charged</button>` : ''}
+        ${typeof ppMarkMenu === 'function' ? ppMarkMenu('spaUnchMark', "'" + a.id + "'") : ''}
         <button onclick="spaUnchDelete('${a.id}')" style="${btn}border:1.5px solid #fca5a5;background:#fff;color:#b91c1c">🗑 Delete</button>
       </div></div>`;
   };
