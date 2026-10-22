@@ -8,7 +8,7 @@
 //     hour) while the calendar is open. Browsers only allow sound after the page has been clicked once, so the first click anywhere on the page switches the sound on.
 //     The 🔔 button in the banner turns the sound off/on (remembered on that computer).
 // Read-only: nothing is changed or blocked. Change LM_HOURS to change what counts as last minute.
-const LM_HOURS = 24;
+const LM_HOURS = 2;
 const LM_SEEN = 'amansala_lm_seen', LM_SOUND = 'amansala_lm_sound';
 let lmAudio = null;
 function lmSoundOn() { try { return localStorage.getItem(LM_SOUND) !== 'off'; } catch (e) { return true; } }
