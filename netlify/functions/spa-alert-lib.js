@@ -37,6 +37,8 @@ async function sendWhatsApp(to, vars, idem, template) {
 }
 
 async function sendSms(to, body) {
+  // Twilio SMS is off: spa alerts go out through Visito WhatsApp only (Darlene 2026-10-22). Set SPA_ALERTS_SMS=true to bring the fallback back.
+  if (process.env.SPA_ALERTS_SMS !== 'true') return { ok: false, reason: 'twilio_not_configured' };
   const sid = process.env.TWILIO_ACCOUNT_SID, tok = process.env.TWILIO_AUTH_TOKEN, from = process.env.TWILIO_SMS_NUMBER;
   if (!sid || !tok || !from) return { ok: false, reason: 'twilio_not_configured' };
   const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
