@@ -106,7 +106,15 @@ window.renderStep3_GuestType = function (el) {
   SB.step = 4; renderStep();
 };
 function sbfFixBack(el) { const b = el.querySelector('.btn-back'); if (b) { const svc = SpaData.services.find(s => s.id === SB.serviceId); b.setAttribute('onclick', `setStep(${svc && svc.groupPricing ? 2.5 : 2})`); } }
-['renderStep4_Hotel', 'renderStep4_Offsite'].forEach(n => { const o = window[n]; window[n] = function (el) { o(el); sbfFixBack(el); }; });
+// The name was already asked on page 1, so the details page no longer asks again: the two name boxes become hidden fields (the page's own submit code still
+// reads them) and a line says who the booking is for. Special offer links (?offer=...) never ask on page 1, so they keep the name boxes.
+function sbfHideNames(el) {
+  if (!SB.firstName || !SB.lastName) return;
+  const re = /<div class="form-row">\s*<div><label class="form-label">First Name \*<\/label><input class="form-input" id="sbFirst"[^>]*><\/div>\s*<div><label class="form-label">Last Name \*<\/label><input class="form-input" id="sbLast"[^>]*><\/div>\s*<\/div>/;
+  if (!re.test(el.innerHTML)) return;
+  el.innerHTML = el.innerHTML.replace(re, `<input type="hidden" id="sbFirst" value="${esc(SB.firstName)}"><input type="hidden" id="sbLast" value="${esc(SB.lastName)}"><div class="section-sub" style="margin:0 0 14px">Booking for <b>${esc(SB.firstName)} ${esc(SB.lastName)}</b> · <a href="#" onclick="setStep(1);return false" style="color:#2d6a6a">change</a></div>`);
+}
+['renderStep4_Hotel', 'renderStep4_Offsite'].forEach(n => { const o = window[n]; window[n] = function (el) { o(el); sbfFixBack(el); sbfHideNames(el); }; });
 
 // ---------- step 6: desired time, gap-filling, closest times ----------
 const _sbfOrigStep6 = window.renderStep6_DateTime;
