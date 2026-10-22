@@ -814,6 +814,7 @@ function sbEmailShell(headline,bodyHtml){
 function sbEmailRow(label,value){
   return `<tr><td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:13px;color:#6b7280;width:130px;vertical-align:top">${label}</td><td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:14px;color:#1a2332;font-weight:500">${value}</td></tr>`;
 }
+function sbMeet(appt){return typeof sbfMeet==='function'?sbfMeet(appt):{where:'',text:''};}   // where to meet — defined in modules/spa-booking-flow.js
 async function sbSendConfirmEmail(appt,svc,therName,location_,folioPosted){
   try{
     const confirmationUrl=`${location.origin}/spa-booking.html?confirmation=${appt.id}`;
@@ -824,11 +825,12 @@ async function sbSendConfirmEmail(appt,svc,therName,location_,folioPosted){
         ${sbEmailRow('Date',fmtDateLong(appt.date))}
         ${sbEmailRow('Time',fmtT(appt.start))}
         ${sbEmailRow('Therapist',esc(therName))}
-        ${sbEmailRow('Meet at',esc(location_))}
+        ${sbEmailRow('Meet at',esc(sbMeet(appt).where||location_))}
         ${appt.roomNumber?sbEmailRow('Your room',esc(appt.roomNumber)):''}
         ${folioPosted?sbEmailRow('Payment','Charged to your room folio'):''}
         ${appt.tipAmount>0?sbEmailRow('Tip',`$${appt.tipAmount} USD${folioPosted?' (added to your room folio)':' (please add this when you settle payment)'}`):''}
       </table>
+      ${sbMeet(appt).text?`<p style="font-size:14.5px;color:#1a2332;font-weight:600;margin:0 0 20px;padding:14px 16px;background:#f0f9f9;border-radius:10px">Where to meet: ${esc(sbMeet(appt).text)}</p>`:''}
       <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px">Need to cancel? You can cancel free of charge up to 12 hours before your appointment using the button below. Need a different time instead? Please contact us directly — our team handles all time changes personally.</p>
       <div style="text-align:center;margin-bottom:8px">
         <a href="${cancelUrl}" style="display:inline-block;background:#b45309;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.3px">Cancel My Appointment</a>
@@ -1158,13 +1160,13 @@ async function sbWriteAppointment(paymentIntentId){
       el.innerHTML=`<div class="msg">
         <div class="msg-icon">🌴</div>
         <div class="msg-title">You're Booked!</div>
-        <div class="msg-sub">See you for your <b>${esc(svc.name)}</b> on ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>${folioPosted?'The charge has been added to your room folio.':'The charge will appear on your room folio. Our team will confirm your reservation.'} We've sent the details — including your meeting location and a cancellation link — to ${esc(appt.email)}.${viewConfirmationLink}</div>
+        <div class="msg-sub">See you for your <b>${esc(svc.name)}</b> on ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}.<br><br>${folioPosted?'The charge has been added to your room folio.':'The charge will appear on your room folio. Our team will confirm your reservation.'} We've sent the details — including your meeting location and a cancellation link — to ${esc(appt.email)}.${sbMeet(appt).text?`<br><br><b>Where to meet:</b> ${esc(sbMeet(appt).text)}`:''}${viewConfirmationLink}</div>
       </div>`;
     }else{
       el.innerHTML=`<div class="msg">
         <div class="msg-icon">🌴</div>
         <div class="msg-title">You're Booked!</div>
-        <div class="msg-sub">Your <b>${esc(svc.name)}</b> is confirmed for ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}. Payment received — see you then! We've sent the details — including your meeting location and a cancellation link — to ${esc(appt.email)}.${viewConfirmationLink}</div>
+        <div class="msg-sub">Your <b>${esc(svc.name)}</b> is confirmed for ${fmtDateLong(SB.date)} at ${fmtT(SB.start)}. Payment received — see you then! We've sent the details — including your meeting location and a cancellation link — to ${esc(appt.email)}.${sbMeet(appt).text?`<br><br><b>Where to meet:</b> ${esc(sbMeet(appt).text)}`:''}${viewConfirmationLink}</div>
       </div>`;
     }
   }catch(e){
@@ -1206,7 +1208,8 @@ function sbRenderConfirmationScreen(apptId){
     <div class="summary-row"><span class="lbl">Date</span><span class="val">${fmtDateLong(appt.date)}</span></div>
     <div class="summary-row"><span class="lbl">Time</span><span class="val">${fmtT(appt.start)}</span></div>
     <div class="summary-row"><span class="lbl">Therapist</span><span class="val">${esc(therName)}</span></div>
-    <div class="summary-row"><span class="lbl">Meet at</span><span class="val">${esc(meetAt)}</span></div>
+    <div class="summary-row"><span class="lbl">Meet at</span><span class="val">${esc(sbMeet(appt).where||meetAt)}</span></div>
+    ${!isCancelled&&sbMeet(appt).text?`<div class="section-sub" style="margin:10px 0 4px;color:#2d2520;font-weight:600">${esc(sbMeet(appt).text)}</div>`:''}
     ${appt.roomNumber?`<div class="summary-row"><span class="lbl">Your room</span><span class="val">${esc(appt.roomNumber)}</span></div>`:''}
     <div class="summary-row"><span class="lbl">Price</span><span class="val">$${svc?.groupPricing?appt.groupTotalPriceUSD:svc?.price} USD${appt.guestType!=='hotel'?' + 13% tax':''}</span></div>
     ${appt.tipAmount>0?`<div class="summary-row"><span class="lbl">Tip</span><span class="val">$${appt.tipAmount} USD</span></div>`:''}
@@ -1326,7 +1329,8 @@ function sbRenderRescheduleScreen(){
   document.getElementById('mainContent').innerHTML=`<div class="msg"><div class="msg-icon">☎️</div><div class="msg-title">Please Contact Us Directly</div><div class="msg-sub">Our team handles all appointment time changes personally — please contact us directly (front desk or the spa) to request a different time.</div></div>`;
 }
 
-init();
 </script>
+<script src="modules/spa-booking-flow.js?v=20261022a"></script>
+<script>init();</script>
 </body>
 </html>
