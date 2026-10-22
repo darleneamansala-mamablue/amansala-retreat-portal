@@ -8,7 +8,7 @@
 //     hour) while the calendar is open. Browsers only allow sound after the page has been clicked once, so the first click anywhere on the page switches the sound on.
 //     The 🔔 button in the banner turns the sound off/on (remembered on that computer).
 // Read-only: nothing is changed or blocked. Change LM_HOURS to change what counts as last minute.
-const LM_HOURS = 24;
+const LM_HOURS = 2;
 const LM_SEEN = 'amansala_lm_seen', LM_SOUND = 'amansala_lm_sound';
 let lmAudio = null;
 function lmSoundOn() { try { return localStorage.getItem(LM_SOUND) !== 'off'; } catch (e) { return true; } }
@@ -27,6 +27,8 @@ function lmDing(force) {
     });
   } catch (e) {}
 }
+function lmClosed() { try { return localStorage.getItem('amansala_lm_collapsed') === '1'; } catch (e) { return false; } }
+function lmToggleBanner() { try { localStorage.setItem('amansala_lm_collapsed', localStorage.getItem('amansala_lm_collapsed') === '1' ? '0' : '1'); } catch (e) {} const b = document.getElementById('lmBanner'), body = document.getElementById('lmBody'), arrow = document.getElementById('lmArrow'); let closed = false; try { closed = localStorage.getItem('amansala_lm_collapsed') === '1'; } catch (e) {} if (body) body.style.display = closed ? 'none' : 'block'; if (arrow) arrow.textContent = closed ? '▸ Show' : '▾ Hide'; }
 function lmToggleSound() { try { localStorage.setItem(LM_SOUND, lmSoundOn() ? 'off' : 'on'); } catch (e) {} const b = document.getElementById('lmSoundBtn'); if (b) b.textContent = lmSoundOn() ? '🔔 Sound on' : '🔕 Sound off'; if (lmSoundOn()) lmDing(true); }
 function lmNotify(html) {
   try {
@@ -76,9 +78,9 @@ const lmEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</
           const svcName = a => ((SpaData.services || []).find(s => s.id === a.serviceId) || {}).name || 'service';
           const therName = a => ((SpaData.therapists || []).find(t => t.id === a.therapistId) || {}).firstName || 'no therapist';
           el.insertAdjacentHTML('afterbegin', `<div id="lmBanner" style="margin:0 0 14px;padding:12px 16px;border-radius:12px;background:#fffbeb;border:1.5px solid #fde68a;text-align:left;font-family:'Jost',sans-serif">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px"><div style="font-weight:700;font-size:13.5px;color:#92400e">⚡ ${list.length} last-minute booking${list.length !== 1 ? 's' : ''} on this day</div>
-              <button id="lmSoundBtn" onclick="lmToggleSound()" style="border:1.5px solid #fcd34d;background:#fff;border-radius:8px;padding:3px 9px;font-size:11.5px;font-weight:700;color:#92400e;cursor:pointer">${lmSoundOn() ? '🔔 Sound on' : '🔕 Sound off'}</button></div>
-            ${list.map(a => `<div style="font-size:12.5px;color:#78350f;line-height:1.55">• <b>${lmEsc(a.clientName)}</b> — ${lmEsc(svcName(a))} with ${lmEsc(therName(a))} at ${spaCalFmtT(a.start)} (${lmEsc(lmLabel(a))}${a.source === 'guest_booking' ? ', online' : ''})</div>`).join('')}</div>`);
+            <div onclick="lmToggleBanner()" title="Click to open or close" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;user-select:none"><div style="font-weight:700;font-size:13.5px;color:#92400e">⚡ ${list.length} last-minute booking${list.length !== 1 ? 's' : ''} on this day</div>
+              <div style="display:flex;gap:8px;align-items:center"><button id="lmSoundBtn" onclick="event.stopPropagation();lmToggleSound()" style="border:1.5px solid #fcd34d;background:#fff;border-radius:8px;padding:3px 9px;font-size:11.5px;font-weight:700;color:#92400e;cursor:pointer">${lmSoundOn() ? '🔔 Sound on' : '🔕 Sound off'}</button><span id="lmArrow" style="font-size:12px;font-weight:700;color:#6b7280;white-space:nowrap">${lmClosed() ? '▸ Show' : '▾ Hide'}</span></div></div>
+            <div id="lmBody" style="display:${lmClosed() ? 'none' : 'block'};margin-top:4px">${list.map(a => `<div style="font-size:12.5px;color:#78350f;line-height:1.55">• <b>${lmEsc(a.clientName)}</b> — ${lmEsc(svcName(a))} with ${lmEsc(therName(a))} at ${spaCalFmtT(a.start)} (${lmEsc(lmLabel(a))}${a.source === 'guest_booking' ? ', online' : ''})</div>`).join('')}</div></div>`);
         }
         // pop-up once per new last-minute booking made in the last hour
         let seen = []; try { seen = JSON.parse(localStorage.getItem(LM_SEEN) || '[]'); } catch (e) {}
