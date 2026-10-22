@@ -1,7 +1,7 @@
 // ===== spa-booking-flow.js — new guest booking flow for spa-booking.html (Darlene 2026-10-22) =====
 // Loaded by spa-booking.html AFTER its main script and BEFORE init(); it replaces a few step functions of that page and leaves the rest alone.
 // The flow:
-//  1. Name + "Are you staying at Amansala?"
+//  1. "Are you staying at Amansala?" (no name here: the name is asked once, on the details page)
 //       Yes  -> only massages are offered (no ceremonies); charged to the room as before.
 //       No   -> "What would you like to book?" Massage or Ceremony; advance payment as before.
 //  2. Treatment.   3. (the old "are you staying?" page is skipped, we already know)   4. Details (name is pre-filled).
@@ -27,20 +27,12 @@ window.renderStep1_SessionType = function (el) {
   renderDots(7);
   el.innerHTML = `<div class="card">
     <div class="section-title">Book Your Spa Experience</div>
-    <div class="section-sub">First, tell us who you are.</div>
-    <div class="form-row">
-      <div><label class="form-label">First Name *</label><input class="form-input" id="sbfFirst" value="${esc(SB.firstName)}"></div>
-      <div><label class="form-label">Last Name *</label><input class="form-input" id="sbfLast" value="${esc(SB.lastName)}"></div>
-    </div>
-    <div class="section-title" style="font-size:17px;margin-top:18px">Are you staying at Amansala?</div>
+    <div class="section-title" style="font-size:17px;margin-top:6px">Are you staying at Amansala?</div>
     <div class="choice-btn" onclick="sbfStay(true)">Yes, I am staying at Amansala<div class="cd">Massages, charged to your room</div></div>
     <div class="choice-btn" onclick="sbfStay(false)">No, I am not staying at Amansala<div class="cd">Massages and ceremonies · advance payment to reserve your spot</div></div>
   </div>`;
 };
 function sbfStay(staying) {
-  const first = (document.getElementById('sbfFirst') || {}).value || '', last = (document.getElementById('sbfLast') || {}).value || '';
-  if (!first.trim() || !last.trim()) { showToast('Please enter your first and last name.'); return; }
-  SB.firstName = first.trim(); SB.lastName = last.trim();
   SB.guestType = staying ? 'hotel' : 'offsite';
   SB.serviceId = null; SB.prefType = 'none'; SB.requestedTherapistId = null; SB.date = null; SB.start = null; SBF.desired = null;
   if (staying) { SB.sessionType = 'individual'; SB.onlyMassage = true; setStep(2); }
@@ -58,7 +50,7 @@ function sbfRenderKind(el) {
   el.innerHTML = `<button class="btn-back" onclick="setStep(1)">&#8249; Back</button>
     <div class="card">
       <div class="section-title">What Would You Like to Book?</div>
-      <div class="section-sub">Hi ${esc(SB.firstName)}, are you looking for a massage or a ceremony?</div>
+      <div class="section-sub">Are you looking for a massage or a ceremony?</div>
       <div class="choice-btn" onclick="sbfPickKind('massage')">A Massage<div class="cd">One-on-one body work, just for you</div></div>
       <div class="choice-btn" onclick="sbfPickKind('ceremony')">A Ceremony<div class="cd">Temazcal, Cacao &amp; Sound Healing and other shared experiences</div></div>
     </div>`;
