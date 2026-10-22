@@ -3,9 +3,13 @@
 // view and wraps spaSetView / spaRender so that tab renders. Read-only except the per-row Charge button, which calls the existing
 // spaChargeApptToRoom. Matching uses spaResolveGuestForAppt / spaFindGuestByRoom, the same rules the charge button uses, so this
 // report can never disagree with what a click on Charge would do.
+// Already-charged check (Darlene 2026-10-22: "it is showing ones that are charged"): front desk often charges a service straight on the room account without
+// updating the appointment, so about half of what this list used to show was already charged. Each service is now checked against the guest's Spa lines
+// (ppFindCharged / ppLoadSpaLines in pending-charges.js) and the ones already on an account are left out of the list, with a summary line and a folded
+// list so you can see which ones and what the line says.
 // Why: Hotel Guest + Confirmed appointments auto-charge on save, but when the room number or name doesn't line up the charge is
 // silently skipped, and nobody sees it until checkout (Darlene's ask 2026-10-21).
-let spaUnchView = { upcoming: false };
+let spaUnchView = { upcoming: false, linesReady: false, loading: false };
 
 function spaUnchReason(a) {
   const { match, bkMatch, roomHint } = spaResolveGuestForAppt(a);
@@ -33,9 +37,21 @@ function spaUnchCollect() {
 function spaUnchToggleUpcoming(on) { spaUnchView.upcoming = !!on; spaRenderUncharged(); }
 async function spaUnchCharge(id) { await spaChargeApptToRoom(id); spaRenderUncharged(); }
 
+function spaUnchRecheck() { spaUnchView.linesReady = false; spaRenderUncharged(); }
 function spaRenderUncharged() {
   const el = document.getElementById('spaContent'); if (!el) return;
-  const rows = spaUnchCollect();
+  if (typeof ppLoadSpaLines === 'function' && !spaUnchView.linesReady) { // read the room accounts first, so nothing already charged is shown as missing
+    if (!spaUnchView.loading) {
+      spaUnchView.loading = true;
+      ppLoadSpaLines().catch(e => console.warn('[not charged] could not read room accounts', e)).finally(() => { spaUnchView.linesReady = true; spaUnchView.loading = false; spaRenderUncharged(); });
+    }
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:#6b7280">Checking the room accounts…</div>';
+    return;
+  }
+  const all = spaUnchCollect();
+  const lineOf = a => { try { if (typeof ppFindCharged !== 'function' || typeof ppState === 'undefined') return null; const m = ppState.marks && ppState.marks['spa|' + a.id]; return ppFindCharged(a, ppState.spaLines) || (m ? { desc: 'marked ' + (m.how === 'none' ? 'no charge needed' : 'charged') + ' by ' + m.by, price: 0 } : null); } catch (e) { return null; } };
+  const doneRows = all.map(a => ({ a, line: lineOf(a) })).filter(x => x.line);
+  const rows = all.filter(a => !doneRows.some(x => x.a.id === a.id));
   const btn = 'font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;cursor:pointer;white-space:nowrap;';
   const row = a => {
     const svc = (SpaData.services || []).find(s => s.id === a.serviceId);
@@ -62,11 +78,16 @@ function spaRenderUncharged() {
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
       <div><div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:#2d2520">Not Charged to a Room</div>
         <div style="font-size:12px;color:#6b7280">Hotel Guest services that are Confirmed or Completed but never posted to a folio. Pre-Paid ones are left out.</div></div>
-      <label style="font-size:12px;color:#2d2520;cursor:pointer"><input type="checkbox" ${spaUnchView.upcoming ? 'checked' : ''} onchange="spaUnchToggleUpcoming(this.checked)"> Include upcoming dates</label>
+      <div style="display:flex;gap:12px;align-items:center"><label style="font-size:12px;color:#2d2520;cursor:pointer"><input type="checkbox" ${spaUnchView.upcoming ? 'checked' : ''} onchange="spaUnchToggleUpcoming(this.checked)"> Include upcoming dates</label>
+        <button onclick="spaUnchRecheck()" style="${btn}border:1.5px solid #c8bfb5;background:#fff;color:#2d2520">↻ Check again</button></div>
     </div>
+    ${doneRows.length ? `<div style="margin-bottom:14px;padding:12px 16px;border-radius:12px;background:#f0fdf4;border:1.5px solid #bbf7d0;font-size:13px;color:#14532d;line-height:1.5">
+      <b>✓ ${doneRows.length} of ${all.length}</b> services that looked uncharged are <b>actually already charged</b> on the guest's room account (charged by hand before the appointment was updated), so they are not listed below.
+      <b>${rows.length}</b> ${rows.length === 1 ? 'really still needs' : 'really still need'} charging.
+      <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:600">Show the ${doneRows.length} already charged</summary><div style="margin-top:6px;font-size:12px;line-height:1.7">${doneRows.map(x => `${escHtml(x.a.date)} ${escHtml(x.a.time || '')} · <b>${escHtml(x.a.clientName || '')}</b> — ${escHtml(x.line.desc || '')}${x.line.price ? ' $' + x.line.price : ''}`).join('<br>')}</div></details></div>` : ''}
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">
       ${rows.length ? `<div style="display:grid;grid-template-columns:96px 1.2fr 1.2fr 70px 1.6fr 170px;gap:10px;padding:10px 16px;background:#f8f5f0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74"><div>Date</div><div>Client</div><div>Service</div><div>Room</div><div>Why not charged</div><div></div></div>${rows.map(row).join('')}`
-        : '<div style="padding:40px;text-align:center;color:#6b7280">Everything is charged. Nothing to fix.</div>'}
+        : `<div style="padding:40px;text-align:center;color:#6b7280">${doneRows.length ? 'Nothing left to charge — everything listed above is already on a room account.' : 'Everything is charged. Nothing to fix.'}</div>`}
     </div>
     ${rows.length ? `<div style="margin-top:14px;text-align:right;font-size:13px;font-weight:700;color:#1a2332">${rows.length} service${rows.length !== 1 ? 's' : ''} · $${total.toFixed(0)} not yet charged</div>` : ''}
   </div>`;
