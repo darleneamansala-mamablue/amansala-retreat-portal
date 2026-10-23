@@ -4631,7 +4631,7 @@ function sendRoomsSoldOutEmail(bkId){
 
 // "Real PMS" sync — 2026-10-20, Jorge's ask after the Amy Reich room-move
 // incident ("quiero que lo hagamos como un pms real"). The staleness guard
-// below (kept as CAS_SYNC_ENABLED's fallback) requires every mutating
+// below (kept as casSyncEnabled()'s fallback) requires every mutating
 // function across the whole app to remember to bump its own object's
 // .updatedAt, or that edit silently never uploads -- a structural bug class
 // found today in ~25 functions beyond the ones already patched one at a time
@@ -4641,14 +4641,43 @@ function sendRoomsSoldOutEmail(bkId){
 // by diffing against a remembered snapshot, never a manually-set flag, so
 // there's nothing left for a new call site to forget. Behind a flag during
 // rollout -- the old path stays untouched as the fallback.
-const CAS_SYNC_ENABLED=localStorage.getItem('amansala_cas_sync')==='1'||location.search.includes('cas=1');
-if(location.search.includes('cas=0'))localStorage.removeItem('amansala_cas_sync');
+// Rollout switch (2026-10-22): app_store key 'cas_sync' = { mode } decides it for every browser, re-read on every save
+// (piggybacks the clear_signal read below) so a change takes effect within one save, no deploy needed:
+//   'off'     emergency: everyone on the old path, a browser's own ?cas=1 included
+//   'opt_in'  (default, also when the row does not exist) only browsers opened once with ?cas=1
+//   'on'      everyone, except a browser opened once with ?cas=0
+// Turn it off from Supabase: app_store, key cas_sync, value {"mode":"off"}.
+if(location.search.includes('cas=0'))localStorage.setItem('amansala_cas_sync','0');
 if(location.search.includes('cas=1'))localStorage.setItem('amansala_cas_sync','1');
+let _casRemoteMode='opt_in';
+function _casSetRemote(v){const m=v&&v.mode;_casRemoteMode=(m==='off'||m==='on')?m:'opt_in';}
+function casSyncEnabled(){
+  let local=null;try{local=localStorage.getItem('amansala_cas_sync');}catch(e){}
+  if(_casRemoteMode==='off')return false;
+  if(_casRemoteMode==='on')return local!=='0';
+  return local==='1';
+}
+// A save that could not be done after every retry (or a row found deleted elsewhere) is also written to app_store as
+// 'cas_log:<time>_<rand>', so staff never have to report it for us to see it. Once per row and kind per page load,
+// since a failed row is retried on every save.
+const _casLogged=new Set();
+function casLogEvent(kind,table,items){
+  try{
+    const fresh=(items||[]).filter(it=>{const k=kind+'|'+table+'|'+it.id;if(_casLogged.has(k))return false;_casLogged.add(k);return true;});
+    if(!fresh.length)return;
+    const session=typeof getCurrentSession==='function'?getCurrentSession():null;
+    const now=new Date().toISOString();
+    db.from('app_store').insert({key:'cas_log:'+now+'_'+Math.random().toString(36).slice(2,7),updated_at:now,value:{
+      at:now,kind,table,user:session?.name||'',mode:_casRemoteMode,page:location.pathname+location.search,ua:navigator.userAgent.slice(0,160),
+      items:fresh.slice(0,20).map(it=>({id:it.id,reason:it.reason||'',room:it.row?.room||'',bookingId:it.row?.bookingId||'',leader:it.row?.leaderName||''})),
+    }}).then(()=>{},()=>{});
+  }catch(e){}
+}
 // Snapshots casSyncTable reads/updates for bookings and registrations --
 // built once in loadFromSupabase() right after those arrays are populated
 // (the only trustworthy baseline: the REAL updated_at each row came back
 // with from SQL), and kept current by casSyncTable itself after that. Plain
-// objects, not used at all when CAS_SYNC_ENABLED is off.
+// objects, not used at all when casSyncEnabled() is off.
 let _bkBase=new Map(),_regBase=new Map();
 async function syncToSupabase(){
   // Never write to Supabase from local file:// — prevents local dev from corrupting live data
@@ -4661,8 +4690,11 @@ async function syncToSupabase(){
     // rows. The 406 was harmless (caught below, sync proceeds either way) but spammed
     // the console on every save — including every Push to CB, which runs saveAll()
     // twice (once immediately, once again 2s later).
-    const {data:sigData}=await db.from('app_store').select('value').eq('key','clear_signal').maybeSingle();
-    const clearSig=sigData?.value||'';
+    // cas_sync (the rollout switch above) comes back in the same request
+    const {data:sigRows}=await db.from('app_store').select('key,value').in('key',['clear_signal','cas_sync']);
+    const _sig=k=>(sigRows||[]).find(r=>r.key===k)?.value;
+    _casSetRemote(_sig('cas_sync'));
+    const clearSig=_sig('clear_signal')||'';
     const lastAck=localStorage.getItem('amansala_clear_ack')||'';
     if(clearSig&&clearSig>lastAck)return; // not yet acknowledged — wait for loadFromSupabase to clear first
   }catch(e){}
@@ -4692,7 +4724,7 @@ async function syncToSupabase(){
   }
   const _bkRegSync=(async()=>{
     try{
-      if(CAS_SYNC_ENABLED){
+      if(casSyncEnabled()){
         const payRows=[];
         AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
         const[bkResult,regResult]=await Promise.all([
@@ -4714,6 +4746,8 @@ async function syncToSupabase(){
           console.warn('[cas-sync] removed from this tab, deleted elsewhere:',[...goneBk,...goneReg]);
           if(typeof showToast==='function')showToast('ℹ '+(goneBk.size+goneReg.size)+' registro(s) ya habían sido borrados en otra pestaña — se quitaron de esta también.');
         }
+        casLogEvent('failed','bookings',bkResult?.failed);casLogEvent('failed','registrations',regResult?.failed);
+        casLogEvent('gone','bookings',(bkResult?.gone||[]).map(id=>({id})));casLogEvent('gone','registrations',(regResult?.gone||[]).map(id=>({id})));
         const allFailed=[...(bkResult?.failed||[]),...(regResult?.failed||[])];
         if(allFailed.length){
           console.warn('[cas-sync] could not save',allFailed.length,'record(s) after every retry — staying dirty, will retry next save:',allFailed.map(f=>f.id));
@@ -4997,6 +5031,7 @@ async function loadFromSupabase(){
     data.forEach(r=>{store[r.key]=r.value;_appStoreUpdatedAt[r.key]=r.updated_at;});
     // Clear signal: if Supabase has a clear_signal newer than what this device last acknowledged,
     // wipe local bookings/regs so stale data on any device can't keep coming back.
+    _casSetRemote(store.cas_sync);
     if(store.clear_signal){
       const lastAck=localStorage.getItem('amansala_clear_ack')||'';
       if(store.clear_signal>lastAck){
@@ -5029,7 +5064,7 @@ async function loadFromSupabase(){
       sqlPayments.map(sqlPaymentToApp).filter(p=>!deletedPaymentIds.has(p.id)).forEach(p=>{const arr=_paysByBk.get(p.bookingId)||[];arr.push(p);_paysByBk.set(p.bookingId,arr);});
       AppData.bookings.forEach(bk=>{bk.payments=_paysByBk.get(bk.id)||[];});
       AppData.regs=sqlRegs.map(sqlRegToApp).filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId));
-      // CAS sync baseline (see cas-sync.js / syncToSupabase's CAS_SYNC_ENABLED
+      // CAS sync baseline (see cas-sync.js / syncToSupabase's casSyncEnabled()
       // branch) -- the REAL updated_at each row just came back with from SQL
       // is the only trustworthy "last known good" snapshot to diff future
       // edits against. Rebuilt fresh on every load; casSyncTable keeps it
