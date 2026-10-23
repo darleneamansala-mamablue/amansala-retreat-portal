@@ -119,6 +119,13 @@ let fails = 0; const check = (name, cond, extra) => { console.log((cond ? 'ok   
   DB.transport.push(row('a', 'Ana', 'Lopez'));
   await runAuto(D, 'departure');
   check('K3. Guest alone: text has no name', dep().length === 1 && !/Ana Lopez"/.test(dep()[0]), dep());
+  // L. Room of two, the hand charge is on the SECOND guest's own folio (room 35, 2026-10-18): only the first guest gets a system charge
+  fresh();
+  DB.folios.push({ id: 'f4', registration_id: 'r3', guest_name: 'Dee Diaz', status: 'open' });
+  DB.transport.push(row('c', 'Cal', 'Diaz'), row('d', 'Dee', 'Diaz'));
+  DB.folio_items.push({ id: 'h1', folio_id: 'f4', description: 'Departure Cancun airport 6 or + Sharing', qty: 1, unit_price: 45, category: 'Transportation', created_at: '2026-11-08T10:00:00Z' });
+  await runAuto(D, 'departure');
+  check('L. Hand charge on Dee\'s folio: system charges only Cal, on Cal\'s folio', dep().length === 2 && dep().some(x => /^Cal Diaz: \$\d+ "Departure Transport .*— Cal Diaz"/.test(x)) && dep().filter(x => x.startsWith('Dee Diaz')).length === 1, dep());
   console.log(fails ? `\n${fails} FAILED` : '\nAll passed');
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('ERROR', e); process.exit(1); });

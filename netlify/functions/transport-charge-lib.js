@@ -343,15 +343,20 @@ async function handCharges(key, label, date) {
   const folioIds = [...new Set(items.map(i => i.folio_id))];
   const regOfFolio = new Map();
   for (let i = 0; i < folioIds.length; i += 100) {
-    const fr = await supaFetch(key, `folios?select=id,registration_id&id=in.(${folioIds.slice(i, i + 100).join(',')})`);
-    (Array.isArray(fr.data) ? fr.data : []).forEach(x => regOfFolio.set(x.id, x.registration_id));
+    const fr = await supaFetch(key, `folios?select=id,registration_id,guest_name&id=in.(${folioIds.slice(i, i + 100).join(',')})`);
+    (Array.isArray(fr.data) ? fr.data : []).forEach(x => regOfFolio.set(x.id, x));
   }
+  // ownByReg: registration -> the folio owner's name for each seat charged by hand there (one per qty), so the charge counts for the
+  // guest whose folio it is on (real case: room 35's arrival was on Danielle's folio, not Landen's)
   items.forEach(i => {
     const m = String(i.description).match(/\(([^)]+)\)\s*$/);
     const q = Math.max(1, Math.round(Number(i.qty) || 1));
     if (m && /[a-z]{2,}\s+[a-z]/i.test(m[1])) { for (let n = 0; n < q; n++) named.push(m[1].trim()); return; }
-    const reg = regOfFolio.get(i.folio_id);
-    if (reg) ownByReg.set(reg, (ownByReg.get(reg) || 0) + q);
+    const fo = regOfFolio.get(i.folio_id);
+    if (!fo) return;
+    const list = ownByReg.get(fo.registration_id) || [];
+    for (let n = 0; n < q; n++) list.push(fo.guest_name || '');
+    ownByReg.set(fo.registration_id, list);
   });
   return { named, ownByReg };
 }
@@ -486,15 +491,15 @@ async function runCharges(key, opts) {
     const go = [];
     const regGuests = (reg.guests ?? []).filter(g => g.name && !g.cancelled);
     const guestOf = e => (regGuests.find(g => nameMatch(g.name, e.name)) || {}).name || e.name;
-    let ownHand = byHand.ownByReg.get(reg.id) || 0;
-    rl.filter(eligible).forEach(e => {
-      // Already charged by hand (staff posted this ride themselves): never add a system charge next to it
-      const named = byHand.named.findIndex(n => nameLoose(n, e.name));
-      if (named >= 0 || ownHand > 0) {
-        if (named >= 0) byHand.named.splice(named, 1); else ownHand--;
-        res.skipped.push({ rowId: e.rowId, name: e.name, room: reg.room, reason: 'charged_by_hand' });
-        return;
-      }
+    // Already charged by hand (staff posted this ride themselves): never add a system charge next to it. A "(Name)" line counts for
+    // that guest; a line on a guest's own folio counts for them; any other hand line of the room for whoever is left.
+    const travel = rl.filter(eligible), byHandSeat = new Set();
+    const ownLeft = [...(byHand.ownByReg.get(reg.id) || [])];
+    travel.forEach(e => { const i = byHand.named.findIndex(n => nameLoose(n, e.name)); if (i >= 0) { byHand.named.splice(i, 1); byHandSeat.add(e); } });
+    travel.forEach(e => { if (byHandSeat.has(e)) return; const i = ownLeft.findIndex(n => n && nameMatch(n, e.name)); if (i >= 0) { ownLeft.splice(i, 1); byHandSeat.add(e); } });
+    travel.forEach(e => { if (byHandSeat.has(e) || !ownLeft.length) return; const i = ownLeft.findIndex(n => !n || !travel.some(t => nameMatch(n, t.name))); if (i >= 0) { ownLeft.splice(i, 1); byHandSeat.add(e); } });
+    travel.forEach(e => {
+      if (byHandSeat.has(e)) { res.skipped.push({ rowId: e.rowId, name: e.name, room: reg.room, reason: 'charged_by_hand' }); return; }
       const rate = autoRate(rates, e.airport, paxOf(e));
       if (!rate) { res.skipped.push({ rowId: e.rowId, name: e.name, reason: 'no_rate' }); return; }
       // Two or more guests in one room: the guest's name in the text, so their two lines never look like the same charge twice
