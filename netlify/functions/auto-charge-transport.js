@@ -3,132 +3,16 @@
 // Runs daily at 05:00 UTC (midnight Tulum, UTC-5) — called twice by pg_cron:
 //   type=arrival   → charges tomorrow's arrivals (1 day ahead)
 //   type=departure → charges departures 2 days ahead
+// Also the "Cargar" button on the Transport screen (?date=&type=).
 // If booking has flag "teacher_pays_[arrival|departure]_transport" → charge teacher's folio the total.
 // If not → charge each guest individually at the rate for their service group size.
-// Marks each transport row with data.folioCharged.[arrival|departure]* to prevent double-charging.
+// One charge per GUEST, not per transport row: a guest's duplicate rows (placeholder stub + real form, or two submissions) are
+// collapsed exactly as the Transport screen shows them (transport-charge-lib.js). Only adds what is missing: a guest whose folio
+// already has their "<Arrival|Departure> Transport <date>" charge is skipped, so a second run (cron + the button, or a retry)
+// can never charge twice. Real case 2026-10-21: Departure Transport posted twice, seconds apart, on about ten folios.
+// Pass dryRun: true to see what would be charged without writing anything.
 
-const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
-// Jorge's ask 2026-10-15: staff-editable in Admin > Settings (app_store key
-// 'portal_settings') instead of hardcoded here -- reassigned near the top of the
-// handler once that row is fetched; this is just the fallback if it's never saved.
-let RATES = {
-  cancun: [195, 100, 80, 65, 55, 45],
-  tulum:  [145,  80, 65, 55, 45, 40],
-};
-
-function autoRate(airport, pax) {
-  const tbl = RATES[airport];
-  if (!tbl) return null;
-  return tbl[Math.min(pax - 1, tbl.length - 1)];
-}
-
-async function supaFetch(key, path, method = 'GET', body = null) {
-  const opts = {
-    method,
-    headers: {
-      'apikey':        key,
-      'Authorization': `Bearer ${key}`,
-      'Content-Type':  'application/json',
-      'Accept':        'application/json',
-      ...(method !== 'GET' ? { 'Prefer': 'return=representation' } : {}),
-    },
-  };
-  if (body != null) opts.body = JSON.stringify(body);
-  const res  = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, opts);
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch { data = text; }
-  return { ok: res.ok, status: res.status, data };
-}
-
-function toMinutes(t) {
-  if (!t) return null;
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + (m || 0);
-}
-
-// Replicate transport.js auto-cluster: same booking + airport + ≤20-min window
-function clusterEntries(entries) {
-  const clusters = [];
-  for (const e of entries) {
-    const mins = toMinutes(e.time);
-    const key  = `${e.bookingId}|${e.airport}`;
-    let joined = false;
-    if (mins !== null) {
-      for (const cl of clusters) {
-        const f = cl[0];
-        if (`${f.bookingId}|${f.airport}` !== key) continue;
-        const fm = toMinutes(f.time);
-        if (fm !== null && Math.abs(fm - mins) <= 20) { cl.push(e); joined = true; break; }
-      }
-    }
-    if (!joined) clusters.push([e]);
-  }
-  return clusters;
-}
-
-// POST to create-folio-charge via direct Supabase (avoids internal HTTP round-trip)
-async function chargeFolio(supaKey, { registrationId, guestName, description, unitPrice }) {
-  // Look up canonical name
-  const regLookup = await supaFetch(supaKey,
-    `registrations?select=guests&id=eq.${encodeURIComponent(registrationId)}&limit=1`
-  );
-  const regRow = Array.isArray(regLookup.data) ? regLookup.data[0] : null;
-  const canonical = regRow?.guests?.find(g => g.name)?.name ?? guestName ?? '';
-
-  // Find or create folio
-  let folioId = null;
-  const exactRes = await supaFetch(supaKey,
-    `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(canonical)}&limit=1`
-  );
-  if (exactRes.ok && Array.isArray(exactRes.data) && exactRes.data.length) {
-    folioId = exactRes.data[0].id;
-  } else {
-    const anyRes = await supaFetch(supaKey,
-      `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&status=eq.open&order=created_at.asc&limit=1`
-    );
-    if (anyRes.ok && Array.isArray(anyRes.data) && anyRes.data.length) {
-      folioId = anyRes.data[0].id;
-    }
-  }
-  if (!folioId) {
-    const token = crypto.randomUUID().replace(/-/g, '');
-    const createRes = await supaFetch(supaKey, 'folios', 'POST', {
-      registration_id: registrationId,
-      guest_name:      canonical,
-      name:            canonical,
-      payment_token:   token,
-      status:          'open',
-    });
-    if (!createRes.ok) return { error: `folio_create_failed: ${JSON.stringify(createRes.data)}` };
-    const created = Array.isArray(createRes.data) ? createRes.data[0] : createRes.data;
-    folioId = created?.id;
-    if (!folioId) return { error: 'folio_created_no_id' };
-  }
-
-  // Insert folio_item
-  const itemRes = await supaFetch(supaKey, 'folio_items', 'POST', {
-    folio_id:   folioId,
-    description,
-    qty:        1,
-    unit_price: unitPrice,
-    tax_rate:   13,
-    category:   'Transport',
-  });
-  if (!itemRes.ok) return { error: `folio_item_failed: ${JSON.stringify(itemRes.data)}` };
-  const saved = Array.isArray(itemRes.data) ? itemRes.data[0] : itemRes.data;
-  return { folioItemId: saved?.id, folioId };
-}
-
-// Fuzzy name match: all tokens of the shorter name appear in the longer name
-// "hilario cen" matches "hilario cen ku" and vice versa
-function nameMatch(a, b) {
-  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
-  const tokA = norm(a).split(/\s+/).filter(Boolean);
-  const tokB = norm(b).split(/\s+/).filter(Boolean);
-  const [shorter, longer] = tokA.length <= tokB.length ? [tokA, tokB] : [tokB, tokA];
-  return shorter.length > 0 && shorter.every(t => longer.includes(t));
-}
+const L = require('./transport-charge-lib');
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -138,278 +22,36 @@ exports.handler = async (event) => {
   const supaKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supaKey) return { statusCode: 500, body: 'Missing SUPABASE_SERVICE_KEY' };
 
-  const settingsRes = await supaFetch(supaKey, 'app_store?key=eq.portal_settings&select=value');
-  const savedRates = settingsRes.ok && Array.isArray(settingsRes.data) && settingsRes.data[0]?.value?.transportRates;
-  if (savedRates) RATES = savedRates;
-
   // Accept optional date and type override via query param or POST body
   let tomorrow = event.queryStringParameters?.date ?? null;
   let type     = event.queryStringParameters?.type ?? 'arrival';
+  let dryRun   = event.queryStringParameters?.dryRun === '1';
   if (event.body) {
     try {
       const b = JSON.parse(event.body);
       if (!tomorrow) tomorrow = b.date ?? null;
       if (b.type)    type     = b.type;
+      if (b.dryRun === true) dryRun = true;
     } catch {}
   }
-  const isArr       = type !== 'departure';
+  const isArr = type !== 'departure';
   if (!tomorrow) {
     const now  = new Date();
     const tulu = new Date(now.getTime() + (-5 * 60 - now.getTimezoneOffset()) * 60000);
     tulu.setDate(tulu.getDate() + (isArr ? 1 : 2));  // arrivals: 1 day ahead; departures: 2 days ahead
     tomorrow = tulu.toISOString().slice(0, 10);
   }
-  const dateField   = isArr ? 'arrivalDate'         : 'departureDate';
-  const otField     = isArr ? 'arrivalOT'           : 'departureOT';
-  const timeField   = isArr ? 'arrivalTime'         : 'departureTime';
-  const apField     = isArr ? 'arrivalAirport'      : 'departureAirport';
-  const chargedF    = isArr ? 'arrivalFolioItemId'  : 'departureFolioItemId';
-  const amountF     = isArr ? 'arrivalAmount'       : 'departureAmount';
-  const chargedAtF  = isArr ? 'arrivalChargedAt'    : 'departureChargedAt';
-  const paidByF     = isArr ? 'arrivalPaidBy'       : 'departurePaidBy';
-  const tFlag       = isArr ? 'teacher_pays_arrival_transport' : 'teacher_pays_departure_transport';
-  const dirPrefix   = isArr ? 'arrival' : 'departure';
-  const descLabel   = isArr ? 'Arrival' : 'Departure';
-  console.log(`[auto-charge-transport] processing ${type}s for ${tomorrow}`);
+  console.log(`[auto-charge-transport] processing ${type}s for ${tomorrow}${dryRun ? ' (dry run)' : ''}`);
 
-  // 1. All transport rows
-  const trRes = await supaFetch(supaKey, 'transport?select=id,booking_id,data&order=id');
-  if (!trRes.ok) return { statusCode: 500, body: `transport fetch failed: ${JSON.stringify(trRes.data)}` };
-
-  const rows = (trRes.data ?? []).filter(r => {
-    const d = r.data ?? {};
-    return d[dateField] === tomorrow && !d[otField];
-  });
-  if (!rows.length) {
-    console.log(`[auto-charge-transport] no ${type}s for ${tomorrow}`);
-    return { statusCode: 200, body: JSON.stringify({ date: tomorrow, type, charged: [], skipped: [], errors: [] }) };
+  let r;
+  try {
+    r = await L.runCharges(supaKey, { direction: isArr ? 'arrival' : 'departure', date: tomorrow, mode: 'insertOnly', dryRun });
+  } catch (e) {
+    console.error('[auto-charge-transport]', e.message);
+    return { statusCode: 500, body: e.message };
   }
-
-  // 2. Bookings — need flags
-  const bookingIds = [...new Set(rows.map(r => r.booking_id).filter(Boolean))];
-  const bkMap = {};
-  if (bookingIds.length) {
-    const bkFilter = bookingIds.map(id => `id.eq.${id}`).join(',');
-    const bkRes = await supaFetch(supaKey, `bookings?select=id,flags,leader_name&or=(${bkFilter})`);
-    (Array.isArray(bkRes.data) ? bkRes.data : []).forEach(b => { bkMap[b.id] = b; });
-  }
-
-  // 3. Registrations for bookings with retreat assigned
-  const regsByBk = {};
-  if (bookingIds.length) {
-    const regFilter = bookingIds.map(id => `booking_id.eq.${id}`).join(',');
-    const regRes = await supaFetch(supaKey,
-      `registrations?select=id,booking_id,room,guests,is_teacher_room,cancelled&or=(${regFilter})`
-    );
-    (Array.isArray(regRes.data) ? regRes.data : []).forEach(r => { (regsByBk[r.booking_id] ??= []).push(r); });
-  }
-
-  // 3b. All registrations — used as fallback for entries without a retreat (extra nights, escapes, etc.)
-  const allRegsRes = await supaFetch(supaKey, 'registrations?select=id,booking_id,room,guests,cancelled&limit=2000');
-  const allRegs = allRegsRes.ok ? (allRegsRes.data ?? []) : [];
-  // Fuzzy name search across all registrations
-  const findRegByName = (fullName, excludeTeacher = true) => {
-    const matches = [];
-    for (const r of allRegs) {
-      if (excludeTeacher && r.is_teacher_room) continue;
-      if ((r.guests ?? []).some(g => g.name && nameMatch(g.name, fullName))) {
-        matches.push(r);
-      }
-    }
-    return matches;
-  };
-
-  // 4. Load user-defined transport groups from settings
-  const grpRes = await supaFetch(supaKey, 'settings?select=value&key=eq.transport_groups&limit=1');
-  const savedGroups = (grpRes.ok && Array.isArray(grpRes.data) && grpRes.data[0]?.value) ? grpRes.data[0].value : [];
-  const userGroupMap = new Map(savedGroups); // "arrival|rowId" or "departure|rowId" → "ug_N"
-
-  const results = { date: tomorrow, charged: [], skipped: [], errors: [] };
-  const now_iso = new Date().toISOString();
-
-  // 5. Build entry list
-  let entries = rows.map(r => {
-    const d = r.data ?? {};
-    return {
-      rowId:          r.id,
-      bookingId:      r.booking_id,
-      time:           d[timeField] ?? '',
-      airport:        d[apField]   ?? 'cancun',
-      firstName:      d.firstName  ?? '',
-      lastName:       d.lastName   ?? '',
-      alreadyCharged: !!d.folioCharged?.[chargedF],
-      data:           d,
-    };
-  });
-
-  // 5b. Cancelled guests never travel -- exclude them entirely, not just from
-  // being charged, so they also stop counting toward anyone else's shared-van
-  // group size (Jorge's ask 2026-09-26, after Nicole Chavez -- cancelled on
-  // her registration -- still would have been charged/counted here otherwise).
-  // A guest counts as cancelled either per-guest (g.cancelled, e.g. one of
-  // several sharing a room) or when their WHOLE registration is cancelled
-  // (r.cancelled -- the "Cancel" button in Booking Detail, added 2026-09-26
-  // for a room/reservation that isn't split per-guest, e.g. CH16).
-  entries = entries.filter(e => {
-    const fullName = `${e.firstName} ${e.lastName}`.trim();
-    if (!fullName) return true;
-    const candidateRegs = e.bookingId ? (regsByBk[e.bookingId] ?? []) : allRegs;
-    const cancelled = candidateRegs.some(r => (r.guests ?? []).some(g => g.name && nameMatch(g.name, fullName) && (g.cancelled || r.cancelled)));
-    if (cancelled) results.skipped.push({ rowId: e.rowId, name: fullName, reason: 'guest_cancelled' });
-    return !cancelled;
-  });
-
-  // 6. Build direction-scoped group map
-  const groupKeyMap = new Map();
-  entries.forEach(e => {
-    const dirKey = `${dirPrefix}|${e.rowId}`;
-    if (userGroupMap.has(dirKey)) groupKeyMap.set(dirKey, userGroupMap.get(dirKey));
-  });
-  const ungrouped = entries.filter(e => !groupKeyMap.has(`${dirPrefix}|${e.rowId}`));
-  clusterEntries(ungrouped).forEach((cl, i) => {
-    const key = `auto_${i}`;
-    cl.forEach(e => groupKeyMap.set(`${dirPrefix}|${e.rowId}`, key));
-  });
-  entries.forEach(e => {
-    const dk = `${dirPrefix}|${e.rowId}`;
-    if (!groupKeyMap.has(dk)) groupKeyMap.set(dk, `solo_${e.rowId}`);
-  });
-
-  // groupKey → [entries]
-  const groups = new Map();
-  entries.forEach(e => {
-    const gk = groupKeyMap.get(`${dirPrefix}|${e.rowId}`);
-    if (!groups.has(gk)) groups.set(gk, []);
-    groups.get(gk).push(e);
-  });
-
-  // 7. Process each booking
-  for (const bkId of bookingIds) {
-    const bk   = bkMap[bkId];
-    if (!bk) continue;
-    const flags       = bk.flags ?? [];
-    const teacherPays = flags.includes(tFlag);
-    const regs        = regsByBk[bkId] ?? [];
-    const teacherReg  = regs.find(r => r.is_teacher_room);
-    const bkEntries   = entries.filter(e => e.bookingId === bkId);
-
-    if (teacherPays) {
-      if (!teacherReg) { results.errors.push({ bkId, reason: 'no_teacher_registration' }); continue; }
-      if (bkEntries.some(e => e.alreadyCharged)) { results.skipped.push({ bkId, reason: 'already_charged_teacher' }); continue; }
-
-      let total = 0;
-      bkEntries.forEach(e => {
-        const gk  = groupKeyMap.get(`${dirPrefix}|${e.rowId}`) ?? `solo_${e.rowId}`;
-        const pax = (groups.get(gk) ?? [e]).length;
-        total += autoRate(e.airport, pax) ?? 0;
-      });
-      if (total <= 0) { results.skipped.push({ bkId, reason: 'zero_total' }); continue; }
-
-      const teacherName = (teacherReg.guests ?? []).find(g => g.name)?.name ?? bk.leader_name ?? '';
-      const { folioItemId, error } = await chargeFolio(supaKey, {
-        registrationId: teacherReg.id,
-        guestName:      teacherName,
-        description:    `${descLabel} Transport ${tomorrow} — ${bkEntries.length} guest${bkEntries.length !== 1 ? 's' : ''}`,
-        unitPrice:      total,
-      });
-      if (error) { results.errors.push({ bkId, reason: error }); continue; }
-
-      for (const e of bkEntries) {
-        const updatedData = {
-          ...e.data,
-          folioCharged: {
-            ...(e.data.folioCharged ?? {}),
-            [chargedF]:   folioItemId,
-            [amountF]:    total / bkEntries.length,
-            [chargedAtF]: now_iso,
-            [paidByF]:    'teacher',
-          },
-        };
-        await supaFetch(supaKey, `transport?id=eq.${e.rowId}`, 'PATCH', { data: updatedData });
-      }
-      results.charged.push({ bkId, paidBy: 'teacher', total, guests: bkEntries.length, folioItemId });
-
-    } else {
-      for (const e of bkEntries) {
-        if (e.alreadyCharged) { results.skipped.push({ rowId: e.rowId, reason: 'already_charged' }); continue; }
-
-        const gk  = groupKeyMap.get(`${dirPrefix}|${e.rowId}`) ?? `solo_${e.rowId}`;
-        const pax = (groups.get(gk) ?? [e]).length;
-        const rate = autoRate(e.airport, pax);
-        if (!rate) { results.skipped.push({ rowId: e.rowId, reason: 'no_rate' }); continue; }
-
-        const fullName = `${e.firstName} ${e.lastName}`.trim().toLowerCase();
-        const reg = regs.find(r =>
-          !r.is_teacher_room &&
-          (r.guests ?? []).some(g => g.name && nameMatch(g.name, fullName))
-        ) ?? (() => {
-          const matches = findRegByName(fullName);
-          return matches.length === 1 ? matches[0] : null;
-        })();
-        if (!reg) { results.errors.push({ rowId: e.rowId, name: fullName, reason: 'no_registration' }); continue; }
-
-        const { folioItemId, error } = await chargeFolio(supaKey, {
-          registrationId: reg.id,
-          guestName:      (reg.guests ?? []).find(g => g.name)?.name ?? '',
-          description:    `${descLabel} Transport ${tomorrow} — ${e.airport?.toUpperCase()} ${e.time ?? ''}`,
-          unitPrice:      rate,
-        });
-        if (error) { results.errors.push({ rowId: e.rowId, name: fullName, reason: error }); continue; }
-
-        const updatedData = {
-          ...e.data,
-          folioCharged: {
-            ...(e.data.folioCharged ?? {}),
-            [chargedF]:   folioItemId,
-            [amountF]:    rate,
-            [chargedAtF]: now_iso,
-            [paidByF]:    'guest',
-          },
-        };
-        await supaFetch(supaKey, `transport?id=eq.${e.rowId}`, 'PATCH', { data: updatedData });
-        results.charged.push({ rowId: e.rowId, name: fullName, amount: rate, folioItemId });
-      }
-    }
-  }
-
-  // 8. Entries with no booking_id (extra nights, escapes, walk-ins)
-  const noRetiroEntries = entries.filter(e => !e.bookingId);
-  for (const e of noRetiroEntries) {
-    if (e.alreadyCharged) { results.skipped.push({ rowId: e.rowId, reason: 'already_charged' }); continue; }
-
-    const gk   = groupKeyMap.get(`${dirPrefix}|${e.rowId}`) ?? `solo_${e.rowId}`;
-    const pax  = (groups.get(gk) ?? [e]).length;
-    const rate = autoRate(e.airport, pax);
-    if (!rate) { results.skipped.push({ rowId: e.rowId, reason: 'no_rate' }); continue; }
-
-    const fullName = `${e.firstName} ${e.lastName}`.trim().toLowerCase();
-    const matches  = findRegByName(fullName);
-    if (!matches.length) { results.errors.push({ rowId: e.rowId, name: fullName, reason: 'no_registration' }); continue; }
-    if (matches.length > 1) { results.errors.push({ rowId: e.rowId, name: fullName, reason: 'ambiguous_name_multiple_retreats' }); continue; }
-    const reg = matches[0];
-
-    const { folioItemId, error } = await chargeFolio(supaKey, {
-      registrationId: reg.id,
-      guestName:      (reg.guests ?? []).find(g => g.name)?.name ?? '',
-      description:    `${descLabel} Transport ${tomorrow} — ${e.airport?.toUpperCase()} ${e.time ?? ''}`,
-      unitPrice:      rate,
-    });
-    if (error) { results.errors.push({ rowId: e.rowId, name: fullName, reason: error }); continue; }
-
-    const updatedData = {
-      ...e.data,
-      folioCharged: {
-        ...(e.data.folioCharged ?? {}),
-        [chargedF]:   folioItemId,
-        [amountF]:    rate,
-        [chargedAtF]: now_iso,
-        [paidByF]:    'guest',
-      },
-    };
-    await supaFetch(supaKey, `transport?id=eq.${e.rowId}`, 'PATCH', { data: updatedData });
-    results.charged.push({ rowId: e.rowId, name: fullName, amount: rate, folioItemId, source: 'name_lookup' });
-  }
-
+  const results = { date: tomorrow, type, dryRun, charged: r.charged,
+    skipped: r.skipped.concat(r.kept.map(k => ({ ...k, reason: 'already_charged' }))), errors: r.errors };
   console.log('[auto-charge-transport] done:', JSON.stringify(results));
   return {
     statusCode: 200,
