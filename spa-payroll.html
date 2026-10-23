@@ -85,7 +85,10 @@ async function payrollLoginSubmit(){
   try{
     const {data}=await db.from('app_store').select('value').eq('key','staffAccounts').maybeSingle();
     const accounts=(data?.value&&Array.isArray(data.value))?data.value:[];
-    account=accounts.find(s=>s.active!==false&&(s.username||'').toLowerCase()===username&&s.password===password)||null;
+    // Most accounts store only a SHA-256 hash of the password (admin-staff.js hashPassword); a few old ones still hold the plain password.
+    const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(password));
+    const hash=Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    account=accounts.find(s=>s.active!==false&&(s.username||'').toLowerCase()===username&&((s.passwordHash&&s.passwordHash===hash)||(s.password&&s.password===password)))||null;
   }catch(e){}
   if(!account) account=MASTER_STAFF.find(s=>s.username===username&&s.password===password)||null;
   if(!account){errEl.textContent='Incorrect username or password.';return;}
