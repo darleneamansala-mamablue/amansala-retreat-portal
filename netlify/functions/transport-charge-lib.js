@@ -396,24 +396,45 @@ async function runCharges(key, opts) {
     const cand = e.bookingId ? (regsByBk[e.bookingId] ?? []) : allRegs;
     return cand.some(r => (r.guests ?? []).some(g => g.name && nameMatch(g.name, e.name) && (g.cancelled || r.cancelled)));
   };
-  // The guest's room in their own retreat (a guest room before the teacher's), else the one registration anywhere with that name.
-  // The teacher's own seat is charged to the teacher room, as before (e.g. Marcia Hoffheins 2026-10-24).
-  const has = e => r => (r.guests ?? []).some(g => g.name && nameMatch(g.name, e.name));
-  const regMemo = new Map();
-  const findReg = e => {
-    if (regMemo.has(e)) return regMemo.get(e);
-    const mine = e.bookingId ? (regsByBk[e.bookingId] ?? []) : [];
-    let reg = mine.find(r => !r.is_teacher_room && has(e)(r)) || mine.find(has(e));
-    if (!reg) { const m = allRegs.filter(has(e)); reg = m.length === 1 ? m[0] : (m.length > 1 ? 'ambiguous' : null); }
-    regMemo.set(e, reg);
-    return reg;
+  // The guest's room, found the way the Transport screen finds it (modules/transport.js), so whoever shows a room there is charged:
+  // in their own retreat, the full name (a guest room before the teacher's), then a first name only one guest of that retreat has
+  // ("Billy Stalcup" = "Billy S"), then an email only one guest has, then the room staff typed on the row (roomOverride); else the
+  // one registration anywhere with that name. The teacher's own seat is charged to the teacher room, as before (Marcia Hoffheins).
+  // Returns { reg, gi } (gi = which guest of the registration), reg 'ambiguous' or null.
+  const live = r => !r.cancelled;
+  const guestsOf = r => (r.guests ?? []).map((g, i) => ({ g, i })).filter(x => x.g.name && !x.g.cancelled);
+  const first = n => String(n || '').trim().split(/\s+/)[0].toLowerCase();
+  const matchMemo = new Map();
+  const match = e => {
+    if (matchMemo.has(e)) return matchMemo.get(e);
+    const mine = e.bookingId ? (regsByBk[e.bookingId] ?? []).filter(live) : [];
+    const seats = mine.flatMap(r => guestsOf(r).map(x => ({ reg: r, gi: x.i, g: x.g })));
+    const one = list => list.length === 1 ? list[0] : null;
+    let hit = seats.find(x => !x.reg.is_teacher_room && nameMatch(x.g.name, e.name)) || seats.find(x => nameMatch(x.g.name, e.name));
+    const fn = first(e.data.firstName || e.name);
+    if (!hit && fn.length >= 3) hit = one(seats.filter(x => first(x.g.name) === fn));
+    const em = String(e.data.email || '').toLowerCase().trim();
+    if (!hit && em) hit = one(seats.filter(x => String(x.g.email || '').toLowerCase().trim() === em));
+    const ro = String(e.data.roomOverride || '').trim().toLowerCase();
+    if (!hit && ro) { const rs = mine.filter(r => String(r.room || '').trim().toLowerCase() === ro); if (rs.length === 1) { const gs = guestsOf(rs[0]); const g = gs.find(x => nameMatch(x.g.name, e.name)) || (gs.length === 1 ? gs[0] : null); hit = { reg: rs[0], gi: g ? g.i : -1 }; } }
+    let out;
+    if (hit) out = { reg: hit.reg, gi: hit.gi };
+    else {
+      const m = allRegs.filter(live).flatMap(r => guestsOf(r).filter(x => nameMatch(x.g.name, e.name)).map(x => ({ reg: r, gi: x.i })));
+      const regs = [...new Set(m.map(x => x.reg))];
+      out = regs.length === 1 ? m[0] : { reg: regs.length > 1 ? 'ambiguous' : null, gi: -1 };
+    }
+    matchMemo.set(e, out);
+    return out;
   };
+  const findReg = e => match(e).reg;
+  const guestNameOf = e => { const { reg, gi } = match(e); return reg && reg !== 'ambiguous' && gi >= 0 ? reg.guests[gi].name : e.name; };
   const linkedOf = list => list.flatMap(e => e.guest.members.map(m => m.data?.folioCharged?.[f.itemId]).filter(Boolean));
   // One seat per registration guest: the same person can still have rows on two retreats (real case: Amanda Becker / Mary Bandish
   // submitted for both back-to-back Wendy Oberg weeks). Keep the row of the retreat their room is in; the other neither pays nor
   // counts as a passenger.
   const onDay = e => e.data[f.date] === date && !e.data[f.ot] && !isCancelled(e);
-  const seatKey = e => { const r = findReg(e); return r && r !== 'ambiguous' ? `${r.id}|${(r.guests ?? []).findIndex(g => g.name && nameMatch(g.name, e.name))}` : null; };
+  const seatKey = e => { const { reg, gi } = match(e); return reg && reg !== 'ambiguous' ? `${reg.id}|${gi >= 0 ? gi : 'row:' + e.rowId}` : null; };
   const seatBest = new Map();
   entries.filter(onDay).forEach(e => {
     const k = seatKey(e); if (!k) return;
@@ -470,7 +491,10 @@ async function runCharges(key, opts) {
   const byReg = new Map();
   for (const e of guestPays) {
     const reg = findReg(e);
-    if (!reg) { if (eligible(e)) res.errors.push({ rowId: e.rowId, name: e.name, reason: 'no_registration' }); continue; }
+    // A row with no room is only reported when that person was not found through another row (same email or name)
+    const em = String(e.data.email || '').toLowerCase().trim();
+    const foundElsewhere = () => entries.some(o => o !== e && onDay(o) && match(o).reg && match(o).reg !== 'ambiguous' && ((em && String(o.data.email || '').toLowerCase().trim() === em) || nameMatch(o.name, e.name)));
+    if (!reg) { if (eligible(e) && !foundElsewhere()) res.errors.push({ rowId: e.rowId, name: e.name, reason: 'no_registration' }); continue; }
     if (reg === 'ambiguous') { if (eligible(e)) res.errors.push({ rowId: e.rowId, name: e.name, reason: 'ambiguous_name_multiple_retreats' }); continue; }
     if (!byReg.has(reg.id)) byReg.set(reg.id, { reg, list: [] });
     byReg.get(reg.id).list.push(e);
@@ -490,14 +514,14 @@ async function runCharges(key, opts) {
   for (const { reg, list: rl } of byReg.values()) {
     const go = [];
     const regGuests = (reg.guests ?? []).filter(g => g.name && !g.cancelled);
-    const guestOf = e => (regGuests.find(g => nameMatch(g.name, e.name)) || {}).name || e.name;
+    const guestOf = guestNameOf;
     // Already charged by hand (staff posted this ride themselves): never add a system charge next to it. A "(Name)" line counts for
     // that guest; a line on a guest's own folio counts for them; any other hand line of the room for whoever is left.
     const travel = rl.filter(eligible), byHandSeat = new Set();
     const ownLeft = [...(byHand.ownByReg.get(reg.id) || [])];
-    travel.forEach(e => { const i = byHand.named.findIndex(n => nameLoose(n, e.name)); if (i >= 0) { byHand.named.splice(i, 1); byHandSeat.add(e); } });
-    travel.forEach(e => { if (byHandSeat.has(e)) return; const i = ownLeft.findIndex(n => n && nameMatch(n, e.name)); if (i >= 0) { ownLeft.splice(i, 1); byHandSeat.add(e); } });
-    travel.forEach(e => { if (byHandSeat.has(e) || !ownLeft.length) return; const i = ownLeft.findIndex(n => !n || !travel.some(t => nameMatch(n, t.name))); if (i >= 0) { ownLeft.splice(i, 1); byHandSeat.add(e); } });
+    travel.forEach(e => { const i = byHand.named.findIndex(n => nameLoose(n, e.name) || nameLoose(n, guestOf(e))); if (i >= 0) { byHand.named.splice(i, 1); byHandSeat.add(e); } });
+    travel.forEach(e => { if (byHandSeat.has(e)) return; const i = ownLeft.findIndex(n => n && nameMatch(n, guestOf(e))); if (i >= 0) { ownLeft.splice(i, 1); byHandSeat.add(e); } });
+    travel.forEach(e => { if (byHandSeat.has(e) || !ownLeft.length) return; ownLeft.shift(); byHandSeat.add(e); });
     travel.forEach(e => {
       if (byHandSeat.has(e)) { res.skipped.push({ rowId: e.rowId, name: e.name, room: reg.room, reason: 'charged_by_hand' }); return; }
       const rate = autoRate(rates, e.airport, paxOf(e));

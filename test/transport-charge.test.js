@@ -126,6 +126,14 @@ let fails = 0; const check = (name, cond, extra) => { console.log((cond ? 'ok   
   DB.folio_items.push({ id: 'h1', folio_id: 'f4', description: 'Departure Cancun airport 6 or + Sharing', qty: 1, unit_price: 45, category: 'Transportation', created_at: '2026-11-08T10:00:00Z' });
   await runAuto(D, 'departure');
   check('L. Hand charge on Dee\'s folio: system charges only Cal, on Cal\'s folio', dep().length === 2 && dep().some(x => /^Cal Diaz: \$\d+ "Departure Transport .*— Cal Diaz"/.test(x)) && dep().filter(x => x.startsWith('Dee Diaz')).length === 1, dep());
+  // M. Short names on the room list (real cases: "Billy S", "Crystal W"), found like the Transport screen does
+  fresh();
+  DB.registrations.push({ id: 'r5', booking_id: 'bk1', room: '20', guests: [{ name: 'Billy S' }] }, { id: 'r6', booking_id: 'bk1', room: '21', guests: [{ name: 'Gil Ortiz', email: 'gil@mail.com' }] },
+                        { id: 'r7', booking_id: 'bk1', room: '22', guests: [{ name: 'Pat Long' }] });
+  DB.folios.push({ id: 'f5', registration_id: 'r5', guest_name: 'Billy S', status: 'open' }, { id: 'f6', registration_id: 'r6', guest_name: 'Gil Ortiz', status: 'open' }, { id: 'f7', registration_id: 'r7', guest_name: 'Pat Long', status: 'open' });
+  DB.transport.push(row('b1', 'Billy', 'Stalcup'), row('g1', 'Gilbert', 'Ortiz-Ruiz', { email: 'gil@mail.com', time: '15:00' }), row('p1', 'Patricia', 'Smith', { time: '18:00', data: { roomOverride: '22' } }));
+  const m = await runAuto(D, 'departure');
+  check('M. Unique first name, email and typed room all find the room', dep().length === 3 && ['Billy S', 'Gil Ortiz', 'Pat Long'].every(n => dep().some(x => x.startsWith(n + ':'))) && !m.errors.length, { dep: dep(), errors: m.errors });
   console.log(fails ? `\n${fails} FAILED` : '\nAll passed');
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('ERROR', e); process.exit(1); });
