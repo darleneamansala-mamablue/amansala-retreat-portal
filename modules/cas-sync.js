@@ -23,7 +23,10 @@
 // stays flagged dirty (so the next sync retries it automatically) and is
 // reported back to the caller to show the user, not just logged to console.
 
-function casSnapshotRow(toSqlRow,row){return JSON.stringify(toSqlRow(row));}
+// The row as SQL columns, without updated_at: that column is the CAS version stamp, never data, so code that still bumps
+// .updatedAt by hand (the old convention) doesn't by itself make a row look edited.
+function _casSql(toSqlRow,row){const sql={...toSqlRow(row)};delete sql.updated_at;return sql;}
+function casSnapshotRow(toSqlRow,row){return JSON.stringify(_casSql(toSqlRow,row));}
 
 // Call once, right after loadFromSupabase() populates the live array, using
 // the REAL `updated_at` each row came back with from SQL -- that's the only
@@ -52,15 +55,17 @@ async function casUpdateOne({db,table,row,idOf,toSqlRow,fromSqlRow,base,maxAttem
   // a merge mutates it in place, or a second conflict on the same call would
   // lose track of what this tab actually meant to change (diffing the
   // already-merged state against itself would show no changes left).
-  const myIntendedSql=toSqlRow(row);
+  const myIntendedSql=_casSql(toSqlRow,row);
   if(!known){
     // No baseline for this id at all -- caller should normally route a
     // genuinely new row through insert instead, but if it ends up here
     // (e.g. a row this tab somehow never synced before), just write it
     // unconditionally once and establish a baseline for next time.
     const{data,error}=await db.from(table).update({...myIntendedSql,updated_at:new Date().toISOString()}).eq('id',id).select('*');
-    if(error||!data||!data.length)return{ok:false,id,reason:error?error.message:'no-row'};
+    if(error)return{ok:false,id,reason:error.message};
+    if(!data||!data.length)return{ok:false,id,reason:'gone'};
     base.set(id,{sqlJson:JSON.stringify(myIntendedSql),updatedAt:data[0].updated_at});
+    row.updatedAt=data[0].updated_at;
     return{ok:true,id};
   }
   const oldSql=JSON.parse(known.sqlJson);
@@ -74,6 +79,7 @@ async function casUpdateOne({db,table,row,idOf,toSqlRow,fromSqlRow,base,maxAttem
     if(data&&data.length){
       base.set(id,{sqlJson:JSON.stringify(payload),updatedAt:data[0].updated_at});
       Object.assign(row,fromSqlRow(payload));
+      row.updatedAt=data[0].updated_at;
       return{ok:true,id};
     }
     // Lost the race -- someone else wrote first. Re-read and merge column by
@@ -82,7 +88,10 @@ async function casUpdateOne({db,table,row,idOf,toSqlRow,fromSqlRow,base,maxAttem
     // other field keeps whatever the fresh server row has, so a field the
     // OTHER tab changed and this tab never touched survives untouched.
     const{data:freshRow,error:fe}=await db.from(table).select('*').eq('id',id).maybeSingle();
-    if(fe||!freshRow){await _casBackoff(400);continue;}
+    if(fe){await _casBackoff(400);continue;}
+    // Deleted on another tab/device: nothing to merge into. Reported back as 'gone' so the caller drops it from memory --
+    // retrying would only fail again on every save (and a recent id would otherwise get re-created by the insert path).
+    if(!freshRow)return{ok:false,id,reason:'gone'};
     const merged={};
     for(const col in myIntendedSql){
       merged[col]=(JSON.stringify(myIntendedSql[col])!==JSON.stringify(oldSql[col]))?myIntendedSql[col]:freshRow[col];
@@ -121,26 +130,51 @@ async function casSyncTable({db,table,rows,idOf,toSqlRow,fromSqlRow,base,deleted
     const id=idOf(row);
     return id!=null&&!(deletedIds&&deletedIds.has(id));
   });
-  const toInsert=[],toUpdate=[],skippedZombies=[];
+  const toInsert=[],toUpdate=[],skippedZombies=[],unknown=[];
   live.forEach(row=>{
     const id=idOf(row);
     const known=base.get(id);
-    if(!known){
-      if(!isRecentLocalId||isRecentLocalId(id))toInsert.push(row);
-      else skippedZombies.push(id);
-      return;
-    }
+    if(!known){unknown.push(row);return;}
     if(casSnapshotRow(toSqlRow,row)!==known.sqlJson)toUpdate.push(row);
   });
 
-  const failed=[];
+  // No baseline for these rows: this tab never loaded them from SQL (created here since load, or brought in after load by a
+  // screen that re-fetches rows on its own -- Block Rooms reloading a retreat's registrations, Split stay inserting straight to
+  // SQL). Ask SQL which of them already exist. An existing one adopts the server row as its baseline and is saved like any
+  // other row if this tab's copy differs; only a row SQL doesn't have is inserted (a genuinely new one) or skipped (an old id
+  // that is gone -- a stale tab's zombie, never resurrected).
+  if(unknown.length){
+    const ids=unknown.map(idOf),onServer=new Map();
+    for(let i=0;i<ids.length;i+=100){
+      const{data,error}=await db.from(table).select('*').in('id',ids.slice(i,i+100));
+      if(error){unknown.forEach(row=>skippedZombies.push(idOf(row)));unknown.length=0;break;}
+      (data||[]).forEach(r=>onServer.set(r.id,r));
+    }
+    unknown.forEach(row=>{
+      const id=idOf(row),srv=onServer.get(id);
+      if(srv){
+        base.set(id,{sqlJson:casSnapshotRow(toSqlRow,fromSqlRow(srv)),updatedAt:srv.updated_at});
+        if(casSnapshotRow(toSqlRow,row)!==base.get(id).sqlJson)toUpdate.push(row);
+      }else if(!isRecentLocalId||isRecentLocalId(id))toInsert.push(row);
+      else skippedZombies.push(id);
+    });
+  }
+
+  const failed=[],gone=[];
   let insertedCount=0,updatedCount=0;
 
   if(toInsert.length){
-    const{error}=await db.from(table).insert(toInsert.map(toSqlRow));
+    // .select() so the baseline gets SQL's real updated_at -- a client-side "now" never matches it, and every row's first
+    // edit after creation would then lose a CAS race against itself
+    const{data,error}=await db.from(table).insert(toInsert.map(row=>_casSql(toSqlRow,row))).select('*');
     if(!error){
       insertedCount=toInsert.length;
-      toInsert.forEach(row=>base.set(idOf(row),{sqlJson:casSnapshotRow(toSqlRow,row),updatedAt:new Date().toISOString()}));
+      const byId=new Map((data||[]).map(r=>[r.id,r]));
+      toInsert.forEach(row=>{
+        const srv=byId.get(idOf(row));
+        base.set(idOf(row),{sqlJson:casSnapshotRow(toSqlRow,row),updatedAt:srv?srv.updated_at:null});
+        if(srv)row.updatedAt=srv.updated_at;
+      });
     }else{
       toInsert.forEach(row=>failed.push({id:idOf(row),row,reason:error.message}));
     }
@@ -152,11 +186,13 @@ async function casSyncTable({db,table,rows,idOf,toSqlRow,fromSqlRow,base,deleted
     const results=await Promise.all(chunk.map(row=>casUpdateOne({db,table,row,idOf,toSqlRow,fromSqlRow,base})));
     results.forEach((res,idx)=>{
       if(res.ok)updatedCount++;
+      else if(res.reason==='gone'){gone.push(res.id);base.delete(res.id);}
       else failed.push({id:res.id,row:chunk[idx],reason:res.reason});
     });
   }
 
-  return{inserted:insertedCount,updated:updatedCount,failed,skippedZombies};
+  // gone: deleted on another tab/device -- the caller removes them from memory so they are not offered again
+  return{inserted:insertedCount,updated:updatedCount,failed,gone,skippedZombies};
 }
 
 if(typeof module!=='undefined'&&module.exports){

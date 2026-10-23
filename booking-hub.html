@@ -4697,7 +4697,7 @@ async function syncToSupabase(){
         AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
         const[bkResult,regResult]=await Promise.all([
           casSyncTable({db,table:'bookings',rows:AppData.bookings,idOf:b=>b.id,toSqlRow:appBookingToSqlRow,fromSqlRow:sqlBookingToApp,base:_bkBase,deletedIds:deletedBookingIds,isRecentLocalId:_isRecentLocalId}),
-          casSyncTable({db,table:'registrations',rows:AppData.regs,idOf:r=>r.id,toSqlRow:appRegToSqlRow,fromSqlRow:sqlRegToApp,base:_regBase,deletedIds:deletedRegIds,isRecentLocalId:_isRecentLocalId}),
+          casSyncTable({db,table:'registrations',rows:AppData.regs.filter(r=>!deletedBookingIds.has(r.bookingId)),idOf:r=>r.id,toSqlRow:appRegToSqlRow,fromSqlRow:sqlRegToApp,base:_regBase,deletedIds:deletedRegIds,isRecentLocalId:_isRecentLocalId}),
           deletedBookingIds.size?db.from('bookings').delete().in('id',[...deletedBookingIds]):null,
           deletedRegIds.size?db.from('registrations').delete().in('id',[...deletedRegIds]):null,
           payRows.length?db.from('payments').upsert(payRows):null,
@@ -4705,6 +4705,15 @@ async function syncToSupabase(){
         ]);
         deletedBookingIds.forEach(id=>_bkBase.delete(id));
         deletedRegIds.forEach(id=>_regBase.delete(id));
+        // Deleted on another tab/device since this tab loaded: drop them here too, so they are never offered again (and a
+        // recent id never gets re-created by the next save)
+        const goneBk=new Set(bkResult?.gone||[]),goneReg=new Set(regResult?.gone||[]);
+        if(goneBk.size||goneReg.size){
+          AppData.bookings=AppData.bookings.filter(b=>!goneBk.has(b.id));
+          AppData.regs=AppData.regs.filter(r=>!goneReg.has(r.id)&&!goneBk.has(r.bookingId));
+          console.warn('[cas-sync] removed from this tab, deleted elsewhere:',[...goneBk,...goneReg]);
+          if(typeof showToast==='function')showToast('ℹ '+(goneBk.size+goneReg.size)+' registro(s) ya habían sido borrados en otra pestaña — se quitaron de esta también.');
+        }
         const allFailed=[...(bkResult?.failed||[]),...(regResult?.failed||[])];
         if(allFailed.length){
           console.warn('[cas-sync] could not save',allFailed.length,'record(s) after every retry — staying dirty, will retry next save:',allFailed.map(f=>f.id));
@@ -6542,7 +6551,7 @@ function switchTab(id,btn){
 }
 
 </script>
-<script src="modules/cas-sync.js?v=20261020a"></script>
+<script src="modules/cas-sync.js?v=20261022a"></script>
 <script src="modules/venues.js?v=20261020a"></script>
 <script src="modules/room-optimizer.js?v=20261020a"></script>
 <script src="modules/sales-pipeline.js"></script>

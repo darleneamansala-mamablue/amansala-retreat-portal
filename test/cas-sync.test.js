@@ -35,16 +35,23 @@ function makeFakeDb(initialRows, { onUpdateAttempt } = {}) {
         };
         return builder;
       },
-      async insert(rows) {
-        (Array.isArray(rows) ? rows : [rows]).forEach(r => {
-          serverRows.set(r.id, { ...r, updated_at: r.updated_at || new Date().toISOString() });
-        });
-        return { error: null };
+      insert(rows) {
+        const list = (Array.isArray(rows) ? rows : [rows]);
+        const dup = list.find(r => serverRows.has(r.id));
+        const done = () => {
+          if (dup) return { data: null, error: { message: 'duplicate key value violates unique constraint' } };
+          const out = list.map(r => { const row = { ...r, updated_at: r.updated_at || new Date(Date.now() + 7).toISOString() }; serverRows.set(r.id, row); return { ...row }; });
+          return { data: out, error: null };
+        };
+        let ran = null;
+        const run = () => (ran = ran || done());
+        return { select: async () => run(), then: (res, rej) => Promise.resolve(run()).then(res, rej) };
       },
       select() {
         const filters = {};
         const builder = {
           eq(col, val) { filters[col] = val; return builder; },
+          async in(col, vals) { return { data: vals.filter(v => serverRows.has(v)).map(v => ({ ...serverRows.get(v) })), error: null }; },
           async maybeSingle() {
             const row = serverRows.get(filters.id);
             return { data: row ? { ...row } : null, error: null };
@@ -54,7 +61,7 @@ function makeFakeDb(initialRows, { onUpdateAttempt } = {}) {
       },
     };
   }
-  return { from, _server: serverRows };
+  return { from, _server: serverRows, attempts: () => attempt };
 }
 
 const idOf = r => r.id;
@@ -185,12 +192,90 @@ async function test_sameFieldLastWriteWins() {
   assert.strictEqual(db._server.get('bk5').notes, 'my note');
 }
 
+// 6. A row brought in AFTER load (Block Rooms re-fetching a retreat's registrations) has no baseline: it must adopt the
+//    server row and save an edit normally -- not be re-inserted (duplicate key) nor skipped as a zombie (edit never saved).
+async function test_rowFetchedAfterLoadStillSaves() {
+  const old = { id: 'id_1700000000000_abcd', leader_name: 'Ana', notes: 'server', updated_at: '2026-01-01T00:00:00.000Z' };
+  const recent = { id: 'id_' + Date.now() + '_wxyz', leader_name: 'Bea', notes: 'server', updated_at: '2026-01-01T00:00:00.000Z' };
+  const db = makeFakeDb([old, recent]);
+  const base = new Map();   // this tab loaded before both rows existed
+  const rows = [fromSqlRow(old), fromSqlRow(recent)];
+  rows[0].notes = 'edited old'; rows[1].notes = 'edited recent';
+  const res = await casSyncTable({ db, table: 'registrations', rows, idOf, toSqlRow, fromSqlRow, base, isRecentLocalId: id => !/^id_1700/.test(id) });
+  assert.deepStrictEqual(res.failed, [], 'nothing may fail');
+  assert.deepStrictEqual(res.skippedZombies, [], 'an existing row is never treated as a zombie');
+  assert.strictEqual(res.inserted, 0, 'an existing row is never re-inserted');
+  assert.strictEqual(db._server.get(old.id).notes, 'edited old');
+  assert.strictEqual(db._server.get(recent.id).notes, 'edited recent');
+}
+
+// 7. Split stay: the new row is inserted straight to SQL and pushed into memory; the next sync must not try to insert it again
+async function test_rowInsertedDirectlyIsNotReinserted() {
+  const db = makeFakeDb([]);
+  const created = { id: 'id_' + Date.now() + '_spl1', leader_name: 'Cal', notes: 'split', updated_at: '2026-10-22T10:00:00.000Z' };
+  db._server.set(created.id, { ...created });
+  const rows = [fromSqlRow(created)];
+  const res = await casSyncTable({ db, table: 'registrations', rows, idOf, toSqlRow, fromSqlRow, base: new Map(), isRecentLocalId: () => true });
+  assert.deepStrictEqual(res.failed, [], 'no duplicate-key failure');
+  assert.strictEqual(res.inserted, 0);
+  assert.strictEqual(res.updated, 0, 'unchanged row is not even written');
+}
+
+// 8. Deleted on another tab: reported as gone right away (one attempt), not as a failure retried on every save
+async function test_deletedElsewhereIsGone() {
+  const srv = { id: 'bk9', leader_name: 'Dee', notes: 'x', updated_at: '2026-01-01T00:00:00.000Z' };
+  const db = makeFakeDb([srv]);
+  const local = fromSqlRow(srv);
+  const base = casBuildBase([local], idOf, toSqlRow, () => srv.updated_at);
+  db._server.delete('bk9');
+  local.notes = 'edit after delete';
+  const t0 = Date.now();
+  const res = await casSyncTable({ db, table: 'bookings', rows: [local], idOf, toSqlRow, fromSqlRow, base });
+  assert.deepStrictEqual(res.gone, ['bk9']);
+  assert.deepStrictEqual(res.failed, []);
+  assert.ok(!base.has('bk9'), 'baseline dropped');
+  assert.ok(Date.now() - t0 < 300, 'no retry loop');
+}
+
+// 9. A new row's baseline is SQL's real updated_at, so its first edit after creation saves on the first attempt
+async function test_insertThenEditFirstAttempt() {
+  const db = makeFakeDb([]);
+  const row = { id: 'id_' + Date.now() + '_new1', leaderName: 'Eve', notes: 'v1' };
+  const base = new Map();
+  await casSyncTable({ db, table: 'bookings', rows: [row], idOf, toSqlRow, fromSqlRow, base, isRecentLocalId: () => true });
+  const before = db.attempts();
+  row.notes = 'v2';
+  const res = await casSyncTable({ db, table: 'bookings', rows: [row], idOf, toSqlRow, fromSqlRow, base, isRecentLocalId: () => true });
+  assert.strictEqual(res.updated, 1);
+  assert.strictEqual(db.attempts() - before, 1, 'one update attempt, no self-conflict');
+  assert.strictEqual(db._server.get(row.id).notes, 'v2');
+}
+
+// 10. Only .updatedAt bumped by hand (the old convention) and nothing else: no write
+async function test_updatedAtAloneIsNotAnEdit() {
+  const toSqlTs = r => ({ id: r.id, leader_name: r.leaderName, notes: r.notes, updated_at: r.updatedAt || null });
+  const fromSqlTs = r => ({ id: r.id, leaderName: r.leader_name, notes: r.notes, updatedAt: r.updated_at });
+  const srv = { id: 'bk7', leader_name: 'Fay', notes: 'n', updated_at: '2026-01-01T00:00:00.000Z' };
+  const db = makeFakeDb([srv]);
+  const local = fromSqlTs(srv);
+  const base = casBuildBase([local], idOf, toSqlTs, () => srv.updated_at);
+  local.updatedAt = new Date().toISOString();
+  const res = await casSyncTable({ db, table: 'bookings', rows: [local], idOf, toSqlRow: toSqlTs, fromSqlRow: fromSqlTs, base });
+  assert.strictEqual(res.updated, 0);
+  assert.strictEqual(db.attempts(), 0);
+}
+
 (async () => {
   await run('happy path, no conflict', test_happyPath);
   await run('conflict on attempt 1, resolves on retry, both edits survive', test_conflictThenResolve);
   await run('sustained conflict exhausts retries without losing the pending edit', test_exhaustedConflictNeverLosesTheEdit);
   await run('two tabs, different fields, via casSyncTable, both survive', test_differentFieldsBothSurvive_viaSyncTable);
   await run('two tabs, same field, last write wins (documented)', test_sameFieldLastWriteWins);
+  await run('row fetched after load (Block Rooms) still saves, never re-inserted or skipped', test_rowFetchedAfterLoadStillSaves);
+  await run('row inserted straight to SQL (Split stay) is not inserted again', test_rowInsertedDirectlyIsNotReinserted);
+  await run('row deleted on another tab is reported gone at once, not retried', test_deletedElsewhereIsGone);
+  await run('new row: first edit after creation saves on the first attempt', test_insertThenEditFirstAttempt);
+  await run('only .updatedAt bumped by hand is not an edit', test_updatedAtAloneIsNotAnEdit);
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();
