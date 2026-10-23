@@ -128,6 +128,18 @@ function therapistCompAmount(rate,service){
   const isMXN=rate.compensationCurrency==='MXN';
   return Math.round(isMXN?amountLocal/SPA_MXN_PER_USD:amountLocal);
 }
+// Therapists are paid in pesos: a rate entered in MXN is paid as written, only a USD rate is converted (same as spaTherapistCompMXN in modules/spa.js).
+function therapistCompMXN(rate,service){
+  if(!rate||!service)return null;
+  let amountLocal;
+  if(rate.compensationType==='FIXED')amountLocal=rate.compensationValue||0;
+  else if(rate.compensationType==='PERCENTAGE')amountLocal=service.price!=null?service.price*(rate.compensationValue||0)/100:null;
+  else if(rate.compensationType==='HOURLY')amountLocal=service.duration?(rate.compensationValue||0)*service.duration/60:null;
+  else return null;
+  if(amountLocal==null)return null;
+  return Math.round(rate.compensationCurrency==='MXN'?amountLocal:amountLocal*SPA_MXN_PER_USD);
+}
+const pesos=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0})+' MXN';
 
 async function loadAndRenderPayroll(){
   const el=document.getElementById('content');
@@ -148,7 +160,7 @@ async function loadAndRenderPayroll(){
     own.forEach(a=>{
       const svc=services.find(s=>s.id===a.serviceId);
       const rate=(t.services||[]).find(r=>r.serviceId===a.serviceId);
-      const pay=therapistCompAmount(rate,svc)||0;
+      const pay=therapistCompMXN(rate,svc)||0;
       total+=pay;
       const name=svc?.name||a.serviceId;
       bySvc[name]=(bySvc[name]||0)+pay;
@@ -157,7 +169,7 @@ async function loadAndRenderPayroll(){
   }).filter(r=>r.count>0).sort((a,b)=>b.total-a.total);
   const grandTotal=rows.reduce((s,r)=>s+r.total,0);
 
-  let html=`<div class="page-title">Spa Payroll</div><div class="page-sub">Real earnings from completed appointments, converted to USD at ${SPA_MXN_PER_USD}:1</div>`;
+  let html=`<div class="page-title">Spa Payroll</div><div class="page-sub">Real earnings from completed appointments, in pesos (a rate entered in dollars is converted at ${SPA_MXN_PER_USD} pesos to $1)</div>`;
   if(!rows.length){
     html+='<div class="empty">No completed appointments yet — payroll fills in as services are marked Completed.</div>';
   }else{
@@ -166,14 +178,14 @@ async function loadAndRenderPayroll(){
       html+=`<div class="card">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <div class="name">${esc(r.t.firstName)} ${esc(r.t.lastName||'')}</div>
-          <div class="total">$${r.total}</div>
+          <div class="total">${pesos(r.total)}</div>
         </div>
         <div class="count">${r.count} completed service${r.count!==1?'s':''}</div>
-        ${Object.entries(r.bySvc).map(([name,amt])=>`<div class="svc-row"><span>${esc(name)}</span><span>$${amt}</span></div>`).join('')}
+        ${Object.entries(r.bySvc).map(([name,amt])=>`<div class="svc-row"><span>${esc(name)}</span><span>${pesos(amt)}</span></div>`).join('')}
       </div>`;
     });
     html+='</div>';
-    html+=`<div class="grand"><span class="lbl">Total Paid Out</span><span class="amt">$${grandTotal}</span></div>`;
+    html+=`<div class="grand"><span class="lbl">Total Paid Out</span><span class="amt">${pesos(grandTotal)}</span></div>`;
   }
   el.innerHTML=html;
 }
