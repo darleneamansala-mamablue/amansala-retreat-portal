@@ -77,6 +77,19 @@ async function dcScan() {
     groups.push({ key: 't:' + fid + '|' + dir, count: v.length, extra, lines, gap: times.length > 1 ? (Math.max(...times) - Math.min(...times)) / 1000 : null, likely: false, src: 'folio', total,
       desc: `${dir} transport charged ${qty} time${qty !== 1 ? 's' : ''} for ${guests} guest${guests !== 1 ? 's' : ''}`, category: 'Transport', regId: f.registration_id, guest: f.guest_name, room: reg ? reg.room : '?' });
   });
+  // The same restaurant ticket number ("consumo restaurante folio:172246") charged more than once, on one room or on two. Equal amounts = the same bill posted twice
+  // (Likely mistake); different amounts usually mean a mistyped ticket number (Check).
+  const byTicket = {};
+  items.forEach(i => { const m = /^restaurant/i.test(i.category || '') && String(i.description || '').match(/folio\D{0,3}(\d{5,6})/i); if (m) (byTicket[m[1]] = byTicket[m[1]] || []).push(i); });
+  Object.entries(byTicket).forEach(([ticket, v]) => {
+    if (v.length < 2) return;
+    const amt = i => Math.round((Number(i.qty) || 1) * (Number(i.unit_price) || 0) * 100) / 100, first = v.slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))[0];
+    const f = folioById[first.folio_id] || {}, reg = regById[f.registration_id], same = v.every(i => amt(i) === amt(first));
+    const lines = v.map(i => { const fo = folioById[i.folio_id] || {}, r = regById[fo.registration_id]; return { at: i.created_at, staff: '', note: `Room ${r ? r.room : '?'} ${fo.guest_name || ''} ${dcMoney(amt(i))}` }; }).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    const times = lines.map(l => Date.parse(l.at)).filter(t => !isNaN(t));
+    groups.push({ key: 'k:' + ticket, count: v.length, extra: Math.min(...v.map(amt)) * (v.length - 1), lines, gap: times.length > 1 ? (Math.max(...times) - Math.min(...times)) / 1000 : null, likely: same, src: 'folio', total: amt(first),
+      desc: `Restaurant ticket ${ticket} charged ${v.length} times${same ? '' : ' (amounts differ — check the ticket number)'}`, category: 'Restaurant', regId: f.registration_id, guest: f.guest_name, room: reg ? reg.room : '?' });
+  });
   groups.sort((a, b) => (b.likely - a.likely) || b.extra - a.extra);
   return groups;
 }
@@ -144,7 +157,7 @@ function dcRender() {
       return `<div style="background:#fff;border:1.5px solid ${g.likely && !hidden ? '#fecaca' : '#e8dfd4'};border-radius:12px;padding:12px 14px;margin-bottom:10px;${hidden ? 'opacity:.55' : ''}">
         <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
           <div><b style="font-size:15px">Room ${dcEsc(g.room)}</b> · ${dcEsc(g.guest)} <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px;${g.likely ? 'background:#fee2e2;color:#b91c1c' : 'background:#fef3c7;color:#92400e'}">${g.likely ? 'Likely mistake' : 'Check'}</span></div>
-          <div style="font-weight:800;color:#dc2626">${g.key.startsWith('t:') ? `charged ${dcMoney(g.total)}` : `${g.count} × ${dcMoney(g.total)}`} · extra ${dcMoney(g.extra)}</div></div>
+          <div style="font-weight:800;color:#dc2626">${/^[tk]:/.test(g.key) ? `charged ${dcMoney(g.total)}` : `${g.count} × ${dcMoney(g.total)}`} · extra ${dcMoney(g.extra)}</div></div>
         <div style="font-size:13px;margin-top:4px">${dcEsc(g.desc)}${g.category ? ` <span style="color:#8a7e74">(${dcEsc(g.category)})</span>` : ''}</div>
         <div style="font-size:11.5px;color:#6b7280;margin-top:4px">${g.lines.map(l => l.note ? `${dcTime(l.at)} · ${dcEsc(l.note)}` : `${dcTime(l.at)} · ${l.staff ? dcEsc(l.staff) : 'automatic'}`).join('  |  ')}${g.gap != null ? ` — ${g.gap < 120 ? Math.round(g.gap) + ' seconds apart' : (g.gap < 7200 ? Math.round(g.gap / 60) + ' minutes apart' : Math.round(g.gap / 3600) + ' hours apart')}` : ''}</div>
         <div style="display:flex;gap:8px;margin-top:8px">
