@@ -110,6 +110,7 @@ let SBStaffAccounts=[];
 // Staff-editable rotation rules (booking-hub.html's Spa > Auto-Assign screen, modules/
 // spa-rotation-settings.js) -- these defaults are only ever used until staff saves that
 // screen once; after that, whatever they set there takes over automatically.
+let SB_BLOCKS=[];   // hours the office blocked for a therapist (Spa calendar > Block time, app_store spa_time_blocks): never offered
 let SB_ROT={femaleOrder:['Laura','Laura','Gabby','Graciela'],femaleFallback:'Rosario',malePrimary:'Julian',malePrimaryCap:4,maleSecondary:'Miguel',noPreferenceFirst:'male',mariaName:'Maria Luisa',mariaStageSize:2,mariaBreakMinutes:45,mariaDailyCap:4,generalBreakAfter:3,generalBreakMinutes:30,generalDailyCap:7};
 let SB={step:1,sessionType:null,serviceId:null,guestType:null,firstName:'',lastName:'',email:'',phone:'',roomNumber:'',
         policyAccepted:false,prefType:'none',requestedTherapistId:null,date:null,start:null,therapistId:null,roomId:null,tipAmount:0,rotationGroup:null,rotationName:null,
@@ -138,6 +139,7 @@ async function init(){
     SBBookings=(bd||[]).map(b=>({id:b.id,leaderName:b.leader_name,bookingType:b.booking_type,blockedRooms:b.blocked_rooms,charges:b.charges}));
     SBStaffAccounts=(scd?.value&&Array.isArray(scd.value))?scd.value:[];
     if(rot?.value) SB_ROT={...SB_ROT,...rot.value};
+    try{const {data:blk}=await db.from('app_store').select('value').eq('key','spa_time_blocks').maybeSingle();SB_BLOCKS=Array.isArray(blk?.value)?blk.value:[];}catch(e){}
   }catch(e){}
   const cancelId=new URLSearchParams(location.search).get('cancel');
   if(cancelId) return sbRenderCancelScreen(cancelId);
@@ -528,6 +530,7 @@ function sbSlotFree(therapistId,roomId,dateStr,startMin,duration,excludeApptId){
   const endMin=startMin+duration;
   let brk=0;
   if(therapistId){
+    if(SB_BLOCKS.some(b=>b.therapistId===therapistId&&b.date===dateStr&&(b.allDay||(hhmmToMin(b.start)<endMin&&hhmmToMin(b.end)>startMin))))return false;
     const ther=SpaData.therapists.find(t=>t.id===therapistId);
     if(ther&&!sbIsTherapistAvailable(ther,dateStr,startMin<720?'AM':'PM'))return false;
     if(ther){
