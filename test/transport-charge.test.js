@@ -98,6 +98,27 @@ let fails = 0; const check = (name, cond, extra) => { console.log((cond ? 'ok   
   DB.transport.find(r => r.id === 'b').data.departureTime = '12:05';
   await runAdj('b', 'departure');
   check('J2. They share the van: the same charge becomes $200', dep().length === 1 && /Tea Cher: \$200/.test(dep()[0]), dep());
+  // K. Two guests in one room, each with their own folio: each charge on its own folio, with the guest's name
+  fresh();
+  DB.folios.push({ id: 'f4', registration_id: 'r3', guest_name: 'Dee Diaz', status: 'open' });
+  DB.transport.push(row('c', 'Cal', 'Diaz'), row('d', 'Dee', 'Diaz'));
+  await runAuto(D, 'departure');
+  check('K1. Room of two, two folios: one named charge on each', dep().length === 2 && dep().some(x => /^Cal Diaz: \$100 ".*— Cal Diaz"/.test(x)) && dep().some(x => /^Dee Diaz: \$100 ".*— Dee Diaz"/.test(x)), dep());
+  // K2. Today's state: both lines identical on the first guest's folio -> adjust names them, moves nothing, adds nothing
+  fresh();
+  DB.folios.push({ id: 'f4', registration_id: 'r3', guest_name: 'Dee Diaz', status: 'open' });
+  DB.transport.push(row('c', 'Cal', 'Diaz'), row('d', 'Dee', 'Diaz'));
+  ['i1', 'i2'].forEach((id, n) => DB.folio_items.push({ id, folio_id: 'f3', description: `Departure Transport ${D} — CANCUN 12:00 (adjusted)`, qty: 1, unit_price: 100, category: 'Transport', created_at: `2026-11-0${n + 1}T00:00:00Z` }));
+  DB.transport.find(r => r.id === 'c').data.folioCharged = { departureFolioItemId: 'i1' };
+  DB.transport.find(r => r.id === 'd').data.folioCharged = { departureFolioItemId: 'i2' };
+  await runAdj('c', 'departure');
+  const k2 = DB.folio_items.filter(i => i.description.startsWith('Departure'));
+  check('K2. Two identical lines: named, still on the same folio, nothing added', k2.length === 2 && k2.every(i => i.folio_id === 'f3') && k2.some(i => i.id === 'i1' && /Cal Diaz/.test(i.description)) && k2.some(i => i.id === 'i2' && /Dee Diaz/.test(i.description)), dep());
+  // K3. One guest alone in a room: no name added to the text
+  fresh();
+  DB.transport.push(row('a', 'Ana', 'Lopez'));
+  await runAuto(D, 'departure');
+  check('K3. Guest alone: text has no name', dep().length === 1 && !/Ana Lopez"/.test(dep()[0]), dep());
   console.log(fails ? `\n${fails} FAILED` : '\nAll passed');
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('ERROR', e); process.exit(1); });

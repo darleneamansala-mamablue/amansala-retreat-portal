@@ -204,11 +204,16 @@ function dedupeGuests(rows, regs) {
 }
 
 // ---- Folio charges ----
-// The folio a registration's charges go on: the first guest's folio, else the oldest open one, else a new one.
-async function findOrCreateFolio(key, registrationId, guestName) {
+// The folio a charge goes on: that guest's own folio when they have one (two guests in a room often each have theirs), else the
+// first guest's folio, else the oldest open one, else a new one.
+async function findOrCreateFolio(key, registrationId, guestName, forGuest) {
   const regLookup = await supaFetch(key, `registrations?select=guests&id=eq.${encodeURIComponent(registrationId)}&limit=1`);
   const regRow = Array.isArray(regLookup.data) ? regLookup.data[0] : null;
   const canonical = regRow?.guests?.find(g => g.name)?.name ?? guestName ?? '';
+  if (forGuest && forGuest !== canonical) {
+    const own = await supaFetch(key, `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(forGuest)}&limit=1`);
+    if (own.ok && Array.isArray(own.data) && own.data.length) return { folioId: own.data[0].id };
+  }
   const exactRes = await supaFetch(key, `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(canonical)}&limit=1`);
   if (exactRes.ok && Array.isArray(exactRes.data) && exactRes.data.length) return { folioId: exactRes.data[0].id };
   const anyRes = await supaFetch(key, `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&status=eq.open&order=created_at.asc&limit=1`);
@@ -246,13 +251,15 @@ async function reconcileCharges(key, { registrationId, guestName, label, date, w
   const have = await existingCharges(key, registrationId, label, date, linkedIds);
   const out = { itemIds: [], updated: [], inserted: [], deleted: [], kept: [] };
   const pool = [...have];
-  // Pair each wanted charge with an existing one at the same price first, so nothing changes needlessly
-  const pairs = wanted.map(w => {
-    const i = pool.findIndex(h => Number(h.unit_price) === Number(w.unitPrice));
-    return i >= 0 ? pool.splice(i, 1)[0] : null;
-  });
+  // Pair each wanted charge with the existing one that is already that guest's (linked on their row, or on their own folio at
+  // that price), then any at the same price, so nothing changes needlessly
+  const take = (pred) => { const i = pool.findIndex(pred); return i >= 0 ? pool.splice(i, 1)[0] : null; };
+  const pairs = wanted.map(() => null);
+  wanted.forEach((w, n) => { pairs[n] = take(h => (w.linked || []).includes(h.id)); });
+  wanted.forEach((w, n) => { if (!pairs[n] && w.folioId) pairs[n] = take(h => h.folio_id === w.folioId && Number(h.unit_price) === Number(w.unitPrice)); });
+  wanted.forEach((w, n) => { if (!pairs[n]) pairs[n] = take(h => Number(h.unit_price) === Number(w.unitPrice)); });
   const insertOnly = mode === 'insertOnly';
-  let folioId = null;
+  const folioFor = new Map();
   for (let n = 0; n < wanted.length; n++) {
     const w = wanted[n];
     const h = pairs[n] || pool.shift() || null;
@@ -270,8 +277,9 @@ async function reconcileCharges(key, { registrationId, guestName, label, date, w
       continue;
     }
     if (dryRun) { out.itemIds.push('(new)'); out.inserted.push({ unitPrice: w.unitPrice }); continue; }
-    if (!folioId) { const f = await findOrCreateFolio(key, registrationId, guestName); if (f.error) return f; folioId = f.folioId; }
-    const r = await supaFetch(key, 'folio_items', 'POST', { folio_id: folioId, description: w.description, qty: 1, unit_price: w.unitPrice, tax_rate: 13, category: 'Transport' });
+    const fk = w.guestName || '';
+    if (!folioFor.has(fk)) { const f = await findOrCreateFolio(key, registrationId, guestName, w.guestName); if (f.error) return f; folioFor.set(fk, f.folioId); }
+    const r = await supaFetch(key, 'folio_items', 'POST', { folio_id: folioFor.get(fk), description: w.description, qty: 1, unit_price: w.unitPrice, tax_rate: 13, category: 'Transport' });
     if (!r.ok) return { error: `folio_item_failed: ${JSON.stringify(r.data)}` };
     const saved = Array.isArray(r.data) ? r.data[0] : r.data;
     out.itemIds.push(saved?.id); out.inserted.push({ id: saved?.id, unitPrice: w.unitPrice });
@@ -468,8 +476,16 @@ async function runCharges(key, opts) {
     const r = findReg(e);
     if (r && r !== 'ambiguous' && byReg.has(r.id) && !teacherPays(e.bookingId) && !byReg.get(r.id).list.includes(e)) byReg.get(r.id).list.push(e);
   }
+  const folioOf = new Map();
+  const regIds = [...byReg.keys()];
+  for (let i = 0; i < regIds.length; i += 100) {
+    const fr = await supaFetch(key, `folios?select=id,registration_id,guest_name&registration_id=in.(${regIds.slice(i, i + 100).map(encodeURIComponent).join(',')})`);
+    (Array.isArray(fr.data) ? fr.data : []).forEach(x => { if (!folioOf.has(`${x.registration_id}|${x.guest_name}`)) folioOf.set(`${x.registration_id}|${x.guest_name}`, x.id); });
+  }
   for (const { reg, list: rl } of byReg.values()) {
     const go = [];
+    const regGuests = (reg.guests ?? []).filter(g => g.name && !g.cancelled);
+    const guestOf = e => (regGuests.find(g => nameMatch(g.name, e.name)) || {}).name || e.name;
     let ownHand = byHand.ownByReg.get(reg.id) || 0;
     rl.filter(eligible).forEach(e => {
       // Already charged by hand (staff posted this ride themselves): never add a system charge next to it
@@ -481,10 +497,14 @@ async function runCharges(key, opts) {
       }
       const rate = autoRate(rates, e.airport, paxOf(e));
       if (!rate) { res.skipped.push({ rowId: e.rowId, name: e.name, reason: 'no_rate' }); return; }
-      go.push({ e, rate, description: `${f.label} Transport ${date} — ${e.airport?.toUpperCase()} ${e.time ?? ''}${suffix}` });
+      // Two or more guests in one room: the guest's name in the text, so their two lines never look like the same charge twice
+      // (real case 2026-10-22: staff deleted the second guest's line as a "double" in three rooms)
+      const who = regGuests.length > 1 ? ` — ${guestOf(e)}` : '';
+      go.push({ e, rate, guestName: guestOf(e), description: `${f.label} Transport ${date} — ${e.airport?.toUpperCase()} ${e.time ?? ''}${who}${suffix}` });
     });
     const out = await reconcileCharges(key, { registrationId: reg.id, guestName: (reg.guests ?? []).find(g => g.name)?.name ?? '',
-      label: f.label, date, wanted: go.map(x => ({ description: x.description, unitPrice: x.rate })), linkedIds: linkedOf(rl), mode, dryRun });
+      label: f.label, date, wanted: go.map(x => ({ description: x.description, unitPrice: x.rate, guestName: x.guestName, linked: linkedOf([x.e]), folioId: folioOf.get(`${reg.id}|${x.guestName}`) })),
+      linkedIds: linkedOf(rl), mode, dryRun });
     if (out.error) { res.errors.push({ room: reg.room, reason: out.error }); continue; }
     report(out, { room: reg.room, names: go.map(x => x.e.name).join(' & ') });
     for (const e of rl) {
