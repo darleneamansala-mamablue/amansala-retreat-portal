@@ -817,7 +817,7 @@ function spaRenderPayrollTable() {
     own.forEach(a => {
       const svc = SpaData.services.find(s => s.id === a.serviceId);
       const rate = (t.services || []).find(r => r.serviceId === a.serviceId);
-      const pay = spaTherapistCompAmount(rate, svc) || 0;
+      const pay = spaTherapistCompMXN(rate, svc) || 0;
       total += pay;
       const name = svc?.name || a.serviceId;
       bySvc[name] = (bySvc[name] || 0) + pay;
@@ -837,14 +837,14 @@ function spaRenderPayrollTable() {
       html += `<div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;padding:16px 18px">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:#2d2520">${r.t.firstName} ${r.t.lastName || ''}</div>
-          <div style="font-size:16px;font-weight:700;color:#059669">$${r.total}</div>
+          <div style="font-size:16px;font-weight:700;color:#059669">${spaPesos(r.total)}</div>
         </div>
         <div style="font-size:11.5px;color:#9ca3af;margin-bottom:8px">${r.count} completed</div>
-        ${Object.entries(r.bySvc).map(([name, amt]) => `<div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;padding:2px 0"><span>${name}</span><span>$${amt}</span></div>`).join('')}
+        ${Object.entries(r.bySvc).map(([name, amt]) => `<div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;padding:2px 0"><span>${name}</span><span>${spaPesos(amt)}</span></div>`).join('')}
       </div>`;
     });
     html += `</div>
-    <div style="margin-top:18px;text-align:right;font-size:14px;font-weight:700;color:#1a2332">Total owed: $${grandTotal}</div>`;
+    <div style="margin-top:18px;text-align:right;font-size:14px;font-weight:700;color:#1a2332">Total owed: ${spaPesos(grandTotal)}</div>`;
   }
   html += spaRenderTipsReport();
   el.innerHTML = html;
@@ -899,6 +899,19 @@ function spaTherapistCompAmount(rate, service) {
   const isMXN = rate.compensationCurrency === 'MXN';
   return Math.round(isMXN ? amountLocal / SPA_MXN_PER_USD : amountLocal);
 }
+// Same take in pesos, for Payroll: therapists are paid in pesos, so a rate entered in MXN is paid exactly as written (600 stays 600) and
+// only a rate entered in USD is converted (x SPA_MXN_PER_USD). Payroll shows this; spaTherapistCompAmount above stays USD for the margin math.
+function spaTherapistCompMXN(rate, service) {
+  if (!rate || !service) return null;
+  let amountLocal;
+  if (rate.compensationType === 'FIXED') amountLocal = rate.compensationValue || 0;
+  else if (rate.compensationType === 'PERCENTAGE') amountLocal = service.price != null ? service.price * (rate.compensationValue || 0) / 100 : null;
+  else if (rate.compensationType === 'HOURLY') amountLocal = service.duration ? (rate.compensationValue || 0) * service.duration / 60 : null;
+  else return null;
+  if (amountLocal == null) return null;
+  return Math.round(rate.compensationCurrency === 'MXN' ? amountLocal : amountLocal * SPA_MXN_PER_USD);
+}
+const spaPesos = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' MXN';
 
 // ── SERVICES ─────────────────────────────────────────────────────────────
 function spaRenderServices() {
