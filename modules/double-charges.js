@@ -59,6 +59,24 @@ async function dcScan() {
     const times = g.lines.map(l => Date.parse(l.at)).filter(t => !isNaN(t)), gap = times.length > 1 ? (Math.max(...times) - Math.min(...times)) / 1000 : null;
     groups.push(Object.assign({ key, count: g.lines.length, extra: Math.round(g.base.total * (g.lines.length - 1) * 100) / 100, lines: g.lines.sort((a, b) => String(a.at).localeCompare(String(b.at))), gap, likely: gap != null && gap <= 120 }, g.base));
   });
+  // Transport charged more times than the room has guests (Arrival / Departure, per folio). The same-text check above misses these because the lines
+  // read differently ("Departure Cancun airport 6 or + Sharing" 2 x $45 plus two "Departure Transport 2026-10-23 — CANCUN 14:25 (adjusted)" lines, or two
+  // adjusted lines at different times and prices). Real case 2026-10-22: a regroup at 7:10 PM posted a second departure charge on about ten folios.
+  const tByKey = {};
+  items.forEach(i => {
+    const d = String(i.description || '');
+    ['Departure', 'Arrival'].forEach(dir => { if (/^transport/i.test(i.category || '') && d.startsWith(dir)) (tByKey[i.folio_id + '|' + dir] = tByKey[i.folio_id + '|' + dir] || []).push(i); });
+  });
+  Object.entries(tByKey).forEach(([k, v]) => {
+    const [fid, dir] = k.split('|'), f = folioById[fid] || {}, reg = regById[f.registration_id], guests = Math.max(1, ((reg && reg.guests) || []).filter(g => g.name).length);
+    const qty = v.reduce((s, i) => s + (Number(i.qty) || 1), 0); if (qty <= guests) return;
+    const amounts = v.flatMap(i => Array.from({ length: Math.round(Number(i.qty) || 1) }, () => Number(i.unit_price) || 0)).sort((a, b) => a - b), excess = qty - guests;
+    const extra = Math.round(amounts.slice(0, excess).reduce((s, x) => s + x, 0) * 100) / 100, total = Math.round(v.reduce((s, i) => s + (Number(i.qty) || 1) * (Number(i.unit_price) || 0), 0) * 100) / 100;
+    const lines = v.map(i => ({ at: i.created_at, staff: '', note: `${i.description} (${Number(i.qty) || 1} × ${dcMoney(Number(i.unit_price) || 0)})` })).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    const times = lines.map(l => Date.parse(l.at)).filter(t => !isNaN(t));
+    groups.push({ key: 't:' + fid + '|' + dir, count: v.length, extra, lines, gap: times.length > 1 ? (Math.max(...times) - Math.min(...times)) / 1000 : null, likely: false, src: 'folio', total,
+      desc: `${dir} transport charged ${qty} time${qty !== 1 ? 's' : ''} for ${guests} guest${guests !== 1 ? 's' : ''}`, category: 'Transport', regId: f.registration_id, guest: f.guest_name, room: reg ? reg.room : '?' });
+  });
   groups.sort((a, b) => (b.likely - a.likely) || b.extra - a.extra);
   return groups;
 }
@@ -126,9 +144,9 @@ function dcRender() {
       return `<div style="background:#fff;border:1.5px solid ${g.likely && !hidden ? '#fecaca' : '#e8dfd4'};border-radius:12px;padding:12px 14px;margin-bottom:10px;${hidden ? 'opacity:.55' : ''}">
         <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
           <div><b style="font-size:15px">Room ${dcEsc(g.room)}</b> · ${dcEsc(g.guest)} <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px;${g.likely ? 'background:#fee2e2;color:#b91c1c' : 'background:#fef3c7;color:#92400e'}">${g.likely ? 'Likely mistake' : 'Check'}</span></div>
-          <div style="font-weight:800;color:#dc2626">${g.count} × ${dcMoney(g.total)} · extra ${dcMoney(g.extra)}</div></div>
+          <div style="font-weight:800;color:#dc2626">${g.key.startsWith('t:') ? `charged ${dcMoney(g.total)}` : `${g.count} × ${dcMoney(g.total)}`} · extra ${dcMoney(g.extra)}</div></div>
         <div style="font-size:13px;margin-top:4px">${dcEsc(g.desc)}${g.category ? ` <span style="color:#8a7e74">(${dcEsc(g.category)})</span>` : ''}</div>
-        <div style="font-size:11.5px;color:#6b7280;margin-top:4px">${g.lines.map(l => `${dcTime(l.at)} · ${l.staff ? dcEsc(l.staff) : 'automatic'}`).join('  |  ')}${g.gap != null ? ` — ${g.gap < 120 ? Math.round(g.gap) + ' seconds apart' : (g.gap < 7200 ? Math.round(g.gap / 60) + ' minutes apart' : Math.round(g.gap / 3600) + ' hours apart')}` : ''}</div>
+        <div style="font-size:11.5px;color:#6b7280;margin-top:4px">${g.lines.map(l => l.note ? `${dcTime(l.at)} · ${dcEsc(l.note)}` : `${dcTime(l.at)} · ${l.staff ? dcEsc(l.staff) : 'automatic'}`).join('  |  ')}${g.gap != null ? ` — ${g.gap < 120 ? Math.round(g.gap) + ' seconds apart' : (g.gap < 7200 ? Math.round(g.gap / 60) + ' minutes apart' : Math.round(g.gap / 3600) + ' hours apart')}` : ''}</div>
         <div style="display:flex;gap:8px;margin-top:8px">
           ${g.regId ? `<button onclick="openBookingDetailForReg('${dcEsc(g.regId)}','${dcEsc(g.guest).replace(/'/g, "\\'")}')" style="${btn};background:var(--teal,#2d6a6a);color:#fff;border-color:var(--teal,#2d6a6a)">Open booking</button>` : ''}
           <button onclick="dcDismiss(${i},${hidden ? 'false' : 'true'})" style="${btn}">${hidden ? 'Show again' : "It's correct — hide"}</button></div></div>`;
