@@ -68,14 +68,24 @@ async function dcLoadDismissed() {
 }
 async function dcSetDismissed(key, on) {
   await dcLoadDismissed(); // re-read first so two people's clicks don't overwrite each other
-  if (on) dcState.dismissed[key] = { by: (getCurrentSession() || {}).name || 'Staff', at: new Date().toISOString() }; else delete dcState.dismissed[key];
+  if (on) dcState.dismissed[key] = { by: (getCurrentSession() || {}).name || 'Staff', at: new Date().toISOString(), n: ((dcState.groups.find(g => g.key === key) || {}).count) || null }; else delete dcState.dismissed[key];
   try { const { error } = await db.from('app_store').upsert({ key: DC_KEY, value: dcState.dismissed, updated_at: new Date().toISOString() }); if (error) throw error; }
   catch (e) { showToast('Could not save — try again.'); return; }
   dcBadge(); dcRender();
 }
 function dcDismiss(i, on) { const g = dcVisibleAll()[i]; if (g) dcSetDismissed(g.key, on); }
-const dcVisibleAll = () => dcState.groups.filter(g => dcState.showDismissed || !dcState.dismissed[g.key]);
-const dcOpenCount = () => dcState.groups.filter(g => !dcState.dismissed[g.key]).length;
+// "It's correct" only covers the lines that existed when it was pressed. A dismissal remembers how many lines the group had (n); if another
+// identical line is posted later the group comes back. Older dismissals (no n) hide only groups whose lines were all posted before that click
+// (future-dated lines such as spa charges are ignored). Real case 2026-10-22: dismissals made earlier in the day kept hiding brand-new double
+// Departure Transport lines because the dismissal key is the same text on the same folio.
+function dcIsDismissed(g) {
+  const d = dcState.dismissed[g.key]; if (!d) return false;
+  if (d.n != null) return g.count <= d.n;
+  const now = Date.now(), t = g.lines.map(l => Date.parse(l.at)).filter(x => !isNaN(x) && x <= now);
+  return !t.length || Math.max(...t) <= Date.parse(d.at || 0);
+}
+const dcVisibleAll = () => dcState.groups.filter(g => dcState.showDismissed || !dcIsDismissed(g));
+const dcOpenCount = () => dcState.groups.filter(g => !dcIsDismissed(g)).length;
 
 function dcBadge() {
   const b = document.getElementById('dcBadge'); if (!b) return;
@@ -89,16 +99,16 @@ async function dcRefresh(quiet) {
   if (!quiet) return;
   // Alert once per new doubled charge, so the same one doesn't pop up every half hour
   let seen = []; try { seen = JSON.parse(localStorage.getItem(DC_SEEN) || '[]'); } catch (e) {}
-  const fresh = dcState.groups.filter(g => !dcState.dismissed[g.key] && !seen.includes(g.key));
+  const fresh = dcState.groups.filter(g => !dcIsDismissed(g) && !seen.includes(g.key + '#' + g.count));
   if (fresh.length) {
-    try { localStorage.setItem(DC_SEEN, JSON.stringify([...new Set([...seen, ...fresh.map(g => g.key)])].slice(-500))); } catch (e) {}
+    try { localStorage.setItem(DC_SEEN, JSON.stringify([...new Set([...seen, ...fresh.map(g => g.key + '#' + g.count)])].slice(-500))); } catch (e) {}
     showToast(`⚠ ${fresh.length} possible double charge${fresh.length !== 1 ? 's' : ''} on rooms (${fresh.slice(0, 3).map(g => 'Room ' + g.room).join(', ')}${fresh.length > 3 ? '…' : ''}) — see Double Charges.`);
   }
 }
 
 function dcRender() {
   const el = document.getElementById('dcContent'); if (!el) return;
-  const rows = dcVisibleAll(), open = rows.filter(g => !dcState.dismissed[g.key]), extra = open.reduce((s, g) => s + g.extra, 0);
+  const rows = dcVisibleAll(), open = rows.filter(g => !dcIsDismissed(g)), extra = open.reduce((s, g) => s + g.extra, 0);
   const btn = 'padding:6px 12px;border:1.5px solid #c8bfb5;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px';
   el.innerHTML = `<div style="max-width:1150px;margin:0 auto;font-family:'Jost',sans-serif;color:#2d2520;text-align:left">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -112,7 +122,7 @@ function dcRender() {
     ${dcState.error ? `<div style="margin-top:12px;padding:12px;border-radius:10px;background:#fef2f2;color:#b91c1c;font-size:12.5px">Could not read the charges: ${dcEsc(dcState.error)}</div>` : ''}
     <div style="margin-top:14px;font-size:13px;font-weight:700">${open.length ? `${open.length} possible double charge${open.length !== 1 ? 's' : ''} · <span style="color:#dc2626">${dcMoney(extra)} charged extra</span>` : (dcState.loadedAt ? '<span style="color:#059669">No double charges found.</span>' : 'Checking…')}</div>
     <div style="margin-top:10px">${rows.map((g, i) => {
-      const hidden = !!dcState.dismissed[g.key];
+      const hidden = dcIsDismissed(g);
       return `<div style="background:#fff;border:1.5px solid ${g.likely && !hidden ? '#fecaca' : '#e8dfd4'};border-radius:12px;padding:12px 14px;margin-bottom:10px;${hidden ? 'opacity:.55' : ''}">
         <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
           <div><b style="font-size:15px">Room ${dcEsc(g.room)}</b> · ${dcEsc(g.guest)} <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px;${g.likely ? 'background:#fee2e2;color:#b91c1c' : 'background:#fef3c7;color:#92400e'}">${g.likely ? 'Likely mistake' : 'Check'}</span></div>
