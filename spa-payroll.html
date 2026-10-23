@@ -151,7 +151,9 @@ async function loadAndRenderPayroll(){
   const services=(sd?.value?.services)||[];
   const therapists=(sd?.value?.therapists)||[];
   const appointments=(ad?.value)||[];
-  const completed=appointments.filter(a=>a.status==='COMPLETED'||(a.status!=='CANCELLED'&&a.status!=='NO_SHOW'&&a.confirmed===true&&a.confirmedByRole==='therapist')); // Completed, or marked by the therapist
+  // A service counts once its time has passed, unless it was cancelled (a no-show or a booking still waiting for payment doesn't count either); Completed always counts (Darlene 2026-10-23)
+  const timePassed=a=>{if(!a||!a.date)return false;const st=Date.parse(a.date+'T'+(a.start||'00:00')+':00-05:00');return !isNaN(st)&&st+(a.duration||60)*60000<=Date.now();};
+  const completed=appointments.filter(a=>a.status==='COMPLETED'||(a.status!=='CANCELLED'&&a.status!=='NO_SHOW'&&a.status!=='PAYMENT_PENDING'&&(timePassed(a)||(a.confirmed===true&&a.confirmedByRole==='therapist'))));
 
   const rows=therapists.map(t=>{
     const own=completed.filter(a=>a.therapistId===t.id);
@@ -169,7 +171,7 @@ async function loadAndRenderPayroll(){
   }).filter(r=>r.count>0).sort((a,b)=>b.total-a.total);
   const grandTotal=rows.reduce((s,r)=>s+r.total,0);
 
-  let html=`<div class="page-title">Spa Payroll</div><div class="page-sub">Real earnings from completed appointments, in pesos (a rate entered in dollars is converted at ${SPA_MXN_PER_USD} pesos to $1)</div>`;
+  let html=`<div class="page-title">Spa Payroll</div><div class="page-sub">Real earnings from services whose time has passed (cancelled ones excluded), in pesos (a rate entered in dollars is converted at ${SPA_MXN_PER_USD} pesos to $1)</div>`;
   if(!rows.length){
     html+='<div class="empty">No completed appointments yet — payroll fills in as services are marked Completed.</div>';
   }else{
