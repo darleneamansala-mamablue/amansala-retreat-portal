@@ -90,6 +90,26 @@ async function dcScan() {
     groups.push({ key: 'k:' + ticket, count: v.length, extra: Math.min(...v.map(amt)) * (v.length - 1), lines, gap: times.length > 1 ? (Math.max(...times) - Math.min(...times)) / 1000 : null, likely: same, src: 'folio', total: amt(first),
       desc: `Restaurant ticket ${ticket} charged ${v.length} times${same ? '' : ' (amounts differ — check the ticket number)'}`, category: 'Restaurant', regId: f.registration_id, guest: f.guest_name, room: reg ? reg.room : '?' });
   });
+  // The same service typed twice with a date written into the text: "Tarot 1hr" posted on 10-20 and "Tarot 1hr 22-10-26" posted on 10-21, or
+  // "Massage 1hr 23-10-26" next to the spa's own line. The wording differs and the days differ, so the same-text check above never meets them.
+  // Same folio, same amount, same words once the written date is removed, and the written dates agree (or only one line has one): flagged as "Check".
+  // Two lines with different written dates (a guest buying the service for two days) are not flagged. Lines that already read identically are left to the check above.
+  const dateRe = /\(?\s*(\d{1,2})\s*[-\/.]\s*(\d{1,2})\s*[-\/.]\s*(\d{2,4})\s*\)?/;
+  const byCore = {};
+  items.forEach(i => {
+    if (/^(payment|credit|tip)/i.test(i.category || '')) return;
+    const total = Math.round((Number(i.qty) || 1) * (Number(i.unit_price) || 0) * 100) / 100; if (total <= 0) return;
+    const text = String(i.description || ''), m = text.match(dateRe), core = dcNorm(text.replace(dateRe, ' ')); if (!core || /\d{4}-\d{2}-\d{2}/.test(text) || /folio/.test(core)) return;
+    (byCore[i.folio_id + '|' + core + '|' + total] = byCore[i.folio_id + '|' + core + '|' + total] || []).push({ i, written: m ? `${+m[1]}/${+m[2]}/${+m[3] % 100}` : '', total, core });
+  });
+  Object.entries(byCore).forEach(([k, v]) => {
+    if (v.length < 2 || new Set(v.map(x => dcNorm(x.i.description))).size < 2) return;
+    const dates = new Set(v.map(x => x.written).filter(Boolean)); if (dates.size > 1 || !v.some(x => x.written)) return;
+    const f = folioById[v[0].i.folio_id] || {}, reg = regById[f.registration_id], lines = v.map(x => ({ at: x.i.created_at, staff: '', note: `${x.i.description}` })).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    const times = lines.map(l => Date.parse(l.at)).filter(t => !isNaN(t));
+    groups.push({ key: 'd:' + k, count: v.length, extra: Math.round(v[0].total * (v.length - 1) * 100) / 100, lines, gap: times.length > 1 ? (Math.max(...times) - Math.min(...times)) / 1000 : null, likely: false, src: 'folio', total: v[0].total,
+      desc: `Same service charged ${v.length} times (once with a date in the text): ${v[0].i.description}`, category: v[0].i.category, regId: f.registration_id, guest: f.guest_name, room: reg ? reg.room : '?' });
+  });
   groups.sort((a, b) => (b.likely - a.likely) || b.extra - a.extra);
   return groups;
 }
