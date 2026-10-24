@@ -9,7 +9,7 @@
 
 const SPA_CAL_START_H = 7;
 const SPA_CAL_END_H = 21;
-const SPA_CAL_PX_HR = 72;
+const SPA_CAL_PX_HR = 88;   // was 72: taller cells so the card text is easier to read (Darlene 2026-10-24)
 const SPA_CAL_COL_W = 170;
 const SPA_CAL_TIME_W = 56;
 
