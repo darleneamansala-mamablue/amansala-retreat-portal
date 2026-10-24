@@ -3040,7 +3040,7 @@ function tsRenderCalSection(bk){
       const dayMornShala=snm(_mornOv?.shala1||sr.morningShala1);
       if(!_dayMornSkipped)rows.push({time:fmtT(dayMornStart)+' – '+fmtT(addMin(dayMornStart,dayMornDur)),desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'),shala:dayMornShala,cat:'yoga',sk:dayMornStart||'08:00'});
       const _bMStart=_dayMornSkipped?'':(dayMornStart||'');const _bMDur=dayMornDur;const _brunchT=_bMStart?addMin(_bMStart,_bMDur+15):'09:45';
-      rows.push({time:fmtT(_brunchT),desc:_brunchT<'09:45'?'Breakfast':'Brunch',shala:'',cat:'meal',sk:_brunchT});
+      rows.push({time:fmtT(_brunchT),desc:(!bk.mealPlan||bk.mealPlan==='standard')?'Brunch':(_brunchT<'09:45'?'Breakfast':'Brunch'),shala:'',cat:'meal',sk:_brunchT});
       rows.push({time:'3:00 PM',desc:'Snack',shala:'',cat:'meal',sk:'15:00'});
       const ws=(sr.workshops||[]).find(w=>w.enabled&&w.date===dateStr);
       if(ws)rows.push({time:fmtT(ws.start)+' – '+fmtT(addMin(ws.start,ws.dur||90)),desc:'Mid-Afternoon Class'+(ws.notes?' — '+ws.notes:''),shala:snm(ws.shala1),cat:'yoga',sk:ws.start||'16:00'});
@@ -5363,7 +5363,7 @@ function openPrintSchedule(bkId){
         rows.push({time:fmtT(_pDayMornStart)+' – '+end,desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'),shala:_pDayMornShala,cls:'shala',sk:_pDayMornStart});
       }
       const _pOv=sr?.adminOverride||{};const _pMStart=_pOv.morningStart||_pUsualMorn.start||'';const _pMDur=parseInt(_pOv.morningDur||_pUsualMorn.dur||90);const _pBrunchT=_pMStart?addMin(_pMStart,_pMDur+15):'09:45';
-      rows.push({time:fmtT(_pBrunchT),desc:_pBrunchT<'09:45'?'Breakfast':'Brunch',shala:'',cls:'',sk:_pBrunchT});
+      rows.push({time:fmtT(_pBrunchT),desc:(!bk.mealPlan||bk.mealPlan==='standard')?'Brunch':(_pBrunchT<'09:45'?'Breakfast':'Brunch'),shala:'',cls:'',sk:_pBrunchT});
       rows.push({time:'3:00 PM',desc:'Snack',shala:'',cls:'',sk:'15:00'});
       if(sr?.workshops){
         const ws=(sr.workshops||[]).find(w=>w.enabled&&w.date===dateStr);
