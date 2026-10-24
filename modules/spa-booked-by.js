@@ -65,7 +65,14 @@ function sbyDecorate() {
       if (card.querySelector('.sbyLine')) return;
       const m = (card.getAttribute('onclick') || '').match(/spaApptShowForm\('([^']+)'\)/); if (!m) return;
       const a = (SpaAppointments || []).find(x => x.id === m[1]); if (!a) return;
-      const who = sbyWho(a); if (!who) return;   // nothing for older bookings: the card is small and "not recorded" is only noise there
+      const who = sbyWho(a); if (!who) return;   // nothing for older bookings
+      // Preferred spot: right on the confirmation line ("Not confirmed · Darlene booked"), so it takes no extra space
+      const conf = card.querySelector('.scl-label');
+      if (conf) {
+        const tag = document.createElement('span'); tag.className = 'sbyLine'; tag.textContent = ' · ' + sbyLabel(a); tag.title = sbyLabel(a);
+        tag.style.cssText = 'color:#6d28d9;font-weight:700;white-space:nowrap';
+        conf.appendChild(tag); return;
+      }
       // A small pill in the bottom-right corner (no extra line, so it never pushes the other text): the booker's initials, or a globe for the online page. Full words on hover.
       const line = document.createElement('div'); line.className = 'sbyLine';
       const initials = a.bookedBy ? String(a.bookedBy).trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() : '🌐';
