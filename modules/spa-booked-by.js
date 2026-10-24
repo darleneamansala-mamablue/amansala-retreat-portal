@@ -36,6 +36,14 @@ function sbyStamp() {
     } catch (e) {}
     return out;
   };
+  // Visible on the card itself (Darlene 2026-10-24): after each draw, add a small "Booked by ..." line at the bottom of every appointment card.
+  // Done on the drawn page, after the other modules have decorated the cards, so it sits under their lines (e.g. "Confirmed by therapist").
+  const origRender = window.spaCalRender;
+  if (typeof origRender === 'function') window.spaCalRender = function () {
+    const out = origRender.apply(this, arguments);
+    setTimeout(sbyDecorate, 80); setTimeout(sbyDecorate, 600);
+    return out;
+  };
   if (typeof origPanel === 'function') window.spaCalPanelHtml = function (cols, isTher) {
     let html = origPanel.apply(this, arguments);
     try {
@@ -48,3 +56,18 @@ function sbyStamp() {
     return html;
   };
 })();
+
+function sbyDecorate() {
+  try {
+    document.querySelectorAll('[onclick*="spaApptShowForm(\'"]').forEach(card => {
+      if (card.querySelector('.sbyLine')) return;
+      const m = (card.getAttribute('onclick') || '').match(/spaApptShowForm\('([^']+)'\)/); if (!m) return;
+      const a = (SpaAppointments || []).find(x => x.id === m[1]); if (!a) return;
+      const who = sbyWho(a);
+      const line = document.createElement('div'); line.className = 'sbyLine';
+      line.style.cssText = 'font-size:9.5px;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + (who ? '#7c3aed' : '#9ca3af');
+      line.textContent = who ? 'Booked by ' + who : 'Booked by: not recorded';
+      card.appendChild(line);
+    });
+  } catch (e) {}
+}
