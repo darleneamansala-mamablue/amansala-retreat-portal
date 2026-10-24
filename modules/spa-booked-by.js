@@ -12,6 +12,8 @@ function sbyWho(a) {
   if (a.source === 'guest_booking') return 'the guest (online)';
   return '';
 }
+// The words shown (Darlene 2026-10-24): "Cyan booked", "Rubi booked", "Darlene booked" for the office, and "Client booked online" when the guest booked on the booking page.
+function sbyLabel(a) { const who = sbyWho(a); if (!who) return ''; return a.bookedBy ? `${a.bookedBy} booked` : 'Client booked online'; }
 function sbyWhen(a) { try { return a.bookedByAt ? new Date(a.bookedByAt).toLocaleString('en-US', { timeZone: 'America/Cancun', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; } catch (e) { return ''; } }
 function sbyStamp() {
   const me = (typeof getCurrentSession === 'function' && (getCurrentSession() || {}).name) || '', now = Date.now();
@@ -32,7 +34,7 @@ function sbyStamp() {
       if (!a) { el.style.display = 'none'; return out; }
       const who = sbyWho(a), when = sbyWhen(a);
       el.style.display = 'block';
-      el.innerHTML = who ? `<b>Booked by:</b> ${sbyEsc(who)}${when ? ' · ' + when : ''}` : '<b>Booked by:</b> <span style="color:#9ca3af">not recorded (made before this was tracked)</span>';
+      el.innerHTML = who ? `<b>${sbyEsc(sbyLabel(a))}</b>${when ? ' · ' + when : ''}` : '<b>Booked by:</b> <span style="color:#9ca3af">not recorded (made before this was tracked)</span>';
     } catch (e) {}
     return out;
   };
@@ -50,7 +52,7 @@ function sbyStamp() {
       (SpaAppointments || []).forEach(a => {
         const who = sbyWho(a); if (!who) return;
         const marker = `spaApptShowForm('${a.id}')" style=`;
-        if (html.includes(marker)) html = html.split(marker).join(`spaApptShowForm('${a.id}')" title="Booked by ${sbyEsc(who)}" style=`);
+        if (html.includes(marker)) html = html.split(marker).join(`spaApptShowForm('${a.id}')" title="${sbyEsc(sbyLabel(a))}" style=`);
       });
     } catch (e) {}
     return html;
@@ -66,7 +68,7 @@ function sbyDecorate() {
       const who = sbyWho(a);
       const line = document.createElement('div'); line.className = 'sbyLine';
       line.style.cssText = 'font-size:9.5px;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + (who ? '#7c3aed' : '#9ca3af');
-      line.textContent = who ? 'Booked by ' + who : 'Booked by: not recorded';
+      line.textContent = who ? sbyLabel(a) : 'Booked by: not recorded';
       card.appendChild(line);
     });
   } catch (e) {}
