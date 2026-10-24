@@ -13,6 +13,7 @@ const HC_ITEMS = [
   { id: 'transport-folder', when: 'S-3', group: '3 days prior to retreat', text: 'Folder with transport information, printed 3 days in advance. Note if TEACHER PAYS or STUDENTS PAY for transport', hint: 'transport' },
   { id: 'schedule-printed', when: 'S-1', group: '1 day prior to retreat', text: 'Schedule printed, ready for teacher review' },
   { id: 'activity-sheet', when: 'S-1', group: '1 day prior to retreat', text: 'Activity sheet drafted' },
+  { id: 'firepit-nights', when: 'S-1', group: '1 day prior to retreat', text: 'Fire Pit: confirm with the teacher which nights they want it, and set them with the 🔥 Fire Pit button', hint: 'firepit' },
   { id: 'menu-fridge', when: 'S1', group: '1 day prior (2 days if the retreat starts on a Sunday)', text: 'Menu on the fridge, and meet with the kitchen', hint: 'offsite' },
   { id: 'allergies-fridge', when: 'S1', group: '1 day prior (2 days if the retreat starts on a Sunday)', text: 'Note with allergies and preferences on the fridge' },
   { id: 'shala-ready', when: 'S0', group: 'Day of retreat: AM shift', text: 'Yoga shala is ready' },
@@ -45,6 +46,11 @@ function hcDue(bk, when) {
 function hcItemsFor(bk) {
   const rec = hcState.data[bk.id] || {}, done = rec.done || {};
   const items = HC_ITEMS.map(it => ({ ...it, due: hcDue(bk, it.when), done: done[it.id] || null }));
+  // One step for every Fire Pit night saved on this retreat (Fire Pit button / tab): set up, light and put out on that night
+  (bk.retreatActivities || []).filter(a => a.aoId === 'ao21' && a.date).sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach(a => {
+    const d = String(a.date).slice(0, 10), t = a.time ? ' ' + new Date('2000-01-01T' + a.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+    items.push({ id: 'fp-' + d, text: `Fire Pit ready and staffed: ${hcFmt(d)}${t}`, group: 'Fire Pit nights', due: d, done: done['fp-' + d] || null });
+  });
   (rec.extras || []).forEach(x => items.push({ id: x.id, text: x.text, group: 'Extra for this retreat', due: x.due || '', done: done[x.id] || null, extra: true }));
   return items;
 }
@@ -87,6 +93,7 @@ function hcHint(bk, kind) {
   try {
     if (kind === 'transport') { const f = bk.flags || [], a = f.includes('teacher_pays_arrival_transport'), d = f.includes('teacher_pays_departure_transport'); return `Arrival: ${a ? 'TEACHER PAYS' : 'students pay'} · Departure: ${d ? 'TEACHER PAYS' : 'students pay'}`; }
     if (kind === 'balance' && typeof calcBkBalance === 'function') { const b = calcBkBalance(bk).balance; return b > 0.5 ? `Balance owed: $${b.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'No balance owed'; }
+    if (kind === 'firepit') { const n = (bk.retreatActivities || []).filter(a => a.aoId === 'ao21').length; return n ? `${n} fire pit night${n !== 1 ? 's' : ''} set` : 'No fire pit nights set yet'; }
     if (kind === 'offsite') { const sr = bk.scheduleRequest || {}, n = parseInt(sr.offsiteNight); return n && bk.startDate ? `Offsite night: night ${n}, ${hcFmt(hcAdd(String(bk.startDate).slice(0, 10), n - 1))} · choice: ${sr.offsiteChoice || 'undecided'}` : 'Offsite dinner night not picked yet'; }
   } catch (e) {}
   return '';
