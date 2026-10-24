@@ -1395,7 +1395,11 @@ async function tr2LoadData() {
       if (em && bkId) { const ei = emailRoomIdx[`${bkId}|${em}`]; if (ei && ei.count === 1) return ei; }
       return null;
     })();
-    const room = (d.roomOverride || '').trim() || (matched ? matched.room : '');
+    // Darlene 2026-10-24: a guest whose NAME matches a registration exactly takes that registration's room, even if an older manual room is still stored on the
+    // transport row (Tootsie Olan moved to 3B but the list kept saying 25, Amy Reich 24 vs 29: stale overrides from before the room change). The manual correction
+    // still wins when the name matches no registration, which is what it was added for.
+    const exactReg = roomLookup[`${bkId}|${name.toLowerCase()}`];
+    const room = (exactReg && exactReg.room) ? exactReg.room : ((d.roomOverride || '').trim() || (matched ? matched.room : ''));
     const regId = matched ? matched.regId : null;
     const checkedIn = !!(matched && matched.checkedInAt);
     const retreatLabel = bk ? [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ') : 'Sin retiro asignado';
