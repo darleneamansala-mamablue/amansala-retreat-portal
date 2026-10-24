@@ -3058,7 +3058,7 @@ function tsRenderCalSection(bk){
     // day — hard backstop here regardless of how a stale/mis-dated entry got
     // into bk.retreatActivities (e.g. dates shifting after the retreat's
     // startDate was edited without re-running auto-assign).
-    (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&dateStr!==bk.startDate).forEach(a=>{
+    (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&(dateStr!==bk.startDate||a.aoId==='ao21')).forEach(a=>{
       const ao=getAct(a.aoId);
       const cat=TOUR_IDS.includes(a.aoId)?'tour':CEREMONY_IDS.includes(a.aoId)?'ceremony':(ao.cat||'ceremony');
       const tag=cat==='tour'?'Tour':cat==='entertainment'?'Group Salsa Class':'Ceremony';
@@ -5392,7 +5392,7 @@ function openPrintSchedule(bkId){
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT arrival.
     const printActMap={};ADD_ONS.forEach(a=>printActMap[a.id]=a);printActMap['ao12']={id:'ao12',name:'Group Salsa Class',price:0};
-    (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&dateStr!==bk.startDate).forEach(a=>{
+    (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&(dateStr!==bk.startDate||a.aoId==='ao21')).forEach(a=>{
       const ao=printActMap[a.aoId]||{name:a.aoId,price:0};
       const dur=ACTS_DUR[a.aoId]||90;
       const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
@@ -5645,7 +5645,7 @@ function buildRetreatSchedulesPanel(){
           const aEnd=fmtT(addMin(_afSlotQ,sr.afternoonDur||60));
           rows.push({time:fmtT(_afSlotQ)+' – '+aEnd,desc:tsEffClassLabel(sr,'afternoon','Afternoon Class'),note:shalaName(sr.afternoonShala1),type:'class'});
         }
-        (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&dateStr!==bk.startDate).forEach(a=>{
+        (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&(dateStr!==bk.startDate||a.aoId==='ao21')).forEach(a=>{
           const ao=ADD_ONS.find(x=>x.id===a.aoId);if(!ao)return;
           const isTour=['ao1','ao2','ao3','ao6','ao7'].includes(a.aoId);
           const desc=a.prepaid
@@ -5935,7 +5935,7 @@ function skedGetRetreatEvents(dateStr){
       });
     }
     // Activities assigned by admin — never on the arrival day
-    (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&dateStr!==bk.startDate).forEach(a=>{
+    (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&(dateStr!==bk.startDate||a.aoId==='ao21')).forEach(a=>{
       const ao=ADD_ONS.find(x=>x.id===a.aoId);if(!ao)return;
       const aoMap={ao1:'ruins',ao6:'cenote',ao7:'mangroves',ao2:'muyil',ao3:'atik',ao4:'cacao',ao5:'temazcal',ao9:'clay',ao10:'icebath',ao12:'salsa',ao8:'ruins',ao11:'ruins',ao13:'gitano',ao14:'cooking'};
       const startT=a.time||'09:00';
