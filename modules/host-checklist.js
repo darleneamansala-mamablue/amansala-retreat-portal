@@ -59,7 +59,7 @@ async function hcLoad() {
   if (hcState.loading) return; hcState.loading = true;
   try { const { data, error } = await db.from('app_store').select('value').eq('key', HC_KEY).maybeSingle(); if (error) throw error; hcState.data = (data && data.value && typeof data.value === 'object') ? data.value : {}; hcState.loaded = true; hcState.error = ''; }
   catch (e) { hcState.error = e.message || String(e); }
-  hcState.loading = false; hcRender();
+  hcState.loading = false; hcRender(); hcRenderBox();
 }
 // Re-read the saved copy, change only this retreat's record, write it back: two people ticking different steps never overwrite each other.
 async function hcMutate(bookingId, fn) {
@@ -69,7 +69,7 @@ async function hcMutate(bookingId, fn) {
     all[bookingId] = all[bookingId] || { done: {}, extras: [] }; all[bookingId].done = all[bookingId].done || {}; all[bookingId].extras = all[bookingId].extras || [];
     fn(all[bookingId]);
     const { error } = await db.from('app_store').upsert({ key: HC_KEY, value: all, updated_at: new Date().toISOString() }); if (error) throw error;
-    hcState.data = all; hcRender(); return true;
+    hcState.data = all; hcRender(); hcRenderBox(); return true;
   } catch (e) { showToast('Could not save: ' + (e.message || e)); return false; }
 }
 const hcMe = () => (typeof getCurrentSession === 'function' && (getCurrentSession() || {}).name) || 'Staff';
@@ -114,7 +114,16 @@ function hcRender() {
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px"><button onclick="hcPick('')" style="${btn}">← All retreats</button>
       <div><b style="font-size:17px">${hcEsc(bk.leaderName || bk.retreatName)}</b> <span style="color:#6b7280;font-size:12.5px">${hcFmt(String(bk.startDate).slice(0, 10))} → ${hcFmt(String(bk.endDate).slice(0, 10))}</span></div>
       <div><b>${p.n}/${p.total}</b> done${p.over ? ` <span style="color:#b91c1c;font-weight:700">· ${p.over} overdue</span>` : ''}</div></div>
-    ${groups.map(g => `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#a89a86;margin-bottom:6px">${hcEsc(g.label)}</div>
+    ${hcBodyHtml(bk)}</div>`;
+}
+
+
+// The steps and the "add an extra step" form for one retreat; used by the Host Checklist tab and by the inline checklist in the retreat window.
+function hcBodyHtml(bk) {
+  const btn = 'padding:6px 12px;border:1px solid #c8bfb5;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px';
+  const items = hcItemsFor(bk), today = hcToday(), groups = [];
+  items.forEach(i => { let g = groups.find(x => x.label === i.group); if (!g) groups.push(g = { label: i.group, list: [] }); g.list.push(i); });
+  return `${groups.map(g => `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#a89a86;margin-bottom:6px">${hcEsc(g.label)}</div>
       <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">${g.list.map(i => { const over = !i.done && i.due && i.due < today, hint = i.hint ? hcHint(bk, i.hint) : '';
         return `<div style="padding:10px 14px;border-top:1px solid #f0ebe0;display:flex;gap:10px;align-items:flex-start;${i.done ? 'background:#f0fdf4' : ''}">
           <input type="checkbox" ${i.done ? 'checked' : ''} onchange="hcToggle('${hcEsc(i.id)}')" style="width:20px;height:20px;margin-top:2px;cursor:pointer;flex-shrink:0">
@@ -124,7 +133,7 @@ function hcRender() {
             ${i.done ? `<input type="text" value="${hcEsc(i.done.note || '')}" placeholder="Add a note" onchange="hcNote('${hcEsc(i.id)}',this.value)" style="margin-top:4px;width:100%;max-width:420px;padding:4px 8px;border:1px solid #e0d8cc;border-radius:6px;font-family:inherit;font-size:12px">` : ''}</div>
           ${i.extra ? `<button onclick="hcRemoveExtra('${hcEsc(i.id)}')" style="${btn};padding:2px 8px">✕</button>` : ''}</div>`; }).join('')}</div></div>`).join('')}
     <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="hcExtraText" placeholder="Add an extra step for this retreat" style="flex:1;min-width:220px;padding:7px 10px;border:1.5px solid #c8bfb5;border-radius:8px;font-family:inherit;font-size:13px">
-      <input id="hcExtraDue" type="date" style="padding:6px 8px;border:1.5px solid #c8bfb5;border-radius:8px;font-family:inherit;font-size:13px"><button onclick="hcAddExtra()" style="${btn};background:#2d6a6a;color:#fff;border-color:#2d6a6a">Add</button></div></div>`;
+      <input id="hcExtraDue" type="date" style="padding:6px 8px;border:1.5px solid #c8bfb5;border-radius:8px;font-family:inherit;font-size:13px"><button onclick="hcAddExtra()" style="${btn};background:#2d6a6a;color:#fff;border-color:#2d6a6a">Add</button></div>`;
 }
 
 function hcOpen(btn) {
@@ -133,6 +142,40 @@ function hcOpen(btn) {
   try { localStorage.setItem('ama_last_tab', prev || 'dashboard'); } catch (e) {}
   hcRender(); hcLoad();
 }
+
+// ---- The checklist inside the retreat's own window (Teachers tab, or the preview-as-teacher on an admin device), so it is right there with that teacher's booking ----
+let hcInline = false;
+function hcBoxHtml(bk) {
+  const p = hcProgress(bk);
+  return `<span style="font-weight:800;color:#065f46">✅ Host checklist</span> <span style="color:#6b7280">${hcState.loaded ? `${p.n}/${p.total} done` : 'loading…'}${p.over ? ` <b style="color:#b91c1c">· ${p.over} overdue</b>` : ''}</span> <button onclick="hcOpenFor('${hcEsc(bk.id)}')" style="margin-left:8px;padding:4px 12px;border:1.5px solid #6ee7b7;border-radius:8px;background:#ecfdf5;color:#065f46;font-weight:700;font-family:inherit;font-size:12px;cursor:pointer">${hcInline ? 'Hide' : 'Open checklist'}</button> <span style="font-size:11px;color:#9ca3af">Team only: teachers can't see this</span>`;
+}
+function hcRenderBox() {
+  try {
+    if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE && !localStorage.getItem('ama_admin_device')) return;   // team only
+    const bk = typeof regSelBk !== 'undefined' ? regSelBk : null; let box = document.getElementById('regChecklistBox');
+    if (!bk || !bk.id) { if (box) box.style.display = 'none'; return; }
+    if (!box) {
+      box = document.createElement('div'); box.id = 'regChecklistBox';
+      box.style.cssText = 'margin:10px 0;padding:9px 14px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;font-size:13px;font-family:Jost,sans-serif';
+      const anchor = document.getElementById('regGitanoNotice') || document.getElementById('pkgBarBody');
+      if (!anchor || !anchor.parentNode) return;
+      anchor.parentNode.insertBefore(box, anchor.nextSibling);
+    }
+    if (!hcState.loaded && !hcState.loading) hcLoad();
+    box.style.display = 'block';
+    box.innerHTML = hcBoxHtml(bk) + (hcInline && hcState.bookingId === bk.id ? `<div style="margin-top:12px">${hcBodyHtml(bk)}</div>` : '');
+  } catch (e) {}
+}
+function hcOpenFor(id) {
+  const b = document.getElementById('hostchecklistTabBtn');
+  if (b) { hcOpen(b); hcPick(id); return; }   // admin portal: the Host Checklist tab, on this retreat
+  hcState.bookingId = id; hcInline = !hcInline; hcRenderBox();   // no sidebar here (teacher preview): open it right inside the box
+}
+(function () {
+  if (typeof regRender !== 'function') return;
+  const orig = window.regRender;
+  window.regRender = function () { const out = orig.apply(this, arguments); hcRenderBox(); return out; };
+})();
 
 (function () {
   const side = document.getElementById('staffSideBtn'), after = document.getElementById('tab-checkoutbalances') || document.getElementById('tab-doublecharges');
