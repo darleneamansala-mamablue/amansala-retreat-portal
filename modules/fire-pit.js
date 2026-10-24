@@ -38,18 +38,29 @@ function fpRender() {
       return `<div onclick="fpPick('${fpEsc(b.id)}')" style="cursor:pointer;background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:12px 16px;display:flex;justify-content:space-between;gap:12px;align-items:center"><div><b style="font-size:15px">${fpEsc(b.leaderName || b.retreatName)}</b><div style="font-size:12px;color:#6b7280">${fpFmt(String(b.startDate).slice(0, 10))} → ${fpFmt(String(b.endDate).slice(0, 10))}</div></div><div style="font-size:13px;font-weight:700;color:${n ? '#d97706' : '#9ca3af'}">${n ? `🔥 ${n} night${n !== 1 ? 's' : ''}` : 'No fire pit'}</div></div>`; }).join('') || '<div style="color:#9ca3af">No current or upcoming retreats.</div>'}</div></div>`;
     return;
   }
-  const have = {}; fpEntries(bk).forEach(a => { have[String(a.date).slice(0, 10)] = a.time || FP_DEFAULT_TIME; });
   el.innerHTML = `<div style="max-width:900px;margin:0 auto;font-family:'Jost',sans-serif;color:#2d2520;text-align:left">${head}
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px"><button onclick="fpPick('')" style="${btn}">← All retreats</button><div><b style="font-size:17px">${fpEsc(bk.leaderName || bk.retreatName)}</b> <span style="color:#6b7280;font-size:12.5px">${fpFmt(String(bk.startDate).slice(0, 10))} → ${fpFmt(String(bk.endDate).slice(0, 10))}</span></div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><button onclick="fpAll(true)" style="${btn}">Every night</button><button onclick="fpAll(false)" style="${btn}">Clear</button>
+    ${fpPickerHtml(bk)}</div>`;
+}
+// The nights picker itself (shared by the Fire Pit tab and the inline version in the retreat window)
+function fpPickerHtml(bk) {
+  const btn = 'padding:6px 12px;border:1.5px solid #c8bfb5;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px';
+  const have = {}; fpEntries(bk).forEach(a => { have[String(a.date).slice(0, 10)] = a.time || FP_DEFAULT_TIME; });
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><button onclick="fpAll(true)" style="${btn}">Every night</button><button onclick="fpAll(false)" style="${btn}">Clear</button>
       <span style="font-size:12.5px;color:#6b7280">Set all to</span><input type="time" id="fpAllTime" value="${FP_DEFAULT_TIME}" onchange="fpSetAllTime(this.value)" style="padding:5px 8px;border:1.5px solid #c8bfb5;border-radius:8px;font-family:inherit"></div>
     <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">${fpNights(bk).map((d, i) => `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:${i ? '1px solid #f0ebe0' : '0'};${have[d] ? 'background:#fffbeb' : ''}">
       <input type="checkbox" class="fpNight" data-date="${d}" ${have[d] ? 'checked' : ''} style="width:20px;height:20px;cursor:pointer"><div style="flex:1;font-weight:600">${fpFmt(d)}${d === String(bk.startDate).slice(0, 10) ? ' <span style="font-size:11px;color:#9ca3af;font-weight:500">arrival night</span>' : ''}</div>
       <input type="time" class="fpTime" data-date="${d}" value="${fpEsc(have[d] || FP_DEFAULT_TIME)}" style="padding:5px 8px;border:1.5px solid #c8bfb5;border-radius:8px;font-family:inherit"></div>`).join('')}</div>
-    <div style="margin-top:12px"><button onclick="fpSave()" style="${btn};background:#d97706;color:#fff;border-color:#d97706;font-weight:700">Save Fire Pit nights</button></div></div>`;
+    <div style="margin-top:12px"><button onclick="fpSave()" style="${btn};background:#d97706;color:#fff;border-color:#d97706;font-weight:700">Save Fire Pit nights</button></div>`;
 }
 function fpPick(id) { fpState.bookingId = id; fpRender(); }
-function fpOpenFor(id) { const b = document.getElementById('firepitTabBtn'); if (b) fpOpen(b); fpPick(id); }
+function fpOpenFor(id) {
+  const b = document.getElementById('firepitTabBtn');
+  if (b) { fpOpen(b); fpPick(id); return; }
+  // no admin sidebar on this screen (e.g. the teacher preview): open the picker inline inside the Fire Pit box
+  fpState.bookingId = id; const bk = (AppData.bookings || []).find(x => x.id === id), box = document.getElementById('regFirePitBox'); if (!bk || !box) return;
+  box.innerHTML = fpBoxHtml(bk) + '<div style="margin-top:10px">' + fpPickerHtml(bk) + '</div>';
+}
 function fpAll(on) { document.querySelectorAll('.fpNight').forEach(c => { c.checked = on; }); }
 function fpSetAllTime(v) { document.querySelectorAll('.fpTime').forEach(t => { t.value = v; }); }
 function fpSave() {
@@ -78,7 +89,8 @@ function fpBoxHtml(bk) {
 }
 function fpRenderBox() {
   try {
-    if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE) return;   // team only
+    // team only: hidden for a real teacher, shown in the admin portal and in the preview-as-teacher on an admin device
+    if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE && !localStorage.getItem('ama_admin_device')) return;
     const bk = typeof regSelBk !== 'undefined' ? regSelBk : null; let box = document.getElementById('regFirePitBox');
     if (!bk || !bk.id) { if (box) box.style.display = 'none'; return; }
     if (!box) {
