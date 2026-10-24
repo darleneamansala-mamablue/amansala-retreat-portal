@@ -13,6 +13,9 @@ function fpEnsureAddOn() {
   try { if (typeof ACTS_DUR !== 'undefined' && !ACTS_DUR[FP_ID]) ACTS_DUR[FP_ID] = 90; } catch (e) {}
 }
 fpEnsureAddOn();
+// The add-on list reloads from Supabase a moment after the page opens (and the first reload happens before this file loads), which dropped ao21 and made the schedule read
+// "Optional ao21" (Darlene's screenshot 2026-10-24). So keep checking that it is there.
+setInterval(fpEnsureAddOn, 1500);
 (function () {
   if (typeof syncAddOnsFromSupabase !== 'function') return;
   const orig = window.syncAddOnsFromSupabase;
@@ -63,12 +66,28 @@ function fpOpenFor(id) {
 }
 function fpAll(on) { document.querySelectorAll('.fpNight').forEach(c => { c.checked = on; }); }
 function fpSetAllTime(v) { document.querySelectorAll('.fpTime').forEach(t => { t.value = v; }); }
+// The same night can end up saved twice (an older copy of the retreat merged back in). Keep one line per fire pit night.
+function fpDedupe(bk) {
+  const seen = new Set(), before = (bk.retreatActivities || []).length;
+  bk.retreatActivities = (bk.retreatActivities || []).filter(a => { if (a.aoId !== FP_ID) return true; const k = String(a.date || '').slice(0, 10); if (seen.has(k)) return false; seen.add(k); return true; });
+  return before !== bk.retreatActivities.length;
+}
+function fpCleanDuplicates() {
+  try {
+    if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE && !localStorage.getItem('ama_admin_device') && sessionStorage.getItem('ama_admin_viewing') !== '1') return;   // team devices only
+    let changed = false;
+    (AppData.bookings || []).forEach(bk => { if (fpDedupe(bk)) { bk.retreatActivitiesUpdatedAt = bk.updatedAt = new Date().toISOString(); changed = true; } });
+    if (changed) saveAll();
+  } catch (e) {}
+}
+setInterval(fpCleanDuplicates, 20000); setTimeout(fpCleanDuplicates, 4000);
+
 function fpSave() {
   const bk = (AppData.bookings || []).find(b => b.id === fpState.bookingId); if (!bk) return;
   const times = {}; document.querySelectorAll('.fpTime').forEach(t => { times[t.dataset.date] = t.value || FP_DEFAULT_TIME; });
   const picked = [...document.querySelectorAll('.fpNight')].filter(c => c.checked).map(c => c.dataset.date);
   const keep = (bk.retreatActivities || []).filter(a => a.aoId !== FP_ID);
-  bk.retreatActivities = keep.concat(picked.map(d => ({ aoId: FP_ID, date: d, time: times[d], prepaid: false })));
+  bk.retreatActivities = keep.concat(picked.map(d => ({ aoId: FP_ID, date: d, time: times[d], prepaid: false }))); fpDedupe(bk);
   bk.retreatActivitiesUpdatedAt = bk.updatedAt = new Date().toISOString();
   try { saveAll(); } catch (e) { showToast('Could not save: ' + e.message); return; }
   showToast(picked.length ? `🔥 Fire Pit saved for ${picked.length} night${picked.length !== 1 ? 's' : ''} ✓` : 'Fire Pit removed ✓');
