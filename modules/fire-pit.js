@@ -49,6 +49,7 @@ function fpRender() {
     <div style="margin-top:12px"><button onclick="fpSave()" style="${btn};background:#d97706;color:#fff;border-color:#d97706;font-weight:700">Save Fire Pit nights</button></div></div>`;
 }
 function fpPick(id) { fpState.bookingId = id; fpRender(); }
+function fpOpenFor(id) { const b = document.getElementById('firepitTabBtn'); if (b) fpOpen(b); fpPick(id); }
 function fpAll(on) { document.querySelectorAll('.fpNight').forEach(c => { c.checked = on; }); }
 function fpSetAllTime(v) { document.querySelectorAll('.fpTime').forEach(t => { t.value = v; }); }
 function fpSave() {
@@ -60,7 +61,7 @@ function fpSave() {
   bk.retreatActivitiesUpdatedAt = bk.updatedAt = new Date().toISOString();
   try { saveAll(); } catch (e) { showToast('Could not save: ' + e.message); return; }
   showToast(picked.length ? `🔥 Fire Pit saved for ${picked.length} night${picked.length !== 1 ? 's' : ''} ✓` : 'Fire Pit removed ✓');
-  fpRender();
+  fpRender(); fpRenderBox();
 }
 
 function fpOpen(btn) {
@@ -69,6 +70,33 @@ function fpOpen(btn) {
   try { localStorage.setItem('ama_last_tab', prev || 'dashboard'); } catch (e) {}
   fpRender();
 }
+// ---- Fire Pit line inside the retreat's own window (Teachers tab, the booking you pick there), so it is visible while you work on that retreat ----
+function fpBoxHtml(bk) {
+  const e = fpEntries(bk).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const nights = e.map(a => `${fpFmt(String(a.date).slice(0, 10))}${a.time ? ' ' + new Date('2000-01-01T' + a.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''}`).join(' · ');
+  return `<span style="font-weight:800;color:#c2410c">🔥 Fire Pit</span> <span style="color:#6b7280">${e.length ? e.length + ' night' + (e.length !== 1 ? 's' : '') + ': ' + fpEsc(nights) : 'none set'}</span> <button onclick="fpOpenFor('${fpEsc(bk.id)}')" style="margin-left:8px;padding:4px 12px;border:1.5px solid #fdba74;border-radius:8px;background:#fff7ed;color:#9a3412;font-weight:700;font-family:inherit;font-size:12px;cursor:pointer">${e.length ? 'Change nights' : 'Set nights'}</button>`;
+}
+function fpRenderBox() {
+  try {
+    if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE) return;   // team only
+    const bk = typeof regSelBk !== 'undefined' ? regSelBk : null; let box = document.getElementById('regFirePitBox');
+    if (!bk || !bk.id) { if (box) box.style.display = 'none'; return; }
+    if (!box) {
+      box = document.createElement('div'); box.id = 'regFirePitBox';
+      box.style.cssText = 'margin:10px 0;padding:9px 14px;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;font-size:13px;font-family:Jost,sans-serif';
+      const anchor = document.getElementById('regGitanoNotice') || document.getElementById('pkgBarBody');
+      if (!anchor || !anchor.parentNode) return;
+      anchor.parentNode.insertBefore(box, anchor.nextSibling);
+    }
+    box.style.display = 'block'; box.innerHTML = fpBoxHtml(bk);
+  } catch (e) {}
+}
+(function () {
+  if (typeof regRender !== 'function') return;
+  const orig = window.regRender;
+  window.regRender = function () { const out = orig.apply(this, arguments); fpRenderBox(); return out; };
+})();
+
 (function () {
   const side = document.getElementById('staffSideBtn'), after = document.getElementById('tab-hostchecklist') || document.getElementById('tab-checkoutbalances') || document.getElementById('tab-doublecharges');
   if (!side || !after || document.getElementById('tab-firepit')) return;
