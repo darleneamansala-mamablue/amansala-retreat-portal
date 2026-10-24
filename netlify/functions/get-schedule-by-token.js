@@ -149,11 +149,11 @@ function buildScheduleDays(bk, addOnMap){
     // 3:00 PM activity both printed after 7:30 PM Dinner) — every other row
     // above carries a raw 24h sk for exactly this sort, but these pushes
     // never got one, so they silently fell back to the end when sorted.
-    (bk.retreat_activities||[]).filter(a=>a.date===dateStr&&dateStr!==bk.start_date).forEach(a=>{
+    (bk.retreat_activities||[]).filter(a=>a.date===dateStr&&(dateStr!==bk.start_date||a.aoId==='ao21')).forEach(a=>{
       const ao = addOnMap[a.aoId] || { name:a.aoId, price:0 };
       const dur = ACTS_DUR[a.aoId] || 90;
       const timeRange = a.time ? `${fmtT(a.time)} – ${fmtT(addMin(a.time,dur))}` : '';
-      const desc = a.prepaid ? (ao.name+(a.requestedTime?' (requested this time)':'')) : (`Optional ${ao.name}`+(ao.price?` — $${ao.price} USD per person`:''));
+      const desc = a.prepaid ? (ao.name+(a.requestedTime?' (requested this time)':'')) : (a.aoId==='ao21' ? ao.name : `Optional ${ao.name}`+(ao.price?` — $${ao.price} USD per person`:''));   // Fire Pit just says Fire Pit
       rows.push({ time:timeRange, desc, sk: a.time||'99:99' });
     });
 
@@ -188,6 +188,7 @@ exports.handler = async (event) => {
     const addOns = aoRes.ok ? await aoRes.json() : [];
     const addOnMap = {}; addOns.forEach(a=>addOnMap[a.id]=a);
     addOnMap['ao12'] = { id:'ao12', name:'Group Salsa Class', price:0 };
+    addOnMap['ao21'] = { id:'ao21', name:'Fire Pit', price:0 };   // Fire Pit nights set by the team (modules/fire-pit.js); not a row in the add_ons table, so without this the link said "Optional ao21"
 
     const days = buildScheduleDays(bk, addOnMap);
 
