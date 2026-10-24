@@ -38,7 +38,7 @@ function sbyStamp() {
     } catch (e) {}
     return out;
   };
-  // Visible on the card itself (Darlene 2026-10-24): after each draw, add a small "Booked by ..." line at the bottom of every appointment card.
+  // Visible on the card itself (Darlene 2026-10-24): after each draw, add a small initials pill (hover: "Cyan booked") in the bottom-right of every appointment card.
   // Done on the drawn page, after the other modules have decorated the cards, so it sits under their lines (e.g. "Confirmed by therapist").
   const origRender = window.spaCalRender;
   if (typeof origRender === 'function') window.spaCalRender = function () {
@@ -65,10 +65,12 @@ function sbyDecorate() {
       if (card.querySelector('.sbyLine')) return;
       const m = (card.getAttribute('onclick') || '').match(/spaApptShowForm\('([^']+)'\)/); if (!m) return;
       const a = (SpaAppointments || []).find(x => x.id === m[1]); if (!a) return;
-      const who = sbyWho(a);
+      const who = sbyWho(a); if (!who) return;   // nothing for older bookings: the card is small and "not recorded" is only noise there
+      // A small pill in the bottom-right corner (no extra line, so it never pushes the other text): the booker's initials, or a globe for the online page. Full words on hover.
       const line = document.createElement('div'); line.className = 'sbyLine';
-      line.style.cssText = 'font-size:9.5px;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + (who ? '#7c3aed' : '#9ca3af');
-      line.textContent = who ? sbyLabel(a) : 'Booked by: not recorded';
+      const initials = a.bookedBy ? String(a.bookedBy).trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() : '🌐';
+      line.textContent = initials; line.title = sbyLabel(a);
+      line.style.cssText = 'position:absolute;right:5px;bottom:4px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:#ede9fe;color:#6d28d9;font-size:9.5px;font-weight:800;line-height:16px;text-align:center;pointer-events:auto';
       card.appendChild(line);
     });
   } catch (e) {}
