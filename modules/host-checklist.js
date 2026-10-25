@@ -24,10 +24,11 @@ const HC_ITEMS = [
   { id: 'allergies-fridge', when: 'S1', group: '1 day prior (2 days if the retreat starts on a Sunday)', text: 'Note with allergies and preferences on the fridge' },
   { id: 'shala-ready', when: 'S0', group: 'Day of retreat: AM shift', text: 'Yoga shala is ready' },
   { id: 'staff-meeting', when: 'S0', group: 'Day of retreat: AM and PM shift', text: 'Staff meeting: kitchen, reception, greeters' },
-  { id: 'greet-teacher', when: 'S0', group: 'Meeting with the teacher', text: 'Greet the teacher and take them on a tour: show them the shala options, and show them how to use the music of each shala you show them' },
+  { id: 'greet-teacher', when: 'S0', group: 'Meeting with the teacher', text: 'Greet the teacher and take them on a tour: show them the shala options' },
+  { id: 'show-music', when: 'S0', group: 'Meeting with the teacher', text: 'Show the teacher how to use the music of each shala you showed them' },
   { id: 'review-schedule', when: 'S0', group: 'Meeting with the teacher', text: 'Review the schedule' },
   { id: 'review-balance', when: 'S0', group: 'Meeting with the teacher', text: 'Review if a balance is owed', hint: 'balance' },
-  { id: 'group-tip', when: 'S0', group: 'Meeting with the teacher', text: 'Give the teacher the group tip details for the last day' },
+  { id: 'group-tip', when: 'S0', group: 'Meeting with the teacher', text: 'Give the teacher the group tip envelope for the last day' },
   { id: 'welcome-orientation', when: 'S0', group: 'Check-in during dessert', text: 'Welcome orientation' },
   { id: 'final-schedule', when: 'S0', group: 'Check-in during dessert', text: 'Update and print the finalised schedule and activity sheets' },
   { id: 'announce-transport', when: 'S+1', group: '1st morning', text: 'Announcement about transport' },
@@ -81,7 +82,7 @@ async function hcMutate(bookingId, fn) {
     all[bookingId] = all[bookingId] || { done: {}, extras: [] }; all[bookingId].done = all[bookingId].done || {}; all[bookingId].extras = all[bookingId].extras || [];
     fn(all[bookingId]);
     const { error } = await db.from('app_store').upsert({ key: HC_KEY, value: all, updated_at: new Date().toISOString() }); if (error) throw error;
-    hcState.data = all; hcRender(); hcRenderBox(); return true;
+    hcState.data = all; hcRender(); hcRenderBox(); try { hcAlertTick(); } catch (e) {} return true;
   } catch (e) { showToast('Could not save: ' + (e.message || e)); return false; }
 }
 const hcMe = () => (typeof getCurrentSession === 'function' && (getCurrentSession() || {}).name) || 'Staff';
@@ -192,6 +193,51 @@ function hcOpenFor(id) {
   const orig = window.regRender;
   window.regRender = function () { const out = orig.apply(this, arguments); hcRenderBox(); return out; };
 })();
+
+// ---- Alert: arrival steps that are not ticked off (Darlene 2026-10-24). For every retreat arriving within the next 3 days (or already here and in its first 2 days), the Retreat Admin steps and every
+// arrival step whose due date has come are checked; anything not ticked shows in a red chip at the bottom-left of the team's screens, and a click lists them by retreat. Team only.
+const HC_ARRIVAL_WHEN = ['S-3', 'S-1', 'S1', 'S0', 'S+1'];
+function hcTeam() { try { return (typeof IS_TEACHER_MODE === 'undefined' || !IS_TEACHER_MODE) || sessionStorage.getItem('ama_admin_viewing') === '1' || !!localStorage.getItem('ama_admin_device'); } catch (e) { return false; } }
+function hcAlertScan() {
+  const today = hcToday(), out = [];
+  (AppData.bookings || []).filter(b => b.status !== 'cancelled' && b.startDate && b.endDate && (b.bookingType || '') !== 'room_only').forEach(bk => {
+    const start = String(bk.startDate).slice(0, 10);
+    if (today < hcAdd(start, -3) || today > hcAdd(start, 2)) return;   // only around arrival
+    const steps = hcItemsFor(bk).filter(i => !i.done && !i.extra && (i.when === null || i.when === undefined ? (i.group === 'Retreat Admin' || /^fp-/.test(i.id) === false && false) : HC_ARRIVAL_WHEN.includes(i.when) && i.due && i.due <= today));
+    const admin = hcItemsFor(bk).filter(i => !i.done && i.group === 'Retreat Admin');
+    const all = [...new Map([...admin, ...steps].map(i => [i.id, i])).values()];
+    if (all.length) out.push({ bk, steps: all });
+  });
+  return out.sort((a, b) => String(a.bk.startDate).localeCompare(String(b.bk.startDate)));
+}
+function hcAlertChip() {
+  let chip = document.getElementById('hcAlertChip');
+  if (!chip) { chip = document.createElement('button'); chip.id = 'hcAlertChip'; chip.onclick = hcAlertShow; chip.style.cssText = 'position:fixed;left:14px;bottom:110px;z-index:99988;display:none;padding:8px 14px;border-radius:99px;border:2px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:800;font-size:12.5px;cursor:pointer;font-family:Jost,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25)'; document.body.appendChild(chip); }
+  return chip;
+}
+function hcAlertTick() {
+  try {
+    if (!document.body) return; const chip = hcAlertChip();
+    if (!hcTeam()) { chip.style.display = 'none'; return; }
+    if (!hcState.loaded && !hcState.loading) { hcLoad(); return; }
+    const list = hcAlertScan(), n = list.reduce((s, x) => s + x.steps.length, 0);
+    chip.style.display = n ? 'block' : 'none';
+    chip.textContent = `📋 ${n} host step${n !== 1 ? 's' : ''} not done`;
+  } catch (e) {}
+}
+function hcAlertShow() {
+  const list = hcAlertScan();
+  let m = document.getElementById('hcAlertModal');
+  if (!m) { m = document.createElement('div'); m.id = 'hcAlertModal'; m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:Jost,sans-serif'; document.body.appendChild(m); }
+  m.style.display = 'flex';
+  m.innerHTML = `<div style="background:#f5f1eb;border-radius:16px;max-width:680px;width:100%;max-height:90vh;overflow:auto;padding:20px 24px;box-shadow:0 12px 40px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#92400e">📋 Host checklist: not done yet</div><button onclick="document.getElementById('hcAlertModal').style.display='none'" style="border:none;background:none;font-size:22px;cursor:pointer;color:#6b7280">✕</button></div>
+    <div style="font-size:12.5px;color:#6b7280;margin-bottom:12px">Retreats arriving in the next 3 days (or in their first 2). Retreat Admin steps, and arrival steps whose due date has come.</div>
+    ${list.length ? list.map(x => `<div style="background:#fff;border:1.5px solid #fde68a;border-radius:12px;padding:10px 14px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div style="font-weight:800">${hcEsc(x.bk.leaderName || x.bk.retreatName)} <span style="font-weight:500;color:#6b7280;font-size:12px">arrives ${hcFmt(String(x.bk.startDate).slice(0, 10))}</span></div>
+      <button onclick="document.getElementById('hcAlertModal').style.display='none';hcOpenFor('${hcEsc(x.bk.id)}')" style="padding:4px 12px;border:1.5px solid #6ee7b7;border-radius:8px;background:#ecfdf5;color:#065f46;font-weight:700;font-family:inherit;font-size:12px;cursor:pointer">Open checklist</button></div>
+      ${x.steps.map(i => `<div style="font-size:13px;margin-top:4px">☐ ${hcEsc(i.text)}${i.due && i.due < hcToday() ? ` <span style="color:#b91c1c;font-weight:700;font-size:11.5px">overdue since ${hcFmt(i.due)}</span>` : ''}</div>`).join('')}</div>`).join('') : '<div style="color:#059669;font-weight:700">Everything for the arrival is ticked off. ✓</div>'}</div>`;
+}
+setInterval(hcAlertTick, 60000); setTimeout(hcAlertTick, 7000);
 
 (function () {
   const side = document.getElementById('staffSideBtn'), after = document.getElementById('tab-checkoutbalances') || document.getElementById('tab-doublecharges');
