@@ -7,12 +7,13 @@ function qpTeam() {
   try { return (typeof IS_TEACHER_MODE === 'undefined' || !IS_TEACHER_MODE) || sessionStorage.getItem('ama_admin_viewing') === '1' || !!localStorage.getItem('ama_admin_device'); } catch (e) { return false; }
 }
 function qpBookingId() {
+  if (qpForced) return qpForced;
   try {
     if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE) { if (typeof _tsBkId !== 'undefined' && _tsBkId) return _tsBkId; return sessionStorage.getItem('teacher_bk_id') || localStorage.getItem('teacher_bk_id') || ''; }
     return (typeof regSelBk !== 'undefined' && regSelBk && regSelBk.id) || '';
   } catch (e) { return ''; }
 }
-let qpOpen = '', qpShownFor = '';   // qpOpen: 'fire' | 'list' | ''
+let qpOpen = '', qpShownFor = '', qpForced = '';   // qpForced: open for this retreat instead of the one on screen (used by the Tours-for-this-group checklist)   // qpOpen: 'fire' | 'list' | ''
 
 function qpBar() {
   let bar = document.getElementById('qpBar');
@@ -31,7 +32,8 @@ function qpTick() {
     }
   } catch (e) {}
 }
-function qpShow(which) {
+function qpShow(which, forId) {
+  if (forId) qpForced = forId;
   const id = qpBookingId(), bk = (AppData.bookings || []).find(b => b.id === id); if (!bk) return;
   qpOpen = which;
   if (typeof fpState !== 'undefined') fpState.bookingId = id;
@@ -49,7 +51,7 @@ function qpDraw() {
       <button onclick="qpClose()" style="border:none;background:none;font-size:22px;cursor:pointer;color:#6b7280">✕</button></div>
     ${fire ? (typeof fpPickerHtml === 'function' ? fpPickerHtml(bk) : 'Fire Pit is not loaded.') : (typeof hcBodyHtml === 'function' ? hcBodyHtml(bk) : 'Checklist is not loaded.')}</div>`;
 }
-function qpClose() { qpOpen = ''; const m = document.getElementById('qpModal'); if (m) m.style.display = 'none'; try { if (typeof fpRenderBox === 'function') fpRenderBox(); if (typeof hcRenderBox === 'function') hcRenderBox(); } catch (e) {} }
+function qpClose() { qpOpen = ''; qpForced = ''; const m = document.getElementById('qpModal'); if (m) m.style.display = 'none'; try { if (typeof fpRenderBox === 'function') fpRenderBox(); if (typeof hcRenderBox === 'function') hcRenderBox(); } catch (e) {} }
 
 // After any save from the pop-up, draw it again so ticks, nights and notes show straight away
 (function () {

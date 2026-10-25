@@ -82,14 +82,18 @@ function fpCleanDuplicates() {
 }
 setInterval(fpCleanDuplicates, 20000); setTimeout(fpCleanDuplicates, 4000);
 
+// 'Tours for this group' (tour-picker.js) keeps a per-retreat list of activities turned OFF and removes them on every save; the Fire Pit must never be on it while it has nights.
+function fpClearOff(bk) { try { const off = typeof tpGetOff === 'function' ? tpGetOff(bk) : null; if (off && off.has(FP_ID)) { off.delete(FP_ID); tpSetOff(bk, off); } } catch (e) {} }
 function fpSave() {
   const bk = (AppData.bookings || []).find(b => b.id === fpState.bookingId); if (!bk) return;
   const times = {}; document.querySelectorAll('.fpTime').forEach(t => { times[t.dataset.date] = t.value || FP_DEFAULT_TIME; });
   const picked = [...document.querySelectorAll('.fpNight')].filter(c => c.checked).map(c => c.dataset.date);
   const keep = (bk.retreatActivities || []).filter(a => a.aoId !== FP_ID);
   bk.retreatActivities = keep.concat(picked.map(d => ({ aoId: FP_ID, date: d, time: times[d], prepaid: false }))); fpDedupe(bk);
+  fpClearOff(bk);
   bk.retreatActivitiesUpdatedAt = bk.updatedAt = new Date().toISOString();
   try { saveAll(); } catch (e) { showToast('Could not save: ' + e.message); return; }
+  try { if (typeof svRefreshActivityView === 'function' && document.getElementById('scheduleViewerModal')?.classList.contains('open')) svRefreshActivityView(bk.id); } catch (e) {}
   showToast(picked.length ? `🔥 Fire Pit saved for ${picked.length} night${picked.length !== 1 ? 's' : ''} ✓` : 'Fire Pit removed ✓');
   fpRender(); fpRenderBox();
 }
@@ -139,4 +143,81 @@ function fpRenderBox() {
   b.className = 'tab-btn tab-btn-sub'; b.id = 'firepitTabBtn'; b.setAttribute('onclick', 'fpOpen(this)'); b.style.color = '#ea580c';
   b.innerHTML = '🔥 Fire Pit';
   side.parentNode.insertBefore(b, side);
+})();
+
+// ---- The Assigned Activities editor (a retreat's Schedule window) ----
+// Why Fire Pit could not be chosen there (Darlene 2026-10-24, Melissa Masella): the editor allows each activity ONCE per retreat ("already scheduled - edit its existing date/time"), never on the arrival
+// night, and its day list starts the day after arrival. A Fire Pit can be on several nights, arrival night included. So for Fire Pit only: adding it adds another night (unless that night already
+// has one), its day dropdown also offers the arrival night, and moving it to the arrival night is allowed. Everything else about the editor is unchanged.
+(function () {
+  const bkOf = id => (AppData.bookings || []).find(b => b.id === id);
+  const nightOk = (bk, d) => !!d && d >= String(bk.startDate).slice(0, 10) && d < String(bk.endDate).slice(0, 10);   // arrival night through the last night
+  const stamp = bk => { bk.retreatActivitiesUpdatedAt = bk.updatedAt = new Date().toISOString(); };
+
+  if (typeof svAddActivity === 'function') {
+    const o = window.svAddActivity;
+    window.svAddActivity = function (bkId) {
+      const aoId = document.getElementById('svAddAoId')?.value;
+      if (aoId !== FP_ID) return o.apply(this, arguments);
+      const bk = bkOf(bkId); if (!bk) return;
+      const date = document.getElementById('svAddAoDate')?.value, time = document.getElementById('svAddAoTime')?.value || FP_DEFAULT_TIME;
+      if (!date) { showToast('Pick the night for the Fire Pit first.'); return; }
+      if (!nightOk(bk, date)) { showToast('The Fire Pit can be on any night of the stay, not the departure day.'); return; }
+      if (fpEntries(bk).some(a => String(a.date).slice(0, 10) === date)) { showToast('This retreat already has the Fire Pit that night.'); return; }
+      (bk.retreatActivities = bk.retreatActivities || []).push({ aoId: FP_ID, date, time, prepaid: false });
+      fpClearOff(bk); stamp(bk); saveAll(); if (typeof svRefreshActivityView === 'function') svRefreshActivityView(bkId);
+      showToast('🔥 Fire Pit night added ✓');
+    };
+  }
+  if (typeof svChangeActivityDate === 'function') {
+    const o = window.svChangeActivityDate;
+    window.svChangeActivityDate = function (bkId, idx, newDate) {
+      const bk = bkOf(bkId), act = bk && (bk.retreatActivities || [])[idx];
+      if (!act || act.aoId !== FP_ID) return o.apply(this, arguments);
+      if (!nightOk(bk, newDate)) { showToast('The Fire Pit can be on any night of the stay, not the departure day.'); if (typeof svRefreshActivityView === 'function') svRefreshActivityView(bkId); return; }
+      if (fpEntries(bk).some(a => a !== act && String(a.date).slice(0, 10) === newDate)) { showToast('This retreat already has the Fire Pit that night.'); if (typeof svRefreshActivityView === 'function') svRefreshActivityView(bkId); return; }
+      act.date = newDate; stamp(bk); saveAll(); if (typeof svRefreshActivityView === 'function') svRefreshActivityView(bkId);
+    };
+  }
+  if (typeof svActivityEditorHtml === 'function') {
+    const o = window.svActivityEditorHtml;
+    window.svActivityEditorHtml = function (bk, bkId) {
+      fpEnsureAddOn();   // so "Fire Pit" is in the Add list even if the add-on list just reloaded
+      let html = o.apply(this, arguments);
+      try {
+        const start = String(bk.startDate).slice(0, 10), lbl = new Date(start + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + ' (arrival night)';
+        const opt = sel => `<option value="${start}"${sel ? ' selected' : ''}>${lbl}</option>`;
+        // each Fire Pit row's day dropdown: add the arrival night as the first choice (selected when that is the saved date)
+        (bk.retreatActivities || []).forEach((a, idx) => {
+          if (a.aoId !== FP_ID) return;
+          const m = `onchange="svChangeActivityDate('${bkId}',${idx},this.value)"`, at = html.indexOf(m); if (at < 0) return;
+          const gt = html.indexOf('>', at) + 1; html = html.slice(0, gt) + opt(a.date === start) + html.slice(gt);
+        });
+        // the Add row's day dropdown: the arrival night is offered too (it only works for the Fire Pit; any other activity is still refused with the usual message)
+        const addAt = html.indexOf('id="svAddAoDate"'); if (addAt >= 0) { const gt = html.indexOf('>', addAt) + 1; html = html.slice(0, gt) + opt(false) + html.slice(gt); }
+      } catch (e) {}
+      return html;
+    };
+  }
+})();
+(function () {
+  if (typeof svAoTimeAutofill !== 'function') return;
+  const o = window.svAoTimeAutofill;
+  window.svAoTimeAutofill = function () { const r = o.apply(this, arguments); try { if (document.getElementById('svAddAoId')?.value === FP_ID) { const t = document.getElementById('svAddAoTime'); if (t) t.value = FP_DEFAULT_TIME; } } catch (e) {} return r; };   // evenings, not the 11:45 tour default
+})();
+
+// ---- "Tours for this group" checklist (tour-picker.js): ticking Fire Pit there did nothing, because it only adds an activity on a day it "normally runs" (weekday rotation) and the Fire Pit has none.
+// Now ticking it opens the Fire Pit nights pop-up for that retreat (tick the nights and times, Save); unticking removes every Fire Pit night (the picker's own behaviour). ----
+(function () {
+  if (typeof tpToggle !== 'function') return;
+  const o = window.tpToggle;
+  window.tpToggle = function (bkId, aoId, checked) {
+    if (aoId !== FP_ID) return o.apply(this, arguments);
+    const bk = (AppData.bookings || []).find(b => b.id === bkId); if (!bk) return;
+    if (!checked) return o.apply(this, arguments);
+    fpClearOff(bk);
+    try { if (typeof svRefreshActivityView === 'function') svRefreshActivityView(bkId); } catch (e) {}   // the box stays unticked until nights are saved
+    if (typeof qpShow === 'function') { fpState.bookingId = bkId; qpShow('fire', bkId); }
+    else showToast('Open the 🔥 Fire Pit button to choose the nights.');
+  };
 })();
