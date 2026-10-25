@@ -29,7 +29,7 @@ function mceDecorate() {
     const cells = [...grid.querySelectorAll('.menu-grid-cell')];
     const weekHasLunch = dates.some(ds => (menuSchedule[ds] && menuSchedule[ds].lunch || []).length > 0);
     const weekHasBreakfast = dates.some(ds => (menuSchedule[ds] && menuSchedule[ds].breakfast || []).length > 0);
-    const meals = ['lightBreakfast', ...(weekHasBreakfast ? ['breakfast'] : []), 'brunch', ...(weekHasLunch ? ['lunch'] : []), 'snack', 'dinner'];
+    const meals = (a => typeof menuMealsFor === 'function' ? menuMealsFor(dates, a) : a)(['lightBreakfast', ...(weekHasBreakfast ? ['breakfast'] : []), 'brunch', ...(weekHasLunch ? ['lunch'] : []), 'snack', 'dinner']);
     if (cells.length !== meals.length * 7) return;
     cells.forEach((cell, n) => {
       const meal = meals[Math.floor(n / 7)], ds = dates[n % 7];
