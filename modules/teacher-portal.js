@@ -3026,9 +3026,9 @@ function tsRenderCalSection(bk){
       const _timeOvs=bk.scheduleTimeOverrides||[];
       const _mornOv=_timeOvs.find(o=>o.date===dateStr&&o.period==='morn');
       const _aftOv=_timeOvs.find(o=>o.date===dateStr&&o.period==='aft');
-      const dayMornStart=_mornOv?_mornOv.start:_effMornStart;
+      const dayMornStart=(_mornOv&&_mornOv.start)?_mornOv.start:_effMornStart;
       const dayMornDur=_mornOv?(_mornOv.dur||_effMornDur):_effMornDur;
-      const dayAfSlot=_aftOv?_aftOv.start:_effAfSlot;
+      const dayAfSlot=(_aftOv&&_aftOv.start)?_aftOv.start:_effAfSlot;
       const dayAfDur=_aftOv?(_aftOv.dur||_effAfDur):_effAfDur;
       // Must respect "No class this day" (bk.scheduleSkips) for middle days
       // too — this branch never checked it at all, so a skipped morning/
@@ -3543,7 +3543,7 @@ function svValidActivityDays(bk){
 // class fall back to "the usual morning time," which we derive from the
 // first day-by-day entry rather than a now-nonexistent sr.morningStart.
 function tsUsualMorning(bk){
-  const ov=(bk.scheduleTimeOverrides||[]).find(o=>o.period==='morn');
+  const ov=(bk.scheduleTimeOverrides||[]).find(o=>o.period==='morn'&&o.start)||(bk.scheduleTimeOverrides||[]).find(o=>o.period==='morn');   // first day that really has a start time
   if(ov)return{start:ov.start,dur:ov.dur||60,shala1:ov.shala1||''};
   return{start:'',dur:60,shala1:''};
 }
@@ -5349,7 +5349,7 @@ function openPrintSchedule(bkId){
       const _pMornOv=_pTimeOvs.find(o=>o.date===dateStr&&o.period==='morn');
       const _pAftOv=_pTimeOvs.find(o=>o.date===dateStr&&o.period==='aft');
       const _pUsualMorn=tsUsualMorning(bk);
-      const _pDayMornStart=_pMornOv?_pMornOv.start:_pUsualMorn.start;
+      const _pDayMornStart=(_pMornOv&&_pMornOv.start)?_pMornOv.start:_pUsualMorn.start;
       const _pDayMornDur=_pMornOv?(_pMornOv.dur||_pUsualMorn.dur||60):(_pUsualMorn.dur||60);
       const _pDayMornShala=shalaName(_pMornOv?.shala1||_effMornId);
       // Same "No class this day" check as the departure-day branch above and
@@ -5375,7 +5375,7 @@ function openPrintSchedule(bkId){
           rows.push({time:fmtT(ws.start)+' – '+wsEnd,desc:'Mid-Afternoon Class',shala:shalaName(ws.shala1),cls:'shala',sk:ws.start||'16:00'});
         }
       }
-      const _pDayAfSlot=_pAftOv?_pAftOv.start:(sr?.afternoonSlot||sr?.afternoonStart);
+      const _pDayAfSlot=(_pAftOv&&_pAftOv.start)?_pAftOv.start:(sr?.afternoonSlot||sr?.afternoonStart);
       const _pDayAfDur=_pAftOv?(_pAftOv.dur||sr?.afternoonDur||60):(sr?.afternoonDur||60);
       const _pDayAfShala=shalaName(_pAftOv?.shala1||_effAftId);
       if(sr?.hasAfternoon&&_pDayAfSlot&&!_pAftSkipped){
@@ -5870,7 +5870,7 @@ function skedGetRetreatEvents(dateStr){
       // same arrival day — Darlene's report 2026-09-16).
       if(effMornStart&&effMornShala&&!mornSkippedThisDay&&!hasRealArrivalClass){
         const arrOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
-        const arrStart=arrOv?arrOv.start:effMornStart;
+        const arrStart=(arrOv&&arrOv.start)?arrOv.start:effMornStart;
         const arrDur=arrOv?.dur||effMornDur;
         const mEnd=skedMinToTime(skedTimeToMin(arrStart)+arrDur);
         evs.push({id:'ret_'+bk.id+'_morn_arr',resourceId:arrOv?.shala1||effMornShala,date:dateStr,startTime:arrStart,endTime:mEnd,title,subtitle:tsEffClassLabel(sr,'arrival','Opening Class')+(arrOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
@@ -5888,7 +5888,7 @@ function skedGetRetreatEvents(dateStr){
         }
       } else if(effMornStart&&effMornShala&&!mornSkippedThisDay&&!(sr.hasDepartureClass&&sr.departureSlot)){
         const depOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
-        const depStart=depOv?depOv.start:effMornStart;
+        const depStart=(depOv&&depOv.start)?depOv.start:effMornStart;
         const depDur=depOv?.dur||effMornDur;
         const mEnd=skedMinToTime(skedTimeToMin(depStart)+depDur);
         evs.push({id:'ret_'+bk.id+'_morn_dep',resourceId:effMornShala,date:dateStr,startTime:depStart,endTime:mEnd,title,subtitle:tsEffClassLabel(sr,'departure','Morning Class')+(depOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
@@ -5908,9 +5908,9 @@ function skedGetRetreatEvents(dateStr){
       const timeOvs=bk.scheduleTimeOverrides||[];
       const mornOv=timeOvs.find(o=>o.date===dateStr&&o.period==='morn');
       const aftOv=timeOvs.find(o=>o.date===dateStr&&o.period==='aft');
-      const dayMornStart=mornOv?mornOv.start:effMornStart;
+      const dayMornStart=(mornOv&&mornOv.start)?mornOv.start:effMornStart;
       const dayMornDur=mornOv?(mornOv.dur||effMornDur):effMornDur;
-      const dayAfSlot=aftOv?aftOv.start:effAfSlot;
+      const dayAfSlot=(aftOv&&aftOv.start)?aftOv.start:effAfSlot;
       const dayAfDur=aftOv?(aftOv.dur||effAfDur):effAfDur;
       const dayMornShala=mornOv?.shala1||effMornShala;
       if(dayMornStart&&dayMornShala&&!mornSkipped){

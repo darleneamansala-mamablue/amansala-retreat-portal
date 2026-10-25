@@ -387,7 +387,7 @@ function menuMealTime(bk,meal,dateStr){
       // day-override lookup was why the Menu could show a stale time that
       // no longer matched what was actually confirmed for that specific day.
       const mornOv=(bk.scheduleTimeOverrides||[]).find(o=>o.date===dateStr&&o.period==='morn');
-      mStart=mornOv?mornOv.start:(ov.morningStart||sr.morningStart||'');
+      mStart=(mornOv&&mornOv.start)?mornOv.start:(ov.morningStart||sr.morningStart||((bk.scheduleTimeOverrides||[]).find(o=>o.period==='morn'&&o.start)||{}).start||'');
       mDur=parseInt(mornOv?(mornOv.dur||90):(ov.morningDur||sr.morningDur||90));
     }
     // No class that morning (day skipped / no morning class): brunch still
