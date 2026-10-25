@@ -20,6 +20,37 @@ https://amansala-portal.netlify.app/*  https://amansalaportal.com/:splat  301!
 /spa  /spa-booking.html  200
 /book-spa  /spa-booking.html  200
 
+# Portal sections have their own addresses (modules/tab-urls.js): each one opens booking-hub.html, which then shows that section after login. Must sit above the /:slug catch-all.
+/dashboard  /booking-hub.html  200
+/venues  /booking-hub.html  200
+/pipeline  /booking-hub.html  200
+/booking-engine  /booking-hub.html  200
+/reservations  /booking-hub.html  200
+/calendar  /booking-hub.html  200
+/teachers  /booking-hub.html  200
+/teacher-profiles  /booking-hub.html  200
+/builder  /booking-hub.html  200
+/date-finder  /booking-hub.html  200
+/activity-log  /booking-hub.html  200
+/items  /booking-hub.html  200
+/menu-editor  /booking-hub.html  200
+/contracts  /booking-hub.html  200
+/commissions  /booking-hub.html  200
+/reports  /booking-hub.html  200
+/settings  /booking-hub.html  200
+/bot-log  /booking-hub.html  200
+/schedule  /booking-hub.html  200
+/housekeeping  /booking-hub.html  200
+/transport  /booking-hub.html  200
+/events  /booking-hub.html  200
+/spa-admin  /booking-hub.html  200
+/menu  /booking-hub.html  200
+/activity-sheet  /booking-hub.html  200
+/bbc-schedule  /booking-hub.html  200
+/confirmations  /booking-hub.html  200
+/we-travel  /booking-hub.html  200
+/guest-chat  /booking-hub.html  200
+
 # Short payment links -- /pay/<id> -> resolved from the payment_shortlinks
 # table by netlify/functions/pay-redirect.js (302 redirect to the real Stripe
 # Checkout URL). Created by visito-create-reservation.js so Lana can hand a
