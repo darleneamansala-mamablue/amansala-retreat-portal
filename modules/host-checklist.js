@@ -184,6 +184,7 @@ function hcRenderBox() {
   } catch (e) {}
 }
 function hcOpenFor(id) {
+  if (typeof qpShow === 'function') { try { qpShow('list', id); return; } catch (e) { console.warn('[host-checklist] pop-up failed', e); } }   // a pop-up over everything: the Host Checklist tab opened BEHIND a booking page that was already open (Darlene 2026-10-25)
   const b = document.getElementById('hostchecklistTabBtn');
   if (b) { hcOpen(b); hcPick(id); return; }   // admin portal: the Host Checklist tab, on this retreat
   hcState.bookingId = id; hcInline = !hcInline; hcRenderBox();   // no sidebar here (teacher preview): open it right inside the box
