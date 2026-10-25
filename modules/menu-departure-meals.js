@@ -46,7 +46,8 @@ function mdNoteHtml(dateStr, mealKey) {
   const items = Object.entries(mdLog).filter(([k]) => { const p = k.split('|'); return p[1] === day && p[2] === mealKey; }).map(([, v]) => v);
   if (!items.length) return '';
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  return `<div style="margin-top:6px;padding:5px 8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:11px;line-height:1.35;color:#1e3a8a"><b>🚐 Left for the airport before this meal — not counted:</b><br>${items.map(x => `${esc(x.group)}: ${esc(x.names.join(', '))} (${x.from} → ${x.to})`).join('<br>')}</div>`;
+  // just the numbers on one short line (Darlene 2026-10-25: the names took too much room)
+  return `<div style="margin-top:4px;font-size:10.5px;line-height:1.3;color:#1e3a8a" title="Left for the airport before this meal — not counted">🚐 ${items.map(x => `${x.names.length} left (${x.from} → ${x.to})`).join(' · ')}</div>`;
 }
 (function () {
   if (typeof menuRenderMealSection === 'function') {
