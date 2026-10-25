@@ -13,12 +13,18 @@ function tourDateAllowed(bk,date){
   const s=(bk.startDate||'').slice(0,10),e=(bk.endDate||'').slice(0,10);
   return date!==s&&date!==e;
 }
+function fireNightAllowed(bk,date){
+  if(!bk||!date)return false;
+  const s=(bk.startDate||'').slice(0,10),e=(bk.endDate||'').slice(0,10);
+  return date>=s&&date<e;
+}
 function cleanRetreatActivities(bk){
   const acts=bk&&bk.retreatActivities;
   if(!Array.isArray(acts)||!acts.length)return 0;
   // Tours unchecked in "Tours for this group" (tour-picker.js) never stay on.
   const off=new Set(bk?.packageCustomPrices?.__cfg__?.tourOff||[]);
-  const keep=acts.filter(a=>a&&a.aoId&&a.aoId!=='undefined'&&!off.has(a.aoId)&&tourDateAllowed(bk,(a.date||'').slice(0,10)));
+  // Fire Pit (ao21, modules/fire-pit.js) is the one exception to the arrival-day rule: it may be on the arrival NIGHT (never the departure day). Without this every save deleted an arrival-night Fire Pit.
+  const keep=acts.filter(a=>a&&a.aoId&&a.aoId!=='undefined'&&!off.has(a.aoId)&&(a.aoId==='ao21'?fireNightAllowed(bk,(a.date||'').slice(0,10)):tourDateAllowed(bk,(a.date||'').slice(0,10))));
   // Never two off-site tours on the same day (Darlene 2026-09-30) — ceremonies
   // and on-site activities follow Tour Settings and may share a day. The first
   // tour on a day stays; any later one that day is dropped. Only days inside
