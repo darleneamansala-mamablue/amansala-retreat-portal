@@ -27,6 +27,7 @@ const HC_ITEMS = [
   { id: 'greet-teacher', when: 'S0', group: 'Meeting with the teacher', text: 'Greet the teacher and take them on a tour: show them the shala options, and show them how to use the music of each shala you show them' },
   { id: 'review-schedule', when: 'S0', group: 'Meeting with the teacher', text: 'Review the schedule' },
   { id: 'review-balance', when: 'S0', group: 'Meeting with the teacher', text: 'Review if a balance is owed', hint: 'balance' },
+  { id: 'group-tip', when: 'S0', group: 'Meeting with the teacher', text: 'Give the teacher the group tip details for the last day' },
   { id: 'welcome-orientation', when: 'S0', group: 'Check-in during dessert', text: 'Welcome orientation' },
   { id: 'final-schedule', when: 'S0', group: 'Check-in during dessert', text: 'Update and print the finalised schedule and activity sheets' },
   { id: 'announce-transport', when: 'S+1', group: '1st morning', text: 'Announcement about transport' },
