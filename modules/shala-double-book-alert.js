@@ -31,6 +31,21 @@ function sdbScan() {
   return out;
 }
 const sdbWho = e => String(e.title || 'Retreat').replace(/</g, '&lt;') + (e.subtitle ? ' — ' + String(e.subtitle).split(' · ')[0].replace(/</g, '&lt;') : '');
+// One line of a pair, clickable: opens the same edit form as clicking that block on the Schedule (classes: time, length, shala; anything else opens the retreat's schedule)
+const sdbLine = (e, date) => `<div onclick="sdbFix('${String(e.id).replace(/'/g, '')}','${String(e.bkId).replace(/'/g, '')}','${date}')" title="Click to change this one" style="font-size:13px;padding:5px 8px;margin-top:3px;border-radius:8px;cursor:pointer;background:#fff7f7" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fff7f7'">${sdbWho(e)} <b>${sdbFmt(e.startTime)}–${sdbFmt(e.endTime)}</b> <span style="color:#b91c1c;font-weight:700;font-size:11.5px">✎ change</span></div>`;
+// Click a line: hide this list, open that block's edit form, and when the form is closed bring the list back (re-scanned) so you can carry on down it
+let sdbWatch = null;
+function sdbFix(evId, bkId, date) {
+  const m = document.getElementById('sdbModal'); if (m) m.style.display = 'none';
+  try { skedClickEvent(evId, bkId, true, date); } catch (e) { if (m) m.style.display = 'flex'; return; }
+  clearInterval(sdbWatch); let quiet = 0, ticks = 0;
+  sdbWatch = setInterval(() => {
+    ticks++;
+    const open = document.querySelector('.modal-overlay.open');
+    quiet = open ? 0 : quiet + 1;
+    if (quiet >= 2 || ticks > 1000) { clearInterval(sdbWatch); sdbTick(); sdbShow(); }
+  }, 600);
+}
 const sdbDay = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 function sdbChip() {
@@ -55,8 +70,8 @@ function sdbShow() {
   m.style.display = 'flex';
   m.innerHTML = `<div style="background:#f5f1eb;border-radius:16px;max-width:680px;width:100%;max-height:90vh;overflow:auto;padding:20px 24px;box-shadow:0 12px 40px rgba(0,0,0,.3)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#b91c1c">⚠ Shala double-bookings</div><button onclick="document.getElementById('sdbModal').style.display='none'" style="border:none;background:none;font-size:22px;cursor:pointer;color:#6b7280">✕</button></div>
-    <div style="font-size:12.5px;color:#6b7280;margin-bottom:12px">Next ${SDB_DAYS} days, from what the Schedule shows. Change one of each pair (move the time or the shala) to clear it.</div>
+    <div style="font-size:12.5px;color:#6b7280;margin-bottom:12px">Next ${SDB_DAYS} days, from what the Schedule shows. Click either line of a pair to change it (time, length or shala); the list comes back when you save.</div>
     ${sdbList.length ? sdbList.map(c => `<div style="background:#fff;border:1.5px solid #fecaca;border-radius:12px;padding:10px 14px;margin-bottom:10px"><div style="font-weight:800">${sdbName(c.shala)} · ${sdbDay(c.date)}</div>
-      <div style="font-size:13px;margin-top:4px">${sdbWho(c.a)} <b>${sdbFmt(c.a.startTime)}–${sdbFmt(c.a.endTime)}</b></div><div style="font-size:13px">${sdbWho(c.b)} <b>${sdbFmt(c.b.startTime)}–${sdbFmt(c.b.endTime)}</b></div></div>`).join('') : '<div style="color:#059669;font-weight:700">No double-bookings in the next 21 days. ✓</div>'}</div>`;
+      ${sdbLine(c.a, c.date)}${sdbLine(c.b, c.date)}</div>`).join('') : '<div style="color:#059669;font-weight:700">No double-bookings in the next 21 days. ✓</div>'}</div>`;
 }
 setInterval(sdbTick, 60000); setTimeout(sdbTick, 6000);
