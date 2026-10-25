@@ -10,6 +10,11 @@ const HC_KEY = 'host_checklists';
 
 // when: how the due date is worked out. 'S-3' = 3 days before start, 'S1' = 1 day before start (2 if it starts on a Sunday), 'S0' = start day, 'S+1' = day after start, 'E-1' = day before check-out, 'E0' = check-out day.
 const HC_ITEMS = [
+  // Retreat Admin: set up once per retreat, above the host steps (Darlene 2026-10-24). No due date: tick them when done. "assign" = can be handed to someone (default shown).
+  { id: 'adm-massage-credit', when: null, group: 'Retreat Admin', text: 'Massage credit added to the teacher\'s room' },
+  { id: 'adm-teacher-room', when: null, group: 'Retreat Admin', text: 'Teacher is in a nice room' },
+  { id: 'adm-best-rooms', when: null, group: 'Retreat Admin', text: 'All students are in the best possible room for their room type' },
+  { id: 'adm-whatsapp', when: null, group: 'Retreat Admin', text: 'WhatsApp chat made', assign: 'Online team' },
   { id: 'transport-folder', when: 'S-3', group: '3 days prior to retreat', text: 'Folder with transport information, printed 3 days in advance. Note if TEACHER PAYS or STUDENTS PAY for transport', hint: 'transport' },
   { id: 'schedule-printed', when: 'S-1', group: '1 day prior to retreat', text: 'Schedule printed, ready for teacher review' },
   { id: 'activity-sheet', when: 'S-1', group: '1 day prior to retreat', text: 'Activity sheet drafted' },
@@ -45,7 +50,8 @@ function hcDue(bk, when) {
 }
 function hcItemsFor(bk) {
   const rec = hcState.data[bk.id] || {}, done = rec.done || {};
-  const items = HC_ITEMS.map(it => ({ ...it, due: hcDue(bk, it.when), done: done[it.id] || null }));
+  const assign = rec.assign || {};
+  const items = HC_ITEMS.map(it => ({ ...it, due: hcDue(bk, it.when), done: done[it.id] || null, assignee: it.assign !== undefined ? (assign[it.id] !== undefined ? assign[it.id] : it.assign) : undefined }));
   // One step for every Fire Pit night saved on this retreat (Fire Pit button / tab): set up, light and put out on that night
   (bk.retreatActivities || []).filter(a => a.aoId === 'ao21' && a.date).sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach(a => {
     const d = String(a.date).slice(0, 10), t = a.time ? ' ' + new Date('2000-01-01T' + a.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
@@ -81,6 +87,7 @@ async function hcMutate(bookingId, fn) {
 const hcMe = () => (typeof getCurrentSession === 'function' && (getCurrentSession() || {}).name) || 'Staff';
 function hcToggle(itemId) { return hcMutate(hcState.bookingId, r => { if (r.done[itemId]) delete r.done[itemId]; else r.done[itemId] = { by: hcMe(), at: new Date().toISOString(), note: '' }; }); }
 function hcNote(itemId, text) { return hcMutate(hcState.bookingId, r => { r.done[itemId] = Object.assign({ by: hcMe(), at: new Date().toISOString() }, r.done[itemId] || {}, { note: text }); }); }
+function hcAssign(itemId, who) { return hcMutate(hcState.bookingId, r => { r.assign = r.assign || {}; r.assign[itemId] = String(who || '').trim(); }); }
 function hcAddExtra() {
   const text = (document.getElementById('hcExtraText') || {}).value || '', due = (document.getElementById('hcExtraDue') || {}).value || '';
   if (!text.trim()) { showToast('Type the step first.'); return; }
@@ -136,6 +143,7 @@ function hcBodyHtml(bk) {
           <input type="checkbox" ${i.done ? 'checked' : ''} onchange="hcToggle('${hcEsc(i.id)}')" style="width:20px;height:20px;margin-top:2px;cursor:pointer;flex-shrink:0">
           <div style="flex:1;min-width:0"><div style="font-size:13.5px;${i.done ? 'color:#6b7280;text-decoration:line-through' : 'font-weight:600'}">${hcEsc(i.text)}</div>
             ${hint ? `<div style="font-size:12px;color:#7c3aed;font-weight:600;margin-top:2px">${hcEsc(hint)}</div>` : ''}
+            ${i.assignee !== undefined ? `<div style="margin-top:3px;font-size:11.5px;color:#6b7280">Assigned to <input type="text" value="${hcEsc(i.assignee)}" placeholder="e.g. Online team" onchange="hcAssign('${hcEsc(i.id)}',this.value)" style="padding:2px 8px;border:1px solid #d6cfc4;border-radius:6px;font-family:inherit;font-size:11.5px;width:160px"></div>` : ''}
             <div style="font-size:11.5px;color:${over ? '#b91c1c' : '#9ca3af'};margin-top:2px">${i.due ? (over ? 'Overdue · was due ' : 'Due ') + hcFmt(i.due) : ''}${i.done ? ` · ✓ ${hcEsc(i.done.by)}, ${new Date(i.done.at).toLocaleString('en-US', { timeZone: 'America/Cancun', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</div>
             ${i.done ? `<input type="text" value="${hcEsc(i.done.note || '')}" placeholder="Add a note" onchange="hcNote('${hcEsc(i.id)}',this.value)" style="margin-top:4px;width:100%;max-width:420px;padding:4px 8px;border:1px solid #e0d8cc;border-radius:6px;font-family:inherit;font-size:12px">` : ''}</div>
           ${i.extra ? `<button onclick="hcRemoveExtra('${hcEsc(i.id)}')" style="${btn};padding:2px 8px">✕</button>` : ''}</div>`; }).join('')}</div></div>`).join('')}
