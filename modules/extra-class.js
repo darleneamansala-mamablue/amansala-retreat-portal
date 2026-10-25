@@ -34,14 +34,15 @@ function ecAdd(bkId) {
   const label = document.getElementById('ecLabel').value.trim(), co = document.getElementById('ecCo').value.trim();
   if (!date || !start) { showToast('Pick the day and the start time.'); return; }
   if (!shala) { showToast('Pick the shala.'); return; }
-  // Is that shala free then? (every retreat's classes as the Schedule draws them)
+  // Is that shala free then? Warn only (a browser can silence pop-up questions, which made the class impossible to add)
+  let warn = '';
   try {
     const s0 = ecMin(start), busy = typeof skedGetRetreatEvents === 'function' ? skedGetRetreatEvents(date).find(e => e.resourceId === shala && ecMin(e.startTime) != null && ecMin(e.endTime) != null && ecMin(e.startTime) < s0 + dur && s0 < ecMin(e.endTime)) : null;
-    if (busy && !confirm(`${ecShalaName(shala)} is already in use then: ${busy.title}${busy.subtitle ? ' — ' + String(busy.subtitle).split(' · ')[0] : ''} (${ecFmt(busy.startTime)}–${ecFmt(busy.endTime)}).\n\nAdd the class anyway? It will show in the double-booking list.`)) return;
+    if (busy) warn = `${ecShalaName(shala)} is also used then: ${busy.title}${busy.subtitle ? ' — ' + String(busy.subtitle).split(' · ')[0] : ''} (${ecFmt(busy.startTime)}–${ecFmt(busy.endTime)}). It is in the double-booking list.`;
   } catch (e) {}
   (bk.scheduleTimeOverrides = bk.scheduleTimeOverrides || []).push({ id: 'ec' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date, period: EC_PERIOD, start, dur, shala1: shala, label, coTeacher: co, notes: '' });
   bk.updatedAt = new Date().toISOString(); saveAll();
-  showToast('Class added ✓'); if (typeof qpDraw === 'function') qpDraw(); try { if (typeof sdbTick === 'function') sdbTick(); } catch (e) {}
+  showToast(warn ? 'Class added ✓ — ' + warn : 'Class added ✓'); if (typeof qpDraw === 'function') qpDraw(); try { if (typeof sdbTick === 'function') sdbTick(); } catch (e) {}
 }
 function ecRemove(bkId, id, idx) {
   const bk = (AppData.bookings || []).find(b => b.id === bkId); if (!bk || !confirm('Remove this class?')) return;
