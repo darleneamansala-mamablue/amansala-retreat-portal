@@ -11,10 +11,27 @@ function rmsRefresh() {
 }
 function rmsSettle() { setTimeout(rmsRefresh, 150); setTimeout(rmsRefresh, 1200); }
 
+// The folio's room charge line is saved as the text "Room charge — <room>" when it is created and was never updated by a move, so a guest moved GV2 -> 5 still read "Room charge — 18"
+// on the bill (John Patterson, 2026-10-24). After a move, rename every Room-category line of that retreat's registrations that names a different room than the guest is in now.
+async function rmsFixRoomLines(bookingId) {
+  try {
+    const regs = (AppData.regs || []).filter(r => r.bookingId === bookingId && r.room); if (!regs.length) return;
+    const { data: folios } = await db.from('folios').select('id,registration_id').in('registration_id', regs.map(r => r.id));
+    if (!folios || !folios.length) return;
+    const roomOf = {}; regs.forEach(r => { roomOf[r.id] = r.room; });
+    const { data: items } = await db.from('folio_items').select('id,folio_id,description,category').in('folio_id', folios.map(f => f.id)).eq('category', 'Room');
+    const regOfFolio = {}; folios.forEach(f => { regOfFolio[f.id] = f.registration_id; });
+    for (const it of (items || [])) {
+      const m = /^Room charge — (.+)$/.exec(it.description || ''); const room = roomOf[regOfFolio[it.folio_id]];
+      if (m && room && m[1].trim() !== String(room).trim()) await db.from('folio_items').update({ description: `Room charge — ${room}` }).eq('id', it.id);
+    }
+  } catch (e) { console.warn('[room-move-sync] room charge line', e); }
+}
+
 (function () {
   if (typeof regMoveGuest === 'function') {
     const o = window.regMoveGuest;
-    window.regMoveGuest = function () { const r = o.apply(this, arguments); rmsSettle(); return r; };
+    window.regMoveGuest = function (payload) { const r = o.apply(this, arguments); rmsSettle(); try { const reg = AppData.regs.find(x => x.id === String(payload || '').split('::')[0]); if (reg) setTimeout(() => rmsFixRoomLines(reg.bookingId), 600); } catch (e) {} return r; };
   }
   if (typeof regSplitGuestToRoom === 'function') {
     const o = window.regSplitGuestToRoom;
