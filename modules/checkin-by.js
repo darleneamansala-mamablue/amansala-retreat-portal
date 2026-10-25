@@ -26,11 +26,11 @@ async function ciRecord(id, on, at, info) {
     ciLog = all; ciLoadedAt = Date.now();
   } catch (e) { console.warn('[checkin-by] could not save who checked in', e); }
 }
-const CI_UP = { accepted: 'accepted', declined: 'declined', none: 'not offered' };
+const CI_UP = { accepted: 'accepted', declined: 'declined', none: 'not offered', offered: 'offered' };
 function ciDetail(id) {
   const r = ciLog[id]; if (!r) return '';
   const parts = [];
-  if (r.upgrade) parts.push('Upgrade: ' + (CI_UP[r.upgrade] || r.upgrade));
+  if (r.upgrade) parts.push('Upgrade: ' + (CI_UP[r.upgrade] || r.upgrade));   // 'offered' = ticked on the Transport log, answer not given yet
   if (r.shown) parts.push('Options shown: ' + (r.shown === 'yes' ? 'yes' : 'no') + (r.options ? ' (' + r.options + ')' : ''));
   if (r.note) parts.push('Note: ' + r.note);
   return parts.join(' · ');
@@ -57,7 +57,7 @@ function ciAsk(name) {
   });
 }
 const ciGuestName = id => { try { const r = AppData.regs.find(x => x.id === id); if (r) return (((r.guests || []).find(g => g.name) || {}).name) || ''; const q = typeof _resRequests !== 'undefined' ? _resRequests.find(x => x.id === id) : null; return q ? (q.name || [q.firstName, q.lastName].filter(Boolean).join(' ')) : ''; } catch (e) { return ''; } };
-const ciLabel = (id, checkedInAt) => { const r = ciLog[id]; return r ? `Checked in by ${r.by}` : (checkedInAt ? 'Checked in · who not recorded' : ''); };
+const ciLabel = (id, checkedInAt) => { const r = ciLog[id]; return (r && r.by) ? `Checked in by ${r.by}` : (checkedInAt ? 'Checked in · who not recorded' : ''); };
 
 (function () {
   // 1. Record who, right after each check-in succeeds
@@ -83,9 +83,37 @@ const ciLabel = (id, checkedInAt) => { const r = ciLog[id]; return r ? `Checked 
   if (typeof _bdRender === 'function') { const o = window._bdRender; window._bdRender = function () { const r = o.apply(this, arguments); ciLoad().then(() => setTimeout(ciDecorateBd, 120)); return r; }; }
   if (typeof tr2RenderRow === 'function') { const o = window.tr2RenderRow; window.tr2RenderRow = function (e) {
     const html = o.apply(this, arguments);
-    try { return e && e.regId && e.checkedIn ? html.replace('Checked in -- click to undo', ciEsc(ciLabel(e.regId, true) + (ciDetail(e.regId) ? ' · ' + ciDetail(e.regId) : '')) + ' -- click to undo') : html; } catch (err) { return html; } }; }
+    try {
+      let out = e && e.regId && e.checkedIn ? html.replace('Checked in -- click to undo', ciEsc(ciLabel(e.regId, true) + (ciDetail(e.regId) ? ' · ' + ciDetail(e.regId) : '')) + ' -- click to undo') : html;
+      if (e && e.regId && e.type === 'arrival') out = out.replace(/(<div style="font-weight:700;color:#111827">[^<]*<\/div>)/, '$1' + ciTransportBlock(e));
+      return out;
+    } catch (err) { return html; } }; }
+  // the Transport log needs the saved ticks and names too: read them after it loads, then redraw it
+  if (typeof tr2LoadData === 'function') { const o = window.tr2LoadData; window.tr2LoadData = async function () { const r = await o.apply(this, arguments); ciLoad(true).then(() => { try { if (typeof tr2BuildView === 'function' && document.getElementById('tr2-body')) tr2BuildView(); } catch (e) {} }); return r; }; }
   setTimeout(() => ciLoad(true), 2500);
 })();
+
+// ---- Transport log: "Offered Upgrade" and "Showed Options" tick boxes on each arrival row (Darlene 2026-10-24), saved in the same record as who checked them in ----
+async function ciSetFlag(regId, kind, on) {
+  try {
+    const { data } = await db.from('app_store').select('value').eq('key', CI_KEY).maybeSingle();
+    const all = (data && data.value && typeof data.value === 'object') ? data.value : {};
+    const e = all[regId] = all[regId] || {};
+    if (kind === 'upgrade') { if (on) { if (!e.upgrade || e.upgrade === 'none') e.upgrade = 'offered'; } else delete e.upgrade; }
+    else { if (on) e.shown = 'yes'; else { delete e.shown; delete e.options; } }
+    e.flagBy = ciMe() || 'Staff'; e.flagAt = new Date().toISOString();
+    if (!Object.keys(e).some(k => !/^flag/.test(k) && k !== 'by' && k !== 'at')) { if (!e.by) delete all[regId]; }
+    const { error } = await db.from('app_store').upsert({ key: CI_KEY, value: all, updated_at: new Date().toISOString() }); if (error) throw error;
+    ciLog = all; ciLoadedAt = Date.now();
+  } catch (e) { console.warn('[checkin-by] could not save the tick', e); if (typeof showToast === 'function') showToast('Could not save. Try again.'); }
+  try { if (typeof tr2BuildView === 'function') tr2BuildView(); } catch (e) {}
+}
+function ciTransportBlock(e) {
+  const r = ciLog[e.regId] || {}, up = !!r.upgrade && r.upgrade !== 'none', sh = r.shown === 'yes';
+  const cb = (kind, on, label, tip) => `<label onclick="event.stopPropagation()" title="${ciEsc(tip)}" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:99px;margin:2px 4px 0 0;cursor:pointer;background:${on ? '#d1fae5' : '#f3f4f6'};color:${on ? '#065f46' : '#6b7280'}"><input type="checkbox" ${on ? 'checked' : ''} onclick="event.stopPropagation()" onchange="ciSetFlag('${ciEsc(e.regId)}','${kind}',this.checked)" style="margin:0;cursor:pointer">${label}</label>`;
+  const who = e.checkedIn ? `<div style="font-size:10.5px;font-weight:600;color:${r.by ? '#047857' : '#9ca3af'};margin-top:2px">✓ ${ciEsc(ciLabel(e.regId, true))}</div>` : '';
+  return `<div>${cb('upgrade', up, up && r.upgrade !== 'offered' ? 'Offered Upgrade ✓ (' + (CI_UP[r.upgrade] || r.upgrade) + ')' : 'Offered Upgrade' + (up ? ' ✓' : ''), ciDetail(e.regId) || 'Tick when an upgrade was offered')}${cb('options', sh, 'Showed Options' + (sh ? ' ✓' : ''), ciDetail(e.regId) || 'Tick when they were shown room options')}${who}</div>`;
+}
 
 function ciDecorateRes() {
   try {
