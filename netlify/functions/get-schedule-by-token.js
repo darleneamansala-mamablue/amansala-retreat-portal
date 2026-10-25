@@ -49,7 +49,8 @@ function effClassLabelDay(sr,bk,dateStr,ovPeriod,labelKey,fallback){
 }
 function usualMorning(bk,sr){
   const ov=(sr&&sr.adminOverride)||{};
-  return { start: ov.morningStart||(sr&&sr.morningStart)||'', dur: parseInt(ov.morningDur||(sr&&sr.morningDur)||90) };
+  const first = ((bk && bk.schedule_time_overrides) || []).find(o => o.period === 'morn' && o.start);   // first day that really has a time
+  return { start: ov.morningStart||(sr&&sr.morningStart)||(first&&first.start)||'', dur: parseInt(ov.morningDur||(sr&&sr.morningDur)||(first&&first.dur)||90) };
 }
 
 function buildScheduleDays(bk, addOnMap){
@@ -109,7 +110,7 @@ function buildScheduleDays(bk, addOnMap){
       const aftOv = timeOvs.find(o=>o.date===dateStr&&o.period==='aft');
       const usual = usualMorning(bk,sr);
       if (!mornSkipped) {
-        const dayMornStart = mornOv ? mornOv.start : usual.start;
+        const dayMornStart = (mornOv && mornOv.start) ? mornOv.start : usual.start;   // a day saved with a blank time falls back to the usual one
         const dayMornDur = mornOv ? (mornOv.dur||usual.dur||60) : (usual.dur||60);
         const dayMornShala = shalaName((mornOv&&mornOv.shala1)||sr.morningShala1);
         if (dayMornStart) {
@@ -131,7 +132,7 @@ function buildScheduleDays(bk, addOnMap){
         }
       }
       if (!aftSkipped) {
-        const dayAfSlot = aftOv ? aftOv.start : (sr.afternoonSlot||sr.afternoonStart);
+        const dayAfSlot = (aftOv && aftOv.start) ? aftOv.start : (sr.afternoonSlot||sr.afternoonStart);
         const dayAfDur = aftOv ? (aftOv.dur||sr.afternoonDur||60) : (sr.afternoonDur||60);
         const dayAfShala = shalaName((aftOv&&aftOv.shala1)||sr.afternoonShala1);
         if (sr.hasAfternoon && dayAfSlot) {
