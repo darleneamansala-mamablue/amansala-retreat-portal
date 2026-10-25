@@ -175,7 +175,7 @@ function menuRenderWeek(){
   // Only show Lunch row if at least one day this week has lunch scheduled
   const weekHasLunch=days.some(ds=>(menuSchedule[ds]?.lunch||[]).length>0);
   const weekHasBreakfast=days.some(ds=>(menuSchedule[ds]?.breakfast||[]).length>0);
-  const meals=['lightBreakfast',...(weekHasBreakfast?['breakfast']:[]),'brunch',...(weekHasLunch?['lunch']:[]),'snack','dinner'];
+  const meals=(a=>typeof menuMealsFor==='function'?menuMealsFor(days,a):a)(['lightBreakfast',...(weekHasBreakfast?['breakfast']:[]),'brunch',...(weekHasLunch?['lunch']:[]),'snack','dinner']);   // menu-meal-rows.js can override the list for a week
   // Row-based layout: all 7 cells for each meal go in the SAME grid row,
   // so CSS grid forces identical height across columns — sections stay aligned.
   let html='<div style="min-width:980px"><div class="menu-week-grid">';
@@ -607,7 +607,7 @@ function menuPrint(){
   }
   const printHasLunch=days.some(ds=>(menuSchedule[ds]?.lunch||[]).length>0);
   const printHasBreakfast=days.some(ds=>(menuSchedule[ds]?.breakfast||[]).length>0);
-  const meals=['lightBreakfast',...(printHasBreakfast?['breakfast']:[]),'brunch',...(printHasLunch?['lunch']:[]),'snack','dinner'];
+  const meals=(a=>typeof menuMealsFor==='function'?menuMealsFor(days,a):a)(['lightBreakfast',...(printHasBreakfast?['breakfast']:[]),'brunch',...(printHasLunch?['lunch']:[]),'snack','dinner']);
   const mealCfg=MENU_MEAL_CFG;
   const fmtD=ds=>{const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});};
   // Pre-compute max schedule rows per meal across all selected days
@@ -967,7 +967,7 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
   const rangeLbl=fmtRangeLbl(fromVal,toVal);
   const printHasLunch=days.some(ds=>(menuSchedule[ds]?.lunch||[]).length>0);
   const printHasBreakfast=days.some(ds=>(menuSchedule[ds]?.breakfast||[]).length>0);
-  const meals=['lightBreakfast',...(printHasBreakfast?['breakfast']:[]),'brunch',...(printHasLunch?['lunch']:[]),'snack','dinner'];
+  const meals=(a=>typeof menuMealsFor==='function'?menuMealsFor(days,a):a)(['lightBreakfast',...(printHasBreakfast?['breakfast']:[]),'brunch',...(printHasLunch?['lunch']:[]),'snack','dinner']);
 
   const itemLine=(s)=>{
     const clean=s.replace(' ★','').replace('★ ','');
