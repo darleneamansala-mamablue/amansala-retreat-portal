@@ -3039,6 +3039,8 @@ function tsRenderCalSection(bk){
       const _dayAftSkipped=(bk.scheduleSkips||[]).some(s=>s.date===dateStr&&s.period==='aft');
       const dayMornShala=snm(_mornOv?.shala1||sr.morningShala1);
       if(!_dayMornSkipped)rows.push({time:fmtT(dayMornStart)+' – '+fmtT(addMin(dayMornStart,dayMornDur)),desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'),shala:dayMornShala,cat:'yoga',sk:dayMornStart||'08:00'});
+      // Extra classes added by the team for this day (modules/extra-class.js): a second morning class, a workshop, anything with its own time and shala
+      (bk.scheduleTimeOverrides||[]).filter(o=>o.date===dateStr&&o.period==='extra'&&o.start).forEach(o=>{rows.push({time:fmtT(o.start)+' – '+fmtT(addMin(o.start,o.dur||60)),desc:(o.label||'Extra Class')+(o.coTeacher?' — with '+o.coTeacher:''),shala:snm(o.shala1),cat:'yoga',sk:o.start});});
       const _bMStart=_dayMornSkipped?'':(dayMornStart||'');const _bMDur=dayMornDur;const _brunchT=_bMStart?addMin(_bMStart,_bMDur+15):'09:45';
       rows.push({time:fmtT(_brunchT),desc:(!bk.mealPlan||bk.mealPlan==='standard')?'Brunch':(_brunchT<'09:45'?'Breakfast':'Brunch'),shala:'',cat:'meal',sk:_brunchT});
       rows.push({time:'3:00 PM',desc:'Snack',shala:'',cat:'meal',sk:'15:00'});
@@ -3068,7 +3070,7 @@ function tsRenderCalSection(bk){
         prepaidActs.push({time:timeRange,name:ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):''),cat,tag,shala:ACT_SHALA[a.aoId]||'',requestedTime:!!a.requestedTime});
       } else {
         const _aoP=tsAoFor(bk,ao),_sgN=tsSmallGroupN(bk);
-        rows.push({time:timeRange,desc:ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(_aoP.price?' — $'+tsMoney(_aoP.price)+'/person'+(_sgN?' (based on all '+_sgN+' guests joining)':''):''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:'Optional',prepaid:false,sk:a.time||'99:99'});
+        rows.push({time:timeRange,desc:ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(_aoP.price?' — $'+tsMoney(_aoP.price)+'/person'+(_sgN?' (based on all '+_sgN+' guests joining)':''):''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:a.aoId==='ao21'?'':'Optional',prepaid:false,sk:a.time||'99:99'});   // Fire Pit: a group activity, not optional
       }
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
@@ -4464,8 +4466,8 @@ function renderTeacherActivities(bkId){
     rows.push({ao,date:null,timeStr:'Time TBC',prepaid:true});
   });
   rows.sort((a,b)=>(a.date||'9999')>(b.date||'9999')?1:-1);
-  const prepaid=rows.filter(r=>r.prepaid);
-  const optional=rows.filter(r=>!r.prepaid);
+  const prepaid=rows.filter(r=>r.prepaid||(r.ao&&r.ao.id==='ao21'));   // Fire Pit: a group activity, listed as included, never optional
+  const optional=rows.filter(r=>!(r.prepaid||(r.ao&&r.ao.id==='ao21')));
   let html=copyBannerHtml;
   const card=(r,badge,badgeBg,badgeColor)=>`
     <div style="background:#fff;border:1.5px solid #ddd8cf;border-radius:12px;padding:16px 20px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
@@ -4477,7 +4479,7 @@ function renderTeacherActivities(bkId){
     </div>`;
   if(prepaid.length){
     html+=`<div style="font-size:10.5px;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;margin-top:4px">✦ Included in Your Package</div>`;
-    html+=`<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px">${prepaid.map(r=>card(r,'Prepaid','#dcfce7','#15803d')).join('')}</div>`;
+    html+=`<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px">${prepaid.map(r=>card(r,r.ao&&r.ao.id==='ao21'?'Included':'Prepaid','#dcfce7','#15803d')).join('')}</div>`;
   }
   if(optional.length){
     html+=`<div style="font-size:10.5px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Optional Add-Ons</div>`;
@@ -5362,6 +5364,7 @@ function openPrintSchedule(bkId){
         const end=fmtT(addMin(_pDayMornStart,_pDayMornDur));
         rows.push({time:fmtT(_pDayMornStart)+' – '+end,desc:tsEffClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'),shala:_pDayMornShala,cls:'shala',sk:_pDayMornStart});
       }
+      (bk.scheduleTimeOverrides||[]).filter(o=>o.date===dateStr&&o.period==='extra'&&o.start).forEach(o=>{rows.push({time:fmtT(o.start)+' – '+fmtT(addMin(o.start,o.dur||60)),desc:(o.label||'Extra Class')+(o.coTeacher?' — with '+o.coTeacher:''),shala:shalaName(o.shala1),cls:'shala',sk:o.start});});   // extra classes (modules/extra-class.js)
       const _pOv=sr?.adminOverride||{};const _pMStart=_pOv.morningStart||_pUsualMorn.start||'';const _pMDur=parseInt(_pOv.morningDur||_pUsualMorn.dur||90);const _pBrunchT=_pMStart?addMin(_pMStart,_pMDur+15):'09:45';
       rows.push({time:fmtT(_pBrunchT),desc:(!bk.mealPlan||bk.mealPlan==='standard')?'Brunch':(_pBrunchT<'09:45'?'Breakfast':'Brunch'),shala:'',cls:'',sk:_pBrunchT});
       rows.push({time:'3:00 PM',desc:'Snack',shala:'',cls:'',sk:'15:00'});
@@ -5397,7 +5400,7 @@ function openPrintSchedule(bkId){
       const dur=ACTS_DUR[a.aoId]||90;
       const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
       const _aoP=tsAoFor(bk,ao);
-      const desc=a.prepaid?(ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(a.requestedTime?' (requested this time)':'')):('Optional '+ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(_aoP.price?' — $'+tsMoney(_aoP.price)+' USD per person'+(tsSmallGroupN(bk)?'*':''):''));
+      const desc=a.prepaid?(ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(a.requestedTime?' (requested this time)':'')):((a.aoId==='ao21'?'':'Optional ')+ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(_aoP.price?' — $'+tsMoney(_aoP.price)+' USD per person'+(tsSmallGroupN(bk)?'*':''):''));
       rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99',isExtra:true});
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
@@ -5650,7 +5653,7 @@ function buildRetreatSchedulesPanel(){
           const isTour=['ao1','ao2','ao3','ao6','ao7'].includes(a.aoId);
           const desc=a.prepaid
             ?(ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+' — Pre-Paid Activity')
-            :((isTour?'Optional Tour to ':'Optional: ')+ao.name+(ao.price?' — $'+ao.price+' USD':''));
+            :(a.aoId==='ao21'?ao.name:((isTour?'Optional Tour to ':'Optional: ')+ao.name+(ao.price?' — $'+ao.price+' USD':'')));
           rows.push({time:a.time?fmtT(a.time):'11:45 AM',desc,note:'',type:a.prepaid?'prepaid':'optional'});
         });
       }
