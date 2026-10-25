@@ -143,11 +143,21 @@ function skedGetBbcEvents(dateStr){
   return evs;
 }
 
-function bbcGetShalaConflicts(date,location){
+function bbcGetShalaConflicts(date,location,timeStr){
   if(!date||!location)return[];
   const shalaId=bbcLocToShalaId(location);
   if(!shalaId)return[];
   const conflicts=[];
+  // With a time (Darlene 2026-10-25: a 4:00 class was refused because a retreat's MORNING class used that shala), only a retreat class that really overlaps that time counts,
+  // taken from what the Schedule grid shows (day-by-day times, extra classes, workshops). No time -> the old whole-day check below.
+  const rng=timeStr?bbcSlotTimeRange(timeStr,45):null;
+  if(rng&&typeof skedGetRetreatEvents==='function'){
+    const m=t=>{const[h,mi]=String(t).split(':').map(Number);return h*60+(mi||0);};
+    const a0=m(rng.start),a1=m(rng.end);
+    skedGetRetreatEvents(date).filter(e=>e.isRetreat&&e.resourceId===shalaId&&e.startTime&&e.endTime&&m(e.startTime)<a1&&a0<m(e.endTime))
+      .forEach(e=>conflicts.push(String(e.title||'Retreat')+' — '+String(e.subtitle||'class').split(' · ')[0]+' ('+e.startTime+'–'+e.endTime+')'));
+    return conflicts;
+  }
   (typeof AppData.bookings!=='undefined'?AppData.bookings:[]).forEach(bk=>{
     if(!bk.scheduleRequest)return;
     if(bk.startDate>date||bk.endDate<date)return;
@@ -293,7 +303,7 @@ function bbcGenDaySlots(di,total,excursionDays,tourName,guestCount,date){
   // back to Heaven if Beachfront is already booked by a concurrent yoga
   // retreat that day.
   if(isFirst){
-    const arrivalLoc=(date&&bbcGetShalaConflicts(date,'Beachfront').length)?'Heaven':'Beachfront';
+    const arrivalLoc=(date&&bbcGetShalaConflicts(date,'Beachfront','5:45 – 7:30').length)?'Heaven':'Beachfront';
     const slots=[
       bbcMakeSlot('4:45 – 5:30','Sculpt & Tone','Ryan','Grande',false,'class'),
       bbcMakeSlot('5:45 – 6:45','Gentle Yoga','Kun',arrivalLoc,false,'class'),
@@ -660,7 +670,7 @@ function bbcRenderSlotRow(schedId,di,slot,si,dups,date){
     +(isMeal?'<span style="font-size:11px;color:#d1d5db;padding-left:2px">—</span>':isLocked?lockedSpan(slot.instructor):'<input value="'+slot.instructor+'" oninput="bbcSlotField(\''+schedId+'\','+di+','+si+',\'instructor\',this.value)" list="bbcInstDl-'+schedId+'-'+di+'" style="width:100%;border:1px solid '+(isDup?'#f59e0b':'#e5e7eb')+';border-radius:6px;padding:4px 7px;font-family:\'Jost\',sans-serif;font-size:12px;color:var(--dark);background:'+(isDup?'#fffbeb':'#fff')+';outline:none" placeholder="Instructor...">')
     +'</div><div style="padding:5px 8px;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--border)">'
     +(isMeal||isTour?'<span style="font-size:11px;color:#d1d5db;padding-left:2px">—</span>':isLocked?lockedSpan(slot.location):(function(){
-      const cfls=bbcGetShalaConflicts(date,slot.location);
+      const cfls=bbcGetShalaConflicts(date,slot.location,slot.time);
       const cfBorder=cfls.length?'#f87171':'#e5e7eb';
       const cfBg=cfls.length?'#fff5f5':'#fff';
       const cfHtml=cfls.length?'<div title="'+cfls.join(' | ').replace(/"/g,'&quot;')+'" style="font-size:9.5px;color:#dc2626;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help">⚠ '+cfls[0].substring(0,28)+(cfls[0].length>28||cfls.length>1?'…':'')+'</div>':'';
@@ -754,7 +764,7 @@ function bbcSlotField(schedId,di,si,field,val){
 function bbcCheckLocationConflict(schedId,di,si,val,prevVal){
   const s=bbcSchedules.find(x=>x.id===schedId);
   if(!s||!s.days[di]||!s.days[di].slots[si])return;
-  const cfls=bbcGetShalaConflicts(s.days[di].date,val);
+  const cfls=bbcGetShalaConflicts(s.days[di].date,val,s.days[di].slots[si].time);
   if(cfls.length){
     alert('That shala is already booked for this date:\n\n'+cfls.join('\n')+'\n\nPlease choose a different location.');
     s.days[di].slots[si].location=prevVal||'';
