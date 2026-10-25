@@ -52,10 +52,7 @@ function mceDecorate() {
         el.dataset.mce = '1'; el.title = 'Click to edit, move or remove this dish';
         el.addEventListener('click', ev => { ev.stopPropagation(); mceOpen(ds, e.path, e.i); });
       });
-      const add = document.createElement('button');
-      add.type = 'button'; add.className = 'mce-add'; add.textContent = '+ add dish';
-      add.addEventListener('click', ev => { ev.stopPropagation(); mceOpen(ds, meal === 'dinner' ? 'dinner.dishes' : meal, null); });
-      list.appendChild(add);
+      // the "+ add dish" button was removed (Darlene 2026-10-25); dishes can still be clicked to edit, move or remove
     });
   } catch (e) { console.warn('[menu-click-edit]', e); }
 }
