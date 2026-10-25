@@ -9,7 +9,7 @@
 const ME_KEYS={menu1:'menuOverride',menu2:'menuOverride2'};
 const ME_LSS={menu1:'amansala_menu_override',menu2:'amansala_menu_override2'};
 const ME_DAYS={1:'Monday',2:'Tuesday',3:'Wednesday',4:'Thursday',5:'Friday',6:'Saturday',7:'Sunday'};
-const ME_MEALS=[['lightBreakfast','Fruit, Coffee & Tea'],['brunch','Brunch'],['lunch','Lunch'],['snack','Snack']];
+const ME_MEALS=[['lightBreakfast','Fruit, Coffee & Tea'],['breakfast','Breakfast'],['brunch','Brunch'],['lunch','Lunch'],['snack','Snack']];
 function meTarget(m){return m==='menu2'?MENU2:WEEKLY_MENU;}   // MENU2 comes from menu-variants.js
 const ME_BUILTIN={menu1:JSON.parse(JSON.stringify(WEEKLY_MENU)),menu2:JSON.parse(JSON.stringify(MENU2))}; // before any override
 const ME_BUILTIN_EN=Object.assign({},MENU_EN);
@@ -122,6 +122,7 @@ function meDrawDay(){
   const listCard=(key,title,note)=>card(title,(d[key]||[]).map((it,i)=>meRow(key,i,it,key==='brunch'||key==='lunch')).join('')+`<button class="btn btn-secondary" onclick="meAdd('${key}')">+ Add dish</button>`,note);
   body.innerHTML=
     listCard('lightBreakfast','Fruit, Coffee & Tea')+
+    listCard('breakfast','Breakfast','Shown for groups on a Breakfast · Lunch · Dinner plan (such as Bikini Bootcamp).')+
     listCard('brunch','Brunch','Brunch and Lunch are separate lists. If you change a shared dish, change it in both.')+
     listCard('lunch','Lunch')+
     listCard('snack','Snack')+
@@ -149,9 +150,9 @@ function meDinner(f,v){_meDays[_meDay].dinner=_meDays[_meDay].dinner||{dishes:[]
 async function meSave(){
   const btn=document.getElementById('meSaveBtn');
   // drop blank dish rows
-  Object.values(_meDays).forEach(d=>{['lightBreakfast','brunch','lunch','snack'].forEach(k=>{if(d[k])d[k]=d[k].filter(x=>meClean(x));});if(d.dinner&&d.dinner.dishes)d.dinner.dishes=d.dinner.dishes.filter(x=>meClean(x));});
+  Object.values(_meDays).forEach(d=>{['lightBreakfast','breakfast','brunch','lunch','snack'].forEach(k=>{if(d[k])d[k]=d[k].filter(x=>meClean(x));});if(d.dinner&&d.dinner.dishes)d.dinner.dishes=d.dinner.dishes.filter(x=>meClean(x));});
   const names=new Set();
-  Object.values(_meDays).forEach(d=>{['lightBreakfast','brunch','lunch','snack'].forEach(k=>(d[k]||[]).forEach(x=>names.add(meClean(x))));(d.dinner&&d.dinner.dishes||[]).forEach(x=>names.add(meClean(x)));if(d.dinner&&d.dinner.dessert)d.dinner.dessert.split('·').forEach(x=>names.add(x.trim()));});
+  Object.values(_meDays).forEach(d=>{['lightBreakfast','breakfast','brunch','lunch','snack'].forEach(k=>(d[k]||[]).forEach(x=>names.add(meClean(x))));(d.dinner&&d.dinner.dishes||[]).forEach(x=>names.add(meClean(x)));if(d.dinner&&d.dinner.dessert)d.dinner.dessert.split('·').forEach(x=>names.add(x.trim()));});
   const dishes={};
   Object.values(_meDays).forEach(d=>{if(d.dinner&&d.dinner.protein)names.add(meClean(d.dinner.protein));});
   names.forEach(n=>{if(n&&_meDish[n]&&(_meDish[n].name||_meDish[n].desc))dishes[n]={name:_meDish[n].name||'',desc:_meDish[n].desc||''};});
