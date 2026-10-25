@@ -6,7 +6,7 @@
 // (the menu the week is using: Menu 1 or Menu 2 Más Carne), so the Menu Editor, history and "Restore original menu" keep working as before.
 // A menu is a weekly pattern: changing Thursday changes every Thursday that uses that menu, not just the week on screen.
 
-const MCE_MEALS = [['lightBreakfast', 'Fruit, Coffee & Tea'], ['brunch', 'Brunch'], ['lunch', 'Lunch'], ['snack', 'Snack'], ['dinner.dishes', 'Dinner (soup, salad, side…)']];
+const MCE_MEALS = [['lightBreakfast', 'Fruit, Coffee & Tea'], ['breakfast', 'Breakfast'], ['brunch', 'Brunch'], ['lunch', 'Lunch'], ['snack', 'Snack'], ['dinner.dishes', 'Dinner (soup, salad, side…)']];
 let _mceCtx = null;   // what the open window is editing
 
 function mceCss() {
@@ -33,7 +33,6 @@ function mceDecorate() {
     if (cells.length !== meals.length * 7) return;
     cells.forEach((cell, n) => {
       const meal = meals[Math.floor(n / 7)], ds = dates[n % 7];
-      if (meal === 'breakfast') return;                       // not part of the editable menu
       const list = cell.querySelector('.menu-dish-list'); if (!list || list.dataset.mceDone) return; list.dataset.mceDone = '1';
       const real = [...list.querySelectorAll('.menu-dish')].filter(el => el.style.visibility !== 'hidden' && !/^—$/.test(el.textContent.trim()));
       const md = menuDataFor(ds) || {};
@@ -117,7 +116,7 @@ function mceClose() { const ov = document.getElementById('mceOv'); if (ov) ov.re
 function mceKeepAllDetails() {
   const names = new Set();
   Object.values(_meDays).forEach(d => {
-    ['lightBreakfast', 'brunch', 'lunch', 'snack'].forEach(k => (d[k] || []).forEach(x => names.add(meClean(x))));
+    ['lightBreakfast', 'breakfast', 'brunch', 'lunch', 'snack'].forEach(k => (d[k] || []).forEach(x => names.add(meClean(x))));
     const din = d.dinner || {};
     (din.dishes || []).forEach(x => names.add(meClean(x)));
     if (din.protein) names.add(meClean(din.protein));
