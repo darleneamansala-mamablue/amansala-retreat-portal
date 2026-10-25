@@ -118,6 +118,7 @@ function buildScheduleDays(bk, addOnMap){
           rows.push({ time:`${fmtT(dayMornStart)} – ${end}`, desc: effClassLabelDay(sr,bk,dateStr,'morn','morning','Morning Class'), shala: dayMornShala, sk: dayMornStart });
         }
       }
+      timeOvs.filter(o=>o.date===dateStr&&o.period==='extra'&&o.start).forEach(o=>{ rows.push({ time:`${fmtT(o.start)} – ${fmtT(addMin(o.start, o.dur||60))}`, desc:(o.label||'Extra Class')+(o.coTeacher?' — with '+o.coTeacher:''), shala: shalaName(o.shala1), sk:o.start }); });   // extra classes added by the team
       const ov = sr.adminOverride || {};
       const mStart = ov.morningStart||usual.start||'';
       const mDur = parseInt(ov.morningDur||usual.dur||90);
