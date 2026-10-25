@@ -12,7 +12,7 @@ let _mceCtx = null;   // what the open window is editing
 function mceCss() {
   if (document.getElementById('mceCss')) return;
   const st = document.createElement('style'); st.id = 'mceCss';
-  st.textContent = '#menuGrid:not(.mce-editing) .mce-add{display:none}#menuGrid.mce-editing .menu-dish[data-mce]{outline:1px dashed #fdba74}.menu-dish[data-mce]{cursor:pointer;border-radius:4px}.menu-dish[data-mce]:hover{background:#fff7ed;outline:1px dashed #fdba74}.mce-add{display:block;margin:2px 0 0;padding:2px 4px;font-size:10.5px;color:#c2410c;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit;opacity:.75}.mce-add:hover{opacity:1;text-decoration:underline}';
+  st.textContent = '#menuGrid:not(.mce-editing) .mce-add,#menuGrid:not(.mce-editing) .mce-x{display:none}.mce-x{float:right;margin-left:6px;color:#dc2626;font-weight:800;cursor:pointer;padding:0 4px;border-radius:4px}.mce-x:hover{background:#fee2e2}#menuGrid.mce-editing .menu-dish[data-mce]{outline:1px dashed #fdba74}.menu-dish[data-mce]{cursor:pointer;border-radius:4px}.menu-dish[data-mce]:hover{background:#fff7ed;outline:1px dashed #fdba74}.mce-add{display:block;margin:2px 0 0;padding:2px 4px;font-size:10.5px;color:#c2410c;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit;opacity:.75}.mce-add:hover{opacity:1;text-decoration:underline}';
   document.head.appendChild(st);
 }
 function mceVariantNow() { try { return menuVariantForWeek(menuCurrentMonday); } catch (e) { return 'menu1'; } }
@@ -50,6 +50,9 @@ function mceDecorate() {
         const e = entries[k]; if (!e) return;
         el.dataset.mce = '1'; el.title = 'Click to edit, move or remove this dish';
         el.addEventListener('click', ev => { ev.stopPropagation(); mceOpen(ds, e.path, e.i); });
+        const x = document.createElement('span'); x.className = 'mce-x'; x.textContent = '✕'; x.title = 'Take this dish off the menu';   // visible in Edit mode only
+        x.addEventListener('click', ev => { ev.stopPropagation(); mceQuickRemove(ds, e.path, e.i); });
+        el.appendChild(x);
       });
       // "+ add dish" is only visible while "Edit mode" is on (the button above the week), so the menu stays clean otherwise (Darlene 2026-10-25)
       const add = document.createElement('button');
@@ -61,6 +64,16 @@ function mceDecorate() {
   } catch (e) { console.warn('[menu-click-edit]', e); }
 }
 let mceEditing = false;
+async function mceQuickRemove(ds, path, i) {            // the red ✕ next to a dish: ask, then take it off (same save as the Remove button in the dish window)
+  try { await mceLoadState(); } catch (e) { showToast('Could not open the menu: ' + (e.message || e)); return; }
+  const di = mceDayIdx(ds);
+  let raw = '';
+  if (path === 'dinner.protein') raw = (_meDays[di].dinner || {}).protein || '';
+  else if (path === 'dinner.dessert') raw = (_meDays[di].dinner || {}).dessert || '';
+  else raw = mceListOf(di, path)[i] || '';
+  _mceCtx = { ds, di, path, i, key: meClean(raw), isNew: false };
+  mceRemove();
+}
 function mceToggleUi() {
   const grid = document.getElementById('menuGrid'), wrap = document.getElementById('menuGridWrap'); if (!grid || !wrap) return;
   grid.classList.toggle('mce-editing', mceEditing);
