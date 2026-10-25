@@ -28,7 +28,7 @@ function qpTick() {
     if (qpShownFor !== id) {
       qpShownFor = id; bar.style.display = 'flex';
       const st = 'padding:9px 14px;border-radius:99px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(0,0,0,.25)';
-      bar.innerHTML = `<button onclick="qpShow('fire')" style="${st};border:2px solid #fdba74;background:#fff7ed;color:#9a3412">🔥 Fire Pit</button><button onclick="qpShow('list')" style="${st};border:2px solid #6ee7b7;background:#ecfdf5;color:#065f46">✅ Checklist</button><button onclick="qpShow('class')" style="${st};border:2px solid #c4b5fd;background:#f5f3ff;color:#5b21b6">➕ Add class</button>`;
+      bar.innerHTML = `<button onclick="qpShow('fire')" style="${st};border:2px solid #fdba74;background:#fff7ed;color:#9a3412">🔥 Fire Pit</button><button onclick="qpShow('list')" style="${st};border:2px solid #6ee7b7;background:#ecfdf5;color:#065f46">✅ Checklist</button><button onclick="qpShow('class')" style="${st};border:2px solid #c4b5fd;background:#f5f3ff;color:#5b21b6">➕ Add class</button><button onclick="qpShow('tip')" style="${st};border:2px solid #86efac;background:#f0fdf4;color:#166534">💵 Group tip</button>`;
     }
   } catch (e) {}
 }
@@ -45,11 +45,11 @@ function qpShow(which, forId) {
 function qpDraw() {
   const m = document.getElementById('qpModal'); if (!m || m.style.display === 'none') return;
   const id = qpBookingId(), bk = (AppData.bookings || []).find(b => b.id === id); if (!bk) { m.style.display = 'none'; return; }
-  const title = bk.leaderName || bk.retreatName || 'Retreat', fire = qpOpen === 'fire', cls = qpOpen === 'class';
+  const title = bk.leaderName || bk.retreatName || 'Retreat', fire = qpOpen === 'fire', cls = qpOpen === 'class', tip = qpOpen === 'tip';
   m.innerHTML = `<div style="background:#f5f1eb;border-radius:16px;max-width:760px;width:100%;max-height:92vh;overflow:auto;padding:20px 24px;box-shadow:0 12px 40px rgba(0,0,0,.3)">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px"><div><div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700">${fire ? '🔥 Fire Pit nights' : cls ? '➕ Add a class' : '✅ Host checklist'}</div><div style="font-size:12.5px;color:#6b7280">${String(title).replace(/</g, '&lt;')} · team only, teachers never see this</div></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px"><div><div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700">${fire ? '🔥 Fire Pit nights' : cls ? '➕ Add a class' : tip ? '💵 Group tip' : '✅ Host checklist'}</div><div style="font-size:12.5px;color:#6b7280">${String(title).replace(/</g, '&lt;')} · team only, teachers never see this</div></div>
       <button onclick="qpClose()" style="border:none;background:none;font-size:22px;cursor:pointer;color:#6b7280">✕</button></div>
-    ${cls ? (typeof ecHtml === 'function' ? ecHtml(bk) : 'Classes are not loaded.') : fire ? (typeof fpPickerHtml === 'function' ? fpPickerHtml(bk) : 'Fire Pit is not loaded.') : (typeof hcBodyHtml === 'function' ? hcBodyHtml(bk) : 'Checklist is not loaded.')}</div>`;
+    ${tip ? (typeof gtHtml === 'function' ? gtHtml(bk) : 'Tips are not loaded.') : cls ? (typeof ecHtml === 'function' ? ecHtml(bk) : 'Classes are not loaded.') : fire ? (typeof fpPickerHtml === 'function' ? fpPickerHtml(bk) : 'Fire Pit is not loaded.') : (typeof hcBodyHtml === 'function' ? hcBodyHtml(bk) : 'Checklist is not loaded.')}</div>`;
 }
 function qpClose() { qpOpen = ''; qpForced = ''; const m = document.getElementById('qpModal'); if (m) m.style.display = 'none'; try { if (typeof fpRenderBox === 'function') fpRenderBox(); if (typeof hcRenderBox === 'function') hcRenderBox(); } catch (e) {} }
 
