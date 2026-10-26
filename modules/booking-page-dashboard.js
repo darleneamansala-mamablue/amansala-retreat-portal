@@ -6,6 +6,9 @@
 // retreat_balance_schedule (written by rb-fulfil.js / rb-charge-balances.js), refreshed at most once a minute.
 
 let _bpd={orders:{},sched:[],cfg:{},at:0,busy:false};
+// Hide / Show for this card: remembered in this browser only (a convenience, not shared with other staff).
+function bpdHidden(){try{return localStorage.getItem('bpdHidden')==='1';}catch(e){return false;}}
+function bpdToggle(){try{localStorage.setItem('bpdHidden',bpdHidden()?'0':'1');}catch(e){}bpdRender();}
 function bpdTeacher(){try{return !!(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE&&!document.body.classList.contains('admin-preview'));}catch(e){return false;}}
 function bpdEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function bpdMoney(n){return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -72,7 +75,7 @@ function bpdRender(){
   const chip=(txt,bg,bd,c)=>`<span style="display:inline-block;padding:1px 8px;border-radius:9px;font-size:10.5px;font-weight:700;background:${bg};color:${c};border:1px solid ${bd};white-space:nowrap">${txt}</span>`;
   const row=(inner)=>`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid #f1ede5;font-size:12.5px">${inner}</div>`;
   const stat=(lbl,val,clr)=>`<div style="flex:1;min-width:150px;padding:10px 14px;background:#faf7f2;border-radius:10px"><div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a6f64">${lbl}</div><div style="font-size:20px;font-weight:800;color:${clr||'#2d2520'}">${val}</div></div>`;
-  let html=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><b style="font-size:15px;flex:1">🌐 Guest booking page payments</b><span style="font-size:11.5px;color:#7a6f64">${orders.length} booking${orders.length===1?'':'s'}</span></div>`;
+  let html=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><b style="font-size:15px;flex:1">🌐 Guest booking page payments</b><span style="font-size:11.5px;color:#7a6f64">${orders.length} booking${orders.length===1?'':'s'}</span><button type="button" onclick="bpdToggle()" style="padding:3px 10px;border:1px solid #c8bfb5;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:#5a5048">${bpdHidden()?'Show ▾':'Hide ▴'}</button></div><div style="${bpdHidden()?'display:none':''}">`;
   html+=bpdPages();
   if(!orders.length&&!sched.length){
     html+=`<div style="font-size:13px;color:#7a6f64;padding:6px 0">No bookings through the guest booking page yet. They will show up here as soon as the first guest pays. Set a retreat up in Teacher Reg → Actions → Guest booking page.</div>`;
@@ -98,6 +101,7 @@ function bpdRender(){
       html+=row(`${st}<b>${bpdEsc(o.name||'')}</b><span style="color:#5a5048">${bpdEsc(bpdRetreatName(o.bookingId))} · paid ${bpdMoney(o.paidNow||o.total)}${(o.units||[]).length?' · '+bpdEsc(o.units.join(', ')):''}</span>${o.recordUrl?`<a href="${bpdEsc(o.recordUrl)}" target="_blank" rel="noopener" style="margin-left:auto;color:#2d6a6a;font-weight:700">Booking record (PDF)</a>`:''}`);
     });
   }
+  html+='</div>';
   const card=document.createElement('div');card.className='bpd-card';
   card.style.cssText='background:#fff;border:1.5px solid #e8dfd4;border-radius:14px;padding:16px 18px;margin:0 0 16px';
   card.innerHTML=html;
