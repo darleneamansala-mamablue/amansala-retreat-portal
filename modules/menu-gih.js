@@ -1,33 +1,34 @@
-// ===== menu-gih.js — "GIH" (Guests In House) under Breakfast on the Menu, on screen and in the kitchen prints (Darlene 2026-10-26) =====
-// Breakfast is the included breakfast for everybody sleeping in house, so the kitchen needs one number there: GIH = everyone who slept here the night before — retreat guests (registered guests,
-// teacher room included), BBC / Bikini Bootcamp and other room-only guests (their pax) and WeTravel groups. Cancelled, archived and not-yet-confirmed ('requested') bookings are not counted. Stay
-// nights are start <= night < end, so a guest eats breakfast on the departure morning but not on the arrival morning. It is shown ONLY in the Breakfast box (tick "Breakfast" in "Meals shown this
-// week"), not under the day name and not in any other meal. Display only; nothing is saved. menuGihLine(date) is also used by the printouts in menu.js.
+// ===== menu-gih.js — "GIH" (Guests In House) as a row in the Breakfast group table, on screen and in the kitchen prints (Darlene 2026-10-26) =====
+// GIH sits in the Breakfast box's Hora / Grupo / # table, the same spot as a retreat group such as Patricia: Grupo = "GIH", # = how many individual guests are in house and need breakfast.
+// Retreat groups (Patricia, Melissa, Bikini Bootcamp, WeTravel…) already have their own rows, so GIH counts only the OTHER in-house guests: room-only bookings (Cloudbeds / Direct / OTA).
+// A guest eats breakfast on the morning after a night they slept here: stay nights are start <= night < end, so departure morning counts and arrival morning doesn't. Cancelled, archived and
+// not-yet-confirmed ('requested') bookings are not counted, and the count is each booking's guest number (pax). Shown only under Breakfast (tick "Breakfast" in "Meals shown this week").
+// Display only; nothing is saved. menuGihRow(date) and menuGihLine(date) are used by the printouts in menu.js.
 (function () {
   if (!document.getElementById('mgihCss')) {
     const st = document.createElement('style'); st.id = 'mgihCss';
-    st.textContent = '.mgih{margin:4px 6px;padding:3px 8px;border-radius:8px;background:#fde68a;color:#78350f;font-size:12px;font-weight:800;letter-spacing:.3px;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}';
+    st.textContent = '.mgih-row td{background:#fde68a!important;color:#78350f;font-weight:800;-webkit-print-color-adjust:exact;print-color-adjust:exact}';
     document.head.appendChild(st);
   }
+  const isGroup = b => b.retreatName === 'Bikini Bootcamp' || b.mealPlan === 'weTravel';   // these have their own kitchen rows
   function gihFor(ds) {
     let n = 0;
     try {
       const prev = new Date(ds + 'T12:00:00'); prev.setDate(prev.getDate() - 1); const night = prev.toISOString().slice(0, 10);
       (AppData.bookings || []).forEach(b => {
-        if (!b || b.status === 'cancelled' || b.status === 'requested' || (b.flags || []).includes('archived')) return;
+        if (!b || b.bookingType !== 'room_only' || isGroup(b) || b.status === 'cancelled' || b.status === 'requested' || (b.flags || []).includes('archived')) return;
         const s = (b.startDate || '').slice(0, 10), e = (b.endDate || '').slice(0, 10);
-        if (!s || !e || !(s <= night && night < e)) return;
-        n += Number(b.bookingType === 'room_only' ? b.pax : (typeof menuHeadcount === 'function' ? menuHeadcount(b) : b.pax)) || 0;
+        if (s && e && s <= night && night < e) n += Number(b.pax) || 0;
       });
     } catch (e) { console.warn('[menu-gih]', e); }
     return n;
   }
-  window.menuGihLine = ds => '<div class="mgih" style="margin:4px 6px;padding:3px 8px;border-radius:8px;background:#fde68a;color:#78350f;font-size:12px;font-weight:800;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact">GIH · guests in house ' + gihFor(ds) + '</div>';
+  window.menuGihRow = ds => '<tr class="mgih-row"><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8"></td><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8;font-weight:800;color:#78350f">GIH</td><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8;text-align:center;font-weight:800;color:#78350f">' + gihFor(ds) + '</td></tr>';
+  window.menuGihLine = ds => '<div class="rw-groups"><div class="rw-group-row" style="font-weight:800;color:#78350f">GIH · ' + gihFor(ds) + '</div></div>';
   function mgihPaint() {
     try {
       const grid = document.getElementById('menuGrid'); if (!grid) return;
-      grid.querySelectorAll('.menu-day-header .mgih, .msd-head .mgih').forEach(e => e.remove());   // the first version put it under the day name
-      document.querySelectorAll('#menuGrid .msd-head .mgih').forEach(e => e.remove());
+      grid.querySelectorAll('.mgih').forEach(e => e.remove());   // earlier versions drew a yellow bar under the dishes
       const dates = [...grid.querySelectorAll('.menu-day-header')].map(h => (/menuPrintDay\('([^']+)'\)/.exec(h.getAttribute('onclick') || '') || [])[1]);
       if (dates.length !== 7 || dates.some(d => !d)) return;
       const cells = [...grid.querySelectorAll('.menu-grid-cell')];
@@ -37,10 +38,11 @@
       if (cells.length !== meals.length * 7) return;
       const row = meals.indexOf('breakfast'); if (row < 0) return;
       for (let c = 0; c < 7; c++) {
-        const cell = cells[row * 7 + c], list = cell && cell.querySelector('.menu-dish-list'); if (!list) continue;
-        let d = cell.querySelector('.mgih');
-        if (!d) { d = document.createElement('div'); d.className = 'mgih'; d.title = 'Guests in house — everyone who slept here last night and needs breakfast'; list.insertAdjacentElement('afterend', d); }
-        d.textContent = 'GIH · guests in house ' + gihFor(dates[c]);
+        const cell = cells[row * 7 + c], tb = cell && cell.querySelector('.menu-sched-tbl tbody'); if (!tb) continue;
+        const html = menuGihRow(dates[c]).replace('<td style', '<td title="Guests in house: individual guests (not in a retreat group) who need breakfast" style').replace(/(<td[^>]*><\/td>)(<td[^>]*>GIH)/, '$1$2');
+        let r = tb.querySelector('.mgih-row');
+        if (!r) { tb.insertAdjacentHTML('afterbegin', html); r = tb.querySelector('.mgih-row'); if (r) r.insertAdjacentHTML('beforeend', '<td style="background:#fde68a"></td>'); }
+        else { const n = r.children[2]; const v = String(gihFor(dates[c])); if (n && n.textContent !== v) n.textContent = v; }
       }
     } catch (e) { console.warn('[menu-gih]', e); }
   }
