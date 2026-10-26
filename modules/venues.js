@@ -990,7 +990,7 @@ function rmOpenNewBooking(room,rtId,startDate){
   document.getElementById('rm-phone').value='';
   document.getElementById('rm-notes').value='';
   document.getElementById('rm-mealplan').value='breakfast';
-  document.getElementById('rm-adults').value='1';
+  document.getElementById('rm-adults').value='';document.getElementById('rm-adults').placeholder='# of guests in the room';   // required: no silent default of 1 (Darlene 2026-10-26)
   document.getElementById('rm-status').value='requested';
   const err=document.getElementById('rm-err');err.textContent='';err.style.display='none';
   document.getElementById('rm-pay-link-row').style.display='none';
@@ -1155,10 +1155,12 @@ function rmSaveNewBooking(){
   const notes=document.getElementById('rm-notes').value.trim();
   const mealPlan=document.getElementById('rm-mealplan').value;
   const rate=parseFloat(document.getElementById('rm-rate').value)||0;
-  const adults=parseInt(document.getElementById('rm-adults').value)||1;
+  const adultsRaw=parseInt(document.getElementById('rm-adults').value)||0;
+  const adults=adultsRaw||1;
   const status=document.getElementById('rm-status').value;
   const errEl=document.getElementById('rm-err');errEl.style.display='none';
   if(!leader){errEl.textContent='Guest name is required.';errEl.style.display='block';return;}
+  if(!adultsRaw){errEl.textContent='Enter the number of guests staying in the room.';errEl.style.display='block';try{document.getElementById('rm-adults').focus();}catch(e){}return;}
   if(!start||!end||end<=start){errEl.textContent='Invalid dates.';errEl.style.display='block';return;}
   if(leaderEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leaderEmail)){errEl.textContent='Enter a valid email or leave it blank.';errEl.style.display='block';return;}
   const nights=Math.round((pd(end)-pd(start))/DAY_MS);
@@ -1374,7 +1376,7 @@ function rsOpen(){
   const today=fmtISO(new Date());
   document.getElementById('rs-start').value=today;
   document.getElementById('rs-end').value=fmtISO(addDays(pd(today),1));
-  document.getElementById('rs-pax').value='1';
+  document.getElementById('rs-pax').value='';document.getElementById('rs-pax').placeholder='# of guests';   // required: no silent default of 1
   document.getElementById('rs-err').style.display='none';
   document.getElementById('rsStep1').style.display='block';
   document.getElementById('rsStep2').style.display='none';
@@ -1488,9 +1490,11 @@ async function fetchExternalReservationsForRange(startDate,endDate){
 }
 async function rsSearch(){
   const start=document.getElementById('rs-start').value,end=document.getElementById('rs-end').value;
-  const pax=parseInt(document.getElementById('rs-pax').value)||1;
+  const paxRaw=parseInt(document.getElementById('rs-pax').value)||0;
+  const pax=paxRaw||1;
   const errEl=document.getElementById('rs-err');errEl.style.display='none';
   if(!start||!end||end<=start){errEl.textContent='Please choose valid check-in/check-out dates.';errEl.style.display='block';return;}
+  if(!paxRaw){errEl.textContent='Enter the number of guests first.';errEl.style.display='block';try{document.getElementById('rs-pax').focus();}catch(e){}return;}
   _rsCheckIn=start;_rsCheckOut=end;_rsPax=pax;
   const nights=Math.round((pd(end)-pd(start))/DAY_MS);
   document.getElementById('rsStep1').style.display='none';
