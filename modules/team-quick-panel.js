@@ -27,14 +27,16 @@ function qpTick() {
     if (!bk) { bar.style.display = 'none'; qpShownFor = ''; return; }
     if (qpShownFor !== id) {
       qpShownFor = id; bar.style.display = 'flex';
+      const isBbc = typeof hcIsBbc === 'function' && hcIsBbc(bk);   // BBC has no host checklist
       const st = 'padding:9px 14px;border-radius:99px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(0,0,0,.25)';
-      bar.innerHTML = `<button onclick="qpShow('fire')" style="${st};border:2px solid #fdba74;background:#fff7ed;color:#9a3412">🔥 Fire Pit</button><button onclick="qpShow('list')" style="${st};border:2px solid #6ee7b7;background:#ecfdf5;color:#065f46">✅ Checklist</button><button onclick="qpShow('class')" style="${st};border:2px solid #c4b5fd;background:#f5f3ff;color:#5b21b6">➕ Add class</button><button onclick="qpShow('tip')" style="${st};border:2px solid #86efac;background:#f0fdf4;color:#166534">💵 Group tip</button>`;
+      bar.innerHTML = `<button onclick="qpShow('fire')" style="${st};border:2px solid #fdba74;background:#fff7ed;color:#9a3412">🔥 Fire Pit</button>${isBbc ? '' : `<button onclick="qpShow('list')" style="${st};border:2px solid #6ee7b7;background:#ecfdf5;color:#065f46">✅ Checklist</button>`}<button onclick="qpShow('class')" style="${st};border:2px solid #c4b5fd;background:#f5f3ff;color:#5b21b6">➕ Add class</button><button onclick="qpShow('tip')" style="${st};border:2px solid #86efac;background:#f0fdf4;color:#166534">💵 Group tip</button>`;
     }
   } catch (e) {}
 }
 function qpShow(which, forId) {
   if (forId) qpForced = forId;
   const id = qpBookingId(), bk = (AppData.bookings || []).find(b => b.id === id); if (!bk) return;
+  if (which === 'list' && typeof hcIsBbc === 'function' && hcIsBbc(bk)) { try { showToast('BBC groups do not have a host checklist.'); } catch (e) {} return; }
   qpOpen = which;
   if (typeof fpState !== 'undefined') fpState.bookingId = id;
   if (typeof hcState !== 'undefined') { hcState.bookingId = id; if (!hcState.loaded && typeof hcLoad === 'function') hcLoad(); }
