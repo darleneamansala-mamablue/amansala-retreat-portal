@@ -23,6 +23,7 @@
     } catch (e) { console.warn('[menu-gih]', e); }
     return n;
   }
+  window.menuGihCount = gihFor;
   window.menuGihRow = ds => '<tr class="mgih-row"><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8"></td><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8;font-weight:800;font-size:11.5px;color:#78350f">GIH</td><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8;text-align:center;font-weight:800;font-size:11.5px;color:#78350f">' + gihFor(ds) + '</td></tr>';
   window.menuGihLine = ds => '<div class="rw-groups"><div class="rw-group-row" style="font-weight:800;color:#78350f">GIH · ' + gihFor(ds) + '</div></div>';
   function mgihPaint() {
@@ -43,6 +44,9 @@
         let r = tb.querySelector('.mgih-row');
         if (!r) { tb.insertAdjacentHTML('afterbegin', html); r = tb.querySelector('.mgih-row'); if (r) r.insertAdjacentHTML('beforeend', '<td style="background:#fde68a"></td>'); }
         else { const n = r.children[2]; const v = String(gihFor(dates[c])); if (n && n.textContent !== v) n.textContent = v; }
+        // the box's Total counts the GIH guests too (Darlene 2026-10-26): groups' pax + GIH
+        const tot = cell.querySelector('.menu-total-row b');
+        if (tot) { const rows = (menuSchedule[dates[c]] && menuSchedule[dates[c]].breakfast) || []; const sum = rows.reduce((n, x) => n + (parseInt(x.pax) || 0), 0) + gihFor(dates[c]); const v = sum ? String(sum) : '—'; if (tot.textContent !== v) tot.textContent = v; }
       }
     } catch (e) { console.warn('[menu-gih]', e); }
   }
