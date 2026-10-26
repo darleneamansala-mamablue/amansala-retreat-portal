@@ -24,14 +24,14 @@
   function mgihPaint() {
     try {
       document.querySelectorAll('#menuGrid .menu-day-header, #menuGrid .msd-head').forEach(h => {
-        if (h.querySelector('.mgih')) return;
         const m = (h.getAttribute('onclick') || '').match(/menuPrintDay\('(\d{4}-\d{2}-\d{2})'\)/); if (!m) return;
-        const d = document.createElement('div'); d.className = 'mgih'; d.textContent = 'GIH ' + gihFor(m[1]);
-        d.title = 'Guests in house — everyone who slept here last night and needs breakfast'; h.appendChild(d);
+        let d = h.querySelector('.mgih'); if (!d) { d = document.createElement('div'); d.className = 'mgih'; d.title = 'Guests in house — everyone who slept here last night and needs breakfast'; h.appendChild(d); }
+        d.textContent = 'GIH ' + gihFor(m[1]);
       });
     } catch (e) { console.warn('[menu-gih]', e); }
   }
   const o = window.menuRenderWeek;
   if (typeof o === 'function') window.menuRenderWeek = function () { const r = o.apply(this, arguments); setTimeout(mgihPaint, 50); return r; };
   setTimeout(mgihPaint, 50);
+  setInterval(mgihPaint, 4000); // the bookings load after the first draw, so keep the count current
 })();
