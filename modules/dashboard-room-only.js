@@ -21,13 +21,15 @@
   }
   // BBC / RNR (incl. WeTravel) groups: in house today or arriving in the next 14 days. Guests = pax, else registered guests; "?" when neither is known yet.
   const kind = b => { const t = (b.retreatName || '') + ' ' + (b.leaderName || ''); return /\bBBC\b|bikini\s*boot/i.test(t) ? 'BBC' : (/\bRNR\b|restore\s*(&|and)?\s*renew/i.test(t) ? 'RNR' : ''); };
+  // Every guest registered on the booking (WeTravel guests arrive with the room not yet assigned, so do not filter by room)
+  const regGuests = b => (AppData.regs || []).filter(r => r.bookingId === b.id).reduce((n, r) => n + new Set((r.guests || []).filter(g => g && g.name).map(g => g.name.trim().toLowerCase())).size, 0);
   function groups(todayIso, endIso) {
     const m = {};
     (AppData.bookings || []).forEach(b => {
       const k = kind(b); if (!k || b.status === 'cancelled' || b.status === 'requested' || (b.flags || []).includes('archived')) return;
       const [s, e] = D(b); if (!s || !e || e < todayIso || s > endIso) return;
       const key = k + s + e, x = m[key] = m[key] || { k, s, e, n: 0, r: 0, res: 0, wt: false, now: s <= todayIso && todayIso < e };
-      let n = Number(b.pax) || 0; if (!n) { try { n = menuHeadcount(b); } catch (q) {} }
+      let n = Number(b.pax) || 0; if (!n) n = regGuests(b);
       x.n += n; x.r += rooms(b); x.res++; x.wt = x.wt || b.source === 'wetravel';
     });
     return Object.values(m).sort((a, c) => a.s.localeCompare(c.s));
