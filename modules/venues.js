@@ -2746,6 +2746,14 @@ function rcBuild(){
         // call 2026-09-17: "if we move it here we should be able to move it").
         bl.style.cssText=`left:${li*36+2+_arrivalHalfPx}px;width:${wi*36-4+_checkoutHalfPx-_arrivalHalfPx}px;top:5px;height:34px;background:${pc.bg};border-color:${pc.border};color:${pc.text};cursor:grab;border-left:4px solid ${st.border};${roomOnlyOutline}`;
         bl.draggable=true;
+        // Start → end dates printed on the bar itself (styled by booking-dates.js).
+        if(bk.startDate&&bk.endDate){
+          const _M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          const _pd=d=>{const x=String(d).slice(0,10).split('-');return {m:_M[+x[1]-1],d:+x[2]};};
+          const _a=_pd(bk.startDate),_z=_pd(bk.endDate),_n=Math.round((new Date(bk.endDate)-new Date(bk.startDate))/86400000);
+          bl.dataset.dates=(wi<2)?(_a.d+'→'+_z.d):(_a.m+' '+_a.d+' → '+_z.m+' '+_z.d+(wi>=3&&_n>0?' · '+_n+' night'+(_n>1?'s':''):''));
+          bl.title=_a.m+' '+_a.d+' → '+_z.m+' '+_z.d+' ('+_n+' night'+(_n===1?'':'s')+')';
+        }
         // Never show retreat/leader name and guest name together on a room row
         // — the retreat is already identifiable via color + the Active in
         // This View strip above. A room with a named guest shows only that
