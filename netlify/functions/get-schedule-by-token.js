@@ -73,7 +73,7 @@ function buildScheduleDays(bk, addOnMap){
       rows.push({ time:'3:00 PM', desc:'Welcome Snack', sk:'15:00' });
       if (sr.hasArrivalClass && sr.arrivalSlot) {
         const end = fmtT(addMin(sr.arrivalSlot, sr.arrivalDur||60));
-        rows.push({ time:`${fmtT(sr.arrivalSlot)} – ${end}`, desc: effClassLabel(sr,'arrival','Opening Class'), shala: mShala, sk: sr.arrivalSlot });
+        rows.push({ time:`${fmtT(sr.arrivalSlot)} – ${end}`, desc: effClassLabel(sr,'arrival','Opening Class'), shala: shalaName(sr.arrivalShala1||sr.morningShala1), sk: sr.arrivalSlot });
       }
       rows.push({ time:'7:30 PM', desc:'Dinner', sk:'19:30' });
     } else if (i === nights) {
