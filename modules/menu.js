@@ -263,13 +263,15 @@ function menuProteinColor(text){
   return{bg:'#fef9e7',color:'#78350f',border:'#fde8c8'};
 }
 
+// Fruit, Coffee & Tea shows as "F · G · CHIA" (+ the bread of the day, e.g. Pan de Platano) on one line: the kitchen knows what F and G are (Darlene 2026-10-26)
+function menuLbShort(d){return String(d).split('·').map(t=>{t=t.trim();return /^frutas?$/i.test(t)?'F':/^granola$/i.test(t)?'G':/^chia$/i.test(t)?'CHIA':t;}).join(' · ');}
 function menuRenderMealSection(dateStr,mealKey,dishes,rows,padTo=0,dishPadTo=0){
   const cfg=MENU_MEAL_CFG[mealKey]||{label:mealKey,bg:'#f5f3ee',color:'#555'};
   const total=rows.reduce((n,r)=>n+(parseInt(r.pax)||0),0);
   const dishesHtml=dishes.map((d,i)=>{
     const isProtein=(mealKey==='brunch'||mealKey==='lunch')&&d.includes('★');
     const label=d.replace(' ★','');
-    if(!isProtein)return`<div class="menu-dish">${d}</div>`;
+    if(!isProtein)return mealKey==='lightBreakfast'?`<div class="menu-dish" style="white-space:nowrap;font-size:12px">${menuLbShort(d)}</div>`:`<div class="menu-dish">${d}</div>`;
     const pc=menuProteinColor(label);
     return `<div class="menu-dish" style="font-weight:700;color:${pc.color};background:${pc.bg};margin:-5px -8px 3px;padding:4px 8px;border-bottom:1px solid ${pc.border}">★ ${label}</div>`;
   }).join('');
@@ -638,8 +640,9 @@ function menuPrint(){
         if(din.protein) dishesHtml+=`<div style="font-weight:700;font-size:12px;color:#1e3a5f;padding:3px 0;border-bottom:1px dotted #cde">★ ${din.protein}</div>`;
         (din.dishes||[]).forEach(d2=>{ dishesHtml+=`<div style="font-size:11.5px;padding:2px 0;border-bottom:1px dotted #e0dbd2">${d2}</div>`; });
         if(din.dessert) dishesHtml+=`<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-top:4px">Postre</div><div style="font-size:11.5px;padding:2px 0">${din.dessert}</div>`;
-      } else if(meal!=='lightBreakfast'){   // Fruit, Coffee & Tea dishes are left off the printout (Darlene 2026-10-26)
+      } else {
         (mData[meal]||[]).forEach(d2=>{
+          if(meal==='lightBreakfast'){dishesHtml+=`<div style="font-size:11.5px;padding:2px 0;white-space:nowrap">${menuLbShort(d2)}</div>`;return;}
           const isProt=(meal==='brunch'||meal==='lunch')&&d2.includes('★');
           dishesHtml+=isProt
             ?`<div style="font-weight:700;font-size:12px;color:#78350f;padding:3px 0;border-bottom:1px dotted #fde">★ ${d2.replace(' ★','')}</div>`
@@ -653,7 +656,7 @@ function menuPrint(){
       for(let p=rows.length;p<maxR[meal];p++) schedHtml+=`<tr><td colspan="3" style="padding:3px 4px;border-top:1px solid #f2efe8">&nbsp;</td></tr>`;
       schedHtml+='</tbody></table>';
       if(meal==='breakfast'&&typeof menuGihRow==='function')schedHtml=schedHtml.replace('<tbody>','<tbody>'+menuGihRow(ds));   // GIH (guests in house) shows under Breakfast only (modules/menu-gih.js)
-      gridHtml+=`<div style="background:#fff"><div style="padding:4px 5px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:${cfg.bg};color:${cfg.color};text-align:center">${cfg.label}</div><div style="padding:5px 5px;background:#fafaf7">${dishesHtml||(meal==='lightBreakfast'?'':'<div style="font-size:11.5px;color:#aaa">—</div>')}</div>${schedHtml}<div style="padding:3px 5px;font-size:11px;color:#888;background:#f5f2ec;border-top:1px solid #e8e2d8;text-align:right">Total: ${((meal==='breakfast'&&typeof menuGihCount==='function')?total+menuGihCount(ds):total)||'—'}</div></div>`;
+      gridHtml+=`<div style="background:#fff"><div style="padding:4px 5px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:${cfg.bg};color:${cfg.color};text-align:center">${cfg.label}</div><div style="padding:5px 5px;background:#fafaf7">${dishesHtml||'<div style="font-size:11.5px;color:#aaa">—</div>'}</div>${schedHtml}<div style="padding:3px 5px;font-size:11px;color:#888;background:#f5f2ec;border-top:1px solid #e8e2d8;text-align:right">Total: ${((meal==='breakfast'&&typeof menuGihCount==='function')?total+menuGihCount(ds):total)||'—'}</div></div>`;
     });
   });
   gridHtml+='</div>';
