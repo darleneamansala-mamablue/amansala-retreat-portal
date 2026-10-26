@@ -135,12 +135,23 @@ function hcRender() {
 }
 
 
+// Special notes for this retreat (Darlene 2026-10-26): free text at the top of its checklist, saved with the retreat's record (rec.notes, with who and when).
+function hcNotesHtml(bk) {
+  const rec = hcState.data[bk.id] || {}, n = rec.notes || '';
+  const by = rec.notesBy ? `<div style="font-size:11.5px;color:#92400e;margin-top:4px">Last updated by ${hcEsc(rec.notesBy)}${rec.notesAt ? ' · ' + new Date(rec.notesAt).toLocaleString('en-US', { timeZone: 'America/Cancun', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}</div>` : '';
+  return `<div style="margin-bottom:14px;padding:10px 14px;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px">
+    <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#92400e;margin-bottom:6px">📝 Special notes for this retreat</div>
+    <textarea id="hcNotesBox" rows="${n ? Math.min(8, Math.max(3, n.split('\n').length + 1)) : 3}" placeholder="Anything the team must know for this retreat (allergies, VIPs, special requests, changes…)" onchange="hcSaveNotes(this.value)" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #e8d9a8;border-radius:8px;font-family:inherit;font-size:13.5px;line-height:1.4;background:#fff;resize:vertical">${hcEsc(n)}</textarea>${by}
+    ${n ? '' : '<div style="font-size:11.5px;color:#92400e;margin-top:4px">Type here and click outside the box. It saves and shows on this checklist for the whole team.</div>'}</div>`;
+}
+function hcSaveNotes(text) { return hcMutate(hcState.bookingId, r => { r.notes = String(text || '').trim(); r.notesBy = hcMe(); r.notesAt = new Date().toISOString(); }); }
+
 // The steps and the "add an extra step" form for one retreat; used by the Host Checklist tab and by the inline checklist in the retreat window.
 function hcBodyHtml(bk) {
   const btn = 'padding:6px 12px;border:1px solid #c8bfb5;border-radius:8px;background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px';
   const items = hcItemsFor(bk), today = hcToday(), groups = [];
   items.forEach(i => { let g = groups.find(x => x.label === i.group); if (!g) groups.push(g = { label: i.group, list: [] }); g.list.push(i); });
-  return `${groups.map(g => `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#a89a86;margin-bottom:6px">${hcEsc(g.label)}</div>
+  return `${hcNotesHtml(bk)}${groups.map(g => `<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#a89a86;margin-bottom:6px">${hcEsc(g.label)}</div>
       <div style="background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;overflow:hidden">${g.list.map(i => { const over = !i.done && i.due && i.due < today, hint = i.hint ? hcHint(bk, i.hint) : '';
         return `<div style="padding:10px 14px;border-top:1px solid #f0ebe0;display:flex;gap:10px;align-items:flex-start;${i.done ? 'background:#f0fdf4' : ''}">
           <input type="checkbox" ${i.done ? 'checked' : ''} onchange="hcToggle('${hcEsc(i.id)}')" style="width:20px;height:20px;margin-top:2px;cursor:pointer;flex-shrink:0">
