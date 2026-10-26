@@ -652,6 +652,7 @@ function menuPrint(){
       // Spacer rows for alignment
       for(let p=rows.length;p<maxR[meal];p++) schedHtml+=`<tr><td colspan="3" style="padding:3px 4px;border-top:1px solid #f2efe8">&nbsp;</td></tr>`;
       schedHtml+='</tbody></table>';
+      if(meal==='breakfast'&&typeof menuGihLine==='function')schedHtml=menuGihLine(ds)+schedHtml;   // GIH (guests in house) shows under Breakfast only (modules/menu-gih.js)
       gridHtml+=`<div style="background:#fff"><div style="padding:4px 5px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:${cfg.bg};color:${cfg.color};text-align:center">${cfg.label}</div><div style="padding:5px 5px;background:#fafaf7">${dishesHtml||'<div style="font-size:11.5px;color:#aaa">—</div>'}</div>${schedHtml}<div style="padding:3px 5px;font-size:11px;color:#888;background:#f5f2ec;border-top:1px solid #e8e2d8;text-align:right">Total: ${total||'—'}</div></div>`;
     });
   });
@@ -1000,7 +1001,7 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
       const items=mData[meal];if(!items||!items.length)return'';
       return `<div class="rw-meal">
         <div class="rw-meal-hdr" style="background:${MENU_MEAL_CFG[meal].bg};color:${MENU_MEAL_CFG[meal].color}">${MENU_MEAL_CFG[meal].label}</div>
-        <div class="rw-meal-body">${items.map(itemLine).join('')}${groupLine(ds,meal)}</div>
+        <div class="rw-meal-body">${items.map(itemLine).join('')}${meal==='breakfast'&&isKitchen&&typeof menuGihLine==='function'?menuGihLine(ds):''}${groupLine(ds,meal)}</div>
       </div>`;
     };
     return `<div class="rw-day${isToday?' rw-today':''}">
