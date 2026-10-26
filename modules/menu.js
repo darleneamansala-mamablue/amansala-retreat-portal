@@ -638,7 +638,7 @@ function menuPrint(){
         if(din.protein) dishesHtml+=`<div style="font-weight:700;font-size:12px;color:#1e3a5f;padding:3px 0;border-bottom:1px dotted #cde">★ ${din.protein}</div>`;
         (din.dishes||[]).forEach(d2=>{ dishesHtml+=`<div style="font-size:11.5px;padding:2px 0;border-bottom:1px dotted #e0dbd2">${d2}</div>`; });
         if(din.dessert) dishesHtml+=`<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-top:4px">Postre</div><div style="font-size:11.5px;padding:2px 0">${din.dessert}</div>`;
-      } else {
+      } else if(meal!=='lightBreakfast'){   // Fruit, Coffee & Tea dishes are left off the printout (Darlene 2026-10-26)
         (mData[meal]||[]).forEach(d2=>{
           const isProt=(meal==='brunch'||meal==='lunch')&&d2.includes('★');
           dishesHtml+=isProt
@@ -653,7 +653,7 @@ function menuPrint(){
       for(let p=rows.length;p<maxR[meal];p++) schedHtml+=`<tr><td colspan="3" style="padding:3px 4px;border-top:1px solid #f2efe8">&nbsp;</td></tr>`;
       schedHtml+='</tbody></table>';
       if(meal==='breakfast'&&typeof menuGihRow==='function')schedHtml=schedHtml.replace('<tbody>','<tbody>'+menuGihRow(ds));   // GIH (guests in house) shows under Breakfast only (modules/menu-gih.js)
-      gridHtml+=`<div style="background:#fff"><div style="padding:4px 5px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:${cfg.bg};color:${cfg.color};text-align:center">${cfg.label}</div><div style="padding:5px 5px;background:#fafaf7">${dishesHtml||'<div style="font-size:11.5px;color:#aaa">—</div>'}</div>${schedHtml}<div style="padding:3px 5px;font-size:11px;color:#888;background:#f5f2ec;border-top:1px solid #e8e2d8;text-align:right">Total: ${((meal==='breakfast'&&typeof menuGihCount==='function')?total+menuGihCount(ds):total)||'—'}</div></div>`;
+      gridHtml+=`<div style="background:#fff"><div style="padding:4px 5px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:${cfg.bg};color:${cfg.color};text-align:center">${cfg.label}</div><div style="padding:5px 5px;background:#fafaf7">${dishesHtml||(meal==='lightBreakfast'?'':'<div style="font-size:11.5px;color:#aaa">—</div>')}</div>${schedHtml}<div style="padding:3px 5px;font-size:11px;color:#888;background:#f5f2ec;border-top:1px solid #e8e2d8;text-align:right">Total: ${((meal==='breakfast'&&typeof menuGihCount==='function')?total+menuGihCount(ds):total)||'—'}</div></div>`;
     });
   });
   gridHtml+='</div>';
@@ -661,7 +661,11 @@ function menuPrint(){
   const title=fromVal===toVal?`Menu — ${fromFmt}`:`Menu — ${fromFmt} to ${toFmt}`;
   const w=window.open('','_blank');
   w.document.write(`<!DOCTYPE html><html><head>
-  <link rel="icon" type="image/png" href="/favicon.png"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:16px;font-size:14px;}h1{font-size:20px;margin:0 0 12px;text-align:center;}@media print{@page{size:landscape}body{padding-top:60px}}</style></head><body><h1>${title}</h1>${gridHtml}</body></html>`);
+  <link rel="icon" type="image/png" href="/favicon.png"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:16px;font-size:14px;}h1{font-size:16px;margin:0 0 6px;text-align:center;}@media print{@page{size:legal landscape;margin:0.25in}body{padding:0;margin:0}}</style></head><body><h1>${title}</h1><div id="menuFit">${gridHtml}</div><script>
+  // Legal landscape, one page: shrink the whole grid just enough to fit the paper (no manual scaling in the print box)
+  function menuFit(){var g=document.getElementById('menuFit');if(!g)return;g.style.zoom=1;var pw=13.5*96,ph=8*96-30;var s=Math.min(1,pw/g.scrollWidth,ph/g.offsetHeight);g.style.zoom=s;}
+  window.addEventListener('beforeprint',menuFit);menuFit();
+  </script></body></html>`);
   w.document.close();
   setTimeout(()=>w.print(),400);
 }
