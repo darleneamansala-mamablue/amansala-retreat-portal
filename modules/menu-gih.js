@@ -7,7 +7,7 @@
 (function () {
   if (!document.getElementById('mgihCss')) {
     const st = document.createElement('style'); st.id = 'mgihCss';
-    st.textContent = '.mgih-row td{background:#fde68a!important;color:#78350f;font-weight:800;-webkit-print-color-adjust:exact;print-color-adjust:exact}';
+    st.textContent = '.mgih-row td{background:#fde68a!important;color:#78350f;font-weight:800;font-size:12px!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}';
     document.head.appendChild(st);
   }
   const isGroup = b => b.retreatName === 'Bikini Bootcamp' || b.mealPlan === 'weTravel';   // these have their own kitchen rows
@@ -23,7 +23,7 @@
     } catch (e) { console.warn('[menu-gih]', e); }
     return n;
   }
-  window.menuGihRow = ds => '<tr class="mgih-row"><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8"></td><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8;font-weight:800;color:#78350f">GIH</td><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8;text-align:center;font-weight:800;color:#78350f">' + gihFor(ds) + '</td></tr>';
+  window.menuGihRow = ds => '<tr class="mgih-row"><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8"></td><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8;font-weight:800;font-size:11.5px;color:#78350f">GIH</td><td style="padding:3px 4px;background:#fde68a;border-top:1px solid #f2efe8;text-align:center;font-weight:800;font-size:11.5px;color:#78350f">' + gihFor(ds) + '</td></tr>';
   window.menuGihLine = ds => '<div class="rw-groups"><div class="rw-group-row" style="font-weight:800;color:#78350f">GIH · ' + gihFor(ds) + '</div></div>';
   function mgihPaint() {
     try {
