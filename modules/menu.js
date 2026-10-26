@@ -264,7 +264,7 @@ function menuProteinColor(text){
 }
 
 // Fruit, Coffee & Tea shows as "F · G · CHIA" (+ the bread of the day, e.g. Pan de Platano) on one line: the kitchen knows what F and G are (Darlene 2026-10-26)
-function menuLbShort(d){return String(d).split('·').map(t=>{t=t.trim();return /^frutas?$/i.test(t)?'F':/^granola$/i.test(t)?'G':/^chia$/i.test(t)?'CHIA':t;}).join(' · ');}
+function menuLbShort(d){return String(d).split('·').map(t=>{t=t.trim();return /^frutas?$/i.test(t)?'F':/^granola$/i.test(t)?'G':/^chia$/i.test(t)?'CHIA':t;}).filter(Boolean).join(' · ');}
 function menuRenderMealSection(dateStr,mealKey,dishes,rows,padTo=0,dishPadTo=0){
   const cfg=MENU_MEAL_CFG[mealKey]||{label:mealKey,bg:'#f5f3ee',color:'#555'};
   const total=rows.reduce((n,r)=>n+(parseInt(r.pax)||0),0);
