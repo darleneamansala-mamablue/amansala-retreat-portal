@@ -63,9 +63,11 @@ function hcItemsFor(bk) {
 }
 function hcRetreats() {
   const today = hcToday();
-  return (AppData.bookings || []).filter(b => b.status !== 'cancelled' && b.startDate && b.endDate && (b.bookingType || '') !== 'room_only' && String(b.endDate).slice(0, 10) >= hcAdd(today, -3))
+  return (AppData.bookings || []).filter(b => b.status !== 'cancelled' && b.startDate && b.endDate && (b.bookingType || '') !== 'room_only' && !hcIsBbc(b) && String(b.endDate).slice(0, 10) >= hcAdd(today, -3))
     .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
 }
+// BBC (Bikini Bootcamp / We Travel BBC) groups run differently from regular retreats and have no host checklist (Darlene 2026-10-26)
+function hcIsBbc(b) { return /\bBBC\b|bikini\s*boot/i.test((b.retreatName || '') + ' ' + (b.leaderName || '')); }
 function hcProgress(bk) { const it = hcItemsFor(bk), n = it.filter(i => i.done).length, over = it.filter(i => !i.done && i.due && i.due < hcToday()).length; return { n, total: it.length, over }; }
 
 async function hcLoad() {
@@ -170,7 +172,7 @@ function hcRenderBox() {
   try {
     if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE && !localStorage.getItem('ama_admin_device')) return;   // team only
     const bk = typeof regSelBk !== 'undefined' ? regSelBk : null; let box = document.getElementById('regChecklistBox');
-    if (!bk || !bk.id) { if (box) box.style.display = 'none'; return; }
+    if (!bk || !bk.id || hcIsBbc(bk)) { if (box) box.style.display = 'none'; return; }
     if (!box) {
       box = document.createElement('div'); box.id = 'regChecklistBox';
       box.style.cssText = 'margin:10px 0;padding:9px 14px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;font-size:13px;font-family:Jost,sans-serif';
@@ -201,7 +203,7 @@ const HC_ARRIVAL_WHEN = ['S-3', 'S-1', 'S1', 'S0', 'S+1'];
 function hcTeam() { try { return (typeof IS_TEACHER_MODE === 'undefined' || !IS_TEACHER_MODE) || sessionStorage.getItem('ama_admin_viewing') === '1' || !!localStorage.getItem('ama_admin_device'); } catch (e) { return false; } }
 function hcAlertScan() {
   const today = hcToday(), out = [];
-  (AppData.bookings || []).filter(b => b.status !== 'cancelled' && b.startDate && b.endDate && (b.bookingType || '') !== 'room_only').forEach(bk => {
+  (AppData.bookings || []).filter(b => b.status !== 'cancelled' && b.startDate && b.endDate && (b.bookingType || '') !== 'room_only' && !hcIsBbc(b)).forEach(bk => {
     const start = String(bk.startDate).slice(0, 10);
     if (today < hcAdd(start, -3) || today > hcAdd(start, 2)) return;   // only around arrival
     const steps = hcItemsFor(bk).filter(i => !i.done && !i.extra && (i.when === null || i.when === undefined ? (i.group === 'Retreat Admin' || /^fp-/.test(i.id) === false && false) : HC_ARRIVAL_WHEN.includes(i.when) && i.due && i.due <= today));
