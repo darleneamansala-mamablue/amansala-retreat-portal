@@ -18,6 +18,25 @@
     const g = a => a.reduce((n, b) => n + (Number(b.pax) || 0), 0);
     return { inh, arr, dep, gIn: g(inh), gArr: g(arr), gDep: g(dep) };
   }
+  // BBC / RNR (incl. WeTravel) groups: in house today or arriving in the next 14 days. Guests = pax, else registered guests; "?" when neither is known yet.
+  const kind = b => { const t = (b.retreatName || '') + ' ' + (b.leaderName || ''); return /\bBBC\b|bikini\s*boot/i.test(t) ? 'BBC' : (/\bRNR\b|restore\s*(&|and)?\s*renew/i.test(t) ? 'RNR' : ''); };
+  function groups(todayIso, endIso) {
+    const seen = new Set(), out = [];
+    (AppData.bookings || []).forEach(b => {
+      const k = kind(b); if (!k || b.status === 'cancelled' || (b.flags || []).includes('archived')) return;
+      const [s, e] = D(b); if (!s || !e || e < todayIso || s > endIso) return;
+      const key = k + s + e; if (seen.has(key)) return; seen.add(key);
+      let n = Number(b.pax) || 0; if (!n) { try { n = menuHeadcount(b); } catch (x) {} }
+      out.push({ k, b, s, e, n, wt: b.source === 'wetravel', now: s <= todayIso && todayIso < e });
+    });
+    return out.sort((a, c) => a.s.localeCompare(c.s));
+  }
+  function groupsHtml(todayIso, endIso) {
+    const g = groups(todayIso, endIso);
+    const rows = g.length ? g.map(x => '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span><b style="color:' + (x.k === 'BBC' ? '#b45309' : '#6d28d9') + '">' + x.k + '</b>' + (x.wt ? ' · WeTravel' : '') + ' ' + esc(x.b.leaderName && !/^we travel/i.test(x.b.leaderName) && x.b.leaderName !== x.k ? x.b.leaderName : '') + (x.now ? ' <span style="color:#15803d;font-weight:700">in house now</span>' : ' <span style="color:#4b5563">upcoming</span>') + '</span><span style="color:#4b5563;white-space:nowrap">' + x.s.slice(5) + ' → ' + x.e.slice(5) + ' · ' + (x.n ? x.n + ' guests' : 'guests ?') + '</span></div>').join('')
+      : '<div style="font-size:12.5px;color:#4b5563;padding:5px 0;border-top:1px solid #efeae0">No BBC or RNR groups in house or arriving in the next 14 days.</div>';
+    return '<div style="margin-top:14px"><div style="font-size:13px;font-weight:800;color:#1f2d2d;margin-bottom:2px">BBC / RNR groups (incl. WeTravel)</div>' + rows + '</div>';
+  }
   function card() {
     const today = new Date(); today.setHours(12, 0, 0, 0);
     const t = stats(iso(today));
@@ -35,11 +54,12 @@
       return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid #efeae0;font-size:12.5px"><span>' + esc(b.leaderName || b.retreatName || 'Guest') + tag + '</span><span style="color:#4b5563;white-space:nowrap">' + s.slice(5) + ' → ' + e.slice(5) + ' · ' + (Number(b.pax) || 0) + ' guest' + ((Number(b.pax) || 0) === 1 ? '' : 's') + '</span></div>';
     }).join('');
     return '<div id="droCard" style="background:#fff;border-radius:14px;padding:16px 18px;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,.06)">'
-      + '<div style="font-size:15px;font-weight:800;color:#1f2d2d;margin-bottom:10px">🏨 Room-only guests today</div>'
+      + '<div style="font-size:15px;font-weight:800;color:#1f2d2d;margin-bottom:10px">🏨 Room-only guests today &amp; BBC / RNR</div>'
       + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + tile(t.gIn, bk(t.inh.length), 'In house tonight', '#dcfce7') + tile(t.gArr, bk(t.arr.length), 'Arriving today', '#e0f2fe') + tile(t.gDep, bk(t.dep.length), 'Departing today', '#fef3c7') + '</div>'
       + '<div style="font-size:11.5px;font-weight:700;color:#4b5563;margin:12px 0 4px">Guests in house, next 7 days</div><div style="display:flex;gap:6px;flex-wrap:wrap">' + strip + '</div>'
       + (names ? '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:#2d6a6a">Who is in house tonight</summary><div style="margin-top:6px">' + names + '</div></details>' : '')
-      + '<div style="font-size:11px;color:#6b7280;margin-top:8px">Individual room-only bookings (Cloudbeds, Direct, OTA). Retreat groups, BBC and WeTravel are not included.</div></div>';
+      + groupsHtml(iso(today), iso(new Date(today.getTime() + 14 * 864e5)))
+      + '<div style="font-size:11px;color:#6b7280;margin-top:8px">Individual room-only bookings (Cloudbeds, Direct, OTA). The room-only numbers above do not include retreat groups, BBC, RNR or WeTravel.</div></div>';
   }
   function paint() {
     try {
