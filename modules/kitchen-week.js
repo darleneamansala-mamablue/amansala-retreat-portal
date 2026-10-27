@@ -160,7 +160,7 @@ function kwOrd(d){if(kwLang==='es')return String(d);const m=d%100;if(m>=11&&m<=1
 function kwLevel(n){return n>=4?'busy':n===3?'mid':n===2?'some':n===1?'normal':'slow';}
 function kwWeekSelect(){
   const t=kwT(),m=kwView==='month',cur=m?'':kwIso(kwStart),base=kwMonday(new Date());let o=m?'<option value="" selected>'+t.weekPick+' ▾</option>':'';
-  for(let i=-8;i<=52;i++){
+  for(let i=0;i<=52;i++){
     const a=new Date(base.getFullYear(),base.getMonth(),base.getDate()+7*i),b=new Date(a.getFullYear(),a.getMonth(),a.getDate()+6);
     const f=d=>d.toLocaleDateString(t.loc,{month:'short',day:'numeric'});
     o+='<option value="'+kwIso(a)+'"'+(kwIso(a)===cur?' selected':'')+'>'+f(a)+' – '+f(b)+(i===0?' ★':'')+'</option>';
