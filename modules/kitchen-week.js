@@ -164,7 +164,7 @@ function kwBarHtml(){
     +'<span class="kw-lang"><button class="'+(kwLang==='en'?'on':'')+'" onclick="kwSetLang(\'en\')">EN</button><button class="'+(kwLang==='es'?'on':'')+'" onclick="kwSetLang(\'es\')">ES</button></span>'
     +'<label class="kw-opt"><input type="checkbox" id="kwPend"'+(kwIncludePending?' checked':'')+' onchange="kwTogglePending(this.checked)"> '+t.pending+'</label>'
     +'<button onclick="kwNav(-1)">'+(m?t.prevM:t.prev)+'</button><button onclick="kwNav(0)">'+(m?t.todayM:t.today)+'</button><button onclick="kwNav(1)">'+(m?t.nextM:t.next)+'</button>'
-    +'<input type="date" onchange="kwJump(this.value)" title="'+t.jump+'">'
+    +'<input type="date" min="2020-01-01" max="2100-12-31" value="'+(m?kwIso(kwMonth):kwIso(kwStart))+'" onchange="kwJump(this.value)" title="'+t.jump+'">'
     +'<button onclick="kwCopyLink(this)">'+t.copy+'</button>'
     +'<button class="kw-primary" onclick="kwPrint()">'+t.print+'</button></div>';
 }
@@ -250,7 +250,7 @@ window.kwNav=function(dir){
   else kwStart=dir===0?kwMonday(new Date()):new Date(kwStart.getFullYear(),kwStart.getMonth(),kwStart.getDate()+7*dir);
   kwRenderPanel();
 };
-window.kwJump=function(v){if(v){const d=new Date(v+'T12:00:00');kwStart=kwMonday(d);kwMonth=new Date(d.getFullYear(),d.getMonth(),1);kwRenderPanel();}};
+window.kwJump=function(v){if(v&&v>='2020-01-01'&&v<='2100-12-31'){const d=new Date(v+'T12:00:00');kwStart=kwMonday(d);kwMonth=new Date(d.getFullYear(),d.getMonth(),1);kwRenderPanel();}};
 window.kwSetView=function(v){kwView=v==='month'?'month':'week';try{localStorage.setItem('kwView',kwView);}catch(e){}kwRenderPanel();};
 window.kwTogglePending=function(v){kwIncludePending=!!v;kwRenderPanel();};
 window.kwPrintDoc=function(){
