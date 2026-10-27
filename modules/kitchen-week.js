@@ -228,13 +228,13 @@ const KW_CSS=`
 .kw-mwd{font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:1px;text-align:center;color:#1a2332;padding:2px 0}
 .kw-day.kw-mc,.kw-mc{min-height:118px;padding:6px 7px;border-radius:10px}
 .kw-mc.kw-out{background:transparent;border:0}
-.kw-mh{font-size:13.5px;font-weight:600;margin-bottom:3px;line-height:1.25}
+.kw-mh{font-size:15px;font-weight:600;margin-bottom:3px;line-height:1.25}
 .kw-mdn{font-weight:700}
 .kw-mcount{font-family:'Jost',sans-serif;font-size:26px;font-weight:600;line-height:1}
 .kw-mc.slow .kw-mhs{color:#17653a}.kw-mc.normal .kw-mhs{color:#14578f}.kw-mc.some .kw-mhs{color:#7a5f00}.kw-mc.mid .kw-mhs{color:#a84300}.kw-mc.busy .kw-mhs{color:#8f1a10}.kw-mc{cursor:pointer}.kw-mc.kw-out{cursor:default}.kw-weeksel{max-width:210px}
-.kw-ms{font-size:11.5px;line-height:1.3}.kw-mm{font-weight:500}
-.kw-mn{font-size:11px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kw-mc .kw-offnote{font-size:11px}
+.kw-ms{font-size:13.5px;line-height:1.3}.kw-mm{font-weight:500}
+.kw-mn{font-size:13.5px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kw-mc .kw-offnote{font-size:13px}
 .kw-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .kw-title{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:#1a2332;margin-right:auto}
 .kw-bar select,.kw-bar button,.kw-bar input[type=date]{font:500 13px 'Jost',sans-serif;padding:8px 13px;border:1.5px solid #d9d3c7;border-radius:9px;background:#fff;color:#1a2332;cursor:pointer}
