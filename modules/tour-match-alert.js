@@ -21,8 +21,14 @@ function tmaScan() {
     const overlap = (x, y) => x.startDate < y.endDate && y.startDate < x.endDate;
     Object.keys(byTour).forEach(fam => {
       const list = byTour[fam], parent = list.map((_, i) => i), find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
-      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (list[i].bk.id !== list[j].bk.id && overlap(list[i].bk, list[j].bk)) parent[find(i)] = find(j);
-      const clusters = {}; list.forEach((e, i) => { (clusters[find(i)] = clusters[find(i)] || []).push(e); });
+      // Two groups mismatch when their stays overlap, their tour days differ, and one group's tour day is a night the other group is also here (so the other could have joined that day).
+      const here = (bk, d) => d >= bk.startDate && d < bk.endDate, flagged = new Set();
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+        const x = list[i], y = list[j];
+        if (x.bk.id === y.bk.id || x.date === y.date || !overlap(x.bk, y.bk)) continue;
+        if (here(y.bk, x.date) || here(x.bk, y.date)) { parent[find(i)] = find(j); flagged.add(i); flagged.add(j); }
+      }
+      const clusters = {}; list.forEach((e, i) => { if (flagged.has(i)) (clusters[find(i)] = clusters[find(i)] || []).push(e); });
       Object.values(clusters).forEach(c => {
         const ids = new Set(c.map(e => e.bk.id));
         if (ids.size < 2 || new Set(c.map(e => e.date)).size < 2) return;
