@@ -19,13 +19,21 @@ function tpTourList(){
   return (typeof ADD_ONS!=='undefined'?ADD_ONS:[]).filter(a=>a&&a.id&&a.name)
     .slice().sort((a,b)=>a.name.localeCompare(b.name));
 }
+// The catalog lists some activities twice (original + copy: Cacao ao4/ao19, Mayan Clay ao9/ao20, Ruins ao1/ao16, Grande Cenote ao6/ao17, Mangroves ao7/ao18; families come from
+// tour-one-at-a-time.js). The checklist shows each activity ONCE (the original) and a tick/untick applies to the whole family (Darlene 2026-10-27).
+const tpFam=id=>(typeof totFamily==='function'?totFamily(id):[id]);
+function tpUniqueTours(){
+  const all=(typeof ADD_ONS!=='undefined'?ADD_ONS:[]),seen=new Set(),out=[];
+  tpTourList().forEach(t=>{const o=all.find(a=>a&&a.id===tpFam(t.id)[0]&&a.name)||t;if(!seen.has(o.id)){seen.add(o.id);out.push(o);}});
+  return out.sort((a,b)=>a.name.localeCompare(b.name));
+}
 function tourPickerHtml(bk,bkId){
   const off=tpGetOff(bk);
-  const tours=tpTourList();
+  const tours=tpUniqueTours();
   if(!tours.length)return '';
   // Checked = actually on this group's schedule right now (and not turned off).
   const scheduled=new Set((bk.retreatActivities||[]).map(a=>a.aoId));
-  const isOn=t=>scheduled.has(t.id)&&!off.has(t.id);
+  const isOn=t=>tpFam(t.id).some(id=>scheduled.has(id)&&!off.has(id));
   const onCount=tours.filter(isOn).length;
   const items=tours.map(t=>{
     const on=isOn(t);
@@ -57,9 +65,10 @@ function tpToggle(bkId,aoId,checked){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return;
   const off=tpGetOff(bk);
   const name=(ADD_ONS.find(a=>a.id===aoId)||{}).name||'Tour';
+  const fam=tpFam(aoId);
   if(checked){
-    off.delete(aoId);
-    const has=(bk.retreatActivities||[]).some(a=>a.aoId===aoId);
+    fam.forEach(id=>off.delete(id));
+    const has=(bk.retreatActivities||[]).some(a=>fam.includes(a.aoId));
     if(!has){
       const date=tpDefaultDate(bk,aoId);
       if(date){
@@ -75,9 +84,9 @@ function tpToggle(bkId,aoId,checked){
       }
     }
   }else{
-    off.add(aoId);
+    fam.forEach(id=>off.add(id));
     const before=(bk.retreatActivities||[]).length;
-    bk.retreatActivities=(bk.retreatActivities||[]).filter(a=>a.aoId!==aoId);
+    bk.retreatActivities=(bk.retreatActivities||[]).filter(a=>!fam.includes(a.aoId));
     if(bk.retreatActivities.length!==before){bk.retreatActivitiesUpdatedAt=bk.updatedAt=new Date().toISOString();}
     showToast(`${name} removed for this group — it won't be auto-assigned again.`);
   }
