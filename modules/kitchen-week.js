@@ -50,6 +50,14 @@ function kwMonday(d){d=new Date(d.getFullYear(),d.getMonth(),d.getDate());d.setD
 function kwIso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function kwEsc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function kwName(b){return b.retreatName||b.leaderName||'Group'}
+// Month boxes: a person's booking shows as first name only ("Wendy"), plus the last initial when another group that day shares the first name ("Shannon J"). Named retreats keep their name.
+function kwShort(b,list){
+  const n=kwName(b).trim();
+  if(b.retreatName&&b.leaderName&&b.retreatName.trim()!==b.leaderName.trim())return n;
+  const w=n.split(/\s+/);if(w.length<2||w.length>4||/retreat|yoga|bootcamp|group|bbc|rnr|travel/i.test(n))return n;
+  const clash=list.some(o=>o!==b&&kwName(o).trim().split(/\s+/)[0].toLowerCase()===w[0].toLowerCase());
+  return clash?w[0]+' '+w[w.length-1].charAt(0).toUpperCase():w[0];
+}
 function kwIsTest(b){return /zzz|\btest\b/i.test((b.retreatName||'')+' '+(b.leaderName||''))}
 function kwIsRoomOnly(b){return b.bookingType==='room_only'||/^(extra night|walk-in|room only)/i.test(kwName(b))}
 function kwActive(b){
@@ -202,7 +210,7 @@ function kwRenderMonth(panel){
     const rg=retreats.reduce((a,b)=>a+kwHeadcount(b,k),0),rog=roomOnly.reduce((a,b)=>a+kwHeadcount(b,k),0);
     const withMeals=[...retreats,...roomOnly].filter(kwHasMeals).reduce((a,b)=>a+kwHeadcount(b,k),0);
     const off=retreats.filter(b=>kwOffsiteDate(b)===k);
-    const names=retreats.slice(0,4).map(b=>'<div class="kw-mn">'+kwEsc(kwName(b))+' ('+kwHeadcount(b,k)+')'+(b.startDate===k?' ▲':'')+(b.endDate===k?' ▼':'')+'</div>').join('');
+    const names=retreats.slice(0,4).map(b=>'<div class="kw-mn">'+kwEsc(kwShort(b,retreats))+' ('+kwHeadcount(b,k)+')'+(b.startDate===k?' ▲':'')+(b.endDate===k?' ▼':'')+'</div>').join('');
     cells+='<div class="kw-mc kw-day '+cls+'" onclick="kwGoWeek(\''+k+'\')" title="'+t.viewWeek+'"><div class="kw-mh"><span class="kw-mdn">'+(rs&&(d.getDate()===1||k===kwIso(rs))?d.toLocaleDateString(t.loc,{month:'short'})+' ':'')+kwOrd(d.getDate())+'</span> - <span class="kw-mhs">'+n+' '+(n===1?t.group:t.groups)+' - '+rg+' pax</span></div>'
       +(rog?'<div class="kw-ms"><b>'+rog+'</b> '+t.roomOnly.toLowerCase()+'</div>':'')
       +'<div class="kw-ms kw-mm">'+t.mealsShort+': <b>'+withMeals+'</b></div>'
