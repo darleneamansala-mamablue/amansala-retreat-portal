@@ -737,7 +737,7 @@ async function spaChargeApptToRoom(apptId, opts) {
 // general staff login, same lightweight-gate pattern used elsewhere in this
 // app (driver logins, schedule-editor password). Share it only with people
 // who should see pay data. Change it any time by editing this constant.
-const SPA_PAYROLL_CODE = 'amansala-pay-2026';
+const SPA_PAYROLL_CODE = 'Payroll2026';
 
 function spaRenderPayroll() {
   const el = document.getElementById('spaContent');
