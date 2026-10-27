@@ -3054,7 +3054,7 @@ function tsRenderCalSection(bk){
       // "Dinner Onsite" plainly, not "Dinner (Off-site)" (that label only fits
       // when the group is actually going offsite, e.g. Gitano).
       const _dinnerT=svDinnerTimeFor(sr,dateStr,(sr.hasAfternoon&&dayAfSlot&&!_dayAftSkipped)?addMin(dayAfSlot,dayAfDur+45):'19:30');
-      if(!hasGitanoToday)rows.push({time:fmtT(_dinnerT),desc:isOffsite?(sr.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner (Off-site)'):'Dinner',shala:'',cat:'meal',sk:_dinnerT});
+      if(!hasGitanoToday){const _offOut=isOffsite&&sr.offsiteChoice!=='onsitePrepaid';rows.push(_offOut?{time:'',desc:'Offsite Dinner',shala:'',cat:'meal',sk:'99:98'}:{time:fmtT(_dinnerT),desc:isOffsite?'Dinner Onsite':'Dinner',shala:'',cat:'meal',sk:_dinnerT});}   // offsite dinner: no set time, last activity of the day
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT the arrival
     // day — hard backstop here regardless of how a stale/mis-dated entry got
@@ -3065,12 +3065,12 @@ function tsRenderCalSection(bk){
       const cat=TOUR_IDS.includes(a.aoId)?'tour':CEREMONY_IDS.includes(a.aoId)?'ceremony':(ao.cat||'ceremony');
       const tag=cat==='tour'?'Tour':cat==='entertainment'?'Group Salsa Class':'Ceremony';
       const dur=ACTS_DUR[a.aoId]||90;
-      const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
+      const timeRange=(a.time&&a.aoId!=='ao13')?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';   // Gitano / offsite dinner has no set time — it is just the last thing that day
       if(a.prepaid){
         prepaidActs.push({time:timeRange,name:ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):''),cat,tag,shala:ACT_SHALA[a.aoId]||'',requestedTime:!!a.requestedTime});
       } else {
         const _aoP=tsAoFor(bk,ao),_sgN=tsSmallGroupN(bk);
-        rows.push({time:timeRange,desc:ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(_aoP.price?' — $'+tsMoney(_aoP.price)+'/person'+(_sgN?' (based on all '+_sgN+' guests joining)':''):''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:a.aoId==='ao21'?'':'Optional',prepaid:false,sk:a.time||'99:99'});   // Fire Pit: a group activity, not optional
+        rows.push({time:timeRange,desc:ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(_aoP.price?' — $'+tsMoney(_aoP.price)+'/person'+(_sgN?' (based on all '+_sgN+' guests joining)':''):''),shala:ACT_SHALA[a.aoId]||'',cat,actTag:a.aoId==='ao21'?'':'Optional',prepaid:false,sk:a.aoId==='ao13'?'99:98':(a.time||'99:99')});   // Fire Pit: a group activity, not optional
       }
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
@@ -5391,17 +5391,17 @@ function openPrintSchedule(bkId){
       })();
       const hasGitanoPrint=(bk.retreatActivities||[]).some(a=>a.aoId==='ao13'&&a.date===dateStr);
       const _pDinnerT=svDinnerTimeFor(sr,dateStr,(sr?.hasAfternoon&&_pDayAfSlot&&!_pAftSkipped)?addMin(_pDayAfSlot,_pDayAfDur+45):'19:30');
-      if(!hasGitanoPrint)rows.push({time:fmtT(_pDinnerT),desc:isOffsite?(sr?.offsiteChoice==='onsitePrepaid'?'Dinner Onsite':'Dinner | Off-site'):'Dinner',shala:'',cls:'',sk:_pDinnerT});
+      if(!hasGitanoPrint){const _pOffOut=isOffsite&&sr?.offsiteChoice!=='onsitePrepaid';rows.push(_pOffOut?{time:'',desc:'Offsite Dinner',shala:'',cls:'',sk:'99:98'}:{time:fmtT(_pDinnerT),desc:isOffsite?'Dinner Onsite':'Dinner',shala:'',cls:'',sk:_pDinnerT});}
     }
     // Tours/ceremonies/prepaid activities can land on any day EXCEPT arrival.
     const printActMap={};ADD_ONS.forEach(a=>printActMap[a.id]=a);printActMap['ao12']={id:'ao12',name:'Group Salsa Class',price:0};
     (bk.retreatActivities||[]).filter(a=>a.date===dateStr&&(dateStr!==bk.startDate||a.aoId==='ao21')).forEach(a=>{
       const ao=printActMap[a.aoId]||{name:a.aoId,price:0};
       const dur=ACTS_DUR[a.aoId]||90;
-      const timeRange=a.time?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';
+      const timeRange=(a.time&&a.aoId!=='ao13')?(fmtT(a.time)+' – '+fmtT(addMin(a.time,dur))):'';   // Gitano / offsite dinner has no set time — it is just the last thing that day
       const _aoP=tsAoFor(bk,ao);
       const desc=a.prepaid?(ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(a.requestedTime?' (requested this time)':'')):((a.aoId==='ao21'?'':'Optional ')+ao.name+(typeof schedGuideSuffix==='function'?schedGuideSuffix(bk,a):'')+(_aoP.price?' — $'+tsMoney(_aoP.price)+' USD per person'+(tsSmallGroupN(bk)?'*':''):''));
-      rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.time||'99:99',isExtra:true});
+      rows.push({time:timeRange,desc,shala:ACT_SHALA[a.aoId]||'',cls:'',sk:a.aoId==='ao13'?'99:98':(a.time||'99:99'),isExtra:true});
     });
     rows.splice(0,rows.length,...tsApplyMealPlan(bk,rows,i,nights));
     if(typeof tsApplyMealTimeOverrides==='function')tsApplyMealTimeOverrides(bk,rows,dateStr);   // per-retreat meal times (meal-times-editor.js)
