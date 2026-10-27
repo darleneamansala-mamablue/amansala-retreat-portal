@@ -271,6 +271,7 @@ function menuRenderMealSection(dateStr,mealKey,dishes,rows,padTo=0,dishPadTo=0){
   const dishesHtml=dishes.map((d,i)=>{
     const isProtein=(mealKey==='brunch'||mealKey==='lunch')&&d.includes('★');
     const label=d.replace(' ★','');
+    if(!isProtein&&mealKey==='breakfast'&&/^(frutas?|yogurt|granola)$/i.test(String(d).trim()))return`<div class="menu-dish" style="display:inline-block;white-space:nowrap;margin-right:12px;border-bottom:none">${d}</div>`;   // Fruta · Yogurt · Granola share one line (each stays its own dish so click-to-edit still lines up)
     if(!isProtein)return mealKey==='lightBreakfast'?`<div class="menu-dish" style="white-space:nowrap;font-size:12px">${menuLbShort(d)}</div>`:`<div class="menu-dish">${d}</div>`;
     const pc=menuProteinColor(label);
     return `<div class="menu-dish" style="font-weight:700;color:${pc.color};background:${pc.bg};margin:-5px -8px 3px;padding:4px 8px;border-bottom:1px solid ${pc.border}">★ ${label}</div>`;
@@ -643,6 +644,7 @@ function menuPrint(){
       } else {
         (mData[meal]||[]).forEach(d2=>{
           if(meal==='lightBreakfast'){dishesHtml+=`<div style="font-size:11.5px;padding:2px 0;white-space:nowrap">${menuLbShort(d2)}</div>`;return;}
+          if(meal==='breakfast'&&/^(frutas?|yogurt|granola)$/i.test(String(d2).trim())){dishesHtml+=`<span style="display:inline-block;font-size:11.5px;padding:2px 0;margin-right:8px;white-space:nowrap">${d2}</span>`;return;}
           const isProt=(meal==='brunch'||meal==='lunch')&&d2.includes('★');
           dishesHtml+=isProt
             ?`<div style="font-weight:700;font-size:12px;color:#78350f;padding:3px 0;border-bottom:1px dotted #fde">★ ${d2.replace(' ★','')}</div>`
