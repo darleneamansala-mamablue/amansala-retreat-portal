@@ -286,7 +286,7 @@ window.kwPrintDoc=function(){
   return '<!DOCTYPE html><html lang="'+kwLang+'"><head><meta charset="utf-8"><title>Amansala - '+(kwView==='month'?kwT().monthTitle:kwT().title)+'</title>'
     +'<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600&display=swap" rel="stylesheet">'
     +'<style>@page{size:landscape;margin:8mm}html,body{margin:0;padding:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
-    +'#kwfit{width:990px;box-sizing:border-box}body{display:flex;justify-content:center}'
+    +'#kwfit{width:1300px;box-sizing:border-box}body{display:flex;justify-content:center}'
     +'.kw-ph{font-family:"Cormorant Garamond",serif;font-size:24px;font-weight:700;margin-bottom:2px;color:#1a2332}'
     +'#tab-staffing-body{padding:0!important;background:#fff!important}.kw-range{font-size:20px!important;margin-bottom:6px!important}'
     +'*{box-sizing:border-box}.kw-day ul{margin:0;padding:8px 0 0}.kw-day{margin:0}.kw-grid{grid-template-columns:repeat(7,1fr)!important}.kw-grid,.kw-mgrid{gap:5px}.kw-day{padding:7px;break-inside:avoid}.kw-count{font-size:40px}.kw-day.kw-mc,.kw-mc{min-height:0}.kw-legend{margin-top:6px}</style></head><body>'
