@@ -652,7 +652,7 @@ function menuPrint(){
         });
       }
       // Schedule rows
-      let schedHtml='<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr><th style="padding:3px 4px;background:#f0ece4;font-size:10px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">Hora</th><th style="padding:3px 4px;background:#f0ece4;font-size:10px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">Grupo</th><th style="padding:3px 4px;background:#f0ece4;font-size:10px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">#</th></tr></thead><tbody>';
+      let schedHtml='<table style="width:100%;border-collapse:collapse;font-size:11.5px"><tbody>';
       rows.forEach(r=>{schedHtml+=`<tr><td style="padding:3px 4px;border-top:1px solid #f2efe8">${r.time||''}</td><td style="padding:3px 4px;border-top:1px solid #f2efe8">${r.group||''}</td><td style="padding:3px 4px;border-top:1px solid #f2efe8;text-align:center">${r.pax||''}</td></tr>`;});
       // Spacer rows for alignment
       // (no blank spacer rows: the grid rows already line the columns up, and they only cost paper)
@@ -666,9 +666,9 @@ function menuPrint(){
   const title=fromVal===toVal?`Menu — ${fromFmt}`:`Menu — ${fromFmt} to ${toFmt}`;
   const w=window.open('','_blank');
   w.document.write(`<!DOCTYPE html><html><head>
-  <link rel="icon" type="image/png" href="/favicon.png"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:0;font-size:14px;}h1{font-size:16px;margin:0 0 4px;text-align:center;}@media print{@page{size:legal landscape;margin:0.25in}body{padding:0;margin:0}}</style></head><body><h1>${title}</h1><div id="menuFit">${gridHtml}</div><script>
+  <link rel="icon" type="image/png" href="/favicon.png"><meta charset="utf-8"><title>${title}</title><style>body{font-family:'Helvetica Neue',Arial,sans-serif;margin:0;padding:0;font-size:14px;}h1{font-size:13px;margin:0 0 2px;text-align:center;}@media print{@page{size:legal landscape;margin:0.2in}body{padding:0;margin:0}}</style></head><body><h1>${title}</h1><div id="menuFit">${gridHtml}</div><script>
   // Legal landscape, one page: shrink the whole grid just enough to fit the paper (no manual scaling in the print box)
-  function menuFit(){var g=document.getElementById('menuFit');if(!g)return;var pw=13.5*96,ph=8*96-30,s=1;for(;s>0.45;s-=0.02){g.style.zoom=1;g.style.width=(pw/s)+'px';if(g.offsetHeight*s<=ph)break;}g.style.zoom=s;}
+  function menuFit(){var g=document.getElementById('menuFit');if(!g)return;var pw=13.6*96,ph=8.1*96-22,s=1;for(;s>0.45;s-=0.02){g.style.zoom=1;g.style.width=(pw/s)+'px';if(g.offsetHeight*s<=ph)break;}g.style.zoom=s;}
   window.addEventListener('beforeprint',menuFit);menuFit();
   </script></body></html>`);
   w.document.close();
