@@ -639,7 +639,7 @@ function menuPrint(){
       if(meal==='dinner'){
         const din=mData.dinner||{};
         if(din.protein) dishesHtml+=`<div style="font-weight:700;font-size:12px;color:#1e3a5f;padding:3px 0;border-bottom:1px dotted #cde">★ ${din.protein}</div>`;
-        (din.dishes||[]).forEach(d2=>{ dishesHtml+=`<div style="font-size:11.5px;padding:2px 0;border-bottom:1px dotted #e0dbd2">${d2}</div>`; });
+        (din.dishes||[]).forEach(d2=>{ dishesHtml+=`<div style="font-size:11.5px;padding:1px 0;border-bottom:1px dotted #e0dbd2">${d2}</div>`; });
         if(din.dessert) dishesHtml+=`<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-top:4px">Postre</div><div style="font-size:11.5px;padding:2px 0">${din.dessert}</div>`;
       } else {
         (mData[meal]||[]).forEach(d2=>{
@@ -648,14 +648,14 @@ function menuPrint(){
           const isProt=(meal==='brunch'||meal==='lunch')&&d2.includes('★');
           dishesHtml+=isProt
             ?`<div style="font-weight:700;font-size:12px;color:#78350f;padding:3px 0;border-bottom:1px dotted #fde">★ ${d2.replace(' ★','')}</div>`
-            :`<div style="font-size:11.5px;padding:2px 0;border-bottom:1px dotted #e0dbd2">${d2}</div>`;
+            :`<div style="font-size:11.5px;padding:1px 0;border-bottom:1px dotted #e0dbd2">${d2}</div>`;
         });
       }
       // Schedule rows
       let schedHtml='<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr><th style="padding:3px 4px;background:#f0ece4;font-size:10px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">Hora</th><th style="padding:3px 4px;background:#f0ece4;font-size:10px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">Grupo</th><th style="padding:3px 4px;background:#f0ece4;font-size:10px;font-weight:700;text-transform:uppercase;color:#888;border-top:1px solid #ddd">#</th></tr></thead><tbody>';
       rows.forEach(r=>{schedHtml+=`<tr><td style="padding:3px 4px;border-top:1px solid #f2efe8">${r.time||''}</td><td style="padding:3px 4px;border-top:1px solid #f2efe8">${r.group||''}</td><td style="padding:3px 4px;border-top:1px solid #f2efe8;text-align:center">${r.pax||''}</td></tr>`;});
       // Spacer rows for alignment
-      for(let p=rows.length;p<maxR[meal];p++) schedHtml+=`<tr><td colspan="3" style="padding:3px 4px;border-top:1px solid #f2efe8">&nbsp;</td></tr>`;
+      // (no blank spacer rows: the grid rows already line the columns up, and they only cost paper)
       schedHtml+='</tbody></table>';
       if(meal==='breakfast'&&typeof menuGihRow==='function')schedHtml=schedHtml.replace('<tbody>','<tbody>'+menuGihRow(ds));   // GIH (guests in house) shows under Breakfast only (modules/menu-gih.js)
       gridHtml+=`<div style="background:#fff">${meal==='lightBreakfast'?'':`<div style="padding:4px 5px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:${cfg.bg};color:${cfg.color};text-align:center">${cfg.label}</div>`}<div style="padding:5px 5px;background:#fafaf7">${dishesHtml||'<div style="font-size:11.5px;color:#aaa">—</div>'}</div>${schedHtml}<div style="padding:3px 5px;font-size:11px;color:#888;background:#f5f2ec;border-top:1px solid #e8e2d8;text-align:right">Total: ${((meal==='breakfast'&&typeof menuGihCount==='function')?total+menuGihCount(ds):total)||'—'}</div></div>`;
