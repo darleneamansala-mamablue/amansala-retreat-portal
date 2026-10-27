@@ -55,7 +55,7 @@ function kwShort(b,list){
   const n=kwName(b).trim();
   if(b.retreatName&&b.leaderName&&b.retreatName.trim()!==b.leaderName.trim())return n;
   const w=n.split(/\s+/);if(w.length<2||w.length>4||/retreat|yoga|bootcamp|group|bbc|rnr|travel/i.test(n))return n;
-  const clash=list.some(o=>o!==b&&kwName(o).trim().split(/\s+/)[0].toLowerCase()===w[0].toLowerCase());
+  const clash=list.some(o=>o!==b&&kwName(o).trim().toLowerCase()!==n.toLowerCase()&&kwName(o).trim().split(/\s+/)[0].toLowerCase()===w[0].toLowerCase());
   return clash?w[0]+' '+w[w.length-1].charAt(0).toUpperCase():w[0];
 }
 function kwIsTest(b){return /zzz|\btest\b/i.test((b.retreatName||'')+' '+(b.leaderName||''))}
