@@ -43,6 +43,7 @@ let kwLang=(function(){
 const kwT=()=>KW_T[kwLang];
 let kwStart=kwMonday(new Date()),kwIncludePending=false;
 let kwView=(function(){try{return localStorage.getItem('kwView')==='month'?'month':'week';}catch(e){return 'week';}})();
+let kwRoll=null,kwAnchor=null; // kwRoll: a Month view that starts on a chosen date (5 weeks) instead of the calendar month
 let kwMonth=(function(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1);})();
 
 function kwMonday(d){d=new Date(d.getFullYear(),d.getMonth(),d.getDate());d.setDate(d.getDate()-((d.getDay()+6)%7));return d}
@@ -164,9 +165,9 @@ function kwWeekSelect(){
     const f=d=>d.toLocaleDateString(t.loc,{month:'short',day:'numeric'});
     o+='<option value="'+kwIso(a)+'"'+(kwIso(a)===cur?' selected':'')+'>'+f(a)+' – '+f(b)+(i===0?' ★':'')+'</option>';
   }
-  return '<select class="kw-weeksel" onchange="kwGoWeek(this.value)" title="'+t.weekPick+'" aria-label="'+t.weekPick+'">'+o+'</select>';
+  return '<select class="kw-weeksel" onchange="kwPick(this.value)" title="'+t.weekPick+'" aria-label="'+t.weekPick+'">'+o+'</select>';
 }
-window.kwGoWeek=function(v){if(!v)return;const d=new Date(v+'T12:00:00');kwStart=kwMonday(d);kwMonth=new Date(d.getFullYear(),d.getMonth(),1);kwView='week';try{localStorage.setItem('kwView','week');}catch(e){}kwRenderPanel();};
+window.kwGoWeek=function(v){if(!v)return;const d=new Date(v+'T12:00:00');kwAnchor=v;kwStart=kwMonday(d);kwMonth=new Date(d.getFullYear(),d.getMonth(),1);kwView='week';try{localStorage.setItem('kwView','week');}catch(e){}kwRenderPanel();};
 function kwBarHtml(){
   const t=kwT(),m=kwView==='month';
   return '<div class="kw-bar"><div class="kw-title">'+(m?t.monthTitle:t.title)+'</div>'
@@ -182,16 +183,18 @@ function kwBarHtml(){
 function kwRenderMonth(panel){
   const t=kwT();
   const first=new Date(kwMonth.getFullYear(),kwMonth.getMonth(),1);
-  const gridStart=kwMonday(first);
-  const last=new Date(kwMonth.getFullYear(),kwMonth.getMonth()+1,0);
+  const rs=kwRoll?new Date(kwRoll+'T12:00:00'):null,re=rs?new Date(rs.getFullYear(),rs.getMonth(),rs.getDate()+34,12):null;
+  const gridStart=kwMonday(rs||first);
+  const last=re||new Date(kwMonth.getFullYear(),kwMonth.getMonth()+1,0);
   const weeks=Math.ceil(((last-gridStart)/86400000+1)/7);
-  const title=first.toLocaleDateString(t.loc,{month:'long',year:'numeric'});
+  const fl=d=>d.toLocaleDateString(t.loc,{month:'long',day:'numeric'});
+  const title=rs?fl(rs)+' – '+fl(re)+', '+re.getFullYear():first.toLocaleDateString(t.loc,{month:'long',year:'numeric'});
   const all=(AppData.bookings||[]).filter(kwActive);
   const wd=[...Array(7)].map((_,i)=>{const d=new Date(gridStart);d.setDate(d.getDate()+i);return d.toLocaleDateString(t.loc,{weekday:'long'})});
   let cells='';
   for(let i=0;i<weeks*7;i++){
     const d=new Date(gridStart);d.setDate(d.getDate()+i);
-    if(d.getMonth()!==first.getMonth()){cells+='<div class="kw-mc kw-out"></div>';continue;}
+    if(rs?(kwIso(d)<kwIso(rs)||kwIso(d)>kwIso(re)):d.getMonth()!==first.getMonth()){cells+='<div class="kw-mc kw-out"></div>';continue;}
     const k=kwIso(d);
     const on=all.filter(b=>b.startDate<=k&&k<=b.endDate);
     const retreats=on.filter(b=>!kwIsRoomOnly(b)),roomOnly=on.filter(kwIsRoomOnly);
@@ -200,7 +203,7 @@ function kwRenderMonth(panel){
     const withMeals=[...retreats,...roomOnly].filter(kwHasMeals).reduce((a,b)=>a+kwHeadcount(b,k),0);
     const off=retreats.filter(b=>kwOffsiteDate(b)===k);
     const names=retreats.slice(0,4).map(b=>'<div class="kw-mn">'+kwEsc(kwName(b))+' ('+kwHeadcount(b,k)+')'+(b.startDate===k?' ▲':'')+(b.endDate===k?' ▼':'')+'</div>').join('');
-    cells+='<div class="kw-mc kw-day '+cls+'" onclick="kwGoWeek(\''+k+'\')" title="'+t.viewWeek+'"><div class="kw-mh"><span class="kw-mdn">'+kwOrd(d.getDate())+'</span> - <span class="kw-mhs">'+n+' '+(n===1?t.group:t.groups)+' - '+rg+' pax</span></div>'
+    cells+='<div class="kw-mc kw-day '+cls+'" onclick="kwGoWeek(\''+k+'\')" title="'+t.viewWeek+'"><div class="kw-mh"><span class="kw-mdn">'+(rs&&(d.getDate()===1||k===kwIso(rs))?d.toLocaleDateString(t.loc,{month:'short'})+' ':'')+kwOrd(d.getDate())+'</span> - <span class="kw-mhs">'+n+' '+(n===1?t.group:t.groups)+' - '+rg+' pax</span></div>'
       +(rog?'<div class="kw-ms"><b>'+rog+'</b> '+t.roomOnly.toLowerCase()+'</div>':'')
       +'<div class="kw-ms kw-mm">'+t.mealsShort+': <b>'+withMeals+'</b></div>'
       +(off.length?'<div class="kw-ms kw-offnote">'+t.offDot+': '+off.map(b=>kwEsc(kwName(b))).join(', ')+'</div>':'')
@@ -257,12 +260,15 @@ const KW_CSS=`
 `;
 
 window.kwNav=function(dir){
-  if(kwView==='month')kwMonth=dir===0?new Date(new Date().getFullYear(),new Date().getMonth(),1):new Date(kwMonth.getFullYear(),kwMonth.getMonth()+dir,1);
-  else kwStart=dir===0?kwMonday(new Date()):new Date(kwStart.getFullYear(),kwStart.getMonth(),kwStart.getDate()+7*dir);
+  if(kwView==='month'&&kwRoll){const d=new Date(kwRoll+'T12:00:00');if(dir===0)kwRoll=null;else{d.setDate(d.getDate()+35*dir);kwRoll=kwIso(d);kwMonth=new Date(d.getFullYear(),d.getMonth(),1);}}
+  else if(kwView==='month')kwMonth=dir===0?new Date(new Date().getFullYear(),new Date().getMonth(),1):new Date(kwMonth.getFullYear(),kwMonth.getMonth()+dir,1);
+  else{kwStart=dir===0?kwMonday(new Date()):new Date(kwStart.getFullYear(),kwStart.getMonth(),kwStart.getDate()+7*dir);kwAnchor=kwIso(kwStart);}
   kwRenderPanel();
 };
-window.kwJump=function(v){if(v&&v>='2020-01-01'&&v<='2100-12-31'){const d=new Date(v+'T12:00:00');kwGoWeek(v);}};
-window.kwSetView=function(v){kwView=v==='month'?'month':'week';try{localStorage.setItem('kwView',kwView);}catch(e){}kwRenderPanel();};
+window.kwJump=function(v){if(v&&v>='2020-01-01'&&v<='2100-12-31'){kwPick(v);}};
+// Picking a date or week: in Month view the month starts on that date (so Oct 27 shows Oct 27 - Nov 30); in Week view it opens that week.
+window.kwPick=function(v){if(!v)return;if(kwView==='month'){const d=new Date(v+'T12:00:00');kwRoll=v;kwAnchor=v;kwMonth=new Date(d.getFullYear(),d.getMonth(),1);kwStart=kwMonday(d);kwRenderPanel();}else kwGoWeek(v);};
+window.kwSetView=function(v){kwView=v==='month'?'month':'week';if(kwView==='month'&&kwAnchor){kwRoll=kwAnchor;const d=new Date(kwAnchor+'T12:00:00');kwMonth=new Date(d.getFullYear(),d.getMonth(),1);}else if(kwView==='week'){kwRoll=null;}try{localStorage.setItem('kwView',kwView);}catch(e){}kwRenderPanel();};
 window.kwTogglePending=function(v){kwIncludePending=!!v;kwRenderPanel();};
 window.kwPrintDoc=function(){
   const grid=document.getElementById('tab-staffing-body');if(!grid)return '';
