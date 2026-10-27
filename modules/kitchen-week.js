@@ -50,6 +50,14 @@ function kwMonday(d){d=new Date(d.getFullYear(),d.getMonth(),d.getDate());d.setD
 function kwIso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function kwEsc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function kwName(b){return b.retreatName||b.leaderName||'Group'}
+// Month boxes: a person's booking shows as first name only ("Wendy"), plus the last initial when another group that day shares the first name ("Shannon J"). Named retreats keep their name.
+function kwShort(b,list){
+  const n=kwName(b).trim();
+  if(b.retreatName&&b.leaderName&&b.retreatName.trim()!==b.leaderName.trim())return n;
+  const w=n.split(/\s+/);if(w.length<2||w.length>4||/retreat|yoga|bootcamp|group|bbc|rnr|travel/i.test(n))return n;
+  const clash=list.some(o=>o!==b&&kwName(o).trim().split(/\s+/)[0].toLowerCase()===w[0].toLowerCase());
+  return clash?w[0]+' '+w[w.length-1].charAt(0).toUpperCase():w[0];
+}
 function kwIsTest(b){return /zzz|\btest\b/i.test((b.retreatName||'')+' '+(b.leaderName||''))}
 function kwIsRoomOnly(b){return b.bookingType==='room_only'||/^(extra night|walk-in|room only)/i.test(kwName(b))}
 function kwActive(b){
@@ -202,7 +210,7 @@ function kwRenderMonth(panel){
     const rg=retreats.reduce((a,b)=>a+kwHeadcount(b,k),0),rog=roomOnly.reduce((a,b)=>a+kwHeadcount(b,k),0);
     const withMeals=[...retreats,...roomOnly].filter(kwHasMeals).reduce((a,b)=>a+kwHeadcount(b,k),0);
     const off=retreats.filter(b=>kwOffsiteDate(b)===k);
-    const names=retreats.slice(0,4).map(b=>'<div class="kw-mn">'+kwEsc(kwName(b))+' ('+kwHeadcount(b,k)+')'+(b.startDate===k?' ▲':'')+(b.endDate===k?' ▼':'')+'</div>').join('');
+    const names=retreats.slice(0,4).map(b=>'<div class="kw-mn">'+kwEsc(kwShort(b,retreats))+' ('+kwHeadcount(b,k)+')'+(b.startDate===k?' ▲':'')+(b.endDate===k?' ▼':'')+'</div>').join('');
     cells+='<div class="kw-mc kw-day '+cls+'" onclick="kwGoWeek(\''+k+'\')" title="'+t.viewWeek+'"><div class="kw-mh"><span class="kw-mdn">'+(rs&&(d.getDate()===1||k===kwIso(rs))?d.toLocaleDateString(t.loc,{month:'short'})+' ':'')+kwOrd(d.getDate())+'</span> - <span class="kw-mhs">'+n+' '+(n===1?t.group:t.groups)+' - '+rg+' pax</span></div>'
       +(rog?'<div class="kw-ms"><b>'+rog+'</b> '+t.roomOnly.toLowerCase()+'</div>':'')
       +'<div class="kw-ms kw-mm">'+t.mealsShort+': <b>'+withMeals+'</b></div>'
@@ -220,13 +228,13 @@ const KW_CSS=`
 .kw-mwd{font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:1px;text-align:center;color:#1a2332;padding:2px 0}
 .kw-day.kw-mc,.kw-mc{min-height:118px;padding:6px 7px;border-radius:10px}
 .kw-mc.kw-out{background:transparent;border:0}
-.kw-mh{font-size:13.5px;font-weight:600;margin-bottom:3px;line-height:1.25}
+.kw-mh{font-size:15px;font-weight:600;margin-bottom:3px;line-height:1.25}
 .kw-mdn{font-weight:700}
 .kw-mcount{font-family:'Jost',sans-serif;font-size:26px;font-weight:600;line-height:1}
 .kw-mc.slow .kw-mhs{color:#17653a}.kw-mc.normal .kw-mhs{color:#14578f}.kw-mc.some .kw-mhs{color:#7a5f00}.kw-mc.mid .kw-mhs{color:#a84300}.kw-mc.busy .kw-mhs{color:#8f1a10}.kw-mc{cursor:pointer}.kw-mc.kw-out{cursor:default}.kw-weeksel{max-width:210px}
-.kw-ms{font-size:11.5px;line-height:1.3}.kw-mm{font-weight:500}
-.kw-mn{font-size:11px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kw-mc .kw-offnote{font-size:11px}
+.kw-ms{font-size:13.5px;line-height:1.3}.kw-mm{font-weight:500}
+.kw-mn{font-size:13.5px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kw-mc .kw-offnote{font-size:13px}
 .kw-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .kw-title{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:#1a2332;margin-right:auto}
 .kw-bar select,.kw-bar button,.kw-bar input[type=date]{font:500 13px 'Jost',sans-serif;padding:8px 13px;border:1.5px solid #d9d3c7;border-radius:9px;background:#fff;color:#1a2332;cursor:pointer}
