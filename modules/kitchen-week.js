@@ -261,7 +261,7 @@ window.kwNav=function(dir){
   else kwStart=dir===0?kwMonday(new Date()):new Date(kwStart.getFullYear(),kwStart.getMonth(),kwStart.getDate()+7*dir);
   kwRenderPanel();
 };
-window.kwJump=function(v){if(v&&v>='2020-01-01'&&v<='2100-12-31'){const d=new Date(v+'T12:00:00');kwStart=kwMonday(d);kwMonth=new Date(d.getFullYear(),d.getMonth(),1);kwRenderPanel();}};
+window.kwJump=function(v){if(v&&v>='2020-01-01'&&v<='2100-12-31'){const d=new Date(v+'T12:00:00');kwGoWeek(v);}};
 window.kwSetView=function(v){kwView=v==='month'?'month':'week';try{localStorage.setItem('kwView',kwView);}catch(e){}kwRenderPanel();};
 window.kwTogglePending=function(v){kwIncludePending=!!v;kwRenderPanel();};
 window.kwPrintDoc=function(){
