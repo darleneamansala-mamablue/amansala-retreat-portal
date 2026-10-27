@@ -21,19 +21,19 @@ const KW_PLANS={
 const KW_T={
   en:{title:'Kitchen Week View',pending:'Include unconfirmed groups',prev:'← Prev Week',today:'This Week',next:'Next Week →',jump:'Jump to the week of this date',
     copy:'Copy Staff Link',copied:'Link Copied',print:'Print',printHead:'Amansala - Groups On Site This Week',retreat:'Retreat',retreats:'Retreats',onSite:'On Site',
-    slow:'Empty',normal:'Light',some:'Moderate',busy:'Busy',retGuests:'Retreat guests',roGuests:'Room Only guests',mealsInc:'Meals included',guests:'guests',
+    slow:'Empty',normal:'Light',some:'Moderate',mid:'Busy',busy:'Very busy',weekPick:'Choose a week',retGuests:'Retreat guests',roGuests:'Room Only guests',mealsInc:'Meals included',guests:'guests',
     dinnerAt:'Dinner at Amansala',offsite:'offsite',arrives:'Arrives',departs:'Departs',dinnerOff:'Dinner Offsite',noMealsInc:'No meals included',noMealsToday:'No meals today',
     group:'group',groups:'groups',viewWeek:'Week',viewMonth:'Month',prevM:'← Prev Month',todayM:'This Month',nextM:'Next Month →',more:'more',mealsShort:'Meals',guestsShort:'guests',offDot:'Dinner offsite',monthTitle:'Kitchen Month View',printHeadM:'Amansala - Groups On Site This Month',
     roomOnly:'Room Only',mealsFor:'Meals included for',allMeals:'All meals',allExDinner:'All meals except dinner',
-    leg1:'Empty: 0 retreats',leg2:'Light: 1 retreat',leg3:'Moderate: 2-3 retreats',leg4:'Busy: 4+ retreats',loading:'Loading the week...',loadErr:'Could not load. Check your connection and refresh.',
+    leg1:'Empty: 0 retreats',leg2:'Light: 1 retreat',leg3:'Moderate: 2 retreats',leg4:'Busy: 3 retreats',leg5:'Very busy: 4+ retreats',loading:'Loading the week...',loadErr:'Could not load. Check your connection and refresh.',
     meal:{lightBreakfast:'Light Breakfast',breakfast:'Breakfast',brunch:'Brunch',lunch:'Lunch',snack:'Snack',dinner:'Dinner'},loc:'en-US'},
   es:{title:'Vista Semanal de Cocina',pending:'Incluir grupos sin confirmar',prev:'← Semana Anterior',today:'Esta Semana',next:'Semana Siguiente →',jump:'Ir a la semana de esta fecha',
     copy:'Copiar Enlace',copied:'Enlace Copiado',print:'Imprimir',printHead:'Amansala - Grupos en el Hotel Esta Semana',retreat:'Retiro',retreats:'Retiros',onSite:'en el Hotel',
-    slow:'Vacío',normal:'Ligero',some:'Moderado',busy:'Ocupado',retGuests:'Huéspedes de retiro',roGuests:'Huéspedes solo habitación',mealsInc:'Comidas incluidas',guests:'huéspedes',
+    slow:'Vacío',normal:'Ligero',some:'Moderado',mid:'Ocupado',busy:'Muy ocupado',weekPick:'Elegir semana',retGuests:'Huéspedes de retiro',roGuests:'Huéspedes solo habitación',mealsInc:'Comidas incluidas',guests:'huéspedes',
     dinnerAt:'Cena en Amansala',offsite:'cena fuera',arrives:'Llega',departs:'Sale',dinnerOff:'Cena Fuera del Hotel',noMealsInc:'Sin comidas incluidas',noMealsToday:'Sin comidas hoy',
     group:'grupo',groups:'grupos',viewWeek:'Semana',viewMonth:'Mes',prevM:'← Mes Anterior',todayM:'Este Mes',nextM:'Mes Siguiente →',more:'más',mealsShort:'Comidas',guestsShort:'huéspedes',offDot:'Cena fuera',monthTitle:'Vista Mensual de Cocina',printHeadM:'Amansala - Grupos en el Hotel Este Mes',
     roomOnly:'Solo Habitación',mealsFor:'Comidas incluidas para',allMeals:'Todas las comidas',allExDinner:'Todas las comidas excepto la cena',
-    leg1:'Vacío: 0 retiros',leg2:'Ligero: 1 retiro',leg3:'Moderado: 2-3 retiros',leg4:'Ocupado: 4 o más retiros',loading:'Cargando la semana...',loadErr:'No se pudo cargar. Revisa tu conexión y actualiza.',
+    leg1:'Vacío: 0 retiros',leg2:'Ligero: 1 retiro',leg3:'Moderado: 2 retiros',leg4:'Ocupado: 3 retiros',leg5:'Muy ocupado: 4 o más retiros',loading:'Cargando la semana...',loadErr:'No se pudo cargar. Revisa tu conexión y actualiza.',
     meal:{lightBreakfast:'Desayuno ligero',breakfast:'Desayuno',brunch:'Brunch',lunch:'Comida',snack:'Snack',dinner:'Cena'},loc:'es-MX'}
 };
 let kwLang=(function(){
@@ -126,7 +126,7 @@ function kwRenderPanel(){
     const k=kwIso(d);
     const on=all.filter(b=>b.startDate<=k&&k<=b.endDate);
     const retreats=on.filter(b=>!kwIsRoomOnly(b)),roomOnly=on.filter(kwIsRoomOnly);
-    const n=retreats.length,cls=kwLevel(n),lbl=t[cls==='slow'?'slow':cls==='normal'?'normal':cls==='some'?'some':'busy'];
+    const n=retreats.length,cls=kwLevel(n),lbl=t[cls];
     const rg=retreats.reduce((a,b)=>a+kwHeadcount(b,k),0);
     const rog=roomOnly.reduce((a,b)=>a+kwHeadcount(b,k),0);
     const withMeals=[...retreats,...roomOnly].filter(kwHasMeals).reduce((a,b)=>a+kwHeadcount(b,k),0);
@@ -151,12 +151,22 @@ function kwRenderPanel(){
   panel.innerHTML='<style>'+KW_CSS+'</style>'
     +kwBarHtml()
     +'<div class="kw-range">'+range+'</div><div class="kw-grid" id="kwGrid">'+cards+'</div>'
-    +'<div class="kw-legend"><span class="l1">'+t.leg1+'</span><span class="l2">'+t.leg2+'</span><span class="l3">'+t.leg3+'</span><span class="l4">'+t.leg4+'</span></div>';
+    +'<div class="kw-legend"><span class="l1">'+t.leg1+'</span><span class="l2">'+t.leg2+'</span><span class="l3">'+t.leg3+'</span><span class="l4">'+t.leg4+'</span><span class="l5">'+t.leg5+'</span></div>';
 }
 
 
 function kwOrd(d){if(kwLang==='es')return String(d);const m=d%100;if(m>=11&&m<=13)return d+'th';return d+(['th','st','nd','rd'][d%10]||'th');}
-function kwLevel(n){return n>=4?'busy':n>=2?'some':n===1?'normal':'slow';}
+function kwLevel(n){return n>=4?'busy':n===3?'mid':n===2?'some':n===1?'normal':'slow';}
+function kwWeekSelect(){
+  const t=kwT(),cur=kwIso(kwStart),base=kwMonday(new Date());let o='';
+  for(let i=-8;i<=52;i++){
+    const a=new Date(base.getFullYear(),base.getMonth(),base.getDate()+7*i),b=new Date(a.getFullYear(),a.getMonth(),a.getDate()+6);
+    const f=d=>d.toLocaleDateString(t.loc,{month:'short',day:'numeric'});
+    o+='<option value="'+kwIso(a)+'"'+(kwIso(a)===cur?' selected':'')+'>'+f(a)+' – '+f(b)+(i===0?' ★':'')+'</option>';
+  }
+  return '<select class="kw-weeksel" onchange="kwGoWeek(this.value)" title="'+t.weekPick+'" aria-label="'+t.weekPick+'">'+o+'</select>';
+}
+window.kwGoWeek=function(v){if(!v)return;const d=new Date(v+'T12:00:00');kwStart=kwMonday(d);kwMonth=new Date(d.getFullYear(),d.getMonth(),1);kwView='week';try{localStorage.setItem('kwView','week');}catch(e){}kwRenderPanel();};
 function kwBarHtml(){
   const t=kwT(),m=kwView==='month';
   return '<div class="kw-bar"><div class="kw-title">'+(m?t.monthTitle:t.title)+'</div>'
@@ -164,7 +174,7 @@ function kwBarHtml(){
     +'<span class="kw-lang"><button class="'+(kwLang==='en'?'on':'')+'" onclick="kwSetLang(\'en\')">EN</button><button class="'+(kwLang==='es'?'on':'')+'" onclick="kwSetLang(\'es\')">ES</button></span>'
     +'<label class="kw-opt"><input type="checkbox" id="kwPend"'+(kwIncludePending?' checked':'')+' onchange="kwTogglePending(this.checked)"> '+t.pending+'</label>'
     +'<button onclick="kwNav(-1)">'+(m?t.prevM:t.prev)+'</button><button onclick="kwNav(0)">'+(m?t.todayM:t.today)+'</button><button onclick="kwNav(1)">'+(m?t.nextM:t.next)+'</button>'
-    +'<input type="date" min="2020-01-01" max="2100-12-31" value="'+(m?kwIso(kwMonth):kwIso(kwStart))+'" onchange="kwJump(this.value)" title="'+t.jump+'">'
+    +kwWeekSelect()+'<input type="date" min="2020-01-01" max="2100-12-31" value="'+(m?kwIso(kwMonth):kwIso(kwStart))+'" onchange="kwJump(this.value)" title="'+t.jump+'">'
     +'<button onclick="kwCopyLink(this)">'+t.copy+'</button>'
     +'<button class="kw-primary" onclick="kwPrint()">'+t.print+'</button></div>';
 }
@@ -190,7 +200,7 @@ function kwRenderMonth(panel){
     const withMeals=[...retreats,...roomOnly].filter(kwHasMeals).reduce((a,b)=>a+kwHeadcount(b,k),0);
     const off=retreats.filter(b=>kwOffsiteDate(b)===k);
     const names=retreats.slice(0,4).map(b=>'<div class="kw-mn">'+kwEsc(kwName(b))+' ('+kwHeadcount(b,k)+')'+(b.startDate===k?' ▲':'')+(b.endDate===k?' ▼':'')+'</div>').join('');
-    cells+='<div class="kw-mc kw-day '+cls+'"><div class="kw-mh"><span class="kw-mdn">'+kwOrd(d.getDate())+'</span> - <span class="kw-mhs">'+n+' '+(n===1?t.group:t.groups)+' - '+rg+' pax</span></div>'
+    cells+='<div class="kw-mc kw-day '+cls+'" onclick="kwGoWeek(\''+k+'\')" title="'+t.viewWeek+'"><div class="kw-mh"><span class="kw-mdn">'+kwOrd(d.getDate())+'</span> - <span class="kw-mhs">'+n+' '+(n===1?t.group:t.groups)+' - '+rg+' pax</span></div>'
       +(rog?'<div class="kw-ms"><b>'+rog+'</b> '+t.roomOnly.toLowerCase()+'</div>':'')
       +'<div class="kw-ms kw-mm">'+t.mealsShort+': <b>'+withMeals+'</b></div>'
       +(off.length?'<div class="kw-ms kw-offnote">'+t.offDot+': '+off.map(b=>kwEsc(kwName(b))).join(', ')+'</div>':'')
@@ -199,7 +209,7 @@ function kwRenderMonth(panel){
   panel.innerHTML='<style>'+KW_CSS+'</style>'+kwBarHtml()
     +'<div class="kw-range">'+title.charAt(0).toUpperCase()+title.slice(1)+'</div>'
     +'<div class="kw-mgrid">'+wd.map(w=>'<div class="kw-mwd">'+w+'</div>').join('')+cells+'</div>'
-    +'<div class="kw-legend"><span class="l1">'+t.leg1+'</span><span class="l2">'+t.leg2+'</span><span class="l3">'+t.leg3+'</span><span class="l4">'+t.leg4+'</span><span>▲ '+t.arrives+' · ▼ '+t.departs+'</span></div>';
+    +'<div class="kw-legend"><span class="l1">'+t.leg1+'</span><span class="l2">'+t.leg2+'</span><span class="l3">'+t.leg3+'</span><span class="l4">'+t.leg4+'</span><span class="l5">'+t.leg5+'</span><span>▲ '+t.arrives+' · ▼ '+t.departs+'</span></div>';
 }
 
 const KW_CSS=`
@@ -210,13 +220,13 @@ const KW_CSS=`
 .kw-mh{font-size:13.5px;font-weight:600;margin-bottom:3px;line-height:1.25}
 .kw-mdn{font-weight:700}
 .kw-mcount{font-family:'Jost',sans-serif;font-size:26px;font-weight:600;line-height:1}
-.kw-mc.slow .kw-mhs{color:#1f6b3a}.kw-mc.normal .kw-mhs{color:#7a5a00}.kw-mc.some .kw-mhs{color:#b34a00}.kw-mc.busy .kw-mhs{color:#a12a1a}
+.kw-mc.slow .kw-mhs{color:#17653a}.kw-mc.normal .kw-mhs{color:#14578f}.kw-mc.some .kw-mhs{color:#7a5f00}.kw-mc.mid .kw-mhs{color:#a84300}.kw-mc.busy .kw-mhs{color:#8f1a10}.kw-mc{cursor:pointer}.kw-mc.kw-out{cursor:default}.kw-weeksel{max-width:210px}
 .kw-ms{font-size:11.5px;line-height:1.3}.kw-mm{font-weight:500}
 .kw-mn{font-size:11px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kw-mc .kw-offnote{font-size:11px}
 .kw-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .kw-title{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:#1a2332;margin-right:auto}
-.kw-bar button,.kw-bar input[type=date]{font:500 13px 'Jost',sans-serif;padding:8px 13px;border:1.5px solid #d9d3c7;border-radius:9px;background:#fff;color:#1a2332;cursor:pointer}
+.kw-bar select,.kw-bar button,.kw-bar input[type=date]{font:500 13px 'Jost',sans-serif;padding:8px 13px;border:1.5px solid #d9d3c7;border-radius:9px;background:#fff;color:#1a2332;cursor:pointer}
 .kw-bar .kw-primary{background:#2d6a6a;border-color:#2d6a6a;color:#fff}
 .kw-lang{display:inline-flex}.kw-lang button{border-radius:0!important}.kw-lang button:first-child{border-radius:9px 0 0 9px!important}.kw-lang button:last-child{border-radius:0 9px 9px 0!important;border-left:0!important}.kw-lang button.on{background:#2d6a6a!important;color:#fff!important;border-color:#2d6a6a!important}
 .kw-opt{font-size:13px;display:flex;gap:6px;align-items:center}
@@ -235,13 +245,14 @@ const KW_CSS=`
 .kw-meals{font-size:12px;color:#1a2332;opacity:.9}
 .kw-tag{display:inline-block;font-size:10.5px;font-weight:600;padding:0 5px;border-radius:5px;background:#fff;border:1px solid currentColor;margin-left:4px}
 .kw-off{color:#7a2a8a}
-.kw-day.slow{background:#dcefe3;border-color:#1f6b3a}.kw-day.slow .kw-count,.kw-day.slow .kw-lbl{color:#1f6b3a}
-.kw-day.normal{background:#fff3b0;border-color:#8a6d00}.kw-day.normal .kw-count,.kw-day.normal .kw-lbl{color:#7a5a00}
-.kw-day.some{background:#fcd9b0;border-color:#b34a00}.kw-day.some .kw-count,.kw-day.some .kw-lbl{color:#b34a00}
-.kw-day.busy{background:#f8d6d0;border-color:#a12a1a}.kw-day.busy .kw-count,.kw-day.busy .kw-lbl{color:#a12a1a}
+.kw-day.slow{background:#cdeedb;border-color:#1f8a4c}.kw-day.slow .kw-count,.kw-day.slow .kw-lbl{color:#17653a}
+.kw-day.normal{background:#cfe6fb;border-color:#1d6fb8}.kw-day.normal .kw-count,.kw-day.normal .kw-lbl{color:#14578f}
+.kw-day.some{background:#fff0a6;border-color:#c9a100}.kw-day.some .kw-count,.kw-day.some .kw-lbl{color:#7a5f00}
+.kw-day.mid{background:#ffc98a;border-color:#e06a00}.kw-day.mid .kw-count,.kw-day.mid .kw-lbl{color:#a84300}
+.kw-day.busy{background:#ff9f98;border-color:#c4271a}.kw-day.busy .kw-count,.kw-day.busy .kw-lbl{color:#8f1a10}
 .kw-legend{display:flex;gap:18px;margin-top:12px;font-size:13px;flex-wrap:wrap}
 .kw-legend span::before{content:"";display:inline-block;width:14px;height:14px;border-radius:4px;margin-right:6px;vertical-align:-2px;border:2px solid}
-.kw-legend .l1::before{background:#dcefe3;border-color:#1f6b3a}.kw-legend .l2::before{background:#fff3b0;border-color:#8a6d00}.kw-legend .l3::before{background:#fcd9b0;border-color:#b34a00}.kw-legend .l4::before{background:#f8d6d0;border-color:#a12a1a}
+.kw-legend .l1::before{background:#cdeedb;border-color:#1f8a4c}.kw-legend .l2::before{background:#cfe6fb;border-color:#1d6fb8}.kw-legend .l3::before{background:#fff0a6;border-color:#c9a100}.kw-legend .l4::before{background:#ffc98a;border-color:#e06a00}.kw-legend .l5::before{background:#ff9f98;border-color:#c4271a}
 @media(max-width:1100px){.kw-grid{grid-template-columns:repeat(2,1fr)}}
 `;
 
