@@ -29,7 +29,7 @@ const CONTRACT_TMPL_DEFAULTS={
     {room:'Garden Basic (private)',solo:'$265',sharing:'—'},
     {room:'Double Beachview',solo:'',sharing:'$285 pp'},
     {room:'Double Room',solo:'',sharing:'$245 pp'},
-    {room:'Triple Room',solo:'',sharing:'$220 pp'}
+    {room:'Triple Room',solo:'',sharing:'$235 pp'}
   ],
   paymentTerms:'All prices in this contract are in U.S. Dollars (USD).\n\nA deposit of {depositAmount} USD is due upon signing this contract. An invoice will be issued after the contract is signed. If the deposit is not received within seven (7) days of signing, Casa de Agua reserves the right to release the dates.\n\nAll payments must be made via bank wire or bank transfer. Credit cards are not accepted.\n\nFull payment for the group is due 6 weeks prior to the retreat start date. Any last-minute registrations must be paid within 3 weeks of the start date.',
   cancellationPolicy:'Cancellation by the Retreat Leader\n\nMore than 16 weeks before the start date: deposit refunded less {cancellationFee} USD.\n\nWithin 16 weeks of the start date: deposit is non-refundable and non-transferable to other dates or personal use.\n\nCancellation by Participants\n\nMore than 3 weeks prior to the start date: two (2) nights will be charged according to the occupancy type booked.\n\n3 weeks or less prior to the start date: non-refundable and non-transferable.\n\nThe Retreat Leader must clearly communicate this cancellation policy to their registrants. Casa de Agua\'s cancellation policy is independent of the Retreat Leader\'s own participant cancellation policy.',
@@ -493,7 +493,7 @@ Garden King:       $300 solo / $200 pp sharing
 Garden Basic:      $265 private
 Double Beachview:  $285 pp
 Double Room:       $245 pp
-Triple Room:       $220 pp`:`ROOM RATES — HIGH SEASON
+Triple Room:       $235 pp`:`ROOM RATES — HIGH SEASON
 ${dash}
 Beachfront King:   $575 solo / $360 pp sharing
 Superior King:     $475 solo / $305 pp sharing
