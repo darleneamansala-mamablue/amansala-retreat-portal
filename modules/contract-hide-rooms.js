@@ -15,7 +15,10 @@
     const n = reEsc(esc(name)).replace(/&quot;/g, '(?:&quot;|")');
     return h.replace(new RegExp('<tr[^>]*>\\s*<td[^>]*>\\s*' + n + '\\s*</td>[\\s\\S]*?</tr>', 'g'), '');
   }, html);
-  const textHide = (txt, hidden) => hidden.reduce((t, name) => t.replace(new RegExp('^[•\\-*]\\s*' + reEsc(name) + '\\s*:.*\\n?', 'gm'), ''), txt);
+  const textHide = (txt, hidden) => hidden.reduce((t, name) => {
+    const base = name.replace(/\s*\(.*\)\s*$/, '');   // the built-in wording says "Garden Basic:" for "Garden Basic (private)"
+    return t.replace(new RegExp('^[•\\-*]?\\s*(?:' + reEsc(name) + '|' + reEsc(base) + ')\\s*:.*\\n?', 'gm'), '');
+  }, txt);
   const wrapGen = (name, fn) => {
     const prev = window[name];
     if (typeof prev !== 'function') return;
