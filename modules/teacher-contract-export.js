@@ -11,12 +11,24 @@
     return n.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') + '-contract';
   }
 
+  // The teacher's contract page, or (team side) the contract preview inside the admin contract window.
+  function tceSource() {
+    const t = document.getElementById('tcContractBody');
+    if (t && t.offsetParent !== null && t.style.display !== 'none') return t;
+    const m = document.getElementById('contractModal');
+    const a = document.getElementById('contractPreview');
+    if (m && a && m.classList.contains('open') && !a.querySelector('textarea')) return a;
+    return null;
+  }
+
   function tceClone() {
-    const src = document.getElementById('tcContractBody');
-    if (!src || src.style.display === 'none') return null;
+    const src = tceSource();
+    if (!src) return null;
     const wrap = document.createElement('div');
     wrap.style.cssText = 'background:#fff;color:#1a2332;font-family:Jost,Arial,sans-serif;padding:0;width:720px';
     wrap.innerHTML = src.innerHTML;
+    // the "Custom for this retreat only" note is for the team, not part of the contract
+    wrap.querySelectorAll('div').forEach(d => { if (d.parentNode === wrap && /Custom for this retreat only/.test(d.textContent) && d.textContent.length < 400) d.remove(); });
     return wrap;
   }
 
@@ -52,20 +64,26 @@
     setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) {} setTimeout(() => f.remove(), 2000); }, 600);
   };
 
-  function tceBar() {
-    const body = document.getElementById('tcContractBody');
-    if (!body) return;
-    let bar = document.getElementById(BAR_ID);
-    const shown = body.style.display !== 'none';
-    if (!shown) { if (bar) bar.remove(); return; }
+  function tceMakeBar(id, target, shown) {
+    let bar = document.getElementById(id);
+    if (!target) return;
+    if (!shown) { if (bar) bar.style.display = 'none'; return; }
     if (!bar) {
       bar = document.createElement('div');
-      bar.id = BAR_ID;
-      bar.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin:0 0 10px';
+      bar.id = id;
       const btn = 'padding:9px 16px;border-radius:10px;border:1.5px solid #2d6a6a;background:#fff;color:#2d6a6a;font-family:Jost,sans-serif;font-size:13.5px;font-weight:700;cursor:pointer';
       bar.innerHTML = '<button type="button" onclick="tceDownload()" style="' + btn + '">⬇ Download PDF</button><button type="button" onclick="tcePrint()" style="' + btn + '">🖨 Print</button>';
-      body.parentNode.insertBefore(bar, body);
+      target.parentNode.insertBefore(bar, target);
     }
+    bar.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin:0 0 10px';
+  }
+  function tceBar() {
+    const body = document.getElementById('tcContractBody');
+    tceMakeBar(BAR_ID, body, !!body && body.style.display !== 'none');
+  }
+  function tceAdminBar() {
+    const pv = document.getElementById('contractPreview');
+    tceMakeBar('tceBarAdmin', pv, !!pv && !pv.querySelector('textarea') && pv.innerHTML.length > 200);
   }
 
   if (typeof renderTeacherContract === 'function') {
@@ -76,4 +94,14 @@
       return r;
     };
   }
+  // team side: the contract window (Retreat → Contract). Bar shows with the preview and hides while the wording editor is open.
+  ['openContractModal', 'contractRenderPreview', 'contractOpenEditor', 'contractCloseEditor', 'contractSaveEditor'].forEach(n => {
+    const orig = window[n];
+    if (typeof orig !== 'function') return;
+    window[n] = function () {
+      const r = orig.apply(this, arguments);
+      try { setTimeout(tceAdminBar, 60); setTimeout(tceAdminBar, 600); } catch (e) {}
+      return r;
+    };
+  });
 })();
