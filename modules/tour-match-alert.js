@@ -5,7 +5,13 @@
 // A red chip "⚠ N tours not matching" shows bottom-left for the team (admin portal, or the preview-as-teacher on an admin device); click it for the list, click a group to open its schedule.
 // A real teacher never sees it.
 let tmaList = [];
-function tmaTeam() { try { return (typeof IS_TEACHER_MODE === 'undefined' || !IS_TEACHER_MODE) || sessionStorage.getItem('ama_admin_viewing') === '1' || !!localStorage.getItem('ama_admin_device'); } catch (e) { return false; } }
+function tmaTeam() { try {
+  // Admin only (Darlene 2026-10-28): not teachers, clients, therapists or other staff logins
+  if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE && sessionStorage.getItem('ama_admin_viewing') !== '1') return false;
+  let sess = null; try { sess = (typeof getCurrentSession === 'function') ? getCurrentSession() : JSON.parse(sessionStorage.getItem('amansala_staff_session') || 'null'); } catch (e) {}
+  if (sess && sess.role) return sess.role === 'admin';
+  return sessionStorage.getItem('ama_admin_viewing') === '1' || !!localStorage.getItem('ama_admin_device');
+} catch (e) { return false; } }
 const tmaEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 const tmaDay = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 function tmaScan() {

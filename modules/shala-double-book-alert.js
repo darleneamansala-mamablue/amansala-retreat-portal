@@ -7,7 +7,13 @@
 const SDB_DAYS = 21;
 let sdbList = [];
 
-function sdbTeam() { try { return (typeof IS_TEACHER_MODE === 'undefined' || !IS_TEACHER_MODE) || sessionStorage.getItem('ama_admin_viewing') === '1' || !!localStorage.getItem('ama_admin_device'); } catch (e) { return false; } }
+function sdbTeam() { try {
+  // Admin only (Darlene 2026-10-28): not teachers, clients, therapists or other staff logins
+  if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE && sessionStorage.getItem('ama_admin_viewing') !== '1') return false;
+  let sess = null; try { sess = (typeof getCurrentSession === 'function') ? getCurrentSession() : JSON.parse(sessionStorage.getItem('amansala_staff_session') || 'null'); } catch (e) {}
+  if (sess && sess.role) return sess.role === 'admin';
+  return sessionStorage.getItem('ama_admin_viewing') === '1' || !!localStorage.getItem('ama_admin_device');
+} catch (e) { return false; } }
 const sdbMin = t => { if (!t || String(t).indexOf(':') < 0) return null; const [h, m] = String(t).split(':').map(Number); return isNaN(h) || isNaN(m) ? null : h * 60 + m; };
 const sdbFmt = t => { const m = sdbMin(t); if (m == null) return '?'; const h = Math.floor(m / 60); return ((h % 12) || 12) + ':' + String(m % 60).padStart(2, '0') + ' ' + (h >= 12 ? 'PM' : 'AM'); };
 const sdbName = id => { try { return (SKED_SHALAS.find(s => s.id === id) || {}).name || id; } catch (e) { return id; } };
