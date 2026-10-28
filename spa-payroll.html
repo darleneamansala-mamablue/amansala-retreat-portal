@@ -158,7 +158,7 @@ async function loadAndRenderPayroll(){
   const rows=therapists.map(t=>{
     const own=completed.filter(a=>a.therapistId===t.id);
     let total=0;
-    const bySvc={};
+    const bySvc={},cntSvc={};
     own.forEach(a=>{
       const svc=services.find(s=>s.id===a.serviceId);
       const rate=(t.services||[]).find(r=>r.serviceId===a.serviceId);
@@ -166,8 +166,9 @@ async function loadAndRenderPayroll(){
       total+=pay;
       const name=svc?.name||a.serviceId;
       bySvc[name]=(bySvc[name]||0)+pay;
+      cntSvc[name]=(cntSvc[name]||0)+1;
     });
-    return {t,count:own.length,total,bySvc};
+    return {t,count:own.length,total,bySvc,cntSvc};
   }).filter(r=>r.count>0).sort((a,b)=>b.total-a.total);
   const grandTotal=rows.reduce((s,r)=>s+r.total,0);
 
@@ -183,7 +184,7 @@ async function loadAndRenderPayroll(){
           <div class="total">${pesos(r.total)}</div>
         </div>
         <div class="count">${r.count} completed service${r.count!==1?'s':''}</div>
-        ${Object.entries(r.bySvc).map(([name,amt])=>`<div class="svc-row"><span>${esc(name)}</span><span>${pesos(amt)}</span></div>`).join('')}
+        ${Object.entries(r.bySvc).map(([name,amt])=>`<div class="svc-row"><span>${esc(name)} <b>× ${r.cntSvc[name]} =</b></span><span>${pesos(amt)}</span></div>`).join('')}
       </div>`;
     });
     html+='</div>';

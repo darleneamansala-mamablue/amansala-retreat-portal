@@ -814,6 +814,7 @@ function spaRenderPayrollTable() {
     const own = completed.filter(a => a.therapistId === t.id);
     let total = 0;
     const bySvc = {};
+    const cntSvc = {};
     own.forEach(a => {
       const svc = SpaData.services.find(s => s.id === a.serviceId);
       const rate = (t.services || []).find(r => r.serviceId === a.serviceId);
@@ -821,8 +822,9 @@ function spaRenderPayrollTable() {
       total += pay;
       const name = svc?.name || a.serviceId;
       bySvc[name] = (bySvc[name] || 0) + pay;
+      cntSvc[name] = (cntSvc[name] || 0) + 1;
     });
-    return { t, count: own.length, total, bySvc };
+    return { t, count: own.length, total, bySvc, cntSvc };
   }).filter(r => r.count > 0).sort((a, b) => b.total - a.total);
   const grandTotal = rows.reduce((s, r) => s + r.total, 0);
 
@@ -840,7 +842,7 @@ function spaRenderPayrollTable() {
           <div style="font-size:16px;font-weight:700;color:#059669">${spaPesos(r.total)}</div>
         </div>
         <div style="font-size:11.5px;color:#9ca3af;margin-bottom:8px">${r.count} completed</div>
-        ${Object.entries(r.bySvc).map(([name, amt]) => `<div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;padding:2px 0"><span>${name}</span><span>${spaPesos(amt)}</span></div>`).join('')}
+        ${Object.entries(r.bySvc).map(([name, amt]) => `<div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;padding:2px 0"><span>${name} <b style="color:#2d2520">× ${r.cntSvc[name]} =</b></span><span>${spaPesos(amt)}</span></div>`).join('')}
       </div>`;
     });
     html += `</div>
