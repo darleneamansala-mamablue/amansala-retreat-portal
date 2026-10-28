@@ -5025,7 +5025,9 @@ async function _fetchAllRows(table,pageSize,selectCols){
 
 async function loadFromSupabase(){
   try{
-    const {data,error}=await db.from('app_store').select('key,value,updated_at');
+    // spa_appts_bk_* = the spa-appointment safety backups (89 copies, ~16 MB). Nothing in the app reads them (only the backup function), and pulling them
+    // made this one query exceed Supabase's statement timeout (500) so the portal loaded slowly or not at all (2026-10-28).
+    const {data,error}=await db.from('app_store').select('key,value,updated_at').not('key','like','spa_appts_bk_%');
     if(error||!data||!data.length)return false;
     const store={};
     data.forEach(r=>{store[r.key]=r.value;_appStoreUpdatedAt[r.key]=r.updated_at;});
