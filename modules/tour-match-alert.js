@@ -40,7 +40,7 @@ function tmaScan() {
 }
 function tmaChip() {
   let chip = document.getElementById('tmaChip');
-  if (!chip) { chip = document.createElement('button'); chip.id = 'tmaChip'; chip.onclick = tmaShow; chip.style.cssText = 'position:fixed;left:14px;bottom:108px;z-index:99988;display:none;padding:8px 14px;border-radius:99px;border:2px solid #fdba74;background:#fff7ed;color:#c2410c;font:700 13px Jost,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18)'; document.body.appendChild(chip); }
+  if (!chip) { chip = document.createElement('button'); chip.id = 'tmaChip'; chip.onclick = tmaShow; chip.style.cssText = 'position:fixed;right:14px;bottom:170px;z-index:99988;display:none;padding:8px 14px;border-radius:99px;border:2px solid #fdba74;background:#fff7ed;color:#c2410c;font:700 13px Jost,sans-serif;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18)'; document.body.appendChild(chip); }
   return chip;
 }
 function tmaTick() {
