@@ -28,6 +28,17 @@
       out.push({ name: 'Casita 4 — one single room (queen bed)', basis: 'Single occupancy', rate: has(price(one, 'price1')) ? usd(price(one, 'price1')) + ' per night' : null });
       return out;
     }
+    if (key === 'casagrande') {
+      // Casa Grande / Casa Master rates exactly as Darlene gave them (2026-10-28, from the Casa Master listing). Same figures all year (no separate low-season list was given).
+      // Contract display only: the portal's own room rates / billing are unchanged.
+      return [
+        { name: 'Queen Room (2 beds, shared bathroom & lounge area) — 2 rooms available', basis: 'Per room', rate: '$275 per night' },
+        { name: 'Garden Individual Room (individual bed, private bathroom, shared lounge area)', basis: 'Single occupancy', rate: '$275 per night' },
+        { name: 'Garden King Room (also has a twin bed for another person)', basis: 'King bed', rate: '$345 per night; add $145 per night if the twin bed is used' },
+        { name: 'Garden Double (2 beds)', basis: 'Per bed', rate: '$260 per bed, per night' },
+        { name: 'Superior King Room (master room — a second bed can be added)', basis: 'One or two guests', rate: '$475 per night for one guest; $300 per person, per night for two' },
+      ];
+    }
     P.types.forEach(id => {
       const rt = cpType(id);
       if (!rt) { out.push({ name: id, basis: '', rate: null }); return; }
