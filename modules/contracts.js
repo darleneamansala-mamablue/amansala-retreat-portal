@@ -148,8 +148,8 @@ function _openContractModalRender(bkId){
   document.getElementById('contractModalSub').textContent=fmtDate(bk.startDate)+' – '+fmtDate(bk.endDate)+' · '+bk.row;
   const badge=document.getElementById('contractSeasonBadge');
   const note=document.getElementById('contractSeasonNote');
-  if(isLow){badge.textContent='Low Season';badge.style.cssText='font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#dcfce7;color:#15803d';note.textContent='Rates and inclusions reflect low season (May – Sep)';}
-  else{badge.textContent='High Season';badge.style.cssText='font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#fef3c7;color:#92400e';note.textContent='Rates and inclusions reflect high season (Oct – Apr)';}
+  if(isLow){badge.textContent='Low Season';badge.style.cssText='font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#dcfce7;color:#15803d';note.textContent='Rates and inclusions reflect low season (Jun – Sep)';}
+  else{badge.textContent='High Season';badge.style.cssText='font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:#fef3c7;color:#92400e';note.textContent='Rates and inclusions reflect high season (Oct – May)';}
   contractRenderPreview(bk);
   // Jorge's ask 2026-10-01: editing a signed contract must stay possible --
   // saving now auto-voids the signature (see contractSaveEditor()) instead
@@ -365,7 +365,7 @@ function contractSaveEditor(){
   }
 }
 
-function isLowSeasonContract(dateStr){if(!dateStr)return false;const m=pd(dateStr).getMonth()+1;return m>=5&&m<=9;}
+function isLowSeasonContract(dateStr){if(!dateStr)return false;const m=pd(dateStr).getMonth()+1;return m>=6&&m<=9;}
 function generateContractHTML(bk,isLow,signDate){
   const leader=bk.leaderName||'Retreat Leader';
   const retreat=bk.retreatName||'';
@@ -415,7 +415,7 @@ function generateContractHTML(bk,isLow,signDate){
       ${bk.leaderEmail?`<tr><td style="padding:5px 0;font-size:13px;color:#7f8c9a">Leader Email</td><td style="padding:5px 0;font-size:13px">${bk.leaderEmail}</td></tr>`:''}
     </table>
     ${hr}
-    <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a;margin-bottom:4px">Room Rates — ${isLow?'Low Season (May – Sep)':'High Season (Oct – Apr)'}</h3>
+    <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#2d6a6a;margin-bottom:4px">Room Rates — ${isLow?'Low Season (Jun – Sep)':'High Season (Oct – May)'}</h3>
     <p style="font-size:11.5px;color:#7f8c9a;margin-bottom:8px">All room rates are subject to 16% tax and $${getTip(bk)} USD per person, per day gratuity (covers the waitstaff and kitchen team). Tipping housekeeping, spa therapists, bell staff, and tour guides — or offering a collective team tip — is customary and always appreciated.</p>
     ${isLow?ratesLow:ratesHigh}
     ${hr}
@@ -463,7 +463,7 @@ function generateContractText(bk,isLow,signDate){
   const roomRelease=fmtShort(addDays(pd(bk.startDate),-_cd.roomAllotmentReleaseDaysBefore));
   const flightDue=fmtShort(addDays(pd(bk.startDate),-_cd.flightDetailsDaysBefore));
   const lastMinReg=fmtShort(addDays(pd(bk.startDate),-_cd.lastMinuteCutoffDaysBefore));
-  const season=isLow?'LOW SEASON (May – Sep)':'HIGH SEASON (Oct – Apr)';
+  const season=isLow?'LOW SEASON (Jun – Sep)':'HIGH SEASON (Oct – May)';
   const eq='═'.repeat(52);const dash='─'.repeat(40);
   return `AMANSALA ECO-CHIC RESORT AND RETREAT
 GROUP RETREAT BOOKING AGREEMENT — ${season}
