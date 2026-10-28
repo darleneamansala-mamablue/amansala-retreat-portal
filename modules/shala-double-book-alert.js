@@ -55,7 +55,7 @@ const sdbDay = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { wee
 
 function sdbChip() {
   let chip = document.getElementById('sdbChip');
-  if (!chip) { chip = document.createElement('button'); chip.id = 'sdbChip'; chip.onclick = sdbShow; chip.style.cssText = 'position:fixed;left:14px;bottom:62px;z-index:99989;display:none;padding:8px 14px;border-radius:99px;border:2px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-weight:800;font-size:12.5px;cursor:pointer;font-family:Jost,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25)'; document.body.appendChild(chip); }
+  if (!chip) { chip = document.createElement('button'); chip.id = 'sdbChip'; chip.onclick = sdbShow; chip.style.cssText = 'position:fixed;right:14px;bottom:122px;z-index:99989;display:none;padding:8px 14px;border-radius:99px;border:2px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-weight:800;font-size:12.5px;cursor:pointer;font-family:Jost,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25)'; document.body.appendChild(chip); }
   return chip;
 }
 function sdbTick() {
