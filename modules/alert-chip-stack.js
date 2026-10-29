@@ -4,6 +4,13 @@
 // share the width of the widest one, and are evenly spaced. The chips' own counting, showing/hiding and click actions are untouched.
 (function () {
   const IDS = ['sdbChip', 'tmaChip', 'tnrChip'];   // top to bottom
+  // "Hide for this work session" (Darlene 2026-10-29): a small button above the chips hides the whole column until the browser tab is closed; a small "⚠ alerts" pill brings it back.
+  const HKEY = 'ama_alerts_hidden';
+  const hidden = () => { try { return sessionStorage.getItem(HKEY) === '1'; } catch (e) { return false; } };
+  const setHidden = v => { try { if (v) sessionStorage.setItem(HKEY, '1'); else sessionStorage.removeItem(HKEY); } catch (e) {} stack(); };
+  window.alertStackHide = () => setHidden(true);
+  window.alertStackShow = () => setHidden(false);
+  const visibleCount = () => IDS.filter(id => { const c = document.getElementById(id); return c && c.style.display !== 'none' && c.style.display !== ''; }).length;
   function stack() {
     let box = document.getElementById('alertStack');
     if (!box) {
@@ -12,6 +19,16 @@
       box.style.cssText = 'position:fixed;right:14px;bottom:60px;z-index:99990;display:flex;flex-direction:column;align-items:stretch;gap:8px;pointer-events:none';
       document.body.appendChild(box);
     }
+    // hide button (top of the column) and the little restore pill
+    let hb = document.getElementById('alertHideBtn');
+    if (!hb) { hb = document.createElement('button'); hb.id = 'alertHideBtn'; hb.type = 'button'; hb.onclick = window.alertStackHide; hb.textContent = 'Hide alerts for this session ✕'; hb.style.cssText = "pointer-events:auto;align-self:flex-end;padding:3px 10px;border-radius:99px;border:1.5px solid #d6cfc4;background:#fff;color:#6b7280;font-family:'Jost',sans-serif;font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15)"; box.insertBefore(hb, box.firstChild); }
+    let sp = document.getElementById('alertShowPill');
+    if (!sp) { sp = document.createElement('button'); sp.id = 'alertShowPill'; sp.type = 'button'; sp.onclick = window.alertStackShow; sp.style.cssText = "position:fixed;right:14px;bottom:14px;z-index:99990;display:none;padding:4px 12px;border-radius:99px;border:1.5px solid #fca5a5;background:#fff;color:#b91c1c;font-family:'Jost',sans-serif;font-size:11.5px;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15)"; document.body.appendChild(sp); }
+    const n = visibleCount(), hide = hidden();
+    box.style.display = hide ? 'none' : 'flex';
+    hb.style.display = n ? '' : 'none';
+    sp.style.display = (hide && n) ? 'block' : 'none';
+    sp.textContent = '⚠ ' + n + ' alert' + (n !== 1 ? 's' : '');
     IDS.forEach(id => {
       const c = document.getElementById(id); if (!c) return;
       if (c.parentNode !== box) {
