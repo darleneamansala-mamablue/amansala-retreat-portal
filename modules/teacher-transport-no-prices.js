@@ -1,7 +1,7 @@
 // ===== teacher-transport-no-prices.js — teachers no longer see transportation prices (Darlene 2026-10-29) =====
 // Loaded as a classic script AFTER teacher-transport-edit.js and teacher-transport-note.js; shares global scope. Standalone: only wraps _renderTeacherTransportInner.
 // In a teacher's view (not an admin, not an admin previewing as the teacher) it removes the "Est. Cost" column, the dollar totals in the "Teacher paying transportation"
-// banner, and the transport total in the Room List stats. Admin logins keep every price. Nothing is deleted or changed in the data.
+// banner, the "Transfer Pricing Reference" card at the bottom, and the transport total in the Room List stats. Admin logins keep every price. Nothing is deleted or changed in the data.
 (function () {
   const isAdmin = () => { try { return typeof IS_TEACHER_MODE === 'undefined' || !IS_TEACHER_MODE || sessionStorage.getItem('ama_admin_viewing') === '1'; } catch (e) { return true; } };
 
@@ -34,6 +34,10 @@
       }
     });
   }
+
+  // the teal "Transfer Pricing Reference" card at the bottom of the page
+  const prevCard = window._trPricingCardHtml;
+  if (typeof prevCard === 'function') window._trPricingCardHtml = function () { return isAdmin() ? prevCard.apply(this, arguments) : ''; };
 
   const prev = window._renderTeacherTransportInner;
   if (typeof prev === 'function') {
