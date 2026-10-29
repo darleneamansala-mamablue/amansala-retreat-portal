@@ -65,8 +65,8 @@ function oarRender() {
   const tile = (n, l, s) => `<div style="flex:1;min-width:130px;background:#fff;border:1.5px solid #e8dfd4;border-radius:10px;padding:8px 12px"><div style="font-size:22px;font-weight:800;color:#2d2520;line-height:1.1">${n}</div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280">${l}</div>${s ? `<div style="font-size:10.5px;color:#9ca3af">${s}</div>` : ''}</div>`;
   const th = 'text-align:left;padding:4px 6px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#6b7280;border-bottom:2px solid #e8dfd4';
   const td = 'padding:3px 6px;font-size:11.5px;border-bottom:1px solid #f0ebe0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-  // rows are split into side-by-side blocks (3 across) so a whole week fits on one page
-  const per = Math.ceil(res.rows.length / 3) || 1, blocks = [0, 1, 2].map(k => res.rows.slice(k * per, (k + 1) * per)).filter(b => b.length);
+  // rows are split into side-by-side blocks (3 across) so a whole week fits on one page (2 across, 3 when there are more than 64 rooms)
+  const nb = res.rows.length > 64 ? 3 : 2, per = Math.ceil(res.rows.length / nb) || 1, blocks = Array.from({ length: nb }, (_, k) => res.rows.slice(k * per, (k + 1) * per)).filter(b => b.length);
   const block = b => `<table style="flex:1;min-width:0;table-layout:fixed;border-collapse:collapse;background:#fff;border:1.5px solid #e8dfd4"><colgroup><col style="width:17%"><col style="width:9%"><col style="width:10%"><col style="width:12%"><col></colgroup><tr><th style="${th}">Room</th><th style="${th}">AC</th><th style="${th}">Nts</th><th style="${th}">Guests</th><th style="${th}">Retreat</th></tr>
     ${b.map(r => `<tr><td style="${td};font-weight:700">${oarEsc(r.unit)}</td><td style="${td}">${r.ac}</td><td style="${td}">${r.nights}</td><td style="${td}">${r.guests.length}</td><td style="${td};font-size:10.5px;color:#4b5563" title="${oarEsc(r.retreats.join(', '))}">${oarEsc(r.retreats.join(', '))}</td></tr>`).join('')}</table>`;
   const night = document.getElementById('oarNight').checked;
