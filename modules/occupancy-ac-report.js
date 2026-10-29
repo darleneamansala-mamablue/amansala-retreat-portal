@@ -85,7 +85,7 @@ function oarCsv() {
 function oarPrint() {
   const body = document.getElementById('oarSheet'); if (!body) return;
   const w = window.open('', '_blank'); if (!w) { alert('Allow pop-ups to print.'); return; }
-  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Occupancy & AC</title><style>@page{size:letter portrait;margin:10mm}body{margin:0;font-family:Jost,Arial,sans-serif;color:#2d2520;width:720px}h2{margin:0 0 8px;font-size:18px}</style></head><body><h2>Occupancy &amp; AC report</h2>' + body.innerHTML + '</body></html>');
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Occupancy & AC</title><style>@page{size:letter portrait;margin:10mm}html{background:#fff}body{margin:0 auto;font-family:Jost,Arial,sans-serif;color:#2d2520;width:720px}h2{margin:0 0 8px;font-size:18px;text-align:center}</style></head><body><h2>Occupancy &amp; AC report</h2>' + body.innerHTML + '</body></html>');
   w.document.close();
   // shrink to fit ONE page (letter minus margins is about 700 x 960 px)
   setTimeout(() => { const b = w.document.body, z = Math.min(1, 950 / b.scrollHeight, 700 / b.scrollWidth); b.style.zoom = z; w.focus(); w.print(); }, 500);
