@@ -45,7 +45,7 @@
         box.innerHTML = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#92400e;margin-bottom:6px">Options for this meal${opts.length ? ' (' + opts.length + ')' : ''}</div>
           ${opts.length ? `<select id="mopSel" onchange="mopPick(this.value)" style="width:100%;padding:8px;border:1.5px solid #fcd34d;border-radius:8px;font-family:inherit;font-size:13px;background:#fff"><option value="">Swap with an option…</option>${opts.map((o, i) => `<option value="${i}">${esc(o.en || o.name)}${o.en ? ' — ' + esc(o.name) : ''}</option>`).join('')}</select>
           <div style="font-size:11.5px;color:#92400e;margin-top:4px">${c.isNew ? 'It is added when you press Save.' : 'Pick one, check it, then press Save. The dish you take out goes into the options.'}</div>` : '<div style="font-size:12.5px;color:#92400e">No options for this meal yet. Add some with the 🍽 Options button, or put this dish in the list below.</div>'}
-          ${c.isNew ? '' : '<button type="button" onclick="mopPutThis()" style="margin-top:8px;padding:5px 11px;border:1.5px solid #fcd34d;border-radius:8px;background:#fff;color:#92400e;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">Put this dish in the options list</button>'}`;
+          ${c.isNew ? '' : `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" onclick="mopMoveThis()" style="padding:5px 11px;border:1.5px solid #fcd34d;border-radius:8px;background:#fff;color:#92400e;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">Move this dish to options</button><button type="button" onclick="mopMoveSection()" style="padding:5px 11px;border:1.5px solid #fcd34d;border-radius:8px;background:#fff;color:#92400e;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">Move the entire section to options</button><button type="button" onclick="mopPutThis()" style="padding:5px 11px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fff;color:#6b7280;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer" title="Adds it to the list and keeps it on the menu">Copy this dish to the list</button></div>`}`;
         saveRow.parentElement.parentElement.insertBefore(box, saveRow.parentElement);
       } catch (e) { console.warn('[menu-options]', e); }
       return r;
@@ -78,6 +78,37 @@
       return prevSave.apply(this, arguments);
     };
   }
+
+
+  // ---- move to options: this dish, or the whole meal section of this day ----
+  function detailOf(name) { try { const d = menuItemDetail(clean(name)) || {}; return { name: clean(name), en: d.name && d.name !== clean(name) ? d.name : '', desc: d.desc || '' }; } catch (e) { return { name: clean(name), en: '', desc: '' }; } }
+  window.mopMoveThis = async function () {
+    const c = _mceCtx; if (!c || c.isNew || !c.key) return;
+    if (!confirm('Move "' + c.key + '" off ' + mceDayName(c.di) + ' and into the options?')) return;
+    addOpt(c.path, detailOf(c.key));
+    const day = _meDays[c.di];
+    if (c.path === 'dinner.protein') delete (day.dinner || {}).protein;
+    else if (c.path === 'dinner.dessert') delete (day.dinner || {}).dessert;
+    else mceListOf(c.di, c.path).splice(c.i, 1);
+    await save(); mceCommit();
+  };
+  window.mopMoveSection = async function () {
+    const c = _mceCtx; if (!c || c.isNew) return;
+    const day = _meDays[c.di], moved = [];
+    if (c.path === 'dinner.protein' || c.path === 'dinner.dessert' || c.path === 'dinner.dishes') {
+      const din = day.dinner || {};
+      if (din.protein) moved.push(['dinner.protein', din.protein]);
+      (din.dishes || []).forEach(x => moved.push(['dinner.dishes', x]));
+      if (din.dessert) moved.push(['dinner.dessert', din.dessert]);
+    } else mceListOf(c.di, c.path).forEach(x => moved.push([c.path, x]));
+    if (!moved.length) return;
+    const label = (MEALS.find(m => m[0] === c.path) || [])[1] || 'this section';
+    if (!confirm('Move all ' + moved.length + ' dish' + (moved.length !== 1 ? 'es' : '') + ' of ' + (c.path.indexOf('dinner') === 0 ? 'Dinner' : label) + ' on ' + mceDayName(c.di) + ' into the options?\n\n' + moved.map(m => '• ' + clean(m[1])).join('\n'))) return;
+    moved.forEach(m => addOpt(m[0], detailOf(m[1])));
+    if (c.path.indexOf('dinner') === 0) { const din = day.dinner || {}; delete din.protein; delete din.dessert; din.dishes = []; day.dinner = din; }
+    else day[c.path] = [];
+    await save(); mceCommit();
+  };
 
   // ---- the "🍽 Options" manager ----
   function mgrHtml() {
