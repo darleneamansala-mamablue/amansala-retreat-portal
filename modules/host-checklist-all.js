@@ -68,3 +68,32 @@ function hcAllShow() {
     };
   }
 })();
+
+// Sidebar entry "Pendings · This Week" right under Host Checklist: opens the list above, with a count of the steps not done (admin logins only).
+(function () {
+  function add() {
+    if (document.getElementById('hcPendingsBtn')) return true;
+    const host = document.getElementById('hostchecklistTabBtn'), side = document.getElementById('staffSideBtn');
+    if (!host || !side) return false;
+    const b = document.createElement('button');
+    b.className = 'tab-btn tab-btn-sub'; b.id = 'hcPendingsBtn'; b.setAttribute('onclick', 'hcAllShow()'); b.style.color = '#d97706';
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg> Pendings · This Week <span id="hcPendingsN" style="display:none;margin-left:6px;background:#d97706;color:#fff;border-radius:99px;font-size:11px;font-weight:800;padding:1px 7px"></span>';
+    side.parentNode.insertBefore(b, host.nextSibling);
+    return true;
+  }
+  function tick() {
+    try {
+      if (!add()) return;
+      const b = document.getElementById('hcPendingsBtn'), n = document.getElementById('hcPendingsN');
+      if (!b) return;
+      const ok = typeof hcTeam === 'function' && hcTeam();
+      b.style.display = ok ? '' : 'none';
+      if (!ok || typeof hcState === 'undefined' || !hcState.loaded) return;
+      const was = hcAllWin; hcAllWin = 7;
+      const c = hcAllScan().reduce((s, x) => s + x.steps.length, 0);
+      hcAllWin = was;
+      n.textContent = c; n.style.display = c ? '' : 'none';
+    } catch (e) {}
+  }
+  setInterval(tick, 60000); setTimeout(tick, 6000); setTimeout(tick, 15000);
+})();
