@@ -70,13 +70,14 @@ function menuOffsiteNoteHtml(dateStr) {
   if (!items.length) return '';
   const txt = [...new Set(items.map(x => x.group))].join(' · ');   // just the retreat name(s) (Darlene 2026-10-29: "OFFSITE and the name of the retreat")
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  return `<div title="Off-site dinner: not counted, not cooked for" style="margin-top:6px;padding:3px 7px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:10.5px;line-height:1.3;color:#991b1b"><b>OFFSITE</b> · ${esc(txt)}</div>`;
+  // margin-top:auto inside the (flex column) grid cell pushes the note to the bottom of the dinner row, so it sits on the same line under every day
+  return `<div style="margin-top:auto;padding:6px 4px 4px"><div title="Off-site dinner: not counted, not cooked for" style="padding:3px 7px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:10.5px;line-height:1.3;color:#991b1b"><b>OFFSITE</b> · ${esc(txt)}</div></div>`;
 }
 (function () {
   if (typeof menuRenderDinner !== 'function') return;
   const origDinner = window.menuRenderDinner;
   window.menuRenderDinner = function (dateStr) {
     const html = origDinner.apply(this, arguments);
-    try { const note = menuOffsiteNoteHtml(dateStr); return note ? String(html).replace(/<\/div>\s*$/, note + '</div>') : html; } catch (e) { return html; }
+    try { const note = menuOffsiteNoteHtml(dateStr); return note ? String(html) + note : html; } catch (e) { return html; }
   };
 })();
