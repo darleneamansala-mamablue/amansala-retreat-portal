@@ -68,9 +68,9 @@ function menuOffsiteMessages() {
 function menuOffsiteNoteHtml(dateStr) {
   const items = Object.values(menuOffsiteLog).filter(x => x.date === String(dateStr).slice(0, 10) && x.kind !== 'check');
   if (!items.length) return '';
-  const txt = items.map(x => x.kind === 'partial' ? `${x.group} (${x.out} of ${x.head} out)` : x.kind === 'undecided' ? `${x.group} (${x.head}) ?` : `${x.group} (${x.head})`).join(' · ');   // short on purpose (Darlene 2026-10-29: too much text); "?" = choice not set yet
+  const txt = [...new Set(items.map(x => x.group))].join(' · ');   // just the retreat name(s) (Darlene 2026-10-29: "OFFSITE and the name of the retreat")
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  return `<div title="Off-site dinner: not counted, not cooked for. A ? means the group's dinner choice is not set yet." style="margin-top:6px;padding:3px 7px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:10.5px;line-height:1.3;color:#991b1b"><b>🚌 Off-site:</b> ${esc(txt)}</div>`;
+  return `<div title="Off-site dinner: not counted, not cooked for" style="margin-top:6px;padding:3px 7px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:10.5px;line-height:1.3;color:#991b1b"><b>OFFSITE</b> · ${esc(txt)}</div>`;
 }
 (function () {
   if (typeof menuRenderDinner !== 'function') return;
