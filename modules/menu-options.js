@@ -117,11 +117,33 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-size:18px;font-weight:700">🍽 Option dishes</div><button onclick="document.getElementById('mopOv').remove()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#6b7280">×</button></div>
       <div style="font-size:12.5px;color:#6b7280;margin-bottom:12px">Dishes you can swap in and out. On the menu, click a dish and choose “Swap with an option”. A dish you take out goes back into this list.</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${MEALS.map(([k, n]) => `<button onclick="mopMeal('${k}')" style="padding:5px 10px;border-radius:99px;border:1.5px solid ${k === mgrMeal ? '#2d6a6a' : '#d6cfc4'};background:${k === mgrMeal ? '#2d6a6a' : '#fff'};color:${k === mgrMeal ? '#fff' : '#374151'};font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">${esc(n)}${(pool[k] || []).length ? ' · ' + pool[k].length : ''}</button>`).join('')}</div>
-      ${l.length ? l.map((o, i) => `<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #f0ebe0"><div style="flex:1"><b>${esc(o.name)}</b>${o.en ? ' <span style="color:#6b7280">· ' + esc(o.en) + '</span>' : ''}${o.desc ? `<div style="font-size:12px;color:#9a8f83">${esc(o.desc)}</div>` : ''}</div><button onclick="mopDel(${i})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:12px;font-family:inherit">Delete</button></div>`).join('') : '<div style="font-size:13px;color:#6b7280;padding:8px 0">No options for this meal yet.</div>'}
+      ${l.length ? l.map((o, i) => `<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid #f0ebe0"><div style="flex:1"><b>${esc(o.name)}</b>${o.en ? ' <span style="color:#6b7280">· ' + esc(o.en) + '</span>' : ''}${o.desc ? `<div style="font-size:12px;color:#9a8f83">${esc(o.desc)}</div>` : ''}</div><select onchange="mopToDay(${i},this.value)" title="Put this option on a day of the week" style="padding:5px 6px;border:1.5px solid #fcd34d;border-radius:8px;background:#fffbeb;color:#92400e;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer"><option value="">Move to a day…</option>${Object.keys(ME_DAYS).map(d => `<option value="${d}">${esc(ME_DAYS[d])}</option>`).join('')}</select><button onclick="mopDel(${i})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:12px;font-family:inherit">Delete</button></div>`).join('') : '<div style="font-size:13px;color:#6b7280;padding:8px 0">No options for this meal yet.</div>'}
       <div style="margin-top:14px;padding-top:12px;border-top:2px solid #e8dfd4"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#8a7e74;margin-bottom:6px">Add an option</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><input id="mopN" placeholder="Name on the menu (Spanish)" style="${inp}"><input id="mopE" placeholder="English name" style="${inp}"><input id="mopD" placeholder="Description (printed menu)" style="${inp};grid-column:1/-1"></div>
         <button onclick="mopAdd()" style="margin-top:8px;padding:8px 16px;border:none;border-radius:8px;background:#2d6a6a;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">+ Add to ${esc((MEALS.find(m => m[0] === mgrMeal) || [])[1] || '')}</button></div></div>`;
   }
+
+  // move an option from the list onto a day of the week (same meal), in the menu the week on screen uses
+  window.mopToDay = async function (i, di) {
+    if (di === '' || di == null) return;
+    const path = mgrMeal, o = list(path)[i]; if (!o) return;
+    di = +di;
+    try { await mceLoadState(); } catch (e) { if (typeof showToast === 'function') showToast('Could not open the menu: ' + (e.message || e)); return; }
+    const day = (_meDays[di] = _meDays[di] || {}), single = path === 'dinner.protein' || path === 'dinner.dessert';
+    let old = '';
+    if (single) { day.dinner = day.dinner || { dishes: [] }; old = path === 'dinner.protein' ? day.dinner.protein || '' : day.dinner.dessert || ''; }
+    const where = (MEALS.find(m => m[0] === path) || [])[1];
+    if (!confirm('Put "' + o.name + '" on ' + mceDayName(di) + ' (' + where + ')?' + (old ? '\n\n"' + clean(old) + '" goes back into the options.' : '') + '\n\nThis is the weekly menu, so it changes every ' + mceDayName(di) + ' that uses ' + (MENU_VARIANTS[mceVariantNow()] || 'this menu') + '.')) { redraw(); return; }
+    if (path === 'dinner.protein') day.dinner.protein = o.name;
+    else if (path === 'dinner.dessert') day.dinner.dessert = o.name;
+    else mceListOf(di, path).push(o.name);
+    const det = meDetail(o.name); det.name = o.en || ''; det.desc = o.desc || '';
+    if (old) addOpt(path, detailOf(old));
+    list(path).splice(i, 1);
+    await save(); await mceCommit();
+    redraw();
+  };
+
   window.mopOpen = async function () {
     await load();
     let ov = document.getElementById('mopOv');
