@@ -211,7 +211,13 @@ function hcOpenFor(id) {
 // ---- Alert: arrival steps that are not ticked off (Darlene 2026-10-24). For every retreat arriving within the next 3 days (or already here and in its first 2 days), the Retreat Admin steps and every
 // arrival step whose due date has come are checked; anything not ticked shows in a red chip at the bottom-left of the team's screens, and a click lists them by retreat. Team only.
 const HC_ARRIVAL_WHEN = ['S-3', 'S-1', 'S1', 'S0', 'S+1'];
-function hcTeam() { try { return (typeof IS_TEACHER_MODE === 'undefined' || !IS_TEACHER_MODE) || sessionStorage.getItem('ama_admin_viewing') === '1' || !!localStorage.getItem('ama_admin_device'); } catch (e) { return false; } }
+function hcTeam() { try {
+  // Admin logins only (Darlene 2026-10-29): not teachers, clients, therapists or other staff logins
+  if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE && sessionStorage.getItem('ama_admin_viewing') !== '1') return false;
+  let s = null; try { s = (typeof getCurrentSession === 'function') ? getCurrentSession() : JSON.parse(sessionStorage.getItem('amansala_staff_session') || 'null'); } catch (e) {}
+  if (s && s.role) return s.role === 'admin';
+  return sessionStorage.getItem('ama_admin_viewing') === '1' || !!localStorage.getItem('ama_admin_device');
+} catch (e) { return false; } }
 function hcAlertScan() {
   const today = hcToday(), out = [];
   (AppData.bookings || []).filter(b => b.status !== 'cancelled' && b.startDate && b.endDate && (b.bookingType || '') !== 'room_only' && !hcIsBbc(b)).forEach(bk => {
