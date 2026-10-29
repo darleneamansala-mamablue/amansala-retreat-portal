@@ -62,31 +62,33 @@ function oarRender() {
   const res = oarScan(from, to, soft); oarRows = res.rows; oarNights = res.perNight;
   const rooms = res.rows.length, ac = res.rows.reduce((s, r) => s + r.ac, 0);
   const peak = res.perNight.reduce((b, p) => p.rooms > b.rooms ? p : b, { rooms: 0, ac: 0, d: '' });
-  const tile = (n, l, s) => `<div style="flex:1;min-width:150px;background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:12px 16px"><div style="font-size:26px;font-weight:800;color:#2d2520">${n}</div><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280">${l}</div>${s ? `<div style="font-size:11.5px;color:#9ca3af;margin-top:2px">${s}</div>` : ''}</div>`;
-  const th = 'text-align:left;padding:7px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;border-bottom:2px solid #e8dfd4';
-  const td = 'padding:7px 10px;font-size:13px;border-bottom:1px solid #f0ebe0;vertical-align:top';
-  out.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${tile(rooms, 'Rooms occupied', oarFmt(from) + ' – ' + oarFmt(to) + ' · ' + res.nights + ' night' + (res.nights !== 1 ? 's' : ''))}${tile(ac, 'AC units', 'in those rooms')}${tile(peak.rooms + ' / ' + peak.ac, 'Busiest night', peak.d ? oarFmt(peak.d) + ' (rooms / AC)' : '')}</div>
-    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin:6px 0">Room numbers</div>
-    <div style="font-size:13.5px;line-height:1.7;background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;padding:10px 14px;margin-bottom:14px">${res.rows.length ? res.rows.map(r => oarEsc(r.unit)).join(' · ') : 'No rooms occupied in this range.'}</div>
-    <table style="width:100%;border-collapse:collapse;background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;margin-bottom:14px"><tr><th style="${th}">Room</th><th style="${th}">AC</th><th style="${th}">Nights</th><th style="${th}">Guests</th><th style="${th}">Retreat</th></tr>
-      ${res.rows.map(r => `<tr><td style="${td};font-weight:700">${oarEsc(r.unit)}</td><td style="${td}">${r.ac}</td><td style="${td}">${r.nights}</td><td style="${td};font-size:12px;color:#4b5563">${oarEsc(r.guests.join(', '))}</td><td style="${td};font-size:12px;color:#4b5563">${oarEsc(r.retreats.join(', '))}</td></tr>`).join('')}
-      <tr><td style="${td};font-weight:800">Total</td><td style="${td};font-weight:800">${ac}</td><td colspan="3" style="${td};font-weight:800">${rooms} room${rooms !== 1 ? 's' : ''}</td></tr></table>
-    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin:6px 0">Night by night</div>
-    <table style="width:100%;border-collapse:collapse;background:#fff;border:1.5px solid #e8dfd4;border-radius:12px;margin-bottom:12px"><tr><th style="${th}">Night</th><th style="${th}">Rooms</th><th style="${th}">AC units</th></tr>
-      ${res.perNight.map(p => `<tr><td style="${td}">${oarFmt(p.d)}</td><td style="${td}">${p.rooms}</td><td style="${td}">${p.ac}</td></tr>`).join('')}</table>
-    <div style="font-size:11.5px;color:#9ca3af;line-height:1.6">A bed counts as its room, and Casa Master, Casa Shanti and Casita 4 count as one unit each. AC units used: ${OAR_AC_NOTES.join('; ')}.${soft ? '' : ' Soft holds are not counted.'}</div>`;
+  const tile = (n, l, s) => `<div style="flex:1;min-width:130px;background:#fff;border:1.5px solid #e8dfd4;border-radius:10px;padding:8px 12px"><div style="font-size:22px;font-weight:800;color:#2d2520;line-height:1.1">${n}</div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280">${l}</div>${s ? `<div style="font-size:10.5px;color:#9ca3af">${s}</div>` : ''}</div>`;
+  const th = 'text-align:left;padding:4px 6px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#6b7280;border-bottom:2px solid #e8dfd4';
+  const td = 'padding:3px 6px;font-size:11.5px;border-bottom:1px solid #f0ebe0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+  // rows are split into side-by-side blocks (3 across) so a whole week fits on one page
+  const per = Math.ceil(res.rows.length / 3) || 1, blocks = [0, 1, 2].map(k => res.rows.slice(k * per, (k + 1) * per)).filter(b => b.length);
+  const block = b => `<table style="flex:1;min-width:0;table-layout:fixed;border-collapse:collapse;background:#fff;border:1.5px solid #e8dfd4"><colgroup><col style="width:17%"><col style="width:9%"><col style="width:10%"><col style="width:12%"><col></colgroup><tr><th style="${th}">Room</th><th style="${th}">AC</th><th style="${th}">Nts</th><th style="${th}">Guests</th><th style="${th}">Retreat</th></tr>
+    ${b.map(r => `<tr><td style="${td};font-weight:700">${oarEsc(r.unit)}</td><td style="${td}">${r.ac}</td><td style="${td}">${r.nights}</td><td style="${td}">${r.guests.length}</td><td style="${td};font-size:10.5px;color:#4b5563" title="${oarEsc(r.retreats.join(', '))}">${oarEsc(r.retreats.join(', '))}</td></tr>`).join('')}</table>`;
+  const night = document.getElementById('oarNight').checked;
+  out.innerHTML = `<div id="oarSheet"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">${tile(rooms, 'Rooms occupied', oarFmt(from) + ' – ' + oarFmt(to) + ' · ' + res.nights + ' night' + (res.nights !== 1 ? 's' : ''))}${tile(ac, 'AC units', 'in those rooms')}${tile(peak.rooms + ' / ' + peak.ac, 'Busiest night', peak.d ? oarFmt(peak.d) + ' (rooms / AC)' : '')}</div>
+    ${res.rows.length ? `<div style="display:flex;gap:8px;align-items:flex-start">${blocks.map(block).join('')}</div>` : '<div style="font-size:13px;color:#6b7280">No rooms occupied in this range.</div>'}
+    <div style="font-size:12px;font-weight:800;margin:8px 0 2px">Total: ${rooms} room${rooms !== 1 ? 's' : ''} · ${ac} AC units</div>
+    ${night ? `<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b7280;margin:8px 0 3px">Night by night</div><div style="display:flex;gap:6px;flex-wrap:wrap">${res.perNight.map(p => `<div style="background:#fff;border:1px solid #e8dfd4;border-radius:7px;padding:3px 8px;font-size:11px"><b>${oarFmt(p.d)}</b> · ${p.rooms} rooms · ${p.ac} AC</div>`).join('')}</div>` : ''}
+    <div style="font-size:10px;color:#9ca3af;line-height:1.5;margin-top:8px">A bed counts as its room; Casa Master, Casa Shanti and Casita 4 count as one unit each. Guests = number of guests. AC units used: ${OAR_AC_NOTES.join('; ')}.${soft ? '' : ' Soft holds not counted.'}</div></div>`;
 }
 function oarCsv() {
   const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
-  const lines = [['Room', 'AC units', 'Nights occupied', 'Guests', 'Retreat'].map(q).join(',')].concat(oarRows.map(r => [r.unit, r.ac, r.nights, r.guests.join('; '), r.retreats.join('; ')].map(q).join(',')));
+  const lines = [['Room', 'AC units', 'Nights occupied', '# Guests', 'Retreat'].map(q).join(',')].concat(oarRows.map(r => [r.unit, r.ac, r.nights, r.guests.length, r.retreats.join('; ')].map(q).join(',')));
   lines.push(['TOTAL', oarRows.reduce((s, r) => s + r.ac, 0), '', oarRows.length + ' rooms', ''].map(q).join(','));
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' })); a.download = `occupancy-ac-${document.getElementById('oarFrom').value}-to-${document.getElementById('oarTo').value}.csv`; document.body.appendChild(a); a.click(); a.remove();
 }
 function oarPrint() {
-  const body = document.getElementById('oarOut'); if (!body) return;
+  const body = document.getElementById('oarSheet'); if (!body) return;
   const w = window.open('', '_blank'); if (!w) { alert('Allow pop-ups to print.'); return; }
-  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Occupancy & AC</title><style>body{font-family:Jost,Arial,sans-serif;padding:24px;color:#2d2520}table{border-collapse:collapse;width:100%}</style></head><body><h2>Occupancy &amp; AC report</h2>' + body.innerHTML + '</body></html>');
-  w.document.close(); setTimeout(() => w.print(), 400);
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Occupancy & AC</title><style>@page{size:letter portrait;margin:10mm}body{margin:0;font-family:Jost,Arial,sans-serif;color:#2d2520;width:720px}h2{margin:0 0 8px;font-size:18px}</style></head><body><h2>Occupancy &amp; AC report</h2>' + body.innerHTML + '</body></html>');
+  w.document.close();
+  // shrink to fit ONE page (letter minus margins is about 700 x 960 px)
+  setTimeout(() => { const b = w.document.body, z = Math.min(1, 950 / b.scrollHeight, 700 / b.scrollWidth); b.style.zoom = z; w.focus(); w.print(); }, 500);
 }
 function oarOpen() {
   if (typeof hcTeam === 'function' && !hcTeam()) return;
@@ -95,12 +97,12 @@ function oarOpen() {
   const inp = 'padding:7px 10px;border:1.5px solid #c8bfb5;border-radius:8px;font-family:inherit;font-size:13.5px;background:#fff';
   const btn = 'padding:7px 13px;border:1.5px solid #c8bfb5;border-radius:8px;background:#fff;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer';
   m.style.display = 'flex';
-  m.innerHTML = `<div style="background:#f5f1eb;border-radius:16px;max-width:860px;width:100%;max-height:92vh;overflow:auto;padding:20px 24px;box-shadow:0 12px 40px rgba(0,0,0,.3)">
+  m.innerHTML = `<div style="background:#f5f1eb;border-radius:16px;max-width:1040px;width:100%;max-height:92vh;overflow:auto;padding:20px 24px;box-shadow:0 12px 40px rgba(0,0,0,.3)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;color:#2d2520">Occupancy &amp; AC report</div><button onclick="document.getElementById('oarModal').style.display='none'" style="background:none;border:none;font-size:24px;cursor:pointer;color:#6b7280">×</button></div>
     <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
       <div><label style="display:block;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px">From</label><input id="oarFrom" type="date" value="${oarToday()}" onchange="oarRender()" style="${inp}"></div>
       <div><label style="display:block;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px">To</label><input id="oarTo" type="date" value="${oarAdd(oarToday(), 6)}" onchange="oarRender()" style="${inp}"></div>
-      <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:#4b5563;padding-bottom:8px"><input id="oarSoft" type="checkbox" onchange="oarRender()"> Include soft holds</label>
+      <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:#4b5563;padding-bottom:8px"><input id="oarSoft" type="checkbox" onchange="oarRender()"> Include soft holds</label><label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:#4b5563;padding-bottom:8px"><input id="oarNight" type="checkbox" onchange="oarRender()"> Night by night</label>
       <button onclick="oarCsv()" style="${btn}">⬇ Download CSV</button><button onclick="oarPrint()" style="${btn}">🖨 Print</button></div>
     <div id="oarOut"></div></div>`;
   oarRender();
