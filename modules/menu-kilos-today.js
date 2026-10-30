@@ -108,8 +108,15 @@
       ${L.length ? `<table style="border-collapse:collapse;margin-top:8px;width:100%;max-width:980px"><thead><tr style="text-align:left;font-size:10.5px;text-transform:uppercase;color:#8a7e74"><th style="padding:3px 9px">Day</th><th style="padding:3px 9px">Meal</th><th style="padding:3px 9px">Protein</th><th style="padding:3px 9px;text-align:center">Guests</th><th style="padding:3px 9px;text-align:right">To order</th><th style="padding:3px 9px;text-align:right">Price</th><th style="padding:3px 9px;text-align:right">Cost</th><th style="padding:3px 9px;text-align:right" title="The Kg you typed on the dinner lines">Kg used</th></tr></thead><tbody>${body}</tbody></table>` : ''}
       <div style="font-size:11.5px;color:#92400e;margin-top:6px">Guests = the # on each meal's list. Brunch and Lunch 200 g, Dinner 250 g per person. Price = the price per kilo in Menu Costs (pesos); "no price" = set it there. Kg used = what you typed in the dinner Kg boxes.</div></details>`;
   }
+  let costReady = false;   // the price list is only loaded once the Menu Costs panel is opened, so load it here too
+  function ensureCost() {
+    if (costReady) return; costReady = true;
+    try { if (!menuProteinPrices.length && typeof menuLoadCostData === 'function') menuLoadCostData(); } catch (e) {}
+    try { if (typeof menuSyncCostDataFromSupabase === 'function') menuSyncCostDataFromSupabase().then(() => { try { if (range) rangeRows = rangeLines(); decorate(); } catch (e) {} }); } catch (e) {}
+  }
   function decorate() {
     try {
+      ensureCost();
       const grid = document.getElementById('menuGrid'); if (!grid || typeof menuSchedule === 'undefined' || !menuCurrentMonday) return;
       let box = document.getElementById('mkoBox');
       const html = boxHtml();
