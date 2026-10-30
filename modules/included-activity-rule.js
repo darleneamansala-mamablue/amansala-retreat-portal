@@ -12,7 +12,7 @@
 //   - Exception: a SMALL group (fewer guests than the small-group minimum in Manage Tours, default 6) does not block and is not blocked.
 // Change the constants below to change the rules.
 
-const IA_EXCLUSIVE=['ao4','ao5','ao12','ao14'];  // activities that only one group can have on a given day
+const IA_EXCLUSIVE=['ao4','ao5','ao12'];  // activities that only one group can have on a given day (Cooking Class ao14 is NOT here: any number of groups can have it the same day, Darlene 2026-10-30 — nobody really attends it)
 const IA_ALWAYS_BLOCK=['ao5'];                  // Temazcal: one ceremony slot a night, so ANY group having it blocks the others (included or optional)
 const IA_ALWAYS_INCLUDED=['ao12','ao14'];     // included for every retreat (Salsa, Cooking)
 
