@@ -30,8 +30,14 @@
     obs.observe(grid, { childList: true, subtree: true });
   }
   const orig = window.menuRenderWeek;
-  if (typeof orig === 'function') window.menuRenderWeek = function () { const r = orig.apply(this, arguments); setTimeout(align, 150); setTimeout(align, 600); setTimeout(align, 2000); return r; };
-  window.addEventListener('resize', later);
+  if (typeof orig === 'function') window.menuRenderWeek = function () { const r = orig.apply(this, arguments); setTimeout(align, 150); setTimeout(align, 600); setTimeout(align, 2000); setTimeout(align, 5000); return r; };
+  window.addEventListener('resize', later); window.addEventListener('load', later);
+  let ro = null, lastW = '';
+  setInterval(() => {   // re-measure whenever the columns change width (text wraps differently)
+    const g = document.getElementById('menuGrid'); if (!g) return;
+    const w = [...g.querySelectorAll('.menu-grid-cell[data-mce-meal="lightBreakfast"]')].map(c => Math.round(c.getBoundingClientRect().width)).join(',') + '|' + g.querySelectorAll('.menu-dish').length;
+    if (w !== lastW) { lastW = w; align(); }
+  }, 700);
   try { document.fonts.ready.then(later); } catch (e) {}
   setTimeout(() => { watch(); align(); }, 800);
 })();
