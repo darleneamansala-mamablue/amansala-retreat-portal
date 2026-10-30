@@ -45,4 +45,24 @@
     try { await db.from('bookings').update({ package_custom_prices: bk.packageCustomPrices }).eq('id', bk.id); } catch (e) {}
     if (typeof showToast === 'function') showToast(on ? '"' + c.name + '" is now charged once, to the teacher only ✓' : '"' + c.name + '" is charged to every guest again');
   };
+
+  // the add-on chips on the room list: staff get a × to take it off, and a "teacher only" tag
+  function decorate() {
+    try {
+      if (typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE && !document.body.classList.contains('admin-preview')) return;
+      const bk = typeof regSelBk !== 'undefined' ? regSelBk : null; if (!bk) return;
+      const list = (bk.packageCustomPrices && bk.packageCustomPrices.__custom__) || [], t = names(bk);
+      document.querySelectorAll('.pkg-chip.on[title^="Custom add-on entered in Staging"]').forEach((el, i) => {
+        if (el.dataset.caoDone || !list[i]) return; el.dataset.caoDone = '1';
+        el.style.cursor = 'default';
+        if (t.includes(list[i].name)) { const tag = document.createElement('span'); tag.textContent = 'teacher only'; tag.style.cssText = 'margin-left:6px;font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:10px'; el.appendChild(tag); }
+        const x = document.createElement('span'); x.textContent = '×'; x.title = 'Take this add-on off'; x.style.cssText = 'margin-left:6px;color:#dc2626;font-size:13px;font-weight:700;cursor:pointer;line-height:1';
+        x.addEventListener('click', ev => { ev.stopPropagation(); removeCustomAddon(i); });
+        el.appendChild(x);
+      });
+    } catch (e) { console.warn('[custom-addon-teacher-only] chips', e); }
+  }
+  const prevRender = window.regRender;
+  if (typeof prevRender === 'function') { const w = function () { const r = prevRender.apply(this, arguments); decorate(); return r; }; window.regRender = w; try { regRender = w; } catch (e) {} }
+  setTimeout(decorate, 1500);
 })();
