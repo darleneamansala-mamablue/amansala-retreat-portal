@@ -15,13 +15,11 @@
       lists.forEach(l => { l.style.minHeight = ''; });
       const by = {};
       lists.forEach(l => { const k = l.closest('.menu-grid-cell').dataset.mceMeal; (by[k] = by[k] || []).push(l); });
-      const top = l => { const c = l.closest('.menu-grid-cell'), t = c.querySelector('.menu-sched-tbl'); return t ? t.getBoundingClientRect().top - c.getBoundingClientRect().top : l.getBoundingClientRect().bottom - c.getBoundingClientRect().top; };
-      for (let pass = 0; pass < 3; pass++) {
-        Object.keys(by).forEach(k => {
-          const offs = by[k].map(top), mx = Math.max.apply(null, offs);
-          by[k].forEach((l, i) => { const d = mx - offs[i]; if (d > 0.5) l.style.minHeight = (parseFloat(l.style.minHeight) || l.getBoundingClientRect().height) + d - (getComputedStyle(l).boxSizing === 'border-box' ? 0 : (parseFloat(getComputedStyle(l).paddingTop) + parseFloat(getComputedStyle(l).paddingBottom))) * (l.style.minHeight ? 0 : 1) + 'px'; });
-        });
-      }
+      Object.keys(by).forEach(k => {
+        const mx = Math.max.apply(null, by[k].map(l => l.getBoundingClientRect().height));
+        const cap = 420;   // never let one tall day stretch the whole row
+        by[k].forEach(l => { const h = Math.min(mx, cap); const cs = getComputedStyle(l), pad = cs.boxSizing === 'border-box' ? 0 : parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom); l.style.minHeight = Math.max(0, h - pad) + 'px'; });
+      });
     } catch (e) { console.warn('[menu-align-rows]', e); }
     busy = false; watch();
   }
