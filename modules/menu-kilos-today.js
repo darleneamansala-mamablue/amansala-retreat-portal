@@ -3,6 +3,7 @@
 //   1. Opening the Menu tab always lands on the week that has TODAY in it, and today's day is marked. (Arrows / jump-to-date still work while you are on the tab.)
 //   2. A "Kilos to order" box above the week: for every day, the protein of the Brunch, the Lunch and the Dinner, how many guests are on that meal's list (the # column),
 //      and the kilos to order at the portion rule (Brunch and Lunch 200 g, Dinner 250 g) — plus the week total for each protein.
+//   2b. Choosing a date, a month, today or the week arrows adds that week's retreats to the menu automatically (same as when the tab opens). Opening the Menu also scrolls to today.
 //   3. In the Dinner Kg boxes, a row that has a # shows its kilos (# × 250 g) in grey until you type your own number.
 // Guests come from the # column of each meal (the rows on the menu). Nothing is saved by this module.
 (function () {
@@ -19,6 +20,14 @@
   if (typeof prevBuild === 'function') {
     window.menuBuild = function () { try { menuCurrentMonday = menuGetSunday(new Date()); } catch (e) {} return prevBuild.apply(this, arguments); };
   }
+
+  // choosing a date / month / today / arrows puts that week's retreats on the menu, like opening the tab does
+  ['menuJumpToDate', 'menuJumpToMonth', 'menuGoToday', 'menuNavWeek'].forEach(n => {
+    const f = window[n]; if (typeof f !== 'function') return;
+    window[n] = function () { const r = f.apply(this, arguments); try { if (typeof menuPopulateFromRetreats === 'function') menuPopulateFromRetreats(true); } catch (e) { console.warn('[menu-kilos-today] populate', e); } return r; };
+  });
+  let scrollNext = false;
+  if (typeof window.menuBuild === 'function') { const b2 = window.menuBuild; window.menuBuild = function () { scrollNext = true; return b2.apply(this, arguments); }; }
 
   function weekDates() {
     const out = [], d0 = new Date(menuCurrentMonday + 'T12:00:00');
@@ -55,7 +64,7 @@
   }
   function decorate() {
     try {
-      const grid = document.getElementById('menuGrid'); if (!grid || typeof menuSchedule === 'undefined') return;
+      const grid = document.getElementById('menuGrid'); if (!grid || typeof menuSchedule === 'undefined' || !menuCurrentMonday) return;
       let box = document.getElementById('mkoBox');
       const html = boxHtml();
       if (!box) { box = document.createElement('div'); box.id = 'mkoBox'; grid.parentNode.insertBefore(box, grid); }
@@ -66,6 +75,7 @@
         const d = (/menuPrintDay\('([^']+)'\)/.exec(h.getAttribute('onclick') || '') || [])[1];
         if (d === ts && !h.dataset.mkoToday) { h.dataset.mkoToday = '1'; h.style.outline = '3px solid #f59e0b'; h.style.outlineOffset = '-3px'; h.insertAdjacentHTML('beforeend', '<div style="font-size:10px;font-weight:800;color:#f59e0b;letter-spacing:.6px">TODAY</div>'); }
       });
+      if (scrollNext) { scrollNext = false; const th = grid.querySelector('[data-mko-today]'); if (th) { try { th.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (e) {} } }
       // dinner Kg boxes show # × 250 g until you type your own
       grid.querySelectorAll('input[placeholder="Kg"], input.mko-kg').forEach(inp => {
         const tr = inp.closest('tr'); if (!tr) return; const ins = tr.querySelectorAll('input');
