@@ -33,6 +33,7 @@ function mceDecorate() {
     if (cells.length !== meals.length * 7) return;
     cells.forEach((cell, n) => {
       const meal = meals[Math.floor(n / 7)], ds = dates[n % 7];
+      cell.dataset.mceDs = ds; cell.dataset.mceMeal = meal;   // addresses for drag and drop (menu-grid-dnd.js)
       const list = cell.querySelector('.menu-dish-list'); if (!list || list.dataset.mceDone) return; list.dataset.mceDone = '1';
       const real = [...list.querySelectorAll('.menu-dish')].filter(el => el.style.visibility !== 'hidden' && !/^—$/.test(el.textContent.trim()));
       const md = menuDataFor(ds) || {};
@@ -48,6 +49,7 @@ function mceDecorate() {
       }
       real.forEach((el, k) => {
         const e = entries[k]; if (!e) return;
+        el.dataset.mceDs = ds; el.dataset.mcePath = e.path; el.dataset.mceI = e.i == null ? '' : e.i;
         el.dataset.mce = '1'; el.title = 'Click to edit, move or remove this dish';
         el.addEventListener('click', ev => { ev.stopPropagation(); mceOpen(ds, e.path, e.i); });
         const x = document.createElement('span'); x.className = 'mce-x'; x.textContent = '✕'; x.title = 'Take this dish off the menu';   // visible in Edit mode only
