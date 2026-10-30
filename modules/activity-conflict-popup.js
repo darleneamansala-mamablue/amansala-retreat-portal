@@ -1,7 +1,7 @@
 // ===== activity-conflict-popup.js — Pop-up when another group already has Sound Healing that night =====
 // Loaded as a classic script AFTER teacher-portal.js; shares global scope. Darlene 2026-10-21: "if another group has sound healing that night then
 // I would get a pop up." Wraps the two places an admin sets the date of an activity in a retreat's Schedule box (svChangeActivityDate when a day is
-// picked in an assigned activity's dropdown, svAddActivity when a new one is added). If any OTHER current retreat already has Sound Healing & Cacao on
+// picked in an assigned activity's dropdown, svAddActivity when a new one is added). If any OTHER current retreat that has it PREPAID (or in its package) already has Sound Healing & Cacao on
 // that same date, a pop-up names the group, the time and the headcount and says it can't be booked that night; the date is left as it was (Darlene:
 // "you can not book that"). Nothing else about editing activities is blocked.
 // The ceremony exists as two catalog entries (ao4 and ao19), so both count. To get the same pop-up for another activity, add its id below.
@@ -18,7 +18,8 @@ function acpConflicts(bk, aoId, date) {
   (AppData.bookings || []).forEach(b => {
     if (b.id === bk.id || b.status === 'cancelled') return;
     (b.retreatActivities || []).forEach(a => {
-      if (ACP_WATCH.has(a.aoId) && String(a.date || '').slice(0, 10) === day)
+      // only a group that has it PREPAID / included in its package holds the night; groups without it can share a night (Darlene 2026-10-30)
+      if (ACP_WATCH.has(a.aoId) && String(a.date || '').slice(0, 10) === day && (a.prepaid || (b.packages || []).some(p => ACP_WATCH.has(p))))
         out.push({ group: b.leaderName || b.retreatName || 'Another group', time: a.time || '', pax: (typeof menuHeadcount === 'function' ? menuHeadcount(b) : 0) || b.pax || 0 });
     });
   });
