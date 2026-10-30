@@ -81,3 +81,26 @@ function menuOffsiteNoteHtml(dateStr) {
     try { const note = menuOffsiteNoteHtml(dateStr); return note ? String(html) + note : html; } catch (e) { return html; }
   };
 })();
+
+// ---- On the PRINTED menus (grid print, week readable, daily pages): "OFFSITE — retreat name" under that night's dinner (Darlene 2026-10-30).
+// Worked out from the bookings for that date (not from the on-screen week), so any printed range shows it.
+function menuOffsitePrintHtml(dateStr) {
+  try {
+    const day = String(dateStr).slice(0, 10), names = [];
+    (AppData.bookings || []).forEach(bk => {
+      if (!bk || bk.status === 'cancelled' || (bk.flags || []).includes('archived')) return;
+      const s = String(bk.startDate || '').slice(0, 10), e = String(bk.endDate || '').slice(0, 10);
+      if (!s || day < s || day >= e) return;
+      const head = (typeof menuHeadcount === 'function' ? menuHeadcount(bk) : 0) || Number(bk.pax) || 0;
+      if (!head) return;
+      const key = bk.id + '|' + day, had = menuOffsiteLog[key];
+      menuOffsiteDinnerPax(bk, day, head);
+      const x = menuOffsiteLog[key];
+      if (x && x.kind !== 'check') names.push(bk.leaderName || bk.retreatName || 'Group');
+      else if (!x && had) menuOffsiteLog[key] = had;
+    });
+    if (!names.length) return '';
+    const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    return `<div style="margin:6px 0 2px;padding:4px 8px;border:1.5px solid #991b1b;border-radius:6px;font-size:12px;font-weight:800;color:#991b1b;text-align:center">OFFSITE DINNER — ${[...new Set(names)].map(esc).join(' · ')}</div>`;
+  } catch (e) { return ''; }
+}
