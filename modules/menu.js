@@ -653,7 +653,7 @@ function menuPrint(){
       }
       // Schedule rows
       let schedHtml='<table style="width:100%;border-collapse:collapse;font-size:11.5px"><tbody>';
-      rows.forEach(r=>{schedHtml+=`<tr><td style="padding:3px 4px;border-top:1px solid #f2efe8">${r.time||''}</td><td style="padding:3px 4px;border-top:1px solid #f2efe8">${r.group||''}</td><td style="padding:3px 4px;border-top:1px solid #f2efe8;text-align:center">${r.pax||''}</td></tr>`;});
+      rows.forEach(r=>{schedHtml+=`<tr><td style="padding:3px 4px;border-top:1px solid #f2efe8">${r.time||''}</td><td style="padding:3px 4px;border-top:1px solid #f2efe8">${r.group||''}${r.note?`<div style="font-weight:700;font-size:10.5px">${escHtml(r.note)}</div>`:''}</td><td style="padding:3px 4px;border-top:1px solid #f2efe8;text-align:center">${r.pax||''}</td></tr>`;});
       // Spacer rows for alignment
       // (no blank spacer rows: the grid rows already line the columns up, and they only cost paper)
       schedHtml+='</tbody></table>';
@@ -988,7 +988,7 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
     if(!isKitchen)return'';
     const rows=menuSchedule[ds]?.[meal]||[];
     if(!rows.length)return'';
-    return `<div class="rw-groups">${rows.map(r=>`<div class="rw-group-row">${r.time?escHtml(r.time)+' · ':''}${escHtml(r.group||'')} · ${r.pax||0}</div>`).join('')}</div>`;
+    return `<div class="rw-groups">${rows.map(r=>`<div class="rw-group-row">${r.time?escHtml(r.time)+' · ':''}${escHtml(r.group||'')} · ${r.pax||0}${r.note?` — <b>${escHtml(r.note)}</b>`:''}</div>`).join('')}</div>`;
   };
   const dayColumn=(ds)=>{
     const mi=menuDayIndex(ds);
@@ -1121,7 +1121,7 @@ function menuPrintDailyRange(fromVal,toVal,isKitchen){
     if(!isKitchen)return'';
     const rows=menuSchedule[ds]?.[meal]||[];
     if(!rows.length)return'';
-    return `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #e0d8cc;font-size:11px;color:#6b7280">${rows.map(r=>`${r.time?escHtml(r.time)+' · ':''}${escHtml(r.group||'')} · ${r.pax||0}`).join('<br>')}</div>`;
+    return `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #e0d8cc;font-size:11px;color:#6b7280">${rows.map(r=>`${r.time?escHtml(r.time)+' · ':''}${escHtml(r.group||'')} · ${r.pax||0}${r.note?` — <b>${escHtml(r.note)}</b>`:''}`).join('<br>')}</div>`;
   };
   const section=(label,items,ds,meal)=>{
     if(!items||!items.length)return'';
