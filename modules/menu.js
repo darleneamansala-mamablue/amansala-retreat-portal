@@ -657,6 +657,7 @@ function menuPrint(){
       // Spacer rows for alignment
       // (no blank spacer rows: the grid rows already line the columns up, and they only cost paper)
       schedHtml+='</tbody></table>';
+      if(meal==='dinner'&&typeof menuOffsitePrintHtml==='function')schedHtml+=menuOffsitePrintHtml(ds);   // OFFSITE + retreat name on the printed grid (modules/menu-offsite-dinner.js)
       if(meal==='breakfast'&&typeof menuGihRow==='function')schedHtml=schedHtml.replace('<tbody>','<tbody>'+menuGihRow(ds));   // GIH (guests in house) shows under Breakfast only (modules/menu-gih.js)
       gridHtml+=`<div style="background:#fff">${meal==='lightBreakfast'?'':`<div style="padding:4px 5px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:${cfg.bg};color:${cfg.color};text-align:center">${cfg.label}</div>`}<div style="padding:5px 5px;background:#fafaf7">${dishesHtml||'<div style="font-size:11.5px;color:#aaa">—</div>'}</div>${schedHtml}<div style="padding:3px 5px;font-size:11px;color:#888;background:#f5f2ec;border-top:1px solid #e8e2d8;text-align:right">Total: ${((meal==='breakfast'&&typeof menuGihCount==='function')?total+menuGihCount(ds):total)||'—'}</div></div>`;
     });
@@ -1004,6 +1005,7 @@ function menuPrintWeekReadable(fromVal,toVal,isKitchen){
             ${(din.dishes||[]).map(itemLine).join('')}
             ${din.dessert?`<div class="rw-dessert">Postre · ${escHtml(menuItemDetail(din.dessert,isKitchen).name)}</div>`:''}
             ${groupLine(ds,'dinner')}
+            ${typeof menuOffsitePrintHtml==='function'?menuOffsitePrintHtml(ds):''}
           </div>
         </div>`;
       }
@@ -1145,6 +1147,7 @@ function menuPrintDailyRange(fromVal,toVal,isKitchen){
         ${mData.dinner.dessert?`<div class="menu-poster-dessert">Dessert · ${escHtml(menuItemDetail(mData.dinner.dessert,isKitchen).name)}</div>`:''}
       </div>
       ${groupHtml(ds,'dinner')}
+      ${typeof menuOffsitePrintHtml==='function'?menuOffsitePrintHtml(ds):''}
     </div>`:'';
     return `<div class="menu-poster-pg${i>0?' menu-poster-page2':''}">
       <div class="menu-poster-brand">${isKitchen?'Amansala · Kitchen':'<img src="/logo-amansala-retreats-black.png" alt="Amansala Retreats" style="height:150px">'}</div>
