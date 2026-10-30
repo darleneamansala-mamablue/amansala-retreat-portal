@@ -30,6 +30,8 @@ function iaName(id){const a=(typeof ADD_ONS!=='undefined'?ADD_ONS:[]).find(x=>x.
 // the other retreat that already has this included activity on that day, if any
 function iaClash(bk,aoId,date){
   if(!bk||!date||!IA_EXCLUSIVE.includes(aoId)||iaSmall(bk))return null;
+  // Sound Healing & Cacao: a group that did not prepay it is put at the same time as the others — never blocked (Darlene 2026-10-30)
+  if(aoId==='ao4'&&!((bk.packages||[]).includes('ao4')||(bk.retreatActivities||[]).some(x=>x&&x.aoId==='ao4'&&x.prepaid)))return null;
   const today=new Date().toISOString().slice(0,10);
   return (AppData.bookings||[]).find(o=>{
     if(o===bk||o.id===bk.id||o.status==='cancelled'||(o.flags||[]).includes('archived')||String(o.endDate||'').slice(0,10)<today)return false;

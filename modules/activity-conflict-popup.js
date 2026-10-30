@@ -14,6 +14,8 @@ function acpFmtDate(ds) { try { return new Date(ds + 'T12:00:00').toLocaleDateSt
 // Other retreats that already have this ceremony on that date
 function acpConflicts(bk, aoId, date) {
   if (!bk || !ACP_WATCH.has(aoId) || !date) return [];
+  // a group that did NOT prepay Cacao is simply put at the same time as the others, so it is never blocked (Darlene 2026-10-30)
+  if (!((bk.packages || []).some(p => ACP_WATCH.has(p)) || (bk.retreatActivities || []).some(a => ACP_WATCH.has(a.aoId) && a.prepaid))) return [];
   const day = String(date).slice(0, 10), out = [];
   (AppData.bookings || []).forEach(b => {
     if (b.id === bk.id || b.status === 'cancelled') return;
