@@ -5894,7 +5894,7 @@ function skedGetRetreatEvents(dateStr){
         const depStart=(depOv&&depOv.start)?depOv.start:effMornStart;
         const depDur=depOv?.dur||effMornDur;
         const mEnd=skedMinToTime(skedTimeToMin(depStart)+depDur);
-        evs.push({id:'ret_'+bk.id+'_morn_dep',resourceId:effMornShala,date:dateStr,startTime:depStart,endTime:mEnd,title,subtitle:tsEffClassLabel(sr,'departure','Morning Class')+(depOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        evs.push({id:'ret_'+bk.id+'_morn_dep',resourceId:depOv?.shala1||effMornShala,date:dateStr,startTime:depStart,endTime:mEnd,title,subtitle:tsEffClassLabel(sr,'departure','Morning Class')+(depOv?' (time changed)':'')+musicNote,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
       }
     }
     // Middle days — morning class + evening class
