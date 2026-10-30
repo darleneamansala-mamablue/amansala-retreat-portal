@@ -3,7 +3,7 @@
 (function () {
   if (!document.getElementById('malCss')) {
     const st = document.createElement('style'); st.id = 'malCss';
-    st.textContent = '#menuGrid .menu-dish[data-mce]{display:flex!important;align-items:flex-start;justify-content:space-between;gap:4px;white-space:normal!important}#menuGrid .menu-dish[data-mce] .mce-x{float:none;flex:none;margin-left:auto}#menuGrid .menu-dish-list .menu-dish[style*="visibility:hidden"]{display:none!important}';
+    st.textContent = '#menuGrid .menu-dish[data-mce]{display:flex!important;align-items:flex-start;justify-content:space-between;gap:4px;white-space:normal!important}#menuGrid .menu-dish[data-mce] .mce-x{float:none;flex:none;margin-left:auto}#menuGrid .menu-grid-cell .menu-dish-list{flex:none!important}#menuGrid .menu-grid-cell .menu-sched-tbl{flex:none}#menuGrid .menu-grid-cell .menu-total-row{margin-top:auto}#menuGrid .menu-dish-list .menu-dish[style*="visibility:hidden"]{display:none!important}';
     document.head.appendChild(st);
   }
   let busy = false, timer = null, obs = null;
