@@ -51,6 +51,8 @@
       return r;
     };
   }
+  window.mopOptionsFor = async function (path) { await load(); return list(path).slice(); };
+  window.mopTake = async function (path, name) { await load(); const l = list(path), ix = l.findIndex(x => same(x.name, name)); if (ix >= 0) { l.splice(ix, 1); await save(); } };
   window.mopPick = function (i) {
     const c = _mceCtx; if (!c) return;
     const o = i === '' ? null : list(c.path)[+i]; pick = o || null; if (!o) return;
