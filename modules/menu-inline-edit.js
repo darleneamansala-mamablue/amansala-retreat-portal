@@ -1,11 +1,14 @@
 // ===== menu-inline-edit.js — add and edit dishes right inside the menu cell (Darlene 2026-10-30) =====
 // Loaded as a classic script AFTER menu-click-edit.js and menu-options.js; shares global scope. Standalone: only wraps mceOpen.
-// While "✏️ Edit dishes / add a dish" is on:
+// "+ add dish" now shows in every meal cell all the time (no need to switch on edit mode). Red ✕ remove buttons still need "✏️ Edit dishes".
+// Inline lines:
 //   - "+ add dish" opens a line right in the cell (type the name, Enter). Your options for that meal show as suggestions; picking one brings its English name and description.
 //   - clicking a dish turns it into a line you can type over (Enter saves, Esc cancels).
 //   - "More…" on that line opens the full window (English name, description, move, remove) as before.
 // The page stays where it is: no jump back to the top of the week. Saves go through the same path as the full window (weekly pattern of the menu in use).
 (function () {
+  // "+ add dish" is always showing on the menu, not only in edit mode (Darlene 2026-10-30)
+  if (!document.getElementById('mieCss')) { const st = document.createElement('style'); st.id = 'mieCss'; st.textContent = '#menuGrid:not(.mce-editing) .mce-add{display:block!important;opacity:.9;font-weight:700;font-size:11px}'; document.head.appendChild(st); }
   const orig = window.mceOpen;
   if (typeof orig !== 'function') return;
   let lastEl = null, busy = false;
@@ -44,7 +47,7 @@
 
   window.mceOpen = async function (ds, path, i) {
     const el = lastEl; lastEl = null;
-    if (!el || !el.isConnected || !document.getElementById('menuGrid') || !document.getElementById('menuGrid').classList.contains('mce-editing')) return orig.apply(this, arguments);
+    if (!el || !el.isConnected || !document.getElementById('menuGrid')) return orig.apply(this, arguments);
     close();
     const c = { ds, di: menuDayIndex(ds), path, i };
     let opts = []; try { if (typeof mopOptionsFor === 'function') opts = await mopOptionsFor(path); } catch (e) {}
