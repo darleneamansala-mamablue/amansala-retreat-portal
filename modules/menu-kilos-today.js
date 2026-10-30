@@ -35,11 +35,24 @@
     return out;
   }
   const peso = n => 'MX$ ' + Math.round(n).toLocaleString('en-US');
-  // price per kilo of the protein for that day's meal (same prices as the Menu Costs panel)
-  function priceFor(ds, meal) {
+  // price per kilo of the protein: matched from the dish name to the Menu Costs price list (so a changed dish gets the right price); fish falls back to that weekday's
+  // assigned fish. Eggs, soups, tostada bars and anything not recognised get no price (shown as "no price") instead of a wrong one.
+  function priceFor(ds, meal, protein) {
     try {
-      const a = (typeof menuAssignForIdx === 'function' && menuAssignForIdx(menuDayIndex(ds))) || {};
-      const id = meal === 'dinner' ? a.dinner : a.midday, p = (menuProteinPrices || []).find(x => x.id === id);
+      const n = String(protein || '').toLowerCase(); let id = '';
+      if (/salm[oó]n/.test(n)) id = 'salmon';
+      else if (/short ?rib|costilla/.test(n)) id = 'shortribs';
+      else if (/rib ?eye/.test(n)) id = 'ribeye';
+      else if (/arrachera|beef|steak|\bres\b|carne/.test(n)) id = 'res';
+      else if (/chicken|pollo|kebab/.test(n)) id = 'pollo';
+      else if (/camar|shrimp|prawn/.test(n)) id = 'camaron15';
+      else if (/pulpo|octopus/.test(n)) id = 'pulpo';
+      else if (/lobster|langosta/.test(n)) id = 'langosta';
+      else if (/fish|pescado|mero|snapper|mahi|tuna|atun|atún/.test(n)) {
+        const a = (typeof menuAssignForIdx === 'function' && menuAssignForIdx(menuDayIndex(ds))) || {}, cand = meal === 'dinner' ? a.dinner : a.midday;
+        id = ['basa', 'robalo', 'entero'].includes(cand) ? cand : 'robalo';
+      }
+      const p = id && (menuProteinPrices || []).find(x => x.id === id);
       return p && p.unit === 'KG' ? Number(p.price) || 0 : 0;
     } catch (e) { return 0; }
   }
@@ -50,7 +63,7 @@
       const md = (typeof menuDataFor === 'function' && menuDataFor(ds)) || {}, sc = menuSchedule[ds] || {};
       const star = list => ((list || []).find(x => /★/.test(x)) || '').replace(/★/g, '').trim();
       const add = (meal, label, protein) => {
-        if (!protein) return; const n = pax(sc[meal]), k = n * G[meal] / 1000, pr = priceFor(ds, meal);
+        if (!protein) return; const n = pax(sc[meal]), k = n * G[meal] / 1000, pr = priceFor(ds, meal, protein);
         const used = (sc[meal] || []).reduce((t, r) => t + (parseFloat(r.kg) || 0), 0);
         rows.push({ ds, meal, label, protein, n, kg: k, price: pr, cost: k * pr, used });
       };
@@ -106,7 +119,7 @@
       <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px"><b>From</b> <input type="date" id="mkoFrom" value="${dFrom}" style="${inp}"> <b>to</b> <input type="date" id="mkoTo" value="${dTo}" style="${inp}"> <button type="button" onclick="mkoSetRange()" style="${btn}">Show these dates</button>${range ? `<button type="button" onclick="mkoThisWeek()" style="${btn};background:#6b7280">Back to the week on screen</button>` : ''}</div>
       <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">${totHtml || '<span style="font-size:13px;color:#6b7280">No guests are on the meal lists yet, so there is nothing to order.</span>'}</div>
       ${L.length ? `<table style="border-collapse:collapse;margin-top:8px;width:100%;max-width:980px"><thead><tr style="text-align:left;font-size:10.5px;text-transform:uppercase;color:#8a7e74"><th style="padding:3px 9px">Day</th><th style="padding:3px 9px">Meal</th><th style="padding:3px 9px">Protein</th><th style="padding:3px 9px;text-align:center">Guests</th><th style="padding:3px 9px;text-align:right">To order</th><th style="padding:3px 9px;text-align:right">Price</th><th style="padding:3px 9px;text-align:right">Cost</th><th style="padding:3px 9px;text-align:right" title="The Kg you typed on the dinner lines">Kg used</th></tr></thead><tbody>${body}</tbody></table>` : ''}
-      <div style="font-size:11.5px;color:#92400e;margin-top:6px">Guests = the # on each meal's list. Brunch and Lunch 200 g, Dinner 250 g per person. Price = the price per kilo in Menu Costs (pesos); "no price" = set it there. Kg used = what you typed in the dinner Kg boxes.</div></details>`;
+      <div style="font-size:11.5px;color:#92400e;margin-top:6px">Guests = the # on each meal's list. Brunch and Lunch 200 g, Dinner 250 g per person. Price = the price per kilo in Menu Costs (pesos); "no price" = no meat on that line, or set it there. Kg used = what you typed in the dinner Kg boxes.</div></details>`;
   }
   let costReady = false;   // the price list is only loaded once the Menu Costs panel is opened, so load it here too
   function ensureCost() {
