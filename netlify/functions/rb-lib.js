@@ -1,4 +1,5 @@
 'use strict';
+const { findOrCreateFolioLocked } = require('./folio-lib');
 // Shared helpers for the Retreat Booking page (retreat-booking.html): reading a retreat's booking config, working out how many
 // rooms / beds are free in its room block, and the ONE place the price is calculated (never trust the browser's number).
 // Config lives in app_store key 'retreat_booking_config' = { <bookingId>: cfg }. See modules/retreat-booking-setup.js.
@@ -111,6 +112,10 @@ async function addRegFolio(key, regId, guestName, items) {
   try {
     let folios = await sget(key, `folios?registration_id=eq.${encodeURIComponent(regId)}&select=id,created_at&order=created_at.asc`);
     let folioId = folios[0] && folios[0].id;
+    if (!folioId) {   // create under the shared lock (a staff screen may be opening this new room right now)
+      const locked = await findOrCreateFolioLocked(key, { registrationId: regId, guestName, token: folioToken(), reuseSingle: true });
+      if (locked) folioId = locked.id;
+    }
     if (!folioId) {
       const r = await sreq(key, 'POST', 'folios', { registration_id: regId, guest_name: guestName, name: guestName, payment_token: folioToken(), status: 'open' }, 'return=representation');
       const j = await r.json(); folioId = (Array.isArray(j) ? j[0] : j).id;

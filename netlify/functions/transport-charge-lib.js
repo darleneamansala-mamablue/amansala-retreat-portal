@@ -1,4 +1,5 @@
 'use strict';
+const { findOrCreateFolioLocked } = require('./folio-lib');
 // Shared by auto-charge-transport.js and adjust-transport-charge.js.
 //
 // 1. dedupeGuests(): the SAME one-row-per-guest view the Transport screen shows (modules/transport.js,
@@ -211,10 +212,15 @@ async function findOrCreateFolio(key, registrationId, guestName, forGuest) {
   const regRow = Array.isArray(regLookup.data) ? regLookup.data[0] : null;
   const canonical = regRow?.guests?.find(g => g.name)?.name ?? guestName ?? '';
   if (forGuest && forGuest !== canonical) {
-    const own = await supaFetch(key, `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(forGuest)}&limit=1`);
+    const ownLocked = await findOrCreateFolioLocked(key, { registrationId, guestName: forGuest, create: false });
+    if (ownLocked) return { folioId: ownLocked.id };
+    const own = await supaFetch(key, `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(forGuest)}&order=created_at.asc&limit=1`);
     if (own.ok && Array.isArray(own.data) && own.data.length) return { folioId: own.data[0].id };
   }
-  const exactRes = await supaFetch(key, `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(canonical)}&limit=1`);
+  // same order as below (this name, else the oldest open one, else a new one), done under the database lock
+  const locked = await findOrCreateFolioLocked(key, { registrationId, guestName: canonical, token: crypto.randomUUID().replace(/-/g, ''), reuseAnyOpen: true });
+  if (locked) return { folioId: locked.id };
+  const exactRes = await supaFetch(key, `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(canonical)}&order=created_at.asc&limit=1`);
   if (exactRes.ok && Array.isArray(exactRes.data) && exactRes.data.length) return { folioId: exactRes.data[0].id };
   const anyRes = await supaFetch(key, `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&status=eq.open&order=created_at.asc&limit=1`);
   if (anyRes.ok && Array.isArray(anyRes.data) && anyRes.data.length) return { folioId: anyRes.data[0].id };

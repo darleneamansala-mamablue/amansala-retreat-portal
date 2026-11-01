@@ -1,4 +1,5 @@
 'use strict';
+const { findOrCreateFolioLocked } = require('./folio-lib');
 
 // Scheduled (netlify.toml: every day 23:00 UTC = 6pm in Tulum) — the evening
 // before check-out, sends every departing guest a WhatsApp thank-you with the
@@ -122,6 +123,11 @@ exports.handler = async () => {
     const col = rc.kind === 'reg' ? 'registration_id' : 'booking_request_id';
     const folios = await get(`/rest/v1/folios?${col}=eq.${rc.anchorId}&select=id,guest_name,payment_token,created_at&order=created_at`);
     let folio = folios.find(f => (f.guest_name || '').trim().toLowerCase() === rc.guestName.trim().toLowerCase()) || folios[0];
+    if (!folio && enabled) {
+      // create under the shared lock (a staff screen may be creating it at this moment); old insert only as fallback
+      const locked = await findOrCreateFolioLocked(supaKey, { [rc.kind === 'reg' ? 'registrationId' : 'bookingRequestId']: rc.anchorId, guestName: rc.guestName, token: randomToken(), reuseSingle: true });
+      if (locked) folio = locked.folio;
+    }
     if (!folio && enabled) {
       const r = await fetch(`${SUPABASE_URL}/rest/v1/folios`, {
         method: 'POST', headers: { ...hdrs, Prefer: 'return=representation' },

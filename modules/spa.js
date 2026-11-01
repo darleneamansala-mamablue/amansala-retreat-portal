@@ -699,9 +699,15 @@ async function spaChargeApptToRoom(apptId, opts) {
     // booking-detail.js _bdLoadFolios; same 13% tax as the other folio charges.
     try {
       const guestName = match.guest.name;
-      let { data: folios, error } = await db.from('folios').select('id').eq('registration_id', match.reg.id).eq('guest_name', guestName).eq('status', 'open').order('created_at', { ascending: true }).limit(1);
-      if (error) throw error;
-      let folioId = folios && folios[0] && folios[0].id;
+      // same locked find-or-create as Booking Detail (open folio of this guest; split stays on their first segment)
+      const folioRegId = typeof folioAnchorRegId === 'function' ? folioAnchorRegId(match.reg.id) : match.reg.id;
+      const r = typeof folioFindOrCreate === 'function' ? await folioFindOrCreate({ registrationId: folioRegId, guestName, token: uid().replace(/[^a-z0-9]/gi, ''), openOnly: true }) : null;
+      let folioId = r && r.folio && r.folio.id;
+      if (!folioId) {
+        let { data: folios, error } = await db.from('folios').select('id').eq('registration_id', match.reg.id).eq('guest_name', guestName).eq('status', 'open').order('created_at', { ascending: true }).limit(1);
+        if (error) throw error;
+        folioId = folios && folios[0] && folios[0].id;
+      }
       if (!folioId) {
         const token = uid().replace(/[^a-z0-9]/gi, '');
         const { data: created, error: cErr } = await db.from('folios').insert({ registration_id: match.reg.id, guest_name: guestName, name: guestName, payment_token: token, status: 'open' }).select('id').single();

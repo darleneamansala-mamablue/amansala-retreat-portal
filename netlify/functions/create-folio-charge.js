@@ -1,4 +1,5 @@
 'use strict';
+const { findOrCreateFolioLocked } = require('./folio-lib');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 
@@ -83,8 +84,13 @@ exports.handler = async (event) => {
   //    Fall back to any open folio for this registration.
   let folioId = null;
 
+  // Shared locked find-or-create (this name, else the oldest open folio, else a new one) -- the look-up below only runs when
+  // the database function is not installed
+  const locked = await findOrCreateFolioLocked(supaKey, { registrationId, guestName: canonicalName, token: genToken(), reuseAnyOpen: true });
+  if (locked) folioId = locked.id;
+
   // Try exact match with canonical name
-  const exactLookup = await supaGet(
+  const exactLookup = folioId ? { ok: true, data: [{ id: folioId }] } : await supaGet(
     supaKey,
     `folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(canonicalName)}&limit=1`
   );

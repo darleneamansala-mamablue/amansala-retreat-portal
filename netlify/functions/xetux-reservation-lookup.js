@@ -1,4 +1,5 @@
 'use strict';
+const { findOrCreateFolioLocked } = require('./folio-lib');
 
 // GET /.netlify/functions/xetux-reservation-lookup?guestName=...
 // Called by Xetux POS to look up a guest's active (checked-in) reservation
@@ -61,6 +62,11 @@ async function supaPost(key, path, body) {
 async function findOrCreateFolio(key, { registrationId, bookingRequestId, guestName }) {
   const linkField = registrationId ? 'registration_id' : 'booking_request_id';
   const linkId = registrationId || bookingRequestId;
+  // shared locked find-or-create (this guest's open folio, else the oldest open one, else a new one); POS searches can fire
+  // several look-ups at once, and each one used to be able to create its own folio
+  const locked = await findOrCreateFolioLocked(key, { registrationId: registrationId || null, bookingRequestId: registrationId ? null : bookingRequestId,
+    guestName, token: crypto.randomUUID().replace(/-/g, ''), openOnly: true, reuseAnyOpen: true });
+  if (locked) return locked.id;
 
   const existing = await supaGet(
     key,

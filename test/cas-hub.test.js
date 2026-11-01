@@ -27,7 +27,8 @@ function fakeDb(seed) {
       const rows = [...m.values()].filter(match);
       if (st.op === 'select') return { data: rows.map(r => ({ ...r })), error: null };
       if (st.op === 'update') { const out = rows.map(r => { const n = { ...r, ...JSON.parse(JSON.stringify(st.payload)), updated_at: stamp() }; m.set(keyOf(r), n); return { ...n }; }); log.push({ table, op: 'update', ids: out.map(keyOf), payload: st.payload }); return { data: out, error: null }; }
-      if (st.op === 'insert' || st.op === 'upsert') { const list = [].concat(st.payload).map(r => JSON.parse(JSON.stringify(r))); const out = list.map(r => { const n = { ...(m.get(keyOf(r)) || {}), ...r, updated_at: stamp() }; m.set(keyOf(n), n); return { ...n }; }); log.push({ table, op: st.op, ids: out.map(keyOf) }); return { data: out, error: null }; }
+      if (st.op === 'insert' || st.op === 'upsert') { const list = [].concat(st.payload).map(r => JSON.parse(JSON.stringify(r)));
+        if (table === 'registrations' && list.some(r => r.booking_id && !T.bookings.has(r.booking_id))) return { data: null, error: { message: 'insert or update on table "registrations" violates foreign key constraint "registrations_booking_id_fkey"' } }; const out = list.map(r => { const n = { ...(m.get(keyOf(r)) || {}), ...r, updated_at: stamp() }; m.set(keyOf(n), n); return { ...n }; }); log.push({ table, op: st.op, ids: out.map(keyOf) }); return { data: out, error: null }; }
       if (st.op === 'delete') { rows.forEach(r => m.delete(keyOf(r))); log.push({ table, op: 'delete', ids: rows.map(keyOf) }); return { data: null, error: null }; }
     };
     const b = {
@@ -46,7 +47,8 @@ function fakeDb(seed) {
       delete() { st.op = 'delete'; return b; },
       maybeSingle() { const r = exec(); return Promise.resolve({ data: r.data[0] || null, error: null }); },
       single() { return b.maybeSingle(); },
-      then(res, rej) { return Promise.resolve(exec()).then(res, rej); },
+      // writes to bookings answer a little later (network), so ordering bugs between tables show up
+      then(res, rej) { const slow = table === 'bookings' && st.op !== 'select' ? 15 : 0; return new Promise(r => setTimeout(r, slow)).then(() => exec()).then(res, rej); },
     };
     return b;
   }
@@ -460,6 +462,20 @@ async function test_swapIsNotDouble() {
   assert.ok(![...db.T.app_store.keys()].some(k => k.startsWith('cas_log:')), 'nothing logged');
 }
 
+// 30. A new booking and its new room saved in one go: the room is not refused by the foreign key (booking saved first)
+async function test_newBookingAndRoomSameSave() {
+  const db = fakeDb({ bookings: [bk('b1')], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  const now = Date.now();
+  t.AppData.bookings.push({ id: 'id_' + now + '_nb', leaderName: 'Walk-in', status: 'confirmed', bookingType: 'room_only', blockedRooms: ['17'], startDate: '2026-11-12', endDate: '2026-11-13' });
+  t.AppData.regs.push({ id: 'id_' + (now + 1) + '_nr', bookingId: 'id_' + now + '_nb', room: '17', guests: [{ name: 'Walk-in' }] });
+  t.saveAll(); await flush(t); await new Promise(r => setTimeout(r, 20));
+  assert.ok(db.T.registrations.has('id_' + (now + 1) + '_nr'), 'room saved on the first try');
+  const logs = [...db.T.app_store.keys()].filter(k => k.startsWith('cas_log:')).map(k => db.T.app_store.get(k).value.kind);
+  assert.ok(!logs.includes('failed'), JSON.stringify(logs));
+}
+
 (async () => {
   await run('save before first load never overwrites with the old local copy', test_saveBeforeLoadDoesNotOverwrite);
   await run('failed first load keeps the gate closed', test_failedLoadKeepsGateClosed);
@@ -485,6 +501,7 @@ async function test_swapIsNotDouble() {
   await run('extra packages and discount survive a reload', test_extraPackagesAndDiscountSurviveReload);
   await run('upgrade group note saved once the column exists', test_upgradeNoteColumn);
   await run('a swap between two retreats is not a double room', test_swapIsNotDouble);
+  await run('new booking + its room in one save: no foreign-key refusal', test_newBookingAndRoomSameSave);
   await run('direct write of a settings column is joined, not overwritten', test_directWriteJoinedNotOverwritten);
   await run('direct write not in memory: written, and an undo elsewhere stands', test_directWriteNotInMemoryPatchesBase);
   await run('switch off: direct writes unchanged', test_directWriteSwitchOff);

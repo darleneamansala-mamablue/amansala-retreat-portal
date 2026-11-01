@@ -235,7 +235,20 @@ function _bdFolioAnchorId(subj){
   return chain.length>1?chain[0].id:subj.id;
 }
 
-async function _bdLoadFolios(){
+// Booking Detail reloads its folios from ~15 places; two loads at once for the same guest (a double click on a row, a save
+// that reloads while the first load is still running) each found no folio and created one -- the main source of the
+// duplicate folios found 2026-11-01. One load per guest at a time; a second call waits for the running one.
+let _bdFolioLoad=null;
+function _bdLoadFolios(){
+  const subj=_bdSubject();if(!subj)return Promise.resolve();
+  const key=subj.folioCol+':'+_bdFolioAnchorId(subj)+':'+(_bdKind==='reg'?(_bdGuestNameOverride||subj.guestName):subj.guestName);
+  // a second call waits for the running load, then loads again (it may be the reload after a new charge)
+  if(_bdFolioLoad&&_bdFolioLoad.key===key)return _bdFolioLoad.next||(_bdFolioLoad.next=_bdFolioLoad.p.then(()=>_bdLoadFoliosNow(),()=>_bdLoadFoliosNow()));
+  const p=_bdLoadFoliosNow().finally(()=>{if(_bdFolioLoad&&_bdFolioLoad.p===p)_bdFolioLoad=null;});
+  _bdFolioLoad={key,p};
+  return p;
+}
+async function _bdLoadFoliosNow(){
   const subj=_bdSubject();if(!subj)return;
   const guestName=_bdKind==='reg'?(_bdGuestNameOverride||subj.guestName):subj.guestName;
   const folioSubjId=_bdFolioAnchorId(subj);
@@ -255,15 +268,27 @@ async function _bdLoadFolios(){
     // matter what name it's filed under -- reuse it instead of creating a duplicate. Only when
     // 2+ folios already exist (a genuine split room, each guest billed separately) does
     // guest_name actually disambiguate which one a new charge belongs to.
+    // Nothing under this exact name: the shared, locked find-or-create (same rules: same name ignoring case/spaces, else the
+    // room's only folio, else a new one) -- so a second screen or a server job doing this at the same moment gets the same folio
+    let _rpcCreated=null;
+    if(!folios||!folios.length){
+      const r=await folioFindOrCreate({[subj.folioCol==='registration_id'?'registrationId':'bookingRequestId']:folioSubjId,guestName,
+        token:uid().replace(/[^a-z0-9]/gi,''),reuseSingle:true});
+      if(r){folios=[r.folio];if(r.created)_rpcCreated=r.folio;}
+    }
     if(!folios||!folios.length){
       const {data:anyFolios,error:aErr}=await db.from('folios').select('*').eq(subj.folioCol,folioSubjId);
       if(aErr)throw aErr;
       if(anyFolios&&anyFolios.length===1)folios=anyFolios;
     }
-    if(!folios||!folios.length){
-      const token=uid().replace(/[^a-z0-9]/gi,'');
-      const {data:created,error:cErr}=await db.from('folios').insert({[subj.folioCol]:folioSubjId,guest_name:guestName,name:guestName,payment_token:token,status:'open'}).select().single();
-      if(cErr)throw cErr;
+    if(_rpcCreated||!folios||!folios.length){
+      let created=_rpcCreated;
+      if(!created){
+        const token=uid().replace(/[^a-z0-9]/gi,'');
+        const {data:ins,error:cErr}=await db.from('folios').insert({[subj.folioCol]:folioSubjId,guest_name:guestName,name:guestName,payment_token:token,status:'open'}).select().single();
+        if(cErr)throw cErr;
+        created=ins;
+      }
       folios=[created];
       // Jorge's report 2026-10-14: a Walk-in (and any other manually-entered Room
       // Only reservation, e.g. Direct/OTA) opened a brand-new folio showing "No
@@ -300,9 +325,12 @@ async function _bdLoadFolios(){
     // into the oldest folio, the first time one of these old empty folios is
     // opened -- runs at most once per booking, since folio_items is non-empty
     // on every later open.
-    if(!justSeeded&&subj.folioCol==='registration_id'&&subj.bookingType==='room_only'&&subj.rate>0&&!(items&&items.length)){
+    // (only for a folio at least a minute old: one created seconds ago is being seeded by the screen that created it, and a
+    // second screen opening it in that moment would add a second Room charge)
+    const _oldestFolio=[...folios].sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0))[0];
+    if(!justSeeded&&subj.folioCol==='registration_id'&&subj.bookingType==='room_only'&&subj.rate>0&&!(items&&items.length)&&_oldestFolio&&Date.now()-new Date(_oldestFolio.created_at||0).getTime()>60000){
       const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
-      const oldest=[...folios].sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0))[0];
+      const oldest=_oldestFolio;
       const {data:backfilled,error:bfErr}=await db.from('folio_items').insert({folio_id:oldest.id,description:`Room charge — ${subj.room||'Room'}`,qty:nights,unit_price:subj.rate,tax_rate:0,category:'Room'}).select().single();
       if(bfErr)throw bfErr;
       items=[backfilled];
@@ -343,6 +371,14 @@ function _bdBalanceDue(){return _bdFolios.reduce((s,f)=>s+_bdFolioTotal(f),0);}
 // part of a split. Jorge's ask 2026-09-29: the Period/nights shown for one
 // segment only ("1 night") looked wrong when the guest's real stay spans
 // several rooms -- this is what lets the render show the FULL stay too.
+// The registration a guest's folio lives on: a split stay keeps ONE folio on its first segment (see _bdFolioAnchorId), so
+// spa / bulk charges for a later segment must go there too, or Booking Detail never shows them
+function folioAnchorRegId(regId){
+  const reg=AppData.regs.find(r=>r.id===regId);const bk=reg&&AppData.bookings.find(b=>b.id===reg.bookingId);
+  if(!reg||!bk)return regId;
+  const chain=_bdSplitChain(reg,bk);
+  return chain.length>1?chain[0].id:regId;
+}
 function _bdSplitChain(reg,bk){
   if(!reg||!bk)return[reg];
   const eff=r=>({in:r.checkIn||bk.startDate,out:r.checkOut||bk.endDate});

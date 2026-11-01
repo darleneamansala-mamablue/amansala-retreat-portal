@@ -1114,8 +1114,12 @@ async function sbWriteAppointment(paymentIntentId){
             const fmtD=ds=>ds?new Date(ds+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
             try{
               const gName=match.guest.name;
-              let {data:fl}=await db.from('folios').select('id').eq('registration_id',match.reg.id).eq('guest_name',gName).eq('status','open').order('created_at',{ascending:true}).limit(1);
-              let folioId=fl&&fl[0]&&fl[0].id;
+              // shared locked find-or-create (sql/find_or_create_folio.sql): this guest's open folio, else a new one -- never two
+              // at once with a front-desk screen; the look-up below only runs when the database function is not installed
+              let folioId=null;
+              try{const{data:lk,error:lkErr}=await db.rpc('find_or_create_folio',{p_registration_id:match.reg.id,p_guest_name:gName,p_payment_token:(Date.now().toString(36)+Math.random().toString(36).slice(2,12)),p_open_only:true});if(!lkErr&&lk&&lk.folio)folioId=lk.folio.id;}catch(e){}
+              let {data:fl}=folioId?{data:[{id:folioId}]}:await db.from('folios').select('id').eq('registration_id',match.reg.id).eq('guest_name',gName).eq('status','open').order('created_at',{ascending:true}).limit(1);
+              folioId=fl&&fl[0]&&fl[0].id;
               if(!folioId){
                 const token=(Date.now().toString(36)+Math.random().toString(36).slice(2,12));
                 const {data:cf,error:cfErr}=await db.from('folios').insert({registration_id:match.reg.id,guest_name:gName,name:gName,payment_token:token,status:'open'}).select('id').single();

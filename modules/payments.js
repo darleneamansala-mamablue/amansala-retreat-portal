@@ -1734,9 +1734,15 @@ async function bcPostCharges() {
     if (rowResult) rowResult.textContent = '…';
 
     try {
-      let { data: folios, error: fErr } = await db.from('folios').select('*').eq('registration_id', regId).eq('guest_name', guestName);
-      if (fErr) throw fErr;
-      let folio = (folios || [])[0];
+      // same locked find-or-create as Booking Detail (one folio per guest, split stays on their first segment)
+      const folioRegId = typeof folioAnchorRegId === 'function' ? folioAnchorRegId(regId) : regId;
+      const r = typeof folioFindOrCreate === 'function' ? await folioFindOrCreate({ registrationId: folioRegId, guestName, token: uid().replace(/[^a-z0-9]/gi, ''), reuseSingle: true }) : null;
+      let folio = r && r.folio;
+      if (!folio) {
+        let { data: folios, error: fErr } = await db.from('folios').select('*').eq('registration_id', regId).eq('guest_name', guestName).order('created_at', { ascending: true });
+        if (fErr) throw fErr;
+        folio = (folios || [])[0];
+      }
       if (!folio) {
         const token = uid().replace(/[^a-z0-9]/gi, '');
         const { data: created, error: cErr } = await db.from('folios').insert({ registration_id: regId, guest_name: guestName, name: guestName, payment_token: token, status: 'open' }).select().single();

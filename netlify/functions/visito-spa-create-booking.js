@@ -1,4 +1,5 @@
 'use strict';
+const { findOrCreateFolioLocked } = require('./folio-lib');
 
 // Visito AI "Tool" — lets Lana book a spa appointment end to end, with ZERO
 // staff involvement: determines whether the guest is currently staying at
@@ -29,9 +30,13 @@ const STRIPE_API = 'https://api.stripe.com/v1';
 // chargeFolio() helper.
 async function chargeFolio(hdrs, { registrationId, guestName, description, unitPrice, category, serviceDate }) {
   let folioId = null;
-  const exactRes = await fetch(`${SUPABASE_URL}/rest/v1/folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(guestName)}&limit=1`, { headers: hdrs });
-  const exact = exactRes.ok ? await exactRes.json() : [];
-  if (exact.length) folioId = exact[0].id;
+  // shared locked find-or-create (this name, else the oldest open folio, else a new one); old look-up only as fallback
+  const locked = await findOrCreateFolioLocked(hdrs.apikey, { registrationId, guestName, token: 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), reuseAnyOpen: true });
+  if (locked) folioId = locked.id;
+  const exactRes = folioId ? null : await fetch(`${SUPABASE_URL}/rest/v1/folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&guest_name=eq.${encodeURIComponent(guestName)}&order=created_at.asc&limit=1`, { headers: hdrs });
+  const exact = exactRes && exactRes.ok ? await exactRes.json() : [];
+  if (folioId) {}
+  else if (exact.length) folioId = exact[0].id;
   else {
     const anyRes = await fetch(`${SUPABASE_URL}/rest/v1/folios?select=id&registration_id=eq.${encodeURIComponent(registrationId)}&status=eq.open&order=created_at.asc&limit=1`, { headers: hdrs });
     const any = anyRes.ok ? await anyRes.json() : [];

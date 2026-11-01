@@ -1,4 +1,5 @@
 'use strict';
+const { findOrCreateFolioLocked } = require('./folio-lib');
 
 // POST /.netlify/functions/lightspeed-room-charge
 // Called when a "room charge" payment is posted in Lightspeed L Series.
@@ -125,7 +126,10 @@ exports.handler = async (event) => {
   const canonical = (matchedReg.guests ?? []).find(g => g.name)?.name ?? guestName ?? '';
 
   let folioId = null;
-  const folioExact = await supaFetch(supaKey,
+  // shared locked find-or-create (this name's open folio, else the oldest open one, else a new one); the look-up below only
+  // runs when the database function is not installed
+  const locked = await findOrCreateFolioLocked(supaKey, { registrationId: matchedReg.id, guestName: canonical, token: crypto.randomUUID().replace(/-/g, ''), openOnly: true, reuseAnyOpen: true });
+  const folioExact = locked ? { ok: true, data: [{ id: locked.id }] } : await supaFetch(supaKey,
     `folios?select=id&registration_id=eq.${encodeURIComponent(matchedReg.id)}&guest_name=eq.${encodeURIComponent(canonical)}&status=eq.open&limit=1`
   );
   if (folioExact.ok && Array.isArray(folioExact.data) && folioExact.data.length) {

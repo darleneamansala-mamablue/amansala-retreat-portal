@@ -4756,6 +4756,24 @@ function _casDirectUpdate(table,payload,st,exec){
     return r;
   });
 }
+// One folio (guest bill) per guest, even when two screens or a screen and a server job ask at the same moment: the
+// database function find_or_create_folio (sql/find_or_create_folio.sql) does look-up + insert under a lock. Returns
+// {folio, created}, or null when the function is not installed yet / failed -- callers then fall back to their own
+// look-up, exactly as before.
+let _folioRpcMissing=false;
+async function folioFindOrCreate({registrationId=null,bookingRequestId=null,guestName=null,token=null,openOnly=false,reuseAnyOpen=false,reuseSingle=false,create=true}={}){
+  if(_folioRpcMissing||(!registrationId&&!bookingRequestId))return null;
+  try{
+    const{data,error}=await db.rpc('find_or_create_folio',{p_registration_id:registrationId,p_booking_request_id:bookingRequestId,p_guest_name:guestName,
+      p_payment_token:token,p_open_only:openOnly,p_reuse_any_open:reuseAnyOpen,p_reuse_single:reuseSingle,p_create:create});
+    if(error){
+      if(error.code==='PGRST202'||error.code==='42883')_folioRpcMissing=true;   // not installed: stop asking
+      else console.warn('[folio] find_or_create_folio failed, using the old look-up:',error.message);
+      return null;
+    }
+    return data&&data.folio?data:null;
+  }catch(e){return null;}
+}
 // Payments (their own table, no updated_at). Every save used to upsert EVERY payment this tab had in memory: a tab opened
 // before someone edited a payment put the old amount back, and one still holding a payment deleted elsewhere created it
 // again. Now only what this tab added or changed since its last load/save is written (diffed against _payBase, built at
@@ -4869,8 +4887,11 @@ async function syncToSupabase(){
     try{
       if(casSyncEnabled()&&_casBaseReady){
         const _roomsAdded=_casRoomsAdded();
-        const[bkResult,regResult]=await Promise.all([
-          casSyncTable({db:_dbRaw,table:'bookings',serverWins:_CAS_BK_SERVER_WINS,rows:AppData.bookings,idOf:b=>b.id,toSqlRow:appBookingToSqlRow,fromSqlRow:sqlBookingToApp,base:_bkBase,deletedIds:deletedBookingIds,isRecentLocalId:_isRecentLocalId}),
+        // Bookings first, then registrations: a new booking and its new room are both inserts, and the registration's
+        // booking_id must already exist (real case 2026-11-01: a new Room Only reservation's room was refused once by the
+        // foreign key, saved on the retry)
+        const bkResult=await casSyncTable({db:_dbRaw,table:'bookings',serverWins:_CAS_BK_SERVER_WINS,rows:AppData.bookings,idOf:b=>b.id,toSqlRow:appBookingToSqlRow,fromSqlRow:sqlBookingToApp,base:_bkBase,deletedIds:deletedBookingIds,isRecentLocalId:_isRecentLocalId});
+        const[regResult]=await Promise.all([
           casSyncTable({db:_dbRaw,table:'registrations',rows:AppData.regs.filter(r=>!deletedBookingIds.has(r.bookingId)),idOf:r=>r.id,toSqlRow:appRegToSqlRow,fromSqlRow:sqlRegToApp,base:_regBase,deletedIds:deletedRegIds,isRecentLocalId:_isRecentLocalId}),
           deletedBookingIds.size?db.from('bookings').delete().in('id',[...deletedBookingIds]):null,
           deletedRegIds.size?db.from('registrations').delete().in('id',[...deletedRegIds]):null,
@@ -6883,10 +6904,10 @@ function switchTab(id,btn){
 // ===== CONTRACT GENERATOR — moved to modules/contracts.js (loaded above) =====
 // ===== SIGNATURE PAD — moved to modules/contracts.js (loaded above) =====
 </script>
-<script src="modules/payments.js?v=20261101a"></script>
+<script src="modules/payments.js?v=20261101b"></script>
 <script src="modules/room-activities.js"></script>
 <script src="modules/tour-picker.js?v=20261027a"></script>
-<script src="modules/booking-detail.js?v=20261020d"></script>
+<script src="modules/booking-detail.js?v=20261101a"></script>
 <script>
 // ===== PAYMENT RECORDING — moved to modules/payments.js =====
 // ===== PIPELINE STEPS — moved to modules/payments.js (loaded above) =====
@@ -6895,7 +6916,7 @@ function switchTab(id,btn){
 <script>
 // ===== ADMIN DONE TASKS — moved to modules/admin-staff.js =====
 </script>
-<script src="modules/spa.js?v=20261028a"></script>
+<script src="modules/spa.js?v=20261101a"></script>
 <script src="modules/spa-calendar.js?v=20261024a"></script>
 <script src="modules/spa-appt-merge.js?v=20261019b"></script>
 <script src="modules/spa-calendar-autorefresh.js?v=20261019a"></script>
