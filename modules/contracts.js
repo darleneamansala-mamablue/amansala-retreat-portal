@@ -174,7 +174,7 @@ function _openContractModalRender(bkId){
     sigStatus.innerHTML=`&#10003; Signed by ${bk.contractSignature} on ${fmtDate(bk.contractSignedAt.slice(0,10))}`;
     setTimeout(()=>{
       const sigArea=document.getElementById('tcContractSigArea');
-      if(!sigArea)return;
+      if(!sigArea||_contractBkId!==bk.id)return;   // another contract opened meanwhile: never paint this signature on it
       const signedDate=new Date(bk.contractSignedAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
       const pkgs=calcPkgItems(bk);
       sigArea.innerHTML=`
@@ -840,6 +840,7 @@ function renderTeacherContract(bkId){
   const sentDate=bk.contractSentAt?new Date(bk.contractSentAt):new Date();
   sentDate.setHours(0,0,0,0);
   body.innerHTML=generateContractHTML(bk,isLow,sentDate);
+  body.dataset.bkId=bk.id;
   body.style.display='block';
   notSentMsg.style.display='none';
 
@@ -852,7 +853,7 @@ function renderTeacherContract(bkId){
       `Signed by ${bk.contractSignature} on ${new Date(bk.contractSignedAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}${pkgLine}`;
     setTimeout(()=>{
       const sigArea=document.getElementById('tcContractSigArea');
-      if(!sigArea)return;
+      if(!sigArea||body.dataset.bkId!==bk.id)return;   // another contract opened meanwhile: never paint this signature on it
       const signedDate=new Date(bk.contractSignedAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
       sigArea.innerHTML=`<div style="max-width:420px;margin-top:8px">
         <div style="border:1.5px solid #86efac;border-radius:10px;padding:16px 20px;background:#f0fdf4">
@@ -899,7 +900,36 @@ function sigGetDataUrl(){
   return canvas.toDataURL('image/png');
 }
 
-function teacherSignContract(){
+// A teacher must sign the contract they actually read. If staff changed it (wording, prices, gratuity, dates...) while it
+// was open on the teacher's screen, or it was already signed elsewhere, re-read the booking from the server right before
+// signing and stop: show the new version and ask to review it. Returns true when signing may go ahead.
+let _tcSigning=false;
+async function _tcContractStillCurrent(bk){
+  try{
+    const{data:row,error}=await db.from('bookings').select('*').eq('id',bk.id).maybeSingle();
+    if(error||!row)return true;   // cannot check (offline): sign as before
+    const srv=sqlBookingToApp(row);
+    if(srv.contractSignedAt&&srv.contractSignature){
+      Object.assign(bk,srv);renderTeacherContract(bk.id);
+      showToast('This contract is already signed.');
+      return false;
+    }
+    const fresh={...bk,...srv};
+    if(fresh.tipPerNight==null)fresh.tipPerNight=bk.tipPerNight;   // the $30 default renderTeacherContract fills in
+    const sent=fresh.contractSentAt?new Date(fresh.contractSentAt):new Date();sent.setHours(0,0,0,0);
+    const now=document.createElement('div');now.innerHTML=generateContractHTML(fresh,isLowSeasonContract(fresh.startDate),sent);
+    const shown=document.getElementById('tcContractBody');
+    if(!shown)return true;
+    // compare the contract wording only, not the signature box
+    const txt=el=>{const c=el.cloneNode(true);c.querySelectorAll('#tcContractSigArea').forEach(x=>x.remove());return c.textContent.replace(/\s+/g,' ');};
+    if(txt(now)===txt(shown))return true;
+    Object.assign(bk,srv);renderTeacherContract(bk.id);
+    showToast('Amansala just updated your contract. Please review the new version above, then sign again.');
+    try{logActivity('Contract changed before signing',`${bk.leaderName||bk.retreatName} — teacher shown the updated version`,bk.id);}catch(e){}
+    return false;
+  }catch(e){return true;}
+}
+async function teacherSignContract(){
   const savedId=(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id'));
   const bk=AppData.bookings.find(b=>b.id===savedId);if(!bk)return;
   const name=(document.getElementById('tcSigName').value||'').trim();
@@ -909,6 +939,11 @@ function teacherSignContract(){
   // Read selected add-ons from inline checkboxes
   const selectedPkgs=[...document.querySelectorAll('#tcAddonGrid input[type=checkbox]:checked')]
     .map(cb=>cb.dataset.id).filter(Boolean);
+  if(_tcSigning)return;   // double click
+  _tcSigning=true;
+  let current;try{current=await _tcContractStillCurrent(bk);}finally{_tcSigning=false;}
+  if(!current)return;
+  if(bk.contractSignedAt&&bk.contractSignature)return;
   bk.contractSignature=name;
   bk.contractSignedAt=new Date().toISOString();
   bk.contractAuditUserAgent=navigator.userAgent;
