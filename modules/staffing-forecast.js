@@ -123,7 +123,14 @@ function sfGaps(daysAhead) {
 const SF_LV = ['', 'background:#fde7c7;color:#92400e', 'background:#fecaca;color:#991b1b'];
 const SF_CV = ['', 'background:#dbeafe;color:#1e40af', 'background:#bfdbfe;color:#1e3a8a'];
 function sfStaffList(cur) {
-  try { if (typeof alStaff === 'function') return alStaff(cur); } catch (e) {}
+  // Spa therapists are for the spa only, so they are not offered as cover here (a name already saved stays visible).
+  try {
+    if (typeof alStaff === 'function') {
+      const flat = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      const spa = new Set(((typeof SpaData !== 'undefined' && SpaData.therapists) || []).map(t => flat(t.firstName)));
+      return alStaff(cur).filter(n => n === cur || !spa.has(flat(n)));
+    }
+  } catch (e) {}
   return cur ? [cur] : [];
 }
 async function sfRender() {
