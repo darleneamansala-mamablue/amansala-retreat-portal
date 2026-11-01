@@ -518,6 +518,17 @@ exports.handler = async (event) => {
     }
     if (newRegs.length) await supa(supaKey, 'registrations', 'POST', newRegs);
 
+    // Blocks only ever grew before: a guest moved to another room (or who cancelled)
+    // left their first auto-picked room blocked forever. Keep the block list equal to
+    // the rooms active guests are actually in.
+    try {
+      const liveRegs = await supa(supaKey, `registrations?select=room,cancelled&booking_id=eq.${bkId}`, 'GET');
+      if (Array.isArray(liveRegs)) {
+        const liveRooms = [...new Set(liveRegs.filter(r => r.room && !r.cancelled).map(r => r.room))];
+        await supa(supaKey, `bookings?id=eq.${bkId}`, 'PATCH', { blocked_rooms: liveRooms });
+      }
+    } catch (e) { console.warn('[wetravel-webhook] could not tidy blocked rooms:', e.message); }
+
     // Idempotency for Svix retries: only create folios for registration+guest
     // combos that don't already have one (a redelivered event must not double
     // up "Room Charges"/"Extras" rows).
