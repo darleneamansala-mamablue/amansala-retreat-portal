@@ -103,6 +103,8 @@ async function openBlockModal(bkId){
     // Replace (not merge) this booking's regs with the fresh server copy, so a reg that
     // no longer exists server-side disappears here too instead of lingering in memory.
     AppData.regs=AppData.regs.filter(r=>r.bookingId!==bkId).concat((freshRegRows||[]).map(sqlRegToApp));
+    // tell the safety-net baseline what was just brought in, so the next save does not take it for this tab's own edit
+    if(typeof casAfterFetch==='function'){casAfterFetch('registrations',freshRegRows);if(freshBkRow)casAfterPartialFetch('bookings',bkId,freshBkRow);}
   }catch(e){
     console.warn('[openBlockModal] fresh fetch failed — falling back to in-memory data',e);
     showToast('⚠ No se pudo confirmar el estado más reciente de este retiro — revisa con cuidado antes de guardar.');

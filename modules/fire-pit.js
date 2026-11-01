@@ -69,8 +69,10 @@ function fpSetAllTime(v) { document.querySelectorAll('.fpTime').forEach(t => { t
 // The same night can end up saved twice (an older copy of the retreat merged back in). Keep one line per fire pit night.
 function fpDedupe(bk) {
   const seen = new Set(), before = (bk.retreatActivities || []).length;
-  bk.retreatActivities = (bk.retreatActivities || []).filter(a => { if (a.aoId !== FP_ID) return true; const k = String(a.date || '').slice(0, 10); if (seen.has(k)) return false; seen.add(k); return true; });
-  return before !== bk.retreatActivities.length;
+  const kept = (bk.retreatActivities || []).filter(a => { if (a.aoId !== FP_ID) return true; const k = String(a.date || '').slice(0, 10); if (seen.has(k)) return false; seen.add(k); return true; });
+  if (kept.length === before) return false;   // nothing to drop: leave the list (and a null one) exactly as it is
+  bk.retreatActivities = kept;
+  return true;
 }
 function fpCleanDuplicates() {
   try {

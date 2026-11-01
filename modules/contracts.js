@@ -126,8 +126,11 @@ function saveContractTemplateFromForm(){
 let _contractBkId=null;
 function openContractModal(bkId){
   // Pull latest from Supabase first so teacher signatures from other devices show immediately
-  loadFromSupabase().then(()=>{
-    try{loadAll();}catch(e){}
+  // With the safety net on, loadAll() after it is skipped: loadFromSupabase() already mirrors the result into localStorage,
+  // and loadAll() only re-ran the startup clean-ups on fresh data (auto deposit invoices numbered per device, status bumps)
+  // -- changes the safety net would then save -- and left regSelBk pointing at a detached copy
+  loadFromSupabase().then(loaded=>{
+    if(!loaded||!(typeof casActive==='function'&&casActive())){try{loadAll();}catch(e){}}
     _openContractModalRender(bkId);
   }).catch(()=>{try{loadAll();}catch(e){} _openContractModalRender(bkId);});
 }

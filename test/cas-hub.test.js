@@ -64,7 +64,7 @@ function makeTab(db, localStore) {
   vm.createContext(ctx);
   vm.runInContext(ENGINE + '\nconst AppData={bookings:[],venRows:[],roomTypes:[],regs:[],teacherMessages:[],programBlocks:[],specialEvents:[]};\n' +
     'let deletedBookingIds=new Set(),deletedRegIds=new Set(),deletedPaymentIds=new Set(),regSelBk=null,_lastLocalSaveAt=0,_appStoreUpdatedAt={},PortalSettings={};\n' +
-    HUB + '\nthis.T={get AppData(){return AppData},saveAll,loadFromSupabase,syncToSupabase,get ready(){return _casBaseReady},set ready(v){_casBaseReady=v},sqlBookingToApp,sqlRegToApp,get busy(){return _saveAllBusy}};', ctx);
+    HUB + '\nthis.T={db,casAfterFetch,casAfterPartialFetch,get AppData(){return AppData},saveAll,loadFromSupabase,syncToSupabase,get ready(){return _casBaseReady},set ready(v){_casBaseReady=v},sqlBookingToApp,sqlRegToApp,get busy(){return _saveAllBusy}};', ctx);
   return ctx.T;
 }
 const flush = async t => { await t.busy; await new Promise(r => setTimeout(r, 5)); await t.busy; };
@@ -198,6 +198,84 @@ async function test_conflictLogged() {
   assert.ok(logs.some(v => v.kind === 'conflict' && v.items[0].reason === 'notes'), 'conflict on notes logged');
 }
 
+// ---- Step 2: direct writes and Block Rooms --------------------------------------------------------------------------
+// 11. Two people change different settings of the same retreat (both live in package_custom_prices) through a screen that
+//     writes the column straight to SQL. With the safety net the direct write is left to CAS, which joins both.
+async function test_directWriteJoinedNotOverwritten() {
+  const db = fakeDb({ bookings: [bk('b1', { package_custom_prices: { __cfg__: { taxRate: 16, hideRoomNumbers: false } } })], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  // someone else sets tax rate 0 meanwhile
+  const cur = db.T.bookings.get('b1');
+  db.T.bookings.set('b1', { ...cur, package_custom_prices: { __cfg__: { taxRate: 0, hideRoomNumbers: false } }, updated_at: stamp() });
+  // this tab toggles hide room numbers the way toggleHideRoomNumbers() does: memory, saveAll, then a direct write
+  const b = t.AppData.bookings[0];
+  b.packageCustomPrices = { __cfg__: { taxRate: 16, hideRoomNumbers: true } };
+  t.saveAll();
+  const r = await t.db.from('bookings').update({ package_custom_prices: b.packageCustomPrices }).eq('id', 'b1');
+  assert.strictEqual(r.error, null);
+  await flush(t);
+  assert.deepStrictEqual(db.T.bookings.get('b1').package_custom_prices, { __cfg__: { taxRate: 0, hideRoomNumbers: true } });
+}
+// 12. A direct write whose value is not in memory goes to SQL as before, and the baseline learns it: a check-in written
+//     directly and then undone on another device is not re-applied by this tab's next save
+async function test_directWriteNotInMemoryPatchesBase() {
+  const db = fakeDb({ registrations: [{ id: 'g1', booking_id: 'b1', room: '10', checked_in_at: null, notes: 'n', updated_at: '2026-11-01T00:00:00.000+00:00' }], bookings: [bk('b1')], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  await t.db.from('registrations').update({ checked_in_at: '2026-11-01T15:00:00Z' }).eq('id', 'g1');
+  assert.strictEqual(db.T.registrations.get('g1').checked_in_at, '2026-11-01T15:00:00Z', 'written directly');
+  t.AppData.regs[0].checkedInAt = '2026-11-01T15:00:00Z';     // the screen mirrors it in memory after the write
+  db.T.registrations.set('g1', { ...db.T.registrations.get('g1'), checked_in_at: null, updated_at: stamp() });  // undone elsewhere
+  t.AppData.regs[0].notes = 'later';
+  t.saveAll(); await flush(t);
+  assert.strictEqual(db.T.registrations.get('g1').checked_in_at, null, 'the undo stands');
+  assert.strictEqual(db.T.registrations.get('g1').notes, 'later');
+}
+// 13. Switch off: direct writes behave exactly as before
+async function test_directWriteSwitchOff() {
+  const db = fakeDb({ bookings: [bk('b1')], app_store: [{ key: 'cas_sync', value: { mode: 'off' } }] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  t.AppData.bookings[0].notes = 'x';
+  await t.db.from('bookings').update({ notes: 'x' }).eq('id', 'b1');
+  assert.ok(db.log.some(l => l.table === 'bookings' && l.op === 'update' && l.payload.notes === 'x'), 'written directly');
+}
+// 14. Block Rooms re-fetch: what it brought in is not taken for this tab's own edit
+async function test_blockRoomsRefetchRebased() {
+  const db = fakeDb({ registrations: [{ id: 'g1', booking_id: 'b1', room: '10', guests: [{ name: 'Ana' }], updated_at: '2026-11-01T00:00:00.000+00:00' }], bookings: [bk('b1', { blocked_rooms: ['10'] })], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  // another tab edits guests and rooms
+  db.T.registrations.set('g1', { ...db.T.registrations.get('g1'), guests: [{ name: 'Ana Lopez' }], updated_at: stamp() });
+  db.T.bookings.set('b1', { ...db.T.bookings.get('b1'), blocked_rooms: ['10', '11'], updated_at: stamp() });
+  // this tab opens Block Rooms: fresh fetch put in memory (as openBlockModal does)
+  const freshRegs = [{ ...db.T.registrations.get('g1') }], freshBk = { blocked_rooms: ['10', '11'] };
+  t.AppData.regs.splice(0, t.AppData.regs.length, ...freshRegs.map(t.sqlRegToApp));
+  t.AppData.bookings[0].blockedRooms = freshBk.blocked_rooms;
+  t.casAfterFetch('registrations', freshRegs); t.casAfterPartialFetch('bookings', 'b1', freshBk);
+  // the other tab changes them again
+  db.T.registrations.set('g1', { ...db.T.registrations.get('g1'), guests: [{ name: 'Ana López' }], updated_at: stamp() });
+  db.T.bookings.set('b1', { ...db.T.bookings.get('b1'), blocked_rooms: ['10', '11', '12'], updated_at: stamp() });
+  // this tab saves something unrelated
+  t.AppData.bookings[0].notes = 'unrelated';
+  t.saveAll(); await flush(t);
+  assert.deepStrictEqual(db.T.registrations.get('g1').guests, [{ name: 'Ana López' }], 'guests not reverted');
+  assert.deepStrictEqual(db.T.bookings.get('b1').blocked_rooms, ['10', '11', '12'], 'rooms not reverted');
+  assert.strictEqual(db.T.bookings.get('b1').notes, 'unrelated');
+}
+// 15. Activities: staff adds one in this tab while another tab adds a different one -- both kept
+async function test_activitiesBothKeptThroughPage() {
+  const db = fakeDb({ bookings: [bk('b1', { retreat_activities: [{ aoId: 'ao1', date: '2027-01-02', time: '10:00', prepaid: false }] })], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  const cur = db.T.bookings.get('b1');
+  db.T.bookings.set('b1', { ...cur, retreat_activities: [...cur.retreat_activities, { aoId: 'ao2', date: '2027-01-03', time: '11:45', prepaid: true }], updated_at: stamp() });
+  t.AppData.bookings[0].retreatActivities.push({ aoId: 'ao21', date: '2027-01-02', time: '20:00', prepaid: false });
+  t.saveAll(); await flush(t);
+  assert.deepStrictEqual(db.T.bookings.get('b1').retreat_activities.map(a => a.aoId).sort(), ['ao1', 'ao2', 'ao21']);
+}
+
 (async () => {
   await run('save before first load never overwrites with the old local copy', test_saveBeforeLoadDoesNotOverwrite);
   await run('failed first load keeps the gate closed', test_failedLoadKeepsGateClosed);
@@ -209,6 +287,11 @@ async function test_conflictLogged() {
   await run('new booking survives a reload before its first save', test_newRowSurvivesReload);
   await run('switch off = old path', test_switchOffUsesOldPath);
   await run('same-field conflict goes to the Sync Log', test_conflictLogged);
+  await run('direct write of a settings column is joined, not overwritten', test_directWriteJoinedNotOverwritten);
+  await run('direct write not in memory: written, and an undo elsewhere stands', test_directWriteNotInMemoryPatchesBase);
+  await run('switch off: direct writes unchanged', test_directWriteSwitchOff);
+  await run('Block Rooms re-fetch does not revert later changes', test_blockRoomsRefetchRebased);
+  await run('activities added in two tabs are both kept', test_activitiesBothKeptThroughPage);
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();

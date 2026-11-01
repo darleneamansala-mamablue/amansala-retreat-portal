@@ -1619,6 +1619,10 @@ const TS_SPECIAL_TIME_SLOTS=(()=>{
 
 let _ts={window:'',morningStart:'',morningDur:90,morningDurRequest:'',morningSpecialReason:'',morningLabel:'',morningCoTeacher:'',hasAfternoon:false,afternoonStart:'16:00',afternoonDur:75,afternoonDurRequest:'',afternoonLabel:'',afternoonCoTeacher:'',morningShala1:'',morningShala2:'',afternoonShala1:'',afternoonShala2:'',music:[],specialReq:'',lunchStart:'',hasArrivalClass:false,arrivalSlot:'16:00',arrivalDur:60,arrivalDurRequest:'',arrivalShala1:'',arrivalShala2:'',arrivalNotes:'',arrivalLabel:'',arrivalCoTeacher:'',hasDepartureClass:false,departureSlot:'08:00',departureDur:60,departureDurRequest:'',departureShala1:'',departureShala2:'',departureNotes:'',departureLabel:'',departureCoTeacher:'',hasSunrise:false,sunriseDates:[],sunriseStart:'',sunriseDur:45,sunriseLocation:''};
 let _tsBkId=null;
+// The draft as it was when this booking's form was filled (tsInit). At submit, only what the teacher changed against it
+// replaces the live values -- anything staff changed meanwhile (dinner time, offsite, per-day edits...) is kept, even if the
+// form was filled from an older copy (opened before the page finished loading, or left open for hours).
+let _tsOrig=null;
 let _tsPrepaidMode='choice'; // 'choice' | 'manual' — for the pre-paid activities assignment card
 
 // Lets a teacher rename a generic class ("Morning Class") to whatever it
@@ -1961,6 +1965,7 @@ function tsInit(bkId){
       if(!store[sk.date])store[sk.date]={};
       store[sk.date].skip=true;
     });
+    _tsOrig=JSON.parse(JSON.stringify(_ts));
   }
   tsRenderPrepaidActivities(bk);
   tsRenderBrowseGrid();
@@ -2837,6 +2842,12 @@ function tsSubmitSchedule(){
   // start time anymore).
   const keepOvs=(bk.scheduleTimeOverrides||[]).filter(o=>o.date<bk.startDate||o.date>=bk.endDate||(o.period!=='morn'&&o.period!=='aft'));
   const newOvs=[];
+  // A day the teacher did not touch in this form keeps whatever is saved for it now (staff may have edited it since)
+  const _same=(a,b)=>typeof _casSame==='function'?_casSame(a,b):JSON.stringify(a)===JSON.stringify(b);
+  // (with the safety net on; otherwise the whole form is sent, as before)
+  const _tsCas=!!_tsOrig&&typeof casActive==='function'&&casActive();
+  const _untouched=(period,dateStr)=>_tsCas&&_same((period==='morn'?_ts.dailyMorning:_ts.dailyAfternoon)?.[dateStr],(period==='morn'?_tsOrig.dailyMorning:_tsOrig.dailyAfternoon)?.[dateStr]);
+  const _curOvs=bk.scheduleTimeOverrides||[],_curSkips=bk.scheduleSkips||[];
   // "No class this day" (o.skip) goes into bk.scheduleSkips instead of a time
   // override — the same array/mechanism admin's own per-day modal
   // (skedSkipFromModal) already uses, so print/dashboard schedule views pick
@@ -2844,12 +2855,14 @@ function tsSubmitSchedule(){
   const keepSkips=(bk.scheduleSkips||[]).filter(s=>s.date<bk.startDate||s.date>=bk.endDate||(s.period!=='morn'&&s.period!=='aft'));
   const newSkips=[];
   svValidActivityDays(bk).forEach(({date:dateStr})=>{
+    if(_untouched('morn',dateStr)){_curOvs.filter(x=>x.date===dateStr&&x.period==='morn').forEach(x=>newOvs.push(x));_curSkips.filter(x=>x.date===dateStr&&x.period==='morn').forEach(x=>newSkips.push(x));return;}
     const o=_ts.dailyMorning?.[dateStr];
     if(o?.skip){newSkips.push({date:dateStr,period:'morn'});return;}
     if(!o||!o.start)return;
     newOvs.push({date:dateStr,period:'morn',start:o.start,dur:o.dur||60,label:o.label||'',coTeacher:o.coTeacher||'',shala1:o.shala1||'',flags:o.flags||[]});
   });
   if(_ts.hasAfternoon)svValidActivityDays(bk).forEach(({date:dateStr})=>{
+    if(_untouched('aft',dateStr)){_curOvs.filter(x=>x.date===dateStr&&x.period==='aft').forEach(x=>newOvs.push(x));_curSkips.filter(x=>x.date===dateStr&&x.period==='aft').forEach(x=>newSkips.push(x));return;}
     const o=_ts.dailyAfternoon?.[dateStr];
     if(o?.skip){newSkips.push({date:dateStr,period:'aft'});return;}
     if(!o||!o.start)return;
@@ -2862,8 +2875,19 @@ function tsSubmitSchedule(){
   // it; it is flagged for review instead of dropping back to Pending (which removed it from the scheduler —
   // Lillian So, Oct 10 2026). Admin confirming again clears the flag.
   const _wasConfirmed=bk.scheduleRequest?.adminStatus==='confirmed';
-  bk.scheduleRequest={...srWithoutDaily,submittedAt:new Date().toISOString(),adminStatus:_wasConfirmed?'confirmed':'pending',adminNote:bk.scheduleRequest?.adminNote||''};
+  // Start from what is saved now; take from the form only the fields the teacher changed in it (or that are not saved yet)
+  let _srOut=srWithoutDaily;
+  if(_tsCas){
+    const{dailyMorning:_om,dailyAfternoon:_oa,...origSr}=_tsOrig;
+    _srOut={...(bk.scheduleRequest||{})};
+    new Set([...Object.keys(srWithoutDaily),...Object.keys(origSr)]).forEach(k=>{
+      if(!_same(srWithoutDaily[k],origSr[k])){if(srWithoutDaily[k]===undefined)delete _srOut[k];else _srOut[k]=srWithoutDaily[k];}
+      else if(_srOut[k]===undefined&&srWithoutDaily[k]!==undefined)_srOut[k]=srWithoutDaily[k];
+    });
+  }
+  bk.scheduleRequest={..._srOut,submittedAt:new Date().toISOString(),adminStatus:_wasConfirmed?'confirmed':'pending',adminNote:bk.scheduleRequest?.adminNote||''};
   if(_wasConfirmed)bk.scheduleRequest.reviewNeeded=true;else delete bk.scheduleRequest.reviewNeeded;
+  _tsOrig=JSON.parse(JSON.stringify(_ts));   // a second submit compares against what was just sent
   saveAll();
   // Auto-populate tours & ceremonies on first submission only
   if(!bk.retreatActivities||!bk.retreatActivities.length){

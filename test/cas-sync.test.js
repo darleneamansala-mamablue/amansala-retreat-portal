@@ -8,7 +8,7 @@
 // `onUpdateAttempt` hook fired right before each conditional-update check.
 
 const assert = require('assert');
-const { casBuildBase, casUpdateOne, casSyncTable, casSnapshotRow, casPendingRows } = require('../modules/cas-sync.js');
+const { casBuildBase, casUpdateOne, casSyncTable, casSnapshotRow, casPendingRows, casPatchBase, casRebaseRows, _casMerge3 } = require('../modules/cas-sync.js');
 
 function makeFakeDb(initialRows, { onUpdateAttempt, delayMs } = {}) {
   const serverRows = new Map(initialRows.map(r => [r.id, { ...r }]));
@@ -376,6 +376,103 @@ async function test_pendingRows() {
   assert.deepStrictEqual(pend, ['b', fresh.id]);
 }
 
+// ---- Step 2: two people changing the same list / settings object at the same time --------------------------------------
+// Runs a real two-tab race through casSyncTable: `other` is what another tab saved first, `mine` what this tab changes.
+async function race(col, start, other, mine, opts = {}) {
+  const toS = r => ({ id: r.id, [col]: r[col] === undefined ? null : r[col], notes: r.notes });
+  const fromS = r => { const o = {}; if ('id' in r) o.id = r.id; if (col in r) o[col] = r[col]; if ('notes' in r) o.notes = r.notes; return o; };
+  const srv = { id: 'r', [col]: start, notes: 'n', updated_at: '2026-01-01T00:00:00.000Z' };
+  const db = makeFakeDb([srv], { onUpdateAttempt(a, server) { if (a === 1) server.set('r', { ...server.get('r'), [col]: other, updated_at: '2026-01-02T00:00:00.000Z' }); } });
+  const local = fromS(JSON.parse(JSON.stringify(srv)));
+  const base = casBuildBase([local], idOf, toS, () => srv.updated_at);
+  local[col] = mine;
+  const res = await casSyncTable({ db, table: 't', rows: [local], idOf, toSqlRow: toS, fromSqlRow: fromS, base, serverWins: opts.serverWins });
+  return { server: db._server.get('r')[col], local: local[col], res };
+}
+const A = (aoId, date) => ({ aoId, date, time: '10:00', prepaid: false });
+
+async function test_activitiesBothAdd() {
+  const { server, local } = await race('acts', [A('ao1', 'd1')], [A('ao1', 'd1'), A('ao2', 'd2')], [A('ao1', 'd1'), A('ao3', 'd3')]);
+  assert.deepStrictEqual(server.map(a => a.aoId).sort(), ['ao1', 'ao2', 'ao3'], 'both new activities kept');
+  assert.deepStrictEqual(local.map(a => a.aoId).sort(), ['ao1', 'ao2', 'ao3'], 'and shown on this screen');
+}
+async function test_activitiesRemoveVsAdd() {
+  const { server } = await race('acts', [A('ao1', 'd1'), A('ao2', 'd2')], [A('ao1', 'd1'), A('ao2', 'd2'), A('ao9', 'd9')], [A('ao2', 'd2')]);
+  assert.deepStrictEqual(server.map(a => a.aoId).sort(), ['ao2', 'ao9'], 'my removal of ao1 and their add of ao9 both apply');
+}
+async function test_activitiesBothAddSameNoDuplicate() {
+  const { server } = await race('acts', [], [A('ao5', 'd5')], [A('ao5', 'd5')]);
+  assert.strictEqual(server.length, 1);
+}
+async function test_activitiesEditVsAdd() {
+  const { server } = await race('acts', [A('ao1', 'd1')], [A('ao1', 'd1'), A('ao2', 'd2')], [A('ao1', 'd4')]);
+  assert.deepStrictEqual(server.map(a => a.aoId + '@' + a.date).sort(), ['ao1@d4', 'ao2@d2'], 'my date change and their new activity');
+}
+const C = (id, amount, d) => ({ id, amount, description: d || 'x' });
+async function test_chargesBothAdd() {
+  const { server, res } = await race('charges', [C('c1', 10)], [C('c1', 10), C('c2', 95, 'Boutique')], [C('c1', 10), C('c3', 145, 'Massage')]);
+  assert.deepStrictEqual(server.map(c => c.id).sort(), ['c1', 'c2', 'c3'], 'boutique AND massage both kept');
+  assert.strictEqual(res.conflicts.length, 0);
+}
+async function test_chargesEditVsDeleteOther() {
+  const { server } = await race('charges', [C('c1', 10), C('c2', 20)], [C('c1', 10)], [C('c1', 12), C('c2', 20)]);
+  assert.deepStrictEqual(server, [C('c1', 12)], 'my edit of c1 kept, their delete of c2 applied');
+}
+async function test_chargesSameChargeBothEdited() {
+  const { server, res } = await race('charges', [C('c1', 10, 'a')], [C('c1', 10, 'theirs')], [C('c1', 15, 'a')]);
+  assert.deepStrictEqual(server, [C('c1', 15, 'theirs')], 'different fields of the same charge both kept');
+  assert.strictEqual(res.conflicts.length, 0);
+}
+async function test_blockedRoomsTwoMoves() {
+  const { server } = await race('rooms', ['10', '11', '20'], ['10', '13', '20'], ['12', '11', '20']);
+  assert.deepStrictEqual([...server].sort(), ['12', '13', '20'], 'move 10->12 here and 11->13 there both apply');
+}
+async function test_settingsObjectDifferentKeys() {
+  const start = { __cfg__: { taxRate: 16, hideRoomNumbers: false }, pkgA: 100 };
+  const { server } = await race('pcp', start, { __cfg__: { taxRate: 0, hideRoomNumbers: false }, pkgA: 100 }, { __cfg__: { taxRate: 16, hideRoomNumbers: true }, pkgA: 100 });
+  assert.deepStrictEqual(server, { __cfg__: { taxRate: 0, hideRoomNumbers: true }, pkgA: 100 }, 'tax rate there + hide numbers here');
+}
+async function test_settingsSameKeyConflictLogged() {
+  const { server, res } = await race('pcp', { pkgA: 100 }, { pkgA: 120 }, { pkgA: 130 });
+  assert.deepStrictEqual(server, { pkgA: 130 });
+  assert.strictEqual(res.conflicts[0].reason, 'pcp');
+}
+async function test_autoColumnServerWins() {
+  const { server, local, res } = await race('venue_row', 'R1', 'R2', 'R3', { serverWins: new Set(['venue_row']) });
+  assert.strictEqual(server, 'R2', 'an automatic value never replaces what was already saved');
+  assert.strictEqual(local, 'R2');
+  assert.strictEqual(res.conflicts.length, 0);
+}
+async function test_guestsNameFixVsAddGuest() {
+  const g = (name) => ({ name, email: '', phone: '' });
+  const { server } = await race('guests', [g('Ana Lopz')], [g('Ana Lopz'), g('Bea')], [g('Ana Lopez')]);
+  assert.deepStrictEqual(server.map(x => x.name).sort(), ['Ana Lopez', 'Bea']);
+}
+
+// casPatchBase: a direct write recorded in the baseline -- a check-in undone on another device is not re-applied
+async function test_patchBaseAfterDirectWrite() {
+  const toS = r => ({ id: r.id, checked_in_at: r.checkedInAt || null, notes: r.notes });
+  const fromS = r => { const o = {}; if ('id' in r) o.id = r.id; if ('checked_in_at' in r) o.checkedInAt = r.checked_in_at; if ('notes' in r) o.notes = r.notes; return o; };
+  const srv = { id: 'g1', checked_in_at: null, notes: 'n', updated_at: '2026-01-01T00:00:00.000Z' };
+  const db = makeFakeDb([srv]);
+  const local = fromS(srv);
+  const base = casBuildBase([local], idOf, toS, () => srv.updated_at);
+  local.checkedInAt = 'T1';                                                         // Check In written straight to SQL
+  db._server.set('g1', { ...db._server.get('g1'), checked_in_at: 'T1', updated_at: '2026-01-02T00:00:00.000Z' });
+  casPatchBase(base, 'g1', { checked_in_at: 'T1' });
+  db._server.set('g1', { ...db._server.get('g1'), checked_in_at: null, updated_at: '2026-01-03T00:00:00.000Z' }); // undone elsewhere
+  local.notes = 'later edit';
+  await casSyncTable({ db, table: 'registrations', rows: [local], idOf, toSqlRow: toS, fromSqlRow: fromS, base });
+  assert.strictEqual(db._server.get('g1').checked_in_at, null, 'the undo elsewhere stands');
+  assert.strictEqual(db._server.get('g1').notes, 'later edit');
+}
+async function test_rebaseRows() {
+  const base = new Map();
+  casRebaseRows(base, [{ id: 'x', leader_name: 'L', notes: 'n', updated_at: 'T9' }], toSqlRow, fromSqlRow);
+  assert.strictEqual(base.get('x').updatedAt, 'T9');
+  assert.strictEqual(base.get('x').sqlJson, casSnapshotRow(toSqlRow, { id: 'x', leaderName: 'L', notes: 'n' }));
+}
+
 (async () => {
   await run('happy path, no conflict', test_happyPath);
   await run('conflict on attempt 1, resolves on retry, both edits survive', test_conflictThenResolve);
@@ -393,6 +490,20 @@ async function test_pendingRows() {
   await run('same column changed by both tabs is reported as a conflict', test_sameColumnConflictIsReported);
   await run('merge never overwrites an edit made mid-save', test_mergeDoesNotOverwriteEditMadeMidSave);
   await run('reload keeps pending rows only', test_pendingRows);
+  await run('activities: both add, both kept', test_activitiesBothAdd);
+  await run('activities: my removal + their add', test_activitiesRemoveVsAdd);
+  await run('activities: same add on both sides is not duplicated', test_activitiesBothAddSameNoDuplicate);
+  await run('activities: my edit + their add', test_activitiesEditVsAdd);
+  await run('charges: boutique + massage at once, both kept', test_chargesBothAdd);
+  await run('charges: my edit + their delete of another', test_chargesEditVsDeleteOther);
+  await run('charges: different fields of one charge', test_chargesSameChargeBothEdited);
+  await run('blocked rooms: two moves at once', test_blockedRoomsTwoMoves);
+  await run('settings object: different keys both kept', test_settingsObjectDifferentKeys);
+  await run('settings object: same key -> last wins, logged', test_settingsSameKeyConflictLogged);
+  await run('automatic column: server value wins', test_autoColumnServerWins);
+  await run('guests: name fix + added guest', test_guestsNameFixVsAddGuest);
+  await run('direct write recorded: undo elsewhere not reverted', test_patchBaseAfterDirectWrite);
+  await run('rebase rows from a full re-fetch', test_rebaseRows);
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();

@@ -4684,12 +4684,75 @@ let _bkBase=new Map(),_regBase=new Map();
 // failed) the CAS branch must not run: every row would adopt the server row as its baseline and the stale local copy would
 // then be written over it. Saves in that window take the old guarded path, exactly like before. Also reset by Restore backup.
 let _casBaseReady=false;
+// The safety net is in charge of saving in this tab right now (switch on for this browser + baselines loaded)
+function casActive(){try{return casSyncEnabled()&&_casBaseReady;}catch(e){return false;}}
 // uid()-style ids carry their creation time: a recent one is a genuinely new local row, an old one missing from SQL is a
 // zombie (deleted elsewhere) that must never be re-created
 function _isRecentLocalId(id){
   const m=/^id_(\d+)_/.exec(id||'');
   if(!m)return true; // not a uid()-style id (e.g. a real UUID) — nothing to second-guess
   return (Date.now()-parseInt(m[1],10))<24*60*60*1000;
+}
+// Booking columns the portal fills in by itself (render-time row layout, visit counters, *_updated_at stamps, the
+// confirmation token/number generated on first preview): when another screen already saved a different value, the
+// automatic one must never replace it.
+const _CAS_BK_SERVER_WINS=new Set(['venue_row','teacher_seen_count','teacher_last_seen','retreat_activities_updated_at','blocked_rooms_updated_at','guest_res_token','confirmation_number']);
+const _casTbl=table=>table==='bookings'?{base:_bkBase,rows:AppData.bookings,cols:_BOOKING_COLUMNS,toSql:appBookingToSqlRow,fromSql:sqlBookingToApp}
+  :table==='registrations'?{base:_regBase,rows:AppData.regs,cols:_REG_COLUMNS,toSql:appRegToSqlRow,fromSql:sqlRegToApp}:null;
+// Screens that re-read a row (or some of its columns) from SQL and put it in memory as-is tell the baseline here, so what
+// they brought in is not taken for this tab's own edit at the next save (Block Rooms).
+function casAfterFetch(table,sqlRows){const t=_casTbl(table);if(t)casRebaseRows(t.base,sqlRows,t.toSql,t.fromSql);}
+function casAfterPartialFetch(table,id,sqlCols){const t=_casTbl(table);if(t&&sqlCols)casPatchBase(t.base,id,sqlCols);}
+// ~55 places write a booking/registration column straight to SQL (db.from('bookings').update({...}).eq('id',x)), most of
+// them right after saveAll(). With the safety net on, each one goes through here:
+//  - the value is already in memory (the usual case) -> the direct write is skipped and the save is left to CAS, which
+//    joins it with whatever someone else changed meanwhile instead of overwriting the whole column (package_custom_prices
+//    holds tax rate, hidden room numbers, meal times... in one column; blocked_rooms is one list for the whole retreat).
+//    The caller's await still waits for that save to land.
+//  - otherwise (value not in memory, a column CAS does not handle, a filter other than one id, or .select() asked for the
+//    row back) -> written directly as before, and the baseline is told, so it is not undone by this tab's next save.
+// The CAS engine itself uses the raw client (_dbRaw) and never passes through here. With the safety net off, nothing changes.
+const _dbRaw={from:db.from.bind(db)};
+const _CAS_OTHER_FILTERS=['neq','is','match','filter','gt','gte','lt','lte','not','or','like','ilike','contains'];
+db.from=function(table){
+  const qb=_dbRaw.from(table);
+  if(table!=='bookings'&&table!=='registrations')return qb;
+  const up=qb.update.bind(qb);
+  qb.update=function(payload,opts){
+    const fb=up(payload,opts),st={ids:[],other:false,select:false};
+    const eq=fb.eq.bind(fb);fb.eq=function(c,v){if(c==='id')st.ids.push(v);else st.other=true;return eq(c,v);};
+    const inn=fb.in.bind(fb);fb.in=function(c,v){if(c==='id')st.ids.push(...v);else st.other=true;return inn(c,v);};
+    _CAS_OTHER_FILTERS.forEach(f=>{if(typeof fb[f]==='function'){const o=fb[f].bind(fb);fb[f]=function(...a){st.other=true;return o(...a);};}});
+    const sel=fb.select.bind(fb);fb.select=function(...a){st.select=true;return sel(...a);};
+    const th=fb.then.bind(fb);
+    let run=null;
+    fb.then=function(res,rej){run=run||_casDirectUpdate(table,payload,st,()=>new Promise((ok,no)=>th(ok,no)));return run.then(res,rej);};
+    return fb;
+  };
+  return qb;
+};
+function _casDirectUpdate(table,payload,st,exec){
+  let t=null;try{t=casActive()?_casTbl(table):null;}catch(e){}
+  if(!t)return exec();
+  const cols=Object.keys(payload||{}).filter(c=>c!=='updated_at');
+  if(cols.length&&st.ids.length===1&&!st.other&&!st.select&&cols.every(c=>t.cols.includes(c))){
+    const row=t.rows.find(r=>r.id===st.ids[0]);
+    if(row&&t.base.has(row.id)){
+      const mem=t.toSql(row);
+      if(cols.every(c=>_casSame(mem[c],payload[c])))
+        return Promise.resolve(saveAll()).then(()=>_saveAllBusy).then(()=>({data:null,error:null}),()=>({data:null,error:null}));
+    }
+  }
+  return exec().then(r=>{
+    try{
+      if(r&&!r.error){
+        const ids=Array.isArray(r.data)?r.data.map(x=>x.id):(st.other?[]:st.ids);
+        const sql={};cols.filter(c=>t.cols.includes(c)).forEach(c=>{sql[c]=payload[c];});
+        if(Object.keys(sql).length)ids.forEach(id=>casPatchBase(t.base,id,sql));
+      }
+    }catch(e){}
+    return r;
+  });
 }
 async function syncToSupabase(){
   // Never write to Supabase from local file:// — prevents local dev from corrupting live data
@@ -4735,8 +4798,8 @@ async function syncToSupabase(){
         const payRows=[];
         AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
         const[bkResult,regResult]=await Promise.all([
-          casSyncTable({db,table:'bookings',rows:AppData.bookings,idOf:b=>b.id,toSqlRow:appBookingToSqlRow,fromSqlRow:sqlBookingToApp,base:_bkBase,deletedIds:deletedBookingIds,isRecentLocalId:_isRecentLocalId}),
-          casSyncTable({db,table:'registrations',rows:AppData.regs.filter(r=>!deletedBookingIds.has(r.bookingId)),idOf:r=>r.id,toSqlRow:appRegToSqlRow,fromSqlRow:sqlRegToApp,base:_regBase,deletedIds:deletedRegIds,isRecentLocalId:_isRecentLocalId}),
+          casSyncTable({db:_dbRaw,table:'bookings',serverWins:_CAS_BK_SERVER_WINS,rows:AppData.bookings,idOf:b=>b.id,toSqlRow:appBookingToSqlRow,fromSqlRow:sqlBookingToApp,base:_bkBase,deletedIds:deletedBookingIds,isRecentLocalId:_isRecentLocalId}),
+          casSyncTable({db:_dbRaw,table:'registrations',rows:AppData.regs.filter(r=>!deletedBookingIds.has(r.bookingId)),idOf:r=>r.id,toSqlRow:appRegToSqlRow,fromSqlRow:sqlRegToApp,base:_regBase,deletedIds:deletedRegIds,isRecentLocalId:_isRecentLocalId}),
           deletedBookingIds.size?db.from('bookings').delete().in('id',[...deletedBookingIds]):null,
           deletedRegIds.size?db.from('registrations').delete().in('id',[...deletedRegIds]):null,
           payRows.length?db.from('payments').upsert(payRows):null,
@@ -6619,7 +6682,7 @@ function switchTab(id,btn){
 
 </script>
 <script src="modules/tab-urls.js?v=20261025a"></script>
-<script src="modules/cas-sync.js?v=20261101a"></script>
+<script src="modules/cas-sync.js?v=20261101b"></script>
 <script src="modules/venues.js?v=20261026b"></script>
 <script src="modules/booking-dates.js?v=20261026a"></script>
 <script src="modules/room-optimizer.js?v=20261020a"></script>
@@ -6639,7 +6702,7 @@ function switchTab(id,btn){
 <script src="modules/reports.js?v=20261020j"></script>
 <script src="modules/reports-daily-categories.js?v=20261021a"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20261030a"></script>
+<script src="modules/teacher-portal.js?v=20261101a"></script>
 <script src="modules/room-list-notes.js?v=20261026a"></script>
 <script src="modules/room-list-maint-note.js?v=20261027a"></script>
 <script src="modules/shala-chica-rooftop.js?v=20261024a"></script>
@@ -6659,7 +6722,7 @@ function switchTab(id,btn){
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20261018a"></script>
+<script src="modules/room-blocking.js?v=20261101a"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====
@@ -6670,7 +6733,7 @@ function switchTab(id,btn){
 // ===== RETREAT BUILDER — moved to modules/retreat-builder.js =====
 // ===== DASHBOARD — moved to modules/retreat-builder.js (loaded above) =====
 </script>
-<script src="modules/contracts.js?v=20261028b"></script>
+<script src="modules/contracts.js?v=20261101a"></script>
 <script src="modules/global-rate.js?v=20261020a"></script>
 <script src="modules/custom-addon-teacher-only.js?v=20261030b"></script>
 <script src="modules/contract-library-link.js?v=20261020a"></script>
@@ -6953,7 +7016,7 @@ if(location.protocol!=='file:'){
 <script src="modules/host-checklist.js?v=20261029a"></script>
 <script src="modules/host-checklist-all.js?v=20261029d"></script>
 <script src="modules/occupancy-ac-report.js?v=20261029e"></script>
-<script src="modules/fire-pit.js?v=20261024e"></script>
+<script src="modules/fire-pit.js?v=20261101a"></script>
 <script src="modules/team-quick-panel.js?v=20261026a"></script>
 <script src="modules/fire-pit-schedule.js?v=20261024a"></script>
 <script src="modules/checkin-by.js?v=20261024c"></script>
