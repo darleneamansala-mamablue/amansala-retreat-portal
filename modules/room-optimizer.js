@@ -365,7 +365,9 @@ async function ozAnalyze(rangeStart,rangeEnd){
 
 // Restricted re-run used by "Find Solution" on one specific overbooking alert.
 async function ozFindSolutionForAlert(alertId){
-  const alert=(_ozLastAnalysis?.overbooking||[]).find(a=>a.id===alertId);
+  // the Overbooking badge/modal lists _ozOverbookAlerts (its own scan, its own ids) -- looking only in the last full
+  // analysis never found them, so "Find Solution" always said it could not evaluate
+  const alert=[...(_ozOverbookAlerts||[]),...(_ozLastAnalysis?.overbooking||[])].find(a=>a.id===alertId);
   if(!alert)return null;
   const extReservations=await fetchExternalReservationsForRange(alert.startDate,alert.endDate);
   const cbKnownRooms=await ozFetchCloudbedsRoomTruth();

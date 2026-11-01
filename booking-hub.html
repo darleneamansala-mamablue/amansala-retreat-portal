@@ -4342,7 +4342,7 @@ async function _forceReleaseRetreatLock(bkId){
   try{
     await db.from('app_store').upsert({key:lockKey,value:null,updated_at:new Date().toISOString()});
     showToast('Lock liberado — recargando…');
-    setTimeout(()=>regSelectBooking(bkId),800);
+    setTimeout(()=>regSelectRetreat(bkId),800);   // was regSelectBooking, which does not exist (screen never refreshed)
   }catch(e){showToast('Error al liberar lock: '+e.message,'error');}
 }
 
@@ -6823,9 +6823,9 @@ function switchTab(id,btn){
 </script>
 <script src="modules/tab-urls.js?v=20261025a"></script>
 <script src="modules/cas-sync.js?v=20261101b"></script>
-<script src="modules/venues.js?v=20261101a"></script>
+<script src="modules/venues.js?v=20261101b"></script>
 <script src="modules/booking-dates.js?v=20261026a"></script>
-<script src="modules/room-optimizer.js?v=20261020a"></script>
+<script src="modules/room-optimizer.js?v=20261101a"></script>
 <script src="modules/sales-pipeline.js"></script>
 <script src="modules/booking-engine-admin.js?v=20261017a"></script>
 <script src="modules/reservations.js?v=20261019b"></script>

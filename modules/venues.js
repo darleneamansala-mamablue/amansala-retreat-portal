@@ -2321,7 +2321,7 @@ function openVenFinancials(){
   const anyEarned=td.tiers.some(t=>t.earned);
   const allEarned=td.tiers.every(t=>t.earned);
   const tdHtml=(()=>{
-    if(bk.teacherDiscountDisabled)return`<div style="margin-top:14px;padding:12px 16px;background:#f9fafb;border:1.5px dashed #d1d5db;border-radius:10px;font-size:12.5px;color:#9ca3af;display:flex;align-items:center;gap:8px"><span>Teacher discount disabled for this retreat</span><button onclick="event.stopPropagation();const bk=bookings.find(b=>b.id==='${bk.id}');if(bk){delete bk.teacherDiscountDisabled;saveAll();openVenFinancials();}" style="margin-left:auto;padding:3px 10px;font-size:11.5px;background:#fff;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;font-family:'Jost',sans-serif">Re-enable</button></div>`;
+    if(bk.teacherDiscountDisabled)return`<div style="margin-top:14px;padding:12px 16px;background:#f9fafb;border:1.5px dashed #d1d5db;border-radius:10px;font-size:12.5px;color:#9ca3af;display:flex;align-items:center;gap:8px"><span>Teacher discount disabled for this retreat</span><button onclick="event.stopPropagation();const bk=AppData.bookings.find(b=>b.id==='${bk.id}');if(bk){delete bk.teacherDiscountDisabled;saveAll();openVenFinancials();}" style="margin-left:auto;padding:3px 10px;font-size:11.5px;background:#fff;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;font-family:'Jost',sans-serif">Re-enable</button></div>`;
     const tierRows=td.tiers.map((t,i)=>{
       const pg=Math.min(td.paidGuests,t.threshold);
       const pct2=Math.round(pg/t.threshold*100);
@@ -2347,7 +2347,7 @@ function openVenFinancials(){
     return`<div style="margin-top:14px;border:1.5px solid ${anyEarned?'#86efac':'#bfdbfe'};border-radius:10px;overflow:hidden">
       <div style="padding:10px 16px;background:${anyEarned?'#f0fdf4':'#eff6ff'};border-bottom:1px solid ${anyEarned?'#86efac':'#bfdbfe'};display:flex;align-items:center;justify-content:space-between">
         <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:${anyEarned?'#15803d':'#1d4ed8'}">Teacher Discount · ${td.paidGuests} registered guest${td.paidGuests!==1?'s':''}</span>
-        <button onclick="event.stopPropagation();const bk2=bookings.find(b=>b.id==='${bk.id}');if(bk2){bk2.teacherDiscountDisabled=true;saveAll();openVenFinancials();}" style="padding:2px 9px;font-size:11px;background:#fff;border:1px solid ${anyEarned?'#86efac':'#bfdbfe'};border-radius:5px;cursor:pointer;font-family:'Jost',sans-serif;color:${anyEarned?'#15803d':'#1d4ed8'}">Disable</button>
+        <button onclick="event.stopPropagation();const bk2=AppData.bookings.find(b=>b.id==='${bk.id}');if(bk2){bk2.teacherDiscountDisabled=true;saveAll();openVenFinancials();}" style="padding:2px 9px;font-size:11px;background:#fff;border:1px solid ${anyEarned?'#86efac':'#bfdbfe'};border-radius:5px;cursor:pointer;font-family:'Jost',sans-serif;color:${anyEarned?'#15803d':'#1d4ed8'}">Disable</button>
       </div>
       <div style="padding:14px 16px">${tierRows}${creditSummary}</div>
     </div>`;
