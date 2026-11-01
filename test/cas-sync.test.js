@@ -8,18 +8,20 @@
 // `onUpdateAttempt` hook fired right before each conditional-update check.
 
 const assert = require('assert');
-const { casBuildBase, casUpdateOne, casSyncTable } = require('../modules/cas-sync.js');
+const { casBuildBase, casUpdateOne, casSyncTable, casSnapshotRow, casPendingRows } = require('../modules/cas-sync.js');
 
-function makeFakeDb(initialRows, { onUpdateAttempt } = {}) {
+function makeFakeDb(initialRows, { onUpdateAttempt, delayMs } = {}) {
   const serverRows = new Map(initialRows.map(r => [r.id, { ...r }]));
   let attempt = 0;
   function from() {
     return {
-      update(payload) {
+      update(payloadLive) {
+        const payload = JSON.parse(JSON.stringify(payloadLive)); // sent over the wire now, like the real client
         const filters = {};
         const builder = {
           eq(col, val) { filters[col] = val; return builder; },
           async select() {
+            if (delayMs) await new Promise(r => setTimeout(r, delayMs));
             attempt++;
             if (onUpdateAttempt) onUpdateAttempt(attempt, serverRows);
             const row = serverRows.get(filters.id);
@@ -83,7 +85,7 @@ async function test_happyPath() {
   const res = await casUpdateOne({ db, table: 'bookings', row: local, idOf, toSqlRow, fromSqlRow, base });
   assert.strictEqual(res.ok, true);
   assert.strictEqual(db._server.get('bk1').notes, 'new note');
-  assert.strictEqual(base.get('bk1').sqlJson, JSON.stringify(toSqlRow(local)), 'base must reflect what was written');
+  assert.strictEqual(base.get('bk1').sqlJson, casSnapshotRow(toSqlRow, local), 'base must reflect what was written');
 }
 
 // 2. Conflict on the first attempt, resolves on retry — and the other tab's
@@ -138,7 +140,7 @@ async function test_exhaustedConflictNeverLosesTheEdit() {
   assert.strictEqual(dirtyNow, false, 'row must still diff against base — i.e. still "dirty" for the next sync pass');
 }
 function casSnapshotRowMatchesBase(row, base, toSqlRow) {
-  return JSON.stringify(toSqlRow(row)) === base.get(row.id).sqlJson;
+  return casSnapshotRow(toSqlRow, row) === base.get(row.id).sqlJson;
 }
 
 // 4. Two tabs editing DIFFERENT fields of the same row at once, through the
@@ -265,6 +267,115 @@ async function test_updatedAtAloneIsNotAnEdit() {
   assert.strictEqual(db.attempts(), 0);
 }
 
+
+// Rows with a list column, for the tests below
+const toSqlL = r => ({ id: r.id, leader_name: r.leaderName, notes: r.notes, acts: r.acts === undefined ? null : r.acts });
+const fromSqlL = r => { const o = {}; if ('id' in r) o.id = r.id; if ('leader_name' in r) o.leaderName = r.leader_name; if ('notes' in r) o.notes = r.notes; if ('acts' in r) o.acts = r.acts; return o; };
+
+// 11. A second quick edit made while the first save is still in the air stays pending and is saved by the next save --
+//     never folded into the baseline unsent (the bug: date edit, then time edit within a second, time lost).
+async function test_editDuringSaveIsNotLost() {
+  const srv = { id: 'bk11', leader_name: 'Ana', notes: 'n0', acts: [{ aoId: 'ao1', date: '2027-01-01', time: '10:00' }], updated_at: '2026-01-01T00:00:00.000Z' };
+  const db = makeFakeDb([srv], { delayMs: 30 });
+  const local = fromSqlL(srv); local.acts = JSON.parse(JSON.stringify(srv.acts));
+  const base = casBuildBase([local], idOf, toSqlL, () => srv.updated_at);
+  local.acts[0].date = '2027-01-02';                               // edit 1
+  const first = casSyncTable({ db, table: 'bookings', rows: [local], idOf, toSqlRow: toSqlL, fromSqlRow: fromSqlL, base });
+  await new Promise(r => setTimeout(r, 5));
+  local.acts[0].time = '11:00'; local.notes = 'n1';               // edit 2, while edit 1 is in the air
+  await first;
+  assert.strictEqual(local.notes, 'n1', 'edit 2 still on screen');
+  assert.strictEqual(local.acts[0].time, '11:00', 'edit 2 still on screen');
+  const second = await casSyncTable({ db, table: 'bookings', rows: [local], idOf, toSqlRow: toSqlL, fromSqlRow: fromSqlL, base });
+  assert.strictEqual(second.updated, 1, 'next save sends edit 2');
+  const s = db._server.get('bk11');
+  assert.strictEqual(s.notes, 'n1'); assert.strictEqual(s.acts[0].time, '11:00'); assert.strictEqual(s.acts[0].date, '2027-01-02');
+}
+
+// 12. A list that was null and became [] in memory (a cleanup/render did it) is not an edit: no write, and on a merge it
+//     never wipes the list another tab just filled.
+async function test_nullToEmptyIsNotAnEdit() {
+  const srv = { id: 'bk12', leader_name: 'Bo', notes: 'x', acts: null, updated_at: '2026-01-01T00:00:00.000Z' };
+  const db = makeFakeDb([srv], {
+    onUpdateAttempt(attempt, server) {
+      if (attempt === 1) server.set('bk12', { ...server.get('bk12'), acts: [{ aoId: 'ao5', date: '2027-02-02' }], updated_at: '2026-01-02T00:00:00.000Z' });
+    },
+  });
+  const local = fromSqlL(srv);
+  const base = casBuildBase([local], idOf, toSqlL, () => srv.updated_at);
+  local.acts = [];
+  const r0 = await casSyncTable({ db, table: 'bookings', rows: [local], idOf, toSqlRow: toSqlL, fromSqlRow: fromSqlL, base });
+  assert.strictEqual(r0.updated, 0, '[] vs null alone is no write');
+  local.notes = 'real edit';                                       // a real edit on another column forces a write + merge
+  const r1 = await casSyncTable({ db, table: 'bookings', rows: [local], idOf, toSqlRow: toSqlL, fromSqlRow: fromSqlL, base });
+  assert.strictEqual(r1.updated, 1);
+  assert.deepStrictEqual(db._server.get('bk12').acts, [{ aoId: 'ao5', date: '2027-02-02' }], 'the other tab\'s new list survives');
+  assert.strictEqual(db._server.get('bk12').notes, 'real edit');
+  assert.deepStrictEqual(local.acts, [{ aoId: 'ao5', date: '2027-02-02' }], 'and shows on this screen');
+}
+
+// 13. Same content, different key order (jsonb returns keys in its own order) is not an edit
+async function test_keyOrderIsNotAnEdit() {
+  const srv = { id: 'bk13', leader_name: 'Cy', notes: 'x', acts: [{ date: '2027-01-01', aoId: 'ao1', time: '10:00' }], updated_at: '2026-01-01T00:00:00.000Z' };
+  const db = makeFakeDb([srv]);
+  const local = fromSqlL(srv);
+  const base = casBuildBase([local], idOf, toSqlL, () => srv.updated_at);
+  local.acts = [{ aoId: 'ao1', time: '10:00', date: '2027-01-01' }];
+  const res = await casSyncTable({ db, table: 'bookings', rows: [local], idOf, toSqlRow: toSqlL, fromSqlRow: fromSqlL, base });
+  assert.strictEqual(res.updated, 0);
+  assert.strictEqual(db.attempts(), 0);
+}
+
+// 14. Both tabs changed the same column: this tab wins (documented) and the row is reported as a conflict for the Sync Log
+async function test_sameColumnConflictIsReported() {
+  const srv = { id: 'bk14', leader_name: 'Di', notes: 'old', updated_at: '2026-01-01T00:00:00.000Z' };
+  const db = makeFakeDb([srv], {
+    onUpdateAttempt(attempt, server) { if (attempt === 1) server.set('bk14', { ...server.get('bk14'), notes: 'theirs', leader_name: 'Their Name', updated_at: '2026-01-02T00:00:00.000Z' }); },
+  });
+  const local = fromSqlRow(srv);
+  const base = casBuildBase([local], idOf, toSqlRow, () => srv.updated_at);
+  local.notes = 'mine';
+  const res = await casSyncTable({ db, table: 'bookings', rows: [local], idOf, toSqlRow, fromSqlRow, base });
+  assert.strictEqual(res.updated, 1);
+  assert.strictEqual(res.conflicts.length, 1);
+  assert.strictEqual(res.conflicts[0].reason, 'notes', 'only the column both changed is named');
+  assert.strictEqual(db._server.get('bk14').leader_name, 'Their Name');
+}
+
+// 15. A merge pulls another tab's column onto the screen, but never over an edit to that column made while saving
+async function test_mergeDoesNotOverwriteEditMadeMidSave() {
+  const srv = { id: 'bk15', leader_name: 'Ed', notes: 'old', updated_at: '2026-01-01T00:00:00.000Z' };
+  let local;
+  const db = makeFakeDb([srv], {
+    delayMs: 10,
+    onUpdateAttempt(attempt, server) {
+      if (attempt === 1) {
+        server.set('bk15', { ...server.get('bk15'), leader_name: 'Theirs', updated_at: '2026-01-02T00:00:00.000Z' });
+        local.leaderName = 'Mine typed mid-save';                   // this tab edits the same column while the save is retrying
+      }
+    },
+  });
+  local = fromSqlRow(srv);
+  const base = casBuildBase([local], idOf, toSqlRow, () => srv.updated_at);
+  local.notes = 'n';
+  await casSyncTable({ db, table: 'bookings', rows: [local], idOf, toSqlRow, fromSqlRow, base });
+  assert.strictEqual(local.leaderName, 'Mine typed mid-save', 'mid-save edit kept on screen');
+  const again = await casSyncTable({ db, table: 'bookings', rows: [local], idOf, toSqlRow, fromSqlRow, base });
+  assert.strictEqual(again.updated, 1, 'and saved next');
+  assert.strictEqual(db._server.get('bk15').leader_name, 'Mine typed mid-save');
+}
+
+// 16. casPendingRows: what a reload must keep (unsaved edits, new unsaved rows) and what it may replace
+async function test_pendingRows() {
+  const a = { id: 'a', leaderName: 'A', notes: 'x' }, b = { id: 'b', leaderName: 'B', notes: 'x' };
+  const base = casBuildBase([a, b], idOf, toSqlRow, () => 't0');
+  b.notes = 'edited';
+  const fresh = { id: 'id_' + Date.now() + '_new', leaderName: 'N', notes: '' };
+  const zombie = { id: 'id_1600000000000_old', leaderName: 'Z', notes: '' };
+  const pend = casPendingRows([a, b, fresh, zombie], idOf, toSqlRow, base, id => !/^id_1600/.test(id)).map(r => r.id);
+  assert.deepStrictEqual(pend, ['b', fresh.id]);
+}
+
 (async () => {
   await run('happy path, no conflict', test_happyPath);
   await run('conflict on attempt 1, resolves on retry, both edits survive', test_conflictThenResolve);
@@ -276,6 +387,12 @@ async function test_updatedAtAloneIsNotAnEdit() {
   await run('row deleted on another tab is reported gone at once, not retried', test_deletedElsewhereIsGone);
   await run('new row: first edit after creation saves on the first attempt', test_insertThenEditFirstAttempt);
   await run('only .updatedAt bumped by hand is not an edit', test_updatedAtAloneIsNotAnEdit);
+  await run('edit made while a save is in the air is not lost', test_editDuringSaveIsNotLost);
+  await run('null -> [] is not an edit and never wipes a list filled elsewhere', test_nullToEmptyIsNotAnEdit);
+  await run('same content in another key order is not an edit', test_keyOrderIsNotAnEdit);
+  await run('same column changed by both tabs is reported as a conflict', test_sameColumnConflictIsReported);
+  await run('merge never overwrites an edit made mid-save', test_mergeDoesNotOverwriteEditMadeMidSave);
+  await run('reload keeps pending rows only', test_pendingRows);
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();

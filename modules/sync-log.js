@@ -2,7 +2,7 @@
 // Loaded as a classic script AFTER double-charges.js; shares global scope. Standalone: adds a "Sync Log" tab under Double Charges
 // with a red count of entries nobody has reviewed yet.
 // Reads app_store 'cas_log:<time>_<rand>' rows (written by casLogEvent() in booking-hub.html: a save that failed after every retry,
-// or a row found deleted on another tab) and shows who, which booking / room, when and why. 'cas_log_reviewed' = { at, by } is
+// a row found deleted on another tab, or a conflict: two people changed the same field at once) and shows who, which booking / room, when and why. 'cas_log_reviewed' = { at, by } is
 // shared, so once someone marks the list reviewed the count clears for everyone.
 // Also the rollout switch (app_store 'cas_sync' = { mode }, see casSyncEnabled() in booking-hub.html): admins turn the new sync
 // off (emergency) / on for browsers that opted in with ?cas=1 / on for everyone, without opening Supabase.
@@ -15,8 +15,11 @@ const slIsAdmin = () => (typeof getCurrentSession === 'function' && getCurrentSe
 const SL_KIND = {
   failed: { label: 'No se guardó', color: '#b91c1c', bg: '#fee2e2' },
   gone: { label: 'Ya estaba borrado', color: '#92400e', bg: '#fef3c7' },
+  conflict: { label: 'Choque', color: '#1e40af', bg: '#dbeafe' },
 };
-const SL_REASON = r => r === 'exhausted' ? 'otra persona lo estaba editando al mismo tiempo y no se pudo guardar tras 10 intentos — el cambio sigue en su pantalla y se reintenta en su siguiente guardado'
+// conflict: saved fine, but another person had changed the same field(s) at the same time and this person's value won
+const SL_REASON = (r, kind) => kind === 'conflict' ? 'dos personas cambiaron lo mismo al mismo tiempo; quedó el cambio de esta persona — campo(s): ' + (r || '')
+  : r === 'exhausted' ? 'otra persona lo estaba editando al mismo tiempo y no se pudo guardar tras 10 intentos — el cambio sigue en su pantalla y se reintenta en su siguiente guardado'
   : r === 'gone' ? 'alguien lo borró en otra pestaña; se quitó también de la pantalla de esta persona'
   : r ? 'error de la base de datos: ' + r : '';
 const SL_MODES = [
@@ -108,7 +111,7 @@ function slRender() {
           <div><b style="font-size:14px">${slTime(r.at)}</b> · ${slEsc(r.user || 'sin usuario')} <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px;background:${k.bg};color:${k.color}">${slEsc(k.label)}</span>${isNew ? ' <span style="font-size:11px;color:#dc2626;font-weight:700">nuevo</span>' : ''}</div>
           <div style="font-size:11.5px;color:#8a7e74">${r.table === 'bookings' ? 'Reserva' : 'Registro'}${(r.items || []).length > 1 ? ` · ${(r.items || []).length}` : ''}</div></div>
         ${(r.items || []).map(it => `<div style="font-size:12.5px;margin-top:6px">${it.room ? `<b>Cuarto ${slEsc(it.room)}</b> · ` : ''}${it.leader ? slEsc(it.leader) + ' · ' : ''}<span style="color:#8a7e74">${slEsc(it.id)}</span>
-          <div style="font-size:11.5px;color:#6b7280">${slEsc(SL_REASON(it.reason || (r.kind === 'gone' ? 'gone' : '')))}</div>
+          <div style="font-size:11.5px;color:#6b7280">${slEsc(SL_REASON(it.reason || (r.kind === 'gone' ? 'gone' : ''), r.kind))}</div>
           ${r.table === 'registrations' && typeof openBookingDetailForReg === 'function' ? `<button onclick="openBookingDetailForReg('${slEsc(it.id)}','')" style="${btn};margin-top:4px">Abrir reserva</button>` : ''}</div>`).join('')}
       </div>`;
     }).join('')}</div></div>`;

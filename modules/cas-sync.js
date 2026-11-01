@@ -26,7 +26,35 @@
 // The row as SQL columns, without updated_at: that column is the CAS version stamp, never data, so code that still bumps
 // .updatedAt by hand (the old convention) doesn't by itself make a row look edited.
 function _casSql(toSqlRow,row){const sql={...toSqlRow(row)};delete sql.updated_at;return sql;}
-function casSnapshotRow(toSqlRow,row){return JSON.stringify(_casSql(toSqlRow,row));}
+// The value as compared, never as written: keys sorted (Postgres jsonb hands objects back in its own key order, so a list
+// rebuilt with the same content would otherwise look edited), and null/''/[]/{} all count as "empty" (a render that turns a
+// null list into [] is not an edit -- and must never win a merge over a list someone else just filled).
+function _casCanon(v){
+  if(v===undefined||v===null||v==='')return null;
+  if(Array.isArray(v)){if(!v.length)return null;return v.map(_casCanon);}
+  if(typeof v==='object'){
+    const out={};let n=0;
+    Object.keys(v).sort().forEach(k=>{const c=_casCanon(v[k]);if(c!==null){out[k]=c;n++;}});
+    return n?out:null;
+  }
+  return v;
+}
+function _casSame(a,b){return JSON.stringify(_casCanon(a))===JSON.stringify(_casCanon(b));}
+function _casSnapshotSql(sql){return JSON.stringify(_casCanon(sql));}
+function casSnapshotRow(toSqlRow,row){return _casSnapshotSql(_casSql(toSqlRow,row));}
+// A deep copy taken at the moment of saving: arrays/objects inside a row are shared with the live object, so without the
+// copy an edit made while the request is in the air would end up in the baseline without ever having been sent.
+function _casCopy(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));}
+// Puts the columns that came from the server (another tab's changes) onto the live object -- but only where this tab has not
+// edited that column again since the save started, so an edit made mid-save is never overwritten.
+function _casApplyServerCols(row,toSqlRow,fromSqlRow,cols,serverSql,sentSql){
+  if(!cols.length)return;
+  const now=_casSql(toSqlRow,row),patch={};
+  cols.forEach(col=>{if(_casSame(now[col],sentSql[col]))patch[col]=_casCopy(serverSql[col]);});
+  const fields=fromSqlRow(patch);
+  Object.keys(fields).forEach(f=>{if(fields[f]===undefined)delete fields[f];});
+  Object.assign(row,fields);
+}
 
 // Call once, right after loadFromSupabase() populates the live array, using
 // the REAL `updated_at` each row came back with from SQL -- that's the only
@@ -51,25 +79,24 @@ function _casBackoff(ms){return new Promise(res=>setTimeout(res,ms));}
 async function casUpdateOne({db,table,row,idOf,toSqlRow,fromSqlRow,base,maxAttempts}){
   const id=idOf(row);
   const known=base.get(id);
-  // Captured ONCE, before any retry -- must not be recomputed from `row` after
-  // a merge mutates it in place, or a second conflict on the same call would
-  // lose track of what this tab actually meant to change (diffing the
-  // already-merged state against itself would show no changes left).
-  const myIntendedSql=_casSql(toSqlRow,row);
+  // Captured ONCE, as a deep copy, before any await -- the live row can keep changing while this request is in the air
+  // (a second quick edit), and those later changes must stay pending for the next save, not be counted as sent.
+  const myIntendedSql=_casCopy(_casSql(toSqlRow,row));
   if(!known){
-    // No baseline for this id at all -- caller should normally route a
-    // genuinely new row through insert instead, but if it ends up here
-    // (e.g. a row this tab somehow never synced before), just write it
-    // unconditionally once and establish a baseline for next time.
+    // No baseline for this id at all -- casSyncTable never sends one here (unknown rows are looked up first), kept only
+    // as a safe fallback: write it once and establish a baseline for next time.
     const{data,error}=await db.from(table).update({...myIntendedSql,updated_at:new Date().toISOString()}).eq('id',id).select('*');
     if(error)return{ok:false,id,reason:error.message};
     if(!data||!data.length)return{ok:false,id,reason:'gone'};
-    base.set(id,{sqlJson:JSON.stringify(myIntendedSql),updatedAt:data[0].updated_at});
+    base.set(id,{sqlJson:_casSnapshotSql(myIntendedSql),updatedAt:data[0].updated_at});
     row.updatedAt=data[0].updated_at;
     return{ok:true,id};
   }
-  const oldSql=JSON.parse(known.sqlJson);
-  let payload=myIntendedSql,conditionUpdatedAt=known.updatedAt;
+  const oldSql=JSON.parse(known.sqlJson)||{};
+  // Columns this tab actually changed since its baseline -- the only ones it may write over someone else's value
+  const mine=new Set(Object.keys(myIntendedSql).filter(col=>!_casSame(myIntendedSql[col],oldSql[col])));
+  let payload=myIntendedSql,conditionUpdatedAt=known.updatedAt,fromServer=[];
+  const conflicts=new Set();
   for(let attempt=0;attempt<(maxAttempts||10);attempt++){
     const{data,error}=await db.from(table)
       .update({...payload,updated_at:new Date().toISOString()})
@@ -77,39 +104,46 @@ async function casUpdateOne({db,table,row,idOf,toSqlRow,fromSqlRow,base,maxAttem
       .select('*');
     if(error){await _casBackoff(400);continue;}
     if(data&&data.length){
-      base.set(id,{sqlJson:JSON.stringify(payload),updatedAt:data[0].updated_at});
-      Object.assign(row,fromSqlRow(payload));
+      base.set(id,{sqlJson:_casSnapshotSql(payload),updatedAt:data[0].updated_at});
+      _casApplyServerCols(row,toSqlRow,fromSqlRow,fromServer,payload,myIntendedSql);
       row.updatedAt=data[0].updated_at;
-      return{ok:true,id};
+      return{ok:true,id,conflicts:[...conflicts]};
     }
-    // Lost the race -- someone else wrote first. Re-read and merge column by
-    // column: a field wins only if THIS tab's intended value differs from its
-    // OWN last-known baseline (i.e. this tab genuinely changed it); every
-    // other field keeps whatever the fresh server row has, so a field the
-    // OTHER tab changed and this tab never touched survives untouched.
+    // Lost the race -- someone else wrote first. Re-read and merge column by column: a column this tab changed keeps this
+    // tab's value; every other column takes the fresh server value, so another tab's change to a column this tab never
+    // touched survives untouched.
     const{data:freshRow,error:fe}=await db.from(table).select('*').eq('id',id).maybeSingle();
     if(fe){await _casBackoff(400);continue;}
     // Deleted on another tab/device: nothing to merge into. Reported back as 'gone' so the caller drops it from memory --
     // retrying would only fail again on every save (and a recent id would otherwise get re-created by the insert path).
     if(!freshRow)return{ok:false,id,reason:'gone'};
-    const merged={};
+    const merged={};fromServer=[];
     for(const col in myIntendedSql){
-      merged[col]=(JSON.stringify(myIntendedSql[col])!==JSON.stringify(oldSql[col]))?myIntendedSql[col]:freshRow[col];
+      if(mine.has(col)){
+        merged[col]=myIntendedSql[col];
+        // Both sides changed the same column to different values: this tab's value wins (last write), logged so we can see it
+        if(!_casSame(freshRow[col],oldSql[col])&&!_casSame(freshRow[col],myIntendedSql[col]))conflicts.add(col);
+      }else{merged[col]=freshRow[col];fromServer.push(col);}
     }
     payload=merged;
     conditionUpdatedAt=freshRow.updated_at;
-    // Reflect the MERGED state on screen right away (my intended fields +
-    // their non-conflicting ones), not the raw fresh server row -- assigning
-    // the raw fresh row here would overwrite this tab's own pending edit back
-    // to the old value for every retry, and if every retry then fails, that
-    // edit is gone from the screen even though the merge logic itself never
-    // dropped it (real bug caught while building this: `payload`/`merged` is
-    // a local variable, thrown away on exhaustion -- `row` and `base` are the
-    // only state that survives, so `row` must already hold the right answer).
-    Object.assign(row,fromSqlRow(merged));
+    // Show the merged state right away (another tab's changes on the columns this tab did not touch). If every retry then
+    // fails, this tab's own pending edits are still on screen and still differ from the baseline, so the next save retries.
+    _casApplyServerCols(row,toSqlRow,fromSqlRow,fromServer,merged,myIntendedSql);
     await _casBackoff(80+Math.random()*220);
   }
   return{ok:false,id,reason:'exhausted'};
+}
+
+// Rows of the live array that still hold changes not saved yet (differ from their baseline), or that were created here and
+// never inserted. A reload must keep these instead of replacing them with the server copy, or the change is silently lost.
+function casPendingRows(rows,idOf,toSqlRow,base,isRecentLocalId){
+  return(rows||[]).filter(row=>{
+    const id=idOf(row);if(id==null)return false;
+    const known=base.get(id);
+    if(!known)return!isRecentLocalId||isRecentLocalId(id);
+    return casSnapshotRow(toSqlRow,row)!==known.sqlJson;
+  });
 }
 
 // Main entry point for a whole table's worth of live rows in one pass.
@@ -160,19 +194,20 @@ async function casSyncTable({db,table,rows,idOf,toSqlRow,fromSqlRow,base,deleted
     });
   }
 
-  const failed=[],gone=[];
+  const failed=[],gone=[],conflicts=[];
   let insertedCount=0,updatedCount=0;
 
   if(toInsert.length){
     // .select() so the baseline gets SQL's real updated_at -- a client-side "now" never matches it, and every row's first
     // edit after creation would then lose a CAS race against itself
-    const{data,error}=await db.from(table).insert(toInsert.map(row=>_casSql(toSqlRow,row))).select('*');
+    const sent=toInsert.map(row=>_casCopy(_casSql(toSqlRow,row)));
+    const{data,error}=await db.from(table).insert(sent).select('*');
     if(!error){
       insertedCount=toInsert.length;
       const byId=new Map((data||[]).map(r=>[r.id,r]));
-      toInsert.forEach(row=>{
+      toInsert.forEach((row,i)=>{
         const srv=byId.get(idOf(row));
-        base.set(idOf(row),{sqlJson:casSnapshotRow(toSqlRow,row),updatedAt:srv?srv.updated_at:null});
+        base.set(idOf(row),{sqlJson:_casSnapshotSql(sent[i]),updatedAt:srv?srv.updated_at:null});
         if(srv)row.updatedAt=srv.updated_at;
       });
     }else{
@@ -185,18 +220,19 @@ async function casSyncTable({db,table,rows,idOf,toSqlRow,fromSqlRow,base,deleted
     const chunk=toUpdate.slice(i,i+chunkSize);
     const results=await Promise.all(chunk.map(row=>casUpdateOne({db,table,row,idOf,toSqlRow,fromSqlRow,base})));
     results.forEach((res,idx)=>{
-      if(res.ok)updatedCount++;
+      if(res.ok){updatedCount++;if(res.conflicts&&res.conflicts.length)conflicts.push({id:res.id,row:chunk[idx],reason:res.conflicts.join(',')});}
       else if(res.reason==='gone'){gone.push(res.id);base.delete(res.id);}
       else failed.push({id:res.id,row:chunk[idx],reason:res.reason});
     });
   }
 
   // gone: deleted on another tab/device -- the caller removes them from memory so they are not offered again
-  return{inserted:insertedCount,updated:updatedCount,failed,gone,skippedZombies};
+  // conflicts: rows saved where another tab had changed one of the same columns (this tab's value won) -- logged by the caller
+  return{inserted:insertedCount,updated:updatedCount,failed,gone,skippedZombies,conflicts};
 }
 
 if(typeof module!=='undefined'&&module.exports){
   // Node test harness only (see test/cas-sync.test.js) -- a plain <script> tag
   // in the browser never sets `module`, so this never runs there.
-  module.exports={casSnapshotRow,casBuildBase,casUpdateOne,casSyncTable};
+  module.exports={casSnapshotRow,casBuildBase,casUpdateOne,casSyncTable,casPendingRows};
 }

@@ -4679,6 +4679,18 @@ function casLogEvent(kind,table,items){
 // with from SQL), and kept current by casSyncTable itself after that. Plain
 // objects, not used at all when casSyncEnabled() is off.
 let _bkBase=new Map(),_regBase=new Map();
+// True only once a load from SQL has succeeded and built the baselines above. Until then (the first seconds after opening the
+// page, while memory still holds this browser's possibly days-old localStorage copy -- or a whole session whose first load
+// failed) the CAS branch must not run: every row would adopt the server row as its baseline and the stale local copy would
+// then be written over it. Saves in that window take the old guarded path, exactly like before. Also reset by Restore backup.
+let _casBaseReady=false;
+// uid()-style ids carry their creation time: a recent one is a genuinely new local row, an old one missing from SQL is a
+// zombie (deleted elsewhere) that must never be re-created
+function _isRecentLocalId(id){
+  const m=/^id_(\d+)_/.exec(id||'');
+  if(!m)return true; // not a uid()-style id (e.g. a real UUID) — nothing to second-guess
+  return (Date.now()-parseInt(m[1],10))<24*60*60*1000;
+}
 async function syncToSupabase(){
   // Never write to Supabase from local file:// — prevents local dev from corrupting live data
   if(location.protocol==='file:')return;
@@ -4717,14 +4729,9 @@ async function syncToSupabase(){
   //    means it's a zombie, not a fresh local creation);
   //  - never overwrite an existing registration with a local copy unless the local
   //    copy's own updatedAt is newer than the row's current updated_at in Supabase.
-  function _isRecentLocalId(id){
-    const m=/^id_(\d+)_/.exec(id||'');
-    if(!m)return true; // not a uid()-style id (e.g. a real UUID) — nothing to second-guess
-    return (Date.now()-parseInt(m[1],10))<24*60*60*1000;
-  }
   const _bkRegSync=(async()=>{
     try{
-      if(casSyncEnabled()){
+      if(casSyncEnabled()&&_casBaseReady){
         const payRows=[];
         AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
         const[bkResult,regResult]=await Promise.all([
@@ -4747,6 +4754,7 @@ async function syncToSupabase(){
           if(typeof showToast==='function')showToast('ℹ '+(goneBk.size+goneReg.size)+' registro(s) ya habían sido borrados en otra pestaña — se quitaron de esta también.');
         }
         casLogEvent('failed','bookings',bkResult?.failed);casLogEvent('failed','registrations',regResult?.failed);
+        casLogEvent('conflict','bookings',bkResult?.conflicts);casLogEvent('conflict','registrations',regResult?.conflicts);
         casLogEvent('gone','bookings',(bkResult?.gone||[]).map(id=>({id})));casLogEvent('gone','registrations',(regResult?.gone||[]).map(id=>({id})));
         const allFailed=[...(bkResult?.failed||[]),...(regResult?.failed||[])];
         if(allFailed.length){
@@ -5060,7 +5068,16 @@ async function loadFromSupabase(){
     // the same live data retreat-portal.html already reads, and it's kept current by
     // active daily use, unlike the legacy app_store blob below. SQL wins outright.
     try{
+      // CAS: let saves already queued finish first, so this load does not read the server before they land
+      const _cas=casSyncEnabled()&&_casBaseReady;
+      if(_cas){try{await _saveAllBusy;}catch(e){}}
       const [sqlBookings,sqlRegs,sqlPayments]=await Promise.all([_fetchAllRows('bookings'),_fetchAllRows('registrations'),_fetchAllRows('payments')]);
+      // CAS: rows that still hold an unsaved change (edited while this load was in the air, or a save that failed and will be
+      // retried) keep this tab's copy and its old baseline -- replacing them with the server copy would drop the change
+      // without a word. The next save merges them like any other conflict.
+      const _keepBk=_cas?casPendingRows(AppData.bookings,b=>b.id,appBookingToSqlRow,_bkBase,_isRecentLocalId):[];
+      const _keepReg=_cas?casPendingRows(AppData.regs,r=>r.id,appRegToSqlRow,_regBase,_isRecentLocalId):[];
+      const _oldBkBase=_bkBase,_oldRegBase=_regBase;
       AppData.bookings=sqlBookings.map(sqlBookingToApp).filter(b=>!deletedBookingIds.has(b.id));
       const _paysByBk=new Map();
       sqlPayments.map(sqlPaymentToApp).filter(p=>!deletedPaymentIds.has(p.id)).forEach(p=>{const arr=_paysByBk.get(p.bookingId)||[];arr.push(p);_paysByBk.set(p.bookingId,arr);});
@@ -5075,6 +5092,17 @@ async function loadFromSupabase(){
       const _regUpdatedAtById=new Map(sqlRegs.map(r=>[r.id,r.updated_at]));
       _bkBase=casBuildBase(AppData.bookings,b=>b.id,appBookingToSqlRow,b=>_bkUpdatedAtById.get(b.id));
       _regBase=casBuildBase(AppData.regs,r=>r.id,appRegToSqlRow,r=>_regUpdatedAtById.get(r.id));
+      if(_keepBk.length||_keepReg.length){
+        const _put=(arr,keep,newBase,oldBase,onServer)=>keep.forEach(row=>{
+          const i=arr.findIndex(x=>x.id===row.id);
+          if(i>=0){arr[i]=row;if(oldBase.has(row.id))newBase.set(row.id,oldBase.get(row.id));}
+          else if(!onServer.has(row.id)&&!oldBase.has(row.id))arr.push(row); // created here, not inserted yet
+          // known row now missing from the server: deleted elsewhere -- let it go
+        });
+        _put(AppData.bookings,_keepBk.filter(b=>!deletedBookingIds.has(b.id)),_bkBase,_oldBkBase,_bkUpdatedAtById);
+        _put(AppData.regs,_keepReg.filter(r=>!deletedRegIds.has(r.id)),_regBase,_oldRegBase,_regUpdatedAtById);
+      }
+      _casBaseReady=true;
       if(typeof regSelBk!=='undefined'&&regSelBk){
         const _synced=AppData.bookings.find(b=>b.id===regSelBk.id);
         if(_synced){
@@ -5869,6 +5897,8 @@ function importData(e){
       AppData.roomTypes=data.roomTypes||DEF_ROOM_TYPES.map(r=>({...r}));
       AppData.regs=data.regs||[];
       if(data.venYear)venYear=data.venYear;
+      // back to the old guarded path until the next load rebuilds the baselines -- same result as before the safety net
+      _casBaseReady=false;
       saveAll();
       venBuild();
       showToast('Data restored from backup.');
@@ -6589,7 +6619,7 @@ function switchTab(id,btn){
 
 </script>
 <script src="modules/tab-urls.js?v=20261025a"></script>
-<script src="modules/cas-sync.js?v=20261022a"></script>
+<script src="modules/cas-sync.js?v=20261101a"></script>
 <script src="modules/venues.js?v=20261026b"></script>
 <script src="modules/booking-dates.js?v=20261026a"></script>
 <script src="modules/room-optimizer.js?v=20261020a"></script>
@@ -6918,7 +6948,7 @@ if(location.protocol!=='file:'){
 <script src="modules/menu-cost-edit.js?v=20261025a"></script>
 <script src="modules/menu-kitchen-costing.js?v=20261021a"></script>
 <script src="modules/double-charges.js?v=20261023a"></script>
-<script src="modules/sync-log.js?v=20261023a"></script>
+<script src="modules/sync-log.js?v=20261101a"></script>
 <script src="modules/checkout-balances.js?v=20261022a"></script>
 <script src="modules/host-checklist.js?v=20261029a"></script>
 <script src="modules/host-checklist-all.js?v=20261029d"></script>
