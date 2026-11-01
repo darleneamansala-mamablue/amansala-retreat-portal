@@ -976,11 +976,13 @@ function gSave(){
       const _guestNoteLines=guests.filter(g=>g.name&&g.notes).map(g=>`${g.name}: ${g.notes}`);
       const _allNotes=[notes,..._guestNoteLines].filter(Boolean).join('\n');
       console.log('[CB updateGuest] resId='+_cbResId+' guestId='+_cbGuestId+' name='+_guestName);
+      // the answer can take a while: write it on the booking/room this was sent for, not whatever is open by then
+      const _cbBk=regSelBk,_cbRoom=gEditRoom;
       fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({reservationId:_cbResId,guestId:_cbGuestId,roomName:gEditRoom||'',startDate:checkIn||regSelBk.startDate||'',endDate:checkOut||regSelBk.endDate||'',guestFirstName:_guestName,groupName:regSelBk.retreatName||regSelBk.row||'',leaderName:regSelBk.leaderName||'',adults:_adultCount,dailyRate:0,adjustmentId:_prevAdjId,notes:_allNotes,noteId:_prevNoteId})
       }).then(r=>r.json()).then(d=>{
         console.log('[CB updateGuest result]',JSON.stringify(d).slice(0,300));
-        if(d.reservationId){regSelBk.cbReservationIds[gEditRoom]=d.reservationId;if(d.guestId){if(!regSelBk.cbGuestIds)regSelBk.cbGuestIds={};regSelBk.cbGuestIds[gEditRoom]=d.guestId;}if(!regSelBk.cbAdjustmentIds)regSelBk.cbAdjustmentIds={};regSelBk.cbAdjustmentIds[gEditRoom]=d.adjustmentId||null;if(!regSelBk.cbNoteIds)regSelBk.cbNoteIds={};if(d.noteId)regSelBk.cbNoteIds[gEditRoom]=d.noteId;else if(d.noteDeleted)regSelBk.cbNoteIds[gEditRoom]=null;saveAll();}
+        if(d.reservationId){_cbBk.cbReservationIds[_cbRoom]=d.reservationId;if(d.guestId){if(!_cbBk.cbGuestIds)_cbBk.cbGuestIds={};_cbBk.cbGuestIds[_cbRoom]=d.guestId;}if(!_cbBk.cbAdjustmentIds)_cbBk.cbAdjustmentIds={};_cbBk.cbAdjustmentIds[_cbRoom]=d.adjustmentId||null;if(!_cbBk.cbNoteIds)_cbBk.cbNoteIds={};if(d.noteId)_cbBk.cbNoteIds[_cbRoom]=d.noteId;else if(d.noteDeleted)_cbBk.cbNoteIds[_cbRoom]=null;saveAll();}
       }).catch(e=>console.warn('[CB updateGuest]',e));
     }
   }
@@ -1013,18 +1015,20 @@ function gDelete(){
     if(_cbResId&&reg.guests[0]?.name){
       const _names=reg.guests.filter(g=>g.name).map(g=>g.name);
       const _prevAdjId=(regSelBk.cbAdjustmentIds||{})[gEditRoom]||null;
+      // the answer can take a while: write it on the booking/room this was sent for, not whatever is open by then
+      const _cbBk=regSelBk,_cbRoom=gEditRoom;
       fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({reservationId:_cbResId,roomName:gEditRoom||'',startDate:regSelBk.startDate||'',endDate:regSelBk.endDate||'',guestFirstName:_names.join(' & '),groupName:regSelBk.retreatName||regSelBk.row||'',leaderName:regSelBk.leaderName||'',adults:_names.length,adjustmentId:_prevAdjId,isGuestRemoval:true})
       }).then(r=>r.json()).then(d=>{
-        if(!regSelBk.cbAdjustmentIds)regSelBk.cbAdjustmentIds={};
-        regSelBk.cbAdjustmentIds[gEditRoom]=d.adjustmentId||null;
+        if(!_cbBk.cbAdjustmentIds)_cbBk.cbAdjustmentIds={};
+        _cbBk.cbAdjustmentIds[_cbRoom]=d.adjustmentId||null;
         // updateReservationGuest can fall back server-side to cancel+recreate — capture
         // the new reservationId or the next sync/push can't find this room and
         // creates a duplicate reservation.
         if(d.reservationId&&d.reservationId!==_cbResId){
-          if(!regSelBk.cbReservationIds)regSelBk.cbReservationIds={};
-          regSelBk.cbReservationIds[gEditRoom]=d.reservationId;
-          if(d.guestId){if(!regSelBk.cbGuestIds)regSelBk.cbGuestIds={};regSelBk.cbGuestIds[gEditRoom]=d.guestId;}
+          if(!_cbBk.cbReservationIds)_cbBk.cbReservationIds={};
+          _cbBk.cbReservationIds[_cbRoom]=d.reservationId;
+          if(d.guestId){if(!_cbBk.cbGuestIds)_cbBk.cbGuestIds={};_cbBk.cbGuestIds[_cbRoom]=d.guestId;}
         }
         saveAll();
       }).catch(e=>console.warn('[CB update after partial remove]',e));
@@ -1038,16 +1042,18 @@ function gDelete(){
     if(_rid){
       {
         const _prevAdjIdDel=(regSelBk.cbAdjustmentIds||{})[gEditRoom]||null;
+        // the answer can take a while: write it on the booking/room this was sent for, not whatever is open by then
+        const _cbBk=regSelBk,_cbRoom=gEditRoom;
         fetch(`${CLOUDBEDS_PROXY}?action=updateReservationGuest`,{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({reservationId:_rid,roomName:gEditRoom||'',startDate:regSelBk.startDate||'',endDate:regSelBk.endDate||'',guestFirstName:'',groupName:regSelBk.retreatName||regSelBk.row||'',leaderName:regSelBk.leaderName||'',adults:1,adjustmentId:_prevAdjIdDel,isGuestRemoval:true})
         }).then(r=>r.json()).then(d=>{
-          if(d.guestId){if(!regSelBk.cbGuestIds)regSelBk.cbGuestIds={};regSelBk.cbGuestIds[gEditRoom]=d.guestId;}
-          if(!regSelBk.cbAdjustmentIds)regSelBk.cbAdjustmentIds={};
-          regSelBk.cbAdjustmentIds[gEditRoom]=d.adjustmentId||null;
+          if(d.guestId){if(!_cbBk.cbGuestIds)_cbBk.cbGuestIds={};_cbBk.cbGuestIds[_cbRoom]=d.guestId;}
+          if(!_cbBk.cbAdjustmentIds)_cbBk.cbAdjustmentIds={};
+          _cbBk.cbAdjustmentIds[_cbRoom]=d.adjustmentId||null;
           // Same cancel+recreate fallback risk as above — capture the new reservationId.
           if(d.reservationId&&d.reservationId!==_rid){
-            if(!regSelBk.cbReservationIds)regSelBk.cbReservationIds={};
-            regSelBk.cbReservationIds[gEditRoom]=d.reservationId;
+            if(!_cbBk.cbReservationIds)_cbBk.cbReservationIds={};
+            _cbBk.cbReservationIds[_cbRoom]=d.reservationId;
           }
           saveAll();
         }).catch(e=>console.warn('[CB reset guest]',e));

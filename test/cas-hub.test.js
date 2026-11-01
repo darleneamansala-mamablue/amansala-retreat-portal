@@ -286,6 +286,91 @@ async function test_legacyOn() {
   assert.ok(db.log.some(l => l.table === 'bookings' && l.op === 'update'));
 }
 
+// ---- Payments ---------------------------------------------------------------------------------------------------------
+const pay = (id, bkId, amount, extra) => ({ id, booking_id: bkId, amount, date: '2026-11-01', method: 'stripe', ref: '', note: '', staff_name: 'S', created_at: '2026-11-01T00:00:00.000Z', ...extra });
+// 17. A payment edited on another computer is not put back to the old amount by a tab opened earlier
+async function test_paymentEditNotReverted() {
+  const db = fakeDb({ bookings: [bk('b1')], payments: [pay('p1', 'b1', 1000)], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  db.T.payments.set('p1', { ...db.T.payments.get('p1'), amount: 1200 });       // corrected elsewhere
+  t.AppData.bookings[0].notes = 'unrelated'; t.saveAll(); await flush(t);
+  assert.strictEqual(db.T.payments.get('p1').amount, 1200);
+}
+// 18. A payment deleted on another computer does not come back from a tab that still has it
+async function test_deletedPaymentNotResurrected() {
+  const db = fakeDb({ bookings: [bk('b1')], payments: [pay('p1', 'b1', 1000), pay('p2', 'b1', 500)], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  db.T.payments.delete('p2');                                                    // deleted elsewhere
+  db.T.app_store.set('deletedPaymentIds', { key: 'deletedPaymentIds', value: ['p2'] });
+  t.AppData.bookings[0].notes = 'unrelated'; t.saveAll(); await flush(t);
+  assert.ok(!db.T.payments.has('p2'), 'not re-created');
+  assert.deepStrictEqual(db.T.app_store.get('deletedPaymentIds').value, ['p2'], 'and the deleted list keeps it');
+}
+// 19. A payment recorded here is saved; an edit here is saved; a delete here is saved and listed
+async function test_paymentAddEditDelete() {
+  const db = fakeDb({ bookings: [bk('b1')], payments: [pay('p1', 'b1', 1000)], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  const b = t.AppData.bookings[0];
+  b.payments.push({ id: 'id_' + Date.now() + '_pnew', amount: 300, date: '2026-11-01', method: 'cash', ref: '', note: '', ts: '2026-11-01T01:00:00.000Z' });
+  b.payments[0].amount = 1100;
+  t.saveAll(); await flush(t);
+  assert.strictEqual(db.T.payments.get('p1').amount, 1100);
+  assert.ok([...db.T.payments.keys()].some(k => k.endsWith('_pnew')));
+  const before = db.log.filter(l => l.table === 'payments' && l.op === 'upsert').length;
+  t.saveAll(); await flush(t);
+  assert.strictEqual(db.log.filter(l => l.table === 'payments' && l.op === 'upsert').length, before, 'nothing re-sent when nothing changed');
+}
+// 20. Deleted lists from two computers are joined, not overwritten
+async function test_tombstonesJoined() {
+  const db = fakeDb({ bookings: [bk('b1')], app_store: [casOn, { key: 'deletedPaymentIds', value: ['pX'] }] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  db.T.app_store.set('deletedPaymentIds', { key: 'deletedPaymentIds', value: ['pX', 'pY'] });   // other computer deletes pY
+  t.saveAll(); await flush(t);
+  assert.deepStrictEqual([...db.T.app_store.get('deletedPaymentIds').value].sort(), ['pX', 'pY']);
+}
+// 21. A payment recorded here survives a reload that happens before it is saved
+async function test_pendingPaymentSurvivesReload() {
+  const db = fakeDb({ bookings: [bk('b1')], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  t.AppData.bookings[0].payments.push({ id: 'id_' + Date.now() + '_pq', amount: 70, date: '2026-11-01', method: 'cash', ts: '2026-11-01T01:00:00.000Z' });
+  await t.loadFromSupabase();
+  assert.ok(t.AppData.bookings[0].payments.some(p => p.id.endsWith('_pq')));
+}
+
+// ---- Cloudbeds answers arriving after a reload ------------------------------------------------------------------------
+// 22. A screen holds a booking, asks Cloudbeds, the page reloads meanwhile (2-minute refresh), then the answer arrives and
+//     the new reservation id is written on the held booking: it must be saved (before: written on a detached copy, lost)
+async function test_cloudbedsAnswerAfterReloadIsSaved() {
+  const db = fakeDb({ bookings: [bk('b1', { cb_reservation_ids: { '10': 'R1' }, blocked_rooms: ['10'] })], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  const held = t.AppData.bookings[0];                       // e.g. ozExecuteMove's `bk`, before `await fetch(...)`
+  db.T.bookings.set('b1', { ...db.T.bookings.get('b1'), notes: 'edited elsewhere meanwhile', updated_at: stamp() });
+  await t.loadFromSupabase();                                // reload while waiting for Cloudbeds
+  assert.strictEqual(held.notes, 'edited elsewhere meanwhile', 'the held object got the fresh values');
+  held.cbReservationIds = { ...held.cbReservationIds, '12': 'R2' };   // Cloudbeds answered
+  t.saveAll(); await flush(t);
+  assert.deepStrictEqual(db.T.bookings.get('b1').cb_reservation_ids, { '10': 'R1', '12': 'R2' });
+  assert.strictEqual(db.T.bookings.get('b1').notes, 'edited elsewhere meanwhile');
+}
+// 23. Same for a registration held across a reload
+async function test_heldRegistrationStaysLive() {
+  const db = fakeDb({ bookings: [bk('b1')], registrations: [{ id: 'g1', booking_id: 'b1', room: '10', guests: [{ name: 'A' }], updated_at: '2026-11-01T00:00:00.000+00:00' }], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  const held = t.AppData.regs[0];
+  await t.loadFromSupabase();
+  assert.strictEqual(t.AppData.regs[0], held, 'same object after reload');
+  held.room = '11';
+  t.saveAll(); await flush(t);
+  assert.strictEqual(db.T.registrations.get('g1').room, '11');
+}
+
 (async () => {
   await run('save before first load never overwrites with the old local copy', test_saveBeforeLoadDoesNotOverwrite);
   await run('failed first load keeps the gate closed', test_failedLoadKeepsGateClosed);
@@ -298,6 +383,13 @@ async function test_legacyOn() {
   await run('switch off = old path', test_switchOffUsesOldPath);
   await run('same-field conflict goes to the Sync Log', test_conflictLogged);
   await run("legacy 'on' still counts as on", test_legacyOn);
+  await run('payment edited elsewhere is not reverted', test_paymentEditNotReverted);
+  await run('payment deleted elsewhere does not come back', test_deletedPaymentNotResurrected);
+  await run('payment add / edit saved, nothing re-sent when unchanged', test_paymentAddEditDelete);
+  await run('deleted lists from two computers are joined', test_tombstonesJoined);
+  await run('payment recorded here survives a reload before saving', test_pendingPaymentSurvivesReload);
+  await run('Cloudbeds answer arriving after a reload is saved', test_cloudbedsAnswerAfterReloadIsSaved);
+  await run('registration held across a reload stays live', test_heldRegistrationStaysLive);
   await run('direct write of a settings column is joined, not overwritten', test_directWriteJoinedNotOverwritten);
   await run('direct write not in memory: written, and an undo elsewhere stands', test_directWriteNotInMemoryPatchesBase);
   await run('switch off: direct writes unchanged', test_directWriteSwitchOff);

@@ -4756,6 +4756,31 @@ function _casDirectUpdate(table,payload,st,exec){
     return r;
   });
 }
+// Payments (their own table, no updated_at). Every save used to upsert EVERY payment this tab had in memory: a tab opened
+// before someone edited a payment put the old amount back, and one still holding a payment deleted elsewhere created it
+// again. Now only what this tab added or changed since its last load/save is written (diffed against _payBase, built at
+// load), and nothing is written for payments before the first load except ones created here in the last day.
+let _payBase=new Map();
+const _paySnap=(p,bkId)=>_casSnapshotSql(appPaymentToSqlRow(p,bkId));
+function _payPending(){
+  const out=[];
+  AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>(bk.payments||[]).forEach(p=>{
+    if(!p||!p.id||deletedPaymentIds.has(p.id))return;
+    if(!_casBaseReady){if(/^id_\d+_/.test(p.id)&&_isRecentLocalId(p.id))out.push({p,bkId:bk.id});return;}
+    if(_payBase.get(p.id)!==_paySnap(p,bk.id))out.push({p,bkId:bk.id});
+  }));
+  return out;
+}
+function _paySync(){
+  const pend=_payPending();
+  return Promise.all([
+    pend.length?db.from('payments').upsert(pend.map(x=>appPaymentToSqlRow(x.p,x.bkId))).then(({error})=>{
+      if(!error)pend.forEach(x=>_payBase.set(x.p.id,_paySnap(x.p,x.bkId)));
+      else console.warn('[payments] save failed, will retry next save:',error.message);
+    }):null,
+    deletedPaymentIds.size?db.from('payments').delete().in('id',[...deletedPaymentIds]):null,
+  ]);
+}
 async function syncToSupabase(){
   // Never write to Supabase from local file:// — prevents local dev from corrupting live data
   if(location.protocol==='file:')return;
@@ -4797,15 +4822,12 @@ async function syncToSupabase(){
   const _bkRegSync=(async()=>{
     try{
       if(casSyncEnabled()&&_casBaseReady){
-        const payRows=[];
-        AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
         const[bkResult,regResult]=await Promise.all([
           casSyncTable({db:_dbRaw,table:'bookings',serverWins:_CAS_BK_SERVER_WINS,rows:AppData.bookings,idOf:b=>b.id,toSqlRow:appBookingToSqlRow,fromSqlRow:sqlBookingToApp,base:_bkBase,deletedIds:deletedBookingIds,isRecentLocalId:_isRecentLocalId}),
           casSyncTable({db:_dbRaw,table:'registrations',rows:AppData.regs.filter(r=>!deletedBookingIds.has(r.bookingId)),idOf:r=>r.id,toSqlRow:appRegToSqlRow,fromSqlRow:sqlRegToApp,base:_regBase,deletedIds:deletedRegIds,isRecentLocalId:_isRecentLocalId}),
           deletedBookingIds.size?db.from('bookings').delete().in('id',[...deletedBookingIds]):null,
           deletedRegIds.size?db.from('registrations').delete().in('id',[...deletedRegIds]):null,
-          payRows.length?db.from('payments').upsert(payRows):null,
-          deletedPaymentIds.size?db.from('payments').delete().in('id',[...deletedPaymentIds]):null,
+          _paySync(),
         ]);
         deletedBookingIds.forEach(id=>_bkBase.delete(id));
         deletedRegIds.forEach(id=>_regBase.delete(id));
@@ -4932,8 +4954,7 @@ async function syncToSupabase(){
       // that (it only adds/updates rows), so a payment removed locally would silently
       // survive in Supabase and reappear on the next full reload. deletedPaymentIds
       // mirrors deletedBookingIds/deletedRegIds below to actually delete those rows.
-      const payRows=[];
-      AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)).forEach(bk=>{(bk.payments||[]).forEach(p=>payRows.push(appPaymentToSqlRow(p,bk.id)));});
+      // Only payments added or changed in this tab (_paySync above)
       // These calls are all independent (different tables / disjoint id sets), so run them
       // concurrently instead of one-at-a-time — a save was taking the SUM of every round-trip
       // (each re-upserting the full bookings/registrations arrays), now it takes the MAX.
@@ -4942,8 +4963,7 @@ async function syncToSupabase(){
         deletedBookingIds.size?db.from('bookings').delete().in('id',[...deletedBookingIds]):null,
         regRows.length?db.from('registrations').upsert(regRows):null,
         deletedRegIds.size?db.from('registrations').delete().in('id',[...deletedRegIds]):null,
-        payRows.length?db.from('payments').upsert(payRows):null,
-        deletedPaymentIds.size?db.from('payments').delete().in('id',[...deletedPaymentIds]):null,
+        _paySync(),
       ]);
       // The upsert succeeded — this tab's copy of every booking it just wrote is now the
       // latest version, so record that locally (approximating the server trigger's own
@@ -4979,6 +4999,15 @@ async function syncToSupabase(){
       // admin-staff.js) -- this legacy key is just abandoned going forward,
       // never read or written here again.
       const _contentKeys=['venRows','programBlocks','specialEvents','teacher_messages'];
+      // Deleted-id lists: join with what is on the server, never overwrite it -- a tab opened earlier used to write its
+      // own shorter list back, dropping deletions made since on other computers (and the deleted payment came back)
+      try{
+        const {data:tombRows}=await db.from('app_store').select('key,value').in('key',['deletedBookingIds','deletedRegIds','deletedPaymentIds']);
+        const _tomb=k=>(tombRows||[]).find(r=>r.key===k)?.value;
+        (Array.isArray(_tomb('deletedBookingIds'))?_tomb('deletedBookingIds'):[]).forEach(id=>deletedBookingIds.add(id));
+        (Array.isArray(_tomb('deletedRegIds'))?_tomb('deletedRegIds'):[]).forEach(id=>deletedRegIds.add(id));
+        (Array.isArray(_tomb('deletedPaymentIds'))?_tomb('deletedPaymentIds'):[]).forEach(id=>deletedPaymentIds.add(id));
+      }catch(e){}
       const {data:freshRows}=await db.from('app_store').select('key,updated_at').in('key',_contentKeys);
       const freshMap=new Map((freshRows||[]).map(r=>[r.key,r.updated_at]));
       const _candidates=[
@@ -5143,11 +5172,33 @@ async function loadFromSupabase(){
       const _keepBk=_cas?casPendingRows(AppData.bookings,b=>b.id,appBookingToSqlRow,_bkBase,_isRecentLocalId):[];
       const _keepReg=_cas?casPendingRows(AppData.regs,r=>r.id,appRegToSqlRow,_regBase,_isRecentLocalId):[];
       const _oldBkBase=_bkBase,_oldRegBase=_regBase;
+      const _oldBks=AppData.bookings,_oldRegs=AppData.regs;
+      // payments added/changed here and not saved yet survive the reload (put back on the fresh bookings below)
+      const _keepPays=_casBaseReady?_payPending():[];
       AppData.bookings=sqlBookings.map(sqlBookingToApp).filter(b=>!deletedBookingIds.has(b.id));
       const _paysByBk=new Map();
       sqlPayments.map(sqlPaymentToApp).filter(p=>!deletedPaymentIds.has(p.id)).forEach(p=>{const arr=_paysByBk.get(p.bookingId)||[];arr.push(p);_paysByBk.set(p.bookingId,arr);});
       AppData.bookings.forEach(bk=>{bk.payments=_paysByBk.get(bk.id)||[];});
+      _payBase=new Map(sqlPayments.map(r=>{const p=sqlPaymentToApp(r);return[p.id,_paySnap(p,r.booking_id)];}));
+      _keepPays.forEach(({p,bkId})=>{
+        const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||deletedPaymentIds.has(p.id))return;
+        const i=bk.payments.findIndex(x=>x.id===p.id);
+        if(i>=0)bk.payments[i]=p;else bk.payments.push(p);
+      });
       AppData.regs=sqlRegs.map(sqlRegToApp).filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId));
+      // CAS: refresh each booking/registration IN PLACE (same object, new values) instead of swapping in new objects. Code
+      // still holding a row across an await -- a Cloudbeds call answering 15-25 s later, an open modal, the Optimizer --
+      // then writes its result (new reservation id, guest id...) on the live row that gets saved, not on a detached copy
+      // that nothing saves (lost ids -> duplicate Cloudbeds reservations). Rows with unsaved changes are left as they are
+      // (kept below).
+      if(_cas){
+        const _inPlace=(oldArr,newArr,keep)=>{
+          const byId=new Map(oldArr.map(o=>[o.id,o])),skip=new Set(keep.map(r=>r.id));
+          return newArr.map(n=>{const o=byId.get(n.id);if(!o||o===n||skip.has(n.id))return n;Object.assign(o,n);return o;});   // a kept row goes back in below, after the baselines are built from the server copy
+        };
+        AppData.bookings=_inPlace(_oldBks,AppData.bookings,_keepBk);
+        AppData.regs=_inPlace(_oldRegs,AppData.regs,_keepReg);
+      }
       // CAS sync baseline (see cas-sync.js / syncToSupabase's casSyncEnabled()
       // branch) -- the REAL updated_at each row just came back with from SQL
       // is the only trustworthy "last known good" snapshot to diff future
@@ -6724,7 +6775,7 @@ function switchTab(id,btn){
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20261101a"></script>
+<script src="modules/room-blocking.js?v=20261101b"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====
