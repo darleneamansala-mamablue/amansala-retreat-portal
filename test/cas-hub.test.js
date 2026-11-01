@@ -67,7 +67,7 @@ function makeTab(db, localStore) {
   vm.createContext(ctx);
   vm.runInContext(ENGINE + '\nconst AppData={bookings:[],venRows:[],roomTypes:[],regs:[],teacherMessages:[],programBlocks:[],specialEvents:[]};\n' +
     'let deletedBookingIds=new Set(),deletedRegIds=new Set(),deletedPaymentIds=new Set(),regSelBk=null,_lastLocalSaveAt=0,_appStoreUpdatedAt={},PortalSettings={};\n' +
-    HUB + '\nthis.T={bkCfgSet,toasts,db,casAfterFetch,casAfterPartialFetch,get AppData(){return AppData},saveAll,loadFromSupabase,syncToSupabase,get ready(){return _casBaseReady},set ready(v){_casBaseReady=v},sqlBookingToApp,sqlRegToApp,get busy(){return _saveAllBusy}};', ctx);
+    HUB + '\nthis.T={set clashMs(v){_CAS_CLASH_RECHECK_MS=v},bkCfgSet,toasts,db,casAfterFetch,casAfterPartialFetch,get AppData(){return AppData},saveAll,loadFromSupabase,syncToSupabase,get ready(){return _casBaseReady},set ready(v){_casBaseReady=v},sqlBookingToApp,sqlRegToApp,get busy(){return _saveAllBusy}};', ctx);
   return ctx.T;
 }
 const flush = async t => { await t.busy; await new Promise(r => setTimeout(r, 5)); await t.busy; };
@@ -399,9 +399,10 @@ async function test_doubleRoomWarned() {
   const t = makeTab(db);
   await t.loadFromSupabase();
   // someone else moved b1 into room 12 meanwhile; this screen (older) moves b2 into room 12 too
+  t.clashMs = 20;
   db.T.bookings.set('b1', { ...db.T.bookings.get('b1'), blocked_rooms: ['12'], updated_at: stamp() });
   t.AppData.bookings.find(b => b.id === 'b2').blockedRooms = ['12'];
-  t.saveAll(); await flush(t); await new Promise(r => setTimeout(r, 30));
+  t.saveAll(); await flush(t); await new Promise(r => setTimeout(r, 80));
   assert.ok(t.toasts.some(m => m.includes('Cuarto 12')), 'warned: ' + JSON.stringify(t.toasts));
   const logs = [...db.T.app_store.keys()].filter(k => k.startsWith('cas_log:')).map(k => db.T.app_store.get(k).value);
   assert.ok(logs.some(v => v.kind === 'double'), 'logged');
@@ -411,8 +412,9 @@ async function test_noFalseDoubleRoom() {
   const db = fakeDb({ bookings: [bk('b1', { start_date: '2027-01-10', end_date: '2027-01-15', blocked_rooms: ['12'] }), bk('b2', { start_date: '2027-01-15', end_date: '2027-01-18', blocked_rooms: ['20'] })], app_store: [casOn] });
   const t = makeTab(db);
   await t.loadFromSupabase();
+  t.clashMs = 20;
   t.AppData.bookings.find(b => b.id === 'b2').blockedRooms = ['12'];   // b1 checks out the day b2 arrives
-  t.saveAll(); await flush(t); await new Promise(r => setTimeout(r, 30));
+  t.saveAll(); await flush(t); await new Promise(r => setTimeout(r, 80));
   assert.ok(!t.toasts.some(m => m.includes('Cuarto')), JSON.stringify(t.toasts));
 }
 
@@ -443,6 +445,21 @@ async function test_upgradeNoteColumn() {
   assert.strictEqual(db.T.registrations.get('g1').upgrade_group_note, 'Upgrade A');
 }
 
+// 29. A swap between two retreats (room passes through "both" for a second): no warning
+async function test_swapIsNotDouble() {
+  const db = fakeDb({ bookings: [bk('mon', { start_date: '2026-11-01', end_date: '2026-11-06', blocked_rooms: ['29', '33'] }), bk('beth', { start_date: '2026-11-01', end_date: '2026-11-06', blocked_rooms: ['30'] })], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  t.clashMs = 40;
+  t.AppData.bookings.find(b => b.id === 'beth').blockedRooms = ['30', '29'];
+  t.saveAll(); await flush(t);
+  // the second half of the swap lands a moment later
+  db.T.bookings.set('mon', { ...db.T.bookings.get('mon'), blocked_rooms: ['33', '30'], updated_at: stamp() });
+  await new Promise(r => setTimeout(r, 120));
+  assert.ok(!t.toasts.some(m => m.includes('Cuarto')), JSON.stringify(t.toasts));
+  assert.ok(![...db.T.app_store.keys()].some(k => k.startsWith('cas_log:')), 'nothing logged');
+}
+
 (async () => {
   await run('save before first load never overwrites with the old local copy', test_saveBeforeLoadDoesNotOverwrite);
   await run('failed first load keeps the gate closed', test_failedLoadKeepsGateClosed);
@@ -467,6 +484,7 @@ async function test_upgradeNoteColumn() {
   await run('no false warning (free room, back-to-back dates)', test_noFalseDoubleRoom);
   await run('extra packages and discount survive a reload', test_extraPackagesAndDiscountSurviveReload);
   await run('upgrade group note saved once the column exists', test_upgradeNoteColumn);
+  await run('a swap between two retreats is not a double room', test_swapIsNotDouble);
   await run('direct write of a settings column is joined, not overwritten', test_directWriteJoinedNotOverwritten);
   await run('direct write not in memory: written, and an undo elsewhere stands', test_directWriteNotInMemoryPatchesBase);
   await run('switch off: direct writes unchanged', test_directWriteSwitchOff);

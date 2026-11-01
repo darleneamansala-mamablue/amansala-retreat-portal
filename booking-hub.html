@@ -4795,23 +4795,36 @@ function _casRoomsAdded(){
   });
   return out;
 }
+// A swap between two retreats (or any move done as two saves) passes for a moment through a state where both hold the room
+// -- real case 2026-11-01, room 29 between Monica and Beth Stuart, saved 1 s apart. So look twice, a few seconds apart, using
+// the server copy of BOTH bookings, and only warn about what is still double the second time.
+let _CAS_CLASH_RECHECK_MS=6000;
+async function _casRoomClashes(added){
+  const ids=[...new Set(added.map(a=>a.id))];
+  const{data:mine,error:e1}=await db.from('bookings').select('id,leader_name,retreat_name,status,start_date,end_date,blocked_rooms').in('id',ids);
+  if(e1||!mine||!mine.length)return[];
+  const from=mine.reduce((m,b)=>b.start_date<m?b.start_date:m,mine[0].start_date),to=mine.reduce((m,b)=>b.end_date>m?b.end_date:m,mine[0].end_date);
+  const{data,error}=await db.from('bookings').select('id,leader_name,retreat_name,status,start_date,end_date,blocked_rooms').lt('start_date',to).gt('end_date',from);
+  if(error||!data)return[];
+  const out=[];
+  added.forEach(({id,room})=>{
+    const bk=mine.find(b=>b.id===id);
+    if(!bk||bk.status==='cancelled'||!roomListIncludes(bk.blocked_rooms,room))return;
+    const other=data.find(o=>o.id!==id&&o.status!=='cancelled'&&!deletedBookingIds.has(o.id)&&roomListIncludes(o.blocked_rooms,room)&&o.start_date<bk.end_date&&o.end_date>bk.start_date);
+    if(other)out.push({id,room,bk,other});
+  });
+  return out;
+}
 async function _casRoomClashCheck(added){
   try{
-    const bks=added.map(a=>AppData.bookings.find(b=>b.id===a.id)).filter(Boolean);
-    if(!bks.length)return;
-    const from=bks.reduce((m,b)=>b.startDate<m?b.startDate:m,bks[0].startDate),to=bks.reduce((m,b)=>b.endDate>m?b.endDate:m,bks[0].endDate);
-    const{data,error}=await db.from('bookings').select('id,leader_name,retreat_name,status,start_date,end_date,blocked_rooms').lt('start_date',to).gt('end_date',from);
-    if(error||!data)return;
-    const clashes=[];
-    added.forEach(({id,room})=>{
-      const bk=AppData.bookings.find(b=>b.id===id);if(!bk||!roomListIncludes(bk.blockedRooms,room))return;
-      const other=data.find(o=>o.id!==id&&o.status!=='cancelled'&&!deletedBookingIds.has(o.id)&&roomListIncludes(o.blocked_rooms,room)&&o.start_date<bk.endDate&&o.end_date>bk.startDate);
-      if(other)clashes.push({id,room,bk,other});
-    });
+    let clashes=await _casRoomClashes(added);
     if(!clashes.length)return;
-    const c=clashes[0];
-    if(typeof showToast==='function')showToast(`⚠ Cuarto ${c.room} quedó en dos reservas: ${c.bk.leaderName||c.bk.retreatName||''} y ${c.other.leader_name||c.other.retreat_name||''} (${c.other.start_date} → ${c.other.end_date}). Revisa en Rooms.`+(clashes.length>1?` (+${clashes.length-1} más)`:''));
-    casLogEvent('double','bookings',clashes.map(x=>({id:x.id,row:{room:x.room,leaderName:x.bk.leaderName||x.bk.retreatName||''},reason:`cuarto ${x.room} también en ${x.other.leader_name||x.other.retreat_name||x.other.id} (${x.other.start_date} → ${x.other.end_date})`})));
+    await new Promise(r=>setTimeout(r,_CAS_CLASH_RECHECK_MS));
+    clashes=await _casRoomClashes(clashes.map(c=>({id:c.id,room:c.room})));
+    if(!clashes.length)return;
+    const c=clashes[0],nm=b=>b.leader_name||b.retreat_name||b.id;
+    if(typeof showToast==='function')showToast(`⚠ Cuarto ${c.room} quedó en dos reservas: ${nm(c.bk)} y ${nm(c.other)} (${c.other.start_date} → ${c.other.end_date}). Revisa en Rooms.`+(clashes.length>1?` (+${clashes.length-1} más)`:''));
+    casLogEvent('double','bookings',clashes.map(x=>({id:x.id,row:{room:x.room,leaderName:nm(x.bk)},reason:`cuarto ${x.room} también en ${nm(x.other)} (${x.other.start_date} → ${x.other.end_date})`})));
   }catch(e){}
 }
 async function syncToSupabase(){
