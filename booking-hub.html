@@ -6931,7 +6931,13 @@ function _applyRemoteSync(silent){
   loadFromSupabase().then(loaded=>{
     if(!loaded)return;
     try{
-      runMigrations();recoverBuildBookings();
+      // runMigrations() was called here but never existed anywhere: the error was swallowed by the catch below, so after
+      // every realtime/5-minute refresh nothing was redrawn and screens kept showing the data from before the refresh
+      recoverBuildBookings();
+      // This runs whenever anyone saves (every few seconds on a busy day): never redraw under someone typing in a field --
+      // the data is already refreshed in memory, and the next refresh redraws
+      const _ae=document.activeElement;
+      if(_ae&&(/^(INPUT|TEXTAREA|SELECT)$/.test(_ae.tagName)||_ae.isContentEditable))return;
       if(typeof buildDashboard==='function')buildDashboard();
       if(typeof venBuild==='function')venBuild();
       if(typeof rcBuild==='function')rcBuild();
