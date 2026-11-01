@@ -4781,6 +4781,39 @@ function _paySync(){
     deletedPaymentIds.size?db.from('payments').delete().in('id',[...deletedPaymentIds]):null,
   ]);
 }
+// Same room given to two retreats: each screen only checks its own memory before a move, so two people (or a screen opened
+// earlier) can put two bookings in one room on overlapping dates. After a save that added a room to a booking, ask the
+// server -- same rule as the Rooms drag check (rcMoveRoom): another non-cancelled booking holding that room on overlapping
+// dates -- and warn whoever just saved, plus the Sync Log ('double'). Runs after the save, never slows it down.
+function _casRoomsAdded(){
+  const out=[];
+  AppData.bookings.forEach(b=>{
+    if(deletedBookingIds.has(b.id)||b.status==='cancelled'||!b.startDate||!b.endDate)return;
+    const known=_bkBase.get(b.id);
+    const before=known?((JSON.parse(known.sqlJson)||{}).blocked_rooms||[]):[];
+    (b.blockedRooms||[]).forEach(room=>{if(!roomListIncludes(before,room))out.push({id:b.id,room});});
+  });
+  return out;
+}
+async function _casRoomClashCheck(added){
+  try{
+    const bks=added.map(a=>AppData.bookings.find(b=>b.id===a.id)).filter(Boolean);
+    if(!bks.length)return;
+    const from=bks.reduce((m,b)=>b.startDate<m?b.startDate:m,bks[0].startDate),to=bks.reduce((m,b)=>b.endDate>m?b.endDate:m,bks[0].endDate);
+    const{data,error}=await db.from('bookings').select('id,leader_name,retreat_name,status,start_date,end_date,blocked_rooms').lt('start_date',to).gt('end_date',from);
+    if(error||!data)return;
+    const clashes=[];
+    added.forEach(({id,room})=>{
+      const bk=AppData.bookings.find(b=>b.id===id);if(!bk||!roomListIncludes(bk.blockedRooms,room))return;
+      const other=data.find(o=>o.id!==id&&o.status!=='cancelled'&&!deletedBookingIds.has(o.id)&&roomListIncludes(o.blocked_rooms,room)&&o.start_date<bk.endDate&&o.end_date>bk.startDate);
+      if(other)clashes.push({id,room,bk,other});
+    });
+    if(!clashes.length)return;
+    const c=clashes[0];
+    if(typeof showToast==='function')showToast(`⚠ Cuarto ${c.room} quedó en dos reservas: ${c.bk.leaderName||c.bk.retreatName||''} y ${c.other.leader_name||c.other.retreat_name||''} (${c.other.start_date} → ${c.other.end_date}). Revisa en Rooms.`+(clashes.length>1?` (+${clashes.length-1} más)`:''));
+    casLogEvent('double','bookings',clashes.map(x=>({id:x.id,row:{room:x.room,leaderName:x.bk.leaderName||x.bk.retreatName||''},reason:`cuarto ${x.room} también en ${x.other.leader_name||x.other.retreat_name||x.other.id} (${x.other.start_date} → ${x.other.end_date})`})));
+  }catch(e){}
+}
 async function syncToSupabase(){
   // Never write to Supabase from local file:// — prevents local dev from corrupting live data
   if(location.protocol==='file:')return;
@@ -4822,6 +4855,7 @@ async function syncToSupabase(){
   const _bkRegSync=(async()=>{
     try{
       if(casSyncEnabled()&&_casBaseReady){
+        const _roomsAdded=_casRoomsAdded();
         const[bkResult,regResult]=await Promise.all([
           casSyncTable({db:_dbRaw,table:'bookings',serverWins:_CAS_BK_SERVER_WINS,rows:AppData.bookings,idOf:b=>b.id,toSqlRow:appBookingToSqlRow,fromSqlRow:sqlBookingToApp,base:_bkBase,deletedIds:deletedBookingIds,isRecentLocalId:_isRecentLocalId}),
           casSyncTable({db:_dbRaw,table:'registrations',rows:AppData.regs.filter(r=>!deletedBookingIds.has(r.bookingId)),idOf:r=>r.id,toSqlRow:appRegToSqlRow,fromSqlRow:sqlRegToApp,base:_regBase,deletedIds:deletedRegIds,isRecentLocalId:_isRecentLocalId}),
@@ -4840,6 +4874,7 @@ async function syncToSupabase(){
           console.warn('[cas-sync] removed from this tab, deleted elsewhere:',[...goneBk,...goneReg]);
           if(typeof showToast==='function')showToast('ℹ '+(goneBk.size+goneReg.size)+' registro(s) ya habían sido borrados en otra pestaña — se quitaron de esta también.');
         }
+        if(_roomsAdded.length)_casRoomClashCheck(_roomsAdded);
         casLogEvent('failed','bookings',bkResult?.failed);casLogEvent('failed','registrations',regResult?.failed);
         casLogEvent('conflict','bookings',bkResult?.conflicts);casLogEvent('conflict','registrations',regResult?.conflicts);
         casLogEvent('gone','bookings',(bkResult?.gone||[]).map(id=>({id})));casLogEvent('gone','registrations',(regResult?.gone||[]).map(id=>({id})));
@@ -5094,7 +5129,11 @@ const _PAYMENT_FIELD_TO_COL={ts:'created_at'};
 //   ALTER TABLE payments ADD COLUMN IF NOT EXISTS staff_name text;
 const _PAYMENT_COLUMNS=['id','booking_id','amount','date','method','ref','note','staff_name'];
 function sqlPaymentToApp(row){const p={};for(const col in row) p[_PAYMENT_COL_TO_FIELD[col]||_s2c(col)]=row[col];return p;}
-function appPaymentToSqlRow(p,bookingId){const row={};_PAYMENT_COLUMNS.forEach(col=>{if(col==='booking_id'){row.booking_id=bookingId;return;}const field=_PAYMENT_FIELD_TO_COL[col]||_s2c(col);row[col]=p[field]!==undefined?p[field]:null;});return row;}
+// guest_name (which guest of the room a payment belongs to -- set in the payment form, used by the folio split) had no
+// column, so it was lost on every reload. Sent only once the column exists (seen on load), so nothing breaks before
+// Jorge runs: ALTER TABLE payments ADD COLUMN IF NOT EXISTS guest_name text;
+let _payHasGuestName=false;
+function appPaymentToSqlRow(p,bookingId){const row={};(_payHasGuestName?[..._PAYMENT_COLUMNS,'guest_name']:_PAYMENT_COLUMNS).forEach(col=>{if(col==='booking_id'){row.booking_id=bookingId;return;}const field=_PAYMENT_FIELD_TO_COL[col]||_s2c(col);row[col]=p[field]!==undefined?p[field]:null;});return row;}
 // room_types: the price columns don't follow the plain snake_case->camelCase pattern
 // (e.g. price_single_high -> price1, price_double_low -> price2_low), so this one
 // needs an explicit column map rather than the generic converter.
@@ -5179,6 +5218,7 @@ async function loadFromSupabase(){
       const _paysByBk=new Map();
       sqlPayments.map(sqlPaymentToApp).filter(p=>!deletedPaymentIds.has(p.id)).forEach(p=>{const arr=_paysByBk.get(p.bookingId)||[];arr.push(p);_paysByBk.set(p.bookingId,arr);});
       AppData.bookings.forEach(bk=>{bk.payments=_paysByBk.get(bk.id)||[];});
+      if(sqlPayments.length)_payHasGuestName='guest_name' in sqlPayments[0];
       _payBase=new Map(sqlPayments.map(r=>{const p=sqlPaymentToApp(r);return[p.id,_paySnap(p,r.booking_id)];}));
       _keepPays.forEach(({p,bkId})=>{
         const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||deletedPaymentIds.has(p.id))return;
@@ -6817,7 +6857,7 @@ function switchTab(id,btn){
 // ===== CONTRACT GENERATOR — moved to modules/contracts.js (loaded above) =====
 // ===== SIGNATURE PAD — moved to modules/contracts.js (loaded above) =====
 </script>
-<script src="modules/payments.js?v=20261020a"></script>
+<script src="modules/payments.js?v=20261101a"></script>
 <script src="modules/room-activities.js"></script>
 <script src="modules/tour-picker.js?v=20261027a"></script>
 <script src="modules/booking-detail.js?v=20261020d"></script>
@@ -7064,7 +7104,7 @@ if(location.protocol!=='file:'){
 <script src="modules/menu-cost-edit.js?v=20261025a"></script>
 <script src="modules/menu-kitchen-costing.js?v=20261021a"></script>
 <script src="modules/double-charges.js?v=20261023a"></script>
-<script src="modules/sync-log.js?v=20261101b"></script>
+<script src="modules/sync-log.js?v=20261101c"></script>
 <script src="modules/checkout-balances.js?v=20261022a"></script>
 <script src="modules/host-checklist.js?v=20261029a"></script>
 <script src="modules/host-checklist-all.js?v=20261029d"></script>

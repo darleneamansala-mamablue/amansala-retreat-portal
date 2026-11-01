@@ -32,12 +32,20 @@ function toggleBankEdit(){
     e.value=bankDetails;e.style.display='block';d.style.display='none';e.focus();
   }else{saveBankDetails();e.style.display='none';d.style.display='block';}
 }
+// Next deposit invoice number. Used to be a counter kept in each browser's localStorage, so every computer started at 0001
+// (191 invoices, only 127 distinct numbers -- AMN-2026-0001 issued 16 times, found 2026-11-01). Now: one above the highest
+// number already on ANY booking (shared data), never below this browser's own last number.
 function getNextInvoiceNumber(){
-  const year=new Date().getFullYear();
+  const year=new Date().getFullYear(),pre='AMN-'+year+'-';
   const key='amansala_invoice_counter_'+year;
-  const n=(parseInt(localStorage.getItem(key)||'0',10))+1;
+  let max=parseInt(localStorage.getItem(key)||'0',10)||0;
+  (AppData.bookings||[]).forEach(b=>{
+    const num=b&&b.depositInvoice&&b.depositInvoice.number;
+    if(typeof num==='string'&&num.startsWith(pre)){const v=parseInt(num.slice(pre.length),10);if(v>max)max=v;}
+  });
+  const n=max+1;
   localStorage.setItem(key,String(n));
-  return 'AMN-'+year+'-'+String(n).padStart(4,'0');
+  return pre+String(n).padStart(4,'0');
 }
 
 function renderTeacherInvoice(bkId){

@@ -16,9 +16,11 @@ const SL_KIND = {
   failed: { label: 'No se guardó', color: '#b91c1c', bg: '#fee2e2' },
   gone: { label: 'Ya estaba borrado', color: '#92400e', bg: '#fef3c7' },
   conflict: { label: 'Choque', color: '#1e40af', bg: '#dbeafe' },
+  double: { label: 'Cuarto doble', color: '#9d174d', bg: '#fce7f3' },
 };
 // conflict: saved fine, but another person had changed the same field(s) at the same time and this person's value won
-const SL_REASON = (r, kind) => kind === 'conflict' ? 'dos personas cambiaron lo mismo al mismo tiempo; quedó el cambio de esta persona — campo(s): ' + (r || '')
+const SL_REASON = (r, kind) => kind === 'double' ? 'el mismo cuarto quedó en dos reservas con fechas que se cruzan — ' + (r || '') + '. Revisar en Rooms.'
+  : kind === 'conflict' ? 'dos personas cambiaron lo mismo al mismo tiempo; quedó el cambio de esta persona — campo(s): ' + (r || '')
   : r === 'exhausted' ? 'otra persona lo estaba editando al mismo tiempo y no se pudo guardar tras 10 intentos — el cambio sigue en su pantalla y se reintenta en su siguiente guardado'
   : r === 'gone' ? 'alguien lo borró en otra pestaña; se quitó también de la pantalla de esta persona'
   : r ? 'error de la base de datos: ' + r : '';

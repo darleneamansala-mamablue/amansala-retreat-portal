@@ -38,6 +38,8 @@ function fakeDb(seed) {
       not(c, op, v) { const re = new RegExp('^' + v.replace(/%/g, '.*') + '$'); st.filters.push(r => !re.test(r[c])); return b; },
       like(c, v) { const re = new RegExp('^' + v.replace(/%/g, '.*') + '$'); st.filters.push(r => re.test(r[c])); return b; },
       gte() { return b; },
+      lt(c, v) { st.filters.push(r => String(r[c]) < String(v)); return b; },
+      gt(c, v) { st.filters.push(r => String(r[c]) > String(v)); return b; },
       update(p) { st.op = 'update'; st.payload = p; return b; },
       insert(p) { st.op = 'insert'; st.payload = p; return b; },
       upsert(p) { st.op = 'upsert'; st.payload = p; return b; },
@@ -57,14 +59,15 @@ function makeTab(db, localStore) {
     console: { log() {}, warn() {}, error() {} }, setTimeout, clearTimeout, setInterval() {}, Promise, JSON, Date, Math, Map, Set, Array, Object, String, Number, RegExp, Error,
     location: { protocol: 'https:', search: '', pathname: '/booking-hub.html' }, navigator: { userAgent: 'test' },
     localStorage: { getItem: k => (ls.has(k) ? ls.get(k) : null), setItem: (k, v) => ls.set(k, String(v)), removeItem: k => ls.delete(k) },
-    db, toasts: [],
+    db, toasts: [], get toastsRef() { return this.toasts; },
     PORTAL_SETTINGS_DEFAULTS: { transportRates: {}, notifications: {}, contractDeadlines: {} }, DEF_ROOM_TYPES: [], RT_VERSION: 1, VEN_ROWS_VERSION: 1, venYear: 2026,
   };
   ctx.showToast = m => ctx.toasts.push(m);
+  ctx.roomListIncludes = (list, room) => (list || []).some(r => String(r).toLowerCase() === String(room).toLowerCase());
   vm.createContext(ctx);
   vm.runInContext(ENGINE + '\nconst AppData={bookings:[],venRows:[],roomTypes:[],regs:[],teacherMessages:[],programBlocks:[],specialEvents:[]};\n' +
     'let deletedBookingIds=new Set(),deletedRegIds=new Set(),deletedPaymentIds=new Set(),regSelBk=null,_lastLocalSaveAt=0,_appStoreUpdatedAt={},PortalSettings={};\n' +
-    HUB + '\nthis.T={db,casAfterFetch,casAfterPartialFetch,get AppData(){return AppData},saveAll,loadFromSupabase,syncToSupabase,get ready(){return _casBaseReady},set ready(v){_casBaseReady=v},sqlBookingToApp,sqlRegToApp,get busy(){return _saveAllBusy}};', ctx);
+    HUB + '\nthis.T={toasts,db,casAfterFetch,casAfterPartialFetch,get AppData(){return AppData},saveAll,loadFromSupabase,syncToSupabase,get ready(){return _casBaseReady},set ready(v){_casBaseReady=v},sqlBookingToApp,sqlRegToApp,get busy(){return _saveAllBusy}};', ctx);
   return ctx.T;
 }
 const flush = async t => { await t.busy; await new Promise(r => setTimeout(r, 5)); await t.busy; };
@@ -371,6 +374,48 @@ async function test_heldRegistrationStaysLive() {
   assert.strictEqual(db.T.registrations.get('g1').room, '11');
 }
 
+// 24. Payment guest name: saved and back after reload once the column exists; payments still save while it does not
+async function test_paymentGuestName() {
+  const withCol = fakeDb({ bookings: [bk('b1')], payments: [pay('p1', 'b1', 100, { guest_name: null })], app_store: [casOn] });
+  const t = makeTab(withCol);
+  await t.loadFromSupabase();
+  t.AppData.bookings[0].payments[0].guestName = 'Ana';
+  t.saveAll(); await flush(t);
+  assert.strictEqual(withCol.T.payments.get('p1').guest_name, 'Ana');
+  await t.loadFromSupabase();
+  assert.strictEqual(t.AppData.bookings[0].payments[0].guestName, 'Ana');
+  const noCol = fakeDb({ bookings: [bk('b1')], payments: [pay('p1', 'b1', 100)], app_store: [casOn] });
+  const u = makeTab(noCol);
+  await u.loadFromSupabase();
+  u.AppData.bookings[0].payments[0].guestName = 'Ana'; u.AppData.bookings[0].payments[0].amount = 150;
+  u.saveAll(); await flush(u);
+  assert.strictEqual(noCol.T.payments.get('p1').amount, 150);
+  assert.ok(!('guest_name' in noCol.T.payments.get('p1')), 'no unknown column sent');
+}
+
+// 25. Two people put two retreats in the same room at the same time: whoever saves sees the warning, and it is logged
+async function test_doubleRoomWarned() {
+  const db = fakeDb({ bookings: [bk('b1', { start_date: '2027-01-10', end_date: '2027-01-15', blocked_rooms: ['10'] }), bk('b2', { start_date: '2027-01-12', end_date: '2027-01-18', blocked_rooms: ['20'] })], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  // someone else moved b1 into room 12 meanwhile; this screen (older) moves b2 into room 12 too
+  db.T.bookings.set('b1', { ...db.T.bookings.get('b1'), blocked_rooms: ['12'], updated_at: stamp() });
+  t.AppData.bookings.find(b => b.id === 'b2').blockedRooms = ['12'];
+  t.saveAll(); await flush(t); await new Promise(r => setTimeout(r, 30));
+  assert.ok(t.toasts.some(m => m.includes('Cuarto 12')), 'warned: ' + JSON.stringify(t.toasts));
+  const logs = [...db.T.app_store.keys()].filter(k => k.startsWith('cas_log:')).map(k => db.T.app_store.get(k).value);
+  assert.ok(logs.some(v => v.kind === 'double'), 'logged');
+}
+// 26. No warning for an ordinary move into a free room, or for dates that do not overlap
+async function test_noFalseDoubleRoom() {
+  const db = fakeDb({ bookings: [bk('b1', { start_date: '2027-01-10', end_date: '2027-01-15', blocked_rooms: ['12'] }), bk('b2', { start_date: '2027-01-15', end_date: '2027-01-18', blocked_rooms: ['20'] })], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  t.AppData.bookings.find(b => b.id === 'b2').blockedRooms = ['12'];   // b1 checks out the day b2 arrives
+  t.saveAll(); await flush(t); await new Promise(r => setTimeout(r, 30));
+  assert.ok(!t.toasts.some(m => m.includes('Cuarto')), JSON.stringify(t.toasts));
+}
+
 (async () => {
   await run('save before first load never overwrites with the old local copy', test_saveBeforeLoadDoesNotOverwrite);
   await run('failed first load keeps the gate closed', test_failedLoadKeepsGateClosed);
@@ -390,6 +435,9 @@ async function test_heldRegistrationStaysLive() {
   await run('payment recorded here survives a reload before saving', test_pendingPaymentSurvivesReload);
   await run('Cloudbeds answer arriving after a reload is saved', test_cloudbedsAnswerAfterReloadIsSaved);
   await run('registration held across a reload stays live', test_heldRegistrationStaysLive);
+  await run('payment guest name saved once the column exists', test_paymentGuestName);
+  await run('same room put in two retreats at once: warned and logged', test_doubleRoomWarned);
+  await run('no false warning (free room, back-to-back dates)', test_noFalseDoubleRoom);
   await run('direct write of a settings column is joined, not overwritten', test_directWriteJoinedNotOverwritten);
   await run('direct write not in memory: written, and an undo elsewhere stands', test_directWriteNotInMemoryPatchesBase);
   await run('switch off: direct writes unchanged', test_directWriteSwitchOff);
