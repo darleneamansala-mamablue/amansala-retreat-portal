@@ -1,4 +1,5 @@
 'use strict';
+const { folioGroup, groupItems } = require('./folio-group');
 
 // Lets a guest add a tip to their own folio from guest-pay.html before paying
 // (Jorge's ask 2026-10-04: an "Add Tip" button on the payment link, amount +
@@ -19,7 +20,7 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { token, description } = body;
+  const { token, description, all } = body;
   const amount = Number(body.amount);
   if (!token) return jsonErr(400, 'Missing token');
   if (!Number.isFinite(amount) || amount <= 0) return jsonErr(400, 'Invalid tip amount');
@@ -28,7 +29,7 @@ exports.handler = async (event) => {
   const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json' };
 
   const folioRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/folios?payment_token=eq.${encodeURIComponent(token)}&select=id&limit=1`,
+    `${SUPABASE_URL}/rest/v1/folios?payment_token=eq.${encodeURIComponent(token)}&select=id,registration_id,booking_request_id,guest_name&limit=1`,
     { headers: hdrs }
   );
   if (!folioRes.ok) return jsonErr(500, 'Could not fetch folio');
@@ -56,11 +57,9 @@ exports.handler = async (event) => {
 
   // Return the full updated item list + total so guest-pay.html can re-render
   // without a second round trip.
-  const itemsRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/folio_items?folio_id=eq.${encodeURIComponent(folioId)}&order=created_at.asc`,
-    { headers: hdrs }
-  );
-  const items = itemsRes.ok ? await itemsRes.json() : [];
+  // (the check-out link shows the guest's whole bill: this folio plus their other folios)
+  const group = all ? await folioGroup(hdrs, folioArr[0]) : [folioArr[0]];
+  const items = (await groupItems(hdrs, group.map(f => f.id))) || [];
   const total = items.reduce((sum, i) => sum + Number(i.qty) * Number(i.unit_price) * (1 + (Number(i.tax_rate) || 0) / 100), 0);
 
   return {

@@ -1,4 +1,5 @@
 'use strict';
+const { folioGroup, groupItems } = require('./folio-group');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API   = 'https://api.stripe.com/v1';
@@ -18,7 +19,7 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { token } = body;
+  const { token, all } = body;
   if (!token) return jsonErr(400, 'Missing token');
 
   const supaHdrs = {
@@ -40,12 +41,10 @@ exports.handler = async (event) => {
   if (folio.status === 'paid') return jsonErr(400, 'Folio already paid');
 
   // Fetch folio items
-  const itemsRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/folio_items?folio_id=eq.${encodeURIComponent(folio.id)}&order=created_at.asc`,
-    { headers: supaHdrs }
-  );
-  if (!itemsRes.ok) return jsonErr(500, 'Could not fetch folio items');
-  const items = await itemsRes.json();
+  // check-out link (all): charge the guest's whole bill -- this folio plus their other folios (see folio-group.js)
+  const group = all ? await folioGroup(supaHdrs, folio) : [folio];
+  const items = await groupItems(supaHdrs, group.map(f => f.id));
+  if (!items) return jsonErr(500, 'Could not fetch folio items');
 
   // Fetch booking info — either from registration or booking_request
   let booking = null;
@@ -104,6 +103,8 @@ exports.handler = async (event) => {
     currency:         'usd',
     description:      desc,
     'metadata[folioId]':    folio.id,
+    // the other folios this payment also settles (confirm-folio-payment splits it over them)
+    ...(group.length > 1 ? { 'metadata[folioIds]': group.map(f => f.id).join(',').slice(0, 500) } : {}),
     'metadata[folioName]':  folio.name.slice(0, 200),
     'metadata[guestName]':  guestName.slice(0, 200),
     'metadata[checkIn]':    (booking?.check_in  ?? '').slice(0, 20),

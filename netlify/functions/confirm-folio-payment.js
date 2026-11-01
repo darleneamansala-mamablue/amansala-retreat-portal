@@ -1,4 +1,5 @@
 'use strict';
+const { groupItems, allocatePayment } = require('./folio-group');
 
 // Verifies a PaymentIntent directly against Stripe's API (server-side, using the
 // secret key) before recording a payment on a folio -- same pattern as
@@ -45,12 +46,15 @@ exports.handler = async (event) => {
   if (pi.status !== 'succeeded') return jsonErr(400, `Payment not completed (status: ${pi.status})`);
   if ((pi.metadata || {}).folioId !== folioId) return jsonErr(400, 'Payment does not match this folio');
 
+  // a check-out payment can settle several folios of the same guest (folio-payment.js metadata folioIds)
+  const groupIds = String((pi.metadata || {}).folioIds || '').split(',').filter(Boolean);
+  const ids = groupIds.length && groupIds.includes(folioId) ? groupIds : [folioId];
   try {
     // Idempotency: skip if a folio_items row already references this PaymentIntent
     // (embedded in the description, same loose-matching style confirm-booking-payment.js
     // uses for stripePaymentIntentId -- folio_items has no dedicated column for it).
     const existingRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/folio_items?folio_id=eq.${encodeURIComponent(folioId)}&description=ilike.*${encodeURIComponent(paymentIntentId)}*&select=id`,
+      `${SUPABASE_URL}/rest/v1/folio_items?folio_id=in.(${ids.map(encodeURIComponent).join(',')})&description=ilike.*${encodeURIComponent(paymentIntentId)}*&select=id`,
       { headers: hdrs }
     );
     const existing = existingRes.ok ? await existingRes.json() : [];
@@ -63,17 +67,23 @@ exports.handler = async (event) => {
     }
 
     const amount = pi.amount_received / 100;
+    // one Payment row per folio it settles (each folio's balance, oldest first; any rest on this folio)
+    let parts = [{ folioId, amount }];
+    if (ids.length > 1) {
+      const items = await groupItems(hdrs, ids);
+      if (items) parts = allocatePayment(amount, ids, items, folioId);
+    }
     const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/folio_items`, {
       method: 'POST',
       headers: { ...hdrs, Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        folio_id: folioId,
+      body: JSON.stringify(parts.map(p => ({
+        folio_id: p.folioId,
         description: `Payment — Credit Card (Stripe) (${paymentIntentId})`,
         qty: 1,
-        unit_price: -amount,
+        unit_price: -p.amount,
         tax_rate: 0,
         category: 'Payment',
-      }),
+      }))),
     });
     if (!insertRes.ok) {
       const errBody = await insertRes.text();

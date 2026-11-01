@@ -136,7 +136,8 @@ exports.handler = async () => {
       if (!r.ok) { console.error(`[checkout-links] folio create failed for ${rc.guestName}: ${(await r.text()).slice(0, 200)}`); results.failed++; continue; }
       [folio] = await r.json();
     }
-    const link = folio ? `${PORTAL_URL}/guest-pay.html?token=${folio.payment_token}` : `${PORTAL_URL}/guest-pay.html?token=(new folio)`;
+    // all=1: the page shows and charges every folio this guest has on the room, not just this one
+    const link = folio ? `${PORTAL_URL}/guest-pay.html?token=${folio.payment_token}&all=1` : `${PORTAL_URL}/guest-pay.html?token=(new folio)`;
     const firstName = rc.guestName.split(/\s+/)[0] || 'there';
 
     if (!enabled) { console.log(`[checkout-links] would send → ${rc.guestName} ${to} ${link}`); continue; }

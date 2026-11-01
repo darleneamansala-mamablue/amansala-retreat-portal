@@ -283,6 +283,8 @@ let _total   = 0;
 let _stripe  = null;
 let _stripeElems = null;
 let _token   = null;
+// ?all=1 = the check-out link: the guest's whole bill (all their folios), see netlify/functions/folio-group.js
+const _all   = new URLSearchParams(location.search).get('all') === '1';
 
 // ─── INIT ─────────────────────────────────────────────────────
 (async function init() {
@@ -292,7 +294,7 @@ let _token   = null;
   _token = token;
 
   try {
-    const res  = await fetch(`/.netlify/functions/get-folio?token=${encodeURIComponent(token)}`);
+    const res  = await fetch(`/.netlify/functions/get-folio?token=${encodeURIComponent(token)}${_all ? '&all=1' : ''}`);
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error ?? 'Could not load folio');
     _folio   = data.folio;
@@ -420,7 +422,7 @@ async function handlePay(token) {
       const res  = await fetch('/.netlify/functions/folio-payment', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ token }),
+        body:    JSON.stringify({ token, all: _all }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? 'Error creating payment');
@@ -596,7 +598,7 @@ async function submitTip() {
       const res = await fetch('/.netlify/functions/add-folio-tip', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ token: _token, amount: r.amount, description: r.name }),
+        body:    JSON.stringify({ token: _token, amount: r.amount, description: r.name, all: _all }),
       });
       data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? 'Could not add tip');

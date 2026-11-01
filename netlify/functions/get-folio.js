@@ -1,4 +1,5 @@
 'use strict';
+const { folioGroup, groupItems } = require('./folio-group');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 
@@ -28,13 +29,10 @@ exports.handler = async (event) => {
   if (!folioArr.length) return jsonErr(404, 'Folio not found');
   const folio = folioArr[0];
 
-  // Fetch folio items
-  const itemsRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/folio_items?folio_id=eq.${encodeURIComponent(folio.id)}&order=created_at.asc`,
-    { headers: supaHdrs }
-  );
-  if (!itemsRes.ok) return jsonErr(500, 'Could not fetch folio items');
-  const items = await itemsRes.json();
+  // Fetch folio items -- the check-out link (?all=1) shows the guest's whole bill: this folio plus their other folios
+  const group = event.queryStringParameters?.all === '1' ? await folioGroup(supaHdrs, folio) : [folio];
+  const items = await groupItems(supaHdrs, group.map(f => f.id));
+  if (!items) return jsonErr(500, 'Could not fetch folio items');
 
   // Fetch booking info — either from registration or booking_request
   let booking = null;
@@ -87,7 +85,7 @@ exports.handler = async (event) => {
   return {
     statusCode: 200,
     headers: { ...cors(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ folio, items, booking, total }),
+    body: JSON.stringify({ folio, folios: group.map(f => ({ id: f.id, name: f.name, status: f.status })), items, booking, total }),
   };
 };
 
