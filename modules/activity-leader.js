@@ -13,7 +13,7 @@ function alStaff(current) {
   const add = n => { const t = alTitle(n); if (t && !have.has(flat(t))) have.set(flat(t), t); };
   [typeof TOUR_GUIDE_NAMES !== 'undefined' ? TOUR_GUIDE_NAMES : [], typeof BBC_INSTRUCTORS_LIST !== 'undefined' ? BBC_INSTRUCTORS_LIST : [],
    typeof TEMAZCAL_FIRE_KEEPER_NAMES !== 'undefined' ? TEMAZCAL_FIRE_KEEPER_NAMES : [], AL_EXTRA].forEach(l => (l || []).forEach(add));
-  try { ((typeof SpaData !== 'undefined' && SpaData.therapists) || []).filter(t => t.active !== false).forEach(t => add(t.firstName)); } catch (e) {}
+  // Spa therapists are for the spa only (Darlene 2026-11-01), so they are no longer added to these staff lists; a name already saved still shows via add(current).
   add(current);
   return [...have.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
