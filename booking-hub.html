@@ -5113,7 +5113,18 @@ function _s2c(s){return s.replace(/_([a-z0-9])/g,(_,c)=>c.toUpperCase());}
 function _c2s(s){return s.replace(/([A-Z])/g,c=>'_'+c.toLowerCase());}
 const _BOOKING_COLUMNS=['id','leader_name','retreat_name','leader_email','leader_cc_email','leader_phone','start_date','end_date','venue_row','pax','status','notes','doc_link','meal_plan','blocked_rooms','packages','package_custom_prices','add_ons_confirmed_at','retreat_activities','contract_sent_at','contract_sent_via_portal','contract_signed_at','contract_signature','final_payment_requested','final_payment_date','deposit_invoice','deposit_invoice_sent_at','schedule_request','flags','status_changed_at','cancelled_at','cancelled_within_16_weeks','cancellation_fee','deposit_at_cancellation','cb_allotment_block_code','cb_reservation_ids','cb_guest_ids','cb_adjustment_ids','cb_note_ids','all_locked','contract_notes','tip_per_night','package_ids','booking_type','room_rate_total','room_rate_nights','charges','guest_res_token','folio_split','confirmation_number','guest_notes','event_type','source','retreat_type','is_return_guest','previous_visit','dates_flexible','pipeline_stage','pipeline_activity','next_action','follow_up_date','sales_rep','scheduled_call_at','scheduled_call_completed_at','room_list_sent_at','room_list_sent_via_portal','dates_accepted','dates_accepted_at','teacher_discount_disabled','teacher_last_seen','teacher_seen_count','whatsapp_number','room_locked','blocked_rooms_updated_at','retreat_activities_updated_at','schedule_skips','schedule_time_overrides','guest_res_sent_log','final_invoice_paid','contract_audit_user_agent','contract_overrides'];
 const _REG_COLUMNS=['id','booking_id','room','room_type_id','guests','custom_price','custom_rate_override','custom_pkg_price','amount_paid','is_teacher_room','locked','check_in','check_out','notes','custom_nights_override','custom_tip_nights_override','checked_in_at','checked_out_at','custom_tip_rate_override','charges','upgrade_both_interested','credit','stripe_customer_id','stripe_payment_method_id','stripe_card_brand','stripe_card_last4','cancelled','cancelled_at'];
-function sqlBookingToApp(row){const bk={};for(const col in row){bk[_BOOKING_COL_TO_FIELD[col]||_s2c(col)]=row[col];}return bk;}
+// extraPackages (custom packages added to one retreat) and eqDiscountAmt (the estimate discount, also taken off the balance)
+// have no column of their own and were lost on every reload; they live in package_custom_prices.__cfg__ like bundle/taxRate
+const _BK_CFG_FIELDS=['extraPackages','eqDiscountAmt'];
+function bkCfgSet(bk,field,val){
+  if(!bk)return;bk[field]=val;
+  const pcp=bk.packageCustomPrices||{};
+  bk.packageCustomPrices={...pcp,__cfg__:{...(pcp.__cfg__||{}),[field]:val}};
+}
+function sqlBookingToApp(row){const bk={};for(const col in row){bk[_BOOKING_COL_TO_FIELD[col]||_s2c(col)]=row[col];}
+  const cfg=row.package_custom_prices&&row.package_custom_prices.__cfg__;
+  if(cfg)_BK_CFG_FIELDS.forEach(f=>{if(cfg[f]!==undefined)bk[f]=cfg[f];});
+  return bk;}
 function appBookingToSqlRow(bk){const row={};_BOOKING_COLUMNS.forEach(col=>{const field=_BOOKING_COL_TO_FIELD[col]||_s2c(col);row[col]=bk[field]!==undefined?bk[field]:null;});return row;}
 function sqlRegToApp(row){const r={};for(const col in row) r[_s2c(col)]=row[col];return r;}
 function appRegToSqlRow(r){const row={};_REG_COLUMNS.forEach(col=>{const field=_s2c(col);row[col]=r[field]!==undefined?r[field]:null;});return row;}
@@ -5219,6 +5230,9 @@ async function loadFromSupabase(){
       sqlPayments.map(sqlPaymentToApp).filter(p=>!deletedPaymentIds.has(p.id)).forEach(p=>{const arr=_paysByBk.get(p.bookingId)||[];arr.push(p);_paysByBk.set(p.bookingId,arr);});
       AppData.bookings.forEach(bk=>{bk.payments=_paysByBk.get(bk.id)||[];});
       if(sqlPayments.length)_payHasGuestName='guest_name' in sqlPayments[0];
+      // registrations.upgrade_group_note (Daily Report upgrade groups): saved once the column exists --
+      // ALTER TABLE registrations ADD COLUMN IF NOT EXISTS upgrade_group_note text;
+      if(sqlRegs.length&&'upgrade_group_note' in sqlRegs[0]&&!_REG_COLUMNS.includes('upgrade_group_note'))_REG_COLUMNS.push('upgrade_group_note');
       _payBase=new Map(sqlPayments.map(r=>{const p=sqlPaymentToApp(r);return[p.id,_paySnap(p,r.booking_id)];}));
       _keepPays.forEach(({p,bkId})=>{
         const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||deletedPaymentIds.has(p.id))return;
@@ -6388,16 +6402,15 @@ function addExtraPkg(){
   const name=(document.getElementById('extraPkgName').value||'').trim();
   const price=parseFloat(document.getElementById('extraPkgPrice').value)||0;
   if(!name)return;
-  if(!regSelBk.extraPackages)regSelBk.extraPackages=[];
   if(!regSelBk.packages)regSelBk.packages=[];
   const id='ep-'+uid();
-  regSelBk.extraPackages.push({id,name,price});
+  bkCfgSet(regSelBk,'extraPackages',[...(regSelBk.extraPackages||[]),{id,name,price}]);
   regSelBk.packages.push(id);
   saveAll();regRender();
 }
 function removeExtraPkg(id){
   if(!regSelBk)return;
-  regSelBk.extraPackages=(regSelBk.extraPackages||[]).filter(ep=>ep.id!==id);
+  bkCfgSet(regSelBk,'extraPackages',(regSelBk.extraPackages||[]).filter(ep=>ep.id!==id));
   regSelBk.packages=(regSelBk.packages||[]).filter(p=>p!==id);
   saveAll();regRender();
 }
@@ -6487,7 +6500,7 @@ function pkgTogglePriceEditor(){
   const existingBundleIds=new Set(existingBundle.ids||items.map(a=>a.id));
   const bundleVal=existingBundle.price!=null?existingBundle.price:(regSelBk.pkgBundlePrice!=null?regSelBk.pkgBundlePrice:'');
   const defaultTotal=items.reduce((s,a)=>s+a.price,0);
-  const curTax=regSelBk.taxRate!=null?regSelBk.taxRate:0.16;
+  const curTax=regSelBk.taxRate??customPrices.__cfg__?.taxRate??0.16;   // after a reload only __cfg__ has it
   el.innerHTML=`<div style="padding:14px 16px;background:#f9f5f0;border-top:1px solid #e8dfd4;border-radius:0 0 10px 10px">
 
     ${_customAoSectionHtml(regSelBk)}
@@ -6776,7 +6789,7 @@ function switchTab(id,btn){
 </script>
 <script src="modules/tab-urls.js?v=20261025a"></script>
 <script src="modules/cas-sync.js?v=20261101b"></script>
-<script src="modules/venues.js?v=20261026b"></script>
+<script src="modules/venues.js?v=20261101a"></script>
 <script src="modules/booking-dates.js?v=20261026a"></script>
 <script src="modules/room-optimizer.js?v=20261020a"></script>
 <script src="modules/sales-pipeline.js"></script>
@@ -6807,7 +6820,7 @@ function switchTab(id,btn){
 // ===== AUTO FLAGS — moved to modules/teacher-portal.js (loaded above) =====
 // ===== FLAGS MODAL — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/pricing.js?v=20261009a"></script>
+<script src="modules/pricing.js?v=20261101a"></script>
 <script src="modules/teacher-pricelist.js"></script>
 <script>
 // ===== ESTIMATED QUOTE — moved to modules/pricing.js =====
@@ -6826,7 +6839,7 @@ function switchTab(id,btn){
 // ===== RETREAT BUILDER — moved to modules/retreat-builder.js =====
 // ===== DASHBOARD — moved to modules/retreat-builder.js (loaded above) =====
 </script>
-<script src="modules/contracts.js?v=20261101a"></script>
+<script src="modules/contracts.js?v=20261101b"></script>
 <script src="modules/global-rate.js?v=20261020a"></script>
 <script src="modules/custom-addon-teacher-only.js?v=20261030b"></script>
 <script src="modules/contract-library-link.js?v=20261020a"></script>
@@ -7146,7 +7159,7 @@ if(location.protocol!=='file:'){
 <script>
 // ===== MENU TAB — moved to modules/menu.js =====
 </script>
-<script src="modules/import-export.js?v=20261018a"></script>
+<script src="modules/import-export.js?v=20261101a"></script>
 <script>
 // ===== CSV IMPORT — moved to modules/import-export.js =====
 // ===== RETREAT GURU IMPORT — moved to modules/import-export.js (loaded above) =====

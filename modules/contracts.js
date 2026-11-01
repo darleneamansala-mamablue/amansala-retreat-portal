@@ -735,7 +735,8 @@ function autoAssignTeacherRoom(bk){
   const allowedRooms=paidCount>=20?2:1;
   const existingRegs=AppData.regs.filter(r=>r.bookingId===bk.id&&r.isTeacherRoom);
   // Remove any incomplete ghost teacher regs (no room assigned)
-  existingRegs.filter(r=>!r.room).forEach(r=>{const idx=AppData.regs.indexOf(r);if(idx>-1)AppData.regs.splice(idx,1);});
+  // ...and record them as deleted, or the next load brings them back from the database
+  existingRegs.filter(r=>!r.room).forEach(r=>{const idx=AppData.regs.indexOf(r);if(idx>-1)AppData.regs.splice(idx,1);deletedRegIds.add(r.id);});
   const toAssign=allowedRooms-existingRegs.filter(r=>r.room).length;
   if(toAssign<=0)return;
   // Teacher room is always Garden King (rt4)

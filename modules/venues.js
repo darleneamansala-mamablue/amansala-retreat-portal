@@ -1009,7 +1009,10 @@ function rmOpenNewBooking(room,rtId,startDate){
 }
 function rmOpenEditBooking(id){
   const bk=AppData.bookings.find(b=>b.id===id);if(!bk||bk.bookingType!=='room_only')return;
-  _rmEditId=id;_rmRoom=(bk.blockedRooms||[])[0]||'';_rmRtId=bk.roomTypeId||'';_rmRateMode='solo';
+  _rmEditId=id;_rmRoom=(bk.blockedRooms||[])[0]||'';_rmRateMode='solo';
+  // bookings have no room_type_id column, so after a reload bk.roomTypeId is empty -- take it from the room's registration
+  // or the room itself; saving with '' used to wipe the registration's room type
+  _rmRtId=bk.roomTypeId||getRegForRoom(id,_rmRoom)?.roomTypeId||(AppData.roomTypes.find(r=>roomListIncludes(r.rooms,_rmRoom))||{}).id||'';
   const rt=AppData.roomTypes.find(r=>r.id===_rmRtId);
   document.getElementById('rmModalTitle').textContent='Edit Reservation';
   document.getElementById('rmDelBtn').style.display='inline-flex';
@@ -1177,7 +1180,7 @@ function rmSaveNewBooking(){
     // below and never got one.
     let reg=getRegForRoom(_rmEditId,room);
     if(!reg){reg={id:uid(),bookingId:_rmEditId,room,roomTypeId:rtId,guests:[{name:leader,email:leaderEmail||'',phone:leaderPhone||'',notes:''}],charges:[],notes:''};AppData.regs.push(reg);}
-    else{reg.room=room;reg.roomTypeId=rtId;if(reg.guests&&reg.guests[0]){reg.guests[0].name=leader;reg.guests[0].email=leaderEmail||'';reg.guests[0].phone=leaderPhone||'';}}
+    else{reg.room=room;reg.roomTypeId=rtId||reg.roomTypeId;if(reg.guests&&reg.guests[0]){reg.guests[0].name=leader;reg.guests[0].email=leaderEmail||'';reg.guests[0].phone=leaderPhone||'';}}
     // Same staleness-guard gap found and fixed in rcMoveRoom/ozApplyPortalMove --
     // this edits an EXISTING reg's room/guest fields and relies on saveAll()'s
     // guarded upload, same as those, so it needs the same reg.updatedAt bump or

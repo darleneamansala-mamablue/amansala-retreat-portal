@@ -195,7 +195,7 @@ function renderEstQuote(lblId,bodyId){
 function setEqDiscountAmt(val){
   if(!regSelBk)return;
   const amt=Math.max(0,parseFloat(val)||0);
-  regSelBk.eqDiscountAmt=amt;
+  bkCfgSet(regSelBk,'eqDiscountAmt',amt);   // also into package_custom_prices.__cfg__ so it survives a reload
   saveAll();
   renderEstQuote();
 }

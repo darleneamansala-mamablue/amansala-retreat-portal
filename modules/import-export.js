@@ -240,7 +240,13 @@ function confirmCsvImport(){
     const canonRoom=_findCanonicalRoom(grp.room)||grp.room;
     const existingIdx=grp.room?AppData.regs.findIndex(r=>r.bookingId===targetBk.id&&r.room.toLowerCase()===canonRoom.toLowerCase()):-1;
     if(existingIdx>=0&&!overwrite)return;
-    if(existingIdx>=0&&overwrite)AppData.regs.splice(existingIdx,1);
+    // Overwrite: update the room's existing registration (same id -- keeps its charges, payments and folio) instead of
+    // removing it from memory only, which left the old row in the database next to the new one
+    if(existingIdx>=0&&overwrite&&grp.guests.length){
+      const ex=AppData.regs[existingIdx];
+      ex.guests=grp.guests;ex.roomTypeId=grp.rtId||ex.roomTypeId;if(grp.notes)ex.notes=grp.notes;ex.updatedAt=new Date().toISOString();
+      added++;return;
+    }
     // Block-only rows (empty rooms): just add to blockedRooms, no reg
     if(grp.blockOnly&&!grp.guests.length){
       if(canonRoom){

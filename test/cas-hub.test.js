@@ -67,7 +67,7 @@ function makeTab(db, localStore) {
   vm.createContext(ctx);
   vm.runInContext(ENGINE + '\nconst AppData={bookings:[],venRows:[],roomTypes:[],regs:[],teacherMessages:[],programBlocks:[],specialEvents:[]};\n' +
     'let deletedBookingIds=new Set(),deletedRegIds=new Set(),deletedPaymentIds=new Set(),regSelBk=null,_lastLocalSaveAt=0,_appStoreUpdatedAt={},PortalSettings={};\n' +
-    HUB + '\nthis.T={toasts,db,casAfterFetch,casAfterPartialFetch,get AppData(){return AppData},saveAll,loadFromSupabase,syncToSupabase,get ready(){return _casBaseReady},set ready(v){_casBaseReady=v},sqlBookingToApp,sqlRegToApp,get busy(){return _saveAllBusy}};', ctx);
+    HUB + '\nthis.T={bkCfgSet,toasts,db,casAfterFetch,casAfterPartialFetch,get AppData(){return AppData},saveAll,loadFromSupabase,syncToSupabase,get ready(){return _casBaseReady},set ready(v){_casBaseReady=v},sqlBookingToApp,sqlRegToApp,get busy(){return _saveAllBusy}};', ctx);
   return ctx.T;
 }
 const flush = async t => { await t.busy; await new Promise(r => setTimeout(r, 5)); await t.busy; };
@@ -416,6 +416,33 @@ async function test_noFalseDoubleRoom() {
   assert.ok(!t.toasts.some(m => m.includes('Cuarto')), JSON.stringify(t.toasts));
 }
 
+// 27. Extra packages and the estimate discount survive a reload (kept in package_custom_prices.__cfg__)
+async function test_extraPackagesAndDiscountSurviveReload() {
+  const db = fakeDb({ bookings: [bk('b1', { package_custom_prices: { __cfg__: { taxRate: 0.16 } } })], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  const b = t.AppData.bookings[0];
+  t.bkCfgSet(b, 'extraPackages', [{ id: 'ep-1', name: 'Cacao', price: 40 }]);
+  t.bkCfgSet(b, 'eqDiscountAmt', 250);
+  t.saveAll(); await flush(t);
+  const u = makeTab(db);
+  await u.loadFromSupabase();
+  const b2 = u.AppData.bookings[0];
+  assert.deepStrictEqual(b2.extraPackages, [{ id: 'ep-1', name: 'Cacao', price: 40 }]);
+  assert.strictEqual(b2.eqDiscountAmt, 250);
+  assert.strictEqual(b2.packageCustomPrices.__cfg__.taxRate, 0.16, 'other settings untouched');
+}
+// 28. Upgrade group note saved once the column exists
+async function test_upgradeNoteColumn() {
+  const reg = { id: 'g1', booking_id: 'b1', room: '10', upgrade_group_note: null, updated_at: '2026-11-01T00:00:00.000+00:00' };
+  const db = fakeDb({ bookings: [bk('b1')], registrations: [reg], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  t.AppData.regs[0].upgradeGroupNote = 'Upgrade A';
+  t.saveAll(); await flush(t);
+  assert.strictEqual(db.T.registrations.get('g1').upgrade_group_note, 'Upgrade A');
+}
+
 (async () => {
   await run('save before first load never overwrites with the old local copy', test_saveBeforeLoadDoesNotOverwrite);
   await run('failed first load keeps the gate closed', test_failedLoadKeepsGateClosed);
@@ -438,6 +465,8 @@ async function test_noFalseDoubleRoom() {
   await run('payment guest name saved once the column exists', test_paymentGuestName);
   await run('same room put in two retreats at once: warned and logged', test_doubleRoomWarned);
   await run('no false warning (free room, back-to-back dates)', test_noFalseDoubleRoom);
+  await run('extra packages and discount survive a reload', test_extraPackagesAndDiscountSurviveReload);
+  await run('upgrade group note saved once the column exists', test_upgradeNoteColumn);
   await run('direct write of a settings column is joined, not overwritten', test_directWriteJoinedNotOverwritten);
   await run('direct write not in memory: written, and an undo elsewhere stands', test_directWriteNotInMemoryPatchesBase);
   await run('switch off: direct writes unchanged', test_directWriteSwitchOff);
