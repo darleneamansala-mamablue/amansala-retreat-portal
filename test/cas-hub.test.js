@@ -69,7 +69,7 @@ function makeTab(db, localStore) {
 }
 const flush = async t => { await t.busy; await new Promise(r => setTimeout(r, 5)); await t.busy; };
 const bk = (id, extra) => ({ id, leader_name: 'L ' + id, notes: 'server', status: 'confirmed', retreat_activities: null, updated_at: '2026-11-01T00:00:00.000+00:00', ...extra });
-const casOn = { key: 'cas_sync', value: { mode: 'on' } };
+const casOn = { key: 'cas_sync', value: { mode: 'on2' } };
 
 let passed = 0, failed = 0;
 async function run(name, fn) { try { await fn(); console.log('ok   -', name); passed++; } catch (e) { console.error('FAIL -', name, '\n     ', e.stack.split('\n').slice(0, 3).join('\n      ')); failed++; } }
@@ -276,6 +276,16 @@ async function test_activitiesBothKeptThroughPage() {
   assert.deepStrictEqual(db.T.bookings.get('b1').retreat_activities.map(a => a.aoId).sort(), ['ao1', 'ao2', 'ao21']);
 }
 
+// 16. The switch written by older code ('on') still turns it on for the new code
+async function test_legacyOn() {
+  const db = fakeDb({ bookings: [bk('b1')], app_store: [{ key: 'cas_sync', value: { mode: 'on' } }] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  t.AppData.bookings[0].notes = 'edited';
+  t.saveAll(); await flush(t);
+  assert.ok(db.log.some(l => l.table === 'bookings' && l.op === 'update'));
+}
+
 (async () => {
   await run('save before first load never overwrites with the old local copy', test_saveBeforeLoadDoesNotOverwrite);
   await run('failed first load keeps the gate closed', test_failedLoadKeepsGateClosed);
@@ -287,6 +297,7 @@ async function test_activitiesBothKeptThroughPage() {
   await run('new booking survives a reload before its first save', test_newRowSurvivesReload);
   await run('switch off = old path', test_switchOffUsesOldPath);
   await run('same-field conflict goes to the Sync Log', test_conflictLogged);
+  await run("legacy 'on' still counts as on", test_legacyOn);
   await run('direct write of a settings column is joined, not overwritten', test_directWriteJoinedNotOverwritten);
   await run('direct write not in memory: written, and an undo elsewhere stands', test_directWriteNotInMemoryPatchesBase);
   await run('switch off: direct writes unchanged', test_directWriteSwitchOff);

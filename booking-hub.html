@@ -4645,12 +4645,14 @@ function sendRoomsSoldOutEmail(bkId){
 // (piggybacks the clear_signal read below) so a change takes effect within one save, no deploy needed:
 //   'off'     emergency: everyone on the old path, a browser's own ?cas=1 included
 //   'opt_in'  (default, also when the row does not exist) only browsers opened once with ?cas=1
-//   'on'      everyone, except a browser opened once with ?cas=0
+//   'on2'     everyone, except a browser opened once with ?cas=0. Written as 'on2' (not 'on') on purpose: a tab still running
+//             the JS from before the 2026-11-01 fixes reads any unknown value as 'opt_in', so it can never be switched onto
+//             the old, unfixed engine. ('on', from that older code, still counts as on here.)
 // Turn it off from Supabase: app_store, key cas_sync, value {"mode":"off"}.
 if(location.search.includes('cas=0'))localStorage.setItem('amansala_cas_sync','0');
 if(location.search.includes('cas=1'))localStorage.setItem('amansala_cas_sync','1');
 let _casRemoteMode='opt_in';
-function _casSetRemote(v){const m=v&&v.mode;_casRemoteMode=(m==='off'||m==='on')?m:'opt_in';}
+function _casSetRemote(v){const m=v&&v.mode;_casRemoteMode=m==='off'?'off':(m==='on'||m==='on2')?'on':'opt_in';}
 function casSyncEnabled(){
   let local=null;try{local=localStorage.getItem('amansala_cas_sync');}catch(e){}
   if(_casRemoteMode==='off')return false;
@@ -7011,7 +7013,7 @@ if(location.protocol!=='file:'){
 <script src="modules/menu-cost-edit.js?v=20261025a"></script>
 <script src="modules/menu-kitchen-costing.js?v=20261021a"></script>
 <script src="modules/double-charges.js?v=20261023a"></script>
-<script src="modules/sync-log.js?v=20261101a"></script>
+<script src="modules/sync-log.js?v=20261101b"></script>
 <script src="modules/checkout-balances.js?v=20261022a"></script>
 <script src="modules/host-checklist.js?v=20261029a"></script>
 <script src="modules/host-checklist-all.js?v=20261029d"></script>

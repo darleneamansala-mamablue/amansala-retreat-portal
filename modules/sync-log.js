@@ -25,7 +25,7 @@ const SL_REASON = (r, kind) => kind === 'conflict' ? 'dos personas cambiaron lo 
 const SL_MODES = [
   { mode: 'off', label: 'Apagada', note: 'Todos usan el sistema anterior. Úsalo si algo falla.' },
   { mode: 'opt_in', label: 'Solo quien la activa', note: 'Solo los navegadores que abrieron el portal con ?cas=1.' },
-  { mode: 'on', label: 'Todo el staff', note: 'Todos con la red de seguridad (un navegador puede salirse con ?cas=0).' },
+  { mode: 'on2', label: 'Todo el staff', note: 'Todos con la red de seguridad (un navegador puede salirse con ?cas=0).' },
 ];
 
 async function slLoad() {
@@ -38,7 +38,7 @@ async function slLoad() {
   const m = k => ((meta.data || []).find(r => r.key === k) || {}).value;
   slState.reviewed = m(SL_REVIEWED) || null;
   const sw = m(SL_SWITCH) || {};
-  slState.mode = (sw.mode === 'off' || sw.mode === 'on') ? sw.mode : 'opt_in';
+  slState.mode = sw.mode === 'off' ? 'off' : (sw.mode === 'on' || sw.mode === 'on2') ? 'on2' : 'opt_in';   // 'on2': see casSyncEnabled() in booking-hub.html
   slState.modeBy = sw.by ? { by: sw.by, at: sw.at } : null;
   if (typeof _casSetRemote === 'function') _casSetRemote(sw);
 }
