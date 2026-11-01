@@ -92,16 +92,25 @@ exports.handler = async () => {
   // Retreat registrations — a reg's own check_out, else its booking's end_date.
   // Same guards as the portal/housekeeping: skip rooms no longer in the
   // booking's blocked_rooms and guests marked cancelled.
-  const bks = await get(`/rest/v1/bookings?select=id,end_date,blocked_rooms&status=neq.cancelled&start_date=lte.${checkOut}&end_date=gte.${checkOut}`);
+  const bks = await get(`/rest/v1/bookings?select=id,start_date,end_date,blocked_rooms&status=neq.cancelled&start_date=lte.${checkOut}&end_date=gte.${checkOut}`);
   if (bks.length) {
     const bkById = Object.fromEntries(bks.map(b => [b.id, b]));
-    const regs = await get(`/rest/v1/registrations?select=id,room,booking_id,cancelled,check_out,guests&booking_id=in.(${bks.map(b => b.id).join(',')})`);
+    const regs = await get(`/rest/v1/registrations?select=id,room,booking_id,cancelled,check_in,check_out,guests&booking_id=in.(${bks.map(b => b.id).join(',')})`);
+    // A split stay (room change mid-stay) keeps ONE folio on its first segment -- the same anchor as the portal's Booking
+    // Detail (_bdSplitChain): walk back through segments whose check-out is this one's check-in. Before, the departing
+    // segment got its own empty folio and the guest was sent a $0 link.
+    const eff = r => ({ in: r.check_in || bkById[r.booking_id].start_date, out: r.check_out || bkById[r.booking_id].end_date });
+    const chainHead = reg => {
+      const all = regs.filter(r => r.booking_id === reg.booking_id), seen = [reg];
+      let cur = reg;
+      for (;;) { const prev = all.find(r => !seen.includes(r) && eff(r).out === eff(cur).in); if (!prev) return cur; seen.push(prev); cur = prev; }
+    };
     regs.forEach(reg => {
       const bk = bkById[reg.booking_id];
       if (reg.cancelled || (reg.check_out || bk.end_date) !== checkOut) return;
       if (bk.blocked_rooms?.length && !bk.blocked_rooms.includes(reg.room)) return;
       (reg.guests || []).filter(g => g.name && !g.cancelled).forEach(g => {
-        recipients.push({ kind: 'reg', anchorId: reg.id, guestName: g.name, phone: g.phone });
+        recipients.push({ kind: 'reg', anchorId: chainHead(reg).id, guestName: g.name, phone: g.phone });
       });
     });
   }

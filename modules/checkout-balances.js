@@ -41,13 +41,16 @@ async function cbScan() {
     if (!ci || !co) return false;
     return range ? (co >= range[0] && co <= range[1]) : (ci <= today && co >= today);
   });
-  const ids = regs.map(r => r.id);
+  // a split stay keeps one folio on its FIRST segment (Booking Detail's anchor): look the bill up there, not on the
+  // departing segment, which has none ("No bill yet" before)
+  const anchorOf = r => (typeof folioAnchorRegId === 'function' ? folioAnchorRegId(r.id) : r.id);
+  const ids = [...new Set(regs.map(anchorOf))];
   const folios = ids.length ? await cbFetchIn('folios', 'registration_id', ids, 'id,registration_id,guest_name') : [];
   const items = folios.length ? await cbFetchIn('folio_items', 'folio_id', folios.map(f => f.id), 'id,folio_id,qty,unit_price,tax_rate') : [];
   const bal = {}; items.forEach(i => { bal[i.folio_id] = (bal[i.folio_id] || 0) + (Number(i.qty) || 1) * (Number(i.unit_price) || 0) * (1 + (Number(i.tax_rate) || 0) / 100); });
   const byReg = {}; folios.forEach(f => { (byReg[f.registration_id] = byReg[f.registration_id] || []).push(f); });
   return regs.map(r => {
-    const b = bks[r.bookingId] || {}, fs = byReg[r.id] || [], total = Math.round(fs.reduce((s, f) => s + (bal[f.id] || 0), 0) * 100) / 100;
+    const b = bks[r.bookingId] || {}, fs = byReg[anchorOf(r)] || [], total = Math.round(fs.reduce((s, f) => s + (bal[f.id] || 0), 0) * 100) / 100;
     const guest = (fs[0] && fs[0].guest_name) || ((r.guests || []).find(g => g.name) || {}).name || '';
     const status = !fs.length ? 'nobill' : Math.abs(total) < 0.5 ? 'zero' : total > 0 ? 'owes' : 'credit';
     return { regId: r.id, room: r.room || '—', guest: guest.replace(/&amp;/g, '&'), retreat: b.retreatName || b.leaderName || '', checkOut: r.checkOut || b.endDate, balance: total, status, checkedOut: !!r.checkedOutAt };
