@@ -98,6 +98,10 @@ function sbTulumNow(){
   let hour=parseInt(get('hour'),10);if(hour===24)hour=0;
   return {dateStr:`${get('year')}-${get('month')}-${get('day')}`,minutes:hour*60+parseInt(get('minute'),10)};
 }
+// Guests need 2 hours' notice (Darlene 2026-11-01); anything sooner is booked in person with a spa representative.
+const SB_MIN_NOTICE_MIN=120;
+const SB_WALKIN_MSG='Online bookings need at least 2 hours\' notice. Please book in person with a spa representative.';
+function sbTooSoon(ds,m){const tn=sbTulumNow();return ds===tn.dateStr&&m<tn.minutes+SB_MIN_NOTICE_MIN;}
 const CAT_ORDER=['massage','spirit','fitness','yoga','pilates','dance'];
 const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates',dance:'Dance'};
 const CAT_ICON={massage:'🪷',spirit:'🦋',fitness:'💪',yoga:'🧘',pilates:'🤸',dance:'💃'};
@@ -681,19 +685,22 @@ function sbRenderSlots(candidates,svc){
   if(!candidates.length){wrap.innerHTML=`<div class="no-slots">No therapists available for this service yet. Please try a different preference or contact us directly.</div>`;return;}
   const tn=sbTulumNow();
   const rows=[];
+  let tooSoon=false;
   for(let m=SB_START_H*60;m<=SB_END_H*60-svc.duration;m+=30){
     if(SB.date===tn.dateStr&&m<=tn.minutes)continue; // already started/passed in Tulum time
+    if(sbTooSoon(SB.date,m)){tooSoon=true;continue;}  // under 2 hours away: book in person
     const assigns=sbAllFreeAssignments(candidates,SB.date,m,svc.duration);
     if(assigns.length) rows.push({start:m,assigns});
   }
-  if(!rows.length){wrap.innerHTML=`<div class="no-slots">No open times on this day — try another date.</div>`;return;}
+  const soonNote=tooSoon?`<div class="no-slots" style="color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;font-style:normal;font-weight:600;margin-bottom:10px">${SB_WALKIN_MSG}</div>`:'';
+  if(!rows.length){wrap.innerHTML=soonNote+`<div class="no-slots">${tooSoon?'No other times open today — try another date.':'No open times on this day — try another date.'}</div>`;return;}
   // No specific therapist chosen (no preference, or just female / male): show plain time buttons. Picking a time assigns the least-busy
   // free therapist automatically; staff can reassign or move the appointment afterwards in the admin calendar.
   if(SB.prefType!=='specific'){
-    wrap.innerHTML=`<div class="section-sub" style="margin:0 0 10px">Choose a time. We will assign one of our ${SB.prefType==='female'?'female ':SB.prefType==='male'?'male ':''}therapists for you.</div><div style="display:flex;flex-wrap:wrap;gap:8px">${rows.map(r=>`<button class="slot-btn" style="width:auto;padding:10px 16px" onclick="sbPickAutoSlot(${r.start})">${fmtT(minToHHMM(r.start))}</button>`).join('')}</div>`;
+    wrap.innerHTML=soonNote+`<div class="section-sub" style="margin:0 0 10px">Choose a time. We will assign one of our ${SB.prefType==='female'?'female ':SB.prefType==='male'?'male ':''}therapists for you.</div><div style="display:flex;flex-wrap:wrap;gap:8px">${rows.map(r=>`<button class="slot-btn" style="width:auto;padding:10px 16px" onclick="sbPickAutoSlot(${r.start})">${fmtT(minToHHMM(r.start))}</button>`).join('')}</div>`;
     return;
   }
-  wrap.innerHTML=`<div style="display:flex;flex-direction:column;gap:12px">${rows.map(r=>`
+  wrap.innerHTML=soonNote+`<div style="display:flex;flex-direction:column;gap:12px">${rows.map(r=>`
     <div>
       <div style="font-size:12px;font-weight:700;color:#8a7e74;margin-bottom:5px">${fmtT(minToHHMM(r.start))}</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
@@ -736,6 +743,7 @@ function sbRotationOrder(){
 function sbPickAutoSlot(startMin){
   const svc=SpaData.services.find(s=>s.id===SB.serviceId);
   const candidates=sbCandidateTherapists();
+  if(sbTooSoon(SB.date,startMin)){alert(SB_WALKIN_MSG);sbRenderSlots(candidates,svc);return;}
   const assigns=sbAllFreeAssignments(candidates,SB.date,startMin,svc.duration);   // re-checked now, in case someone just booked it
   if(!assigns.length){alert('Sorry, that time was just taken. Please choose another time.');sbRenderSlots(candidates,svc);return;}
   let picked=null,pickedGroup=null;
@@ -760,6 +768,7 @@ function sbPickAutoSlot(startMin){
   sbPickSlot(startMin,picked.therapist.id,picked.room?picked.room.id:'');
 }
 function sbPickSlot(startMin,therapistId,roomId){
+  if(sbTooSoon(SB.date,startMin)){alert(SB_WALKIN_MSG);renderStep6_DateTime(document.getElementById('mainContent'));return;}
   SB.start=minToHHMM(startMin);
   SB.therapistId=therapistId;
   SB.roomId=roomId||null;
