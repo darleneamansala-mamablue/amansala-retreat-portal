@@ -258,6 +258,22 @@ function hcAlertShow() {
 }
 setInterval(hcAlertTick, 60000); setTimeout(hcAlertTick, 7000);
 
+// Ticking a step redraws the list; keep the scroll position instead of jumping back to the top (Darlene 2026-11-02: "when we click here it jumps us back to the top")
+(function () {
+  const keep = (name, scroller) => {
+    const orig = window[name]; if (typeof orig !== 'function') return;
+    window[name] = function () {
+      const el = scroller(), top = el ? el.scrollTop : 0, pageY = window.scrollY;
+      const out = orig.apply(this, arguments);
+      const el2 = scroller(); if (el2 && top) el2.scrollTop = top;
+      if (pageY && Math.abs(window.scrollY - pageY) > 2) window.scrollTo(window.scrollX, pageY);
+      return out;
+    };
+  };
+  keep('hcRender', () => document.getElementById('hcContent'));
+  keep('hcRenderBox', () => document.getElementById('hcContent'));
+})();
+
 (function () {
   const side = document.getElementById('staffSideBtn'), after = document.getElementById('tab-checkoutbalances') || document.getElementById('tab-doublecharges');
   if (!side || !after || document.getElementById('tab-hostchecklist')) return;
