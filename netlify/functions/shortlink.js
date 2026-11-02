@@ -12,7 +12,9 @@
 // suffix is added on top — same scheme used everywhere else in the app.
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
+// The service key, read on the server (2026-11-02): this used the public anon key, which stops reading bookings once the
+// database rules are on (security plan phase 4).
+const SUPABASE_ANON_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 const MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
 

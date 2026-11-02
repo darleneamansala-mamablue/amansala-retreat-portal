@@ -77,21 +77,17 @@ function loadStaff(){
   if(!staffAccounts.length){staffAccounts=DEF_STAFF.map(s=>({...s}));}
 }
 function saveStaff(){
+  // this browser's copy only: the staff table is saved through netlify/functions/staff-accounts.js (2026-11-02) -- the
+  // upsert that used to run here was refused by the database since password_hash was hidden from the browser (2026-10-02)
   localStorage.setItem('amansala_staff',JSON.stringify(staffAccounts));
-  (async()=>{
-    try{
-      // Skip DEF_STAFF/MASTER-shaped fallback entries (plaintext `.password`,
-      // never real accounts) -- NOT "has a cached passwordHash" (security fix
-      // 2026-10-02: refreshStaffFromSql() no longer loads that field at all,
-      // so a real existing account edited here -- e.g. toggling active --
-      // would otherwise get silently excluded from the sync every time).
-      // appStaffToSqlRow() already omits password_hash when unset, so this
-      // never nulls out an existing hash just because this browser doesn't
-      // have it cached.
-      const rows=staffAccounts.filter(s=>!s.password&&!s.builtin).map(appStaffToSqlRow);   // builtin = the DEF_STAFF placeholders
-      if(rows.length)await db.from('staff').upsert(rows);
-    }catch(e){console.warn('Staff sync failed:',e);}
-  })();
+}
+// Manage Staff -> staff-accounts.js with this admin's sign-in pass
+async function staffAccountsApi(body){
+  let token='';try{token=sessionStorage.getItem('amansala_staff_token')||'';}catch(e){}
+  const r=await fetch('/.netlify/functions/staff-accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,...body})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||!d.ok)throw new Error(d.error||('error '+r.status));
+  return d;
 }
 
 function getCurrentSession(){
@@ -368,42 +364,38 @@ async function saveStaffMember(){
     if(!name){showToast('Please enter a name.');return;}
     if(!username){showToast('Please enter a username.');return;}
     if(!id&&!password){showToast('Please enter a password.');return;} // required only when creating
-    let s;
-    if(id){
-      s=staffAccounts.find(a=>a.id===id);
-      if(s){
-        s.name=name;s.username=username;s.role=role;
-        if(password)s.passwordHash=await hashPassword(password);
-      }
-    }else{
-      s={id:uid(),name,username,passwordHash:await hashPassword(password),role,active:true};
-      staffAccounts.push(s);
-    }
+    if(password&&password.length<6){showToast('Use a password of at least 6 characters.');return;}
+    showToast('Saving '+(id?'changes':'account')+'…');
+    // saved on the server (the password is hashed there and never kept in this browser)
+    let saved;
+    try{saved=await staffAccountsApi({action:'save',id:id||null,name,username,role,password:password||null});}
+    catch(err){showToast('⚠️ Not saved: '+err.message);return;}
+    let s=id?staffAccounts.find(a=>a.id===id):null;
+    if(s){s.name=name;s.username=username;s.role=role;s.id=saved.id;delete s.password;delete s.passwordHash;delete s.builtin;}
+    else{s={id:saved.id,name,username,role,active:true};staffAccounts.push(s);}
     localStorage.setItem('amansala_staff',JSON.stringify(staffAccounts));
     closeModal('editStaffModal');
     try{renderStaffList();}catch(e){console.warn('[staff] renderList:',e);}
     try{logActivity('Staff account '+(id?'updated':'added'),`${name} (@${username}, ${role})`,null);}catch(e){}
-    showToast('Saving '+(id?'changes':'account')+'…');
-    db.from('staff').upsert(appStaffToSqlRow(s))
-      .then(({error})=>{
-        if(error)showToast('⚠️ Cloud sync failed — '+name+' may not be able to log in from another device. Try again.');
-        else showToast('Staff member '+(id?'updated':'added')+': '+name+' ✓ Synced to cloud');
-      }).catch(()=>showToast('⚠️ Cloud sync failed — staff account saved locally only.'));
+    showToast('Staff member '+(id?'updated':'added')+': '+name+' ✓');
   }catch(e){
     console.error('[staff] saveStaffMember error:',e);
     showToast('Save failed: '+e.message);
   }
 }
 
-function toggleStaffActive(id){
+async function toggleStaffActive(id){
   const s=staffAccounts.find(a=>a.id===id);if(!s)return;
+  try{await staffAccountsApi({action:'setActive',id,active:!s.active});}catch(err){showToast('⚠️ Not saved: '+err.message);return;}
   s.active=!s.active;saveStaff();renderStaffList();
   logActivity('Staff account '+(s.active?'activated':'deactivated'),s.name,null);
   showToast(`${s.name} ${s.active?'activated':'deactivated'}.`);
 }
-function deleteStaffMember(id){
+async function deleteStaffMember(id){
   const s=staffAccounts.find(a=>a.id===id);if(!s)return;
   if(!confirm(`Delete ${s.name} (@${s.username})? This cannot be undone.`))return;
+  // removed from the staff table too (it used to stay there and could still sign in)
+  try{await staffAccountsApi({action:'delete',id});}catch(err){showToast('⚠️ Not deleted: '+err.message);return;}
   staffAccounts=staffAccounts.filter(a=>a.id!==id);
   saveStaff();renderStaffList();
   logActivity('Staff account deleted',`${s.name} (@${s.username})`,null);

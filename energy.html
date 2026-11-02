@@ -6,7 +6,6 @@
 <meta name="robots" content="noindex">
 <title>Energy vs Generator | Amansala</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Cormorant+Garamond:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 :root{--bg:#f6f3ec;--ink:#1f2b27;--moss:#3f5147;--line:#d9d2c3;--paper:#fffdf8;--ok:#2f7a4b;--warn:#b7791f;--bad:#b3261e;--muted:#6b6a5f}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 'DM Sans',sans-serif}
@@ -116,7 +115,6 @@ CH26=2
 <p class="note">Saved on this computer only. Occupancy comes from the portal's bookings (blocked rooms of every non-cancelled retreat and room-only reservation).</p>
 </div>
 <script>
-var db=supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A');
 var APPS=[
  {n:'Boutique AC',q:1,kw:2.5,h:12,s:9,d:70},
  {n:'AC in the gold room (confirm which room)',q:1,kw:1.0,h:12,s:9,d:65},
@@ -281,10 +279,10 @@ function chart(rows,g){
 async function fetchBookings(){
   $('status').textContent='Loading bookings…';
   var a=$('from').value,b=$('to').value;
-  var r=await db.from('bookings').select('start_date,end_date,status,blocked_rooms').lte('start_date',b).gte('end_date',a).neq('status','cancelled');
-  if(r.error){$('status').textContent='Could not load bookings: '+r.error.message;return}
-  BK=(r.data||[]).filter(function(x){return x.start_date&&x.end_date});
-  try{var rt=await db.from('room_types').select('id,rooms');ROOMTYPES=rt.data||[];(rt.data||[]).forEach(function(t){(t.rooms||[]).forEach(function(n){var k=base(n).toLowerCase();if(!TYPE[k]||/^rt/.test(t.id))TYPE[k]=t.id})})}catch(e){}
+  // occupancy from netlify/functions/energy-data.js (2026-11-02), not with the public database key
+  var d;try{var res=await fetch('/.netlify/functions/energy-data?from='+encodeURIComponent(a)+'&to='+encodeURIComponent(b));d=await res.json();if(!res.ok)throw new Error(d.error||res.status)}catch(e){$('status').textContent='Could not load bookings: '+e.message;return}
+  BK=(d.bookings||[]).filter(function(x){return x.start_date&&x.end_date});
+  ROOMTYPES=d.roomTypes||[];ROOMTYPES.forEach(function(t){(t.rooms||[]).forEach(function(n){var k=base(n).toLowerCase();if(!TYPE[k]||/^rt/.test(t.id))TYPE[k]=t.id})});
   $('status').textContent=BK.length+' bookings loaded';weekLabel();render();
 }
 document.addEventListener('input',function(e){var t=e.target;if(t.dataset&&t.dataset.i!=null){APPS[+t.dataset.i][t.dataset.f]=+t.value||0}if(t.closest&&t.closest('.card')&&t.id!=='from'&&t.id!=='to'){save();render()}});

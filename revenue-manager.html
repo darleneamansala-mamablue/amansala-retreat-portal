@@ -250,9 +250,7 @@ svg text{font-family:'Jost',sans-serif}
 
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
-const _db=supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A');
 
 // Only Jorge and Darlene can use this tool (Jorge's ask 2026-10-17) -- there's no granular
 // role system yet, so this is a simple allow-list on the staff-login session name, same
@@ -312,12 +310,9 @@ function rmRoomSortKey(rt){
 }
 
 async function rmLoadAll(){
-  const [settingsRes,recsRow]=await Promise.all([
-    rmFetch('/.netlify/functions/room-price-settings').then(r=>r.json()),
-    _db.from('app_store').select('value').eq('key','room_price_genie_recommendations').maybeSingle(),
-  ]);
+  const settingsRes=await rmFetch('/.netlify/functions/room-price-settings').then(r=>r.json());   // recommendations included (2026-11-02)
   RM_SETTINGS=settingsRes.settings; RM_ROOM_TYPES=settingsRes.roomTypes.slice().sort((a,b)=>rmRoomSortKey(a)-rmRoomSortKey(b)); RM_SEASONAL=settingsRes.seasonalAdjustments||{};
-  RM_RECS=(recsRow.data&&recsRow.data.value)||null;
+  RM_RECS=settingsRes.recommendations||null;
   rmPopulateRoomTypeSelects();
   rmRenderRoomsSetup(); rmRenderWeekday(); rmRenderMonthly(); rmRenderOccupancy(); rmRenderLeadTime();
 }
@@ -332,8 +327,8 @@ async function rmRefreshRecs(){
   rmToast('Recomputing…');
   try{
     await rmFetch('/.netlify/functions/room-price-recalc-now');
-    const recsRow=await _db.from('app_store').select('value').eq('key','room_price_genie_recommendations').maybeSingle();
-    RM_RECS=(recsRow.data&&recsRow.data.value)||null;
+    const fresh=await rmFetch('/.netlify/functions/room-price-settings').then(r=>r.json());
+    RM_RECS=fresh.recommendations||null;
     rmRenderCalendar();
     rmToast('Recommendations updated');
   }catch(e){rmToast('Refresh failed: '+e.message);}

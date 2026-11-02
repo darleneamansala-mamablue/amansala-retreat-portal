@@ -20,12 +20,13 @@ exports.handler = async (event) => {
 
   try {
     if (event.httpMethod === 'GET') {
-      const [settings, roomTypes, besRows] = await Promise.all([
+      const [settings, roomTypes, besRows, recRows] = await Promise.all([
         L.loadSettings(key), L.loadRoomTypes(key),
         L.sget(key, 'booking_engine_settings?id=eq.1&select=weekend_premium,seasonal_adjustments'),
+        L.sget(key, 'app_store?key=eq.room_price_genie_recommendations&select=value'),   // the page used to read these with the public key
       ]);
       const bes = besRows[0] || {};
-      return ok({ settings, roomTypes, seasonalAdjustments: bes.seasonal_adjustments || {}, weekendPremiumPct: bes.weekend_premium ?? 0 });
+      return ok({ settings, roomTypes, seasonalAdjustments: bes.seasonal_adjustments || {}, weekendPremiumPct: bes.weekend_premium ?? 0, recommendations: (recRows[0] && recRows[0].value) || null });
     }
     if (event.httpMethod === 'POST') {
       let body;
