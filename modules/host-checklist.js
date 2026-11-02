@@ -18,7 +18,6 @@ const HC_ITEMS = [
   { id: 'transport-folder', when: 'S-3', group: '3 days prior to retreat', text: 'Folder with transport information, printed 3 days in advance. Note if TEACHER PAYS or STUDENTS PAY for transport', hint: 'transport' },
   { id: 'schedule-printed', when: 'S-1', group: '1 day prior to retreat', text: 'Schedule printed, ready for teacher review' },
   { id: 'activity-sheet', when: 'S-1', group: '1 day prior to retreat', text: 'Activity sheet drafted' },
-  { id: 'firepit-nights', when: 'S-1', group: '1 day prior to retreat', text: 'Fire Pit: confirm with the teacher which nights they want it, and set them with the 🔥 Fire Pit button', hint: 'firepit' },
   { id: 'menu-fridge', when: 'S1', group: '1 day prior (2 days if the retreat starts on a Sunday)', text: 'Menu on the fridge, and meet with the kitchen', hint: 'offsite' },
   { id: 'review-menu', when: 'S1', group: '1 day prior (2 days if the retreat starts on a Sunday)', text: 'Review the menu, meal times and the offsite dinner', hint: 'offsite' },
   { id: 'allergies-fridge', when: 'S1', group: '1 day prior (2 days if the retreat starts on a Sunday)', text: 'Note with allergies and preferences on the fridge' },
