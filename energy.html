@@ -588,11 +588,24 @@ function snapshot(){
    days:r.rows.map(function(x){return {night:x.d,roomsOccupied:x.rooms,acUnitsOn:x.units,kwhLow:Math.round(x.lo),kwhLikely:Math.round(x.mid),kwhHigh:Math.round(x.hi),peakKw:Math.round(x.peak*10)/10,generatorCapacityKw:Math.round(x.cap),peakPctOfCapacity:Math.round(x.pct),energyPctOfWhatGeneratorCanSupply:Math.round(x.epct*10)/10}})};
 }
 function addMsg(role,text){var d=document.createElement('div');d.style.cssText='margin:8px 0;padding:10px 12px;white-space:pre-wrap;'+(role==='user'?'background:#eef2ee;margin-left:40px':'background:#fff;border:1px solid var(--line);margin-right:40px');d.textContent=text;$('chatlog').appendChild(d);$('chatlog').scrollTop=$('chatlog').scrollHeight;return d}
+// The assistant spends the Anthropic account, so it answers staff only (2026-11-02: it used to answer anyone): a one-time
+// sign-in with the portal's staff login, kept for this browser tab.
+async function energyToken(){
+  var t='';try{t=sessionStorage.getItem('energy_token')||'';}catch(e){}
+  if(t)return t;
+  var u=prompt('Portal username (staff only):');if(!u)return '';
+  var p=prompt('Password:');if(!p)return '';
+  try{var r=await fetch('/.netlify/functions/staff-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});var d=await r.json();
+    if(d&&d.success&&d.token){try{sessionStorage.setItem('energy_token',d.token);}catch(e){}return d.token;}}catch(e){}
+  alert('Wrong username or password.');return '';
+}
 async function ask(q){
-  q=(q||'').trim();if(!q)return;$('chatq').value='';addMsg('user',q);CHAT.push({role:'user',content:q});
+  q=(q||'').trim();if(!q)return;
+  var tok=await energyToken();if(!tok)return;$('chatq').value='';addMsg('user',q);CHAT.push({role:'user',content:q});
   var wait=addMsg('assistant','Thinking…');$('chatgo').disabled=true;
   try{
-    var r=await fetch('/.netlify/functions/energy-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:CHAT,report:snapshot()})});
+    var r=await fetch('/.netlify/functions/energy-chat',{method:'POST',headers:{'Content-Type':'application/json','X-Portal-Token':tok},body:JSON.stringify({messages:CHAT,report:snapshot()})});
+    if(r.status===401){try{sessionStorage.removeItem('energy_token');}catch(e){}}
     var j=await r.json();var a=j.answer||j.error||'Something went wrong. Please try again.';
     wait.textContent=a;if(j.answer)CHAT.push({role:'assistant',content:a});else CHAT.pop();
   }catch(e){wait.textContent='Connection problem. Please try again.';CHAT.pop()}

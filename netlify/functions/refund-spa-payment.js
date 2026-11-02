@@ -23,6 +23,24 @@ exports.handler = async (event) => {
   const { paymentIntentId } = body;
   if (!paymentIntentId) return jsonErr(400, 'Missing paymentIntentId');
 
+  // Only that case (2026-11-02: this used to refund ANY payment on the Stripe account for anyone who asked): a spa-booking
+  // payment made in the last 2 hours that no appointment holds.
+  const piRes = await fetch(`${STRIPE_API}/payment_intents/${encodeURIComponent(String(paymentIntentId))}`, {
+    headers: { 'Authorization': `Bearer ${stripeKey}`, 'Stripe-Version': '2024-06-20' },
+  });
+  const pi = await piRes.json();
+  if (pi.error || !pi.id) return jsonErr(400, 'Payment not found');
+  if ((pi.metadata || {}).source !== 'spa_booking') return jsonErr(403, 'Not a spa booking payment');
+  if (pi.status !== 'succeeded') return jsonErr(400, 'Payment not completed');
+  if (Date.now() / 1000 - pi.created > 2 * 3600) return jsonErr(403, 'Too old to refund here: ask the front desk');
+  const supaKey = process.env.SUPABASE_SERVICE_KEY;
+  if (!supaKey) return jsonErr(500, 'Server config error');
+  const ar = await fetch('https://vnttlpqkssihbmcynxvo.supabase.co/rest/v1/app_store?key=eq.spa_appointments&select=value', { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } });
+  if (!ar.ok) return jsonErr(500, 'Could not check the appointment');
+  const rows = await ar.json();
+  const appts = (rows[0] && Array.isArray(rows[0].value)) ? rows[0].value : [];
+  if (appts.some(a => a && a.paymentIntentId === pi.id && a.status !== 'CANCELLED')) return jsonErr(403, 'This payment belongs to a booked appointment');
+
   const params = new URLSearchParams({ payment_intent: paymentIntentId });
   const res = await fetch(`${STRIPE_API}/refunds`, {
     method:  'POST',

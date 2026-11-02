@@ -173,7 +173,20 @@ async function checkLogin(key, kind, username, password) {
   return a ? { id: a.id, name: a.name, username: u, role: a.role } : null;
 }
 
-const cors = () => ({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' });
+// The signed pass from staff-login (body.token or header X-Portal-Token), for functions only staff may call.
+// opts.admin: role admin only; opts.names: lower-case name fragments allowed (Revenue Manager: jorge, darlene).
+function staffFromEvent(event, opts = {}) {
+  const h = event.headers || {};
+  let tok = h['x-portal-token'] || h['X-Portal-Token'];
+  if (!tok && event.body) { try { tok = JSON.parse(event.body).token; } catch (e) {} }
+  const c = verifyToken(tok);
+  if (!c || c.kind !== 'staff') return null;
+  if (opts.admin && c.role !== 'admin') return null;
+  if (opts.names && !opts.names.some(n => String(c.name || '').toLowerCase().includes(n))) return null;
+  return c;
+}
+
+const cors = () => ({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token' });
 const reply = (code, data) => ({ statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
 
-module.exports = { signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };
+module.exports = { staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };

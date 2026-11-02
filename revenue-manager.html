@@ -259,6 +259,14 @@ const _db=supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJh
 // session shape booking-hub.html already uses (netlify/functions/staff-login.js).
 const RM_ALLOWED = ['jorge','darlene'];
 
+// The price functions only answer with the staff-login pass (2026-11-02: they used to answer anyone). A pass that ran out
+// (12 h) or a session from before the change sends you back to the sign-in.
+async function rmFetch(url,opts={}){
+  let tok='';try{tok=sessionStorage.getItem('rm_token')||'';}catch(e){}
+  const r=await fetch(url,{...opts,headers:{...(opts.headers||{}),'X-Portal-Token':tok}});
+  if(r.status===401){try{sessionStorage.removeItem('rm_session');sessionStorage.removeItem('rm_token');}catch(e){}alert('Please sign in again.');location.reload();throw new Error('signed out');}
+  return r;
+}
 function rmToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
 
 async function rmLogin(){
@@ -275,6 +283,7 @@ async function rmLogin(){
       return;
     }
     sessionStorage.setItem('rm_session',JSON.stringify(d.session));
+    sessionStorage.setItem('rm_token',d.token||'');
     rmBoot(d.session);
   }catch(e){errEl.textContent='Login failed: '+e.message;errEl.style.display='block';}
 }
@@ -304,7 +313,7 @@ function rmRoomSortKey(rt){
 
 async function rmLoadAll(){
   const [settingsRes,recsRow]=await Promise.all([
-    fetch('/.netlify/functions/room-price-settings').then(r=>r.json()),
+    rmFetch('/.netlify/functions/room-price-settings').then(r=>r.json()),
     _db.from('app_store').select('value').eq('key','room_price_genie_recommendations').maybeSingle(),
   ]);
   RM_SETTINGS=settingsRes.settings; RM_ROOM_TYPES=settingsRes.roomTypes.slice().sort((a,b)=>rmRoomSortKey(a)-rmRoomSortKey(b)); RM_SEASONAL=settingsRes.seasonalAdjustments||{};
@@ -322,7 +331,7 @@ function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'
 async function rmRefreshRecs(){
   rmToast('Recomputing…');
   try{
-    await fetch('/.netlify/functions/room-price-recalc-now');
+    await rmFetch('/.netlify/functions/room-price-recalc-now');
     const recsRow=await _db.from('app_store').select('value').eq('key','room_price_genie_recommendations').maybeSingle();
     RM_RECS=(recsRow.data&&recsRow.data.value)||null;
     rmRenderCalendar();
@@ -356,7 +365,7 @@ async function rmSaveSettings(){
   ['6mo','3mo','6w','4w','2w','1w','7d','3d','0d'].forEach(k=>{const el=document.getElementById('lt_'+k);if(el)RM_SETTINGS.leadTimePct[k]=parseFloat(el.value)||0;});
 
   try{
-    const r=await fetch('/.netlify/functions/room-price-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({settings:RM_SETTINGS,seasonalAdjustments:RM_SEASONAL})});
+    const r=await rmFetch('/.netlify/functions/room-price-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({settings:RM_SETTINGS,seasonalAdjustments:RM_SEASONAL})});
     const d=await r.json();
     if(d.success){rmToast('Saved — recommendations refresh tonight (or click Refresh on Calendar)');}
     else rmToast('Save failed: '+(d.error||'unknown error'));
@@ -563,7 +572,7 @@ async function rmUploadVisible(){
   if(!confirm(`Upload ${changes.length} new price(s) to Escape for ${esc(RM_ROOM_TYPES.find(r=>r.id===rtId).name)}?`))return;
   const btn=document.getElementById('calUploadBtn'); btn.disabled=true;
   try{
-    const r=await fetch('/.netlify/functions/room-price-apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({changes,staffName:RM_SESSION.name})});
+    const r=await rmFetch('/.netlify/functions/room-price-apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({changes,staffName:RM_SESSION.name})});
     const d=await r.json();
     if(d.success){rmToast(`Uploaded ${d.applied} price(s)`); changes.forEach(c=>{byDate[c.date].current=c.price_single;}); rmRenderCalendar();}
     else rmToast('Upload failed: '+(d.error||'unknown error'));
@@ -625,7 +634,8 @@ function rmNav(page){
 // ---- Boot ----
 (function(){
   const saved=sessionStorage.getItem('rm_session');
-  if(saved){
+  let tok='';try{tok=sessionStorage.getItem('rm_token')||'';}catch(e){}
+  if(saved&&tok){
     try{const session=JSON.parse(saved); if(RM_ALLOWED.some(n=>(session.name||'').toLowerCase().includes(n))){rmBoot(session);return;}}catch(e){}
   }
 })();

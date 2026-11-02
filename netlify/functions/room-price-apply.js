@@ -11,9 +11,14 @@
 // of forcing a whole date range to share one number.
 const L = require('./room-price-lib');
 
+const { staffFromEvent } = require('./portal-auth-lib');
+const RM_NAMES = ['jorge', 'darlene'];   // same allow-list as revenue-manager.html
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: '' };
   if (event.httpMethod !== 'POST') return jsonErr(405, 'Method Not Allowed');
+  // Staff only (2026-11-02): this used to answer anyone on the internet -- the Revenue Manager sends the staff-login pass.
+  if (!staffFromEvent(event, { names: RM_NAMES })) return jsonErr(401, 'Sign in again');
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!key) return jsonErr(500, 'Server config error');
 
@@ -35,5 +40,5 @@ exports.handler = async (event) => {
 };
 
 function ok(data) { return { statusCode: 200, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) }; }
-function cors() { return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' }; }
+function cors() { return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token' }; }
 function jsonErr(code, msg) { return { statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify({ error: msg }) }; }
