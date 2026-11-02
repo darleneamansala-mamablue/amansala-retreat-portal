@@ -16,7 +16,8 @@ function mdPickup(d) { // minutes since midnight, or null
   return f - (d.departureAirport === 'tulum' ? 150 : 210);
 }
 async function mdLoad() {
-  if (typeof teacherScoped === 'function' && teacherScoped()) return false;   // teacher portal: no kitchen menu, and only its own retreat is loaded
+  if (typeof teacherScoped === 'function' && teacherScoped()) return false;
+  if (typeof _portalCanLoad === 'function' && !_portalCanLoad()) return false;   // not signed in yet   // teacher portal: no kitchen menu, and only its own retreat is loaded
   try {
     const { data, error } = await db.from('transport').select('id,booking_id,data'); if (error) throw error;
     const rows = (data || []).filter(r => r.booking_id && r.data && r.data.departureDate && r.data.departureTime);

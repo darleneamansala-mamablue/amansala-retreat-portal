@@ -50,6 +50,7 @@ async function hashPassword(password){
 // drive the Manage Staff screen and name/role lookups elsewhere, never the
 // hash.
 async function refreshStaffFromSql(){
+  if(typeof _portalCanLoad==='function'&&!_portalCanLoad())return;   // not signed in yet: the login itself is checked on the server
   try{
     const{data,error}=await db.from('staff').select('id,name,username,role,active,permissions');
     if(error||!data||!data.length)return;
@@ -152,6 +153,7 @@ function staffLoginComplete(session){
   logActivity('Signed in','',null);
   buildDashboard();
   venBuild();
+  if(typeof portalLoadAfterSignIn==='function')portalLoadAfterSignIn();   // the data loads now, with the pass
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('staffLoginOverlay')?.style.display!=='none')staffLoginSubmit();});
 

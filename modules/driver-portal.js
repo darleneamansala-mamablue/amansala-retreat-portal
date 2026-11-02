@@ -85,6 +85,7 @@ function driverLoginComplete(account){
   const ov=document.getElementById('driverLoginOverlay');if(ov)ov.style.display='none';
   const dash=document.getElementById('driverDashboard');if(dash)dash.style.display='block';
   drInitDashboard();
+  if(typeof portalLoadAfterSignIn==='function')portalLoadAfterSignIn();   // the data loads now, with the pass
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('driverLoginOverlay')?.style.display!=='none'&&IS_DRIVER_MODE)driverLoginSubmit();});
 

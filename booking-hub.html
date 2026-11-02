@@ -4248,8 +4248,8 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 // public anon key, so the database knows who is asking (role 'authenticated' + app_role). Nothing is locked yet (that is
 // phase 4): with the switch off -- app_store 'db_pass' = {"mode":"off"|"on"} -- or no pass, every request uses the anon
 // key exactly as before. ?pass=1 tries it on one browser (remembered), ?pass=0 takes that browser out.
-let _dbPassMode='off';
-function _dbPassSetRemote(v){_dbPassMode=v&&v.mode==='on'?'on':'off';}
+let _dbPassMode='on';   // until app_store says otherwise: the data now waits for a signed-in pass (phase 4)
+function _dbPassSetRemote(v){_dbPassMode=v&&v.mode==='off'?'off':'on';}   // only an explicit {"mode":"off"} turns it off
 try{if(location.search.includes('pass=1'))localStorage.setItem('amansala_db_pass_test','1');if(location.search.includes('pass=0'))localStorage.setItem('amansala_db_pass_test','0');}catch(e){}
 function _dbPassOn(){let t=null;try{t=localStorage.getItem('amansala_db_pass_test');}catch(e){}return t==='0'?false:t==='1'||_dbPassMode==='on';}
 function dbPassGet(){
@@ -4259,7 +4259,24 @@ function dbPassGet(){
     return c.exp*1000>Date.now()+30000?{t,c}:null;
   }catch(e){return null;}
 }
-function dbPassStore(t){try{if(t)sessionStorage.setItem('amansala_db_pass',t);else sessionStorage.removeItem('amansala_db_pass');}catch(e){}}
+function dbPassStore(t){
+  try{
+    if(t){sessionStorage.setItem('amansala_db_pass',t);sessionStorage.removeItem('amansala_pass_unavailable');}
+    else{sessionStorage.removeItem('amansala_db_pass');sessionStorage.setItem('amansala_pass_unavailable','1');}   // the server issued none (no JWT secret): this session reads as before
+  }catch(e){}
+}
+// Phase 4 (2026-11-02): the portal's data is read only once someone is signed in with a pass -- the login screen no
+// longer downloads every booking, guest and payment. Teachers (their own retreat, with its pass) and the public event
+// form are not affected. After a sign-in the page reloads once so everything loads with the pass.
+function _portalCanLoad(){
+  try{
+    if(typeof teacherScoped==='function'&&teacherScoped())return true;
+    if(typeof IS_EVENT_MODE!=='undefined'&&IS_EVENT_MODE)return true;
+    if(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE)return true;   // staff previewing a teacher portal
+    return !!sessionStorage.getItem('amansala_db_pass')||sessionStorage.getItem('amansala_pass_unavailable')==='1';
+  }catch(e){return true;}
+}
+function portalLoadAfterSignIn(){if(typeof _casBaseReady!=='undefined'&&!_casBaseReady)setTimeout(()=>location.reload(),60);}
 // signed in, switch on, but no pass (signed in before the pass existed, or it ran out): logged once per page
 let _dbPassMissLogged=false;
 function _dbPassMiss(){
@@ -4295,8 +4312,9 @@ const db=supabase.createClient(SUPA_URL,SUPA_KEY,{accessToken:async()=>dbAuthTok
   try{
     const ss=sessionStorage,done=keys=>{keys.forEach(k=>ss.removeItem(k));ss.setItem('ama_signin_again','1');};
     const has=k=>{try{const v=JSON.parse(ss.getItem(k)||'null');return !!(v&&typeof v==='object');}catch(e){return false;}};
-    if(has('amansala_staff_session')&&!ss.getItem('amansala_staff_token'))done(['amansala_staff_session','amansala_db_pass']);
-    if(!ss.getItem('amansala_db_pass'))['amansala_spa_staff_session','amansala_driver_session','amansala_staff_confirm_session'].forEach(k=>{if(has(k))done([k]);});
+    const noPass=!ss.getItem('amansala_db_pass')&&ss.getItem('amansala_pass_unavailable')!=='1';
+    if(has('amansala_staff_session')&&(!ss.getItem('amansala_staff_token')||noPass))done(['amansala_staff_session','amansala_db_pass']);
+    if(noPass)['amansala_spa_staff_session','amansala_driver_session','amansala_staff_confirm_session'].forEach(k=>{if(has(k))done([k]);});
     if(ss.getItem('ama_signin_again')){
       // say why on whichever login screen shows
       const say=()=>{const ids=['staffLoginErr','spaStaffLoginErr','driverLoginErr','staffConfirmLoginErr'];let shown=false;
@@ -5339,6 +5357,7 @@ async function _teacherFetch(){
 }
 async function loadFromSupabase(){
   try{
+    if(typeof _portalCanLoad==='function'&&!_portalCanLoad())return false;   // not signed in yet: nothing is read (phase 4)
     const _tp=teacherScoped()?await _teacherFetch():null;
     if(!_tp&&teacherScoped())return false;
     // spa_appts_bk_* = the spa-appointment safety backups (89 copies, ~16 MB). Nothing in the app reads them (only the backup function), and pulling them
@@ -7047,7 +7066,7 @@ function switchTab(id,btn){
 // ===== PAYMENT RECORDING — moved to modules/payments.js =====
 // ===== PIPELINE STEPS — moved to modules/payments.js (loaded above) =====
 </script>
-<script src="modules/admin-staff.js?v=20261102b"></script>
+<script src="modules/admin-staff.js?v=20261102c"></script>
 <script>
 // ===== ADMIN DONE TASKS — moved to modules/admin-staff.js =====
 </script>
@@ -7082,8 +7101,8 @@ function switchTab(id,btn){
 <script>
 // ===== TRANSPORTATION — moved to modules/transport.js =====
 </script>
-<script src="modules/driver-portal.js?v=20261102b"></script>
-<script src="modules/spa-staff-portal.js?v=20261102b"></script>
+<script src="modules/driver-portal.js?v=20261102c"></script>
+<script src="modules/spa-staff-portal.js?v=20261102c"></script>
 <script src="modules/housekeeping.js?v=20260930c"></script>
 <script src="modules/teacher-profiles.js"></script>
 <script src="modules/cloudbeds-extra.js"></script>
@@ -7275,7 +7294,7 @@ if(location.protocol!=='file:'){
 </script>
 <script src="modules/menu.js?v=20261030b"></script>
 <script src="modules/menu-offsite-dinner.js?v=20261030a"></script>
-<script src="modules/menu-departure-meals.js?v=20261102a"></script>
+<script src="modules/menu-departure-meals.js?v=20261102b"></script>
 <script src="modules/menu-variants.js?v=20261009b"></script>
 <script src="modules/menu-protein-names.js?v=20261021a"></script>
 <script src="modules/menu-editor.js?v=20261025a"></script>
@@ -7850,7 +7869,7 @@ if(location.protocol!=='file:'){
 <script src="modules/bbc-upload.js?v=20261025a"></script>
 <script src="modules/bbc-short-stays.js?v=20261025b"></script>
 <script src="modules/bbc-sort-slots.js?v=20261025a"></script>
-<script src="modules/staff-confirm-portal.js?v=20261102b"></script>
+<script src="modules/staff-confirm-portal.js?v=20261102c"></script>
 <script src="modules/spa-confirm-label.js?v=20261014a"></script>
 <script src="modules/spa-therapist-done.js?v=20261023a"></script>
 <script src="modules/spa-reports.js?v=20261025a"></script>

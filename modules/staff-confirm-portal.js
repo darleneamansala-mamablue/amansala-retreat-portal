@@ -245,6 +245,7 @@ function staffConfirmLoginComplete(account){
   const ov=document.getElementById('staffConfirmLoginOverlay');if(ov)ov.style.display='none';
   const dash=document.getElementById('staffConfirmDashboard');if(dash)dash.style.display='block';
   scInitDashboard();
+  if(typeof portalLoadAfterSignIn==='function')portalLoadAfterSignIn();   // the data loads now, with the pass
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('staffConfirmLoginOverlay')?.style.display!=='none'&&IS_STAFF_CONFIRM_MODE)staffConfirmLoginSubmit();});
 

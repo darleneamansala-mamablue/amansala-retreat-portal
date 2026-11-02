@@ -68,6 +68,7 @@ function spaStaffLoginComplete(account){
   currentSpaStaffSession=session;
   const ov=document.getElementById('spaStaffLoginOverlay');if(ov)ov.style.display='none';
   spaStaffShowDashboard();
+  if(typeof portalLoadAfterSignIn==='function')portalLoadAfterSignIn();   // the data loads now, with the pass
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('spaStaffLoginOverlay')?.style.display!=='none'&&IS_SPA_STAFF_MODE)spaStaffLoginSubmit();});
 
