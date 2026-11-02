@@ -41,6 +41,18 @@
       : '<div style="font-size:12.5px;color:#4b5563;padding:5px 0;border-top:1px solid #efeae0">No BBC or RNR groups in house or arriving in the next 14 days.</div>';
     return '<div style="margin-top:14px"><div style="font-size:13px;font-weight:800;color:#1f2d2d;margin-bottom:2px">BBC / RNR groups (incl. WeTravel)</div>' + rows + '</div>';
   }
+  // Everyone in house tonight: room-only guests plus retreat / BBC / RNR / WeTravel groups (start <= night < end; cancelled, archived and unconfirmed 'requested' bookings left out)
+  function everyone(ds, roomOnlyGuests) {
+    let grp = 0, n = 0;
+    (AppData.bookings || []).forEach(b => {
+      if (!b || b.status === 'cancelled' || b.status === 'requested' || (b.flags || []).includes('archived')) return;
+      if (b.bookingType === 'room_only' && !kind(b)) return;
+      const [s, e] = D(b); if (!s || !e || !(s <= ds && ds < e)) return;
+      let g = Number(b.pax) || 0; if (!g) g = regGuests(b);
+      grp += g; n++;
+    });
+    return { grp, n, total: grp + roomOnlyGuests };
+  }
   function card() {
     const today = new Date(); today.setHours(12, 0, 0, 0);
     const t = stats(iso(today));
@@ -57,11 +69,12 @@
     const names = '<div id="droPanel" style="display:none;margin-top:10px;padding:10px 12px;background:#faf8f3;border-radius:10px"></div>';
     return '<div id="droCard" style="background:#fff;border-radius:14px;padding:16px 18px;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,.06)">'
       + '<div style="font-size:15px;font-weight:800;color:#1f2d2d;margin-bottom:10px">🏨 Room-only guests today &amp; BBC / RNR</div>'
-      + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + tile(t.gIn, bk(t.inh.length, t.rIn), 'Guests in house tonight', '#dcfce7', 'in') + tile(t.gArr, bk(t.arr.length, t.rArr), 'Guests arriving today', '#e0f2fe', 'arr') + tile(t.gDep, bk(t.dep.length, t.rDep), 'Guests departing today', '#fef3c7', 'dep') + '</div>'
+      + (function () { const ev = everyone(iso(today), t.gIn); return '<div style="background:#1f2d2d;color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13.5px"><b style="font-size:20px">' + ev.total + '</b> guests in house tonight, everyone <span style="opacity:.85">· ' + t.gIn + ' room-only · ' + ev.grp + ' in ' + ev.n + ' retreat / BBC / RNR group' + (ev.n === 1 ? '' : 's') + ' (from each group\'s guest count)</span></div>'; })()
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + tile(t.gIn, bk(t.inh.length, t.rIn), 'Room-only guests in house tonight', '#dcfce7', 'in') + tile(t.gArr, bk(t.arr.length, t.rArr), 'Room-only guests arriving today', '#e0f2fe', 'arr') + tile(t.gDep, bk(t.dep.length, t.rDep), 'Room-only guests departing today', '#fef3c7', 'dep') + '</div>'
       + '<div style="font-size:11.5px;font-weight:700;color:#4b5563;margin:12px 0 4px">Guests in house, next 7 days</div><div style="display:flex;gap:6px;flex-wrap:wrap">' + strip + '</div>'
       + names
       + groupsHtml(iso(today), iso(new Date(today.getTime() + 14 * 864e5)))
-      + '<div style="font-size:11px;color:#6b7280;margin-top:8px">Individual room-only bookings (Cloudbeds, Direct, OTA). The room-only numbers above do not include retreat groups, BBC, RNR or WeTravel. Requested (unconfirmed) bookings are not counted.</div></div>';
+      + '<div style="font-size:11px;color:#6b7280;margin-top:8px">Individual room-only bookings (Cloudbeds, Direct, OTA). The three room-only tiles and the 7-day strip count room-only bookings only; the dark line on top adds the retreat, BBC, RNR and WeTravel groups. Requested (unconfirmed) bookings are not counted.</div></div>';
   }
   // Room type, room and nightly rate for a booking, worked out the same way as the Reservations tab (custom rate if set, else the room type's rate for that many guests)
   function stayInfo(b) {
