@@ -137,7 +137,6 @@ body{font-family:'Jost',-apple-system,sans-serif;font-size:14px;color:#1a1a2e;ba
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 // Same form, two flavors — driven by ?type=wedding or ?type=bachelorette (defaults to wedding).
 // Kept as its own lightweight lead-capture (writes to crm_inquiries, not bookings)
@@ -157,7 +156,6 @@ document.getElementById('lbl-honoree').innerHTML=cfg.honoreeLabel+' <span class=
 document.getElementById('f-honoree').placeholder=cfg.honoreePlaceholder;
 document.getElementById('fg-date').querySelector('label').innerHTML=cfg.dateLabel+' <span class="req">*</span>';
 
-const _db=supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A');
 function clearErr(id){document.getElementById(id)?.classList.remove('has-error');}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 
@@ -195,32 +193,12 @@ async function submitInquiry(){
     status:'new',
     submittedAt:new Date().toISOString(),
   };
-  // Additive-only append to its own dedicated key -- never touches bookings,
-  // so it can never race the admin's own saves the way a shared key would.
+  // Sent through netlify/functions/inquiry-submit.js (2026-11-02): the server adds the lead to the Sales Pipeline and the
+  // inquiries list without overwriting other leads. This page used to rewrite that whole list with the public database key.
   try{
-    const {data}=await _db.from('app_store').select('value').eq('key','crm_inquiries').maybeSingle();
-    const existing=Array.isArray(data?.value)?data.value:[];
-    existing.push(entry);
-    await _db.from('app_store').upsert({key:'crm_inquiries',value:existing,updated_at:new Date().toISOString()});
-  }catch(e){console.warn('Supabase push failed:',e);}
-  // Also land on the Sales Pipeline like retreat leads (leader-inquiry.html does
-  // the same insert into the real `bookings` table) -- per Darlene, all inquiries
-  // should live on one pipeline, colored by type (eventType drives card color).
-  try{
-    await _db.from('bookings').insert({
-      id:'bk_'+uid(),
-      event_type:eventType,
-      leader_name:entry.name,
-      retreat_name:`${entry.honoree} ${eventType==='wedding'?'Wedding':'Bachelorette'}`,
-      leader_email:entry.email,
-      leader_phone:entry.phone,
-      start_date:entry.date,end_date:entry.date,
-      pax:entry.guestCount?parseInt(entry.guestCount):null,
-      notes:entry.notes,
-      source:'inquiry',
-      status:'requested',
-    });
-  }catch(e){console.warn('Pipeline push failed:',e);}
+    const r=await fetch('/.netlify/functions/inquiry-submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'event',...entry})});
+    if(!r.ok){btn.disabled=false;btn.textContent='Submit Inquiry';alert('Sorry, we could not send your inquiry — please try again.');return;}
+  }catch(e){btn.disabled=false;btn.textContent='Submit Inquiry';alert('Sorry, we could not send your inquiry — please try again.');return;}
   document.getElementById('formPanel').style.display='none';
   document.getElementById('thankyouPanel').style.display='block';
   window.scrollTo({top:0,behavior:'smooth'});

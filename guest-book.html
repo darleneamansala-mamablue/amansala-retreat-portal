@@ -9,7 +9,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700;800&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
     --sand:#f8f5ee;
@@ -184,9 +183,7 @@
 // Staff can edit text/photos/WhatsApp number there without a code deploy.
 // Everything below (GB_DEFAULT_*) is only the FALLBACK shown if that row is
 // ever missing or Supabase can't be reached -- so this page never breaks.
-const SUPA_URL='https://vnttlpqkssihbmcynxvo.supabase.co';
-const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
-const db=supabase.createClient(SUPA_URL,SUPA_KEY);
+// Read through netlify/functions/public-content.js (2026-11-02), not with the public database key.
 
 const GB_DEFAULT_WHATSAPP = ''; // TODO: set from Booking Engine → Guest Book once Jorge gives the number
 const GB_DEFAULT_HERO = { title:'Welcome to Amansala', image:'shala-images/beachfront.jpg' };
@@ -395,10 +392,10 @@ function gbApplyConfig(cfg){
 // Render the fallback immediately (instant, no flash of empty content),
 // then swap in the live-edited version from Supabase if it loads.
 gbApplyConfig({hero:GB_DEFAULT_HERO,sections:GB_DEFAULT_SECTIONS,whatsappNumber:GB_DEFAULT_WHATSAPP});
-db.from('app_store').select('value').eq('key','guestBookConfig').maybeSingle()
-  .then(({data,error})=>{
-    if(error||!data||!data.value)return;
-    gbApplyConfig(data.value);
+fetch('/.netlify/functions/public-content?key=guestBookConfig').then(r=>r.json())
+  .then(d=>{
+    if(!d||!d.value)return;
+    gbApplyConfig(d.value);
   })
   .catch(e=>console.warn('[guest-book] load failed, showing built-in content',e));
 </script>

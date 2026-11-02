@@ -13,6 +13,10 @@ https://amansala-portal.netlify.app/*  https://amansalaportal.com/:splat  301!
 /test/*  /404.html  404!
 /supabase-setup.sql  /404.html  404!
 /booking-hub.local-backup-20260821.html  /404.html  404!
+# room-registrations.html: an old stand-alone room-list tool (last changed 2026-09-06, only linked from the old
+# room-calendar / venue-bookings pages) that read and rewrote every guest list with the public database key. Retired
+# 2026-11-02: the portal's Teachers / Rooms screens replace it.
+/room-registrations.html  /booking-hub.html  302!
 
 # Spa-only staff link (Rosy/Kike/Host/Rubi etc.) -- redirects to booking-hub.html
 # in spa-staff mode (own login, no access to the rest of the portal). Must be

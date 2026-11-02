@@ -12,25 +12,16 @@
 <body>
 <div id="tab-staffing-body"><div id="st-msg">Loading the week...</div></div>
 <script>
-const SB='https://vnttlpqkssihbmcynxvo.supabase.co',KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
+// Groups and head-counts come from netlify/functions/kitchen-week-data.js (2026-11-02): this page used to read every
+// booking and every guest (names, emails, phones) with the public database key just to count heads.
 const camel=s=>s.replace(/_([a-z])/g,(m,c)=>c.toUpperCase());
 const cv=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[camel(k),v]));
 window.AppData={bookings:[],regs:[]};
-async function pull(table,cols){
-  let out=[];
-  for(let from=0;;from+=1000){
-    const r=await fetch(SB+'/rest/v1/'+table+'?select='+cols+'&order=id',{headers:{apikey:KEY,Authorization:'Bearer '+KEY,Range:from+'-'+(from+999)}});
-    const j=await r.json();if(!Array.isArray(j))throw new Error('load failed');
-    out=out.concat(j);if(j.length<1000)break;
-  }
-  return out.map(cv);
-}
 async function load(first){
   try{
-    const [b,r]=await Promise.all([
-      pull('bookings','id,leader_name,retreat_name,start_date,end_date,pax,status,booking_type,cancelled_at,meal_plan,schedule_request'),
-      pull('registrations','id,booking_id,guests,check_in,check_out,cancelled')]);
-    AppData.bookings=b;AppData.regs=r;
+    const r=await fetch('/.netlify/functions/kitchen-week-data');
+    const d=await r.json();if(!r.ok||!Array.isArray(d.bookings))throw new Error('load failed');
+    AppData.bookings=d.bookings.map(cv);AppData.regs=(d.registrations||[]).map(cv);
     if(first)kwNav(0);else kwRefresh();
   }catch(e){if(first)document.getElementById('st-msg').textContent=kwText('loadErr');}
 }

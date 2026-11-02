@@ -58,9 +58,8 @@
 
 <div id="content"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
 <script>
-const db = supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A');
 
 // Separate standalone page per Darlene's request: spa payroll needs its own
 // URL, restricted to admin accounts only — not the old shared-code gate
@@ -83,7 +82,7 @@ async function payrollLoginSubmit(){
   try{
     const resp=await fetch('/.netlify/functions/staff-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
     const data=await resp.json();
-    if(data&&data.success)account={...data.session,username};
+    if(data&&data.success){account={...data.session,username};try{sessionStorage.setItem('spa_payroll_token',data.token||'');}catch(e){}}
   }catch(e){errEl.textContent='Network error — please try again.';return;}
   if(!account){errEl.textContent='Incorrect username or password.';return;}
   if(account.role!=='admin'){
@@ -103,6 +102,7 @@ async function payrollLoginSubmit(){
 }
 function payrollSignOut(){
   sessionStorage.removeItem('spa_payroll_session');
+  sessionStorage.removeItem('spa_payroll_token');
   location.reload();
 }
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('loginOverlay').style.display!=='none')payrollLoginSubmit();});
@@ -138,13 +138,15 @@ const pesos=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0})+' 
 async function loadAndRenderPayroll(){
   const el=document.getElementById('content');
   el.innerHTML='<div class="empty">Loading…</div>';
-  const [{data:sd},{data:ad}]=await Promise.all([
-    db.from('app_store').select('value').eq('key','spa_data').maybeSingle(),
-    db.from('app_store').select('value').eq('key','spa_appointments').maybeSingle(),
-  ]);
-  const services=(sd?.value?.services)||[];
-  const therapists=(sd?.value?.therapists)||[];
-  const appointments=(ad?.value)||[];
+  // from netlify/functions/spa-payroll-data.js with the admin's sign-in pass (2026-11-02): no client contact details, and
+  // nothing at all without a real admin sign-in
+  let tok='';try{tok=sessionStorage.getItem('spa_payroll_token')||'';}catch(e){}
+  const res=await fetch('/.netlify/functions/spa-payroll-data',{headers:{'X-Portal-Token':tok}});
+  if(res.status===401){payrollSignOut();return;}
+  const pd=await res.json();
+  const services=pd.services||[];
+  const therapists=pd.therapists||[];
+  const appointments=pd.appointments||[];
   // A service counts once its time has passed, unless it was cancelled (a no-show or a booking still waiting for payment doesn't count either); Completed always counts (Darlene 2026-10-23)
   const timePassed=a=>{if(!a||!a.date)return false;const st=Date.parse(a.date+'T'+(a.start||'00:00')+':00-05:00');return !isNaN(st)&&st+(a.duration||60)*60000<=Date.now();};
   const completed=appointments.filter(a=>a.status==='COMPLETED'||(a.status!=='CANCELLED'&&a.status!=='NO_SHOW'&&a.status!=='PAYMENT_PENDING'&&(timePassed(a)||(a.confirmed===true&&a.confirmedByRole==='therapist'))));

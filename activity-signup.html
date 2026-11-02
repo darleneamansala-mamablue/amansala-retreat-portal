@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Activity Sign-Up · Amansala</title>
 <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Jost',sans-serif;background:#f7f4ef;color:#2d3a3a;min-height:100vh}
@@ -68,9 +67,9 @@ body{font-family:'Jost',sans-serif;background:#f7f4ef;color:#2d3a3a;min-height:1
 <div class="toast" id="toast"></div>
 
 <script>
-const SUPA_URL='https://vnttlpqkssihbmcynxvo.supabase.co';
-const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
-const db=supabase.createClient(SUPA_URL,SUPA_KEY);
+// The retreat and the sign-up go through netlify/functions/activity-public.js (2026-11-02): this page used to read the
+// whole booking (leader contact, charges) and every guest's sign-up with the public database key, and rewrite that list.
+const ACT_FN='/.netlify/functions/activity-public';
 
 const ADD_ONS=[
   {id:'ao1', name:'Tulum Ruins',                   desc:'Archaeological tour of ancient Maya ruins',                  price:85},
@@ -105,19 +104,11 @@ async function init(){
   const el=document.getElementById('mainContent');
   if(!bkId){el.innerHTML=`<div class="msg"><div class="msg-icon">❌</div><div class="msg-title">Invalid Link</div><div class="msg-sub">This link is missing a retreat ID. Please ask your retreat leader for the correct sign-up link.</div></div>`;return;}
   try{
-    const {data:bkRow,error}=await db.from('bookings').select('*').eq('id',bkId).maybeSingle();
-    if(error)throw error;
-    bk=bkRow?{
-      id:bkRow.id,retreatName:bkRow.retreat_name,leaderName:bkRow.leader_name,
-      startDate:bkRow.start_date,endDate:bkRow.end_date,
-      retreatActivities:bkRow.retreat_activities,packages:bkRow.packages,customPrices:bkRow.package_custom_prices||{},
-    }:null;
+    const r=await fetch(ACT_FN+'?id='+encodeURIComponent(bkId));
+    if(!r.ok&&r.status!==404)throw new Error('load '+r.status);
+    bk=r.ok?((await r.json()).retreat||null):null;
     if(!bk){el.innerHTML=`<div class="msg"><div class="msg-icon">🔍</div><div class="msg-title">Retreat Not Found</div><div class="msg-sub">We couldn't find this retreat. The link may be outdated. Please contact your retreat leader.</div></div>`;return;}
-    // Load existing signups
-    const {data:sd}=await db.from('app_store').select('value').eq('key','act_signups_'+bkId).single();
-    const signups=(sd?.value)||[];
-    existingSignup=signups.find(s=>false); // will check after name entry
-    render(signups);
+    render([]);
   }catch(e){
     el.innerHTML=`<div class="msg"><div class="msg-icon">⚠️</div><div class="msg-title">Something went wrong</div><div class="msg-sub">Please try refreshing the page. If the issue persists, contact your retreat leader.</div></div>`;
   }
@@ -235,13 +226,10 @@ async function submitSignup(){
   const btn=document.getElementById('submitBtn');
   btn.disabled=true;btn.textContent='Saving…';
   try{
-    const {data:sd}=await db.from('app_store').select('value').eq('key','act_signups_'+bkId).single();
-    let signups=(sd?.value)||[];
-    const isMine=s=>s.firstName?.toLowerCase()===first.toLowerCase()&&s.lastName?.toLowerCase()===last.toLowerCase();
-    const hadPrev=signups.some(isMine);
-    signups=signups.filter(s=>!isMine(s));
-    signups.push({id:'su_'+Date.now(),bookingId:bkId,firstName:first,lastName:last,roomNumber:room,activities:[...selectedIds],submittedAt:new Date().toISOString()});
-    await db.from('app_store').upsert({key:'act_signups_'+bkId,value:signups,updated_at:new Date().toISOString()});
+    const r=await fetch(ACT_FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:bkId,firstName:first,lastName:last,room,activities:[...selectedIds]})});
+    const d=await r.json();
+    if(!r.ok||!d.ok)throw new Error(d.error||'not saved');
+    const hadPrev=!!d.updated;
     // Show success
     const el=document.getElementById('mainContent');
     const actNames=[...selectedIds].map(id=>ACTS_MAP[id]?.name||id);
