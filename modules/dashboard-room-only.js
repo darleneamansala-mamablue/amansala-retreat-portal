@@ -62,6 +62,20 @@
       + groupsHtml(iso(today), iso(new Date(today.getTime() + 14 * 864e5)))
       + '<div style="font-size:11px;color:#6b7280;margin-top:8px">Individual room-only bookings (Cloudbeds, Direct, OTA). The room-only numbers above do not include retreat groups, BBC, RNR or WeTravel. Requested (unconfirmed) bookings are not counted.</div></div>';
   }
+  // Room type, room and nightly rate for a booking, worked out the same way as the Reservations tab (custom rate if set, else the room type's rate for that many guests)
+  function stayInfo(b) {
+    try {
+      const reg = (AppData.regs || []).find(r => r.bookingId === b.id), room = (reg && reg.room) || (b.blockedRooms || [])[0] || '';
+      const rt = (AppData.roomTypes || []).find(t => (t.rooms || []).includes(room));
+      const [s, e] = D(b), ci = (reg && reg.checkIn) || s, co = (reg && reg.checkOut) || e;
+      const gc = reg ? Math.max(1, (reg.guests || []).filter(g => g && g.name && !g.cancelled).length) : (Number(b.pax) || 1);
+      const nights = Math.max(1, Math.round((Date.parse(co + 'T12:00:00') - Date.parse(ci + 'T12:00:00')) / 864e5));
+      let rate = reg && reg.customRateOverride != null ? Number(reg.customRateOverride) : (rt && typeof getRoomRate === 'function' ? getRoomRate(rt, gc, ci, nights) : null);
+      if (rate != null && isNaN(rate)) rate = null;
+      return { type: rt ? rt.name : '', room, rate };
+    } catch (x) { return { type: '', room: '', rate: null }; }
+  }
+  const stayLine = b => { const i = stayInfo(b); const bits = [i.type, i.room ? 'Room ' + i.room : '', i.rate != null ? '$' + Number(i.rate).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' / night' : ''].filter(Boolean); return bits.join(' · '); };
   // Click a tile: list the guests behind the number; click a guest to open their booking (Darlene 2026-11-02: "we need to be able to see who the one guest is or click into it")
   window.droShow = function (key) {
     const box = document.getElementById('droPanel'); if (!box) return;
@@ -72,7 +86,7 @@
       const reg = (AppData.regs || []).find(r => r.bookingId === b.id), gn = reg && (reg.guests || []).find(g => g && g.name), nm = (gn && gn.name) || b.leaderName || b.retreatName || 'Guest';
       const [s, e] = D(b), label = esc(nm) + (gn && b.leaderName && b.leaderName !== nm ? ' <span style="color:#6b7280">(' + esc(b.leaderName) + ')</span>' : '');
       const click = ' onclick="droSummary(\'' + String(b.id).replace(/'/g, '') + '\')" style="cursor:pointer;color:#2d6a6a;font-weight:700;text-decoration:underline"';
-      return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span' + click + '>' + label + '</span><span style="color:#4b5563;white-space:nowrap">' + s.slice(5) + ' → ' + e.slice(5) + ' · ' + (Number(b.pax) || 0) + ' guest' + ((Number(b.pax) || 0) === 1 ? '' : 's') + ' · ' + (rooms(b) === 1 ? '1 room' : rooms(b) + ' rooms') + '</span></div>';
+      const sl = stayLine(b); return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span><span' + click + '>' + label + '</span>' + (sl ? '<div style="color:#4b5563;font-size:12px;margin-top:1px">' + esc(sl) + '</div>' : '') + '</span><span style="color:#4b5563;white-space:nowrap">' + s.slice(5) + ' → ' + e.slice(5) + ' · ' + (Number(b.pax) || 0) + ' guest' + ((Number(b.pax) || 0) === 1 ? '' : 's') + ' · ' + (rooms(b) === 1 ? '1 room' : rooms(b) + ' rooms') + '</span></div>';
     }).join('');
     box.innerHTML = '<div style="font-size:12.5px;font-weight:800;color:#1f2d2d;margin-bottom:4px">' + title + '</div>' + (rows || '<div style="font-size:12.5px;color:#4b5563">Nobody.</div>');
   };
@@ -95,7 +109,7 @@
       + '<div style="background:#fff;border-radius:12px;padding:4px 14px">'
       + row('Status', esc(String(b.status || '').replace(/_/g, ' ')))
       + row('Stay', fmt(s) + ' → ' + fmt(e) + ' · ' + nights + ' night' + (nights === 1 ? '' : 's'))
-      + row('Room', esc(roomList))
+      + row('Room', esc(stayLine(b) || roomList))
       + row('Guests', (Number(b.pax) || guests.length || 0) + (guests.length ? ' · ' + esc(guests.join(', ')) : ''))
       + row('Email', esc(b.leaderEmail || ''))
       + row('Phone', esc(b.leaderPhone || ''))
