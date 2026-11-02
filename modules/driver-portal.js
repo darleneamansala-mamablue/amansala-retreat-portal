@@ -6,9 +6,11 @@
 // but lives in its own storage keys and its own login/session functions.
 
 // ===== DRIVER ACCOUNTS =====
+// No passwords in this file (it is public): sign-in is checked on the server by netlify/functions/portal-login.js
+// (kind 'driver'), 2026-11-02.
 const DEF_DRIVERS=[
-  {id:'drv_irving',name:'Irving',username:'irving',password:'irving2026',active:true},
-  {id:'drv_salamon',name:'Salamon',username:'salamon',password:'salamon2026',active:true},
+  {id:'drv_irving',name:'Irving',username:'irving',active:true},
+  {id:'drv_salamon',name:'Salamon',username:'salamon',active:true},
 ];
 let driverAccounts=[];
 let currentDriverSession=null;
@@ -18,10 +20,12 @@ function loadDrivers(){
   const raw=localStorage.getItem('amansala_drivers');
   if(raw){try{driverAccounts=JSON.parse(raw);}catch{driverAccounts=DEF_DRIVERS.map(d=>({...d}));}}
   else{driverAccounts=DEF_DRIVERS.map(d=>({...d}));localStorage.setItem('amansala_drivers',JSON.stringify(driverAccounts));}
-  driverAccounts.forEach(d=>{if(d.active===undefined)d.active=true;});
+  driverAccounts.forEach(d=>{if(d.active===undefined)d.active=true;delete d.password;});
   if(!driverAccounts.length)driverAccounts=DEF_DRIVERS.map(d=>({...d}));
+  localStorage.setItem('amansala_drivers',JSON.stringify(driverAccounts));   // drops passwords an older version kept here
 }
 function saveDrivers(){
+  driverAccounts.forEach(d=>{delete d.password;});
   localStorage.setItem('amansala_drivers',JSON.stringify(driverAccounts));
   (async()=>{try{await db.from('app_store').upsert({key:'driverAccounts',value:driverAccounts,updated_at:new Date().toISOString()});}catch(e){console.warn('Driver account sync failed:',e);}})();
 }
@@ -54,35 +58,21 @@ function getDriverSession(){
   return currentDriverSession;
 }
 
-function driverLoginSubmit(){
+async function driverLoginSubmit(){
   const username=document.getElementById('driverLoginUser').value.trim().toLowerCase();
   const password=document.getElementById('driverLoginPass').value;
   const errEl=document.getElementById('driverLoginErr');
   errEl.textContent='';
   if(!username||!password){errEl.textContent='Please enter your username and password.';return;}
-  function tryLogin(){
-    return driverAccounts.find(d=>d.active&&d.username.toLowerCase()===username&&d.password===password)
-      ||DEF_DRIVERS.find(d=>d.username===username&&d.password===password)||null;
-  }
-  let account=tryLogin();
-  if(!account){
-    errEl.textContent='Checking credentials…';
-    db.from('app_store').select('value').eq('key','driverAccounts').maybeSingle().then(({data})=>{
-      if(data?.value&&Array.isArray(data.value)&&data.value.length){
-        const seen=new Map();
-        data.value.forEach(d=>d.username&&seen.set(d.username.toLowerCase(),d));
-        driverAccounts.forEach(d=>{if(d.username&&!seen.has(d.username.toLowerCase()))seen.set(d.username.toLowerCase(),d);});
-        driverAccounts=[...seen.values()];
-        localStorage.setItem('amansala_drivers',JSON.stringify(driverAccounts));
-      }
-      account=tryLogin();
-      if(!account){errEl.textContent='Incorrect username or password.';return;}
-      errEl.textContent='';
-      driverLoginComplete(account);
-    }).catch(()=>{errEl.textContent='Incorrect username or password.';});
-    return;
-  }
-  driverLoginComplete(account);
+  errEl.textContent='Checking credentials…';
+  let data;
+  try{
+    const resp=await fetch('/.netlify/functions/portal-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'driver',username,password})});
+    data=await resp.json();
+  }catch(e){errEl.textContent='Network error — please try again.';return;}
+  if(!data||!data.success){errEl.textContent='Incorrect username or password.';return;}
+  errEl.textContent='';
+  driverLoginComplete(data.session);
 }
 
 function driverLoginComplete(account){

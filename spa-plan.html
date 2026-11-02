@@ -332,12 +332,18 @@ footer{margin-top:60px;padding-top:24px;border-top:1px solid var(--border);font-
 </div>
 
 <script>
-const GATE_USER = 'darlene';
-const GATE_PASS = 'amansala2024';
-function tryUnlock(){
+// Admin sign-in, checked on the server (netlify/functions/staff-login.js). The page used to compare against Darlene's
+// master password written right here (removed 2026-11-02).
+async function tryUnlock(){
   const u = document.getElementById('gateUser').value.trim().toLowerCase();
   const p = document.getElementById('gatePass').value;
-  if (u === GATE_USER && p === GATE_PASS) {
+  let ok = false;
+  try {
+    const r = await fetch('/.netlify/functions/staff-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) });
+    const d = await r.json();
+    ok = !!(d && d.success && d.session && d.session.role === 'admin');
+  } catch (e) {}
+  if (ok) {
     sessionStorage.setItem('spa_plan_unlocked','1');
     document.getElementById('gate').style.display = 'none';
     document.getElementById('doc').style.display = 'block';

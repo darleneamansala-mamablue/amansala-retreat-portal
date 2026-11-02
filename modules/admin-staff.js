@@ -16,9 +16,11 @@ function dbUnmarkDone(key){delete adminDone[key];saveAdminDone();buildDashboard(
 
 
 // ===== STAFF ACCOUNTS =====
+// No passwords here: this file is public. Sign-in is checked by netlify/functions/staff-login.js (2026-11-02: the master
+// passwords that used to be written here let anyone sign in as Darlene).
 const DEF_STAFF=[
-  {id:'staff_001',name:'Darlene',username:'darlene',password:'amansala2024',role:'admin',active:true},
-  {id:'staff_002',name:'Front Desk',username:'frontdesk',password:'welcome1',role:'staff',active:true},
+  {id:'staff_001',name:'Darlene',username:'darlene',role:'admin',active:true,builtin:true},
+  {id:'staff_002',name:'Front Desk',username:'frontdesk',role:'staff',active:true,builtin:true},
 ];
 let staffAccounts=[];
 let currentSession=null;
@@ -85,7 +87,7 @@ function saveStaff(){
       // appStaffToSqlRow() already omits password_hash when unset, so this
       // never nulls out an existing hash just because this browser doesn't
       // have it cached.
-      const rows=staffAccounts.filter(s=>!s.password).map(appStaffToSqlRow);
+      const rows=staffAccounts.filter(s=>!s.password&&!s.builtin).map(appStaffToSqlRow);   // builtin = the DEF_STAFF placeholders
       if(rows.length)await db.from('staff').upsert(rows);
     }catch(e){console.warn('Staff sync failed:',e);}
   })();
@@ -134,6 +136,8 @@ async function staffLoginSubmit(){
   }catch(e){errEl.textContent='Network error — please try again.';return;}
   if(!data||!data.success){errEl.textContent='Incorrect username or password.';return;}
   errEl.textContent='';
+  // signed pass for the account screens (portal-accounts: spa / driver / confirm passwords)
+  try{if(data.token)sessionStorage.setItem('amansala_staff_token',data.token);}catch(e){}
   staffLoginComplete(data.session);
 }
 
@@ -153,6 +157,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
 function staffLogout(){
   if(!confirm('Sign out of the Amansala portal?'))return;
   sessionStorage.removeItem('amansala_staff_session');
+  sessionStorage.removeItem('amansala_staff_token');
   currentSession=null;
   location.reload();
 }

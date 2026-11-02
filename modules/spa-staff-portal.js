@@ -7,11 +7,13 @@
 // spa-calendar.js) instead of duplicating that UI — this mode just takes
 // over the full screen and activates that one tab, nothing else.
 
+// No passwords in this file (it is public): sign-in is checked on the server by netlify/functions/portal-login.js
+// (kind 'spa'), 2026-11-02.
 const DEF_SPA_STAFF=[
-  {id:'spastaff_rosy',name:'Rosy',username:'rosy',password:'rosy2026',active:true},
-  {id:'spastaff_kike',name:'Kike',username:'kike',password:'kike2026',active:true},
-  {id:'spastaff_host',name:'Host',username:'host',password:'host2026',active:true},
-  {id:'spastaff_rubi',name:'Rubi',username:'rubi',password:'rubi2026',active:true},
+  {id:'spastaff_rosy',name:'Rosy',username:'rosy',active:true},
+  {id:'spastaff_kike',name:'Kike',username:'kike',active:true},
+  {id:'spastaff_host',name:'Host',username:'host',active:true},
+  {id:'spastaff_rubi',name:'Rubi',username:'rubi',active:true},
 ];
 let spaStaffAccounts=[];
 let currentSpaStaffSession=null;
@@ -20,10 +22,12 @@ function loadSpaStaffAccounts(){
   const raw=localStorage.getItem('amansala_spa_staff');
   if(raw){try{spaStaffAccounts=JSON.parse(raw);}catch{spaStaffAccounts=DEF_SPA_STAFF.map(s=>({...s}));}}
   else{spaStaffAccounts=DEF_SPA_STAFF.map(s=>({...s}));localStorage.setItem('amansala_spa_staff',JSON.stringify(spaStaffAccounts));}
-  spaStaffAccounts.forEach(s=>{if(s.active===undefined)s.active=true;});
+  spaStaffAccounts.forEach(s=>{if(s.active===undefined)s.active=true;delete s.password;});
   if(!spaStaffAccounts.length)spaStaffAccounts=DEF_SPA_STAFF.map(s=>({...s}));
+  localStorage.setItem('amansala_spa_staff',JSON.stringify(spaStaffAccounts));   // drops passwords an older version kept here
 }
 function saveSpaStaffAccounts(){
+  spaStaffAccounts.forEach(s=>{delete s.password;});
   localStorage.setItem('amansala_spa_staff',JSON.stringify(spaStaffAccounts));
   (async()=>{try{await db.from('app_store').upsert({key:'spaStaffAccounts',value:spaStaffAccounts,updated_at:new Date().toISOString()});}catch(e){console.warn('Spa staff account sync failed:',e);}})();
 }
@@ -38,31 +42,21 @@ function getSpaStaffSession(){
   return currentSpaStaffSession;
 }
 
-function spaStaffLoginSubmit(){
+async function spaStaffLoginSubmit(){
   const username=document.getElementById('spaStaffLoginUser').value.trim().toLowerCase();
   const password=document.getElementById('spaStaffLoginPass').value;
   const errEl=document.getElementById('spaStaffLoginErr');
   errEl.textContent='';
   if(!username||!password){errEl.textContent='Please enter your username and password.';return;}
-  function tryLogin(){
-    return spaStaffAccounts.find(a=>a.active&&a.username.toLowerCase()===username&&a.password===password)||null;
-  }
-  let account=tryLogin();
-  if(!account){
-    errEl.textContent='Checking credentials…';
-    db.from('app_store').select('value').eq('key','spaStaffAccounts').maybeSingle().then(({data})=>{
-      if(data?.value&&Array.isArray(data.value)&&data.value.length){
-        spaStaffAccounts=data.value;
-        localStorage.setItem('amansala_spa_staff',JSON.stringify(spaStaffAccounts));
-      }
-      account=tryLogin();
-      if(!account){errEl.textContent='Incorrect username or password.';return;}
-      errEl.textContent='';
-      spaStaffLoginComplete(account);
-    }).catch(()=>{errEl.textContent='Incorrect username or password.';});
-    return;
-  }
-  spaStaffLoginComplete(account);
+  errEl.textContent='Checking credentials…';
+  let data;
+  try{
+    const resp=await fetch('/.netlify/functions/portal-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'spa',username,password})});
+    data=await resp.json();
+  }catch(e){errEl.textContent='Network error — please try again.';return;}
+  if(!data||!data.success){errEl.textContent='Incorrect username or password.';return;}
+  errEl.textContent='';
+  spaStaffLoginComplete(data.session);
 }
 
 function spaStaffLoginComplete(account){

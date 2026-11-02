@@ -12,31 +12,33 @@
 // see their own hours and confirm/unconfirm them — no financials, no other tabs.
 
 // ===== ACCOUNTS =====
+// No passwords in this file (it is public): sign-in is checked on the server by netlify/functions/portal-login.js
+// (kind 'confirm'), and admins set passwords through portal-accounts.js (2026-11-02).
 const DEF_STAFF_CONFIRM=[
-  {id:'sc_ryan',name:'Ryan',username:'ryan',password:'12345',active:true},
-  {id:'sc_adele',name:'Adele',username:'adele',password:'12345',active:true},
-  {id:'sc_sergio',name:'Sergio',username:'sergio',password:'12345',active:true},
-  {id:'sc_fernando',name:'Fernando',username:'fernando',password:'12345',active:true},
-  {id:'sc_kun',name:'Kun',username:'kun',password:'12345',active:true},
-  {id:'sc_yolanda',name:'Yolanda',username:'yolanda',password:'12345',active:true},
-  {id:'sc_maya',name:'Maya',username:'maya',password:'12345',active:true},
-  {id:'sc_kiki',name:'Kiki',username:'kiki',password:'12345',active:true},
-  {id:'sc_marco',name:'Marco',username:'marco',password:'12345',active:true},
-  {id:'sc_rubi',name:'Rubi',username:'rubi',password:'12345',active:true,isPayrollAdmin:true},
-  {id:'sc_rosy',name:'Rosy',username:'rosy',password:'12345',active:true},
-  {id:'sc_kike',name:'Kike',username:'kike',password:'12345',active:true},
+  {id:'sc_ryan',name:'Ryan',username:'ryan',active:true},
+  {id:'sc_adele',name:'Adele',username:'adele',active:true},
+  {id:'sc_sergio',name:'Sergio',username:'sergio',active:true},
+  {id:'sc_fernando',name:'Fernando',username:'fernando',active:true},
+  {id:'sc_kun',name:'Kun',username:'kun',active:true},
+  {id:'sc_yolanda',name:'Yolanda',username:'yolanda',active:true},
+  {id:'sc_maya',name:'Maya',username:'maya',active:true},
+  {id:'sc_kiki',name:'Kiki',username:'kiki',active:true},
+  {id:'sc_marco',name:'Marco',username:'marco',active:true},
+  {id:'sc_rubi',name:'Rubi',username:'rubi',active:true,isPayrollAdmin:true},
+  {id:'sc_rosy',name:'Rosy',username:'rosy',active:true},
+  {id:'sc_kike',name:'Kike',username:'kike',active:true},
   // Main Spa therapists (Darlene's ask 2026-09-20) — name must match the
   // therapist record in modules/spa.js's SpaData.therapists exactly (case-
   // insensitive) for scSpaItemsForName to find their appointments. Gabby's
   // therapist record is spelled "Gabby", not "Gaby".
-  {id:'sc_julian',name:'Julian',username:'julian',password:'12345',active:true},
-  {id:'sc_laura',name:'Laura',username:'laura',password:'12345',active:true},
-  {id:'sc_miguel',name:'Miguel',username:'miguel',password:'12345',active:true},
-  {id:'sc_marialuisa',name:'Maria Luisa',username:'marialuisa',password:'12345',active:true},
-  {id:'sc_gabby',name:'Gabby',username:'gabby',password:'12345',active:true},
-  {id:'sc_eva',name:'Eva',username:'eva',password:'12345',active:true},
-  {id:'sc_graciela',name:'Graciela',username:'graciela',password:'12345',active:true},
-  {id:'sc_rosario',name:'Rosario',username:'rosario',password:'12345',active:true},
+  {id:'sc_julian',name:'Julian',username:'julian',active:true},
+  {id:'sc_laura',name:'Laura',username:'laura',active:true},
+  {id:'sc_miguel',name:'Miguel',username:'miguel',active:true},
+  {id:'sc_marialuisa',name:'Maria Luisa',username:'marialuisa',active:true},
+  {id:'sc_gabby',name:'Gabby',username:'gabby',active:true},
+  {id:'sc_eva',name:'Eva',username:'eva',active:true},
+  {id:'sc_graciela',name:'Graciela',username:'graciela',active:true},
+  {id:'sc_rosario',name:'Rosario',username:'rosario',active:true},
 ];
 // BBC pay rates per confirmed session — Darlene's spec (2026-08-29). Anything
 // not listed here (tours, ceremonies, meals, Opening Circle, Departures) has
@@ -215,31 +217,22 @@ function getStaffConfirmSession(){
   return currentStaffConfirmSession;
 }
 
-function staffConfirmLoginSubmit(){
+async function staffConfirmLoginSubmit(){
   const username=document.getElementById('staffConfirmLoginUser').value.trim().toLowerCase();
   const password=document.getElementById('staffConfirmLoginPass').value;
   const errEl=document.getElementById('staffConfirmLoginErr');
   errEl.textContent='';
   if(!username||!password){errEl.textContent='Please enter your username and password.';return;}
-  function tryLogin(){
-    return staffConfirmAccounts.find(a=>a.active&&a.username.toLowerCase()===username&&a.password===password)||null;
-  }
-  let account=tryLogin();
-  if(!account){
-    errEl.textContent='Checking credentials…';
-    db.from('app_store').select('value').eq('key','staffConfirmAccounts').maybeSingle().then(({data})=>{
-      if(data?.value&&Array.isArray(data.value)&&data.value.length){
-        staffConfirmAccounts=data.value;
-        localStorage.setItem('amansala_staff_confirm_accounts',JSON.stringify(staffConfirmAccounts));
-      }
-      account=tryLogin();
-      if(!account){errEl.textContent='Incorrect username or password.';return;}
-      errEl.textContent='';
-      staffConfirmLoginComplete(account);
-    }).catch(()=>{errEl.textContent='Incorrect username or password.';});
-    return;
-  }
-  staffConfirmLoginComplete(account);
+  errEl.textContent='Checking credentials…';
+  let data;
+  try{
+    const resp=await fetch('/.netlify/functions/portal-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'confirm',username,password})});
+    data=await resp.json();
+  }catch(e){errEl.textContent='Network error — please try again.';return;}
+  if(!data||!data.success){errEl.textContent='Incorrect username or password.';return;}
+  errEl.textContent='';
+  await loadStaffConfirmAccounts();   // the dashboard reads this person's availability / payroll flag from the list
+  staffConfirmLoginComplete(data.session);
 }
 
 function staffConfirmLoginComplete(account){
@@ -944,13 +937,33 @@ function scRenderPayrollBoardIfPresent(){
 }
 
 // ===== ADMIN — manage accounts + read/toggle every domain's confirm status =====
+// Passwords go to the server (portal-accounts.js), with the pass the admin got at sign-in; the account list in app_store
+// only keeps name, username and the rest.
+async function scSetPasswordOnServer(a,password){
+  let token='';try{token=sessionStorage.getItem('amansala_staff_token')||'';}catch(e){}
+  if(!token){alert('Sign out of the portal and sign in again, then set the password.');return false;}
+  try{
+    const r=await fetch('/.netlify/functions/portal-accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,action:'setPassword',kind:'confirm',accountId:a.id,username:a.username,name:a.name,password})});
+    const d=await r.json();
+    if(!d.success){alert(d.error||'Could not save the password.');return false;}
+    return true;
+  }catch(e){alert('Network error — the password was not saved.');return false;}
+}
+async function scAdminSetPassword(id){
+  const a=staffConfirmAccounts.find(x=>x.id===id);if(!a)return;
+  const pw=(prompt('New password for '+a.name+' (at least 6 characters):')||'').trim();
+  if(!pw)return;
+  if(await scSetPasswordOnServer(a,pw)){delete a.password;await saveStaffConfirmAccounts();scRenderAdminAccounts();showToast('Password saved for '+a.name+'.');}
+}
 async function scAdminAddAccount(){
   const name=document.getElementById('scNewName').value.trim();
   const username=document.getElementById('scNewUser').value.trim().toLowerCase();
   const password=document.getElementById('scNewPass').value.trim();
   if(!name||!username||!password){alert('Please fill in name, username, and password.');return;}
   if(staffConfirmAccounts.some(a=>a.username.toLowerCase()===username)){alert('That username is already in use.');return;}
-  staffConfirmAccounts.push({id:'sc_'+Math.random().toString(36).substr(2,9),name,username,password,active:true});
+  const a={id:'sc_'+Math.random().toString(36).substr(2,9),name,username,active:true};
+  if(!await scSetPasswordOnServer(a,password))return;
+  staffConfirmAccounts.push(a);
   await saveStaffConfirmAccounts();
   scRenderAdminAccounts();
   document.getElementById('scNewName').value='';document.getElementById('scNewUser').value='';document.getElementById('scNewPass').value='';
@@ -973,6 +986,7 @@ async function scAdminRemoveAccount(id){
   staffConfirmAccounts=staffConfirmAccounts.filter(x=>x.id!==id);
   await saveStaffConfirmAccounts();
   scRenderAdminAccounts();
+  try{const token=sessionStorage.getItem('amansala_staff_token')||'';if(token)fetch('/.netlify/functions/portal-accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,action:'remove',kind:'confirm',accountId:id})}).catch(()=>{});}catch(e){}
 }
 function scCopyLoginLink(){
   const url=location.origin+location.pathname.replace(/[^/]*$/,'')+'booking-hub.html?mode=confirm';
@@ -991,7 +1005,7 @@ function scRenderAdminAccounts(){
       <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:9px 12px;flex-wrap:wrap">
         <div style="flex:1;min-width:120px;font-weight:700;color:var(--dark);font-size:13px">${a.name}${upcoming.length?`<div style="font-weight:600;color:#dc2626;font-size:10.5px;margin-top:2px">🚫 ${upcoming.map(d=>fmtD(d.date)+(d.period&&d.period!=='ALL'?' ('+d.period+')':'')).join(', ')}</div>`:''}</div>
         <div style="font-size:12px;color:var(--muted);min-width:90px">@${a.username}</div>
-        <div style="font-size:12px;color:var(--muted);font-family:monospace;min-width:100px">${a.password}</div>
+        <button onclick="event.preventDefault();scAdminSetPassword('${a.id}')" title="Passwords are kept on the server and never shown" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;border:1.5px solid #e8dfd4;background:#fff;color:#6b5f54;cursor:pointer">🔑 Set password</button>
         <button onclick="event.preventDefault();scAdminTogglePayrollAdmin('${a.id}')" title="Can see everyone's hours + BBC payroll, and edit everyone's availability" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid ${a.isPayrollAdmin?'#93c5fd':'#e8dfd4'};background:${a.isPayrollAdmin?'#dbeafe':'#f5f5f0'};color:${a.isPayrollAdmin?'#1d4ed8':'#9ca3af'};cursor:pointer">${a.isPayrollAdmin?'★ Payroll Admin':'Payroll Admin'}</button>
         <button onclick="event.preventDefault();scAdminToggleActive('${a.id}')" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1.5px solid ${a.active?'#86efac':'#e8dfd4'};background:${a.active?'#dcfce7':'#f5f5f0'};color:${a.active?'#15803d':'#9ca3af'};cursor:pointer">${a.active?'Active':'Disabled'}</button>
         <button onclick="event.preventDefault();scAdminRemoveAccount('${a.id}')" style="font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;border:1.5px solid #fca5a5;background:#fff;color:#dc2626;cursor:pointer">Remove</button>

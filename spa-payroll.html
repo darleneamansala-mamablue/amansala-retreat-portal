@@ -65,12 +65,10 @@ const db = supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJ
 // Separate standalone page per Darlene's request: spa payroll needs its own
 // URL, restricted to admin accounts only — not the old shared-code gate
 // (SPA_PAYROLL_CODE in modules/spa.js), which could be passed around.
-// Reuses the SAME staff accounts/credentials as the main admin login
-// (staffAccounts in Supabase, admin-staff.js's pattern) so there's only
-// one set of logins to manage, but requires role==='admin' specifically.
-const MASTER_STAFF=[
-  {id:'staff_001',name:'Darlene',username:'darlene',password:'amansala2024',role:'admin'},
-];
+// Reuses the SAME staff accounts/credentials as the main admin login, checked
+// on the server by netlify/functions/staff-login.js (2026-11-02: this page used
+// to download the account list and compare passwords in the browser, with
+// Darlene's master password written right here), and requires role==='admin'.
 
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
@@ -83,14 +81,10 @@ async function payrollLoginSubmit(){
   errEl.textContent='Checking credentials…';
   let account=null;
   try{
-    const {data}=await db.from('app_store').select('value').eq('key','staffAccounts').maybeSingle();
-    const accounts=(data?.value&&Array.isArray(data.value))?data.value:[];
-    // Most accounts store only a SHA-256 hash of the password (admin-staff.js hashPassword); a few old ones still hold the plain password.
-    const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(password));
-    const hash=Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-    account=accounts.find(s=>s.active!==false&&(s.username||'').toLowerCase()===username&&((s.passwordHash&&s.passwordHash===hash)||(s.password&&s.password===password)))||null;
-  }catch(e){}
-  if(!account) account=MASTER_STAFF.find(s=>s.username===username&&s.password===password)||null;
+    const resp=await fetch('/.netlify/functions/staff-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    const data=await resp.json();
+    if(data&&data.success)account={...data.session,username};
+  }catch(e){errEl.textContent='Network error — please try again.';return;}
   if(!account){errEl.textContent='Incorrect username or password.';return;}
   if(account.role!=='admin'){
     document.getElementById('loginOverlay').style.display='none';

@@ -4,6 +4,16 @@
 # URL. Must stay first so it wins over every other rule below for that host.
 https://amansala-portal.netlify.app/*  https://amansalaportal.com/:splat  301!
 
+# Never served (2026-11-02): the site publishes the whole repo folder, so these were downloadable by anyone -- the August
+# data backups (bookings, guests, transport), the server functions' source, SQL, tests and an old copy of the portal.
+# Forced (!) so no rule or file below can serve them.
+/data-backups/*  /404.html  404!
+/netlify/*  /404.html  404!
+/sql/*  /404.html  404!
+/test/*  /404.html  404!
+/supabase-setup.sql  /404.html  404!
+/booking-hub.local-backup-20260821.html  /404.html  404!
+
 # Spa-only staff link (Rosy/Kike/Host/Rubi etc.) -- redirects to booking-hub.html
 # in spa-staff mode (own login, no access to the rest of the portal). Must be
 # a real redirect (302), not a 200 rewrite -- a rewrite keeps the URL bar as

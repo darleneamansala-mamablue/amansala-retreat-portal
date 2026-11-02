@@ -1,0 +1,152 @@
+'use strict';
+
+// portal-auth-lib.js — passwords for the portal's smaller logins (spa staff, drivers, staff confirmation) and the old
+// 'staffAccounts' list, checked on the server. Until 2026-11-02 those passwords sat in app_store in plain text (or an
+// unsalted SHA-256) and were compared in the browser, so anyone holding the public anon key could read them. Now they
+// live in the portal_logins table (sql/portal_logins.sql: RLS on, no access for anon), salted with scrypt.
+//
+// Moving them is lazy and safe to deploy before the table exists: every login first moves whatever passwords are still in
+// that kind's app_store list into portal_logins and strips them from the list (an old browser tab that saves its copy
+// back puts them there again, and the next login strips them again; a password already in portal_logins always wins).
+// While the table is missing, logins check the old list exactly as before and nothing is stripped.
+const crypto = require('crypto');
+
+const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
+const BLOB_KEY = { spa: 'spaStaffAccounts', driver: 'driverAccounts', confirm: 'staffConfirmAccounts', staff: 'staffAccounts' };
+// Accounts that only ever existed in the browser code (no app_store list was ever saved for spa staff or drivers). Their
+// passwords were public in modules/*.js; they keep working until an admin sets new ones, and are no longer in the browser.
+const DEFAULTS = {
+  spa: [
+    { id: 'spastaff_rosy', name: 'Rosy', username: 'rosy', password: 'rosy2026' },
+    { id: 'spastaff_kike', name: 'Kike', username: 'kike', password: 'kike2026' },
+    { id: 'spastaff_host', name: 'Host', username: 'host', password: 'host2026' },
+    { id: 'spastaff_rubi', name: 'Rubi', username: 'rubi', password: 'rubi2026' },
+  ],
+  driver: [
+    { id: 'drv_irving', name: 'Irving', username: 'irving', password: 'irving2026' },
+    { id: 'drv_salamon', name: 'Salamon', username: 'salamon', password: 'salamon2026' },
+  ],
+  confirm: [], staff: [],
+};
+
+const hdrs = key => ({ apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' });
+const norm = s => String(s || '').trim().toLowerCase();
+
+function hashPassword(pw) {
+  const salt = crypto.randomBytes(16);
+  return 'scrypt$' + salt.toString('hex') + '$' + crypto.scryptSync(String(pw), salt, 32).toString('hex');
+}
+// 'scrypt$salt$hash' (new), 'sha256$hex' (a hash moved from the old staffAccounts list); anything else never matches
+function checkPassword(pw, stored) {
+  const s = String(stored || '');
+  if (s.startsWith('scrypt$')) {
+    const [, salt, hash] = s.split('$');
+    if (!salt || !hash) return false;
+    const got = crypto.scryptSync(String(pw), Buffer.from(salt, 'hex'), 32), want = Buffer.from(hash, 'hex');
+    return got.length === want.length && crypto.timingSafeEqual(got, want);
+  }
+  if (s.startsWith('sha256$')) {
+    const got = Buffer.from(crypto.createHash('sha256').update(String(pw), 'utf8').digest('hex')), want = Buffer.from(s.slice(7));
+    return got.length === want.length && crypto.timingSafeEqual(got, want);
+  }
+  return false;
+}
+
+// Signed pass for a signed-in session (HMAC, 12 h): lets the account functions check that an admin is asking, without a
+// new secret to configure -- the key is derived from the service key, which never leaves the server.
+const TOKEN_HOURS = 12;
+const tokenKey = () => crypto.createHash('sha256').update('amansala-portal-token|' + (process.env.SUPABASE_SERVICE_KEY || '')).digest();
+const b64u = b => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function signToken(claims) {
+  const body = b64u(JSON.stringify({ ...claims, exp: Date.now() + TOKEN_HOURS * 3600e3 }));
+  return body + '.' + b64u(crypto.createHmac('sha256', tokenKey()).update(body).digest());
+}
+function verifyToken(tok) {
+  const [body, sig] = String(tok || '').split('.');
+  if (!body || !sig) return null;
+  const want = b64u(crypto.createHmac('sha256', tokenKey()).update(body).digest());
+  if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
+  try { const c = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); return c.exp > Date.now() ? c : null; } catch (e) { return null; }
+}
+
+async function readBlob(key, kind) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${BLOB_KEY[kind]}&select=value,updated_at`, { headers: hdrs(key) });
+  const rows = r.ok ? await r.json() : [];
+  const row = rows && rows[0];
+  return row ? { list: Array.isArray(row.value) ? row.value : [], updatedAt: row.updated_at } : null;
+}
+// null = table not there yet (sql/portal_logins.sql not run)
+async function readLogins(key, kind) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/portal_logins?kind=eq.${kind}&select=*`, { headers: hdrs(key) });
+  if (!r.ok) return null;
+  return r.json();
+}
+async function upsertLogin(key, row) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/portal_logins?on_conflict=kind,account_id`, {
+    method: 'POST', headers: { ...hdrs(key), Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ ...row, username: norm(row.username), updated_at: new Date().toISOString() }),
+  });
+  return r.ok;
+}
+async function deleteLogin(key, kind, accountId) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/portal_logins?kind=eq.${kind}&account_id=eq.${encodeURIComponent(accountId)}`, { method: 'DELETE', headers: hdrs(key) });
+  return r.ok;
+}
+
+// Moves passwords still sitting in the kind's app_store list (and the code defaults) into portal_logins, then strips them
+// from the list. Returns the kind's logins, or null while the table is missing.
+async function migrateKind(key, kind) {
+  let logins = await readLogins(key, kind);
+  if (!logins) return null;
+  const have = new Set(logins.map(l => l.account_id)), taken = new Set(logins.map(l => l.username));
+  const blob = await readBlob(key, kind);
+  const add = [];
+  const consider = (a, stored) => {
+    const id = String(a.id || ''), u = norm(a.username);
+    if (!id || !u || !stored || have.has(id) || taken.has(u)) return;
+    have.add(id); taken.add(u);
+    add.push({ kind, account_id: id, username: u, name: a.name || u, password_hash: stored, active: a.active !== false });
+  };
+  (blob ? blob.list : []).forEach(a => consider(a, a.password ? hashPassword(a.password) : a.passwordHash ? 'sha256$' + String(a.passwordHash).toLowerCase() : null));
+  DEFAULTS[kind].forEach(a => consider(a, hashPassword(a.password)));
+  for (const row of add) if (await upsertLogin(key, row)) logins.push(row);
+  if (blob && blob.list.some(a => a && (a.password || a.passwordHash))) {
+    // only accounts whose password is now in portal_logins lose it; compare-and-swap on updated_at so a save from a
+    // browser at the same moment is never overwritten (the next login strips it then)
+    const safe = new Set(logins.map(l => l.account_id));
+    const list = blob.list.map(a => { if (!a || !safe.has(String(a.id))) return a; const { password, passwordHash, ...rest } = a; return rest; });
+    await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${BLOB_KEY[kind]}&updated_at=eq.${encodeURIComponent(blob.updatedAt)}`, {
+      method: 'PATCH', headers: { ...hdrs(key), Prefer: 'return=minimal' }, body: JSON.stringify({ value: list, updated_at: new Date().toISOString() }),
+    });
+  }
+  return logins;
+}
+
+// Checks a username/password for one kind. Returns the account ({id,name,username}) or null.
+async function checkLogin(key, kind, username, password) {
+  const u = norm(username);
+  if (!u || !password || !BLOB_KEY[kind]) return null;
+  const logins = await migrateKind(key, kind);
+  if (logins) {
+    const l = logins.find(x => x.username === u && x.active !== false);
+    if (!l || !checkPassword(password, l.password_hash)) return null;
+    // an account switched off in its own list (Staff Confirm admin) cannot sign in either
+    if (kind !== 'staff') {
+      const blob = await readBlob(key, kind);
+      const a = blob && blob.list.find(x => String(x.id) === l.account_id);
+      if (a && a.active === false) return null;
+      return { id: l.account_id, name: (a && a.name) || l.name, username: u };
+    }
+    return { id: l.account_id, name: l.name, username: u };
+  }
+  // table not created yet: the old check, on the server
+  const blob = await readBlob(key, kind);
+  const sha = crypto.createHash('sha256').update(String(password), 'utf8').digest('hex');
+  const a = [...(blob ? blob.list : []), ...DEFAULTS[kind]].find(x => x && x.active !== false && norm(x.username) === u && (x.password === password || x.passwordHash === sha));
+  return a ? { id: a.id, name: a.name, username: u, role: a.role } : null;
+}
+
+const cors = () => ({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' });
+const reply = (code, data) => ({ statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+module.exports = { SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };
