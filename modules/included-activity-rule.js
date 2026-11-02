@@ -33,7 +33,7 @@ function iaClash(bk,aoId,date){
   // Sound Healing & Cacao: a group that did not prepay it is put at the same time as the others — never blocked (Darlene 2026-10-30)
   if(aoId==='ao4'&&!((bk.packages||[]).includes('ao4')||(bk.retreatActivities||[]).some(x=>x&&x.aoId==='ao4'&&x.prepaid)))return null;
   const today=new Date().toISOString().slice(0,10);
-  return (AppData.bookings||[]).find(o=>{
+  return ((typeof bkAll==='function'?bkAll():AppData.bookings)||[]).find(o=>{
     if(o===bk||o.id===bk.id||o.status==='cancelled'||(o.flags||[]).includes('archived')||String(o.endDate||'').slice(0,10)<today)return false;
     if(iaSmall(o))return false;
     return (o.retreatActivities||[]).some(a=>a&&a.aoId===aoId&&String(a.date||'').slice(0,10)===date&&iaBlocks(o,a));
@@ -43,7 +43,7 @@ function iaRefuse(bk,aoId,date,exceptAct){
   if(!IA_EXCLUSIVE.includes(aoId)||!date)return false;
   const o=iaClash(bk,aoId,date);
   if(!o)return false;
-  if(typeof showToast==='function')showToast(`${iaName(aoId)} is already ${IA_ALWAYS_BLOCK.includes(aoId)?'booked':'included'} for ${o.leaderName||o.retreatName||'another retreat'} on ${iaFmt(date)}. Two groups can't have the same activity on the same day — pick another day (groups under ${iaMinPax()} guests are the exception).`);
+  if(typeof showToast==='function')showToast(`${iaName(aoId)} is already ${IA_ALWAYS_BLOCK.includes(aoId)?'booked':'included'} for ${(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE)?'another group':(o.leaderName||o.retreatName||'another retreat')} on ${iaFmt(date)}. Two groups can't have the same activity on the same day — pick another day (groups under ${iaMinPax()} guests are the exception).`);
   return true;
 }
 function iaBk(id){return (AppData.bookings||[]).find(b=>b.id===id);}

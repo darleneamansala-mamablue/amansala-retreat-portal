@@ -2501,7 +2501,7 @@ function tsFmt(t){const[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';r
 
 function tsCheckConflict(shalaId,period,bkId){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return null;
-  const overlapping=AppData.bookings.filter(b=>{
+  const overlapping=bkAll().filter(b=>{
     if(b.id===bkId||!b.scheduleRequest)return false;
     return b.startDate<bk.endDate&&b.endDate>bk.startDate;
   });
@@ -4044,6 +4044,8 @@ function _slSlugify(name){return(name||'').toLowerCase().replace(/[^a-z0-9]/g,''
 function _slDateSuffix(startDate){if(!startDate)return'';const[y,m]=startDate.split('-');return SHORTLINK_MONTHS[parseInt(m,10)-1]+y.slice(2);}
 function _slIdSuffix(id){return(id||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(-4);}
 function computeShortSlug(bkId){
+  // teacher scope: only this retreat is loaded, so the other names it is told apart from are not here -- the server worked it out
+  if(TeacherScope&&TeacherScope.slug&&AppData.bookings.some(b=>b.id===bkId))return TeacherScope.slug;
   const groups={};
   AppData.bookings.filter(b=>b.status!=='cancelled').forEach(b=>{
     const base=_slSlugify(b.leaderName||b.retreatName||'');
@@ -4904,7 +4906,7 @@ function _renderTeacherTransportInner(bkId){
   const wrap=document.getElementById('teacherTransportContent');if(!wrap)return;
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk){wrap.innerHTML='';return;}
   const {roster,guestsWithTransport,submittedCount,orphanSubs}=getTransportRoster(bkId);
-  const _allTr=loadTransport(); // all retreats — needed for cross-retreat pricing
+  const _allTr=TeacherScope?[...loadTransport(),...TeacherScope.transport]:loadTransport(); // all retreats — needed for cross-retreat pricing (teacher scope: the others' times come from the server)
 
   if(!roster.length){
     wrap.innerHTML=`<div style="color:#8a7e74;font-size:13px;text-align:center;padding:40px 0;max-width:420px;margin:0 auto;line-height:1.65">

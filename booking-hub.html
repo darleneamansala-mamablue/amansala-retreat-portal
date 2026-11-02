@@ -4882,7 +4882,8 @@ async function _casRoomClashCheck(added){
     await new Promise(r=>setTimeout(r,_CAS_CLASH_RECHECK_MS));
     clashes=await _casRoomClashes(clashes.map(c=>({id:c.id,room:c.room})));
     if(!clashes.length)return;
-    const c=clashes[0],nm=b=>b.leader_name||b.retreat_name||b.id;
+    const c0id=clashes[0].id;
+    const c=clashes[0],nm=b=>(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE&&b.id!==c0id)?'another group':(b.leader_name||b.retreat_name||b.id);
     if(typeof showToast==='function')showToast(`⚠ Cuarto ${c.room} quedó en dos reservas: ${nm(c.bk)} y ${nm(c.other)} (${c.other.start_date} → ${c.other.end_date}). Revisa en Rooms.`+(clashes.length>1?` (+${clashes.length-1} más)`:''));
     casLogEvent('double','bookings',clashes.map(x=>({id:x.id,row:{room:x.room,leaderName:nm(x.bk)},reason:`cuarto ${x.room} también en ${nm(x.other)} (${x.other.start_date} → ${x.other.end_date})`})));
   }catch(e){}
@@ -5125,7 +5126,8 @@ async function syncToSupabase(){
       // system of record is the `staff` SQL table now anyway (see
       // admin-staff.js) -- this legacy key is just abandoned going forward,
       // never read or written here again.
-      const _contentKeys=['venRows','programBlocks','specialEvents','teacher_messages'];
+      // teacher scope: this page never loaded these shared lists from the server, so it never writes them back
+      const _contentKeys=teacherScoped()?[]:['venRows','programBlocks','specialEvents','teacher_messages'];
       // Deleted-id lists: join with what is on the server, never overwrite it -- a tab opened earlier used to write its
       // own shorter list back, dropping deletions made since on other computers (and the deleted payment came back)
       try{
@@ -5267,12 +5269,47 @@ async function _fetchAllRows(table,pageSize,selectCols){
   return all;
 }
 
+// ===== TEACHER SCOPE (security plan, teacher step 1, 2026-11-02) =====
+// A teacher opening their link (not an admin previewing it) loads ONLY their own retreat, through
+// netlify/functions/teacher-data.js, instead of every booking, guest and payment. Of the other retreats the page only
+// gets what its availability checks need, with no names, kept in TeacherScope -- never in AppData, so no save or
+// clean-up routine can ever write it back. Same links as before.
+let TeacherScope=null;   // {bookings, regs, transport, slug, maxInvoice} while scoped
+function _teacherScopeBk(){try{return new URLSearchParams(location.search).get('bk')||localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id')||'';}catch(e){return'';}}
+function teacherScoped(){
+  try{
+    if(typeof IS_TEACHER_MODE==='undefined'||!IS_TEACHER_MODE)return false;
+    if(sessionStorage.getItem('ama_admin_viewing')==='1'||localStorage.getItem('ama_admin_device'))return false;   // staff previewing: full data, as before
+    return !!_teacherScopeBk();
+  }catch(e){return false;}
+}
+// the teacher's own rows plus the other retreats' occupancy -- for checks that look at other retreats (shala, activities, free rooms)
+function bkAll(){return TeacherScope?[...AppData.bookings,...TeacherScope.bookings]:AppData.bookings;}
+function regAll(){return TeacherScope?[...AppData.regs,...TeacherScope.regs]:AppData.regs;}
+async function _teacherFetch(){
+  try{
+    const r=await fetch('/.netlify/functions/teacher-data?bk='+encodeURIComponent(_teacherScopeBk()));
+    if(!r.ok)return null;
+    const d=await r.json();
+    if(!d||!d.booking)return null;
+    const occ=d.occupancy||{};
+    TeacherScope={
+      bookings:(occ.bookings||[]).map(sqlBookingToApp),
+      regs:(occ.regs||[]).map(x=>({id:'occ_'+x.booking_id+'_'+x.room,bookingId:x.booking_id,room:x.room,cancelled:x.cancelled,guests:x.named?[{name:'Guest'}]:[]})),
+      transport:occ.transport||[],slug:d.slug||null,maxInvoice:d.maxInvoice||0,
+    };
+    if(d.dbPass&&typeof dbPassStore==='function')dbPassStore(d.dbPass);
+    return d;
+  }catch(e){console.warn('[teacher] load failed:',e);return null;}
+}
 async function loadFromSupabase(){
   try{
+    const _tp=teacherScoped()?await _teacherFetch():null;
+    if(!_tp&&teacherScoped())return false;
     // spa_appts_bk_* = the spa-appointment safety backups (89 copies, ~16 MB). Nothing in the app reads them (only the backup function), and pulling them
     // made this one query exceed Supabase's statement timeout (500) so the portal loaded slowly or not at all (2026-10-28).
-    const {data,error}=await db.from('app_store').select('key,value,updated_at').not('key','like','spa_appts_bk_%');
-    if(error||!data||!data.length)return false;
+    const {data,error}=_tp?{data:_tp.store,error:null}:await db.from('app_store').select('key,value,updated_at').not('key','like','spa_appts_bk_%');
+    if(error||!data||(!data.length&&!_tp))return false;
     const store={};
     data.forEach(r=>{store[r.key]=r.value;_appStoreUpdatedAt[r.key]=r.updated_at;});
     // Clear signal: if Supabase has a clear_signal newer than what this device last acknowledged,
@@ -5308,7 +5345,7 @@ async function loadFromSupabase(){
       // CAS: let saves already queued finish first, so this load does not read the server before they land
       const _cas=casSyncEnabled()&&_casBaseReady;
       if(_cas){try{await _saveAllBusy;}catch(e){}}
-      const [sqlBookings,sqlRegs,sqlPayments]=await Promise.all([_fetchAllRows('bookings'),_fetchAllRows('registrations'),_fetchAllRows('payments')]);
+      const [sqlBookings,sqlRegs,sqlPayments]=_tp?[[_tp.booking],_tp.regs||[],_tp.payments||[]]:await Promise.all([_fetchAllRows('bookings'),_fetchAllRows('registrations'),_fetchAllRows('payments')]);
       // CAS: rows that still hold an unsaved change (edited while this load was in the air, or a save that failed and will be
       // retried) keep this tab's copy and its old baseline -- replacing them with the server copy would drop the change
       // without a word. The next save merges them like any other conflict.
@@ -5383,7 +5420,7 @@ async function loadFromSupabase(){
     // room_types: read from the SQL table (same one the new app manages) instead of the blob.
     let _sqlRoomTypesOk=false;
     try{
-      const sqlRoomTypes=await _fetchAllRows('room_types');
+      const sqlRoomTypes=_tp?(_tp.roomTypes||[]):await _fetchAllRows('room_types');
       if(sqlRoomTypes.length){AppData.roomTypes=sqlRoomTypes.map(sqlRoomTypeToApp);_sqlRoomTypesOk=true;}
     }catch(e){console.warn('SQL room_types load failed — keeping previous in-memory data:',e);}
     if(_sqlRoomTypesOk){
@@ -5441,6 +5478,8 @@ async function loadFromSupabase(){
     localStorage.setItem('amansala_special_events',  JSON.stringify(AppData.specialEvents));
     if(store.teacher_messages!==undefined){AppData.teacherMessages=store.teacher_messages;}
     localStorage.setItem('amansala_teacher_messages',JSON.stringify(AppData.teacherMessages));
+    // teacher scope: the admin notifications below are not for teachers; issue acks came with the retreat
+    if(_tp){issueAcks=(store.issueAcks&&typeof store.issueAcks==='object')?store.issueAcks:{};return true;}
     // Activity Notifications data — non-fatal: notifications just stay stale/empty if
     // this fails, never blocks the main bookings/registrations load above.
     try{
@@ -5489,7 +5528,7 @@ async function loadFromSupabase(){
 
 async function loadTransportFromSupabase(){
   try{
-    const {data,error}=await db.from('transport').select('*');
+    const {data,error}=teacherScoped()?await db.from('transport').select('*').eq('booking_id',_teacherScopeBk()):await db.from('transport').select('*');
     if(error||!data)return null;
     return data.map(r=>({...r.data,id:r.id,bookingId:r.booking_id,submittedAt:r.submitted_at}));
   }catch(e){return null;}
@@ -6927,7 +6966,7 @@ function switchTab(id,btn){
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/retreat-builder.js?v=20261019a"></script>
+<script src="modules/retreat-builder.js?v=20261102a"></script>
 <script src="modules/tour-settings.js"></script>
 <script>
 // ===== RETREAT BUILDER — moved to modules/retreat-builder.js =====
@@ -6965,7 +7004,7 @@ function switchTab(id,btn){
 // ===== CONTRACT GENERATOR — moved to modules/contracts.js (loaded above) =====
 // ===== SIGNATURE PAD — moved to modules/contracts.js (loaded above) =====
 </script>
-<script src="modules/payments.js?v=20261101b"></script>
+<script src="modules/payments.js?v=20261102a"></script>
 <script src="modules/room-activities.js"></script>
 <script src="modules/tour-picker.js?v=20261027a"></script>
 <script src="modules/booking-detail.js?v=20261102b"></script>
@@ -7002,7 +7041,7 @@ function switchTab(id,btn){
 // ===== FILL SAMPLE RETREATS — moved to modules/demo-seed.js (loaded above) =====
 // ===== TEACHER SCHEDULE — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/transport.js?v=20261102a"></script>
+<script src="modules/transport.js?v=20261102b"></script>
 <script src="modules/transport-balances.js?v=20261023a"></script>
 <script src="modules/kitchen-week.js?v=20261027k"></script>
 <script>
@@ -7013,7 +7052,7 @@ function switchTab(id,btn){
 <script src="modules/housekeeping.js?v=20260930c"></script>
 <script src="modules/teacher-profiles.js"></script>
 <script src="modules/cloudbeds-extra.js"></script>
-<script src="modules/shala-guard.js?v=20261013a"></script>
+<script src="modules/shala-guard.js?v=20261102a"></script>
 <script src="modules/wetravel-admin.js?v=20261006b"></script>
 <script src="modules/guest-chat.js?v=20260915"></script>
 <script>
@@ -7107,6 +7146,9 @@ try{if(typeof syncAddOnsFromSupabase==='function')syncAddOnsFromSupabase();}catc
 loadFromSupabase().then(async loaded=>{
   if(loaded){
     try{
+      // teacher scope: none of the staff-side work below (room-type fix-up, build recovery, dashboard, calendars) --
+      // it is staff screens the teacher never sees, and it assumes every retreat is loaded
+      if(teacherScoped())throw 'teacher';
       // Room type merge: add missing DEF rooms, and move any room that's now in a different DEF type.
       // Runs on EVERY page load for EVERY user — used to call the full-array
       // syncRoomTypesToSupabase() whenever any type's `rooms` list changed, which
@@ -7139,6 +7181,8 @@ loadFromSupabase().then(async loaded=>{
       if(typeof buildDashboard==='function')buildDashboard();
       if(typeof venBuild==='function')venBuild();
       if(typeof rcBuild==='function')rcBuild();
+    }catch(e){}
+    try{
       // Re-render teacher schedule view after Supabase merge so it reflects latest data
       if(IS_TEACHER_MODE){
         const _tsId=(localStorage.getItem('teacher_bk_id')||sessionStorage.getItem('teacher_bk_id'));
@@ -7155,7 +7199,7 @@ try{recoverBuildBookings();}catch(e){}
 try{loadAdminDone();}catch(e){console.error('loadAdminDone failed',e);adminDone={};}
 try{skedLoadEvents();}catch(e){console.error('skedLoadEvents failed',e);schedEvents=[];}
 try{seedDemo();}catch(e){console.error('seedDemo failed',e);}
-updateInquiryDot();
+if(!teacherScoped())updateInquiryDot();
 
 // Poll Supabase every 2 minutes — full sync to catch deletions, new bookings, and modifications to existing retreats
 if(location.protocol!=='file:'){
@@ -7169,7 +7213,7 @@ if(location.protocol!=='file:'){
       const prevBkIds=new Set(AppData.bookings.map(b=>b.id));
       const prevEvtIds=new Set((AppData.specialEvents||[]).map(e=>e.id));
       const loaded=await loadFromSupabase();
-      if(!loaded)return;
+      if(!loaded||teacherScoped())return;   // teacher scope: only its own retreat refreshed, no staff screens
       // Re-render all active views
       buildDashboard();
       if(typeof venBuild==='function')venBuild();
@@ -7196,7 +7240,7 @@ if(location.protocol!=='file:'){
 </script>
 <script src="modules/menu.js?v=20261030b"></script>
 <script src="modules/menu-offsite-dinner.js?v=20261030a"></script>
-<script src="modules/menu-departure-meals.js?v=20261025a"></script>
+<script src="modules/menu-departure-meals.js?v=20261102a"></script>
 <script src="modules/menu-variants.js?v=20261009b"></script>
 <script src="modules/menu-protein-names.js?v=20261021a"></script>
 <script src="modules/menu-editor.js?v=20261025a"></script>
@@ -7761,7 +7805,7 @@ if(location.protocol!=='file:'){
 <script src="modules/activity-conflict-popup.js?v=20261030b"></script>
 <script src="modules/salsa-rule.js?v=20261016a"></script>
 <script src="modules/temazcal-split.js?v=20261016b"></script>
-<script src="modules/included-activity-rule.js?v=20261030b"></script>
+<script src="modules/included-activity-rule.js?v=20261102a"></script>
 <script>
 // ===== ACTIVITY SHEET TAB — moved to modules/activity-sheet.js =====
 </script>
@@ -7986,5 +8030,14 @@ if(location.protocol!=='file:'){
 </div>
 
 
+<script>
+// Teacher scope (see TeacherScope): the staff screens are never built in a teacher's portal -- they are hidden there, and
+// they assume every retreat is loaded (venBuild re-balances venue rows and saves). Wrapped last, after every module's own
+// wrapper, so this guard is the outermost one.
+['buildDashboard','venBuild','rcBuild','updateInquiryDot'].forEach(n=>{
+  const o=window[n];if(typeof o!=='function')return;
+  window[n]=function(){if(typeof teacherScoped==='function'&&teacherScoped())return;return o.apply(this,arguments);};
+});
+</script>
 </body>
 </html>

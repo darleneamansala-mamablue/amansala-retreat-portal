@@ -39,6 +39,8 @@ function getNextInvoiceNumber(){
   const year=new Date().getFullYear(),pre='AMN-'+year+'-';
   const key='amansala_invoice_counter_'+year;
   let max=parseInt(localStorage.getItem(key)||'0',10)||0;
+  // teacher portal: only its own retreat is loaded -- the server sends the highest number in use
+  if(typeof TeacherScope!=='undefined'&&TeacherScope&&TeacherScope.maxInvoice>max)max=TeacherScope.maxInvoice;
   (AppData.bookings||[]).forEach(b=>{
     const num=b&&b.depositInvoice&&b.depositInvoice.number;
     if(typeof num==='string'&&num.startsWith(pre)){const v=parseInt(num.slice(pre.length),10);if(v>max)max=v;}

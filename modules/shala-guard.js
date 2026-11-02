@@ -48,7 +48,7 @@ function sgInfo(sr,period,theirs){
   return null;
 }
 function sgOthers(bk,confirmedOnly){
-  return AppData.bookings.filter(b=>b.id!==bk.id&&b.status!=='cancelled'&&b.scheduleRequest
+  return (typeof bkAll==='function'?bkAll():AppData.bookings).filter(b=>b.id!==bk.id&&b.status!=='cancelled'&&b.scheduleRequest
     &&b.startDate<bk.endDate&&b.endDate>bk.startDate
     &&(!confirmedOnly||b.scheduleRequest.adminStatus==='confirmed'));
 }
@@ -70,7 +70,7 @@ function sgConflicts(bk,sr,confirmedOnly){
 }
 function sgShalaName(id){try{return (SHALAS.find(s=>s.id===id)||{}).name||id;}catch(e){return id;}}
 function sgMsg(list){
-  return list.map(c=>`• ${c.other.leaderName||c.other.retreatName||'Another retreat'} (${c.other.startDate} – ${c.other.endDate}) already has ${c.shalas.map(sgShalaName).join(' and ')} for ${c.period}${c.theirRange?' at '+sgLabel(c.theirRange):''}`).join('\n');
+  return list.map(c=>`• ${(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE)?'Another group':(c.other.leaderName||c.other.retreatName||'Another retreat')} (${c.other.startDate} – ${c.other.endDate}) already has ${c.shalas.map(sgShalaName).join(' and ')} for ${c.period}${c.theirRange?' at '+sgLabel(c.theirRange):''}`).join('\n');
 }
 
 // The teacher form's current picks as a request-like object (same field names the portal saves)

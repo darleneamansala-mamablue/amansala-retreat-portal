@@ -124,6 +124,8 @@ function recoverTeacherRooms(){
 }
 
 function recoverBuildBookings(){
+  // teacher scope: only the teacher's retreat is loaded, so every other build would look missing and be re-created
+  if(typeof teacherScoped==='function'&&teacherScoped())return;
   let recovered=false;
   builds.forEach(b=>{
     if(b.bkId&&b.startDate&&b.endDate&&!AppData.bookings.find(bk=>bk.id===b.bkId)&&!deletedBookingIds.has(b.bkId)){
@@ -736,10 +738,11 @@ function _freeRoomsCountForNotif(rtId,startDate,endDate){
   const rt=AppData.roomTypes.find(r=>r.id===rtId);if(!rt)return 0;
   const overlaps=(s1,e1,s2,e2)=>s1<e2&&e1>s2;
   const blocked=new Set();
-  AppData.bookings.forEach(b=>{
+  const _regs=typeof regAll==='function'?regAll():AppData.regs;
+  (typeof bkAll==='function'?bkAll():AppData.bookings).forEach(b=>{
     if(b.status==='cancelled'||!overlaps(b.startDate,b.endDate,startDate,endDate))return;
     (b.blockedRooms||[]).forEach(r=>blocked.add(r));
-    AppData.regs.filter(r=>r.bookingId===b.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>blocked.add(r.room));
+    _regs.filter(r=>r.bookingId===b.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>blocked.add(r.room));
   });
   return (rt.rooms||[]).filter(r=>!blocked.has(r)).length;
 }

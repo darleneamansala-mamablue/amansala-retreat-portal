@@ -408,7 +408,10 @@ async function syncTransportFromSupabase(){
 
   const remote=await loadTransportFromSupabase();
   if(!remote)return;
-  const local=loadTransport();
+  // teacher scope: the server only sent this retreat's rows, so the other retreats cached here from an earlier visit are
+  // dropped, not taken for new local entries and pushed back up
+  const _scopedBk=(typeof teacherScoped==='function'&&teacherScoped())?_teacherScopeBk():null;
+  const local=loadTransport().filter(l=>!_scopedBk||l.bookingId===_scopedBk);
   const localById=new Map(local.map(l=>[l.id,l]));
   const remoteIds=new Set(remote.map(r=>r.id));
   // Keep local entries not yet in Supabase, merge with all remote entries — excluding anything deleted
@@ -425,7 +428,7 @@ async function syncTransportFromSupabase(){
   // place that update becomes visible on the admin side, so it's where
   // reconfirmation gets triggered for any already-confirmed leg whose
   // important fields changed underneath it.
-  if(typeof driverConfirmations!=='undefined'){
+  if(typeof driverConfirmations!=='undefined'&&!_scopedBk){
     let anyChanged=false;
     remote.forEach(sub=>{
       const before=localById.get(sub.id);
