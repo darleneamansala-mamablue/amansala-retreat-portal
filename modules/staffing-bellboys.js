@@ -80,9 +80,10 @@ function sbbBrunchStart(date) {
   return best || '';
 }
 function sbbCsrWhen(d) {
-  if (d.arrivals) return '2 pm – 10 pm, with the ' + d.arrivals + ' arrival' + (d.arrivals === 1 ? '' : 's');
-  const t = sbbBrunchStart(d.date);
-  return t ? 'from brunch, ' + sfClock(sfMin(t)) + ', in the restaurant' : 'from brunch start, in the restaurant';
+  const t = sbbBrunchStart(d.date), parts = [];
+  if (t) parts.push('restaurant from brunch, ' + sfClock(sfMin(t)));
+  if (d.arrivals) parts.push('then 2 pm – 10 pm with the ' + d.arrivals + ' arrival' + (d.arrivals === 1 ? '' : 's'));
+  return parts.length ? parts.join(', ').replace(/^./, c => c.toUpperCase()) : 'from brunch start, in the restaurant';
 }
 function sbbCsrDay(d) { return !!d.arrivals || (AppData.bookings || []).some(b => b && b.status !== 'cancelled' && b.bookingType !== 'room_only' && b.startDate && b.endDate && String(b.startDate).slice(0, 10) < d.date && d.date <= String(b.endDate).slice(0, 10)); }
 // AC specialist: Ivan is always on for the arrival night (shown as chosen unless someone changes it; "nobody" is saved as '-').
