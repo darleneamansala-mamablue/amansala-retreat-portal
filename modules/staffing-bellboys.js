@@ -91,4 +91,5 @@ function sbbAcRow(d) {
   const saved = sfCovered(d.date, 'ac'), cur = saved || 'Ivan';
   return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:3px 0"><b style="min-width:122px;color:#166534">AC specialist</b><span style="min-width:130px;font-size:12px;color:#6b7280">arrival night</span><select onchange="sbbSet('${d.date}','ac','ac',this.value||'-')" style="padding:4px 7px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px;background:#fff" title="AC specialist"><option value="Ivan" ${cur === 'Ivan' ? 'selected' : ''}>Ivan</option><option value="-" ${cur === '-' ? 'selected' : ''}>— nobody this night —</option>${cur !== 'Ivan' && cur !== '-' ? `<option value="${sfEsc(cur)}" selected>${sfEsc(cur)}</option>` : ''}</select></div>`;
 }
-window.sfCrewRows = d => (d.arrivals ? sbbAcRow(d) : '') + (sbbInHouse(d.date) ? (sbbCsrDay(d) ? sbbCrewRow('csr', d) : '') + sbbCrewRow('tourguide', d) + sbbCrewRow('yoga', d) + sbbCrewRow('icebath', d) + sbbCrewRow('fitness', d) + sbbCrewRow('pilates', d) + sbbCrewRow('mayanclay', d) : '');
+// The activity teacher rows (tour guide, yoga, ice bath, fitness, pilates, Mayan Clay) were taken out: teachers are assigned in the Schedule / program section.
+window.sfCrewRows = d => (d.arrivals ? sbbAcRow(d) : '') + (sbbInHouse(d.date) ? (sbbCsrDay(d) ? sbbCrewRow('csr', d) : '') : '');
