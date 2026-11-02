@@ -5208,7 +5208,10 @@ async function syncToSupabase(){
       }catch(e){}
       const {data:freshRows}=await db.from('app_store').select('key,updated_at').in('key',_contentKeys);
       const freshMap=new Map((freshRows||[]).map(r=>[r.key,r.updated_at]));
-      const _candidates=[
+      // teacher scope: these shared staff lists were never loaded from the server on this page -- never write them
+      // (2026-11-02: the empty _contentKeys above made every one look "never synced yet" and a teacher's save wrote this
+      // device's old copy over them)
+      const _candidates=teacherScoped()?[]:[
         {key:'venRows',          value:AppData.venRows},
         {key:'programBlocks',    value:AppData.programBlocks},
         {key:'specialEvents',    value:AppData.specialEvents},
@@ -5217,7 +5220,7 @@ async function syncToSupabase(){
       const _staleKeys=[];
       const contentRows=_candidates.filter(c=>{
         const remoteUpdatedAt=freshMap.get(c.key);
-        if(remoteUpdatedAt===undefined)return true; // never synced yet
+        if(remoteUpdatedAt===undefined)return !_contentKeys.length?false:true; // never synced yet (and the key was looked up)
         const known=_appStoreUpdatedAt[c.key];
         // Fail-safe, matching the bookings/room_types guard fix above — no known local
         // timestamp for this key now counts as stale rather than skipping the check.
