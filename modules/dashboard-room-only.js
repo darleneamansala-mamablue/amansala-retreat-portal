@@ -71,10 +71,40 @@
     const rows = ids.map(id => (AppData.bookings || []).find(b => b.id === id)).filter(Boolean).sort((a, b) => (a.leaderName || '').localeCompare(b.leaderName || '')).map(b => {
       const reg = (AppData.regs || []).find(r => r.bookingId === b.id), gn = reg && (reg.guests || []).find(g => g && g.name), nm = (gn && gn.name) || b.leaderName || b.retreatName || 'Guest';
       const [s, e] = D(b), label = esc(nm) + (gn && b.leaderName && b.leaderName !== nm ? ' <span style="color:#6b7280">(' + esc(b.leaderName) + ')</span>' : '');
-      const click = reg ? ' onclick="openBookingDetailForReg(\'' + String(reg.id).replace(/'/g, '') + '\',' + JSON.stringify(nm).replace(/"/g, '&quot;') + ')" style="cursor:pointer;color:#2d6a6a;font-weight:700;text-decoration:underline"' : ' style="font-weight:700"';
+      const click = ' onclick="droSummary(\'' + String(b.id).replace(/'/g, '') + '\')" style="cursor:pointer;color:#2d6a6a;font-weight:700;text-decoration:underline"';
       return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span' + click + '>' + label + '</span><span style="color:#4b5563;white-space:nowrap">' + s.slice(5) + ' → ' + e.slice(5) + ' · ' + (Number(b.pax) || 0) + ' guest' + ((Number(b.pax) || 0) === 1 ? '' : 's') + ' · ' + (rooms(b) === 1 ? '1 room' : rooms(b) + ' rooms') + '</span></div>';
     }).join('');
     box.innerHTML = '<div style="font-size:12.5px;font-weight:800;color:#1f2d2d;margin-bottom:4px">' + title + '</div>' + (rows || '<div style="font-size:12.5px;color:#4b5563">Nobody.</div>');
+  };
+  // Click a guest: a short summary of the booking, with a button for the full booking / folio (Darlene 2026-11-02: "a summary of the bookings when we click it")
+  window.droSummary = function (id) {
+    const b = (AppData.bookings || []).find(x => x.id === id); if (!b) return;
+    const regs = (AppData.regs || []).filter(r => r.bookingId === id), [s, e] = D(b);
+    const nights = Math.max(0, Math.round((Date.parse(e + 'T12:00:00') - Date.parse(s + 'T12:00:00')) / 864e5));
+    const fmt = ds => { try { return new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); } catch (x) { return ds; } };
+    const guests = [...new Set(regs.flatMap(r => (r.guests || []).map(g => g && g.name && g.name.trim()).filter(Boolean)))];
+    const roomList = (b.blockedRooms || []).join(', ') || [...new Set(regs.map(r => r.room).filter(Boolean))].join(', ') || '—';
+    const paid = regs.reduce((n, r) => n + (Number(r.amountPaid) || 0), 0);
+    const row = (k, v) => v ? '<div style="display:flex;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:13px"><span style="min-width:110px;color:#4b5563;font-weight:700">' + k + '</span><span style="flex:1">' + v + '</span></div>' : '';
+    const reg = regs[0], nm = (guests[0]) || b.leaderName || 'Guest';
+    let m = document.getElementById('droSumModal');
+    if (!m) { m = document.createElement('div'); m.id = 'droSumModal'; m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99996;display:flex;align-items:center;justify-content:center;padding:16px'; m.onclick = ev => { if (ev.target === m) m.style.display = 'none'; }; document.body.appendChild(m); }
+    m.style.display = 'flex';
+    m.innerHTML = '<div style="background:#f5f1eb;border-radius:16px;max-width:520px;width:100%;max-height:90vh;overflow:auto;padding:20px 24px;box-shadow:0 12px 40px rgba(0,0,0,.3);font-family:Jost,sans-serif;color:#2d2520">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-family:\'Cormorant Garamond\',serif;font-size:24px;font-weight:700">' + esc(b.leaderName || b.retreatName || nm) + '</div><button onclick="document.getElementById(\'droSumModal\').style.display=\'none\'" style="border:none;background:none;font-size:22px;cursor:pointer;color:#4b5563">✕</button></div>'
+      + '<div style="background:#fff;border-radius:12px;padding:4px 14px">'
+      + row('Status', esc(String(b.status || '').replace(/_/g, ' ')))
+      + row('Stay', fmt(s) + ' → ' + fmt(e) + ' · ' + nights + ' night' + (nights === 1 ? '' : 's'))
+      + row('Room', esc(roomList))
+      + row('Guests', (Number(b.pax) || guests.length || 0) + (guests.length ? ' · ' + esc(guests.join(', ')) : ''))
+      + row('Email', esc(b.leaderEmail || ''))
+      + row('Phone', esc(b.leaderPhone || ''))
+      + row('Meal plan', esc(b.mealPlan || ''))
+      + row('Paid so far', paid ? '$' + paid.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '')
+      + row('Notes', esc(String(b.notes || '').slice(0, 400)).replace(/\n/g, '<br>'))
+      + '</div>'
+      + (reg ? '<button onclick="document.getElementById(\'droSumModal\').style.display=\'none\';openBookingDetailForReg(\'' + String(reg.id).replace(/'/g, '') + '\',' + JSON.stringify(nm).replace(/"/g, '&quot;') + ')" style="margin-top:12px;padding:8px 16px;border:none;border-radius:8px;background:#2d6a6a;color:#fff;font-weight:700;cursor:pointer;font-family:inherit">Open full booking</button>' : '')
+      + '</div>';
   };
   function paint() {
     try {
