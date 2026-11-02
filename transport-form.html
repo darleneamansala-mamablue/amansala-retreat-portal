@@ -623,84 +623,26 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script>
-  const _db=supabase.createClient('https://vnttlpqkssihbmcynxvo.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A');
-  async function saveTransportToCloud(entry){
-    try{await _db.from('transport').upsert({id:entry.id,booking_id:entry.bookingId,data:entry,submitted_at:entry.submittedAt});}catch(e){console.warn('Cloud save failed',e);}
-  }
-
-  function _normName(n) {
-    return (n ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
-      .replace(/[^a-z\s]/g,'').trim().split(/\s+/).sort().join(' ');
-  }
-
-  // Match a guest who didn't pick a retreat (individual mode, or no code/bk param) to a real
-  // booking by email then fuzzy name, searching registrations for retreats ending in the last
-  // 30 days or later — mirrors getTransportRoster()'s matching logic in modules/transport.js,
-  // but runs at submission time so the admin side sees the booking link immediately.
-  async function tryAutoMatchGuest(entryId, email, firstName, lastName) {
-    try {
-      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
-      const cutoffStr = cutoff.toISOString().slice(0,10);
-
-      const [{data: bookings}, {data: regs}] = await Promise.all([
-        _db.from('bookings').select('id,end_date'),
-        _db.from('registrations').select('booking_id,guests')
-      ]);
-      const endDateByBkId = new Map((bookings||[]).map(bk => [bk.id, bk.end_date || '']));
-      const eligibleRegs = (regs||[]).map(r=>({bookingId:r.booking_id,guests:r.guests}))
-        .filter(r => (endDateByBkId.get(r.bookingId) || '') >= cutoffStr);
-
-      if (!eligibleRegs.length) return;
-
-      const emailLc   = (email || '').toLowerCase().trim();
-      const keySearch = _normName([firstName, lastName].filter(Boolean).join(' '));
-      const keyFirst  = _normName(firstName ?? '');
-      const keyLast   = _normName(lastName  ?? '');
-
-      let matchedBkId = null;
-
-      // 1st pass — email match
-      if (emailLc) {
-        for (const reg of eligibleRegs) {
-          const hit = (reg.guests ?? []).find(g => g.email && g.email.toLowerCase().trim() === emailLc);
-          if (hit) { matchedBkId = reg.bookingId; break; }
-        }
-      }
-
-      // 2nd pass — name match
-      if (!matchedBkId && keySearch) {
-        for (const reg of eligibleRegs) {
-          for (const g of (reg.guests ?? [])) {
-            if (!g.name) continue;
-            const keyReg = _normName(g.name);
-            if (keyReg === keySearch) { matchedBkId = reg.bookingId; break; }
-            if (keyFirst.length > 2 && keyLast.length > 2 &&
-                keyReg.includes(keyFirst) && keyReg.includes(keyLast)) {
-              matchedBkId = reg.bookingId; break;
-            }
-          }
-          if (matchedBkId) break;
-        }
-      }
-
-      if (matchedBkId) {
-        await _db.from('transport').update({ booking_id: matchedBkId }).eq('id', entryId);
-      }
-    } catch(e) {
-      console.warn('[transport auto-match]', e);
-    }
-  }
+  // Saving, the retreat list and the "update my info" link go through netlify/functions/transport-public.js (2026-11-02):
+  // this form used to read every booking and guest with the public database key and replace the whole transport row
+  // (wiping office notes such as "charged" on every update).
+  const TR_FN='/.netlify/functions/transport-public';
+  let _editKey=new URLSearchParams(location.search).get('k')||null;
   </script>
   <script>
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     async function getBookings() {
       try {
-        const { data, error } = await _db.from('bookings').select('id,leader_name,retreat_name,start_date,end_date,status');
-        if (error) throw error;
-        return (data||[]).filter(b=>b.status!=='cancelled').map(b=>({id:b.id,leaderName:b.leader_name,retreatName:b.retreat_name,startDate:b.start_date,endDate:b.end_date,status:b.status}));
+        const r = await fetch(TR_FN + '?action=retreats');
+        const d = await r.json();
+        const list = d.retreats || [];
+        // a direct ?bk= link to a retreat that already ended is not in the upcoming list
+        if (bkParam && !list.some(b => b.id === bkParam)) {
+          try { const x = await (await fetch(TR_FN + '?action=retreat&bk=' + encodeURIComponent(bkParam))).json(); if (x.retreat) list.push(x.retreat); } catch (e) {}
+        }
+        return list;
       } catch (e) {
         console.warn('getBookings failed', e);
         return [];
@@ -759,11 +701,11 @@
         // Came from "Update my info" link in confirmation email — load saved entry
         let row = null;
         try {
-          const { data, error } = await _db.from('transport').select('data').eq('id', trParam).maybeSingle();
-          if (!error) row = data;
+          const r = await fetch(TR_FN + '?action=entry&tr=' + encodeURIComponent(trParam) + (_editKey ? '&k=' + encodeURIComponent(_editKey) : ''));
+          if (r.ok) { const d = await r.json(); row = { data: d.entry }; if (d.k) _editKey = d.k; }
         } catch(e) { /* ignore — fall through to empty form */ }
         if (row?.data) {
-          const saved = row.data;
+          const saved = { ...row.data, _k: _editKey };
           if (saved.bookingId && saved.bookingId !== 'individual') {
             selectedBookingId = saved.bookingId;
             const match = bookings.find(bk => bk.id === saved.bookingId);
@@ -986,63 +928,7 @@
     document.getElementById('arrivalOT').addEventListener('change',  () => updateOtState('arrival'));
     document.getElementById('departureOT').addEventListener('change', () => updateOtState('departure'));
 
-    // ── Confirmation email ────────────────────────────────────────────────────
-
-    async function _sendTransportEmail(entry, isUpdate) {
-      const editUrl  = `${location.origin}/transport-form.html?tr=${entry.id}`;
-      const airport  = a => a === 'cancun' ? 'Cancún (CUN)' : a === 'tulum' ? 'Tulum (TQO)' : '—';
-      const fmtDate  = d => { if (!d) return '—'; const [y,m,dy] = d.split('-'); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]} ${+dy}, ${y}`; };
-      const fmtTime  = t => { if (!t) return '—'; const [h,mn] = t.split(':'); const hr=+h; return `${hr%12||12}:${mn} ${hr<12?'AM':'PM'}`; };
-      const arrLine  = entry.arrivalOT   ? 'Own transport / not using Amansala transfer' : `${fmtDate(entry.arrivalDate)} at ${fmtTime(entry.arrivalTime)} · ${airport(entry.arrivalAirport)}`;
-      const depLine  = entry.departureOT ? 'Own transport / not using Amansala transfer' : `${fmtDate(entry.departureDate)} at ${fmtTime(entry.departureTime)} · ${airport(entry.departureAirport)}`;
-      const row = (label, value) => `<tr><td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:13px;color:#6b7280;width:130px;vertical-align:top">${label}</td><td style="padding:10px 0;border-bottom:1px solid #f0ede8;font-size:14px;color:#1a2332;font-weight:500">${value}</td></tr>`;
-      const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f0ea;font-family:'Helvetica Neue',Arial,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f0ea;padding:32px 0">
-<tr><td align="center">
-<table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
-
-  <!-- Header -->
-  <tr><td style="background:#2d6a6a;padding:28px 36px;text-align:center">
-    <div style="font-size:11px;letter-spacing:.15em;color:#a7d7d7;text-transform:uppercase;margin-bottom:6px">Amansala Eco-Chic Resort + Retreat</div>
-    <div style="font-size:22px;font-weight:700;color:#fff">${isUpdate ? 'Transport Info Updated' : 'Transport Info Received'}</div>
-  </td></tr>
-
-  <!-- Body -->
-  <tr><td style="padding:32px 36px">
-    <p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${entry.firstName}, ${isUpdate ? 'your transport details have been updated.' : 'we\'ve received your transportation information.'} Here\'s a summary:</p>
-
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px">
-      ${entry.flightNumber ? row('Flight', entry.flightNumber) : ''}
-      ${row('Arrival', arrLine)}
-      ${row('Departure', depLine)}
-      ${entry.willingToShare ? row('Sharing', 'Willing to share a ride') : ''}
-      ${entry.notes ? row('Notes', entry.notes.replace(/\n/g,'<br>')) : ''}
-    </table>
-
-    <p style="font-size:13.5px;color:#6b7280;margin:0 0 20px">If your flight details change, you can update your info anytime using the button below — no login required.</p>
-
-    <div style="text-align:center;margin-bottom:8px">
-      <a href="${editUrl}" style="display:inline-block;background:#2d6a6a;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.3px">Update My Transport Info</a>
-    </div>
-    <p style="font-size:11px;color:#9ca3af;text-align:center;margin:8px 0 0">Or copy this link: <span style="color:#2d6a6a">${editUrl}</span></p>
-  </td></tr>
-
-  <!-- Footer -->
-  <tr><td style="background:#f5f0ea;padding:20px 36px;text-align:center;border-top:1px solid #e8e3dc">
-    <p style="font-size:12px;color:#9ca3af;margin:0">Amansala Eco-Chic Resort · Tulum, México · retreats@amansala.com</p>
-  </td></tr>
-
-</table>
-</td></tr>
-</table>
-</body></html>`;
-
-      await fetch('/.netlify/functions/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: entry.email, subject: isUpdate ? 'Transport Info Updated — Amansala' : 'Transport Info Received — Amansala', html }),
-      });
-    }
+    // The confirmation email is sent by netlify/functions/transport-public.js.
 
     // ── Form submit ───────────────────────────────────────────────────────────
 
@@ -1152,24 +1038,32 @@
         willingToShare:   willingToShare
       };
 
+      // Save on the server: it keeps the office's own fields on the ride, matches an individual guest to their retreat,
+      // and emails the confirmation with a private "update my info" link
+      const submitBtn = document.querySelector('#transportForm button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      let saved;
+      try {
+        const r = await fetch(TR_FN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'submit', tr: _editingEntryId || null, k: _editKey, ...entry }) });
+        saved = await r.json();
+        if (!r.ok || !saved.ok) throw new Error(saved.error || 'Could not save');
+      } catch (err) {
+        if (submitBtn) submitBtn.disabled = false;
+        alert((err && err.message) || 'Could not save — please try again.');
+        return;
+      }
+      if (submitBtn) submitBtn.disabled = false;
+      entry.id = saved.id; entry.bookingId = saved.entry.bookingId; _editKey = saved.k;
+
       // Save to localStorage (upsert by ID)
       const existing = getTransport().filter(e => e.id !== entry.id);
       existing.push(entry);
       saveTransport(existing);
-      await saveTransportToCloud(entry); // sync to shared database (upserts by ID)
-
-      // Auto-match to retreat booking by email then name (individual guests only; runs in background)
-      if (individualMode || !selectedBookingId) {
-        tryAutoMatchGuest(entry.id, email, firstName, lastName);
-      }
 
       // Store for edit-in-place
-      sessionStorage.setItem('tr_last_entry', JSON.stringify(entry));
+      sessionStorage.setItem('tr_last_entry', JSON.stringify({ ...entry, _k: _editKey }));
       _editingEntryId = entry.id;
-
-      // Send confirmation email (fire and forget — never blocks the UI)
       const isUpdate = !!document.getElementById('formWrap').dataset.editing;
-      _sendTransportEmail(entry, isUpdate).catch(() => {});
 
       // ── Show success ──
       document.getElementById('successTitle').textContent = isUpdate ? 'Info Updated!' : 'Thank You!';
@@ -1186,6 +1080,7 @@
 
     function trPrefillForm(entry) {
       _editingEntryId = entry.id;
+      if (entry._k) _editKey = entry._k;   // the private key of this entry's "update my info" link
       document.getElementById('formWrap').dataset.editing = '1';
 
       // Name / email

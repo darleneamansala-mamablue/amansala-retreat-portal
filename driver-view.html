@@ -211,8 +211,9 @@ body { font-family: 'Jost', sans-serif; background: #f0f4f8; min-height: 100vh; 
 </div>
 
 <script>
-const SUPA_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
-const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
+// Rides come from netlify/functions/driver-data.js (2026-11-02): only this company's rides, with no guest emails or
+// phones. The page used to read every transport row, booking and guest with the public database key.
+const DRIVER_FN = '/.netlify/functions/driver-data';
 
 const PASTEL = ['#eff6ff','#f0fdf4','#faf5ff','#fffbeb','#fdf2f8','#f0fdfa','#fff7ed','#f0f9ff'];
 // Jorge's ask 2026-10-20: Cancun departure lead time 4h -> 3.5h (210 min).
@@ -259,88 +260,26 @@ let _userGroupMap = new Map();
 let _filter  = 'upcoming';
 let _filterDate = '';
 
-async function supa(path) {
-  const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
-    headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
-  });
-  return r.json();
-}
-// PostgREST caps a plain GET at 1000 rows with no error -- confirmed 2026-10-18 as the real
-// cause of "reservas sin habitación" here: `registrations` has 1900+ rows, so a plain supa()
-// call only ever saw the first 1000, silently missing whichever retreats' registrations
-// happened to sort past that cutoff -- no amount of name-matching fixes helps when the
-// registration itself was never loaded at all. Use for any table that could plausibly exceed
-// 1000 rows (registrations in particular, which only grows).
-async function supaAll(path) {
-  const out = [];
-  const sep = path.includes('?') ? '&' : '?';
-  let offset = 0;
-  const pageSize = 1000;
-  for (;;) {
-    const page = await supa(`${path}${sep}limit=${pageSize}&offset=${offset}`);
-    if (!Array.isArray(page)) return page; // surface an error object as-is rather than loop forever
-    out.push(...page);
-    if (page.length < pageSize) return out;
-    offset += pageSize;
-  }
-}
-
-async function supaUpdate(rowId, body) {
-  return fetch(`${SUPA_URL}/rest/v1/transport?id=eq.${rowId}`, {
-    method: 'PATCH',
-    headers: {
-      apikey: SUPA_KEY,
-      Authorization: `Bearer ${SUPA_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
-    },
-    body: JSON.stringify(body),
-  });
-}
-
 async function loadData() {
-  const [rows, bookings, regs, settingsData] = await Promise.all([
-    supaAll('transport?select=id,booking_id,data,submitted_at'),
-    supaAll('bookings?select=id,leader_name,retreat_name,start_date,end_date,status&status=neq.cancelled'),
-    supaAll('registrations?select=booking_id,room,guests'),
-    supa('settings?key=eq.transport_groups&select=value&limit=1'),
-  ]);
-  _userGroupMap = new Map(settingsData?.[0]?.value ?? []);
+  let rows = [], bookings = [];
+  try {
+    const r = await fetch(DRIVER_FN + '?co=' + encodeURIComponent(CO));
+    const d = await r.json();
+    rows = d.rows || []; bookings = d.bookings || [];
+    _userGroupMap = new Map(d.groups || []);
+  } catch (e) { console.error('Could not load rides', e); }
 
   const bkMap = {};
   (bookings || []).forEach(b => { bkMap[b.id] = b; });
 
-  // Room lookup by name -- exact match, then unique-first-name, then unique-email fallback
-  // (ported from modules/transport.js's admin Transport board, which already had all three;
-  // this standalone driver page only ever had the exact match, confirmed 2026-10-18 as the
-  // cause of "reservas sin habitación" here: an abbreviated/variant submitted name, e.g.
-  // "Billy S" vs the registration's "Billy Stalcup", never resolves a room without a fallback,
-  // even though the admin board shows it correctly).
-  const roomLookup = {}, firstNameIdx = {}, emailRoomIdx = {};
-  (regs || []).forEach(r => {
-    (r.guests || []).forEach(g => {
-      if (!g.name || !r.booking_id) return;
-      roomLookup[`${r.booking_id}|${g.name.toLowerCase()}`] = r.room || '';
-      const firstName = g.name.trim().split(/\s+/)[0].toLowerCase();
-      if (firstName.length >= 3) {
-        const fk = `${r.booking_id}|${firstName}`;
-        if (!firstNameIdx[fk]) firstNameIdx[fk] = { room: r.room || '', count: 0 };
-        firstNameIdx[fk].count++;
-      }
-      if (g.email) {
-        const ek = `${r.booking_id}|${g.email.toLowerCase().trim()}`;
-        if (!emailRoomIdx[ek]) emailRoomIdx[ek] = { room: r.room || '', count: 0 };
-        emailRoomIdx[ek].count++;
-      }
-    });
-  });
+  // Rooms are matched on the server (exact name, then a unique first name, then a unique email) -- row.room
 
   // Dedup: collapse same-guest duplicate submissions
   const dedupedRows = (() => {
     const map = new Map();
     for (const row of rows || []) {
       const d  = row.data || {};
-      const em = (d.email || '').toLowerCase().trim();
+      const em = row.emailKey || '';   // a fingerprint of the email from the server, not the address
       const fn = (d.firstName || '').toLowerCase().trim();
       const ln = (d.lastName  || '').toLowerCase().trim();
       const key = `${em || (fn + '_' + ln)}|${d.arrivalDate || ''}|${d.departureDate || ''}`;
@@ -369,13 +308,7 @@ async function loadData() {
     const d   = row.data || {};
     const bk  = bkMap[row.booking_id];
     const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
-    const room = roomLookup[`${row.booking_id}|${name.toLowerCase()}`] || (() => {
-      const fn = (d.firstName || '').trim().toLowerCase();
-      if (fn.length >= 3) { const fi = firstNameIdx[`${row.booking_id}|${fn}`]; if (fi && fi.count === 1) return fi.room; }
-      const em = (d.email || '').toLowerCase().trim();
-      if (em && row.booking_id) { const ei = emailRoomIdx[`${row.booking_id}|${em}`]; if (ei && ei.count === 1) return ei.room; }
-      return '';
-    })();
+    const room = row.room || '';
     const retreatLabel = bk ? [bk.retreat_name, bk.leader_name].filter(Boolean).join(' · ') : '';
 
     // Arrival
@@ -455,26 +388,15 @@ async function confirmGroup(idsStr, confirmed) {
   });
   render();
 
-  // 2. Persist to Supabase
-  const failed = [];
-  await Promise.all(rowIds.map(async rowId => {
-    const entry = _entries.find(e => e.rowId === rowId);
-    if (!entry) return;
-    const newData = { ...(entry.rawData || {}), driver_confirmed: confirmed };
-    try {
-      const resp = await supaUpdate(rowId, { data: newData });
-      if (resp.ok || resp.status === 204) {
-        entry.rawData = newData;
-      } else {
-        const txt = await resp.text().catch(() => '');
-        console.error('Confirm failed:', resp.status, txt);
-        failed.push(rowId);
-      }
-    } catch(err) {
-      console.error('Confirm error:', err);
-      failed.push(rowId);
-    }
-  }));
+  // 2. Save: the server changes only the "confirmed" mark, on the ride as it is now (office edits made since this page
+  //    loaded are kept -- the page used to write back its whole old copy of the ride)
+  let failed = rowIds;
+  try {
+    const resp = await fetch(DRIVER_FN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ co: CO, rowIds, confirmed }) });
+    const d = await resp.json();
+    failed = resp.ok ? (d.failed || []) : rowIds;
+  } catch (err) { console.error('Confirm error:', err); }
+  rowIds.filter(id => !failed.includes(id)).forEach(id => _entries.forEach(e => { if (e.rowId === id) e.rawData = { ...(e.rawData || {}), driver_confirmed: confirmed }; }));
 
   // 3. Revert if all failed
   if (failed.length === rowIds.length) {
