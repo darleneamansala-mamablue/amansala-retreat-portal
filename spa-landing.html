@@ -6,7 +6,6 @@
 <title>Amansala Spa · Tulum</title>
 <meta name="description" content="Book a spa treatment at Amansala — massage, body work, spirit work, and private movement classes in Tulum.">
 <link href="https://fonts.googleapis.com/css2?family=Italiana&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
@@ -150,9 +149,8 @@ footer{text-align:center;padding:30px 24px;font-size:12px;color:#a89a86}
 <footer>Amansala · Tulum &middot; <a href='/spa-booking' style='color:#3AB7AE;font-weight:600'>Book a Spa Treatment</a></footer>
 
 <script>
-const SUPA_URL='https://vnttlpqkssihbmcynxvo.supabase.co';
-const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
-const db=supabase.createClient(SUPA_URL,SUPA_KEY);
+// The catalog comes from netlify/functions/spa-public.js (2026-11-02): no therapist contact details or pay rates, which the
+// public database read used to include.
 
 const CAT_ORDER=['massage','spirit','yoga','pilates','fitness','dance'];
 const CAT_LABEL={massage:'Body Work',spirit:'Spirit Work',fitness:'Fitness',yoga:'Yoga',pilates:'Pilates',dance:'Dance'};
@@ -163,8 +161,9 @@ function esc(s){return (s||'').replace(/</g,'&lt;');}
 (async function init(){
   let SpaData={services:[],rooms:[],therapists:[]};
   try{
-    const {data}=await db.from('app_store').select('value').eq('key','spa_data').single();
-    if(data?.value) SpaData=data.value;
+    const r=await fetch('/.netlify/functions/spa-public?action=catalog');
+    const d=await r.json();
+    if(d&&d.spaData) SpaData=d.spaData;
   }catch(e){}
 
   // Services, grouped, bookable-only (matches spa-booking.html's own filter)
