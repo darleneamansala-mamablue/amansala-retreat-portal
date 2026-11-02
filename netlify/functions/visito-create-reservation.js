@@ -1,4 +1,5 @@
 'use strict';
+const { sendMail } = require('./mail-lib');
 
 // Visito AI "Tool" — lets Lana create a Room Only reservation (Escape / Extra
 // Nights) directly from a WhatsApp conversation, with ZERO staff involvement.
@@ -244,12 +245,7 @@ exports.handler = async (event) => {
     Amansala Eco-Chic Resort &amp; Retreat · Tulum, Mexico · <a href="mailto:bookings@amansala.com" style="color:#0e9494">bookings@amansala.com</a>
   </div>
 </div></body></html>`;
-      const emailRes = await fetch(`${siteUrl}/.netlify/functions/send-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: email, subject: `Complete Your Reservation — ${rt.name}`, html: emailHtml, replyTo: 'bookings@amansala.com' }),
-      });
-      emailed = emailRes.ok;
+      emailed = await sendMail({ to: email, subject: `Complete Your Reservation — ${rt.name}`, html: emailHtml, replyTo: 'bookings@amansala.com' });
     } catch (emailErr) {
       console.warn('[visito-create-reservation] email failed (non-fatal):', emailErr.message);
     }

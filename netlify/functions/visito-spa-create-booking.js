@@ -1,4 +1,5 @@
 'use strict';
+const { sendMail } = require('./mail-lib');
 const { findOrCreateFolioLocked } = require('./folio-lib');
 
 // Visito AI "Tool" — lets Lana book a spa appointment end to end, with ZERO
@@ -545,18 +546,12 @@ exports.handler = async (event) => {
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px">${rows}</table>
         ${payBlock}
         ${cancelBlock}`;
-      await fetch(`${process.env.URL || 'https://amansalaportal.com'}/.netlify/functions/send-email`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: email, subject: 'Spa Appointment Confirmed — Amansala', html: emailShell('Your Spa Appointment is Confirmed', body) }),
-      });
+      await sendMail({ to: email, subject: 'Spa Appointment Confirmed — Amansala', html: emailShell('Your Spa Appointment is Confirmed', body) });
       if (ther.email) {
         const therBody = `<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(ther.firstName)}, a new appointment was just booked with you:</p>
           <table width="100%" cellpadding="0" cellspacing="0">${emailRow('Client', esc(clientName))}${emailRow('Service', esc(svc.name))}${emailRow('Date', fmtDateLong(date))}${emailRow('Time', fmtT(start))}</table>
           <p style="font-size:13.5px;color:#6b7280;margin:20px 0 0">It's on your schedule.</p>`;
-        await fetch(`${process.env.URL || 'https://amansalaportal.com'}/.netlify/functions/send-email`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: ther.email, subject: 'New Appointment — Amansala Spa', html: emailShell('New Appointment Booked', therBody) }),
-        });
+        await sendMail({ to: ther.email, subject: 'New Appointment — Amansala Spa', html: emailShell('New Appointment Booked', therBody) });
       }
     } catch (emailErr) { console.warn('[visito-spa-create-booking] email failed (non-fatal):', emailErr.message); }
 

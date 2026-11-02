@@ -4271,6 +4271,23 @@ function _dbPassMiss(){
 }
 function dbAuthToken(){if(!_dbPassOn())return SUPA_KEY;const p=dbPassGet();if(p)return p.t;_dbPassMiss();return SUPA_KEY;}
 const db=supabase.createClient(SUPA_URL,SUPA_KEY,{accessToken:async()=>dbAuthToken()});
+// Emails: send-email only answers signed-in sessions (2026-11-02), so every call from this page carries this session's
+// passes -- staff-login's (X-Portal-Token) and the database pass (staff, spa, driver, confirm, or a teacher's for their
+// retreat). A session from before the passes existed is told to sign in again.
+(function(){
+  const _f=window.fetch.bind(window);
+  window.fetch=function(input,init){
+    const url=typeof input==='string'?input:(input&&input.url)||'';
+    if(!/\/\.netlify\/functions\/send-email(\?|$)/.test(url))return _f(input,init);
+    const h=new Headers((init&&init.headers)||{});
+    try{const t=sessionStorage.getItem('amansala_staff_token');if(t)h.set('X-Portal-Token',t);}catch(e){}
+    try{const p=sessionStorage.getItem('amansala_db_pass');if(p)h.set('Authorization','Bearer '+p);}catch(e){}
+    return _f(input,{...(init||{}),headers:h}).then(r=>{
+      if(r.status===401){try{showToast('⚠ Email not sent: sign out of the portal and sign in again, then retry.');}catch(e){}}
+      return r;
+    });
+  };
+})();
 // a pass lasts 12 h: renewed in the background while still valid (session-refresh, up to 14 days after the sign-in)
 setInterval(async()=>{
   const p=dbPassGet();if(!p||p.c.exp*1000-Date.now()>2*3600e3)return;

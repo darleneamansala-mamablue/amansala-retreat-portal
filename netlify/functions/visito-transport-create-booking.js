@@ -1,4 +1,5 @@
 'use strict';
+const { sendMail } = require('./mail-lib');
 
 // Visito AI "Tool" — lets Lana book a private airport transfer end to end, mirroring
 // visito-spa-create-booking.js's hotel/offsite split exactly (Jorge's ask 2026-10-15,
@@ -249,10 +250,7 @@ exports.handler = async (event) => {
     <p style="color:#6b7280;font-size:12px;text-align:center">If the button doesn't work, copy this link into your browser:<br>${paymentUrl}</p>
   </div>
 </div></body></html>`;
-      await fetch(`${siteUrl}/.netlify/functions/send-email`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: email, subject: 'Complete Your Transfer Reservation — Amansala', html: emailHtml }),
-      });
+      await sendMail({ to: email, subject: 'Complete Your Transfer Reservation — Amansala', html: emailHtml });
     } catch (emailErr) { console.warn('[visito-transport-create-booking] email failed (non-fatal):', emailErr.message); }
 
     return ok({
