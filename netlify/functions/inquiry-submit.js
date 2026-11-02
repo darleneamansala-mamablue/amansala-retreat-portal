@@ -8,6 +8,7 @@
 //   POST {kind:'leader', name, email, phone, retreatName, startDate, endDate, pax, retreatType, isReturnGuest,
 //         previousVisit, datesFlexible, notes, chica}
 //   POST {kind:'event', type:'wedding'|'bachelorette', name, email, phone, honoree, date, guestCount, notes, referral}
+//   POST {kind:'special', type, name, email, phone, pax, startDate, endDate, notes}   the portal's ?mode=event form -> specialEvents
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const hdrs = key => ({ apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' });
 const reply = (code, data) => ({ statusCode: code, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -19,22 +20,22 @@ async function insertBooking(key, row) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/bookings`, { method: 'POST', headers: { ...hdrs(key), Prefer: 'return=minimal' }, body: JSON.stringify(row) });
   if (!r.ok) throw new Error('bookings ' + r.status + ' ' + (await r.text()).slice(0, 160));
 }
-async function appendInquiry(key, entry) {
+async function appendInquiry(key, entry, storeKey = 'crm_inquiries') {
   for (let i = 0; i < 10; i++) {
-    const g = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.crm_inquiries&select=value,updated_at`, { headers: hdrs(key) });
+    const g = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${storeKey}&select=value,updated_at`, { headers: hdrs(key) });
     const [row] = g.ok ? await g.json() : [];
     const now = new Date().toISOString();
     if (!row) {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store`, { method: 'POST', headers: { ...hdrs(key), Prefer: 'return=minimal' }, body: JSON.stringify({ key: 'crm_inquiries', value: [entry], updated_at: now }) });
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store`, { method: 'POST', headers: { ...hdrs(key), Prefer: 'return=minimal' }, body: JSON.stringify({ key: storeKey, value: [entry], updated_at: now }) });
       if (r.ok) return;
     } else {
       const list = Array.isArray(row.value) ? row.value : [];
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.crm_inquiries&updated_at=eq.${encodeURIComponent(row.updated_at)}`, { method: 'PATCH', headers: { ...hdrs(key), Prefer: 'return=representation' }, body: JSON.stringify({ value: [...list, entry], updated_at: now }) });
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${storeKey}&updated_at=eq.${encodeURIComponent(row.updated_at)}`, { method: 'PATCH', headers: { ...hdrs(key), Prefer: 'return=representation' }, body: JSON.stringify({ value: [...list, entry], updated_at: now }) });
       if (r.ok && (await r.json()).length) return;
     }
     await new Promise(res => setTimeout(res, 100 + Math.random() * 200));
   }
-  throw new Error('crm_inquiries busy');
+  throw new Error(storeKey + ' busy');
 }
 
 exports.handler = async (event) => {
@@ -67,6 +68,13 @@ exports.handler = async (event) => {
         id: 'bk_' + uid(), event_type: type, leader_name: name, retreat_name: `${honoree} ${type === 'wedding' ? 'Wedding' : 'Bachelorette'}`,
         leader_email: email, leader_phone: phone, start_date: d, end_date: d, pax: guestCount, notes: entry.notes, source: 'inquiry', status: 'requested',
       });
+      return reply(200, { ok: true });
+    }
+    if (b.kind === 'special') {
+      const start = date(b.startDate), end = date(b.endDate) || start;
+      if (!start) return reply(400, { error: 'Please pick the dates.' });
+      await appendInquiry(key, { id: 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5), createdAt: new Date().toISOString(), type: s(b.type, 60), status: 'inquiry',
+        contact: name, email, phone, pax: parseInt(b.pax, 10) || null, startDate: start, endDate: end, notes: s(b.notes, 4000), source: 'public_form' }, 'specialEvents');
       return reply(200, { ok: true });
     }
     return reply(400, { error: 'Unknown form' });

@@ -231,17 +231,12 @@ function initEventMode(){
     const startDate=document.getElementById('efStart').value;
     const endDate=document.getElementById('efEnd').value;
     if(!type||!contact||!email||!startDate||!endDate)return;
-    const newEvt={id:'evt_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),createdAt:new Date().toISOString(),type,status:'inquiry',contact,email,phone:document.getElementById('efPhone').value.trim(),pax:parseInt(document.getElementById('efPax').value)||null,startDate,endDate,notes:document.getElementById('efNotes').value.trim(),source:'public_form'};
+    // saved by netlify/functions/inquiry-submit.js (2026-11-02): this form used to rewrite the whole event list with the
+    // public database key (two inquiries at once lost one)
     try{
-      const SK=SUPA_KEY, SU=SUPA_URL;
-      const H={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+(typeof dbAuthToken==='function'?dbAuthToken():SK)};
-      const row=await fetch(SU+'/rest/v1/app_store?key=eq.specialEvents&select=value',{headers:H}).then(r=>r.json());
-      const existing=Array.isArray(row[0]?.value)?row[0].value:[];
-      existing.push(newEvt);
-      const method=row.length?'PATCH':'POST';
-      const url=SU+'/rest/v1/app_store'+(row.length?'?key=eq.specialEvents':'');
-      await fetch(url,{method,headers:{...H,'Prefer':'return=minimal'},body:JSON.stringify({key:'specialEvents',value:existing,updated_at:new Date().toISOString()})});
-    }catch(e){console.warn('Event submission Supabase error:',e);}
+      await fetch('/.netlify/functions/inquiry-submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'special',type,name:contact,email,
+        phone:document.getElementById('efPhone').value.trim(),pax:document.getElementById('efPax').value,startDate,endDate,notes:document.getElementById('efNotes').value.trim()})});
+    }catch(e){console.warn('Event submission error:',e);}
     // Email notification via Netlify Forms
     try{
       const fd=new URLSearchParams();
