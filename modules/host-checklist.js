@@ -239,6 +239,8 @@ function hcAlertTick() {
   try {
     if (!document.body) return; const chip = hcAlertChip();
     if (!hcTeam()) { chip.style.display = 'none'; return; }
+    const dash = document.getElementById('tab-dashboard');   // only on the Dashboard (Darlene 2026-11-02)
+    if (!dash || !dash.classList.contains('active')) { chip.style.display = 'none'; return; }
     if (!hcState.loaded && !hcState.loading) { hcLoad(); return; }
     const list = hcAlertScan(), n = list.reduce((s, x) => s + x.steps.length, 0);
     chip.style.display = n ? 'block' : 'none';
@@ -258,6 +260,7 @@ function hcAlertShow() {
       ${x.steps.map(i => `<div style="font-size:13px;margin-top:4px">☐ ${hcEsc(i.text)}${i.due && i.due < hcToday() ? ` <span style="color:#b91c1c;font-weight:700;font-size:11.5px">overdue since ${hcFmt(i.due)}</span>` : ''}</div>`).join('')}</div>`).join('') : '<div style="color:#059669;font-weight:700">Everything for the arrival is ticked off. ✓</div>'}</div>`;
 }
 setInterval(hcAlertTick, 60000); setTimeout(hcAlertTick, 7000);
+if (typeof switchTab === 'function') { const hcSwitch = window.switchTab; window.switchTab = function () { const r = hcSwitch.apply(this, arguments); setTimeout(hcAlertTick, 0); return r; }; }   // show / hide the chip as soon as the tab changes
 
 (function () {
   const side = document.getElementById('staffSideBtn'), after = document.getElementById('tab-checkoutbalances') || document.getElementById('tab-doublecharges');
