@@ -47,6 +47,7 @@ SBB_KIND.icebath = { title: 'Ice Bath', pick: 'Ice Bath', people: ['Ryan', 'Serg
 SBB_KIND.fitness = { title: 'Fitness Classes', pick: 'Fitness teacher', people: ['Ryan', 'Fernando', 'Sergio'], toast: ' will teach fitness.' };
 SBB_KIND.pilates = { title: 'Pilates', pick: 'Pilates teacher', people: ['Adele', 'Sergio', 'Michelle'], toast: ' will teach pilates.' };
 SBB_KIND.mayanclay = { title: 'Mayan Clay', pick: 'Mayan Clay', people: ['Yolanda', 'Darlene', 'Sergio'], toast: ' will run Mayan Clay.' };
+SBB_KIND.ac = { toast: ' will be the AC specialist.' };
 SBB_KIND.csr = { title: 'CSR (restaurant)', pick: 'CSR', people: ['Max', 'Michelle'], toast: ' will be the CSR.' };
 const sbbShow = {};   // boxes opened with "+ another" this visit
 function sbbInHouse(date) {
@@ -84,4 +85,9 @@ function sbbCsrWhen(d) {
   return t ? 'from brunch, ' + sfClock(sfMin(t)) + ', in the restaurant' : 'from brunch start, in the restaurant';
 }
 function sbbCsrDay(d) { return !!d.arrivals || (AppData.bookings || []).some(b => b && b.status !== 'cancelled' && b.bookingType !== 'room_only' && b.startDate && b.endDate && String(b.startDate).slice(0, 10) < d.date && d.date <= String(b.endDate).slice(0, 10)); }
-window.sfCrewRows = d => sbbInHouse(d.date) ? (sbbCsrDay(d) ? sbbCrewRow('csr', d) : '') + sbbCrewRow('tourguide', d) + sbbCrewRow('yoga', d) + sbbCrewRow('icebath', d) + sbbCrewRow('fitness', d) + sbbCrewRow('pilates', d) + sbbCrewRow('mayanclay', d) : '';
+// AC specialist: Ivan is always on for the arrival night (shown as chosen unless someone changes it; "nobody" is saved as '-').
+function sbbAcRow(d) {
+  const saved = sfCovered(d.date, 'ac'), cur = saved || 'Ivan';
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:3px 0"><b style="min-width:122px;color:#166534">AC specialist</b><span style="min-width:130px;font-size:12px;color:#6b7280">arrival night</span><select onchange="sbbSet('${d.date}','ac','ac',this.value||'-')" style="padding:4px 7px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px;background:#fff" title="AC specialist"><option value="Ivan" ${cur === 'Ivan' ? 'selected' : ''}>Ivan</option><option value="-" ${cur === '-' ? 'selected' : ''}>— nobody this night —</option>${cur !== 'Ivan' && cur !== '-' ? `<option value="${sfEsc(cur)}" selected>${sfEsc(cur)}</option>` : ''}</select></div>`;
+}
+window.sfCrewRows = d => (d.arrivals ? sbbAcRow(d) : '') + (sbbInHouse(d.date) ? (sbbCsrDay(d) ? sbbCrewRow('csr', d) : '') + sbbCrewRow('tourguide', d) + sbbCrewRow('yoga', d) + sbbCrewRow('icebath', d) + sbbCrewRow('fitness', d) + sbbCrewRow('pilates', d) + sbbCrewRow('mayanclay', d) : '');
