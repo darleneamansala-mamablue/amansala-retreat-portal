@@ -81,12 +81,14 @@
   function notesOf(b) {
     const regs = (AppData.regs || []).filter(r => r.bookingId === b.id), out = [], seen = new Set();
     const add = (label, t) => { t = String(t || '').replace(/\s+/g, ' ').trim(); if (!t || seen.has(t.toLowerCase())) return; seen.add(t.toLowerCase()); out.push({ label, text: t.length > 220 ? t.slice(0, 220) + '…' : t }); };
-    regs.forEach(r => add('Internal', r.internalNotes));
+    const SIG = /—\s*[^—\n]+,\s*[A-Z][a-z]{2}\s+\d{1,2}\s*$/;
+    regs.forEach(r => add('Internal', r.internalNotes && !SIG.test(String(r.internalNotes).trim()) ? String(r.internalNotes).trim() + ' (writer not recorded)' : r.internalNotes));
+    if (!out.length) out.push({ label: 'Internal', text: 'No internal notes', none: true });
     regs.forEach(r => { add('Note', r.notes); (r.guests || []).forEach(g => g && add('Guest note', g.notes)); });
     add('Booking note', b.notes);
     return out;
   }
-  const notesHtml = b => notesOf(b).map(n => '<div style="margin-top:2px;font-size:12px;color:#7c2d12"><b>📝 ' + n.label + ':</b> ' + esc(n.text) + '</div>').join('');
+  const notesHtml = b => notesOf(b).map(n => '<div style="margin-top:2px;font-size:12px;color:' + (n.none ? '#4b5563' : '#7c2d12') + '"><b>📝 ' + n.label + ':</b> ' + esc(n.text) + '</div>').join('');
   // Click a tile: list the guests behind the number; click a guest to open their booking (Darlene 2026-11-02: "we need to be able to see who the one guest is or click into it")
   window.droShow = function (key) {
     const box = document.getElementById('droPanel'); if (!box) return;
@@ -149,6 +151,7 @@
       const el = document.getElementById('dbContent'); if (!el) return;
       const old = document.getElementById('droCard'); if (old) old.remove();
       el.insertAdjacentHTML('afterbegin', card());
+      try { window.droShow('arr'); } catch (e) {}   // arrivals open by default so the notes are seen without a click (Darlene 2026-11-02)
     } catch (e) { console.warn('[dashboard-room-only]', e); }
   }
   const orig = window.buildDashboard;
