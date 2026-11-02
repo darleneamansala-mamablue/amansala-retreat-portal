@@ -5592,7 +5592,8 @@ function buildRetreatSchedulesPanel(){
   const fmtT=t=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';return`${h%12||12}:${String(m).padStart(2,'0')} ${ap}`;};
   const addMin=(t,mins)=>{if(!t)return'';const[h,m]=t.split(':').map(Number);const tot=h*60+m+mins;return`${Math.floor(tot/60)%24}:${String(tot%60).padStart(2,'0')}`;};
   const shalaName=id=>id?(SHALAS.find(s=>s.id===id)?.name||id):'—';
-  const hasSched=AppData.bookings.filter(b=>b.scheduleRequest?.submittedAt);
+  const _todayKeep=fmtISO(new Date());   // retreats that have already ended are not listed (Darlene 2026-11-02)
+  const hasSched=AppData.bookings.filter(b=>b.scheduleRequest?.submittedAt&&String(b.endDate||b.startDate||'9999')>=_todayKeep);
   hasSched.sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
   const el=document.getElementById('rspContent');
   const reviewFlag=sr=>(sr&&sr.reviewNeeded&&sr.adminStatus==='confirmed')?`<span style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:99px;font-size:11.5px;font-weight:700;background:#ffedd5;color:#c2410c;margin-left:6px" title="The teacher edited this schedule after you confirmed it. It is still in the scheduler — open it and confirm again once you've checked the changes.">Teacher updated — review</span>`:'';
