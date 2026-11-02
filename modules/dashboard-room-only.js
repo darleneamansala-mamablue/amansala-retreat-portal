@@ -50,7 +50,7 @@
     for (let i = 0; i < 7; i++) {
       const d = new Date(today); d.setDate(d.getDate() + i);
       const s = stats(iso(d));
-      strip += '<div style="flex:1;min-width:58px;text-align:center;padding:6px 2px;border-radius:8px;background:' + (i ? '#f6f3ec' : '#e0f2fe') + '"><div style="font-size:10.5px;font-weight:700;color:#4b5563">' + d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + d.getDate() + '</div><div style="font-size:18px;font-weight:800;color:#1f2d2d">' + s.gIn + '</div></div>';
+      strip += '<div onclick="droShow(\'day:' + iso(d) + '\')" title="Click to see this day\'s arrivals" style="cursor:pointer;flex:1;min-width:58px;text-align:center;padding:6px 2px;border-radius:8px;background:' + (i ? '#f6f3ec' : '#e0f2fe') + '"><div style="font-size:10.5px;font-weight:700;color:#4b5563">' + d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + d.getDate() + '</div><div style="font-size:18px;font-weight:800;color:#1f2d2d">' + s.gIn + '</div></div>';
     }
     const lists = { in: t.inh, arr: t.arr, dep: t.dep };
     window._droLists = {}; Object.keys(lists).forEach(k => { window._droLists[k] = lists[k].map(b => b.id); });
@@ -94,14 +94,24 @@
     const box = document.getElementById('droPanel'); if (!box) return;
     if (box.dataset.k === key && box.style.display !== 'none') { box.style.display = 'none'; return; }
     box.dataset.k = key; box.style.display = 'block';
-    const ids = (window._droLists || {})[key] || [], title = { in: 'In house tonight', arr: 'Arriving today', dep: 'Departing today' }[key];
-    const rows = ids.map(id => (AppData.bookings || []).find(b => b.id === id)).filter(Boolean).sort((a, b) => (a.leaderName || '').localeCompare(b.leaderName || '')).map(b => {
+    const rowsFor = ids => {
+    return ids.map(id => (AppData.bookings || []).find(b => b.id === id)).filter(Boolean).sort((a, b) => (a.leaderName || '').localeCompare(b.leaderName || '')).map(b => {
       const reg = (AppData.regs || []).find(r => r.bookingId === b.id), gn = reg && (reg.guests || []).find(g => g && g.name), nm = (gn && gn.name) || b.leaderName || b.retreatName || 'Guest';
       const [s, e] = D(b), label = esc(nm) + (gn && b.leaderName && b.leaderName !== nm ? ' <span style="color:#6b7280">(' + esc(b.leaderName) + ')</span>' : '');
       const click = ' onclick="droSummary(\'' + String(b.id).replace(/'/g, '') + '\')" style="cursor:pointer;color:#2d6a6a;font-weight:700;text-decoration:underline"';
       const sl = stayLine(b); return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span><span' + click + '>' + label + '</span>' + (sl ? '<div style="color:#4b5563;font-size:12px;margin-top:1px">' + esc(sl) + '</div>' : '') + notesHtml(b) + '</span><span style="color:#4b5563;white-space:nowrap">' + s.slice(5) + ' → ' + e.slice(5) + ' · ' + (Number(b.pax) || 0) + ' guest' + ((Number(b.pax) || 0) === 1 ? '' : 's') + ' · ' + (rooms(b) === 1 ? '1 room' : rooms(b) + ' rooms') + '</span></div>';
     }).join('');
-    box.innerHTML = '<div style="font-size:12.5px;font-weight:800;color:#1f2d2d;margin-bottom:4px">' + title + '</div>' + (rows || '<div style="font-size:12.5px;color:#4b5563">Nobody.</div>');
+    };
+    const section = (title, ids) => '<div style="font-size:12.5px;font-weight:800;color:#1f2d2d;margin:8px 0 4px">' + title + ' (' + ids.length + ')</div>' + (ids.length ? rowsFor(ids) : '<div style="font-size:12.5px;color:#4b5563">Nobody.</div>');
+    if (key.slice(0, 4) === 'day:') {   // a day of the next-7-days strip: who arrives, who leaves, who is staying (room-only: Cloudbeds / Direct / OTA)
+      const ds = key.slice(4), st = stats(ds), arrIds = st.arr.map(b => b.id), depIds = st.dep.map(b => b.id);
+      const stay = st.inh.map(b => b.id).filter(id => !arrIds.includes(id));
+      const nice = (() => { try { return new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }); } catch (e) { return ds; } })();
+      box.innerHTML = '<div style="font-size:13.5px;font-weight:800;color:#1f2d2d">' + nice + '</div>' + section('Arriving', arrIds) + section('Departing', depIds) + section('Already in house', stay);
+      return;
+    }
+    const ids = (window._droLists || {})[key] || [], title = { in: 'In house tonight', arr: 'Arriving today', dep: 'Departing today' }[key];
+    box.innerHTML = '<div style="font-size:12.5px;font-weight:800;color:#1f2d2d;margin-bottom:4px">' + title + '</div>' + (ids.length ? rowsFor(ids) : '<div style="font-size:12.5px;color:#4b5563">Nobody.</div>');
   };
   // Click a guest: a short summary of the booking, with a button for the full booking / folio (Darlene 2026-11-02: "a summary of the bookings when we click it")
   window.droSummary = function (id) {
