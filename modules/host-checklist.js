@@ -232,7 +232,10 @@ function hcAlertScan() {
 }
 function hcAlertChip() {
   let chip = document.getElementById('hcAlertChip');
-  if (!chip) { chip = document.createElement('button'); chip.id = 'hcAlertChip'; chip.onclick = hcAlertShow; chip.style.cssText = 'position:fixed;left:14px;bottom:110px;z-index:99988;display:none;padding:8px 14px;border-radius:99px;border:2px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:800;font-size:12.5px;cursor:pointer;font-family:Jost,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25)'; document.body.appendChild(chip); }
+  if (!chip) { chip = document.createElement('button'); chip.id = 'hcAlertChip'; chip.onclick = hcAlertShow; chip.style.cssText = 'display:none;align-self:flex-start;margin:14px 36px 0;padding:8px 14px;border-radius:99px;border:2px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:800;font-size:12.5px;cursor:pointer;font-family:Jost,sans-serif'; }
+  // In the page, at the top of the Dashboard (not floating), so it never covers the menu or anything else (Darlene 2026-11-02)
+  const dash = document.getElementById('tab-dashboard');
+  if (dash && chip.parentNode !== dash) dash.insertBefore(chip, dash.firstChild);
   return chip;
 }
 function hcAlertTick() {
