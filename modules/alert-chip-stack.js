@@ -3,7 +3,8 @@
 // Each of those modules creates its own chip (fixed position, its own width). This puts the existing chips into one bottom-right column so they line up on the left and right edges,
 // share the width of the widest one, and are evenly spaced. The chips' own counting, showing/hiding and click actions are untouched.
 (function () {
-  const IDS = ['sdbChip', 'tmaChip', 'tnrChip'];   // top to bottom
+  // hcAlertChip (host steps not done) used to float on its own at the bottom left, on top of the sidebar's ADMIN buttons (Jorge 2026-11-02)
+  const IDS = ['sdbChip', 'tmaChip', 'tnrChip', 'hcAlertChip'];   // top to bottom
   // "Hide for this work session" (Darlene 2026-10-29): a small button above the chips hides the whole column until the browser tab is closed; a small "⚠ alerts" pill brings it back.
   const HKEY = 'ama_alerts_hidden';
   const hidden = () => { try { return sessionStorage.getItem(HKEY) === '1'; } catch (e) { return false; } };
