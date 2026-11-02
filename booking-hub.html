@@ -4288,6 +4288,24 @@ const db=supabase.createClient(SUPA_URL,SUPA_KEY,{accessToken:async()=>dbAuthTok
     });
   };
 })();
+// Sign in again for a pass (2026-11-02): a session from before the passes existed is closed here, before any login
+// screen starts, so the person signs in once more and gets them (staff: the staff-login pass; spa / drivers / staff
+// confirmation: the database pass). Teachers are not affected -- their pass comes with their link.
+(function(){
+  try{
+    const ss=sessionStorage,done=keys=>{keys.forEach(k=>ss.removeItem(k));ss.setItem('ama_signin_again','1');};
+    const has=k=>{try{const v=JSON.parse(ss.getItem(k)||'null');return !!(v&&typeof v==='object');}catch(e){return false;}};
+    if(has('amansala_staff_session')&&!ss.getItem('amansala_staff_token'))done(['amansala_staff_session','amansala_db_pass']);
+    if(!ss.getItem('amansala_db_pass'))['amansala_spa_staff_session','amansala_driver_session','amansala_staff_confirm_session'].forEach(k=>{if(has(k))done([k]);});
+    if(ss.getItem('ama_signin_again')){
+      // say why on whichever login screen shows
+      const say=()=>{const ids=['staffLoginErr','spaStaffLoginErr','driverLoginErr','staffConfirmLoginErr'];let shown=false;
+        ids.forEach(id=>{const e=document.getElementById(id);if(e&&e.offsetParent!==null){e.textContent='For security, please sign in again.';shown=true;}});
+        if(shown)ss.removeItem('ama_signin_again');};
+      setTimeout(say,1200);setTimeout(say,3500);
+    }
+  }catch(e){}
+})();
 // a pass lasts 12 h: renewed in the background while still valid (session-refresh, up to 14 days after the sign-in)
 setInterval(async()=>{
   const p=dbPassGet();if(!p||p.c.exp*1000-Date.now()>2*3600e3)return;
