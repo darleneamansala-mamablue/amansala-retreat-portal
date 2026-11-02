@@ -331,9 +331,15 @@ async function _bdLoadFoliosNow(){
     if(!justSeeded&&subj.folioCol==='registration_id'&&subj.bookingType==='room_only'&&subj.rate>0&&!(items&&items.length)&&_oldestFolio&&Date.now()-new Date(_oldestFolio.created_at||0).getTime()>60000){
       const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
       const oldest=_oldestFolio;
-      const {data:backfilled,error:bfErr}=await db.from('folio_items').insert({folio_id:oldest.id,description:`Room charge — ${subj.room||'Room'}`,qty:nights,unit_price:subj.rate,tax_rate:0,category:'Room'}).select().single();
-      if(bfErr)throw bfErr;
-      items=[backfilled];
+      // An extra night booked as its own Room Only reservation next to the guest's retreat is charged on the retreat's
+      // folio when that one is opened first. Backfilling here as well charged the same night twice (Amy Reich, room 24,
+      // 2026-10-24: $575 twice, deleted 2026-11-02 -- and an empty folio would get it back on every open). Skip when the
+      // same guest already has this room's Room charge on another folio from around these dates.
+      if(!await _bdRoomChargeElsewhere(oldest,subj.room,subj.checkIn)){
+        const {data:backfilled,error:bfErr}=await db.from('folio_items').insert({folio_id:oldest.id,description:`Room charge — ${subj.room||'Room'}`,qty:nights,unit_price:subj.rate,tax_rate:0,category:'Room'}).select().single();
+        if(bfErr)throw bfErr;
+        items=[backfilled];
+      }
     }
     _bdFolios=folios.map(f=>({folio:f,items:(items||[]).filter(i=>i.folio_id===f.id)}));
     // Jorge's report 2026-10-01: reopening Edit on a Comisión charge always
@@ -353,6 +359,17 @@ async function _bdLoadFoliosNow(){
   }
 }
 
+async function _bdRoomChargeElsewhere(folio,room,checkIn){
+  try{
+    const name=String(folio.guest_name||'').trim();
+    if(!name||!room)return false;
+    const{data:fs}=await db.from('folios').select('id').ilike('guest_name','%'+name.replace(/[%_]/g,'')+'%').neq('id',folio.id);
+    if(!fs||!fs.length)return false;
+    const{data:its}=await db.from('folio_items').select('created_at').in('folio_id',fs.map(f=>f.id)).eq('category','Room').eq('description',`Room charge — ${room}`);
+    const t=pd(checkIn).getTime();
+    return(its||[]).some(i=>Math.abs(new Date(i.created_at).getTime()-t)<30*DAY_MS);
+  }catch(e){return false;}
+}
 function _bdItemTotal(i){return Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100);}
 function _bdFolioTotal(f){return f.items.reduce((s,i)=>s+_bdItemTotal(i),0);}
 // "Closed" only means no more charges can be added to a folio -- it's a lock,
