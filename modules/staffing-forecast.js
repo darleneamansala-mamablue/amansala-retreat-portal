@@ -157,7 +157,7 @@ async function sfRender() {
       ${f('receptionistOverPerHour', '2nd receptionist if MORE than this many arrive in one hour')}${f('offHoursBefore', 'Off-hours: before (24h)')}${f('offHoursAfter', 'Off-hours: after (24h)')}
       ${f('roomsPerHousekeeper', 'Housekeeping: most check-out rooms per camarista (0 = don\'t check)')}${f('redWithinDays', 'Gap is RED within (days)')}${f('amberWithinDays', 'Gap is AMBER within (days)')}</div></div>`;
   }
-  const rows = days.filter(d => sfShowQuiet || d.needs.length || d.notes.length || d.arrivals || d.checkouts);
+  const rows = days.filter(d => sfShowQuiet || d.needs.length || d.notes.length || d.arrivals || d.checkouts || (window.sfCrewDay && sfCrewDay(d)));
   if (!rows.length) html += '<div style="padding:40px;text-align:center;color:#9ca3af;background:#fff;border-radius:10px">Nothing is booked in this period.</div>';
   const th = 'padding:7px 8px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b7280;border-bottom:1.5px solid #e8dfd4;white-space:nowrap';
   html += `<div style="overflow-x:auto;background:#fff;border:1px solid #e8dfd4;border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="${th}">Date</th><th style="${th}">Arrivals</th><th style="${th}">Check-outs</th><th style="${th}">Arrivals by hour at hotel</th><th style="${th}">What we need and who covers it</th></tr></thead><tbody>`;
@@ -176,7 +176,7 @@ async function sfRender() {
     html += `<tr style="border-top:1px solid #f0ebe0;vertical-align:top"><td style="padding:8px;font-weight:700;white-space:nowrap">${sfEsc(wd)}<div style="font-size:11px;font-weight:500;color:#9ca3af">${inDays === 0 ? 'today' : 'in ' + inDays + ' days'}</div></td>
       <td style="padding:8px"><span style="padding:2px 9px;border-radius:99px;font-weight:700;${SF_LV[d.level('a')]}">${d.arrivals}</span></td><td style="padding:8px"><span style="padding:2px 9px;border-radius:99px;font-weight:700;${SF_CV[d.level('o')]}">${d.checkouts}</span>${d.firstPickup != null ? `<div style="font-size:11px;color:#6b7280">first pickup ${sfClock(d.firstPickup)}</div>` : ''}</td>
       <td style="padding:8px;min-width:200px">${hrs}${d.unknown ? `<div style="font-size:11.5px;color:#b45309;font-weight:600">+ ${d.unknown} time unknown</div>` : ''}</td>
-      <td style="padding:8px;min-width:420px">${needs || '<span style="color:#9ca3af">Normal day, no extra staff needed</span>'}${window.sfBellboyRow ? sfBellboyRow(d) : ''}${window.sfDepartRow ? sfDepartRow(d) : ''}${d.notes.map(x => `<div style="font-size:11.5px;color:#92400e;margin-top:2px">&#9888; ${sfEsc(x)}</div>`).join('')}${sfOnShift(d)}</td></tr>`;
+      <td style="padding:8px;min-width:420px">${needs || '<span style="color:#9ca3af">Normal day, no extra staff needed</span>'}${window.sfBellboyRow ? sfBellboyRow(d) : ''}${window.sfDepartRow ? sfDepartRow(d) : ''}${window.sfCrewRows ? sfCrewRows(d) : ''}${d.notes.map(x => `<div style="font-size:11.5px;color:#92400e;margin-top:2px">&#9888; ${sfEsc(x)}</div>`).join('')}${sfOnShift(d)}</td></tr>`;
   });
   el.innerHTML = html + '</tbody></table></div><div style="font-size:11.5px;color:#9ca3af;margin-top:10px">Guest counts come from the room list. Arrival hours come from guests\' transport forms (flight landing time + transfer time). Nobody is counted as arriving at an hour unless they gave a flight time. Who is actually scheduled to work is not connected to the portal yet, so "covered" means someone was named here.</div>';
 }

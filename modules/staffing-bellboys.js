@@ -38,3 +38,26 @@ async function sbbSet(date, key, kind, name) {
   } catch (e) { showToast('Could not save. Try again.'); }
   sfRender();
 }
+
+// ----- Tour guide and Yoga rows (Darlene 2026-11-01) -----
+// Shown on every day a retreat is in house. One box, with "+ another" up to 3. Saved in 'staffing_coverage' as tourguide / tourguide2/3 and yoga / yoga2/3.
+SBB_KIND.tourguide = { title: 'Tour guide', pick: 'Tour guide', people: ['Fernando', 'Sergio', 'Yolanda'], toast: ' will be the tour guide.' };
+SBB_KIND.yoga = { title: 'Yoga', pick: 'Yoga teacher', people: ['Yolanda', 'Darlene', 'Kun', 'Sergio', 'Kike', 'Maya'], toast: ' will teach yoga.' };
+const sbbShow = {};   // boxes opened with "+ another" this visit
+function sbbInHouse(date) {
+  return (AppData.bookings || []).some(b => b && b.status !== 'cancelled' && !(b.flags || []).includes('archived') && b.bookingType !== 'room_only' && b.startDate && b.endDate && String(b.startDate).slice(0, 10) <= date && date <= String(b.endDate).slice(0, 10));
+}
+window.sfCrewDay = d => sbbInHouse(d.date);
+function sbbCrewRow(kind, d) {
+  const K = SBB_KIND[kind], key = i => sbbKey(kind, i);
+  let n = sbbShow[d.date + kind] || 1;
+  for (const k of [2, 3]) if (sfCovered(d.date, key(k))) n = Math.max(n, k);
+  let h = '';
+  for (let i = 1; i <= n; i++) {
+    const cur = sfCovered(d.date, key(i)), opts = ['', ...K.people, ...(cur && !K.people.includes(cur) ? [cur] : [])];
+    h += `<select onchange="sbbSet('${d.date}','${key(i)}','${kind}',this.value)" style="padding:4px 7px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px;background:#fff" title="${K.pick} ${i}">${opts.map(o => `<option value="${sfEsc(o)}" ${o === cur ? 'selected' : ''}>${sfEsc(o || K.pick + ' ' + i + ' — nobody yet')}</option>`).join('')}</select>`;
+  }
+  if (n < 3) h += `<button onclick="sbbShow['${d.date}${kind}']=${n + 1};sfRender()" style="padding:3px 9px;border:1.5px dashed #b9b0a3;border-radius:7px;background:#fff;font-size:12px;font-weight:600;color:#4b5563;cursor:pointer">+ another</button>`;
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:3px 0"><b style="min-width:122px;color:#166534">${K.title}</b><span style="min-width:130px"></span>${h}</div>`;
+}
+window.sfCrewRows = d => sbbInHouse(d.date) ? sbbCrewRow('tourguide', d) + sbbCrewRow('yoga', d) : '';
