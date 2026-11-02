@@ -41,7 +41,8 @@ function sraIssues(dateStr) {
     // Maria's record is first name "Maria", last name "Luisa", while the Auto-Assign setting says "Maria Luisa": match the full name as well as the first name
     const first = (t.firstName || 'A therapist').trim(), full = `${t.firstName || ''} ${t.lastName || ''}`.trim(), mn = String(S.mariaName || '').trim().toLowerCase();
     const isMaria = !!mn && (first.toLowerCase() === mn || full.toLowerCase() === mn), who = isMaria ? full : first;
-    const cap = isMaria ? S.mariaDailyCap : (parseInt(t.maxServicesPerDay, 10) || S.generalDailyCap);
+    const hasTemazcal = isMaria && (SpaAppointments || []).some(a => a.date === dateStr && a.status !== 'CANCELLED' && a.therapistId === t.id && (/temazcal/i.test(a.clientName || '') || /temazcal/i.test(((SpaData.services || []).find(s => s.id === a.serviceId) || {}).name || '')));
+    const cap = isMaria ? S.mariaDailyCap + (hasTemazcal ? 1 : 0) : (parseInt(t.maxServicesPerDay, 10) || S.generalDailyCap);   // Maria Luisa may do one more when one of her services is a Temazcal
     if (appts.length > cap) out.push({ who, tid: t.id, key: `${dateStr}|${t.id}|cap|${appts.length}`, text: `${who} has ${appts.length} services (the limit is ${cap}).` });
     for (let i = 1; i < appts.length; i++) if (appts[i].s < appts[i - 1].e) out.push({ who, tid: t.id, key: `${dateStr}|${t.id}|double|${appts[i].s}`, text: `${who} is double-booked at ${sraFmt(appts[i].s)} (${appts[i - 1].name} and ${appts[i].name}).` });
     if (isMaria) {
