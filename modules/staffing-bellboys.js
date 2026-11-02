@@ -63,7 +63,25 @@ function sbbCrewRow(kind, d) {
     h += `<select onchange="sbbSet('${d.date}','${key(i)}','${kind}',this.value)" style="padding:4px 7px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px;background:#fff" title="${K.pick} ${i}">${opts.map(o => `<option value="${sfEsc(o)}" ${o === cur ? 'selected' : ''}>${sfEsc(o || K.pick + ' ' + i + ' — nobody yet')}</option>`).join('')}</select>`;
   }
   if (n < 3) h += `<button onclick="sbbShow['${d.date}${kind}']=${n + 1};sfRender()" style="padding:3px 9px;border:1.5px dashed #b9b0a3;border-radius:7px;background:#fff;font-size:12px;font-weight:600;color:#4b5563;cursor:pointer">+ another</button>`;
-  const when = kind === 'csr' ? (d.arrivals ? '2 pm – 10 pm, with the arrivals' : 'from brunch start, in the restaurant') : '';
+  const when = kind === 'csr' ? sbbCsrWhen(d) : '';
   return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:3px 0"><b style="min-width:122px;color:#166534">${K.title}</b><span style="min-width:130px;font-size:12px;color:#6b7280">${when}</span>${h}</div>`;
 }
-window.sfCrewRows = d => sbbInHouse(d.date) ? sbbCrewRow('csr', d) + sbbCrewRow('tourguide', d) + sbbCrewRow('yoga', d) + sbbCrewRow('icebath', d) + sbbCrewRow('fitness', d) + sbbCrewRow('pilates', d) + sbbCrewRow('mayanclay', d) : '';
+// CSR is tied to the arrivals: on an arrival day they work 2 pm – 10 pm with the arrivals; every day after that, while the retreat is in house, they are in the
+// restaurant from the time brunch starts (the earliest brunch time of the retreats already in house, from the Menu's meal times).
+function sbbBrunchStart(date) {
+  let best = null;
+  (AppData.bookings || []).forEach(b => {
+    if (!b || b.status === 'cancelled' || b.bookingType === 'room_only' || !b.startDate || !b.endDate) return;
+    if (!(String(b.startDate).slice(0, 10) < date && date <= String(b.endDate).slice(0, 10))) return;
+    let t = ''; try { t = typeof menuMealTime === 'function' ? menuMealTime(b, 'brunch', date) : ''; } catch (e) {}
+    if (/^\d{1,2}:\d{2}/.test(t || '') && (!best || t < best)) best = t;
+  });
+  return best || '';
+}
+function sbbCsrWhen(d) {
+  if (d.arrivals) return '2 pm – 10 pm, with the ' + d.arrivals + ' arrival' + (d.arrivals === 1 ? '' : 's');
+  const t = sbbBrunchStart(d.date);
+  return t ? 'from brunch, ' + sfClock(sfMin(t)) + ', in the restaurant' : 'from brunch start, in the restaurant';
+}
+function sbbCsrDay(d) { return !!d.arrivals || (AppData.bookings || []).some(b => b && b.status !== 'cancelled' && b.bookingType !== 'room_only' && b.startDate && b.endDate && String(b.startDate).slice(0, 10) < d.date && d.date <= String(b.endDate).slice(0, 10)); }
+window.sfCrewRows = d => sbbInHouse(d.date) ? (sbbCsrDay(d) ? sbbCrewRow('csr', d) : '') + sbbCrewRow('tourguide', d) + sbbCrewRow('yoga', d) + sbbCrewRow('icebath', d) + sbbCrewRow('fitness', d) + sbbCrewRow('pilates', d) + sbbCrewRow('mayanclay', d) : '';
