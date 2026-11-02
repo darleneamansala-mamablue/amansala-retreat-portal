@@ -4929,10 +4929,22 @@ async function syncToSupabase(){
         }
         return;
       }
-      // Safety net on for everyone but this save takes the old path (rewrites every row this tab holds): real case
-      // 2026-11-02 11:34 Cancún, all 254 bookings + 2004 registrations rewritten in one go. Logged once per page so the
-      // Sync Log shows who and why.
-      if(_casRemoteMode==='on')casLogEvent('legacy','bookings',[{id:'bulk',reason:_casBaseReady?'safety net off on this computer (amansala_cas_sync=0)':'saved before the page finished loading'}]);
+      // A save before the first load is done (teacher dashboards do one while loading): the old path below rewrote every
+      // booking and registration this browser had in its local copy -- real cases 2026-11-02 11:34 and 11:47 Cancún, all
+      // 254 bookings + 2004 registrations at once, from /emilytully/dashboard. With the safety net on, only what was created
+      // here moments ago and is not on the server yet is written; everything else waits for the load.
+      if(casSyncEnabled()&&!_casBaseReady){
+        const _fresh=id=>/^id_\d+_/.test(id||'')&&_isRecentLocalId(id);
+        const newBk=AppData.bookings.filter(b=>!deletedBookingIds.has(b.id)&&_fresh(b.id));
+        const newReg=AppData.regs.filter(r=>!deletedRegIds.has(r.id)&&!deletedBookingIds.has(r.bookingId)&&_fresh(r.id));
+        if(newBk.length)await _dbRaw.from('bookings').upsert(newBk.map(appBookingToSqlRow),{onConflict:'id',ignoreDuplicates:true});
+        if(newReg.length)await _dbRaw.from('registrations').upsert(newReg.map(appRegToSqlRow),{onConflict:'id',ignoreDuplicates:true});
+        await _paySync();
+        return;
+      }
+      // Safety net on for everyone but switched off on this computer: this save takes the old path (rewrites every row this
+      // tab holds). Logged once per page so the Sync Log shows who.
+      if(_casRemoteMode==='on')casLogEvent('legacy','bookings',[{id:'bulk',reason:'safety net off on this computer (amansala_cas_sync=0)'}]);
       // registrations can exceed PostgREST's 1000-row page cap (1900+ rows in
       // production) — a plain .select() would silently truncate remoteRegMap and
       // make every registration past row 1000 look "missing from Supabase", which

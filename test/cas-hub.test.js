@@ -90,6 +90,23 @@ async function test_saveBeforeLoadDoesNotOverwrite() {
   assert.strictEqual(db.T.bookings.get('b1').notes, 'NEW from Darlene');
 }
 
+// 1b. Real case 2026-11-02 (/emilytully/dashboard saving while loading): the local copy was as new as the server, so the
+//     old path rewrote all 254 bookings + 2004 registrations. Before the first load nothing existing is written; only a row
+//     created here moments ago is.
+async function test_saveBeforeLoadWritesNothingExisting() {
+  const same = '2026-11-01T10:00:00.000+00:00';
+  const db = fakeDb({ bookings: [bk('b1', { notes: 'server', updated_at: same })], registrations: [{ id: 'g1', booking_id: 'b1', room: '1B', notes: 'server', updated_at: same }], app_store: [casOn] });
+  const t = makeTab(db);
+  const fresh = 'id_' + Date.now() + '_new1';
+  t.AppData.bookings = [{ id: 'b1', leaderName: 'L b1', notes: 'local copy', status: 'confirmed', updatedAt: same }, { id: fresh, leaderName: 'New', status: 'confirmed', updatedAt: new Date().toISOString() }];
+  t.AppData.regs = [{ id: 'g1', bookingId: 'b1', room: '1', notes: 'local copy', updatedAt: same }];
+  t.saveAll(); await flush(t);
+  assert.strictEqual(db.T.bookings.get('b1').notes, 'server');
+  assert.strictEqual(db.T.registrations.get('g1').room, '1B');
+  assert.ok(db.T.bookings.has(fresh), 'booking created here moments ago is saved');
+  assert.ok(!db.log.some(l => (l.table === 'bookings' || l.table === 'registrations') && (l.ids || []).some(id => id === 'b1' || id === 'g1')), 'existing rows not written');
+}
+
 // 2. Same, when the first load failed (app_store error): the gate stays closed for the whole session
 async function test_failedLoadKeepsGateClosed() {
   const db = fakeDb({ bookings: [bk('b1', { notes: 'NEW', updated_at: '2026-11-01T10:00:00.000+00:00' })], app_store: [casOn] });
@@ -492,6 +509,7 @@ async function test_newBookingAndRoomSameSave() {
 
 (async () => {
   await run('save before first load never overwrites with the old local copy', test_saveBeforeLoadDoesNotOverwrite);
+  await run('save before first load writes no existing row (teacher dashboard case)', test_saveBeforeLoadWritesNothingExisting);
   await run('failed first load keeps the gate closed', test_failedLoadKeepsGateClosed);
   await run('after a good load, edits save through CAS', test_afterLoadCasSaves);
   await run('reload keeps an unsaved edit and saves it next', test_reloadKeepsUnsavedRow);
