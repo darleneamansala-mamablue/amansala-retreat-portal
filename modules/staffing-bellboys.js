@@ -47,6 +47,7 @@ SBB_KIND.icebath = { title: 'Ice Bath', pick: 'Ice Bath', people: ['Ryan', 'Serg
 SBB_KIND.fitness = { title: 'Fitness Classes', pick: 'Fitness teacher', people: ['Ryan', 'Fernando', 'Sergio'], toast: ' will teach fitness.' };
 SBB_KIND.pilates = { title: 'Pilates', pick: 'Pilates teacher', people: ['Adele', 'Sergio', 'Michelle'], toast: ' will teach pilates.' };
 SBB_KIND.mayanclay = { title: 'Mayan Clay', pick: 'Mayan Clay', people: ['Yolanda', 'Darlene', 'Sergio'], toast: ' will run Mayan Clay.' };
+SBB_KIND.csr = { title: 'CSR (restaurant)', pick: 'CSR', people: ['Max', 'Michelle'], toast: ' will be the CSR.' };
 const sbbShow = {};   // boxes opened with "+ another" this visit
 function sbbInHouse(date) {
   return (AppData.bookings || []).some(b => b && b.status !== 'cancelled' && !(b.flags || []).includes('archived') && b.bookingType !== 'room_only' && b.startDate && b.endDate && String(b.startDate).slice(0, 10) <= date && date <= String(b.endDate).slice(0, 10));
@@ -62,6 +63,7 @@ function sbbCrewRow(kind, d) {
     h += `<select onchange="sbbSet('${d.date}','${key(i)}','${kind}',this.value)" style="padding:4px 7px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px;background:#fff" title="${K.pick} ${i}">${opts.map(o => `<option value="${sfEsc(o)}" ${o === cur ? 'selected' : ''}>${sfEsc(o || K.pick + ' ' + i + ' — nobody yet')}</option>`).join('')}</select>`;
   }
   if (n < 3) h += `<button onclick="sbbShow['${d.date}${kind}']=${n + 1};sfRender()" style="padding:3px 9px;border:1.5px dashed #b9b0a3;border-radius:7px;background:#fff;font-size:12px;font-weight:600;color:#4b5563;cursor:pointer">+ another</button>`;
-  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:3px 0"><b style="min-width:122px;color:#166534">${K.title}</b><span style="min-width:130px"></span>${h}</div>`;
+  const when = kind === 'csr' ? (d.arrivals ? '2 pm – 10 pm, with the arrivals' : 'from brunch start, in the restaurant') : '';
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:3px 0"><b style="min-width:122px;color:#166534">${K.title}</b><span style="min-width:130px;font-size:12px;color:#6b7280">${when}</span>${h}</div>`;
 }
-window.sfCrewRows = d => sbbInHouse(d.date) ? sbbCrewRow('tourguide', d) + sbbCrewRow('yoga', d) + sbbCrewRow('icebath', d) + sbbCrewRow('fitness', d) + sbbCrewRow('pilates', d) + sbbCrewRow('mayanclay', d) : '';
+window.sfCrewRows = d => sbbInHouse(d.date) ? sbbCrewRow('csr', d) + sbbCrewRow('tourguide', d) + sbbCrewRow('yoga', d) + sbbCrewRow('icebath', d) + sbbCrewRow('fitness', d) + sbbCrewRow('pilates', d) + sbbCrewRow('mayanclay', d) : '';
