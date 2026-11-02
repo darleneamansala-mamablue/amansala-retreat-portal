@@ -77,6 +77,16 @@
     } catch (x) { return { type: '', room: '', rate: null }; }
   }
   const stayLine = b => { const i = stayInfo(b); const bits = [i.type, i.room ? 'Room ' + i.room : '', i.rate != null ? '$' + Number(i.rate).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' / night' : ''].filter(Boolean); return bits.join(' · '); };
+  // Notes on a booking for the quick view: staff-only internal notes first, then the booking / guest notes (birthdays, celebrations, dietary...)
+  function notesOf(b) {
+    const regs = (AppData.regs || []).filter(r => r.bookingId === b.id), out = [], seen = new Set();
+    const add = (label, t) => { t = String(t || '').replace(/\s+/g, ' ').trim(); if (!t || seen.has(t.toLowerCase())) return; seen.add(t.toLowerCase()); out.push({ label, text: t.length > 220 ? t.slice(0, 220) + '…' : t }); };
+    regs.forEach(r => add('Internal', r.internalNotes));
+    regs.forEach(r => { add('Note', r.notes); (r.guests || []).forEach(g => g && add('Guest note', g.notes)); });
+    add('Booking note', b.notes);
+    return out;
+  }
+  const notesHtml = b => notesOf(b).map(n => '<div style="margin-top:2px;font-size:12px;color:#7c2d12"><b>📝 ' + n.label + ':</b> ' + esc(n.text) + '</div>').join('');
   // Click a tile: list the guests behind the number; click a guest to open their booking (Darlene 2026-11-02: "we need to be able to see who the one guest is or click into it")
   window.droShow = function (key) {
     const box = document.getElementById('droPanel'); if (!box) return;
@@ -87,7 +97,7 @@
       const reg = (AppData.regs || []).find(r => r.bookingId === b.id), gn = reg && (reg.guests || []).find(g => g && g.name), nm = (gn && gn.name) || b.leaderName || b.retreatName || 'Guest';
       const [s, e] = D(b), label = esc(nm) + (gn && b.leaderName && b.leaderName !== nm ? ' <span style="color:#6b7280">(' + esc(b.leaderName) + ')</span>' : '');
       const click = ' onclick="droSummary(\'' + String(b.id).replace(/'/g, '') + '\')" style="cursor:pointer;color:#2d6a6a;font-weight:700;text-decoration:underline"';
-      const sl = stayLine(b); return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span><span' + click + '>' + label + '</span>' + (sl ? '<div style="color:#4b5563;font-size:12px;margin-top:1px">' + esc(sl) + '</div>' : '') + '</span><span style="color:#4b5563;white-space:nowrap">' + s.slice(5) + ' → ' + e.slice(5) + ' · ' + (Number(b.pax) || 0) + ' guest' + ((Number(b.pax) || 0) === 1 ? '' : 's') + ' · ' + (rooms(b) === 1 ? '1 room' : rooms(b) + ' rooms') + '</span></div>';
+      const sl = stayLine(b); return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span><span' + click + '>' + label + '</span>' + (sl ? '<div style="color:#4b5563;font-size:12px;margin-top:1px">' + esc(sl) + '</div>' : '') + notesHtml(b) + '</span><span style="color:#4b5563;white-space:nowrap">' + s.slice(5) + ' → ' + e.slice(5) + ' · ' + (Number(b.pax) || 0) + ' guest' + ((Number(b.pax) || 0) === 1 ? '' : 's') + ' · ' + (rooms(b) === 1 ? '1 room' : rooms(b) + ' rooms') + '</span></div>';
     }).join('');
     box.innerHTML = '<div style="font-size:12.5px;font-weight:800;color:#1f2d2d;margin-bottom:4px">' + title + '</div>' + (rows || '<div style="font-size:12.5px;color:#4b5563">Nobody.</div>');
   };
@@ -116,7 +126,7 @@
       + row('Phone', esc(b.leaderPhone || ''))
       + row('Meal plan', esc(b.mealPlan || ''))
       + row('Paid so far', paid ? '$' + paid.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '')
-      + row('Notes', esc(String(b.notes || '').slice(0, 400)).replace(/\n/g, '<br>'))
+      + row('Notes', notesOf(b).map(x => '<b>' + x.label + ':</b> ' + esc(x.text)).join('<br>'))
       + '</div>'
       + (reg ? '<button onclick="document.getElementById(\'droSumModal\').style.display=\'none\';openBookingDetailForReg(\'' + String(reg.id).replace(/'/g, '') + '\',' + JSON.stringify(nm).replace(/"/g, '&quot;') + ')" style="margin-top:12px;padding:8px 16px;border:none;border-radius:8px;background:#2d6a6a;color:#fff;font-weight:700;cursor:pointer;font-family:inherit">Open full booking</button>' : '')
       + '</div>';
@@ -129,7 +139,7 @@
     const rows = ((window._droGroups || [])[i] || []).map(id => (AppData.bookings || []).find(b => b.id === id)).filter(Boolean).map(b => {
       const regs = (AppData.regs || []).filter(r => r.bookingId === b.id), names = [...new Set(regs.flatMap(r => (r.guests || []).map(g => g && g.name && g.name.trim()).filter(Boolean)))];
       const sl = stayLine(b), [bs, be] = D(b);
-      return '<div style="padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span onclick="event.stopPropagation();droSummary(\'' + String(b.id).replace(/'/g, '') + '\')" style="cursor:pointer;color:#2d6a6a;font-weight:700;text-decoration:underline">' + esc(b.leaderName || b.retreatName || 'Guest') + '</span> <span style="color:#4b5563">' + bs.slice(5) + ' → ' + be.slice(5) + (names.length ? ' · ' + esc(names.join(', ')) : ' · guests not entered yet') + '</span>' + (sl ? '<div style="color:#4b5563;font-size:12px">' + esc(sl) + '</div>' : '') + '</div>';
+      return '<div style="padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span onclick="event.stopPropagation();droSummary(\'' + String(b.id).replace(/'/g, '') + '\')" style="cursor:pointer;color:#2d6a6a;font-weight:700;text-decoration:underline">' + esc(b.leaderName || b.retreatName || 'Guest') + '</span> <span style="color:#4b5563">' + bs.slice(5) + ' → ' + be.slice(5) + (names.length ? ' · ' + esc(names.join(', ')) : ' · guests not entered yet') + '</span>' + (sl ? '<div style="color:#4b5563;font-size:12px">' + esc(sl) + '</div>' : '') + notesHtml(b) + '</div>';
     }).join('');
     box.innerHTML = rows || '<div style="font-size:12.5px;color:#4b5563">No bookings.</div>';
     box.onclick = ev => ev.stopPropagation();
