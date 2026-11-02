@@ -43,7 +43,7 @@
   function card() {
     const today = new Date(); today.setHours(12, 0, 0, 0);
     const t = stats(iso(today));
-    const tile = (n, sub, label, bg) => '<div style="flex:1;min-width:130px;background:' + bg + ';border-radius:10px;padding:12px 14px"><div style="font-size:30px;font-weight:800;color:#1f2d2d;line-height:1">' + n + '</div><div style="font-size:12.5px;font-weight:700;color:#1f2d2d;margin-top:4px">' + label + '</div><div style="font-size:11.5px;color:#4b5563">' + sub + '</div></div>';
+    const tile = (n, sub, label, bg, key) => '<div onclick="droShow(\''+key+'\')" title="Click to see who" style="cursor:pointer;flex:1;min-width:130px;background:' + bg + ';border-radius:10px;padding:12px 14px"><div style="font-size:30px;font-weight:800;color:#1f2d2d;line-height:1">' + n + '</div><div style="font-size:12.5px;font-weight:700;color:#1f2d2d;margin-top:4px">' + label + '</div><div style="font-size:11.5px;color:#4b5563">' + sub + '</div></div>';
     const bk = (n, r) => (n === 1 ? '1 booking' : n + ' bookings') + ' · ' + (r === 1 ? '1 room' : r + ' rooms');
     let strip = '';
     for (let i = 0; i < 7; i++) {
@@ -51,19 +51,31 @@
       const s = stats(iso(d));
       strip += '<div style="flex:1;min-width:58px;text-align:center;padding:6px 2px;border-radius:8px;background:' + (i ? '#f6f3ec' : '#e0f2fe') + '"><div style="font-size:10.5px;font-weight:700;color:#4b5563">' + d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + d.getDate() + '</div><div style="font-size:18px;font-weight:800;color:#1f2d2d">' + s.gIn + '</div></div>';
     }
-    const names = t.inh.slice().sort((a, b) => (a.leaderName || '').localeCompare(b.leaderName || '')).map(b => {
-      const [s, e] = D(b), ds = iso(today);
-      const tag = s === ds ? ' <span style="color:#15803d;font-weight:700">arrives today</span>' : (e === ds ? ' <span style="color:#b45309;font-weight:700">departs today</span>' : '');
-      return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid #efeae0;font-size:12.5px"><span>' + esc(b.leaderName || b.retreatName || 'Guest') + tag + '</span><span style="color:#4b5563;white-space:nowrap">' + s.slice(5) + ' → ' + e.slice(5) + ' · ' + (Number(b.pax) || 0) + ' guest' + ((Number(b.pax) || 0) === 1 ? '' : 's') + ' · ' + (rooms(b) === 1 ? '1 room' : rooms(b) + ' rooms') + '</span></div>';
-    }).join('');
+    const lists = { in: t.inh, arr: t.arr, dep: t.dep };
+    window._droLists = {}; Object.keys(lists).forEach(k => { window._droLists[k] = lists[k].map(b => b.id); });
+    const names = '<div id="droPanel" style="display:none;margin-top:10px;padding:10px 12px;background:#faf8f3;border-radius:10px"></div>';
     return '<div id="droCard" style="background:#fff;border-radius:14px;padding:16px 18px;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,.06)">'
       + '<div style="font-size:15px;font-weight:800;color:#1f2d2d;margin-bottom:10px">🏨 Room-only guests today &amp; BBC / RNR</div>'
-      + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + tile(t.gIn, bk(t.inh.length, t.rIn), 'Guests in house tonight', '#dcfce7') + tile(t.gArr, bk(t.arr.length, t.rArr), 'Guests arriving today', '#e0f2fe') + tile(t.gDep, bk(t.dep.length, t.rDep), 'Guests departing today', '#fef3c7') + '</div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + tile(t.gIn, bk(t.inh.length, t.rIn), 'Guests in house tonight', '#dcfce7', 'in') + tile(t.gArr, bk(t.arr.length, t.rArr), 'Guests arriving today', '#e0f2fe', 'arr') + tile(t.gDep, bk(t.dep.length, t.rDep), 'Guests departing today', '#fef3c7', 'dep') + '</div>'
       + '<div style="font-size:11.5px;font-weight:700;color:#4b5563;margin:12px 0 4px">Guests in house, next 7 days</div><div style="display:flex;gap:6px;flex-wrap:wrap">' + strip + '</div>'
-      + (names ? '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:#2d6a6a">Who is in house tonight</summary><div style="margin-top:6px">' + names + '</div></details>' : '')
+      + names
       + groupsHtml(iso(today), iso(new Date(today.getTime() + 14 * 864e5)))
       + '<div style="font-size:11px;color:#6b7280;margin-top:8px">Individual room-only bookings (Cloudbeds, Direct, OTA). The room-only numbers above do not include retreat groups, BBC, RNR or WeTravel. Requested (unconfirmed) bookings are not counted.</div></div>';
   }
+  // Click a tile: list the guests behind the number; click a guest to open their booking (Darlene 2026-11-02: "we need to be able to see who the one guest is or click into it")
+  window.droShow = function (key) {
+    const box = document.getElementById('droPanel'); if (!box) return;
+    if (box.dataset.k === key && box.style.display !== 'none') { box.style.display = 'none'; return; }
+    box.dataset.k = key; box.style.display = 'block';
+    const ids = (window._droLists || {})[key] || [], title = { in: 'In house tonight', arr: 'Arriving today', dep: 'Departing today' }[key];
+    const rows = ids.map(id => (AppData.bookings || []).find(b => b.id === id)).filter(Boolean).sort((a, b) => (a.leaderName || '').localeCompare(b.leaderName || '')).map(b => {
+      const reg = (AppData.regs || []).find(r => r.bookingId === b.id), gn = reg && (reg.guests || []).find(g => g && g.name), nm = (gn && gn.name) || b.leaderName || b.retreatName || 'Guest';
+      const [s, e] = D(b), label = esc(nm) + (gn && b.leaderName && b.leaderName !== nm ? ' <span style="color:#6b7280">(' + esc(b.leaderName) + ')</span>' : '');
+      const click = reg ? ' onclick="openBookingDetailForReg(\'' + String(reg.id).replace(/'/g, '') + '\',' + JSON.stringify(nm).replace(/"/g, '&quot;') + ')" style="cursor:pointer;color:#2d6a6a;font-weight:700;text-decoration:underline"' : ' style="font-weight:700"';
+      return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span' + click + '>' + label + '</span><span style="color:#4b5563;white-space:nowrap">' + s.slice(5) + ' → ' + e.slice(5) + ' · ' + (Number(b.pax) || 0) + ' guest' + ((Number(b.pax) || 0) === 1 ? '' : 's') + ' · ' + (rooms(b) === 1 ? '1 room' : rooms(b) + ' rooms') + '</span></div>';
+    }).join('');
+    box.innerHTML = '<div style="font-size:12.5px;font-weight:800;color:#1f2d2d;margin-bottom:4px">' + title + '</div>' + (rows || '<div style="font-size:12.5px;color:#4b5563">Nobody.</div>');
+  };
   function paint() {
     try {
       const el = document.getElementById('dbContent'); if (!el) return;
