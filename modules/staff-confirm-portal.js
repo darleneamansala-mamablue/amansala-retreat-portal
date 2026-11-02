@@ -231,6 +231,7 @@ async function staffConfirmLoginSubmit(){
   }catch(e){errEl.textContent='Network error — please try again.';return;}
   if(!data||!data.success){errEl.textContent='Incorrect username or password.';return;}
   errEl.textContent='';
+  if(typeof dbPassStore==='function')dbPassStore(data.dbPass||null);
   await loadStaffConfirmAccounts();   // the dashboard reads this person's availability / payroll flag from the list
   staffConfirmLoginComplete(data.session);
 }
@@ -250,6 +251,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
 function staffConfirmLogout(){
   if(!confirm('Sign out?'))return;
   sessionStorage.removeItem('amansala_staff_confirm_session');
+  sessionStorage.removeItem('amansala_db_pass');
   sessionStorage.removeItem('ama_confirm_mode');
   localStorage.removeItem('ama_confirm_persist');
   currentStaffConfirmSession=null;

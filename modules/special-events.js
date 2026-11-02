@@ -234,7 +234,7 @@ function initEventMode(){
     const newEvt={id:'evt_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),createdAt:new Date().toISOString(),type,status:'inquiry',contact,email,phone:document.getElementById('efPhone').value.trim(),pax:parseInt(document.getElementById('efPax').value)||null,startDate,endDate,notes:document.getElementById('efNotes').value.trim(),source:'public_form'};
     try{
       const SK=SUPA_KEY, SU=SUPA_URL;
-      const H={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+SK};
+      const H={'Content-Type':'application/json','apikey':SK,'Authorization':'Bearer '+(typeof dbAuthToken==='function'?dbAuthToken():SK)};
       const row=await fetch(SU+'/rest/v1/app_store?key=eq.specialEvents&select=value',{headers:H}).then(r=>r.json());
       const existing=Array.isArray(row[0]?.value)?row[0].value:[];
       existing.push(newEvt);

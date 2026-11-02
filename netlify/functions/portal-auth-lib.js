@@ -69,6 +69,33 @@ function verifyToken(tok) {
   try { const c = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); return c.exp > Date.now() ? c : null; } catch (e) { return null; }
 }
 
+// Database pass (security plan phase 2): a JWT signed with the project's JWT secret (Netlify env SUPABASE_JWT_SECRET,
+// from Supabase > Project Settings > API > JWT secret), sent by the portal on every request to the database. Supabase
+// then sees role 'authenticated' and these claims instead of the public anon key; the RLS rules of phase 4 read
+// app_role (staff / admin / spa / driver / confirm) and, for teachers later, booking_id. Without the env var nothing is
+// issued and the portal keeps using the anon key, as before.
+const DB_PASS_HOURS = 12, DB_PASS_MAX_DAYS = 14;
+function signDbPass(claims, authTime) {
+  const secret = process.env.SUPABASE_JWT_SECRET;
+  if (!secret) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const head = b64u(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const body = b64u(JSON.stringify({ iss: 'amansala-portal', aud: 'authenticated', role: 'authenticated', iat: now, exp: now + DB_PASS_HOURS * 3600, auth_time: authTime || now, ...claims }));
+  return head + '.' + body + '.' + b64u(crypto.createHmac('sha256', secret).update(head + '.' + body).digest());
+}
+function verifyDbPass(tok) {
+  const secret = process.env.SUPABASE_JWT_SECRET;
+  const [head, body, sig] = String(tok || '').split('.');
+  if (!secret || !head || !body || !sig) return null;
+  const want = b64u(crypto.createHmac('sha256', secret).update(head + '.' + body).digest());
+  if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
+  try {
+    const c = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+    const now = Math.floor(Date.now() / 1000);
+    return c.iss === 'amansala-portal' && c.exp > now ? c : null;
+  } catch (e) { return null; }
+}
+
 async function readBlob(key, kind) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${BLOB_KEY[kind]}&select=value,updated_at`, { headers: hdrs(key) });
   const rows = r.ok ? await r.json() : [];
@@ -149,4 +176,4 @@ async function checkLogin(key, kind, username, password) {
 const cors = () => ({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' });
 const reply = (code, data) => ({ statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
 
-module.exports = { SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };
+module.exports = { signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };

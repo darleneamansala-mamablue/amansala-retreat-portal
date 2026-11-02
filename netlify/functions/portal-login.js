@@ -3,7 +3,7 @@
 // portal-login.js — sign-in for the smaller logins: spa staff (?mode=spa-staff), drivers (?mode=driver) and staff
 // confirmation (?mode=confirm). The browser sends {kind, username, password}; the password is checked here against
 // portal_logins (see portal-auth-lib.js), never in the browser.
-const { checkLogin, signToken, cors, reply } = require('./portal-auth-lib');
+const { checkLogin, signToken, signDbPass, cors, reply } = require('./portal-auth-lib');
 
 const KINDS = ['spa', 'driver', 'confirm'];
 
@@ -19,7 +19,7 @@ exports.handler = async (event) => {
   try {
     const acct = await checkLogin(key, kind, body.username, String(body.password || ''));
     if (!acct) return reply(200, { success: false });
-    return reply(200, { success: true, session: { id: acct.id, name: acct.name, username: acct.username }, token: signToken({ kind, sub: acct.id, name: acct.name }) });
+    return reply(200, { success: true, session: { id: acct.id, name: acct.name, username: acct.username }, token: signToken({ kind, sub: acct.id, name: acct.name }), dbPass: signDbPass({ sub: acct.id, app_role: kind, name: acct.name }) });
   } catch (e) {
     console.error('[portal-login]', e);
     return reply(500, { error: 'Login failed' });

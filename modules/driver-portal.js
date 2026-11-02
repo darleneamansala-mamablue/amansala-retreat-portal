@@ -72,6 +72,7 @@ async function driverLoginSubmit(){
   }catch(e){errEl.textContent='Network error — please try again.';return;}
   if(!data||!data.success){errEl.textContent='Incorrect username or password.';return;}
   errEl.textContent='';
+  if(typeof dbPassStore==='function')dbPassStore(data.dbPass||null);
   driverLoginComplete(data.session);
 }
 
@@ -90,6 +91,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
 function driverLogout(){
   if(!confirm('Sign out?'))return;
   sessionStorage.removeItem('amansala_driver_session');
+  sessionStorage.removeItem('amansala_db_pass');
   sessionStorage.removeItem('ama_driver_mode');
   localStorage.removeItem('ama_driver_persist');
   currentDriverSession=null;

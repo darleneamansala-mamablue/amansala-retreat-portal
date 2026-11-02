@@ -56,6 +56,7 @@ async function spaStaffLoginSubmit(){
   }catch(e){errEl.textContent='Network error — please try again.';return;}
   if(!data||!data.success){errEl.textContent='Incorrect username or password.';return;}
   errEl.textContent='';
+  if(typeof dbPassStore==='function')dbPassStore(data.dbPass||null);
   spaStaffLoginComplete(data.session);
 }
 
@@ -73,6 +74,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementB
 function spaStaffLogout(){
   if(!confirm('Sign out?'))return;
   sessionStorage.removeItem('amansala_spa_staff_session');
+  sessionStorage.removeItem('amansala_db_pass');
   sessionStorage.removeItem('ama_spa_staff_mode');
   localStorage.removeItem('ama_spa_staff_persist');
   currentSpaStaffSession=null;

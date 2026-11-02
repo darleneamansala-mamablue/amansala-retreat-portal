@@ -19,7 +19,7 @@
 // A successful login also returns `token`, a signed 12-hour pass the admin
 // screens send to the account functions (portal-accounts.js).
 const crypto = require('crypto');
-const { checkLogin, signToken } = require('./portal-auth-lib');
+const { checkLogin, signToken, signDbPass } = require('./portal-auth-lib');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 
@@ -72,7 +72,8 @@ exports.handler = async (event) => {
 };
 
 function done(session) {
-  return ok({ success: true, session, token: signToken({ kind: 'staff', sub: session.id, name: session.name, role: session.role }) });
+  return ok({ success: true, session, token: signToken({ kind: 'staff', sub: session.id, name: session.name, role: session.role }),
+    dbPass: signDbPass({ sub: String(session.id), app_role: session.role === 'admin' ? 'admin' : 'staff', name: session.name }) });
 }
 function ok(data) {
   return { statusCode: 200, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) };

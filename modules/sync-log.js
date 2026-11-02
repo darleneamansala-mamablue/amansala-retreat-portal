@@ -18,9 +18,11 @@ const SL_KIND = {
   conflict: { label: 'Choque', color: '#1e40af', bg: '#dbeafe' },
   double: { label: 'Cuarto doble', color: '#9d174d', bg: '#fce7f3' },
   legacy: { label: 'Guardado viejo', color: '#92400e', bg: '#fef3c7' },
+  nopass: { label: 'Sin pase', color: '#475569', bg: '#e2e8f0' },
 };
 // conflict: saved fine, but another person had changed the same field(s) at the same time and this person's value won
-const SL_REASON = (r, kind) => kind === 'legacy' ? 'esta computadora guardó todo con el sistema viejo, sin la red de seguridad — ' + (r || '') + '. Recargar la página.'
+const SL_REASON = (r, kind) => kind === 'nopass' ? 'esta sesión entró antes de que existiera el pase de la base (o se le venció) — que cierre sesión y vuelva a entrar'
+  : kind === 'legacy' ? 'esta computadora guardó todo con el sistema viejo, sin la red de seguridad — ' + (r || '') + '. Recargar la página.'
   : kind === 'double' ? 'el mismo cuarto quedó en dos reservas con fechas que se cruzan — ' + (r || '') + '. Revisar en Rooms.'
   : kind === 'conflict' ? 'dos personas cambiaron lo mismo al mismo tiempo; quedó el cambio de esta persona — campo(s): ' + (r || '')
   : r === 'exhausted' ? 'otra persona lo estaba editando al mismo tiempo y no se pudo guardar tras 10 intentos — el cambio sigue en su pantalla y se reintenta en su siguiente guardado'

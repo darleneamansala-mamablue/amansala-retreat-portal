@@ -93,5 +93,27 @@ const noPasswords = key => db.store[key].value.every(a => !a.password && !a.pass
   assert.strictEqual((await call('portal-accounts', { token: r.token, action: 'remove', kind: 'confirm', accountId: 'sc_ana' })).success, true);
   assert.strictEqual((await call('portal-login', { kind: 'confirm', username: 'ana', password: 'brand-new' })).success, false, 'removed account');
   console.log('ok   - portal-accounts: admin sets / removes passwords, others refused');
+
+  // 7. Database pass: none without SUPABASE_JWT_SECRET; with it, an HS256 JWT Supabase accepts (role authenticated +
+  //    app_role), renewable while valid, never after 14 days, never forged
+  reset();
+  delete process.env.SUPABASE_JWT_SECRET;
+  assert.strictEqual((await call('portal-login', { kind: 'spa', username: 'rosy', password: 'rosy2026' })).dbPass, null, 'no secret: no pass');
+  process.env.SUPABASE_JWT_SECRET = 'jwt-secret-for-tests';
+  const crypto = require('crypto');
+  const parse = t => { const [h, b, sg] = t.split('.'); assert.strictEqual(crypto.createHmac('sha256', 'jwt-secret-for-tests').update(h + '.' + b).digest('base64url'), sg, 'HS256 signature'); return [JSON.parse(Buffer.from(h, 'base64url')), JSON.parse(Buffer.from(b, 'base64url'))]; };
+  let pass = (await call('portal-login', { kind: 'spa', username: 'rosy', password: 'rosy2026' })).dbPass;
+  let [hd, cl] = parse(pass);
+  assert.deepStrictEqual([hd.alg, cl.role, cl.aud, cl.app_role, cl.sub], ['HS256', 'authenticated', 'authenticated', 'spa', 'spastaff_rosy']);
+  assert.ok(cl.exp - cl.iat === 12 * 3600);
+  const adminPass = (await call('staff-login', { username: 'test', password: 'plain-old' })).dbPass;
+  assert.strictEqual(parse(adminPass)[1].app_role, 'admin');
+  const fresh = (await call('session-refresh', { dbPass: pass })).dbPass;
+  assert.ok(fresh && parse(fresh)[1].auth_time === cl.auth_time && parse(fresh)[1].app_role === 'spa', 'renewed, same sign-in time');
+  const forged = pass.split('.').slice(0, 2).join('.') + '.' + 'x'.repeat(43);
+  assert.ok((await call('session-refresh', { dbPass: forged })).error, 'forged pass refused');
+  const old = require('../netlify/functions/portal-auth-lib').signDbPass({ sub: 'a', app_role: 'spa' }, Math.floor(Date.now() / 1000) - 15 * 86400);
+  assert.ok((await call('session-refresh', { dbPass: old })).error, 'sign-in older than 14 days refused');
+  console.log('ok   - database pass: signed for Supabase, renewable, forged/too old refused');
   console.log('portal login: all checks passed');
 })().catch(e => { console.error(e); process.exit(1); });

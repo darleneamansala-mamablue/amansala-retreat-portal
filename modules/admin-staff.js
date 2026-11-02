@@ -138,6 +138,7 @@ async function staffLoginSubmit(){
   errEl.textContent='';
   // signed pass for the account screens (portal-accounts: spa / driver / confirm passwords)
   try{if(data.token)sessionStorage.setItem('amansala_staff_token',data.token);}catch(e){}
+  if(typeof dbPassStore==='function')dbPassStore(data.dbPass||null);
   staffLoginComplete(data.session);
 }
 
@@ -158,6 +159,7 @@ function staffLogout(){
   if(!confirm('Sign out of the Amansala portal?'))return;
   sessionStorage.removeItem('amansala_staff_session');
   sessionStorage.removeItem('amansala_staff_token');
+  sessionStorage.removeItem('amansala_db_pass');
   currentSession=null;
   location.reload();
 }

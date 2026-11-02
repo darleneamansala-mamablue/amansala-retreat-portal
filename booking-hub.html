@@ -4243,7 +4243,39 @@
 // ===== SUPABASE =====
 const SUPA_URL='https://vnttlpqkssihbmcynxvo.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZudHRscHFrc3NpaGJtY3lueHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjU1NjEsImV4cCI6MjEwMDg0MTU2MX0.ZCnXPWFLmH1ysDZJm_evEIapYhPZubzKZFLadKvqr6A';
-const db=supabase.createClient(SUPA_URL,SUPA_KEY);
+// ===== DATABASE PASS (security plan phase 2, 2026-11-02) =====
+// Each sign-in (staff-login / portal-login) returns a pass signed for the database; the client sends it instead of the
+// public anon key, so the database knows who is asking (role 'authenticated' + app_role). Nothing is locked yet (that is
+// phase 4): with the switch off -- app_store 'db_pass' = {"mode":"off"|"on"} -- or no pass, every request uses the anon
+// key exactly as before. ?pass=1 tries it on one browser (remembered), ?pass=0 takes that browser out.
+let _dbPassMode='off';
+function _dbPassSetRemote(v){_dbPassMode=v&&v.mode==='on'?'on':'off';}
+try{if(location.search.includes('pass=1'))localStorage.setItem('amansala_db_pass_test','1');if(location.search.includes('pass=0'))localStorage.setItem('amansala_db_pass_test','0');}catch(e){}
+function _dbPassOn(){let t=null;try{t=localStorage.getItem('amansala_db_pass_test');}catch(e){}return t==='0'?false:t==='1'||_dbPassMode==='on';}
+function dbPassGet(){
+  try{
+    const t=sessionStorage.getItem('amansala_db_pass');if(!t)return null;
+    const b=t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'),c=JSON.parse(atob(b+'==='.slice((b.length+3)%4)));
+    return c.exp*1000>Date.now()+30000?{t,c}:null;
+  }catch(e){return null;}
+}
+function dbPassStore(t){try{if(t)sessionStorage.setItem('amansala_db_pass',t);else sessionStorage.removeItem('amansala_db_pass');}catch(e){}}
+// signed in, switch on, but no pass (signed in before the pass existed, or it ran out): logged once per page
+let _dbPassMissLogged=false;
+function _dbPassMiss(){
+  if(_dbPassMissLogged||(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE))return;
+  let who=null;try{who=['amansala_staff_session','amansala_spa_staff_session','amansala_driver_session','amansala_staff_confirm_session'].map(k=>sessionStorage.getItem(k)).find(Boolean);}catch(e){}
+  if(!who)return;
+  _dbPassMissLogged=true;
+  setTimeout(()=>{try{casLogEvent('nopass','app_store',[{id:'pass',reason:'signed in without a database pass'}]);}catch(e){}},0);
+}
+function dbAuthToken(){if(!_dbPassOn())return SUPA_KEY;const p=dbPassGet();if(p)return p.t;_dbPassMiss();return SUPA_KEY;}
+const db=supabase.createClient(SUPA_URL,SUPA_KEY,{accessToken:async()=>dbAuthToken()});
+// a pass lasts 12 h: renewed in the background while still valid (session-refresh, up to 14 days after the sign-in)
+setInterval(async()=>{
+  const p=dbPassGet();if(!p||p.c.exp*1000-Date.now()>2*3600e3)return;
+  try{const r=await fetch('/.netlify/functions/session-refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dbPass:p.t})});const d=await r.json();if(d&&d.dbPass)dbPassStore(d.dbPass);}catch(e){}
+},10*60*1000);
 
 // ===== RETREAT PRESENCE LOCK =====
 // Uses app_store table for reliable locking — no Presence timing issues.
@@ -5246,6 +5278,7 @@ async function loadFromSupabase(){
     // Clear signal: if Supabase has a clear_signal newer than what this device last acknowledged,
     // wipe local bookings/regs so stale data on any device can't keep coming back.
     _casSetRemote(store.cas_sync);
+    if(typeof _dbPassSetRemote==="function")_dbPassSetRemote(store.db_pass);
     if(store.clear_signal){
       const lastAck=localStorage.getItem('amansala_clear_ack')||'';
       if(store.clear_signal>lastAck){
@@ -6940,7 +6973,7 @@ function switchTab(id,btn){
 // ===== PAYMENT RECORDING — moved to modules/payments.js =====
 // ===== PIPELINE STEPS — moved to modules/payments.js (loaded above) =====
 </script>
-<script src="modules/admin-staff.js?v=20261102a"></script>
+<script src="modules/admin-staff.js?v=20261102b"></script>
 <script>
 // ===== ADMIN DONE TASKS — moved to modules/admin-staff.js =====
 </script>
@@ -6975,8 +7008,8 @@ function switchTab(id,btn){
 <script>
 // ===== TRANSPORTATION — moved to modules/transport.js =====
 </script>
-<script src="modules/driver-portal.js?v=20261102a"></script>
-<script src="modules/spa-staff-portal.js?v=20261102a"></script>
+<script src="modules/driver-portal.js?v=20261102b"></script>
+<script src="modules/spa-staff-portal.js?v=20261102b"></script>
 <script src="modules/housekeeping.js?v=20260930c"></script>
 <script src="modules/teacher-profiles.js"></script>
 <script src="modules/cloudbeds-extra.js"></script>
@@ -7156,7 +7189,7 @@ if(location.protocol!=='file:'){
 // ===== TEACHER MODE — moved to modules/teacher-portal.js (loaded above) =====
 // ===== TEACHER FAQ — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/special-events.js"></script>
+<script src="modules/special-events.js?v=20261102a"></script>
 <script>
 // ===== SPECIAL EVENTS — moved to modules/special-events.js =====
 // ===== TEACHER DASHBOARD — moved to modules/teacher-portal.js (loaded above) =====
@@ -7186,7 +7219,7 @@ if(location.protocol!=='file:'){
 <script src="modules/menu-cost-edit.js?v=20261025a"></script>
 <script src="modules/menu-kitchen-costing.js?v=20261021a"></script>
 <script src="modules/double-charges.js?v=20261023a"></script>
-<script src="modules/sync-log.js?v=20261102a"></script>
+<script src="modules/sync-log.js?v=20261102b"></script>
 <script src="modules/checkout-balances.js?v=20261101a"></script>
 <script src="modules/host-checklist.js?v=20261029a"></script>
 <script src="modules/host-checklist-all.js?v=20261029d"></script>
@@ -7738,7 +7771,7 @@ if(location.protocol!=='file:'){
 <script src="modules/bbc-upload.js?v=20261025a"></script>
 <script src="modules/bbc-short-stays.js?v=20261025b"></script>
 <script src="modules/bbc-sort-slots.js?v=20261025a"></script>
-<script src="modules/staff-confirm-portal.js?v=20261102a"></script>
+<script src="modules/staff-confirm-portal.js?v=20261102b"></script>
 <script src="modules/spa-confirm-label.js?v=20261014a"></script>
 <script src="modules/spa-therapist-done.js?v=20261023a"></script>
 <script src="modules/spa-reports.js?v=20261025a"></script>
