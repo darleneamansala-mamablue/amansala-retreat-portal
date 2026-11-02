@@ -1,12 +1,12 @@
 // ===== staffing-bellboys.js — Staffing Forecast: "Arrival bell boy" and "Departure help (AM)" assign boxes (Darlene 2026-11-01) =====
 // Every day with arrivals gets one Arrival bell boy box; busy days get a 2nd box and very busy days a 3rd (the Busy / Very busy numbers in the
 // forecast's Rules). Departures work the same way with Departure help, which is the AM shift, using the Busy / Very busy check-out numbers.
-// Choices: Teo, Seg, Roman, Noe, Chino (waiter). Box 1 is the forecast's own 'bellboy' / 'checkout' coverage (so gaps and the Dashboard still
+// Choices: Teo, Seg, Roman, Noe, Chino. Box 1 is the forecast's own 'bellboy' / 'checkout' coverage (so gaps and the Dashboard still
 // work); boxes 2 and 3 are saved beside it in 'staffing_coverage' as bellboy2/3 and checkout2/3.
 // Hooks into staffing-forecast.js: sfBellboyNeed / sfDepartNeed (replace the single dropdown on that need) and sfBellboyRow / sfDepartRow
 // (days with guests but no such need).
 const SBB_PEOPLE = ['Teo', 'Seg', 'Roman', 'Noe', 'Chino'];
-const SBB_LABEL = { Chino: 'Chino (waiter)' };
+const SBB_LABEL = {};
 const SBB_KIND = {
   bellboy: { title: 'Arrival bell boy', pick: 'Bell boy', count: d => d.arrivals, busy: () => sfCfg.arrivalsBusy, very: () => sfCfg.arrivalsVeryBusy, info: d => d.arrivals + ' guest' + (d.arrivals === 1 ? '' : 's') + ' arriving', toast: ' will be the arrival bell boy.' },
   checkout: { title: 'Departure help (AM)', pick: 'Departure help', count: d => d.checkouts, busy: () => sfCfg.checkoutsBusy, very: () => sfCfg.checkoutsVeryBusy, info: d => d.checkouts + ' guest' + (d.checkouts === 1 ? '' : 's') + ' checking out', toast: ' will help with departures (AM).' },
