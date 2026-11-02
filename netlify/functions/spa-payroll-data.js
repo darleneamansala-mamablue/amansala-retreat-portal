@@ -4,14 +4,14 @@
 // The page used to read the whole spa catalog and every appointment (clients' names, emails, phones) with the public key,
 // and its sign-in could be skipped by putting anything in sessionStorage. Now: services (name, price, length), therapists
 // with their pay rates, and appointments with only what payroll counts (who, which service, when, status).
-const { staffFromEvent } = require('./portal-auth-lib');
+const { staffAllowed } = require('./portal-auth-lib');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const reply = (code, data) => ({ statusCode: code, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token', 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return reply(200, {});
-  if (!staffFromEvent(event, { admin: true })) return reply(401, { error: 'Sign in again' });
+  if (!await staffAllowed(event, { admin: true })) return reply(401, { error: 'Sign in again' });
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!key) return reply(500, { error: 'Server config error' });
   try {

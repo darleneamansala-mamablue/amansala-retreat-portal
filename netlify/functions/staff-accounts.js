@@ -8,7 +8,7 @@
 //   {token, action:'setActive', id, active}
 //   {token, action:'delete', id}
 const crypto = require('crypto');
-const { staffFromEvent, revokeSessions } = require('./portal-auth-lib');
+const { staffAllowed, revokeSessions } = require('./portal-auth-lib');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const reply = (code, data) => ({ statusCode: code, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token', 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -18,7 +18,7 @@ const sha256 = s => crypto.createHash('sha256').update(String(s), 'utf8').digest
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return reply(200, {});
   if (event.httpMethod !== 'POST') return reply(405, { error: 'Method Not Allowed' });
-  const who = staffFromEvent(event, { admin: true });
+  const who = await staffAllowed(event, { admin: true });
   if (!who) return reply(401, { error: 'Sign out and sign in again as an admin to manage staff.' });
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!key) return reply(500, { error: 'Server config error' });

@@ -125,6 +125,19 @@ async function revokeSessions(key, kind, id) {
   return false;
 }
 
+// staffFromEvent + "not signed out since": for functions that change things (accounts, prices, payroll, emails) a pass
+// from before a sign-out-everywhere stops working at once, not only when it can no longer be renewed. Passes from before
+// 2026-11-02 carry no sign-in time: their 12-hour expiry tells it.
+async function staffAllowed(event, opts = {}) {
+  const c = staffFromEvent(event, opts);
+  if (!c) return null;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!key || !c.sub) return c;
+  const signedInAt = c.auth || c.iat || (c.exp - 12 * 3600e3);
+  const t = await revokedAt(key, 'staff', String(c.sub));
+  return t && t >= signedInAt ? null : c;
+}
+
 async function readBlob(key, kind) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.${BLOB_KEY[kind]}&select=value,updated_at`, { headers: hdrs(key) });
   const rows = r.ok ? await r.json() : [];
@@ -218,4 +231,4 @@ function staffFromEvent(event, opts = {}) {
 const cors = () => ({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token' });
 const reply = (code, data) => ({ statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
 
-module.exports = { passKind, revokedAt, revokeSessions, staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };
+module.exports = { staffAllowed, passKind, revokedAt, revokeSessions, staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };

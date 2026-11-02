@@ -6,7 +6,7 @@ const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-opus-5-5';
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
-const { staffFromEvent } = require('./portal-auth-lib');
+const { staffAllowed } = require('./portal-auth-lib');
 const reply = (code, body) => ({ statusCode: code, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 const SYSTEM = `You are the energy assistant for Amansala, a boutique wellness hotel in Tulum, Mexico. You answer questions about the "Energy vs Generator" report that the user is looking at. The report data is in the REPORT block below (JSON the page generated).
@@ -32,7 +32,7 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
   if (event.httpMethod !== 'POST') return reply(405, { error: 'Method Not Allowed' });
   // staff only (2026-11-02): energy.html signs in with staff-login and sends that pass
-  if (!staffFromEvent(event)) return reply(401, { error: 'Please sign in again (staff only).' });
+  if (!await staffAllowed(event)) return reply(401, { error: 'Please sign in again (staff only).' });
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return reply(500, { error: 'The assistant is not configured yet (missing ANTHROPIC_API_KEY).' });
 

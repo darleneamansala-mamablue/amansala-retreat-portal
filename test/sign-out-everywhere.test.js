@@ -77,5 +77,13 @@ const passFor = (claims, authSecAgo = 0) => lib.signDbPass(claims, Math.floor(Da
   assert.strictEqual((await call('session-refresh', { dbPass: old })).code, 401, 'expired 19 h ago: sign in again');
   assert.strictEqual((await call('session-refresh', { dbPass: slept.slice(0, -4) + 'AAAA' })).code, 401, 'forged');
   console.log('ok   - teachers unaffected; 1-hour passes; renewed after sleep (12 h), not after that, never forged');
+  // an admin pass from before a sign-out stops working at once in the account functions (not only at renewal) --
+  // also an old-style pass (12 h, no sign-in time) from before this change
+  const melOld = (() => { const t = lib.signToken({ kind: 'staff', sub: 'S1', name: 'Jorge', role: 'admin' }); return t; })();
+  await new Promise(r => setTimeout(r, 5));
+  store.session_revocations = { key: 'session_revocations', value: { 'staff:S1': new Date().toISOString() }, updated_at: 'x1' };
+  assert.strictEqual((await call('staff-accounts', { token: melOld, action: 'save', name: 'Evil', username: 'evil', role: 'admin', password: 'evilpass' })).code, 401, 'revoked admin cannot create accounts');
+  assert.strictEqual((await call('portal-accounts', { token: melOld, action: 'setPassword', kind: 'spa', accountId: 'x', username: 'x', password: 'xxxxxx' })).code, 401);
+  console.log('ok   - a revoked admin pass is refused at once by the account functions');
   console.log('sign out everywhere: all checks passed');
 })().catch(e => { console.error(e); process.exit(1); });

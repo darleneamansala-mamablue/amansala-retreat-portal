@@ -7,12 +7,12 @@
 // unscheduled function instead, which just runs the exact same logic on demand.
 const { runRecalc } = require('./room-price-recalc');
 
-const { staffFromEvent } = require('./portal-auth-lib');
+const { staffAllowed } = require('./portal-auth-lib');
 const RM_NAMES = ['jorge', 'darlene'];   // same allow-list as revenue-manager.html
 
 exports.handler = async (event) => {
   // Staff only (2026-11-02): this used to answer anyone on the internet -- the Revenue Manager sends the staff-login pass.
-  if (!staffFromEvent(event || {}, { names: RM_NAMES })) return { statusCode: 401, headers: cors(), body: JSON.stringify({ error: 'Sign in again' }) };
+  if (!await staffAllowed(event || {}, { names: RM_NAMES })) return { statusCode: 401, headers: cors(), body: JSON.stringify({ error: 'Sign in again' }) };
   try {
     const r = await runRecalc();
     return { statusCode: 200, headers: cors(), body: JSON.stringify(r) };
