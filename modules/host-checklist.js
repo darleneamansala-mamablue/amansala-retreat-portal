@@ -232,13 +232,18 @@ function hcAlertScan() {
 }
 function hcAlertChip() {
   let chip = document.getElementById('hcAlertChip');
-  if (!chip) { chip = document.createElement('button'); chip.id = 'hcAlertChip'; chip.onclick = hcAlertShow; chip.style.cssText = 'position:fixed;left:14px;bottom:110px;z-index:99988;display:none;padding:8px 14px;border-radius:99px;border:2px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:800;font-size:12.5px;cursor:pointer;font-family:Jost,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25)'; document.body.appendChild(chip); }
+  if (!chip) { chip = document.createElement('button'); chip.id = 'hcAlertChip'; chip.onclick = hcAlertShow; chip.style.cssText = 'display:none;align-self:flex-start;margin:14px 36px 0;padding:8px 14px;border-radius:99px;border:2px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:800;font-size:12.5px;cursor:pointer;font-family:Jost,sans-serif'; }
+  // In the page, at the top of the Dashboard (not floating), so it never covers the menu or anything else (Darlene 2026-11-02)
+  const dash = document.getElementById('tab-dashboard');
+  if (dash && chip.parentNode !== dash) dash.insertBefore(chip, dash.firstChild);
   return chip;
 }
 function hcAlertTick() {
   try {
     if (!document.body) return; const chip = hcAlertChip();
     if (!hcTeam()) { chip.style.display = 'none'; return; }
+    const dash = document.getElementById('tab-dashboard');   // only on the Dashboard (Darlene 2026-11-02)
+    if (!dash || !dash.classList.contains('active')) { chip.style.display = 'none'; return; }
     if (!hcState.loaded && !hcState.loading) { hcLoad(); return; }
     const list = hcAlertScan(), n = list.reduce((s, x) => s + x.steps.length, 0);
     chip.style.display = n ? 'block' : 'none';
@@ -258,6 +263,7 @@ function hcAlertShow() {
       ${x.steps.map(i => `<div style="font-size:13px;margin-top:4px">☐ ${hcEsc(i.text)}${i.due && i.due < hcToday() ? ` <span style="color:#b91c1c;font-weight:700;font-size:11.5px">overdue since ${hcFmt(i.due)}</span>` : ''}</div>`).join('')}</div>`).join('') : '<div style="color:#059669;font-weight:700">Everything for the arrival is ticked off. ✓</div>'}</div>`;
 }
 setInterval(hcAlertTick, 60000); setTimeout(hcAlertTick, 7000);
+if (typeof switchTab === 'function') { const hcSwitch = window.switchTab; window.switchTab = function () { const r = hcSwitch.apply(this, arguments); setTimeout(hcAlertTick, 0); return r; }; }   // show / hide the chip as soon as the tab changes
 
 (function () {
   const side = document.getElementById('staffSideBtn'), after = document.getElementById('tab-checkoutbalances') || document.getElementById('tab-doublecharges');
