@@ -30,13 +30,14 @@
       const [s, e] = D(b); if (!s || !e || e < todayIso || s > endIso) return;
       const key = k + s + e, x = m[key] = m[key] || { k, s, e, n: 0, r: 0, res: 0, wt: false, now: s <= todayIso && todayIso < e };
       let n = Number(b.pax) || 0; if (!n) n = regGuests(b);
-      x.n += n; x.r += rooms(b); x.res++; x.wt = x.wt || b.source === 'wetravel';
+      x.n += n; x.r += rooms(b); x.res++; (x.ids = x.ids || []).push(b.id); x.wt = x.wt || b.source === 'wetravel';
     });
     return Object.values(m).sort((a, c) => a.s.localeCompare(c.s));
   }
   function groupsHtml(todayIso, endIso) {
     const g = groups(todayIso, endIso);
-    const rows = g.length ? g.map(x => '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span><b style="color:' + (x.k === 'BBC' ? '#b45309' : '#6d28d9') + '">' + x.k + '</b>' + (x.wt ? ' · WeTravel' : '') + (x.now ? ' <span style="color:#15803d;font-weight:700">in house now</span>' : ' <span style="color:#4b5563">upcoming</span>') + '</span><span style="color:#4b5563;white-space:nowrap">' + x.s.slice(5) + ' → ' + x.e.slice(5) + ' · ' + x.res + ' booking' + (x.res === 1 ? '' : 's') + ' · ' + x.r + ' room' + (x.r === 1 ? '' : 's') + ' · ' + (x.n ? x.n + ' guest' + (x.n === 1 ? '' : 's') : 'guests not entered yet') + '</span></div>').join('')
+    window._droGroups = g.map(x => x.ids || []);
+    const rows = g.length ? g.map((x, gi) => '<div onclick="droGroup(' + gi + ')" title="Click to see the bookings" style="cursor:pointer;display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span><b style="color:' + (x.k === 'BBC' ? '#b45309' : '#6d28d9') + '">' + x.k + '</b>' + (x.wt ? ' · WeTravel' : '') + (x.now ? ' <span style="color:#15803d;font-weight:700">in house now</span>' : ' <span style="color:#4b5563">upcoming</span>') + '</span><span style="color:#4b5563;white-space:nowrap">' + x.s.slice(5) + ' → ' + x.e.slice(5) + ' · ' + x.res + ' booking' + (x.res === 1 ? '' : 's') + ' · ' + x.r + ' room' + (x.r === 1 ? '' : 's') + ' · ' + (x.n ? x.n + ' guest' + (x.n === 1 ? '' : 's') : 'guests not entered yet') + '</span></div><div id="droG' + gi + '" style="display:none;margin:0 0 6px;padding:6px 12px;background:#faf8f3;border-radius:8px"></div>').join('')
       : '<div style="font-size:12.5px;color:#4b5563;padding:5px 0;border-top:1px solid #efeae0">No BBC or RNR groups in house or arriving in the next 14 days.</div>';
     return '<div style="margin-top:14px"><div style="font-size:13px;font-weight:800;color:#1f2d2d;margin-bottom:2px">BBC / RNR groups (incl. WeTravel)</div>' + rows + '</div>';
   }
@@ -119,6 +120,19 @@
       + '</div>'
       + (reg ? '<button onclick="document.getElementById(\'droSumModal\').style.display=\'none\';openBookingDetailForReg(\'' + String(reg.id).replace(/'/g, '') + '\',' + JSON.stringify(nm).replace(/"/g, '&quot;') + ')" style="margin-top:12px;padding:8px 16px;border:none;border-radius:8px;background:#2d6a6a;color:#fff;font-weight:700;cursor:pointer;font-family:inherit">Open full booking</button>' : '')
       + '</div>';
+  };
+  // Click a BBC / RNR / WeTravel row: the bookings inside it, each opening the summary (Darlene 2026-11-02: "we would like a We Travel ...")
+  window.droGroup = function (i) {
+    const box = document.getElementById('droG' + i); if (!box) return;
+    if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    const rows = ((window._droGroups || [])[i] || []).map(id => (AppData.bookings || []).find(b => b.id === id)).filter(Boolean).map(b => {
+      const regs = (AppData.regs || []).filter(r => r.bookingId === b.id), names = [...new Set(regs.flatMap(r => (r.guests || []).map(g => g && g.name && g.name.trim()).filter(Boolean)))];
+      const sl = stayLine(b), [bs, be] = D(b);
+      return '<div style="padding:5px 0;border-top:1px solid #efeae0;font-size:12.5px"><span onclick="event.stopPropagation();droSummary(\'' + String(b.id).replace(/'/g, '') + '\')" style="cursor:pointer;color:#2d6a6a;font-weight:700;text-decoration:underline">' + esc(b.leaderName || b.retreatName || 'Guest') + '</span> <span style="color:#4b5563">' + bs.slice(5) + ' → ' + be.slice(5) + (names.length ? ' · ' + esc(names.join(', ')) : ' · guests not entered yet') + '</span>' + (sl ? '<div style="color:#4b5563;font-size:12px">' + esc(sl) + '</div>' : '') + '</div>';
+    }).join('');
+    box.innerHTML = rows || '<div style="font-size:12.5px;color:#4b5563">No bookings.</div>';
+    box.onclick = ev => ev.stopPropagation();
   };
   function paint() {
     try {
