@@ -119,7 +119,7 @@
        Admin). overflow-y:auto on .tab-bar is supposed to handle the overflow by scrolling,
        but that only works if items aren't first shrunk away. */
     #adminSideSection{overflow:hidden;max-height:0;flex-shrink:0;transition:max-height .25s ease;}
-    #adminSideSection.admin-side-open{max-height:600px;}
+    #adminSideSection.admin-side-open{max-height:3000px;} /* every button added to the section (Sync Log, Double Charges...) pushed the last ones (Reports, Bot Log, Settings) out of sight at 600px */
     .tab-btn-sub{padding-left:28px!important;}
     .tab-bar.collapsed .tab-btn-sub{padding:11px!important;justify-content:center;}
 
