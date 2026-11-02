@@ -30,9 +30,10 @@ global.fetch = async (url, opts = {}) => {
     if (m === 'DELETE') { db.logins = db.logins.filter(l => !(l.kind === p.get('kind').slice(3) && l.account_id === p.get('account_id').slice(3))); return json(null, 204); }
   }
   if (path.endsWith('/app_store')) {
+    if (m === 'POST') { const b = JSON.parse(opts.body); db.store[b.key] = { value: b.value, updated_at: 'p' + Date.now() }; return json([db.store[b.key]], 201); }
     const key = p.get('key').slice(3), row = db.store[key];
     if (m === 'GET') return json(row ? [{ value: row.value, updated_at: row.updated_at }] : []);
-    if (m === 'PATCH') { if (!row || p.get('updated_at').slice(3) !== row.updated_at) return json([]); const b = JSON.parse(opts.body); db.store[key] = { value: b.value, updated_at: b.updated_at }; return json(null, 204); }
+    if (m === 'PATCH') { if (!row || decodeURIComponent(p.get('updated_at').slice(3)) !== row.updated_at) return json([]); const b = JSON.parse(opts.body); db.store[key] = { value: b.value, updated_at: b.updated_at + Math.random() }; return json([db.store[key]]); }
   }
   if (path.endsWith('/staff')) return json(db.staff.filter(s => s.username === p.get('username').slice(3)));
   throw new Error('unexpected ' + m + ' ' + url);
@@ -105,7 +106,7 @@ const noPasswords = key => db.store[key].value.every(a => !a.password && !a.pass
   let pass = (await call('portal-login', { kind: 'spa', username: 'rosy', password: 'rosy2026' })).dbPass;
   let [hd, cl] = parse(pass);
   assert.deepStrictEqual([hd.alg, cl.role, cl.aud, cl.app_role, cl.sub], ['HS256', 'authenticated', 'authenticated', 'spa', 'spastaff_rosy']);
-  assert.ok(cl.exp - cl.iat === 12 * 3600);
+  assert.ok(cl.exp - cl.iat === 3600, 'one hour');
   const adminPass = (await call('staff-login', { username: 'test', password: 'plain-old' })).dbPass;
   assert.strictEqual(parse(adminPass)[1].app_role, 'admin');
   const fresh = (await call('session-refresh', { dbPass: pass })).dbPass;

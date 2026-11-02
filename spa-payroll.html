@@ -100,6 +100,15 @@ async function payrollLoginSubmit(){
   document.getElementById('content').style.display='block';
   loadAndRenderPayroll();
 }
+
+// the sign-in pass lasts 1 hour: renewed every 3 minutes while this page is open; refused once the account was signed out
+// everywhere (new password, switched off, removed) -> sign in again
+setInterval(async()=>{
+  let t='';try{t=sessionStorage.getItem('spa_payroll_token')||'';}catch(e){}
+  if(!t)return;
+  try{const r=await fetch('/.netlify/functions/session-refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t})});
+    if(r.status===401)payrollSignOut();else if(r.ok){const d=await r.json();if(d.token)sessionStorage.setItem('spa_payroll_token',d.token);}}catch(e){}
+},3*60*1000);
 function payrollSignOut(){
   sessionStorage.removeItem('spa_payroll_session');
   sessionStorage.removeItem('spa_payroll_token');

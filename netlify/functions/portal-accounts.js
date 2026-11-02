@@ -5,7 +5,8 @@
 //   {token, action:'setPassword', kind, accountId, username, name, password}
 //   {token, action:'remove', kind, accountId}
 //   {token, action:'status', kind}   -> {ids: [account ids that have a password]}
-const { verifyToken, hashPassword, upsertLogin, deleteLogin, migrateKind, norm, cors, reply } = require('./portal-auth-lib');
+//   {token, action:'signOut', kind, accountId}   signs the person out everywhere (account switched off)
+const { verifyToken, hashPassword, upsertLogin, deleteLogin, migrateKind, revokeSessions, norm, cors, reply } = require('./portal-auth-lib');
 
 const KINDS = ['spa', 'driver', 'confirm'];
 
@@ -26,13 +27,16 @@ exports.handler = async (event) => {
     if (b.action === 'status') return reply(200, { ids: logins.map(l => l.account_id) });
     const id = String(b.accountId || '');
     if (!id) return reply(400, { error: 'Missing account' });
-    if (b.action === 'remove') return reply(200, { success: await deleteLogin(key, kind, id) });
+    if (b.action === 'signOut') return reply(200, { success: await revokeSessions(key, kind, id) });
+    if (b.action === 'remove') { const okDel = await deleteLogin(key, kind, id); await revokeSessions(key, kind, id); return reply(200, { success: okDel }); }
     if (b.action === 'setPassword') {
       const pw = String(b.password || ''), u = norm(b.username);
       if (pw.length < 6) return reply(400, { error: 'Use at least 6 characters.' });
       if (!u) return reply(400, { error: 'Missing username' });
       if (logins.some(l => l.username === u && l.account_id !== id)) return reply(409, { error: 'That username is already in use.' });
-      return reply(200, { success: await upsertLogin(key, { kind, account_id: id, username: u, name: b.name || u, password_hash: hashPassword(pw), active: true }) });
+      const okSet = await upsertLogin(key, { kind, account_id: id, username: u, name: b.name || u, password_hash: hashPassword(pw), active: true });
+      if (okSet) await revokeSessions(key, kind, id);   // a new password signs this person out everywhere
+      return reply(200, { success: okSet });
     }
     return reply(400, { error: 'Unknown action' });
   } catch (e) {

@@ -265,6 +265,15 @@ async function rmFetch(url,opts={}){
   if(r.status===401){try{sessionStorage.removeItem('rm_session');sessionStorage.removeItem('rm_token');}catch(e){}alert('Please sign in again.');location.reload();throw new Error('signed out');}
   return r;
 }
+
+// the sign-in pass lasts 1 hour: renewed every 3 minutes while this page is open; refused once the account was signed out
+// everywhere (new password, switched off, removed) -> sign in again
+setInterval(async()=>{
+  let t='';try{t=sessionStorage.getItem('rm_token')||'';}catch(e){}
+  if(!t)return;
+  try{const r=await fetch('/.netlify/functions/session-refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t})});
+    if(r.status===401){try{sessionStorage.removeItem('rm_session');sessionStorage.removeItem('rm_token');}catch(e){}alert('Please sign in again.');location.reload();}else if(r.ok){const d=await r.json();if(d.token)sessionStorage.setItem('rm_token',d.token);}}catch(e){}
+},3*60*1000);
 function rmToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
 
 async function rmLogin(){

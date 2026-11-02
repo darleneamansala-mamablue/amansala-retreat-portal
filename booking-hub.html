@@ -4324,11 +4324,27 @@ const db=supabase.createClient(SUPA_URL,SUPA_KEY,{accessToken:async()=>dbAuthTok
     }
   }catch(e){}
 })();
-// a pass lasts 12 h: renewed in the background while still valid (session-refresh, up to 14 days after the sign-in)
-setInterval(async()=>{
-  const p=dbPassGet();if(!p||p.c.exp*1000-Date.now()>2*3600e3)return;
-  try{const r=await fetch('/.netlify/functions/session-refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dbPass:p.t})});const d=await r.json();if(d&&d.dbPass)dbPassStore(d.dbPass);}catch(e){}
-},10*60*1000);
+// Passes last 1 hour and are renewed every 3 minutes while the page is open (session-refresh). The server refuses to
+// renew them once the account was signed out everywhere (password changed, switched off, removed) or 14 days after the
+// sign-in: then this page signs out and shows the login.
+function portalSignOutEverywhere(){
+  try{['amansala_staff_session','amansala_staff_token','amansala_db_pass','amansala_spa_staff_session','amansala_driver_session','amansala_staff_confirm_session'].forEach(k=>sessionStorage.removeItem(k));sessionStorage.setItem('ama_signin_again','1');}catch(e){}
+  location.reload();
+}
+async function portalRenewPasses(){
+  let pass=null,tok=null;try{pass=sessionStorage.getItem('amansala_db_pass');tok=sessionStorage.getItem('amansala_staff_token');}catch(e){}
+  if(!pass&&!tok)return;
+  try{
+    const r=await fetch('/.netlify/functions/session-refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dbPass:pass||undefined,token:tok||undefined})});
+    if(r.status===401){if(typeof teacherScoped==='function'&&teacherScoped())return;portalSignOutEverywhere();return;}   // a teacher's pass comes back with the next load
+    if(!r.ok)return;   // a server hiccup: try again next time
+    const d=await r.json();
+    if(d.dbPass)dbPassStore(d.dbPass);
+    if(d.token)try{sessionStorage.setItem('amansala_staff_token',d.token);}catch(e){}
+  }catch(e){}
+}
+setInterval(portalRenewPasses,3*60*1000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)portalRenewPasses();});
 
 // ===== RETREAT PRESENCE LOCK =====
 // Uses app_store table for reliable locking — no Presence timing issues.
@@ -7869,7 +7885,7 @@ if(location.protocol!=='file:'){
 <script src="modules/bbc-upload.js?v=20261025a"></script>
 <script src="modules/bbc-short-stays.js?v=20261025b"></script>
 <script src="modules/bbc-sort-slots.js?v=20261025a"></script>
-<script src="modules/staff-confirm-portal.js?v=20261102c"></script>
+<script src="modules/staff-confirm-portal.js?v=20261102d"></script>
 <script src="modules/spa-confirm-label.js?v=20261014a"></script>
 <script src="modules/spa-therapist-done.js?v=20261023a"></script>
 <script src="modules/spa-reports.js?v=20261025a"></script>

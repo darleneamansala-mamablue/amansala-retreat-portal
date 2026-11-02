@@ -54,19 +54,20 @@ function checkPassword(pw, stored) {
 
 // Signed pass for a signed-in session (HMAC, 12 h): lets the account functions check that an admin is asking, without a
 // new secret to configure -- the key is derived from the service key, which never leaves the server.
-const TOKEN_HOURS = 12;
+const TOKEN_HOURS = 1;   // renewed by session-refresh while the page is open (2026-11-02: was 12 h, not renewable)
 const tokenKey = () => crypto.createHash('sha256').update('amansala-portal-token|' + (process.env.SUPABASE_SERVICE_KEY || '')).digest();
 const b64u = b => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 function signToken(claims) {
-  const body = b64u(JSON.stringify({ ...claims, exp: Date.now() + TOKEN_HOURS * 3600e3 }));
+  const now = Date.now();
+  const body = b64u(JSON.stringify({ auth: now, ...claims, iat: now, exp: now + TOKEN_HOURS * 3600e3 }));   // auth = the sign-in time, kept on renewal
   return body + '.' + b64u(crypto.createHmac('sha256', tokenKey()).update(body).digest());
 }
-function verifyToken(tok) {
+function verifyToken(tok, graceMs = 0) {
   const [body, sig] = String(tok || '').split('.');
   if (!body || !sig) return null;
   const want = b64u(crypto.createHmac('sha256', tokenKey()).update(body).digest());
   if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
-  try { const c = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); return c.exp > Date.now() ? c : null; } catch (e) { return null; }
+  try { const c = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); return c.exp + graceMs > Date.now() ? c : null; } catch (e) { return null; }
 }
 
 // Database pass (security plan phase 2): a JWT signed with the project's JWT secret (Netlify env SUPABASE_JWT_SECRET,
@@ -74,7 +75,7 @@ function verifyToken(tok) {
 // then sees role 'authenticated' and these claims instead of the public anon key; the RLS rules of phase 4 read
 // app_role (staff / admin / spa / driver / confirm) and, for teachers later, booking_id. Without the env var nothing is
 // issued and the portal keeps using the anon key, as before.
-const DB_PASS_HOURS = 12, DB_PASS_MAX_DAYS = 14;
+const DB_PASS_HOURS = 1, DB_PASS_MAX_DAYS = 14;   // 1 h, renewed every few minutes while the page is open (was 12 h)
 function signDbPass(claims, authTime) {
   const secret = process.env.SUPABASE_JWT_SECRET;
   if (!secret) return null;
@@ -83,7 +84,7 @@ function signDbPass(claims, authTime) {
   const body = b64u(JSON.stringify({ iss: 'amansala-portal', aud: 'authenticated', role: 'authenticated', iat: now, exp: now + DB_PASS_HOURS * 3600, auth_time: authTime || now, ...claims }));
   return head + '.' + body + '.' + b64u(crypto.createHmac('sha256', secret).update(head + '.' + body).digest());
 }
-function verifyDbPass(tok) {
+function verifyDbPass(tok, graceMs = 0) {
   const secret = process.env.SUPABASE_JWT_SECRET;
   const [head, body, sig] = String(tok || '').split('.');
   if (!secret || !head || !body || !sig) return null;
@@ -92,8 +93,36 @@ function verifyDbPass(tok) {
   try {
     const c = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
     const now = Math.floor(Date.now() / 1000);
-    return c.iss === 'amansala-portal' && c.exp > now ? c : null;
+    return c.iss === 'amansala-portal' && c.exp + graceMs / 1000 > now ? c : null;
   } catch (e) { return null; }
+}
+
+// Signing someone out everywhere (2026-11-02): app_store 'session_revocations' = {"<kind>:<account id>": ISO time}. Passes
+// issued before that time are not renewed (session-refresh), so open pages sign out within minutes and a copied pass
+// stops working within the hour. Written when a password changes or an account is switched off or removed.
+// kind: 'staff' (admin and staff logins), 'spa', 'driver', 'confirm'. Teachers (no account) are never on it.
+const passKind = c => c && (c.kind || (c.app_role === 'admin' || c.app_role === 'staff' ? 'staff' : ['spa', 'driver', 'confirm'].includes(c.app_role) ? c.app_role : null));
+async function revokedAt(key, kind, id) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.session_revocations&select=value`, { headers: hdrs(key) });
+    const [row] = r.ok ? await r.json() : [];
+    const t = row && row.value && row.value[`${kind}:${id}`];
+    return t ? Date.parse(t) : 0;
+  } catch (e) { return 0; }
+}
+async function revokeSessions(key, kind, id) {
+  if (!kind || !id) return false;
+  for (let i = 0; i < 8; i++) {
+    const g = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.session_revocations&select=value,updated_at`, { headers: hdrs(key) });
+    const [row] = g.ok ? await g.json() : [];
+    const value = { ...((row && row.value) || {}), [`${kind}:${id}`]: new Date().toISOString() }, now = new Date().toISOString();
+    const r = row
+      ? await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.session_revocations&updated_at=eq.${encodeURIComponent(row.updated_at)}`, { method: 'PATCH', headers: { ...hdrs(key), Prefer: 'return=representation' }, body: JSON.stringify({ value, updated_at: now }) })
+      : await fetch(`${SUPABASE_URL}/rest/v1/app_store`, { method: 'POST', headers: { ...hdrs(key), Prefer: 'return=representation' }, body: JSON.stringify({ key: 'session_revocations', value, updated_at: now }) });
+    if (r.ok && (await r.json()).length) return true;
+    await new Promise(res => setTimeout(res, 80 + Math.random() * 200));
+  }
+  return false;
 }
 
 async function readBlob(key, kind) {
@@ -189,4 +218,4 @@ function staffFromEvent(event, opts = {}) {
 const cors = () => ({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token' });
 const reply = (code, data) => ({ statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
 
-module.exports = { staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };
+module.exports = { passKind, revokedAt, revokeSessions, staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };

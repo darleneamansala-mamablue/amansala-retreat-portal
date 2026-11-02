@@ -975,6 +975,8 @@ async function scAdminToggleActive(id){
   const a=staffConfirmAccounts.find(x=>x.id===id);if(!a)return;
   a.active=!a.active;
   await saveStaffConfirmAccounts();
+  // switched off: out of every device it is signed in on (within minutes)
+  if(!a.active){try{const token=sessionStorage.getItem('amansala_staff_token')||'';if(token)fetch('/.netlify/functions/portal-accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,action:'signOut',kind:'confirm',accountId:id})}).catch(()=>{});}catch(e){}}
   scRenderAdminAccounts();
 }
 async function scAdminTogglePayrollAdmin(id){

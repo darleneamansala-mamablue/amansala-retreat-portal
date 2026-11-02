@@ -8,7 +8,7 @@
 //   {token, action:'setActive', id, active}
 //   {token, action:'delete', id}
 const crypto = require('crypto');
-const { staffFromEvent } = require('./portal-auth-lib');
+const { staffFromEvent, revokeSessions } = require('./portal-auth-lib');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const reply = (code, data) => ({ statusCode: code, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token', 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -39,7 +39,8 @@ exports.handler = async (event) => {
       if (id) {
         const r = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { ...h, Prefer: 'return=representation' }, body: JSON.stringify(row) });
         const done = r.ok ? await r.json() : [];
-        if (done.length) return reply(200, { ok: true, id });
+        // a new password signs this person out everywhere (open pages within minutes)
+        if (done.length) { if (password) await revokeSessions(key, 'staff', id); return reply(200, { ok: true, id, signedOut: !!password }); }
         if (!password) return reply(400, { error: 'This account is not in the staff list yet — set a password to add it.' });
       }
       const newId = id || ('stf_' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex'));
@@ -50,11 +51,13 @@ exports.handler = async (event) => {
     if (!id) return reply(400, { error: 'Missing account' });
     if (b.action === 'setActive') {
       const r = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { ...h, Prefer: 'return=minimal' }, body: JSON.stringify({ active: !!b.active }) });
+      if (r.ok && !b.active) await revokeSessions(key, 'staff', id);   // switched off: out everywhere
       return reply(r.ok ? 200 : 500, { ok: r.ok });
     }
     if (b.action === 'delete') {
       if (String(who.sub) === id) return reply(400, { error: "You can't delete your own account." });
       const r = await fetch(`${SUPABASE_URL}/rest/v1/staff?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: { ...h, Prefer: 'return=minimal' } });
+      if (r.ok) await revokeSessions(key, 'staff', id);   // removed: out everywhere
       return reply(r.ok ? 200 : 500, { ok: r.ok });
     }
     return reply(400, { error: 'Unknown action' });
