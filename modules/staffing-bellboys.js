@@ -8,18 +8,19 @@
 const SBB_PEOPLE = ['Teo', 'Seg', 'Roman', 'Noe', 'Chino'];
 const SBB_LABEL = {};
 const SBB_KIND = {
-  bellboy: { title: 'Arrival bell boy', pick: 'Bell boy', count: d => d.arrivals, busy: () => sfCfg.arrivalsBusy, very: () => sfCfg.arrivalsVeryBusy, info: d => d.arrivals + ' guest' + (d.arrivals === 1 ? '' : 's') + ' arriving', toast: ' will be the arrival bell boy.' },
-  checkout: { title: 'Departure help (AM)', pick: 'Departure help', count: d => d.checkouts, busy: () => 5, very: () => sfCfg.checkoutsVeryBusy, info: d => d.checkouts + ' guest' + (d.checkouts === 1 ? '' : 's') + ' checking out', toast: ' will help with departures (AM).' },
+  bellboy: { title: 'Arrival bell boy', pick: 'Bell boy', count: d => d.arrivals, steps: [6, 10, 14], busy: () => sfCfg.arrivalsBusy, very: () => sfCfg.arrivalsVeryBusy, info: d => d.arrivals + ' guest' + (d.arrivals === 1 ? '' : 's') + ' arriving', toast: ' will be the arrival bell boy.' },
+  checkout: { title: 'Departure help (AM)', pick: 'Departure help', count: d => d.checkouts, steps: [5, 18], busy: () => 5, very: () => sfCfg.checkoutsVeryBusy, info: d => d.checkouts + ' guest' + (d.checkouts === 1 ? '' : 's') + ' checking out', toast: ' will help with departures (AM).' },
 };
 function sbbKey(kind, idx) { return idx === 1 ? kind : kind + idx; }
+function sbbPick(kind, i) { return kind === 'bellboy' && i === 4 ? 'Waiter' : SBB_KIND[kind].pick + ' ' + i; }
 function sbbBoxes(kind, d, gap, col) {
   const K = SBB_KIND[kind], v = K.count(d);
-  let n = v >= K.very() ? 3 : v >= K.busy() ? 2 : 1;
-  for (const k of [2, 3]) if (sfCovered(d.date, sbbKey(kind, k))) n = Math.max(n, k);   // never hide someone already assigned
+  let n = 1 + K.steps.filter(t => v >= t).length;
+  for (const k of [2, 3, 4]) if (sfCovered(d.date, sbbKey(kind, k))) n = Math.max(n, k);   // never hide someone already assigned
   let h = '';
   for (let i = 1; i <= n; i++) {
     const cur = sfCovered(d.date, sbbKey(kind, i)), g = i === 1 && gap, opts = ['', ...SBB_PEOPLE, ...(cur && !SBB_PEOPLE.includes(cur) ? [cur] : [])];
-    h += `<select onchange="sbbSet('${d.date}','${sbbKey(kind, i)}','${kind}',this.value)" style="padding:4px 7px;border:1.5px solid ${g ? col : '#d6cfc4'};border-radius:7px;font-size:12.5px;background:${g ? '#fef2f2' : '#fff'}" title="${K.pick} ${i}">${opts.map(o => `<option value="${sfEsc(o)}" ${o === cur ? 'selected' : ''}>${sfEsc(o ? (SBB_LABEL[o] || o) : K.pick + ' ' + i + ' — nobody yet')}</option>`).join('')}</select>`;
+    h += `<select onchange="sbbSet('${d.date}','${sbbKey(kind, i)}','${kind}',this.value)" style="padding:4px 7px;border:1.5px solid ${g ? col : '#d6cfc4'};border-radius:7px;font-size:12.5px;background:${g ? '#fef2f2' : '#fff'}" title="${sbbPick(kind, i)}">${opts.map(o => `<option value="${sfEsc(o)}" ${o === cur ? 'selected' : ''}>${sfEsc(o ? (SBB_LABEL[o] || o) : sbbPick(kind, i) + ' — nobody yet')}</option>`).join('')}</select>`;
   }
   return h;
 }
