@@ -24,6 +24,10 @@ const TR_DRV_STATUS={
   completed:{label:'Trip Completed',                     color:'#fff',   bg:'#115e59',border:'#115e59'},
   cancelled:{label:'Cancelled',                          color:'#6b7280',bg:'#f3f4f6',border:'#d1d5db'},
 };
+// Same room in a retreat's room list. "1b" (a bed) and "1B" (Garden Plus) are different rooms: a swap/upgrade that matched
+// them ignoring case once turned both into "1" and the 1B guests vanished from the retreat (Monica, 2026-11-02).
+// roomCodesEqual only ignores case for codes that are not taken twice; pages without it compare exactly.
+function _trSameRoom(a,b){a=String(a||'').trim();b=String(b||'').trim();return typeof roomCodesEqual==='function'?roomCodesEqual(a,b):a===b;}
 function trDrvKey(sub,kind){return sub.id+'_'+kind;}
 function trDrvRec(sub,kind){
   const dc=(typeof driverConfirmations!=='undefined')?driverConfirmations:null;
@@ -798,21 +802,20 @@ async function tr2SwapRooms(rowId, candidateRegId) {
     const bkB = tr2ActiveBooks.find(b => b.id === regB.bookingId);
     if (bkA && bkB && bkA.id === bkB.id) {
       const updated = (bkA.blockedRooms || []).map(r => {
-        const rl = r.trim().toLowerCase();
-        if (rl === roomA.trim().toLowerCase()) return roomB;
-        if (rl === roomB.trim().toLowerCase()) return roomA;
+        if (_trSameRoom(r, roomA)) return roomB;
+        if (_trSameRoom(r, roomB)) return roomA;
         return r;
       });
       await db.from('bookings').update({ blocked_rooms: updated }).eq('id', bkA.id);
       bkA.blockedRooms = updated;
     } else {
       if (bkA) {
-        const updatedA = (bkA.blockedRooms || []).map(r => r.trim().toLowerCase() === roomA.trim().toLowerCase() ? roomB : r);
+        const updatedA = (bkA.blockedRooms || []).map(r => _trSameRoom(r, roomA) ? roomB : r);
         await db.from('bookings').update({ blocked_rooms: updatedA }).eq('id', bkA.id);
         bkA.blockedRooms = updatedA;
       }
       if (bkB) {
-        const updatedB = (bkB.blockedRooms || []).map(r => r.trim().toLowerCase() === roomB.trim().toLowerCase() ? roomA : r);
+        const updatedB = (bkB.blockedRooms || []).map(r => _trSameRoom(r, roomB) ? roomA : r);
         await db.from('bookings').update({ blocked_rooms: updatedB }).eq('id', bkB.id);
         bkB.blockedRooms = updatedB;
       }
@@ -2039,7 +2042,7 @@ async function tr2ConfirmUpgrade(rowId, toRtId, selId, staffSelId, pretaxTotal, 
 
   if (bk) {
     const oldRoom = entry.room.trim();
-    const updatedBlocked = (bk.blockedRooms || []).map(r => r.trim().toLowerCase() === oldRoom.toLowerCase() ? newRoom : r);
+    const updatedBlocked = (bk.blockedRooms || []).map(r => _trSameRoom(r, oldRoom) ? newRoom : r);
     try { await db.from('bookings').update({ blocked_rooms: updatedBlocked }).eq('id', bk.id); bk.blockedRooms = updatedBlocked; saveAll(); }
     catch (e) { showToast('Upgrade OK — error actualizando blocked_rooms: ' + e.message); }
   }

@@ -186,7 +186,7 @@ function parseCsvImport(input){
       const refBk=bkForPreview||{startDate:dates?.start||'',endDate:dates?.end||''};
       const roomTotal=(rt&&name)?calcPrice(rt,guestCount,stayNights,dates?.start||refBk.startDate,refBk):null;
       const price=roomTotal!=null?+(roomTotal/guestCount).toFixed(2):null;
-      const existingReg=bkForPreview?AppData.regs.find(r=>r.bookingId===bkForPreview.id&&r.room.toLowerCase()===room.toLowerCase()):null;
+      const existingReg=bkForPreview?AppData.regs.find(r=>r.bookingId===bkForPreview.id&&roomCodesEqual(r.room,room)):null;
       rows.push({name,lodgeRaw,rtId:finalRtId,rtName:rt?.name||'',room,notes,guestCount,price,stayNights,dates,existingReg,warn:!rt&&!name?false:!rt});
     }
     if(selVal==='__new__'&&autoStart){
@@ -238,7 +238,7 @@ function confirmCsvImport(){
   let added=0,blocked=0,unknownRooms=0;
   Object.values(roomGroups).forEach(grp=>{
     const canonRoom=_findCanonicalRoom(grp.room)||grp.room;
-    const existingIdx=grp.room?AppData.regs.findIndex(r=>r.bookingId===targetBk.id&&r.room.toLowerCase()===canonRoom.toLowerCase()):-1;
+    const existingIdx=grp.room?AppData.regs.findIndex(r=>r.bookingId===targetBk.id&&roomCodesEqual(r.room,canonRoom)):-1;
     if(existingIdx>=0&&!overwrite)return;
     // Overwrite: update the room's existing registration (same id -- keeps its charges, payments and folio) instead of
     // removing it from memory only, which left the old row in the database next to the new one
@@ -251,7 +251,7 @@ function confirmCsvImport(){
     if(grp.blockOnly&&!grp.guests.length){
       if(canonRoom){
         const isSystemRoom=!!_findCanonicalRoom(canonRoom);
-        if(isSystemRoom&&!targetBk.blockedRooms.some(r=>r.toLowerCase()===canonRoom.toLowerCase())){targetBk.blockedRooms.push(canonRoom);blocked++;targetBk.blockedRoomsUpdatedAt=targetBk.updatedAt=new Date().toISOString();}
+        if(isSystemRoom&&!roomListIncludes(targetBk.blockedRooms,canonRoom)){targetBk.blockedRooms.push(canonRoom);blocked++;targetBk.blockedRoomsUpdatedAt=targetBk.updatedAt=new Date().toISOString();}
         else if(!isSystemRoom)unknownRooms++;
       }
       return;
@@ -260,7 +260,7 @@ function confirmCsvImport(){
     added++;
     if(canonRoom){
       const isSystemRoom=!!_findCanonicalRoom(canonRoom);
-      if(isSystemRoom){if(!targetBk.blockedRooms.some(r=>r.toLowerCase()===canonRoom.toLowerCase())){targetBk.blockedRooms.push(canonRoom);targetBk.blockedRoomsUpdatedAt=targetBk.updatedAt=new Date().toISOString();}}
+      if(isSystemRoom){if(!roomListIncludes(targetBk.blockedRooms,canonRoom)){targetBk.blockedRooms.push(canonRoom);targetBk.blockedRoomsUpdatedAt=targetBk.updatedAt=new Date().toISOString();}}
       else{unknownRooms++;}
     }
   });

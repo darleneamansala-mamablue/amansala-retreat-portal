@@ -237,6 +237,20 @@ async function test_directWriteNotInMemoryPatchesBase() {
   assert.strictEqual(db.T.registrations.get('g1').checked_in_at, null, 'the undo stands');
   assert.strictEqual(db.T.registrations.get('g1').notes, 'later');
 }
+// 12b. A whole room list written directly before memory has it (Transport upgrade / swap: write first, memory after) while
+//      another computer added a room to the same retreat: both kept, nothing written straight over it
+async function test_directWriteRoomListJoined() {
+  const db = fakeDb({ bookings: [bk('b1', { blocked_rooms: ['1b', '1B', '5'] })], app_store: [casOn] });
+  const t = makeTab(db);
+  await t.loadFromSupabase();
+  db.T.bookings.set('b1', { ...db.T.bookings.get('b1'), blocked_rooms: ['1b', '1B', '5', '7'], updated_at: stamp() });   // added elsewhere
+  const r = await t.db.from('bookings').update({ blocked_rooms: ['1', '1B', '5'] }).eq('id', 'b1');                   // 1b -> 1 here
+  assert.strictEqual(r.error, null);
+  await flush(t);
+  assert.deepStrictEqual([...db.T.bookings.get('b1').blocked_rooms].sort(), ['1', '1B', '5', '7']);
+  assert.ok(!db.log.some(l => l.table === 'bookings' && l.op === 'update' && l.payload && l.payload.blocked_rooms && !l.payload.updated_at && db.log.indexOf(l) >= 0 && JSON.stringify(l.payload.blocked_rooms) === '["1","1B","5"]'), 'not written straight');
+  assert.deepStrictEqual([...t.AppData.bookings[0].blockedRooms].sort(), ['1', '1B', '5', '7'], 'memory agrees');
+}
 // 13. Switch off: direct writes behave exactly as before
 async function test_directWriteSwitchOff() {
   const db = fakeDb({ bookings: [bk('b1')], app_store: [{ key: 'cas_sync', value: { mode: 'off' } }] });
@@ -504,6 +518,7 @@ async function test_newBookingAndRoomSameSave() {
   await run('new booking + its room in one save: no foreign-key refusal', test_newBookingAndRoomSameSave);
   await run('direct write of a settings column is joined, not overwritten', test_directWriteJoinedNotOverwritten);
   await run('direct write not in memory: written, and an undo elsewhere stands', test_directWriteNotInMemoryPatchesBase);
+  await run('room list written directly before memory has it: joined with a room added elsewhere', test_directWriteRoomListJoined);
   await run('switch off: direct writes unchanged', test_directWriteSwitchOff);
   await run('Block Rooms re-fetch does not revert later changes', test_blockRoomsRefetchRebased);
   await run('activities added in two tabs are both kept', test_activitiesBothKeptThroughPage);

@@ -1015,7 +1015,7 @@ function regMoveGuest(dragPayload,targetRoom,targetRtId){
     // partner, fromRoom is still legitimately occupied by `existing` -- just add the
     // new room.
     bk.blockedRooms=(!existing&&roomListIncludes(blocked,fromRoom))
-      ?blocked.map(r=>r.toLowerCase()===fromRoom.toLowerCase()?physicalTarget:r)
+      ?blocked.map(r=>roomCodesEqual(r,fromRoom)?physicalTarget:r)
       :[...blocked,physicalTarget];
     // Without this, syncToSupabase()'s staleness guard can silently skip uploading this
     // exact change -- same real incident/fix as rcMoveRoom (modules/venues.js) and

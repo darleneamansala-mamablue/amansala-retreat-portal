@@ -1611,9 +1611,9 @@ async function bdSaveDetails(){
       if(bk){
         const oldRoom=(subjBefore.room||'').trim();
         let blocked=bk.blockedRooms||[];
-        if(oldRoom&&blocked.some(r=>r.toLowerCase()===oldRoom.toLowerCase())){
-          blocked=blocked.map(r=>r.toLowerCase()===oldRoom.toLowerCase()?room:r);
-        }else if(!blocked.some(r=>r.toLowerCase()===room.toLowerCase())){
+        if(oldRoom&&roomListIncludes(blocked,oldRoom)){
+          blocked=blocked.map(r=>roomCodesEqual(r,oldRoom)?room:r);
+        }else if(!roomListIncludes(blocked,room)){
           blocked=[...blocked,room];
         }
         bk.blockedRooms=blocked;
@@ -1667,9 +1667,8 @@ async function _bdSwapGuestRooms(regA,regB,roomA,roomB,checkInA,checkOutA){
   // two separate ones when the guests belong to different bookings.
   if(bkA&&bkB&&bkA.id===bkB.id){
     const updated=(bkA.blockedRooms||[]).map(r=>{
-      const rl=r.toLowerCase();
-      if(rl===roomA.toLowerCase())return roomB;
-      if(rl===roomB.toLowerCase())return roomA;
+      if(roomCodesEqual(r,roomA))return roomB;
+      if(roomCodesEqual(r,roomB))return roomA;
       return r;
     });
     bkA.blockedRooms=updated;
@@ -1677,13 +1676,13 @@ async function _bdSwapGuestRooms(regA,regB,roomA,roomB,checkInA,checkOutA){
     catch(err){showToast('Intercambiados — error sincronizando blocked_rooms: '+err.message);}
   }else{
     if(bkA){
-      const updatedA=(bkA.blockedRooms||[]).map(r=>r.toLowerCase()===roomA.toLowerCase()?roomB:r);
+      const updatedA=(bkA.blockedRooms||[]).map(r=>roomCodesEqual(r,roomA)?roomB:r);
       bkA.blockedRooms=updatedA;
       try{await db.from('bookings').update({blocked_rooms:updatedA}).eq('id',bkA.id);}
       catch(err){showToast('Intercambiados — error sincronizando blocked_rooms: '+err.message);}
     }
     if(bkB){
-      const updatedB=(bkB.blockedRooms||[]).map(r=>r.toLowerCase()===roomB.toLowerCase()?roomA:r);
+      const updatedB=(bkB.blockedRooms||[]).map(r=>roomCodesEqual(r,roomB)?roomA:r);
       bkB.blockedRooms=updatedB;
       try{await db.from('bookings').update({blocked_rooms:updatedB}).eq('id',bkB.id);}
       catch(err){showToast('Intercambiados — error sincronizando blocked_rooms: '+err.message);}

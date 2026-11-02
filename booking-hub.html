@@ -4707,11 +4707,11 @@ function casAfterFetch(table,sqlRows){const t=_casTbl(table);if(t)casRebaseRows(
 function casAfterPartialFetch(table,id,sqlCols){const t=_casTbl(table);if(t&&sqlCols)casPatchBase(t.base,id,sqlCols);}
 // ~55 places write a booking/registration column straight to SQL (db.from('bookings').update({...}).eq('id',x)), most of
 // them right after saveAll(). With the safety net on, each one goes through here:
-//  - the value is already in memory (the usual case) -> the direct write is skipped and the save is left to CAS, which
+//  - the row is in memory -> the value is put in memory if it is not there yet, the direct write is skipped and the save is left to CAS, which
 //    joins it with whatever someone else changed meanwhile instead of overwriting the whole column (package_custom_prices
 //    holds tax rate, hidden room numbers, meal times... in one column; blocked_rooms is one list for the whole retreat).
 //    The caller's await still waits for that save to land.
-//  - otherwise (value not in memory, a column CAS does not handle, a filter other than one id, or .select() asked for the
+//  - otherwise (row not in memory, a column CAS does not handle, a filter other than one id, or .select() asked for the
 //    row back) -> written directly as before, and the baseline is told, so it is not undone by this tab's next save.
 // The CAS engine itself uses the raw client (_dbRaw) and never passes through here. With the safety net off, nothing changes.
 const _dbRaw={from:db.from.bind(db)};
@@ -4741,8 +4741,18 @@ function _casDirectUpdate(table,payload,st,exec){
     const row=t.rows.find(r=>r.id===st.ids[0]);
     if(row&&t.base.has(row.id)){
       const mem=t.toSql(row);
-      if(cols.every(c=>_casSame(mem[c],payload[c])))
-        return Promise.resolve(saveAll()).then(()=>_saveAllBusy).then(()=>({data:null,error:null}),()=>({data:null,error:null}));
+      // A value the screen has not put in memory yet (a whole room list computed for a swap, the Transport upgrade...) is
+      // put there first, so CAS saves it as this tab's edit: written straight, it replaced the whole column and undid
+      // whatever another computer changed in it since this tab loaded
+      let ok=cols.every(c=>_casSame(mem[c],payload[c]));
+      if(!ok){
+        const before=t.fromSql(mem),after=t.fromSql({...mem,...JSON.parse(JSON.stringify(payload))});
+        const edits=Object.keys(after).filter(k=>!_casSame(before[k],after[k]));
+        const check=t.toSql({...row,...Object.fromEntries(edits.map(k=>[k,after[k]]))});
+        // only when memory then holds exactly what was asked; otherwise written directly, as below
+        if(cols.every(c=>_casSame(check[c],payload[c]))){edits.forEach(k=>{row[k]=after[k];});ok=true;}
+      }
+      if(ok)return Promise.resolve(saveAll()).then(()=>_saveAllBusy).then(()=>({data:null,error:null}),()=>({data:null,error:null}));
     }
   }
   return exec().then(r=>{
@@ -4919,6 +4929,10 @@ async function syncToSupabase(){
         }
         return;
       }
+      // Safety net on for everyone but this save takes the old path (rewrites every row this tab holds): real case
+      // 2026-11-02 11:34 Cancún, all 254 bookings + 2004 registrations rewritten in one go. Logged once per page so the
+      // Sync Log shows who and why.
+      if(_casRemoteMode==='on')casLogEvent('legacy','bookings',[{id:'bulk',reason:_casBaseReady?'safety net off on this computer (amansala_cas_sync=0)':'saved before the page finished loading'}]);
       // registrations can exceed PostgREST's 1000-row page cap (1900+ rows in
       // production) — a plain .select() would silently truncate remoteRegMap and
       // make every registration past row 1000 look "missing from Supabase", which
@@ -6842,7 +6856,7 @@ function switchTab(id,btn){
 <script src="modules/reports.js?v=20261020j"></script>
 <script src="modules/reports-daily-categories.js?v=20261021a"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20261101a"></script>
+<script src="modules/teacher-portal.js?v=20261102a"></script>
 <script src="modules/room-list-notes.js?v=20261026a"></script>
 <script src="modules/room-list-maint-note.js?v=20261027a"></script>
 <script src="modules/shala-chica-rooftop.js?v=20261024a"></script>
@@ -6909,7 +6923,7 @@ function switchTab(id,btn){
 <script src="modules/payments.js?v=20261101b"></script>
 <script src="modules/room-activities.js"></script>
 <script src="modules/tour-picker.js?v=20261027a"></script>
-<script src="modules/booking-detail.js?v=20261101a"></script>
+<script src="modules/booking-detail.js?v=20261102a"></script>
 <script>
 // ===== PAYMENT RECORDING — moved to modules/payments.js =====
 // ===== PIPELINE STEPS — moved to modules/payments.js (loaded above) =====
@@ -6943,7 +6957,7 @@ function switchTab(id,btn){
 // ===== FILL SAMPLE RETREATS — moved to modules/demo-seed.js (loaded above) =====
 // ===== TEACHER SCHEDULE — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/transport.js?v=20261024a"></script>
+<script src="modules/transport.js?v=20261102a"></script>
 <script src="modules/transport-balances.js?v=20261023a"></script>
 <script src="modules/kitchen-week.js?v=20261027k"></script>
 <script>
@@ -7160,7 +7174,7 @@ if(location.protocol!=='file:'){
 <script src="modules/menu-cost-edit.js?v=20261025a"></script>
 <script src="modules/menu-kitchen-costing.js?v=20261021a"></script>
 <script src="modules/double-charges.js?v=20261023a"></script>
-<script src="modules/sync-log.js?v=20261101c"></script>
+<script src="modules/sync-log.js?v=20261102a"></script>
 <script src="modules/checkout-balances.js?v=20261101a"></script>
 <script src="modules/host-checklist.js?v=20261029a"></script>
 <script src="modules/host-checklist-all.js?v=20261029d"></script>
@@ -7196,7 +7210,7 @@ if(location.protocol!=='file:'){
 <script>
 // ===== MENU TAB — moved to modules/menu.js =====
 </script>
-<script src="modules/import-export.js?v=20261101a"></script>
+<script src="modules/import-export.js?v=20261102a"></script>
 <script>
 // ===== CSV IMPORT — moved to modules/import-export.js =====
 // ===== RETREAT GURU IMPORT — moved to modules/import-export.js (loaded above) =====
