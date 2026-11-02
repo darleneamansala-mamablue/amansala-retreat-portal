@@ -44,6 +44,9 @@ async function sbbSet(date, key, kind, name) {
 SBB_KIND.tourguide = { title: 'Tour guide', pick: 'Tour guide', people: ['Fernando', 'Sergio', 'Yolanda'], toast: ' will be the tour guide.' };
 SBB_KIND.yoga = { title: 'Yoga', pick: 'Yoga teacher', people: ['Yolanda', 'Darlene', 'Kun', 'Sergio', 'Kike', 'Maya'], toast: ' will teach yoga.' };
 SBB_KIND.icebath = { title: 'Ice Bath', pick: 'Ice Bath', people: ['Ryan', 'Sergio', 'Fernando'], toast: ' will run the ice bath.' };
+SBB_KIND.fitness = { title: 'Fitness Classes', pick: 'Fitness teacher', people: ['Ryan', 'Fernando', 'Sergio'], toast: ' will teach fitness.' };
+SBB_KIND.pilates = { title: 'Pilates', pick: 'Pilates teacher', people: ['Adele', 'Sergio', 'Michelle'], toast: ' will teach pilates.' };
+SBB_KIND.mayanclay = { title: 'Mayan Clay', pick: 'Mayan Clay', people: ['Yolanda', 'Darlene', 'Sergio'], toast: ' will run Mayan Clay.' };
 const sbbShow = {};   // boxes opened with "+ another" this visit
 function sbbInHouse(date) {
   return (AppData.bookings || []).some(b => b && b.status !== 'cancelled' && !(b.flags || []).includes('archived') && b.bookingType !== 'room_only' && b.startDate && b.endDate && String(b.startDate).slice(0, 10) <= date && date <= String(b.endDate).slice(0, 10));
@@ -61,4 +64,4 @@ function sbbCrewRow(kind, d) {
   if (n < 3) h += `<button onclick="sbbShow['${d.date}${kind}']=${n + 1};sfRender()" style="padding:3px 9px;border:1.5px dashed #b9b0a3;border-radius:7px;background:#fff;font-size:12px;font-weight:600;color:#4b5563;cursor:pointer">+ another</button>`;
   return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:3px 0"><b style="min-width:122px;color:#166534">${K.title}</b><span style="min-width:130px"></span>${h}</div>`;
 }
-window.sfCrewRows = d => sbbInHouse(d.date) ? sbbCrewRow('tourguide', d) + sbbCrewRow('yoga', d) + sbbCrewRow('icebath', d) : '';
+window.sfCrewRows = d => sbbInHouse(d.date) ? sbbCrewRow('tourguide', d) + sbbCrewRow('yoga', d) + sbbCrewRow('icebath', d) + sbbCrewRow('fitness', d) + sbbCrewRow('pilates', d) + sbbCrewRow('mayanclay', d) : '';
