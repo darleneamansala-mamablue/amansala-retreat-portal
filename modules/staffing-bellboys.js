@@ -9,7 +9,7 @@ const SBB_PEOPLE = ['Teo', 'Seg', 'Roman', 'Noe', 'Chino'];
 const SBB_LABEL = {};
 const SBB_KIND = {
   bellboy: { title: 'Arrival bell boy', pick: 'Bell boy', count: d => d.arrivals, busy: () => sfCfg.arrivalsBusy, very: () => sfCfg.arrivalsVeryBusy, info: d => d.arrivals + ' guest' + (d.arrivals === 1 ? '' : 's') + ' arriving', toast: ' will be the arrival bell boy.' },
-  checkout: { title: 'Departure help (AM)', pick: 'Departure help', count: d => d.checkouts, busy: () => sfCfg.checkoutsBusy, very: () => sfCfg.checkoutsVeryBusy, info: d => d.checkouts + ' guest' + (d.checkouts === 1 ? '' : 's') + ' checking out', toast: ' will help with departures (AM).' },
+  checkout: { title: 'Departure help (AM)', pick: 'Departure help', count: d => d.checkouts, busy: () => 5, very: () => sfCfg.checkoutsVeryBusy, info: d => d.checkouts + ' guest' + (d.checkouts === 1 ? '' : 's') + ' checking out', toast: ' will help with departures (AM).' },
 };
 function sbbKey(kind, idx) { return idx === 1 ? kind : kind + idx; }
 function sbbBoxes(kind, d, gap, col) {
