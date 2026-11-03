@@ -1,4 +1,4 @@
-// ===== daily-shalas.js — the Daily Shalas page, opened by the short link /dailyshalas =====
+// ===== daily-shalas.js — the Daily Shalas page, opened at amansalaportal.com/dailyshalas (address and login handled by modules/tab-urls.js) =====
 // Loaded as a classic script AFTER teacher-portal.js and daily-briefing.js; shares global scope.
 // Standalone: adds a "Daily Shalas" button to the sidebar and its own page. It lists the day's classes in time order
 // (the SAME skedGetRetreatEvents(date) the scheduler and the Daily Briefing draw from) with the shala, start and end time and
@@ -92,8 +92,8 @@ function dsOpen(btn) {
     const panel = document.createElement('div');
     panel.className = 'tab-panel'; panel.id = 'tab-dailyshalas'; panel.style.flexDirection = 'column';
     panel.innerHTML = `<div class="panel-toolbar"><h2>Daily Shalas</h2>
-      <div class="toolbar-right" style="gap:8px">
-        <button class="btn btn-secondary" onclick="dsNav(-1)">&#8249;</button><span id="dshalaDate" style="font-weight:700;font-size:13px;min-width:190px;text-align:center"></span><button class="btn btn-secondary" onclick="dsNav(1)">&#8250;</button>
+      <div class="toolbar-right" style="gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="dsNav(-1)">&#8249;</button><span id="dshalaDate" style="font-weight:700;font-size:13px;min-width:140px;text-align:center"></span><button class="btn btn-secondary" onclick="dsNav(1)">&#8250;</button>
         <button class="btn btn-secondary" onclick="dsNav(0)">Today</button></div></div>
       <div id="dshalaBody" style="flex:1;overflow-y:auto;padding:20px;background:#f0ece4"><div style="padding:40px;text-align:center;color:#9ca3af">Loading…</div></div>`;
     me.parentElement.insertBefore(panel, me.nextSibling);
@@ -103,14 +103,5 @@ function dsOpen(btn) {
     btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M10 21v-6h4v6"/></svg><span class="tab-label">Daily Shalas</span>';
     const brief = document.getElementById('dailyBriefTabBtn');
     if (brief) brief.parentElement.insertBefore(btn, brief.nextSibling); else me.parentElement.appendChild(btn);
-    // the short link /dailyshalas lands on booking-hub.html?go=dailyshalas: once someone is signed in, open this page
-    if (new URLSearchParams(location.search).get('go') === 'dailyshalas') {
-      let tries = 0;
-      const t = setInterval(() => {
-        const signedIn = typeof getCurrentSession === 'function' && getCurrentSession();
-        if (signedIn && typeof switchTab === 'function' && typeof AppData !== 'undefined' && (AppData.bookings || []).length) { clearInterval(t); dsOpen(btn); }
-        else if (++tries > 600) clearInterval(t);   // give up after ~5 minutes on the login screen
-      }, 500);
-    }
   } catch (e) { console.warn('[daily-shalas]', e); }
 })();

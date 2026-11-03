@@ -26,8 +26,8 @@ https://amansala-portal.netlify.app/*  https://amansalaportal.com/:splat  301!
 # the catch-all shortlink rule below so it isn't swallowed by it.
 /spa-staff  /booking-hub.html?mode=spa-staff  302
 
-# Daily Shalas: the shala team signs in with their staff login and taps Start / Finish on each shala.
-/dailyshalas  /booking-hub.html?go=dailyshalas  302
+# Daily Shalas (modules/daily-shalas.js): the shala team signs in with their staff login and taps Start / Finish on each shala. Same kind of address as the sections above; stays above the /:slug catch-all.
+/dailyshalas  /booking-hub.html  200
 
 # Public spa booking link for the 60 minute Crystal Balancing offer (service flagged offer=crystal). A 302, like /spa-staff, so the page sees ?offer=crystal.
 /spa-crystal  /spa-booking.html  302
