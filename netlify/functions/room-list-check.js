@@ -158,7 +158,13 @@ async function run({ send = true, numbers: only } = {}) {
       if ((last.moved || []).length) problems.push({ kind: 'cbmoved', at: today, text: `Cloudbeds ajustado al portal (${last.moved.length}): ${last.moved.join(' · ')}` });
     }
   } catch (e) { console.warn('[room-list-check] cb sync', e.message); }
-  const rank = { clash: 0, nocharge: 1, cbsync: 2, outside: 3, duplicate: 4, transport: 5, cbmoved: 6 };
+  // 7. this morning's scan for copies in Cloudbeds (cb-dup-scan.js, 6:40am)
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.cb_dup_scan_last&select=value`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+    const last = ((await r.json())[0] || {}).value || null;
+    if (last && last.date === today) for (const t of last.copies || []) problems.push({ kind: 'cbcopy', at: today, text: `Copia en Cloudbeds: ${t}` });
+  } catch (e) { console.warn('[room-list-check] cb copies', e.message); }
+  const rank = { clash: 0, nocharge: 1, cbsync: 2, cbcopy: 3, outside: 4, duplicate: 5, transport: 6, cbmoved: 7 };
   problems.sort((a, b) => rank[a.kind] - rank[b.kind] || String(a.at).localeCompare(String(b.at)));
   const msg = message(problems);
   const out = { date: today, bookings: bookings.length, problems: problems.map(p => p.text), sent: 0, failed: 0 };

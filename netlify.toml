@@ -51,6 +51,12 @@
   schedule = "30 11 * * *"
   timeout = 26
 
+# Copies in Cloudbeds: the same guest with two active reservations for the same dates, next 30 days (by check-in, so
+# the ones the window list leaves out are found too). Report only, in the 7am room check. 11:40 UTC = 6:40am Tulum.
+[functions."cb-dup-scan"]
+  schedule = "40 11 * * *"
+  timeout = 26
+
 # Daily room check (Jorge's ask 2026-11-03): guests outside their retreat's room list, the same guest twice, a room
 # given to two bookings on the same nights -> one WhatsApp to app_store 'room_check_alert' numbers. 12:00 UTC = 7am Tulum.
 [functions."room-list-check"]
