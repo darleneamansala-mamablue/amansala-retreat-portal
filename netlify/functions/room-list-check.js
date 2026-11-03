@@ -6,7 +6,10 @@
 //      do not show them),
 //   2. the same guest twice in one retreat (copies like Stephanie Cleary in CH7, Muffett Mayet in GV7),
 //   3. a room given to guests of two different bookings on the same nights (GV7 Nov 4-6, room 10 Feb 6-9),
-//   4. the same guest's transport form twice in one retreat (Lisa de Saxe Zerden, Heather Kasey).
+//   4. the same guest's transport form twice in one retreat (Lisa de Saxe Zerden, Heather Kasey),
+//   5. a ride that should already be on the guest's folio and is not: today's arrivals (charged the night before) and the
+//      departures of today and tomorrow (charged two days ahead). Real case: the 2026-11-02 night run left the Nov 3 arrivals
+//      of Heather Kasey and Kathleen Railey uncharged, found only by hand.
 // When it finds something it sends one WhatsApp (template amansala_revision_cuartos, via Visito) to each number in
 // app_store 'room_check_alert' = {numbers: ['+52...'], enabled: true}. Nothing found = nothing sent.
 // room-list-check-now.js runs the same check on demand (admin pass) and can return the result without sending.
@@ -15,7 +18,8 @@ const VISITO_API = 'https://platform-api.visitoai.com/m2m/v1';
 const CHANNEL_ID = '6abd2154f6a6b5cd69232824';   // WhatsApp +52 1 984 879 5999
 const TEMPLATE_NAME = 'amansala_revision_cuartos';
 const TEMPLATE_LANG = 'es_MX';
-const MAX_DETAIL = 900;   // Meta caps a template body; the rest is summarised as "y N más"
+const MAX_DETAIL = 900;
+const { runCharges } = require('./transport-charge-lib');   // Meta caps a template body; the rest is summarised as "y N más"
 
 const localDate = (offsetDays = 0) => new Date(Date.now() + offsetDays * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Cancun' });
 function fmtDateEsWeekday(d) {
@@ -103,7 +107,7 @@ function findProblems(bookings, regs, today, transport = []) {
     trSeen.add(key);
     problems.push({ kind: 'transport', at: list[0].b.start_date, text: `Transporte repetido en ${label(list[0].b)}: ${list.map(x => x.name).join(' / ')}` });
   }
-  const order = { clash: 0, outside: 1, duplicate: 2, transport: 3 };
+  const order = { clash: 0, nocharge: 1, outside: 2, duplicate: 3, transport: 4 };
   problems.sort((a, b) => order[a.kind] - order[b.kind] || String(a.at).localeCompare(String(b.at)));
   return problems;
 }
@@ -129,6 +133,15 @@ async function run({ send = true, numbers: only } = {}) {
   const regs = (await getAll(key, 'registrations?select=id,booking_id,room,guests,check_in,check_out,cancelled&order=id')).filter(r => ids.has(String(r.booking_id)));
   const transport = (await getAll(key, 'transport?select=id,booking_id,data&order=id')).filter(t => ids.has(String(t.booking_id || (t.data || {}).bookingId)));
   const problems = findProblems(bookings, regs, today, transport);
+  // 5. rides that should be charged by now: what the nightly run would still add (a dry run, nothing written)
+  for (const [direction, date] of [['arrival', today], ['departure', today], ['departure', localDate(1)]]) {
+    try {
+      const res = await runCharges(key, { direction, date, mode: 'insertOnly', dryRun: true });
+      for (const c of res.charged) problems.push({ kind: 'nocharge', at: date, text: `Sin cobro de transporte: ${c.names || c.room || 'grupo'}${c.room ? ` (${c.room})` : ''}, ${direction === 'arrival' ? 'llegada' : 'salida'} ${fmtShort(date)}` });
+    } catch (e) { console.warn('[room-list-check] charge check', direction, date, e.message); }
+  }
+  const rank = { clash: 0, nocharge: 1, outside: 2, duplicate: 3, transport: 4 };
+  problems.sort((a, b) => rank[a.kind] - rank[b.kind] || String(a.at).localeCompare(String(b.at)));
   const msg = message(problems);
   const out = { date: today, bookings: bookings.length, problems: problems.map(p => p.text), sent: 0, failed: 0 };
   if (!problems.length || !send) return out;
