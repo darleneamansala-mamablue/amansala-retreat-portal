@@ -60,3 +60,12 @@ const trs = [
 const tp = findProblems(tb, [], '2026-11-03', trs);
 assert.deepStrictEqual(tp.map(x => x.text), ['Transporte repetido en Heather Kasey: Lisa de Saxe Zerden / Lisa Zerded'], 'one transport repeat; partner and past rides not counted');
 console.log('transport repeats: ok');
+// a whole room clashes with its own beds; two beds of one room do not; "1B" is its own room, not a bed of "1"
+const wb = [{ id: 'J', retreat_name: 'Just Breathe', start_date: '2026-11-01', end_date: '2026-11-06', status: 'confirmed', blocked_rooms: ['4B', '1a', '1b', '1B'] },
+            { id: 'W', retreat_name: 'Wendy Oberg', start_date: '2026-11-04', end_date: '2026-11-08', status: 'confirmed', blocked_rooms: ['4B -a', '4B -b'] }];
+const wr = [{ booking_id: 'J', room: '4B', guests: g('Hayden Bedsole') }, { booking_id: 'W', room: '4B -a', guests: g('Holly Thomas') }, { booking_id: 'W', room: '4B -b', guests: g('Megan Zich') },
+            { booking_id: 'J', room: '1a', guests: g('Jill Lane') }, { booking_id: 'J', room: '1b', guests: g('Sophie Sharp') }, { booking_id: 'J', room: '1B', guests: g('Jason Rhein') }];
+const wp = findProblems(wb, wr, '2026-11-03').filter(x => x.kind === 'clash').map(x => x.text);
+assert.strictEqual(wp.length, 2, 'Hayden clashes with both 4B beds, nothing else: ' + JSON.stringify(wp));
+assert.ok(wp.every(t => /^4B \/ 4B -[ab] 4 nov–6 nov: Hayden Bedsole/.test(t)), JSON.stringify(wp));
+console.log('whole room vs its beds: ok');

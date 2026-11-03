@@ -63,26 +63,35 @@ function findProblems(bookings, regs, today, transport = []) {
       problems.push({ kind: 'duplicate', at: b.start_date, text: `${shown} repetida en ${label(b)} (${rooms.join(', ')})` });
     }
   }
-  // 3. one room, two bookings, same nights (the same person on both sides is a Cloudbeds copy of the stay, not a clash)
+  // 3. one room, two bookings, same nights (the same person on both sides is a Cloudbeds copy of the stay, not a clash).
+  //    A whole room also clashes with its own beds: "4B" with "4B -a"/"4B -b", "1" with "1a"/"1b" (Hayden Bedsole in 4B over
+  //    Wendy Oberg's 4B -a/-b, 2026-11-03). A capital letter is its own room ("1B", "19B"), only a lowercase one or " -a" is a bed.
+  const bedOf = room => { const m = /^(.+?)\s*-\s*[a-d]$/i.exec(room) || /^(.*\d)([a-d])$/.exec(room); return m ? m[1].trim() : null; };
+  const physical = room => bedOf(room) || room;
+  const clashes = (a, b) => a === b || (bedOf(a) === null && bedOf(b) === a) || (bedOf(b) === null && bedOf(a) === b);
   const byRoom = new Map();
   for (const r of active) {
     if (!r.room) continue;
     const b = live.get(String(r.booking_id));
     const ci = r.check_in || b.start_date, co = r.check_out || b.end_date;
     if (!ci || !co) continue;
-    if (!byRoom.has(r.room)) byRoom.set(r.room, []);
-    byRoom.get(r.room).push({ r, b, ci, co });
+    const k = physical(r.room);
+    if (!byRoom.has(k)) byRoom.set(k, []);
+    byRoom.get(k).push({ r, b, ci, co });
   }
-  for (const [room, list] of byRoom) {
+  for (const [, list] of byRoom) {
     list.sort((x, y) => x.ci.localeCompare(y.ci));
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
       const x = list[i], y = list[j];
       if (y.ci >= x.co) break;
-      if (String(x.b.id) === String(y.b.id)) continue;
+      if (!clashes(x.r.room, y.r.room)) continue;
+      const sameRoom = x.r.room === y.r.room;
+      if (sameRoom && String(x.b.id) === String(y.b.id)) continue;
       const nx = names(x.r).map(norm), ny = names(y.r).map(norm);
       if (nx.some(n => ny.some(m => n.includes(m) || m.includes(n)))) continue;
       const from = y.ci > x.ci ? y.ci : x.ci, to = y.co < x.co ? y.co : x.co;
-      problems.push({ kind: 'clash', at: from, text: `${room} ${fmtShort(from)}–${fmtShort(to)}: ${names(x.r).join(' / ')} (${label(x.b)}) y ${names(y.r).join(' / ')} (${label(y.b)})` });
+      const where = sameRoom ? x.r.room : `${x.r.room} / ${y.r.room}`;
+      problems.push({ kind: 'clash', at: from, text: `${where} ${fmtShort(from)}–${fmtShort(to)}: ${names(x.r).join(' / ')} (${label(x.b)}) y ${names(y.r).join(' / ')} (${label(y.b)})` });
     }
   }
   // 4. the same guest's transport form twice in one retreat (same email + first name, or same full name) -- shows
