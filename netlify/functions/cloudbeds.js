@@ -428,6 +428,32 @@ exports.handler = async (event) => {
         return ok(h, { success: true, reservations: out });
       }
 
+      case "getReservationMoney": {
+        // Read only (2026-11-03): contact, source, total, paid and balance of reservations, to import Cloudbeds-only
+        // reservations into the portal with their money. Up to 40 ids per call.
+        const ids = (Array.isArray(body.reservationIds) ? body.reservationIds : []).map(String).slice(0, 40);
+        const out = {};
+        for (let i = 0; i < ids.length; i += 8) {
+          await Promise.all(ids.slice(i, i + 8).map(async id => {
+            const res = await cbGet(tok, "/getReservation", { reservationID: id }).catch(() => null);
+            const d = res?.data;
+            if (!d) { out[id] = { error: true }; return; }
+            const g = d.guestList && typeof d.guestList === "object" ? Object.values(d.guestList)[0] : null;
+            const bd = d.balanceDetailed || {};
+            out[id] = {
+              status: d.status, startDate: d.startDate, endDate: d.endDate, source: d.sourceName || d.source || null,
+              guest: g ? [g.guestFirstName, g.guestLastName].filter(Boolean).join(" ") : (d.guestName || ""),
+              email: (g && g.guestEmail) || d.guestEmail || "", phone: (g && (g.guestPhone || g.guestCellPhone)) || "",
+              adults: Number(d.adults || (g && g.adults) || 0) || null,
+              total: Number(d.total ?? bd.grandTotal ?? 0), paid: Number(bd.paid ?? 0), balance: Number(d.balance ?? bd.balance ?? 0),
+              subTotal: Number(bd.subTotal ?? 0), taxes: Number(bd.taxesFees ?? 0), dateCreated: d.dateCreated || null,
+              thirdPartyId: d.thirdPartyIdentifier || null,
+            };
+          }));
+        }
+        return ok(h, { success: true, reservations: out });
+      }
+
       case "searchReservations": {
         // Read only (2026-11-03): getReservations with a few extra filters, to find reservations the date-window list leaves
         // out (copies behind rooms Cloudbeds called taken: Courtney in 8, Angela Wagner in 1B). Returns ids, names, dates,
