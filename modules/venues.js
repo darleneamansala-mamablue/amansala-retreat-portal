@@ -2995,9 +2995,19 @@ let rcExtReqSeq=0;
 // they're guests only identifiable via one of these grey boxes). Rendering
 // from the last-known `externalReservations` immediately, before kicking
 // off a fresh fetch to replace it, means something is always on screen.
+// Cloudbeds reservations the portal already shows inside another stay, so the calendar does not draw them as a separate
+// box (app_store 'cb_hidden_reservations' = { "<reservation id>": {why, by, at} }). Real case 2026-11-03: Anne Marie
+// McMichael & Jim Kofron's Feb 16-17 night is part of their Heather Rex registration (Feb 12-17) in the portal, but in
+// Cloudbeds it is its own reservation because the group block ends Feb 16.
+let rcHiddenCbIds=null;
+async function rcLoadHiddenCbIds(){
+  try{const{data}=await db.from('app_store').select('value').eq('key','cb_hidden_reservations').maybeSingle();rcHiddenCbIds=new Set(Object.keys((data&&data.value)||{}));}
+  catch(e){rcHiddenCbIds=new Set();}
+}
 function rcRenderExternalReservations(reservations,startMs){
   const portalResIds=new Set();
   AppData.bookings.forEach(bk=>Object.values(bk.cbReservationIds||{}).forEach(id=>{if(id)portalResIds.add(String(id));}));
+  (rcHiddenCbIds||[]).forEach(id=>portalResIds.add(String(id)));
   const allTracks=[...document.querySelectorAll('[data-room]')];
   const trackNames=allTracks.map(t=>t.getAttribute('data-room'));
   allTracks.forEach(t=>t.querySelectorAll('.bk[data-ext="1"]').forEach(el=>el.remove()));
@@ -3095,6 +3105,7 @@ async function rcFetchExternalReservations(startMs){
   if(mySeq!==rcExtReqSeq)return; // superseded by a newer window while this was in flight
   if(!data?.success){console.warn('[rcExternal]',data?.error);return;}
   externalReservations=data.reservations||[];
+  if(!rcHiddenCbIds)await rcLoadHiddenCbIds();
   rcRenderExternalReservations(externalReservations,startMs);
 }
 // Cancels a raw Cloudbeds-only reservation straight from the Room Calendar —
