@@ -31,6 +31,7 @@ function tcwBuildRows() {
     (bk.retreatActivities || []).forEach(a => {
       const d = String(a.date || '').slice(0, 10);
       if (!a || !ids.includes(a.aoId) || !days.includes(d)) return;
+      if (typeof ADD_ONS !== 'undefined' && !ADD_ONS.some(x => x.id === a.aoId)) return;   // tour removed from the catalog
       const k = a.aoId + '|' + d;
       const r = map[k] = map[k] || { key: k, aoId: a.aoId, date: d, times: [], groups: [] };
       if (a.time) r.times.push(a.time);

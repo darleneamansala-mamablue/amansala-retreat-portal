@@ -8,7 +8,7 @@ const TOUR_DEFAULT_TIMES_KEY='amansala_tour_default_times';
 // SKED_AUTO_TEMPLATE in modules/teacher-portal.js) so the panel starts out
 // showing what was actually in use, not a blank slate.
 const TOUR_DEFAULT_TIMES_SEED={
-  ao1:'11:45', ao2:'10:30', ao3:'11:45', ao4:'19:15', ao5:'19:15',
+  ao1:'11:45', ao2:'10:30', ao4:'19:15', ao5:'19:15',
   ao6:'11:45', ao7:'11:45', ao9:'15:00', ao10:'15:00', ao12:'20:30',
   ao13:'19:30', ao14:'17:00', ao16:'11:45',
 };
@@ -70,7 +70,7 @@ const TOUR_WEEKDAYS_KEY='amansala_tour_weekdays';
 // was Monday-only). Gitano (ao13, driven by the offsite-night picker) and
 // anything added later default to no scheduled days until set here.
 const TOUR_WEEKDAYS_SEED={
-  ao1:[1], ao2:[4], ao3:[3,5], ao4:[1,5], ao5:[2,6],
+  ao1:[1], ao2:[4], ao4:[1,5], ao5:[2,6],
   ao6:[2,6], ao7:[0], ao9:[3,6], ao10:[0,4], ao12:[0,3], ao14:[2,5],
 };
 let TOUR_WEEKDAYS={...TOUR_WEEKDAYS_SEED};
