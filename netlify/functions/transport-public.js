@@ -142,9 +142,19 @@ exports.handler = async (event) => {
       prev = row || null;
       if (!row) id = '';
     }
+    if (bookingId === 'individual') { const m = await autoMatch(key, email, firstName, lastName); if (m) guest.bookingId = m; }
+    // the same guest sending the form again from the general link (not their update link) updates their entry instead
+    // of adding a second one (Lisa de Saxe Zerden, Heather Kasey: Aug 21 and again Sep 6, same flights -> twice on
+    // Transport). Same retreat + same email + same first name; couples sharing one email keep separate entries.
+    if (!prev && guest.bookingId !== 'individual') {
+      const em = email.toLowerCase(), fn = normName(firstName);
+      const rows = await getAll(key, `transport?booking_id=eq.${encodeURIComponent(guest.bookingId)}&select=id,booking_id,data`);
+      const same = rows.filter(r => r.data && String(r.data.email || '').toLowerCase().trim() === em && normName(r.data.firstName) === fn)
+        .sort((x, y) => String(x.data.submittedAt || '').localeCompare(String(y.data.submittedAt || '')));
+      if (same.length) { prev = same[0]; id = prev.id; }
+    }
     if (!id) id = 'tr_' + Date.now() + Math.random().toString(36).slice(2, 5);
     const editKey = (prev && prev.data && prev.data.editKey) || crypto.randomBytes(12).toString('hex');
-    if (bookingId === 'individual') { const m = await autoMatch(key, email, firstName, lastName); if (m) guest.bookingId = m; }
     const data = { ...((prev && prev.data) || {}), ...guest, id, editKey, submittedAt: new Date().toISOString() };
     if (data.isIndividual === undefined) delete data.isIndividual;
     const r = await fetch(`${SUPABASE_URL}/rest/v1/transport?on_conflict=id`, {

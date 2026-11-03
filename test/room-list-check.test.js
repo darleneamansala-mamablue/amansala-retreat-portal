@@ -48,3 +48,15 @@ const ph = findProblems([{ id: 'E', retreat_name: 'Emily Tully', start_date: '20
   [{ booking_id: 'E', room: '2a', guests: g('Hold') }, { booking_id: 'E', room: '2b', guests: g('Hold') }, { booking_id: 'E', room: '2b', guests: g('Student 2') }, { booking_id: 'E', room: '9', guests: g('Student') }], '2026-11-03');
 assert.strictEqual(ph.length, 0, 'placeholders ignored');
 console.log('placeholders: ok');
+// transport forms sent twice by the same guest
+const tb = [{ id: 'K', retreat_name: 'Heather Kasey', start_date: '2026-11-04', end_date: '2026-11-08', status: 'deposit_paid', blocked_rooms: ['19B -b'] }];
+const trs = [
+  { id: 't1', booking_id: 'K', data: { firstName: 'Lisa', lastName: 'de Saxe Zerden', email: 'L@x.com', arrivalDate: '2026-11-04', departureDate: '2026-11-08' } },
+  { id: 't2', booking_id: 'K', data: { firstName: 'Lisa', lastName: 'Zerded', email: 'l@x.com', arrivalDate: '2026-11-04', departureDate: '2026-11-08' } },
+  { id: 't3', booking_id: 'K', data: { firstName: 'Dan', lastName: 'Zerden', email: 'l@x.com', arrivalDate: '2026-11-04', departureDate: '2026-11-08' } },
+  { id: 't4', booking_id: 'K', data: { firstName: 'Old', lastName: 'Ride', email: 'o@x.com', arrivalDate: '2026-10-01', departureDate: '2026-10-02' } },
+  { id: 't5', booking_id: 'K', data: { firstName: 'Old', lastName: 'Ride', email: 'o@x.com', arrivalDate: '2026-10-01', departureDate: '2026-10-02' } },
+];
+const tp = findProblems(tb, [], '2026-11-03', trs);
+assert.deepStrictEqual(tp.map(x => x.text), ['Transporte repetido en Heather Kasey: Lisa de Saxe Zerden / Lisa Zerded'], 'one transport repeat; partner and past rides not counted');
+console.log('transport repeats: ok');

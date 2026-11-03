@@ -5,7 +5,8 @@
 //   1. a guest in a room that is not on their retreat's room list (the teacher portal, Transport and the room list
 //      do not show them),
 //   2. the same guest twice in one retreat (copies like Stephanie Cleary in CH7, Muffett Mayet in GV7),
-//   3. a room given to guests of two different bookings on the same nights (GV7 Nov 4-6, room 10 Feb 6-9).
+//   3. a room given to guests of two different bookings on the same nights (GV7 Nov 4-6, room 10 Feb 6-9),
+//   4. the same guest's transport form twice in one retreat (Lisa de Saxe Zerden, Heather Kasey).
 // When it finds something it sends one WhatsApp (template amansala_revision_cuartos, via Visito) to each number in
 // app_store 'room_check_alert' = {numbers: ['+52...'], enabled: true}. Nothing found = nothing sent.
 // room-list-check-now.js runs the same check on demand (admin pass) and can return the result without sending.
@@ -37,7 +38,7 @@ async function getAll(key, path) {
 }
 
 // The check itself, on plain rows (also used by the test).
-function findProblems(bookings, regs, today) {
+function findProblems(bookings, regs, today, transport = []) {
   const live = new Map(bookings.filter(b => b.status !== 'cancelled' && (b.end_date || '') >= today).map(b => [String(b.id), b]));
   const problems = [];
   const active = regs.filter(r => live.has(String(r.booking_id)) && r.cancelled !== true && names(r).length);
@@ -80,7 +81,29 @@ function findProblems(bookings, regs, today) {
       problems.push({ kind: 'clash', at: from, text: `${room} ${fmtShort(from)}–${fmtShort(to)}: ${names(x.r).join(' / ')} (${label(x.b)}) y ${names(y.r).join(' / ')} (${label(y.b)})` });
     }
   }
-  const order = { clash: 0, outside: 1, duplicate: 2 };
+  // 4. the same guest's transport form twice in one retreat (same email + first name, or same full name) -- shows
+  //    twice on Transport (Lisa de Saxe Zerden, Heather Kasey, 2026-11-03); rides that are already over are left out
+  const trBy = new Map();
+  for (const t of transport) {
+    const d = t.data || {}, b = live.get(String(t.booking_id || d.bookingId));
+    if (!b || !d.firstName) continue;
+    const last = [d.arrivalDate, d.departureDate].filter(Boolean).sort().pop();
+    if (last && last < today) continue;
+    const first = norm(d.firstName), full = norm(`${d.firstName} ${d.lastName || ''}`), em = norm(d.email);
+    for (const k of [em && `e|${b.id}|${em}|${first}`, `n|${b.id}|${full}`].filter(Boolean)) {
+      if (!trBy.has(k)) trBy.set(k, []);
+      trBy.get(k).push({ b, name: `${d.firstName} ${d.lastName || ''}`.trim(), id: t.id });
+    }
+  }
+  const trSeen = new Set();
+  for (const list of trBy.values()) {
+    if (list.length < 2) continue;
+    const key = list.map(x => x.id).sort().join(',');
+    if (trSeen.has(key)) continue;
+    trSeen.add(key);
+    problems.push({ kind: 'transport', at: list[0].b.start_date, text: `Transporte repetido en ${label(list[0].b)}: ${list.map(x => x.name).join(' / ')}` });
+  }
+  const order = { clash: 0, outside: 1, duplicate: 2, transport: 3 };
   problems.sort((a, b) => order[a.kind] - order[b.kind] || String(a.at).localeCompare(String(b.at)));
   return problems;
 }
@@ -104,7 +127,8 @@ async function run({ send = true, numbers: only } = {}) {
   const bookings = await getAll(key, `bookings?select=id,retreat_name,leader_name,start_date,end_date,status,blocked_rooms&end_date=gte.${today}`);
   const ids = new Set(bookings.map(b => String(b.id)));
   const regs = (await getAll(key, 'registrations?select=id,booking_id,room,guests,check_in,check_out,cancelled&order=id')).filter(r => ids.has(String(r.booking_id)));
-  const problems = findProblems(bookings, regs, today);
+  const transport = (await getAll(key, 'transport?select=id,booking_id,data&order=id')).filter(t => ids.has(String(t.booking_id || (t.data || {}).bookingId)));
+  const problems = findProblems(bookings, regs, today, transport);
   const msg = message(problems);
   const out = { date: today, bookings: bookings.length, problems: problems.map(p => p.text), sent: 0, failed: 0 };
   if (!problems.length || !send) return out;

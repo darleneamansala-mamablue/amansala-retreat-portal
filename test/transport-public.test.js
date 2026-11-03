@@ -90,5 +90,17 @@ const call = async (fn, ev) => { const r = await fn.handler(ev); return { code: 
   r = await call(tp, { httpMethod: 'POST', body: JSON.stringify({ ...form, bookingId: 'individual', firstName: 'Ana', lastName: 'L', email: 'ANA@x.com' }) });
   assert.strictEqual(r.entry.bookingId, 'b1');
   console.log('ok   - old links still work; an individual guest is matched to the retreat on the server');
+
+  // the same guest sends the form again from the general link (no update link): their entry is updated, not doubled
+  const before = T.transport.length;
+  r = await call(tp, { httpMethod: 'POST', body: JSON.stringify({ ...form, lastName: 'Diaz Typo', email: 'CLEO@x.com', flightNumber: 'UA3' }) });
+  assert.strictEqual(r.id, id, 'same entry'); assert.strictEqual(T.transport.length, before, 'no second entry');
+  const again = T.transport.find(x => x.id === id).data;
+  assert.strictEqual(again.flightNumber, 'UA3'); assert.strictEqual(again.folioCharged, true, 'office field kept'); assert.strictEqual(again.editKey, k);
+  assert.ok(/Updated/.test(mails[mails.length - 1].subject), 'update email');
+  // a partner sharing the email keeps a separate entry
+  r = await call(tp, { httpMethod: 'POST', body: JSON.stringify({ ...form, firstName: 'Dan', email: 'cleo@x.com' }) });
+  assert.notStrictEqual(r.id, id); assert.strictEqual(T.transport.length, before + 1);
+  console.log('ok   - a repeat from the general link updates the entry; a partner with the same email gets their own');
   console.log('transport public: all checks passed');
 })().catch(e => { console.error(e); process.exit(1); });
