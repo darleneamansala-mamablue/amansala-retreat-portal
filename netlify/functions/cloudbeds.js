@@ -401,6 +401,33 @@ exports.handler = async (event) => {
         return ok(h, { success: true, cbIds, cbGuestIds, count: Object.keys(cbIds).length });
       }
 
+      case "getReservationRooms": {
+        // Read only (portal vs Cloudbeds room check, 2026-11-03): the room(s), guest and dates of each reservation id. The list
+        // API leaves rooms out for portal group reservations (getExternalReservations skips their detail to save time), so
+        // this asks for each one. Up to 120 ids per call, 10 at a time.
+        const ids = (Array.isArray(body.reservationIds) ? body.reservationIds : []).map(String).filter(Boolean).slice(0, 120);
+        if (Object.keys(_roomLookup).length === 0) await getRooms(tok);
+        const idToName = {};
+        for (const [name, id] of Object.entries(_roomLookup)) idToName[String(id)] = name;
+        const out = {};
+        for (let i = 0; i < ids.length; i += 10) {
+          await Promise.all(ids.slice(i, i + 10).map(async id => {
+            const res = await cbGet(tok, "/getReservation", { reservationID: id }).catch(() => null);
+            const d = res?.data;
+            if (!d) { out[id] = { error: true }; return; }
+            const slots = [d.assigned, d.unassigned].flatMap(x => Array.isArray(x) ? x : Object.values(x || {})).filter(Boolean);
+            const gl = d.guestList && typeof d.guestList === "object" ? Object.values(d.guestList)[0] : null;
+            out[id] = {
+              status: d.status, startDate: d.startDate, endDate: d.endDate,
+              guest: gl ? [gl.guestFirstName, gl.guestLastName].filter(Boolean).join(" ") : (d.guestName || ""),
+              rooms: slots.map(s => idToName[String(s.roomID || "")] || s.roomName || "").filter(Boolean),
+              unassigned: slots.filter(s => !s.roomID).length,
+            };
+          }));
+        }
+        return ok(h, { success: true, reservations: out });
+      }
+
       case "getCbGuestNames": {
         // For each room→reservationId, fetch reservation and extract guest name
         const { reservationIds, groupName: grpName } = body; // { room: resId }
