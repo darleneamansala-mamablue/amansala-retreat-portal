@@ -45,6 +45,11 @@
 [functions."send-climas-report"]
   schedule = "0 0 * * *"
 
+# Daily room check (Jorge's ask 2026-11-03): guests outside their retreat's room list, the same guest twice, a room
+# given to two bookings on the same nights -> one WhatsApp to app_store 'room_check_alert' numbers. 12:00 UTC = 7am Tulum.
+[functions."room-list-check"]
+  schedule = "0 12 * * *"
+
 # Unscheduled test-trigger twin of send-climas-report -- scheduled functions 403 on a
 # direct call, so this is the only way to fire a test send on demand.
 [functions."send-climas-report-now"]

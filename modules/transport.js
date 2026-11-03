@@ -2270,9 +2270,9 @@ function tr2DefaultPickup(d) {
   return tr2AddMins(d.departureTime, d.departureAirport === 'cancun' ? -210 : -150);
 }
 // Jorge's ask 2026-10-20: the departure pickup time can be manually overridden
-// per guest, but only Hilario and Jorge should be able to change it -- everyone
+// per guest, but only Hilario and Jorge (and since 2026-11-03 Darlene and Melissa) can change it -- everyone
 // else can still see it, just not edit it.
-const TR2_PICKUP_EDIT_STAFF = ['hilario', 'jorge'];
+const TR2_PICKUP_EDIT_STAFF = ['hilario', 'jorge', 'darlene', 'melissa'];   // Darlene and Melissa added 2026-11-03 (same access as Jorge)
 function tr2CanEditPickup() {
   // Substring match, not exact equality -- a staff account's display name can be
   // "Jorge Canales"/"Jorge C." etc, not necessarily the bare first name (Jorge's

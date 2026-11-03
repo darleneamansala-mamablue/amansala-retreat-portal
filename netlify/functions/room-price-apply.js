@@ -12,7 +12,7 @@
 const L = require('./room-price-lib');
 
 const { staffAllowed } = require('./portal-auth-lib');
-const RM_NAMES = ['jorge', 'darlene', 'hilario'];   // same allow-list as revenue-manager.html
+const RM_NAMES = ['jorge', 'darlene', 'hilario', 'melissa'];   // same allow-list as revenue-manager.html
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: '' };
