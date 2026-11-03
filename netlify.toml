@@ -45,6 +45,12 @@
 [functions."send-climas-report"]
   schedule = "0 0 * * *"
 
+# Portal -> Cloudbeds room sync (Jorge 2026-11-03: the portal is the truth): linked Cloudbeds reservations of the next
+# 30 days that sit in another room are moved to the portal's room. 11:30 UTC = 6:30am Tulum, before the 7am room check.
+[functions."cb-room-sync"]
+  schedule = "30 11 * * *"
+  timeout = 26
+
 # Daily room check (Jorge's ask 2026-11-03): guests outside their retreat's room list, the same guest twice, a room
 # given to two bookings on the same nights -> one WhatsApp to app_store 'room_check_alert' numbers. 12:00 UTC = 7am Tulum.
 [functions."room-list-check"]

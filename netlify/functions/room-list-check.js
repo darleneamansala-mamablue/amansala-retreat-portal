@@ -149,7 +149,16 @@ async function run({ send = true, numbers: only } = {}) {
       for (const c of res.charged) problems.push({ kind: 'nocharge', at: date, text: `Sin cobro de transporte: ${c.names || c.room || 'grupo'}${c.room ? ` (${c.room})` : ''}, ${direction === 'arrival' ? 'llegada' : 'salida'} ${fmtShort(date)}` });
     } catch (e) { console.warn('[room-list-check] charge check', direction, date, e.message); }
   }
-  const rank = { clash: 0, nocharge: 1, outside: 2, duplicate: 3, transport: 4 };
+  // 6. this morning's portal -> Cloudbeds room sync (cb-room-sync.js, 6:30am): what it moved and what it could not
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.cb_room_sync_last&select=value`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+    const last = ((await r.json())[0] || {}).value || null;
+    if (last && last.date === today) {
+      for (const t of last.failed || []) problems.push({ kind: 'cbsync', at: today, text: `Cloudbeds no se pudo ajustar al portal: ${t}` });
+      if ((last.moved || []).length) problems.push({ kind: 'cbmoved', at: today, text: `Cloudbeds ajustado al portal (${last.moved.length}): ${last.moved.join(' · ')}` });
+    }
+  } catch (e) { console.warn('[room-list-check] cb sync', e.message); }
+  const rank = { clash: 0, nocharge: 1, cbsync: 2, outside: 3, duplicate: 4, transport: 5, cbmoved: 6 };
   problems.sort((a, b) => rank[a.kind] - rank[b.kind] || String(a.at).localeCompare(String(b.at)));
   const msg = message(problems);
   const out = { date: today, bookings: bookings.length, problems: problems.map(p => p.text), sent: 0, failed: 0 };
