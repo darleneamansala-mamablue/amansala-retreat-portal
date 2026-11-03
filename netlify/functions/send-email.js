@@ -1,6 +1,22 @@
+'use strict';
+
+// Signed-in portal sessions only (2026-11-02): this used to send any message, to anyone, from retreats@amansala.com for
+// whoever called it. The portal sends its staff-login pass (X-Portal-Token) and/or its database pass (Authorization:
+// staff, spa, driver, confirm, or a teacher's pass for their own retreat). Public pages and server functions email through
+// their own functions (mail-lib.js) instead.
+const { staffFromEvent, verifyDbPass } = require('./portal-auth-lib');
+function signedIn(event) {
+  if (staffFromEvent(event)) return true;
+  const h = event.headers || {}, auth = String(h.authorization || h.Authorization || '');
+  return !!verifyDbPass(auth.replace(/^Bearer\s+/i, ''));
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
+  }
+  if (!signedIn(event)) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Sign out of the portal and sign in again to send emails.' }) };
   }
 
   const apiKey = process.env.RESEND_API_KEY;
