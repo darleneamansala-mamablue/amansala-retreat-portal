@@ -225,7 +225,7 @@ exports.handler = async (event) => {
       case "getExternalReservations":
         if (!body.startDate || !body.endDate)
           return ok(h, { error: "startDate and endDate are required" }, 400);
-        return ok(h, await getExternalReservations(tok, body.startDate, body.endDate, body.viewStart));
+        return ok(h, await getExternalReservations(tok, body.startDate, body.endDate, body.viewStart, body.legacy === true));
 
       case "createGroupEvent":
         return ok(h, await createGroupEvent(tok, body));
@@ -1511,7 +1511,7 @@ async function replaceReservation(tok, body) {
   });
 }
 
-async function getExternalReservations(tok, startDate, endDate, viewStart) {
+async function getExternalReservations(tok, startDate, endDate, viewStart, legacy = false) {
   // Ensure room lookup is populated so we can resolve roomID → portal room name
   if (Object.keys(_roomLookup).length === 0) await getRooms(tok);
   const roomIdToName = {};
@@ -1539,7 +1539,14 @@ async function getExternalReservations(tok, startDate, endDate, viewStart) {
   let allRes = [];
   let pageNumber = 1;
   while (true) {
-    const res = await cbGet(tok, "/getReservations", { checkInTo: endDate, checkOutFrom: startDate, pageNumber, pageSize: 100 });
+    // Cloudbeds wants all four of checkInFrom/checkInTo/checkOutFrom/checkOutTo or none ("It is expected for all (or none)
+    // of the following fields to be sent"); with only two it silently returned part of the window, so copies of Todd Zinda
+    // and Angela Wagner guests never showed (2026-11-03). Stays overlapping [startDate, endDate]: check-in up to the end
+    // date (from 90 days before), check-out from the start date (up to 90 days after). `legacy` keeps the old two-field call.
+    const shift = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+    const range = legacy ? { checkInTo: endDate, checkOutFrom: startDate }
+      : { checkInFrom: shift(startDate, -90), checkInTo: endDate, checkOutFrom: startDate, checkOutTo: shift(endDate, 90) };
+    const res = await cbGet(tok, "/getReservations", { ...range, pageNumber, pageSize: 100 });
     if (!res.success) throw new Error("getReservations failed: " + JSON.stringify(res).slice(0, 200));
     const page = res.data || [];
     allRes = allRes.concat(page);
