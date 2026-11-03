@@ -428,6 +428,25 @@ exports.handler = async (event) => {
         return ok(h, { success: true, reservations: out });
       }
 
+      case "getReservationFull": {
+        // Read only: every room line of one reservation (a Cloudbeds reservation can hold several rooms; the list only shows
+        // one) -- for finding copies the reservation list does not show (Todd Zinda, 2026-11-03).
+        const id = String(body.reservationId || "");
+        if (!id) return ok(h, { error: "reservationId required" }, 400);
+        if (Object.keys(_roomLookup).length === 0) await getRooms(tok);
+        const idToName = {};
+        for (const [name, rid] of Object.entries(_roomLookup)) idToName[String(rid)] = name;
+        const res = await cbGet(tok, "/getReservation", { reservationID: id }).catch(() => null);
+        const d = res?.data;
+        if (!d) return ok(h, { success: false });
+        const lines = [d.assigned, d.unassigned].flatMap(x => Array.isArray(x) ? x : Object.values(x || {})).filter(Boolean).map(s => ({
+          reservationRoomID: s.reservationRoomID || s.roomReservationID || null, room: idToName[String(s.roomID || "")] || s.roomName || null,
+          roomTypeName: s.roomTypeName || null, startDate: s.startDate || null, endDate: s.endDate || null,
+          guest: [s.guestFirstName, s.guestLastName].filter(Boolean).join(" ") || null,
+        }));
+        return ok(h, { success: true, status: d.status, startDate: d.startDate, endDate: d.endDate, guest: d.guestName, lines });
+      }
+
       case "getCbGuestNames": {
         // For each room→reservationId, fetch reservation and extract guest name
         const { reservationIds, groupName: grpName } = body; // { room: resId }
