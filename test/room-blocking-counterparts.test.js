@@ -12,7 +12,8 @@ const code = [line(/^const ROOM_PARENT_TO_BED=/), line(/^const ROOM_BED_TO_PAREN
 const ctx = { AppData: { roomTypes: [
   { id: 'rt6', rooms: ['4', '4B'] }, { id: 'bd1', rooms: ['4a', '4b', '4B -a', '4B -b'] },
   { id: 'rt7', rooms: ['1'] }, { id: 'bd2', rooms: ['1a', '1b'] }, { id: 'rt3', rooms: ['1B'] },
-  { id: 'cm1', rooms: ['Casa Master'] }, { id: 'cg1', rooms: ['Casa King Downstairs'] } ] } };
+  { id: 'cm1', rooms: ['Casa Master'] }, { id: 'cg1', rooms: ['Casa King Downstairs'] },
+  { id: 'c4a', rooms: ['Casita 4'] }, { id: 'c4b', rooms: ['Casita 4 / 1'] }, { id: 'c4c', rooms: ['Casita 4 /2a', 'Casita 4 /2b'] } ] } };
 vm.createContext(ctx); vm.runInContext(code, ctx);
 assert.ok(ctx.roomListBlocks(['4B'], '4B -a'), 'whole room taken -> its bed is taken');
 assert.ok(ctx.roomListBlocks(['4B -b'], '4B'), 'a bed taken -> its whole room is taken');
@@ -21,4 +22,6 @@ assert.ok(ctx.roomListBlocks(['1'], '1b') && ctx.roomListBlocks(['1a'], '1'), '1
 assert.ok(!ctx.roomListBlocks(['1B'], '1') && !ctx.roomListBlocks(['1'], '1B') && !ctx.roomListBlocks(['1B'], '1b'), '1B is its own room');
 assert.ok(ctx.roomListBlocks(['Casa Master'], 'Casa King Downstairs') && ctx.roomListBlocks(['Casa King Downstairs'], 'Casa Master'), 'villa <-> its rooms');
 assert.ok(!ctx.roomListBlocks(['4'], '4B -a'), '4 and 4B are different rooms');
+assert.ok(ctx.roomListBlocks(['Casita 4'], 'Casita 4 /2a') && ctx.roomListBlocks(['Casita 4 / 1'], 'Casita 4'), 'Casita 4 <-> its rooms');
+assert.ok(!ctx.roomListBlocks(['Casita 4 /2a'], 'Casita 4 /2b'), 'two Casita bedrooms stay independent');
 console.log('room blocking counterparts: all checks passed');

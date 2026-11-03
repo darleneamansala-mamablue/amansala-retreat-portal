@@ -41,7 +41,7 @@ const ROOM_BED_TO_PARENT = { bd1: 'rt6', bd2: 'rt7', bd3: 'rt8', bd4: 'rt9' };
 // Queen; Casa Shanti = Shanti King + Shanti 2 Bed. Booking the whole villa
 // must block every room in every listed sub-type, and booking any room in
 // any sub-type must block the whole-villa option for those dates.
-const VILLA_TO_SUBTYPES = { cm1: ['cg1', 'cg2', 'cg3', 'cg4', 'cg5'], csh3: ['csh1', 'csh2'] };
+const VILLA_TO_SUBTYPES = { cm1: ['cg1', 'cg2', 'cg3', 'cg4', 'cg5'], csh3: ['csh1', 'csh2'], c4a: ['c4b', 'c4c'] };   // Casita 4 added 2026-11-03
 function splitDoubleHalf(room) {
   const r = String(room || '').trim();
   let m = r.match(/^(\d+)([a-d])$/i);

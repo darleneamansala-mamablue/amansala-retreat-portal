@@ -27,7 +27,7 @@ const ROOM_BED_TO_PARENT = { bd1: 'rt6', bd2: 'rt7', bd3: 'rt8', bd4: 'rt9' };
 // Master = Casa King Downstairs + Casa Grande Up King + Casa Grande 2 Queen
 // Downstairs + Casa Grande Upstairs Individual + Casa Grande Up Shared 2
 // Queen; Casa Shanti = Shanti King + Shanti 2 Bed.
-const VILLA_TO_SUBTYPES = { cm1: ['cg1', 'cg2', 'cg3', 'cg4', 'cg5'], csh3: ['csh1', 'csh2'] };
+const VILLA_TO_SUBTYPES = { cm1: ['cg1', 'cg2', 'cg3', 'cg4', 'cg5'], csh3: ['csh1', 'csh2'], c4a: ['c4b', 'c4c'] };   // Casita 4 added 2026-11-03
 function splitDoubleHalf(room) {
   const r = String(room || '').trim();
   let m = r.match(/^(\d+)([a-d])$/i);
