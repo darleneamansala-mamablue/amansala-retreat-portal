@@ -188,8 +188,11 @@ function _renderBlockRoomsGrid(bkId){
     const extGuestNorm=(r.guestName||'').toLowerCase().trim();
     if(_leaderNorm&&extGuestNorm&&(extGuestNorm.includes(_leaderNorm)||_leaderNorm.includes(extGuestNorm)))return;
     (r.rooms||[]).forEach(room=>{
-      const lk=room.toLowerCase();
-      if(!conflictMap.has(lk))conflictMap.set(lk,{name:`${r.guestName} (${r.sourceName||'Cloudbeds'})`,bookingId:null});
+      // the room and the ones it blocks (a whole room and its beds), like the portal bookings above
+      [room,...roomBlockingCounterparts(room)].forEach(rm=>{
+        const lk=rm.toLowerCase();
+        if(!conflictMap.has(lk))conflictMap.set(lk,{name:`${r.guestName} (${r.sourceName||'Cloudbeds'})`,bookingId:null});
+      });
     });
   });
 
@@ -523,7 +526,8 @@ async function blockSave(){
       // Match against `selected`'s own casing (not `room`'s) so the later
       // `selected.filter(r=>!conflictingRooms.has(r))` actually removes it —
       // same casing mismatch risk as prevRoomsList above.
-      const match=selected.find(s=>roomCodesEqual(s,room));
+      // the same room, or one that blocks it (a whole room and its beds)
+      const match=selected.find(s=>roomCodesEqual(s,room)||roomBlockingCounterparts(s).some(cp=>roomCodesEqual(cp,room)));
       if(match){conflicts.push(`Room ${room} → ${other.leaderName||other.retreatName}`);conflictingRooms.add(match);}
     });
   });
@@ -541,7 +545,7 @@ async function blockSave(){
     if(_bsLeaderNorm&&extGuestNorm&&(extGuestNorm.includes(_bsLeaderNorm)||_bsLeaderNorm.includes(extGuestNorm)))return;
     (r.rooms||[]).forEach(room=>{
       if(roomListIncludes(prevRoomsList,room))return;
-      const match=selected.find(s=>roomCodesEqual(s,room));
+      const match=selected.find(s=>roomCodesEqual(s,room)||roomBlockingCounterparts(s).some(cp=>roomCodesEqual(cp,room)));
       if(match){conflicts.push(`Room ${room} → ${r.guestName} (${r.sourceName||'Cloudbeds'})`);conflictingRooms.add(match);}
     });
   });

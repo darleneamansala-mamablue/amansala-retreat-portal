@@ -5884,6 +5884,20 @@ function getRoomCounterparts(room){
   }
   return[];
 }
+// The rooms that cannot be sold while `room` is taken: getRoomCounterparts() without the sister beds (two beds of one
+// room are sold separately). "4B" -> its beds; "4B -a" -> "4B" only; a villa <-> its rooms.
+function roomBlockingCounterparts(room){
+  const ownRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(room));
+  const isBed=!!(ownRt&&ROOM_BED_TO_PARENT[ownRt.id]);
+  return getRoomCounterparts(room).filter(cp=>!(isBed&&(ownRt.rooms||[]).includes(cp)));
+}
+// Is `room` taken by a list of rooms (a booking's blockedRooms, a Cloudbeds reservation's rooms)? The room itself or a
+// room that blocks it -- a whole room blocks its beds and a bed blocks its whole room (2026-11-03: Hayden Bedsole in 4B
+// while 4B -a/-b were sold to Wendy Oberg's guests).
+function roomListBlocks(list,room){
+  if(roomListIncludes(list,room))return true;
+  return roomBlockingCounterparts(room).some(cp=>roomListIncludes(list,cp));
+}
 function buildUiRoomEntries(rt){
   if(!rt||!isDoubleRoomType(rt))return(rt.rooms||[]).map(r=>({display:r,physical:[r],merged:false}));
   const groups=new Map(),standalone=[];
@@ -6995,7 +7009,7 @@ function switchTab(id,btn){
 </script>
 <script src="modules/tab-urls.js?v=20261025a"></script>
 <script src="modules/cas-sync.js?v=20261101b"></script>
-<script src="modules/venues.js?v=20261101b"></script>
+<script src="modules/venues.js?v=20261103a"></script>
 <script src="modules/booking-dates.js?v=20261026a"></script>
 <script src="modules/room-optimizer.js?v=20261101a"></script>
 <script src="modules/sales-pipeline.js"></script>
@@ -7035,7 +7049,7 @@ function switchTab(id,btn){
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20261101b"></script>
+<script src="modules/room-blocking.js?v=20261103a"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====
 // ===== PACKAGE RATES MANAGER — moved to modules/pricing.js (loaded above) =====

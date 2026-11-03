@@ -1169,7 +1169,7 @@ function rmSaveNewBooking(){
   const nights=Math.round((pd(end)-pd(start))/DAY_MS);
   const roomRateTotal=rate*nights;
   // Conflict check (exclude the booking currently being edited, if any)
-  const conflict=AppData.bookings.some(b=>b.id!==_rmEditId&&b.status!=='cancelled'&&roomListIncludes(b.blockedRooms,room)&&datesOverlap(start,end,b.startDate,b.endDate));
+  const conflict=AppData.bookings.some(b=>b.id!==_rmEditId&&b.status!=='cancelled'&&roomListBlocks(b.blockedRooms,room)&&datesOverlap(start,end,b.startDate,b.endDate));
   if(conflict){errEl.textContent=`Room ${room} is already booked for part of these dates.`;errEl.style.display='block';return;}
   if(_rmEditId){
     const bk=AppData.bookings.find(b=>b.id===_rmEditId);if(!bk)return;
@@ -1300,7 +1300,7 @@ function rmSaveMaintenanceBlock(){
   const err=document.getElementById('rmMaint-err');err.style.display='none';
   if(!room){err.textContent='Selecciona un cuarto.';err.style.display='block';return;}
   if(!start||!end||end<=start){err.textContent='Fechas inválidas.';err.style.display='block';return;}
-  const conflict=AppData.bookings.some(b=>b.id!==_rmMaintEditId&&b.status!=='cancelled'&&roomListIncludes(b.blockedRooms,room)&&datesOverlap(start,end,b.startDate,b.endDate));
+  const conflict=AppData.bookings.some(b=>b.id!==_rmMaintEditId&&b.status!=='cancelled'&&roomListBlocks(b.blockedRooms,room)&&datesOverlap(start,end,b.startDate,b.endDate));
   if(conflict){err.textContent=`El cuarto ${room} ya está ocupado parte de estas fechas.`;err.style.display='block';return;}
   const nights=Math.max(1,Math.round((pd(end)-pd(start))/DAY_MS));
   if(_rmMaintEditId){
@@ -1558,7 +1558,7 @@ function rcTrackClick(event,room,rtId,trackEl){
   const days=rcShowDays;
   if(dayIdx<0||dayIdx>=days)return;
   const clickedDate=fmtISO(addDays(rcStart,dayIdx));
-  const busy=AppData.bookings.some(bk=>bk.status!=='cancelled'&&roomListIncludes(bk.blockedRooms,room)&&clickedDate>=bk.startDate&&clickedDate<bk.endDate);
+  const busy=AppData.bookings.some(bk=>bk.status!=='cancelled'&&roomListBlocks(bk.blockedRooms,room)&&clickedDate>=bk.startDate&&clickedDate<bk.endDate);
   if(busy)return;
   rmOpenNewBooking(room,rtId,clickedDate);
 }
@@ -2830,10 +2830,14 @@ function rcBuild(){
   // BOTH that relationship AND the whole-villa/sub-room-type one (Casa
   // Master, Casa Shanti) -- one pass covers every derived room on the
   // calendar instead of two separate mechanisms.
+  // Bed rows ("4B -a", "1a") are drawn too, so a whole room that is taken shows its beds as taken (2026-11-03: Hayden
+  // Bedsole in 4B while Wendy Oberg's 4B -a/-b looked free). A bed only looks at its whole room, never at its sister bed:
+  // two beds of one room are sold separately.
   const allDisplayRooms=new Set();
-  AppData.roomTypes.forEach(rt=>buildUiRoomEntries(rt).forEach(e=>allDisplayRooms.add(e.display)));
+  AppData.roomTypes.forEach(rt=>{buildUiRoomEntries(rt).forEach(e=>allDisplayRooms.add(e.display));if(ROOM_BED_TO_PARENT[rt.id])(rt.rooms||[]).forEach(r=>allDisplayRooms.add(r));});
   allDisplayRooms.forEach(displayName=>{
-    const counterparts=getRoomCounterparts(displayName);
+    const ownRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(displayName));
+    const counterparts=getRoomCounterparts(displayName).filter(cp=>!(ownRt&&ROOM_BED_TO_PARENT[ownRt.id]&&(ownRt.rooms||[]).includes(cp)));
     if(!counterparts.length)return;
     const physTrack=document.querySelector(`[data-room="${CSS.escape(displayName)}"]`);
     if(!physTrack)return;
@@ -3379,7 +3383,7 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
   // Check toRoom not already blocked by another retreat on overlapping dates
   const conflict=AppData.bookings.find(other=>
     other.id!==bkId&&other.status!=='cancelled'&&
-    roomListIncludes(other.blockedRooms,toRoom)&&
+    roomListBlocks(other.blockedRooms,toRoom)&&
     datesOverlap(bk.startDate,bk.endDate,other.startDate,other.endDate)
   );
   if(conflict){showToast(`Room ${toRoom} is already blocked by ${conflict.leaderName||conflict.retreatName}.`);return;}
@@ -3489,7 +3493,7 @@ function rcMoveRoom(bkId,fromRoom,toRoom){
 // just correctly repositioned (still clickable to link/import, unchanged).
 async function rcMoveExternalReservation(reservationID,fromRoom,toRoom,guestName,startDate,endDate){
   if(fromRoom===toRoom)return;
-  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&roomListIncludes(other.blockedRooms,toRoom)&&datesOverlap(startDate,endDate,other.startDate,other.endDate));
+  const conflict=AppData.bookings.find(other=>other.status!=='cancelled'&&roomListBlocks(other.blockedRooms,toRoom)&&datesOverlap(startDate,endDate,other.startDate,other.endDate));
   if(conflict){showToast(`Room ${toRoom} is already part of ${conflict.leaderName||conflict.retreatName}'s booking for these dates.`);return;}
   showToast(`Moving ${guestName} to ${toRoom}…`);
   try{
