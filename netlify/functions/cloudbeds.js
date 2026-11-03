@@ -428,6 +428,26 @@ exports.handler = async (event) => {
         return ok(h, { success: true, reservations: out });
       }
 
+      case "searchReservations": {
+        // Read only (2026-11-03): getReservations with a few extra filters, to find reservations the date-window list leaves
+        // out (copies behind rooms Cloudbeds called taken: Courtney in 8, Angela Wagner in 1B). Returns ids, names, dates,
+        // status and the rooms the list row carries.
+        const allowed = ["checkInFrom", "checkInTo", "checkOutFrom", "checkOutTo", "roomID", "roomName", "guestName", "status", "includeAllRooms", "sortByRecent", "resultsFrom", "resultsTo"];
+        const params = { pageSize: 100 };
+        for (const k of allowed) if (body[k] !== undefined && body[k] !== null && body[k] !== "") params[k] = body[k];
+        const out = []; let total = null;
+        for (let pageNumber = 1; pageNumber <= 10; pageNumber++) {
+          const res = await cbGet(tok, "/getReservations", { ...params, pageNumber });
+          if (!res.success) return ok(h, { success: false, message: res.message || null, params });
+          total = res.total ?? total;
+          const page = res.data || [];
+          for (const r of page) out.push({ id: String(r.reservationID || r.id), guest: r.guestName || null, start: r.startDate, end: r.endDate, status: r.status,
+            rooms: (Array.isArray(r.rooms) ? r.rooms : Object.values(r.rooms || {})).map(x => (x && (x.roomName || x.roomID)) || x).filter(Boolean) });
+          if (page.length < 100) break;
+        }
+        return ok(h, { success: true, total, count: out.length, reservations: out });
+      }
+
       case "getReservationFull": {
         // Read only: every room line of one reservation (a Cloudbeds reservation can hold several rooms; the list only shows
         // one) -- for finding copies the reservation list does not show (Todd Zinda, 2026-11-03).
