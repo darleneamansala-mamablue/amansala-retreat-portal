@@ -7,7 +7,7 @@
 // Saved per day in app_store 'daily_shalas_YYYY-MM-DD' = { [eventId]: { startedBy, startedAt, finishedBy, finishedAt } }.
 // One small key per day, re-read before every write, so two people ticking different classes at once do not overwrite each other.
 
-let dsDate = null, dsState = {}, dsEvents = [];
+let dsDate = null, dsState = {}, dsEvents = [], dsWait = 0;
 
 function dsEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 function dsISO(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -41,6 +41,8 @@ function dsClasses(date) {
 async function dsRender() {
   const el = document.getElementById('dshalaBody'); if (!el) return;
   if (!dsDate) dsDate = dsISO(new Date());
+  if (!(typeof AppData !== 'undefined' && (AppData.bookings || []).length) && dsWait++ < 20) { setTimeout(dsRender, 1000); return; }   // the portal is still loading its bookings
+  dsWait = 0;
   dsState = await dsFetch(dsDate);
   dsEvents = dsClasses(dsDate);
   const lab = document.getElementById('dshalaDate');
@@ -83,11 +85,14 @@ function dsOpen(btn) {
   const prev = localStorage.getItem('ama_last_tab');
   switchTab('dailyshalas', btn);
   try { localStorage.setItem('ama_last_tab', prev || 'dashboard'); } catch (e) {}
-  dsRender();
 }
 (function () {
   try {
     if (document.getElementById('tab-dailyshalas')) return;
+    if (typeof window.switchTab === 'function') {   // fill the list every time this page is shown, however it was opened (button, /dailyshalas address, back button)
+      const o = window.switchTab;
+      window.switchTab = function (id) { const r = o.apply(this, arguments); if (id === 'dailyshalas') dsRender(); return r; };
+    }
     const me = document.getElementById('tab-menueditor'); if (!me) return;
     const panel = document.createElement('div');
     panel.className = 'tab-panel'; panel.id = 'tab-dailyshalas'; panel.style.flexDirection = 'column';
