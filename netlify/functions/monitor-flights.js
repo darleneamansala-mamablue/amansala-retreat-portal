@@ -97,6 +97,7 @@ exports.handler = async (event) => {
   const results  = { today, tomorrow, checked: flightMap.size, updated: [], unchanged: 0, errors: [] };
   const siteUrl  = process.env.URL ?? 'https://amansala-staging.netlify.app';
   const alertList = []; // collect alerts to store in settings
+  const pendingAdjust = new Map(); // retreat|day -> {rowId, entries}: re-priced once, after every row has its new time
 
   // 3. Check each flight with Airlabs
   for (const [flightIata, flightRows] of flightMap) {
@@ -184,20 +185,12 @@ exports.handler = async (event) => {
           chargeAdjusted = hasCharge ? 'pending_admin_review' : null;
           console.log(`[monitor-flights] ${flightIata} rowId=${r.id}: CANCELLED — charge adjustment skipped, admin review required`);
         } else if (timeChanged && hasCharge) {
-          // DELAYED/EARLY with significant time change: auto-adjust charge
-          try {
-            const adjRes  = await fetch(`${siteUrl}/.netlify/functions/adjust-transport-charge`, {
-              method:  'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body:    JSON.stringify({ rowId: String(r.id), direction: 'arrival' }),
-            });
-            const adjJson = await adjRes.json().catch(() => ({}));
-            chargeAdjusted = adjRes.ok
-              ? (adjJson.recharged?.length > 0 ? 'recharged' : 'voided')
-              : `error_${adjRes.status}`;
-          } catch (e) {
-            chargeAdjusted = `exception: ${e.message}`;
-          }
+          // DELAYED/EARLY with significant time change: the charge is re-priced after every row of this run has its new time,
+          // once per retreat + day (it covers every guest of that ride). One call per row used to price a van with some rows
+          // still on the old time, and repeated rows of one guest each asked again (2026-11-01: 3 x $45 on Julie Boihem).
+          const rideKey = `${r.booking_id || r.data.bookingId}|${r.data.arrivalDate}`;
+          if (!pendingAdjust.has(rideKey)) pendingAdjust.set(rideKey, { rowId: String(r.id), entries: [] });
+          chargeAdjusted = 'queued';
         }
 
         const entry = {
@@ -213,6 +206,7 @@ exports.handler = async (event) => {
           chargeAdjusted,
         };
         results.updated.push(entry);
+        if (chargeAdjusted === 'queued') pendingAdjust.get(`${r.booking_id || r.data.bookingId}|${r.data.arrivalDate}`).entries.push(entry);
 
         // Only store alerts for CANCELLED or significant DELAY (not status-only updates)
         if (isCancelled || (timeChanged && Math.abs(diffMin) > 5)) {
@@ -222,6 +216,23 @@ exports.handler = async (event) => {
     } catch (e) {
       results.errors.push({ flight: flightIata, reason: e.message });
     }
+  }
+
+  // 4b. Re-price the charges of every ride whose time moved, once each
+  for (const { rowId, entries } of pendingAdjust.values()) {
+    let outcome;
+    try {
+      const adjRes  = await fetch(`${siteUrl}/.netlify/functions/adjust-transport-charge`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ rowId, direction: 'arrival' }),
+      });
+      const adjJson = await adjRes.json().catch(() => ({}));
+      outcome = adjRes.ok ? (adjJson.recharged?.length > 0 ? 'recharged' : 'voided') : `error_${adjRes.status}`;
+    } catch (e) {
+      outcome = `exception: ${e.message}`;
+    }
+    entries.forEach(e => { e.chargeAdjusted = outcome; });
   }
 
   // 5. Store alerts in settings for dashboard notifications

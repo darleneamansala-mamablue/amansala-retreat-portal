@@ -134,6 +134,24 @@ let fails = 0; const check = (name, cond, extra) => { console.log((cond ? 'ok   
   DB.transport.push(row('b1', 'Billy', 'Stalcup'), row('g1', 'Gilbert', 'Ortiz-Ruiz', { email: 'gil@mail.com', time: '15:00' }), row('p1', 'Patricia', 'Smith', { time: '18:00', data: { roomOverride: '22' } }));
   const m = await runAuto(D, 'departure');
   check('M. Unique first name, email and typed room all find the room', dep().length === 3 && ['Billy S', 'Gil Ortiz', 'Pat Long'].every(n => dep().some(x => x.startsWith(n + ':'))) && !m.errors.length, { dep: dep(), errors: m.errors });
+  // N. Two runs at the same moment (cron firing twice / the hourly flight check overlapping itself, real case 2026-11-01 8pm:
+  //    Julie Boihem 3 x $45): each sees no charge and adds one; the after-check leaves exactly one per guest
+  fresh();
+  DB.transport.push(row('a', 'Ana', 'Lopez'), row('b', 'Bea', 'Ruiz', { time: '12:10' }));
+  await Promise.all([runAuto(D, 'departure'), runAuto(D, 'departure'), runAuto(D, 'departure')]);
+  check('N1. Three overlapping nightly runs: one charge each', dep().length === 2 && dep().some(x => x.startsWith('Ana Lopez')) && dep().some(x => x.startsWith('Bea Ruiz')), dep());
+  DB.transport.find(t => t.id === 'a').data.departureTime = '16:00';
+  await Promise.all([runAdj('a', 'departure'), runAdj('a', 'departure')]);
+  check('N2. Two overlapping adjusts after a time change: still one each, re-priced alone', dep().length === 2 && dep().filter(x => /\$195/.test(x)).length === 2, dep());
+  // O. An old double charge (from before this fix) is left to the adjust: it removes it, the race check never touches old ones
+  fresh();
+  DB.transport.push(row('a', 'Ana', 'Lopez'));
+  DB.folio_items.push({ id: 'o1', folio_id: 'f1', description: `Departure Transport ${D} — CANCUN 12:00`, qty: 1, unit_price: 195, category: 'Transport', created_at: '2026-10-01T00:00:00Z' },
+                      { id: 'o2', folio_id: 'f1', description: `Departure Transport ${D} — CANCUN 12:00`, qty: 1, unit_price: 195, category: 'Transport', created_at: '2026-10-01T00:00:01Z' });
+  await runAuto(D, 'departure');
+  check('O1. Nightly run (insert only) leaves old charges alone', dep().length === 2, dep());
+  await runAdj('a', 'departure');
+  check('O2. Adjust removes the old duplicate', dep().length === 1, dep());
   console.log(fails ? `\n${fails} FAILED` : '\nAll passed');
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('ERROR', e); process.exit(1); });

@@ -297,7 +297,27 @@ async function reconcileCharges(key, { registrationId, guestName, label, date, w
       out.deleted.push({ id: h.id, amount: Number(h.unit_price) * (Number(h.qty) || 1) });
     }
   }
+  if (out.inserted.length && !dryRun) await dropRaceDuplicates(key, { registrationId, label, date, wanted, linkedIds, out });
   return out;
+}
+
+// Two runs for the same registration + ride at the same moment (the nightly cron firing twice, the hourly flight check overlapping
+// itself) each see "no charge yet" and each add one: real case 2026-11-01 8pm, Julie Boihem 3 x $45 and Lisa Bedsole 2 x $45. After
+// adding, look again: anything over what is wanted that was added in the last few minutes goes, keeping the oldest -- every
+// overlapping run picks the same ones, so they agree and none is left. Older charges are never touched here.
+async function dropRaceDuplicates(key, { registrationId, label, date, wanted, linkedIds, out }) {
+  const all = await existingCharges(key, registrationId, label, date, [...(linkedIds || []), ...out.itemIds.filter(Boolean)]);
+  if (all.length <= wanted.length) return;
+  const recent = Date.now() - 10 * 60 * 1000;
+  const order = [...all].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id)));
+  const keep = new Set(order.slice(0, wanted.length).map(h => h.id));
+  for (const h of order) {
+    if (keep.has(h.id) || !(Date.parse(h.created_at) >= recent)) continue;
+    await supaFetch(key, `folio_items?id=eq.${h.id}`, 'DELETE');
+    out.deleted.push({ id: h.id, amount: Number(h.unit_price) * (Number(h.qty) || 1), race: true });
+    const i = out.itemIds.indexOf(h.id);
+    if (i >= 0) { const same = order.find(k => keep.has(k.id) && Number(k.unit_price) === Number(h.unit_price) && !out.itemIds.includes(k.id)) || order.find(k => keep.has(k.id)); out.itemIds[i] = same ? same.id : null; }
+  }
 }
 
 // Point a guest's rows at their charge: the shown row gets the link, the guest's other rows lose any stale one.
