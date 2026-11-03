@@ -23,7 +23,8 @@ function fmtDateEsWeekday(d) {
 }
 const fmtShort = d => new Date(d + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }).replace('.', '');
 const norm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
-const names = r => (r.guests || []).map(g => String(g && g.name || '').trim()).filter(Boolean);
+const PLACEHOLDER = /^(hold|student|tbd|tba|guest|staff|teacher|blocked?|reserved?|n\/?a|-+|\?+)\s*\d*$/i;   // slot fillers, not people
+const names = r => (r.guests || []).map(g => String(g && g.name || '').trim()).filter(n => n && !PLACEHOLDER.test(n));
 
 async function getAll(key, path) {
   const out = [];

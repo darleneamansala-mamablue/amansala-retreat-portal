@@ -43,3 +43,8 @@ const m = message(many);
 assert.strictEqual(m.count, '60 pendientes'); assert.ok(m.detail.length < 940 && /y \d+ más$/.test(m.detail), 'long list summarised');
 assert.strictEqual(message([{ text: 'a' }]).count, '1 pendiente');
 console.log('room list check: all checks passed');
+// slot fillers ("Hold", "Student 2") are not guests
+const ph = findProblems([{ id: 'E', retreat_name: 'Emily Tully', start_date: '2027-03-01', end_date: '2027-03-05', status: 'confirmed', blocked_rooms: ['2a', '2b'] }],
+  [{ booking_id: 'E', room: '2a', guests: g('Hold') }, { booking_id: 'E', room: '2b', guests: g('Hold') }, { booking_id: 'E', room: '2b', guests: g('Student 2') }, { booking_id: 'E', room: '9', guests: g('Student') }], '2026-11-03');
+assert.strictEqual(ph.length, 0, 'placeholders ignored');
+console.log('placeholders: ok');
