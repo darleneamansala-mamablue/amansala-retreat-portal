@@ -8,7 +8,7 @@
 const { runRecalc } = require('./room-price-recalc');
 
 const { staffAllowed } = require('./portal-auth-lib');
-const RM_NAMES = ['jorge', 'darlene'];   // same allow-list as revenue-manager.html
+const RM_NAMES = ['jorge', 'darlene', 'hilario'];   // same allow-list as revenue-manager.html
 
 exports.handler = async (event) => {
   // Staff only (2026-11-02): this used to answer anyone on the internet -- the Revenue Manager sends the staff-login pass.
