@@ -441,6 +441,7 @@ exports.handler = async (event) => {
         if (!d) return ok(h, { success: false });
         const lines = [d.assigned, d.unassigned].flatMap(x => Array.isArray(x) ? x : Object.values(x || {})).filter(Boolean).map(s => ({
           reservationRoomID: s.reservationRoomID || s.roomReservationID || null, room: idToName[String(s.roomID || "")] || s.roomName || null,
+          roomID: s.roomID || null, cbRoomName: s.roomName || null,
           roomTypeName: s.roomTypeName || null, startDate: s.startDate || null, endDate: s.endDate || null,
           guest: [s.guestFirstName, s.guestLastName].filter(Boolean).join(" ") || null,
         }));
