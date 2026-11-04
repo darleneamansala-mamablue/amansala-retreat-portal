@@ -147,6 +147,46 @@ function ssRead() {
   if (!ssPreview.weekStart) ssPreview.weekStart = ssWeek;
   ssRender();
 }
+// ---- reading a PHOTO of the schedule (Jorge 2026-11-04): netlify/functions/staff-schedule-photo.js reads the grid with
+// Claude; the result lands in the same check-then-save step as a paste ----
+let ssPhotoBusy = false;
+function ssPhotoShrink(file) {
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 2000 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', 0.88));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('not an image')); };
+    img.src = url;
+  });
+}
+async function ssPhotoFile(file) {
+  if (!file || ssPhotoBusy) return;
+  if (!/^image\//.test(file.type)) { showToast('That is not a picture.'); return; }
+  const drop = document.getElementById('ssDrop');
+  ssPhotoBusy = true; if (drop) drop.innerHTML = '<b>Reading the picture…</b><br><span style="font-size:11.5px;color:#9ca3af">This takes about 10-20 seconds.</span>';
+  try {
+    const image = await ssPhotoShrink(file);
+    let token = ''; try { token = sessionStorage.getItem('amansala_staff_token') || ''; } catch (e) {}
+    const r = await fetch('/.netlify/functions/staff-schedule-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, image, mediaType: 'image/jpeg' }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.error) { showToast(d.error || 'Could not read the picture.'); ssRender(); return; }
+    const out = { weekStart: /^\d{4}-\d{2}-\d{2}$/.test(d.weekStart || '') ? d.weekStart : null, rows: [], skipped: [], photoNotes: d.notes || '' };
+    (d.rows || []).forEach(r0 => {
+      const name = String(r0.name || '').trim(); if (!name) return;
+      const days = (r0.days || []).map(c => { const v = String(c || '').trim().replace(/\s+/g, ' '), t = /\s+(FD|RSV)$/i.exec(v); return t ? { code: v.slice(0, t.index).trim(), tag: t[1].toUpperCase() } : { code: v }; });
+      if (days.length !== 7) { out.skipped.push(name + ' (read ' + days.length + ' days, need 7)'); return; }
+      out.rows.push({ name, section: String(r0.section || '').trim(), days });
+    });
+    if (!out.weekStart) out.weekStart = ssWeek;
+    ssPreview = out; ssRender();
+    showToast(out.rows.length ? 'Read ' + out.rows.length + ' people from the picture. Check them, then save.' : 'No staff rows found in the picture.');
+  } catch (e) { showToast('Could not read the picture.'); ssRender(); }
+  finally { ssPhotoBusy = false; }
+}
 function ssGrid(rows, wk, editable) {
   const days = Array.from({ length: 7 }, (_, i) => ssAdd(wk, i)), th = 'padding:5px 7px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;border-bottom:1.5px solid #e8dfd4;text-align:center;white-space:nowrap';
   let html = `<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12.5px;width:100%"><thead><tr><th style="${th};text-align:left">Name</th>${days.map(d => `<th style="${th}">${new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}</th>`).join('')}</tr></thead><tbody>`, sec = null;
@@ -169,13 +209,17 @@ async function ssRender() {
     <span style="width:10px"></span>${SS_DEPTS.map(([k, l]) => { const has = !!((ssData[ssWeek] || {})[k]); return `<button onclick="ssDept='${k}';ssPreview=null;ssRender()" style="padding:6px 12px;border-radius:99px;border:1.5px solid ${ssDept === k ? '#2d6a6a' : '#d6cfc4'};background:${ssDept === k ? '#2d6a6a' : '#fff'};color:${ssDept === k ? '#fff' : '#374151'};font-weight:700;font-size:12px;cursor:pointer">${l} ${has ? '&#10003;' : ''}</button>`; }).join('')}</div>`;
   html += `<div style="${card}"><div style="font-weight:700;margin-bottom:4px">1. Paste this department's schedule</div><div style="font-size:12.5px;color:#6b7280;margin-bottom:8px">In your spreadsheet, select the whole grid for ${ssEsc(SS_DEPTS.find(d => d[0] === ssDept)[1])} (names and the 7 days, including the date row if you can), copy it, and paste it here. Pick the right week above first.</div>
     <textarea id="ssPaste" rows="6" placeholder="Paste here" style="width:100%;padding:9px;border:1.5px solid #d6cfc4;border-radius:8px;font-family:monospace;font-size:12px"></textarea>
-    <div style="margin-top:8px"><button class="btn btn-primary" onclick="ssRead()">Read it</button></div></div>`;
+    <div style="margin-top:8px"><button class="btn btn-primary" onclick="ssRead()">Read it</button></div>
+    <div id="ssDrop" ondragover="event.preventDefault();this.style.background='#ecfdf5'" ondragleave="this.style.background='#faf7f2'" ondrop="event.preventDefault();this.style.background='#faf7f2';ssPhotoFile(event.dataTransfer.files[0])" onclick="document.getElementById('ssPhotoInput').click()" style="margin-top:12px;border:2px dashed #c9bfb1;border-radius:10px;padding:16px;text-align:center;background:#faf7f2;cursor:pointer;font-size:13px;color:#4b5563">
+      <b>Or drop a photo / screenshot of the schedule here</b> (or click to choose one)<br><span style="font-size:11.5px;color:#9ca3af">The portal reads it and shows the table below for you to check before saving.</span>
+      <input id="ssPhotoInput" type="file" accept="image/*" style="display:none" onchange="ssPhotoFile(this.files[0]);this.value=''"></div></div>`;
   if (ssPreview) {
     const p = ssPreview, unk = p.rows.reduce((n, r) => n + r.days.filter(d => ssShift(d.code).unknown).length, 0);
     html += `<div style="${card};border-color:#2d6a6a"><div style="font-weight:700;margin-bottom:6px">2. Check it, then save for the week of ${ssEsc(ssMonday(p.weekStart || ssWeek))}</div>
       ${p.weekStart && ssMonday(p.weekStart) !== ssWeek ? `<div style="color:#b45309;font-size:12.5px;margin-bottom:6px">The dates in your paste start ${ssEsc(p.weekStart)}, so it will be saved to that week, not the one on screen.</div>` : ''}
       ${p.rows.length ? ssGrid(p.rows, ssMonday(p.weekStart || ssWeek)) : '<div style="color:#991b1b;font-weight:600">I could not find any staff rows. Each row needs a name followed by 7 days.</div>'}
       ${p.skipped.length ? `<div style="margin-top:8px;color:#b45309;font-size:12.5px">Skipped rows: ${p.skipped.map(ssEsc).join('; ')}</div>` : ''}
+      ${p.photoNotes ? `<div style="margin-top:6px;color:#b45309;font-size:12.5px">From the picture: ${ssEsc(p.photoNotes)}</div>` : ''}
       ${unk ? `<div style="margin-top:6px;color:#b45309;font-size:12.5px">${unk} cell${unk === 1 ? ' was' : 's were'} not recognised (yellow). They count as not working until fixed in the spreadsheet.</div>` : ''}
       <div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-primary" ${p.rows.length ? '' : 'disabled'} onclick="ssSave()">Save this schedule</button><button class="btn btn-secondary" onclick="ssPreview=null;ssRender()">Cancel</button></div></div>`;
   }
