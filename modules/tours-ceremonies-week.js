@@ -97,6 +97,18 @@ async function tcwRender() {
       const gp = ops.groupPax || {}, seen = new Set();
       const groupBox = (tcwIsAdmin() && ops.status !== 'cancelled' && r.groups.length > 1) ? `<div style="flex-basis:100%;display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding-top:6px;border-top:1px dashed #e8dfd4"><span style="${lbl};margin:0">Went from each group</span>` +
         r.groups.filter(g => !seen.has(g.id) && seen.add(g.id)).map(g => `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px">${tcwEsc(g.name)}${g.pax ? ' (' + g.pax + ')' : ''}<input type="number" min="0" value="${tcwEsc(gp[g.id] == null ? '' : gp[g.id])}" onchange="tcwSetGroup('${r.key}','${tcwEsc(g.id).replace(/'/g, "\\'")}',this.value)" style="padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;width:70px"></label>`).join('') + '</div>' : '';
+      // Tours only: who drives, whether the driver has confirmed, and the money sent. Driver and confirmation are the SAME fields the Activities page
+      // saves (driver, driverConfirmed, driverConfirmedAt), so the two pages always agree; the money box is new (moneySentMXN).
+      const drvOn = tour && ops.status !== 'cancelled';
+      const drvNames = typeof TOUR_DRIVER_NAMES !== 'undefined' ? TOUR_DRIVER_NAMES : [];
+      const drv = String(ops.driver || '').toLowerCase();
+      const cap = n => n ? n.charAt(0).toUpperCase() + n.slice(1) : '';
+      const driverBox = drvOn ? `<div style="flex-basis:100%;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;padding-top:8px;border-top:1px dashed #e8dfd4">
+        <div><div style="${lbl}">Driver <span style="color:#dc2626">*</span></div><select onchange="tcwSetDriver('${r.key}',this.value)" style="padding:7px 8px;border:2px solid ${drv ? '#d6cfc4' : '#dc2626'};border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;background:${drv ? '#fff' : '#fef2f2'};min-width:150px">` +
+          ['', ...drvNames, ...(drv && !drvNames.some(n => n.toLowerCase() === drv) ? [cap(drv)] : [])].map(n => `<option value="${tcwEsc(n.toLowerCase())}" ${n.toLowerCase() === drv ? 'selected' : ''}>${tcwEsc(n || '— assign a driver —')}</option>`).join('') + `</select></div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:7px 12px;border-radius:8px;cursor:${drv ? 'pointer' : 'not-allowed'};opacity:${drv ? 1 : .5};border:1.5px solid ${ops.driverConfirmed ? '#2563eb' : '#d6cfc4'};background:${ops.driverConfirmed ? '#eff6ff' : '#fff'};color:${ops.driverConfirmed ? '#1d4ed8' : '#6b7280'}"><input type="checkbox" ${ops.driverConfirmed ? 'checked' : ''} ${drv ? '' : 'disabled'} onchange="tcwSetDriverConfirmed('${r.key}',this.checked)">${drv ? tcwEsc(cap(drv)) + ' confirmed' : 'Driver confirmed'}</label>
+        ${ops.driverConfirmed && ops.driverConfirmedAt ? `<span style="font-size:12px;color:#1d4ed8">&#10003; confirmed ${tcwEsc(new Date(ops.driverConfirmedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span>` : ''}
+        <div><div style="${lbl}">Money sent (MXN)</div><input type="number" min="0" step="1" value="${tcwEsc(ops.moneySentMXN == null ? '' : ops.moneySentMXN)}" placeholder="0" onchange="tcwSetMoney('${r.key}',this.value)" style="padding:7px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;width:130px"></div></div>` : '';
       html += `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:12px 14px;border-top:1px solid #f0ebe0">
         <div style="min-width:210px;flex:1"><div style="font-weight:700;font-size:14px">${tcwEsc(nm(r.aoId))} <span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:${tour ? '#dbeafe' : '#fae8ff'};color:${tour ? '#1d4ed8' : '#86198f'}">${tour ? 'Tour' : 'Ceremony'}</span></div>
           <div style="font-size:12px;color:#6b7280">${tcwEsc(times)} · ${who}</div></div>
@@ -106,7 +118,7 @@ async function tcwRender() {
           ? `<input type="text" value="${tcwEsc(ops.cancelReason || '')}" placeholder="e.g. not enough ppl" onchange="tcwSet('${r.key}','cancelReason',this.value)" style="padding:7px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;width:150px">`
           : ''}<input type="number" min="0" value="${tcwEsc(ops.paxCount == null ? '' : ops.paxCount)}" placeholder="${ops.status === 'cancelled' ? '# signed up' : 'signed up'}" onchange="tcwSet('${r.key}','paxCount',this.value)" style="padding:7px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;width:${ops.status === 'cancelled' ? '90' : '110'}px;${ops.status === 'cancelled' ? 'margin-left:6px' : ''}"></div>
         <div style="flex:1;min-width:200px"><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Who does what</div><input type="text" value="${tcwEsc(ops.staffNote || '')}" placeholder="e.g. María Luisa leads, Gaby plays music" onchange="tcwSet('${r.key}','staffNote',this.value)" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px"></div>
-      ${groupBox}</div>`;
+      ${groupBox}${driverBox}</div>`;
     });
     html += '</div>';
   });
@@ -125,10 +137,10 @@ function tcwReport() {
   });
   const nm = id => ((typeof ADD_ONS !== 'undefined' ? ADD_ONS : []).find(a => a.id === id) || {}).name || id;
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const out = [['Date', 'Time', 'Activity', 'Type', 'Groups (guests)', 'Status', 'Cancel reason', 'Pax signed up', 'Went per group', 'Guides / shaman', 'Fire keeper'].map(q).join(',')];
+  const out = [['Date', 'Time', 'Activity', 'Type', 'Groups (guests)', 'Status', 'Cancel reason', 'Pax signed up', 'Went per group', 'Driver', 'Driver confirmed', 'Money sent (MXN)', 'Guides / shaman', 'Fire keeper'].map(q).join(',')];
   Object.values(rows).sort((x, y) => x.date.localeCompare(y.date) || (x.times[0] || '').localeCompare(y.times[0] || '')).forEach(r => {
     const o = (typeof actOpsData !== 'undefined' && actOpsData[r.key]) || {};
-    out.push([r.date, [...new Set(r.times)].sort().map(tcwFmtT).join(' & '), nm(r.aoId), TCW_TOURS.includes(r.aoId) ? 'Tour' : 'Ceremony', r.groups.join('; '), o.status === 'cancelled' ? 'Cancelled' : 'Running', o.cancelReason || '', o.paxCount == null ? '' : o.paxCount, Object.keys(o.groupPax || {}).map(g => ((r.gids || {})[g] || g) + ': ' + o.groupPax[g]).join('; '),
+    out.push([r.date, [...new Set(r.times)].sort().map(tcwFmtT).join(' & '), nm(r.aoId), TCW_TOURS.includes(r.aoId) ? 'Tour' : 'Ceremony', r.groups.join('; '), o.status === 'cancelled' ? 'Cancelled' : 'Running', o.cancelReason || '', o.paxCount == null ? '' : o.paxCount, Object.keys(o.groupPax || {}).map(g => ((r.gids || {})[g] || g) + ': ' + o.groupPax[g]).join('; '), TCW_TOURS.includes(r.aoId) ? (o.driver || '') : '', TCW_TOURS.includes(r.aoId) ? (o.driverConfirmed ? 'Yes' : 'No') : '', TCW_TOURS.includes(r.aoId) ? (o.moneySentMXN == null ? '' : o.moneySentMXN) : '',
       r.aoId === 'ao5' ? o.shaman || '' : [o.guide1, o.guide2, o.guide3].filter(Boolean).join(' & '), o.fireKeeper || ''].map(q).join(','));
   });
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + out.join('\n')], { type: 'text/csv' })); a.download = 'tours-ceremonies-report.csv'; a.click();
@@ -158,6 +170,31 @@ function tcwSetGroup(key, gid, val) {
   if (typeof actOpsSave === 'function') actOpsSave();
   if (typeof showToast === 'function') showToast('Saved.');
   tcwRender();
+}
+function tcwSetDriver(key, val) {
+  if (typeof actOpsData === 'undefined') return;
+  const o = actOpsData[key] = actOpsData[key] || {};
+  o.driver = String(val || '').toLowerCase();
+  if (!o.driver) { o.driverConfirmed = false; delete o.driverConfirmedAt; }   // no driver, nothing to confirm
+  if (typeof actOpsSave === 'function') actOpsSave();
+  if (typeof showToast === 'function') showToast(o.driver ? 'Driver saved.' : 'Driver cleared.');
+  tcwRender();
+}
+function tcwSetDriverConfirmed(key, on) {
+  if (typeof actOpsData === 'undefined') return;
+  const o = actOpsData[key] = actOpsData[key] || {};
+  o.driverConfirmed = !!on;
+  if (on) o.driverConfirmedAt = new Date().toISOString(); else delete o.driverConfirmedAt;
+  if (typeof actOpsSave === 'function') actOpsSave();
+  if (typeof showToast === 'function') showToast(on ? 'Driver confirmed.' : 'Confirmation removed.');
+  tcwRender();
+}
+function tcwSetMoney(key, val) {
+  if (typeof actOpsData === 'undefined') return;
+  const o = actOpsData[key] = actOpsData[key] || {};
+  o.moneySentMXN = val === '' ? '' : String(Math.max(0, parseFloat(val) || 0));
+  if (typeof actOpsSave === 'function') actOpsSave();
+  if (typeof showToast === 'function') showToast('Saved.');
 }
 function tcwSet(key, field, val) {
   if (typeof actOpsData === 'undefined') return;
