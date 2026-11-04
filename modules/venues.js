@@ -1873,7 +1873,7 @@ function venSave(){const lead=document.getElementById('vm-leader').value.trim(),
   if(datesChanged){
     const hasContract=!!(bk.contractSignedAt||bk.contractSignature);
     const hasSched=!!bk.scheduleRequest?.submittedAt;
-    const hasCbRes=bk.cbReservationIds&&Object.keys(bk.cbReservationIds).length>0;
+    const hasCbRes=bk.cbReservationIds&&Object.values(bk.cbReservationIds).some(Boolean);
     const lines=[];
     lines.push(`• Venue block will move to ${fmtDate(start)} – ${fmtDate(end)}`);
     lines.push('• Room block stays assigned (same rooms, new dates)');
@@ -1882,7 +1882,7 @@ function venSave(){const lead=document.getElementById('vm-leader').value.trim(),
     if(hasSched)lines.push('• Teacher schedule will be deleted — teacher must resubmit');
     if(!confirm('Changing dates will trigger the following:\n\n'+lines.join('\n')+'\n\nContinue?'))return;
     // Cancel Cloudbeds reservations
-    if(hasCbRes){cancelCloudbedReservations(bk).catch(e=>console.warn('[CB cancel on date change]',e));bk.cbReservationIds={};bk.cbGuestIds={};bk.cbAdjustmentIds={};}
+    if(hasCbRes){cancelCloudbedReservations(bk).catch(e=>console.warn('[CB cancel on date change]',e));cbUnlinkAll(bk);bk.cbGuestIds={};bk.cbAdjustmentIds={};}
     // Wipe contract
     if(hasContract){delete bk.contractSignedAt;delete bk.contractSignature;delete bk.contractSentViaPortal;delete bk.contractSentAt;if(bk.depositInvoice)bk.depositInvoice.status='pending';}
     // Reset status back to requested

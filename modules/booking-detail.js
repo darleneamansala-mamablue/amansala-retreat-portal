@@ -1427,8 +1427,9 @@ async function bdSyncCloudbeds(){
     }catch(e){bdStickyAlert('No pude conectar con Cloudbeds para verificar el enlace actual: '+e.message+'. Intenta de nuevo en un momento.','error');return;}
     if(checkData.errored){bdStickyAlert('No pude confirmar el estado de la reserva enlazada en Cloudbeds ahorita (puede ser temporal) — intenta de nuevo en un momento antes de asumir que ya no existe.','warn');return;}
     if(checkData.active){bdStickyAlert(`Ya está enlazado a una reserva activa en Cloudbeds (estado: ${checkData.status}) — todo en orden, no hace falta hacer nada.`,'success');return;}
-    // Confirmed gone/cancelled -- clear the stale link and fall through to search-or-create.
-    delete bk.cbReservationIds[reg.room];
+    // Confirmed gone/cancelled -- clear the stale link and fall through to search-or-create. null, not delete: a key that
+    // just goes missing is put back by the database while the room is on the list (sql/cb_links_guard.sql).
+    bk.cbReservationIds[reg.room]=null;
     try{await db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id);}
     catch(e){bdStickyAlert('Error limpiando el enlace viejo: '+e.message,'error');return;}
     bdStickyAlert(`La reserva enlazada (${existingId}) ya no existe en Cloudbeds (estado: ${checkData.status||'no encontrada'}) — buscando una reserva real para reemplazarla…`,'warn');
