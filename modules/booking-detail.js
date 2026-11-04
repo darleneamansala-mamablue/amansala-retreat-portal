@@ -100,7 +100,7 @@ function _bdSourceLabel(source){
 // though it shows as "occupied" by itself.
 function _bdAvailableRoomsForEdit(checkIn,checkOut,currentRoom){
   if(!checkIn||!checkOut||typeof rsComputeAvailability!=='function')return currentRoom?[currentRoom]:[];
-  const byType=rsComputeAvailability(checkIn,checkOut,[]);
+  const byType=rsComputeAvailability(checkIn,checkOut,[],{includeBeds:true});
   const rooms=new Set();
   byType.forEach(t=>(t.availableRooms||[]).forEach(r=>rooms.add(r)));
   if(currentRoom)rooms.add(currentRoom);
@@ -128,7 +128,7 @@ function _bdWithinSwapWindow(myCheckIn,otherCheckIn){
 // that different data model is out of scope here.
 function _bdRoomOptionsForEdit(checkIn,checkOut,currentRoom){
   if(!checkIn||!checkOut||typeof rsComputeAvailability!=='function')return currentRoom?[{room:currentRoom,label:currentRoom}]:[];
-  const byType=rsComputeAvailability(checkIn,checkOut,[]);
+  const byType=rsComputeAvailability(checkIn,checkOut,[],{includeBeds:true});
   const seen=new Map();
   byType.forEach(t=>(t.roomStatus||[]).forEach(rs=>{
     if(seen.has(rs.room))return;
