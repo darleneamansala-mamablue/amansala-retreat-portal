@@ -63,7 +63,15 @@ async function run() {
     if (srow && srow.value && srow.value.notifications && srow.value.notifications.climasReportEnabled != null) enabled = !!srow.value.notifications.climasReportEnabled;
   } catch (e) { /* non-fatal — defaults to enabled */ }
   const m2mKey  = process.env.VISITO_M2M_KEY;
-  const numbers = (process.env.CLIMAS_REPORT_NUMBERS || '').split(',').map(s => s.trim()).filter(Boolean);
+  // the Netlify list plus app_store 'climas_report_numbers' {numbers: [...]} -- numbers added without touching Netlify
+  // (Jorge 2026-11-04: four more, +63)
+  let extra = [];
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.climas_report_numbers&select=value`, { headers: { apikey: supaKey, Authorization: `Bearer ${supaKey}` } });
+    const [row] = r.ok ? await r.json() : [];
+    extra = (row && row.value && Array.isArray(row.value.numbers)) ? row.value.numbers : [];
+  } catch (e) { /* non-fatal */ }
+  const numbers = [...new Set([...(process.env.CLIMAS_REPORT_NUMBERS || '').split(','), ...extra].map(s => String(s).replace(/[^\d+]/g, '')).filter(Boolean))];
   if (enabled && (!m2mKey || !numbers.length)) {
     console.error('[climas-report] enabled but VISITO_M2M_KEY / CLIMAS_REPORT_NUMBERS missing');
     return { statusCode: 500 };
