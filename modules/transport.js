@@ -1968,6 +1968,8 @@ async function tr2Drop(targetFirstDirId) {
   tr2BlendGroupPickups();
   tr2BuildView();
   await tr2SaveGroupSetting();
+  { const grp = (tr2AllEntries || []).find(x => x.rowId === srcRowId && x.type === direction);
+    tr2LogRide('Transport ride grouped', [srcRowId, tgtRowId], `${direction} put in the same ride${grp && grp.date ? ' (' + grp.date + (grp.groupPickup ? ', pickup ' + grp.groupPickup : '') + ')' : ''}`); }
 
   const srcHasCharge = !!tr2RawRows[srcRowId]?.data?.folioCharged?.[dirKey];
   const tgtHasCharge = !!tr2RawRows[tgtRowId]?.data?.folioCharged?.[dirKey];
@@ -1991,10 +1993,19 @@ async function tr2Drop(targetFirstDirId) {
     await tr2LoadData();
   }
 }
+// Who changed a ride: manual groupings and pickup times were not in the activity log, so a 9:00 pickup pulled onto a
+// shared van could not be traced (Jodi Krymuza's departures, 2026-11-04)
+function tr2LogRide(action, rowIds, detail) {
+  try {
+    const nm = id => { const d = (tr2RawRows[id] || {}).data || {}; return [d.firstName, d.lastName].filter(Boolean).join(' ') || 'guest'; };
+    const bk = (tr2RawRows[rowIds[0]] || {}).booking_id || null;
+    logActivity(action, `${rowIds.map(nm).join(', ')} — ${detail}`, bk && bk !== 'individual' ? bk : null);
+  } catch (e) {}
+}
 async function tr2SaveGroupSetting() {
   try { await db.from('settings').upsert({ key: 'transport_groups', value: [...tr2UserGroupMap], updated_at: new Date().toISOString() }, { onConflict: 'key' }); } catch (e) {}
 }
-async function tr2ResetGroups() { tr2UserGroupMap.clear(); tr2BlendGroupPickups(); tr2BuildView(); await tr2SaveGroupSetting(); }
+async function tr2ResetGroups() { tr2UserGroupMap.clear(); tr2BlendGroupPickups(); tr2BuildView(); await tr2SaveGroupSetting(); try { logActivity('Transport rides reset', 'Every manual ride grouping cleared (back to automatic)', null); } catch (e) {} }
 async function tr2SplitEntry(dirId) {
   const actualRowId = dirId.split('|')[1], direction = dirId.split('|')[0];
   const dirKey = direction === 'arrival' ? 'arrivalFolioItemId' : 'departureFolioItemId';
@@ -2014,6 +2025,7 @@ async function tr2SplitEntry(dirId) {
   tr2BlendGroupPickups();
   tr2BuildView();
   await tr2SaveGroupSetting();
+  tr2LogRide('Transport ride split', [actualRowId], `${direction} taken out of its shared ride`);
   const thisHasCharge = !!tr2RawRows[actualRowId]?.data?.folioCharged?.[dirKey];
   if (thisHasCharge || otherChargedIds.length) {
     const seenBkIds = new Set();
@@ -2420,6 +2432,8 @@ async function tr2SaveEdit(rowId) {
   if (tr2CanEditPickup()) {
     const pickupVal = g('tr2-e-dep-pickup')?.value || '';
     updatedData.departurePickupOverride = (pickupVal && pickupVal !== (tr2DefaultPickup(updatedData) || '')) ? pickupVal : null;
+    if ((oldData.departurePickupOverride || null) !== (updatedData.departurePickupOverride || null))
+      tr2LogRide('Pickup time changed', [rowId], `departure pickup ${oldData.departurePickupOverride || (tr2DefaultPickup(oldData) || '—') + ' (auto)'} → ${updatedData.departurePickupOverride || (tr2DefaultPickup(updatedData) || '—') + ' (auto)'} · flight ${updatedData.departureTime || '—'}`);
   }
 
   const hadArrCharge = !!oldData.folioCharged?.arrivalFolioItemId, hadDepCharge = !!oldData.folioCharged?.departureFolioItemId;
