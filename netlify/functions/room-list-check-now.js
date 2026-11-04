@@ -4,6 +4,7 @@
 // calls, so this is how an admin sees today's result or fires a test WhatsApp.
 //   POST {token}               -> {problems: [...]} without sending
 //   POST {token, send: true}   -> also sends the WhatsApp to the numbers in app_store 'room_check_alert'
+//   POST {token, send: true, numbers: ['+52...']} -> sends only to those (a test for one person)
 const { staffAllowed, cors, reply } = require('./portal-auth-lib');
 const { run } = require('./room-list-check');
 
@@ -15,7 +16,8 @@ exports.handler = async (event) => {
   const who = await staffAllowed({ headers: event.headers || {}, body: JSON.stringify({ token: b.token }) }, { admin: true });
   if (!who) return reply(401, { error: 'Sign in as an admin.' });
   try {
-    return reply(200, await run({ send: b.send === true }));
+    const numbers = Array.isArray(b.numbers) ? b.numbers.map(String).filter(n => /^\+\d{10,15}$/.test(n)) : undefined;
+    return reply(200, await run({ send: b.send === true, numbers: numbers && numbers.length ? numbers : undefined }));
   } catch (e) {
     console.error('[room-list-check-now]', e);
     return reply(500, { error: 'Could not run the check' });
