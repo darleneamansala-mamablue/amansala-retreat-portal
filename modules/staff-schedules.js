@@ -61,7 +61,7 @@ function ssWorkersOn(date) {
 function ssSummary(w) { const on = (w || []).filter(x => x.working); return { total: on.length, am: on.filter(x => x.half === 'AM').length, pm: on.filter(x => x.half === 'PM').length }; }
 
 // ---- changing one day of a saved week (Jorge 2026-11-04): click a day -> OFF / 8-4 / 11-6 / 1-9 / Custom ----
-const SS_QUICK = ['OFF', '8-4', '11-6', '1-9'];
+const SS_QUICK = ['PSG', 'OFF', '8-4', '11-6', '1-9'];   // PSG = unpaid leave
 function ssPickClose() { const m = document.getElementById('ssPickMenu'); if (m) m.remove(); document.removeEventListener('mousedown', ssPickOutside, true); }
 function ssPickOutside(e) { const m = document.getElementById('ssPickMenu'); if (m && !m.contains(e.target)) ssPickClose(); }
 function ssPick(ev, ri, di) {
@@ -73,7 +73,7 @@ function ssPick(ev, ri, di) {
   m.style.cssText = `position:fixed;z-index:9999;top:${Math.min(box.bottom + 4, innerHeight - 190)}px;left:${Math.min(box.left, innerWidth - 230)}px;width:220px;background:#fff;border:1px solid #d6cfc4;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px;font-family:inherit`;
   const btn = 'display:block;width:100%;text-align:left;padding:7px 10px;margin:2px 0;border:1px solid #e8dfd4;border-radius:7px;background:#fff;cursor:pointer;font-size:13px;font-weight:600';
   m.innerHTML = `<div style="font-size:11.5px;color:#6b7280;margin:0 2px 6px">${ssEsc(r.name)} · ${new Date(ssAdd(ssWeek, di) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })} · now <b>${ssEsc(cur || '—')}</b></div>
-    ${SS_QUICK.map(c => `<button style="${btn};${c === 'OFF' ? 'color:#991b1b' : 'color:#166534'}" onclick="ssSetDay(${ri},${di},'${c}',${c === 'OFF' ? "''" : 'null'})">${c}${c !== 'OFF' && d.tag ? ` <span style="font-size:10px;color:#6b7280">${ssEsc(d.tag)}</span>` : ''}</button>`).join('')}
+    ${SS_QUICK.map(c => { const off = !ssShift(c).working; return `<button style="${btn};${off ? 'color:#991b1b' : 'color:#166534'}" onclick="ssSetDay(${ri},${di},'${c}',${off ? "''" : 'null'})">${c}${c === 'PSG' ? ' <span style="font-size:10px;color:#6b7280;font-weight:500">unpaid leave</span>' : ''}${!off && d.tag ? ` <span style="font-size:10px;color:#6b7280">${ssEsc(d.tag)}</span>` : ''}</button>`; }).join('')}
     <div style="margin-top:6px;border-top:1px solid #f0ebe0;padding-top:6px"><div style="font-size:11.5px;font-weight:700;color:#374151;margin:0 2px 4px">Custom</div>
       <div style="display:flex;gap:4px"><input id="ssPickCustom" value="${ssEsc(cur)}" placeholder="e.g. 10-6 FD, VACACIONES" style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px" onkeydown="if(event.key==='Enter')ssSetCustom(${ri},${di})">
       <button class="btn btn-primary btn-sm" onclick="ssSetCustom(${ri},${di})">Save</button></div>
