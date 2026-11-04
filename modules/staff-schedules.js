@@ -80,7 +80,7 @@ function ssPick(ev, ri, di) {
     <div style="margin-top:6px;border-top:1px solid #f0ebe0;padding-top:5px"><div style="font-size:11px;font-weight:700;color:#374151;margin:0 2px 3px">Custom</div>
       <div style="display:flex;gap:4px"><input id="ssPickCustom" value="${ssEsc(cur)}" placeholder="e.g. 10-6 FD, VACACIONES" style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px" onkeydown="if(event.key==='Enter')ssSetCustom(${ri},${di})">
       <button class="btn btn-primary btn-sm" onclick="ssSetCustom(${ri},${di})">Save</button></div>
-      <div style="font-size:10px;color:#9ca3af;margin:3px 2px 0">e.g. 10-6, AM, VACACIONES, INC, PERMISO. Add FD or RSV after the hours.</div></div>`;
+      <div style="font-size:10px;color:#9ca3af;margin:3px 2px 0">${SS_QUICK_BY_DEPT[ssDept] ? 'e.g. AM, PM, VACACIONES, INC, PERMISO.' : 'e.g. 10-6, AM, VACACIONES, INC, PERMISO. Add FD or RSV after the hours.'}</div></div>`;
   document.body.appendChild(m);
   // under the cell when it fits, otherwise above it, always inside the window
   const h = m.offsetHeight, below = innerHeight - box.bottom - 8;
