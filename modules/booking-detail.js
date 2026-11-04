@@ -314,6 +314,16 @@ async function _bdLoadFoliosNow(){
         justSeeded=true;
       }
     }
+    // Every other folio of this same room whose name is not another guest's of it shows here too. Only the folio under the
+    // exact current name used to show: Korrina Hughes (32a) moved to CH1 and renamed "Korrina L Hughes and Allan Hughes"
+    // kept her own folio, filed under "Korrina L Hughes" -- it was there but nobody could see it (2026-11-04).
+    try{
+      const {data:allF}=await db.from('folios').select('*').eq(subj.folioCol,folioSubjId);
+      const _n=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
+      const others=new Set((subj.allGuests||[]).map(g=>_n(g.name)).filter(x=>x&&x!==_n(guestName)));
+      (allF||[]).forEach(f=>{if(!folios.some(x=>x.id===f.id)&&!others.has(_n(f.guest_name)))folios.push(f);});
+      folios.sort((x,y)=>new Date(x.created_at||0)-new Date(y.created_at||0));
+    }catch(e){}
     const folioIds=folios.map(f=>f.id);
     let {data:items,error:iErr}=await db.from('folio_items').select('*').in('folio_id',folioIds).order('created_at',{ascending:true});
     if(iErr)throw iErr;
