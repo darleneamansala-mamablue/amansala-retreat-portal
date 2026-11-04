@@ -8,6 +8,7 @@
 // One small key per day, re-read before every write, so two people ticking different classes at once do not overwrite each other.
 
 let dsDate = null, dsState = {}, dsEvents = [], dsWait = 0;
+const dsCache = {}, dsLoading = {};   // Calendar list: saved Start/Finish per date
 
 function dsEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 function dsISO(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -25,14 +26,15 @@ async function dsFetch(d) {
   try { const { data } = await db.from('app_store').select('value').eq('key', dsKey(d)).maybeSingle(); return (data && data.value) || {}; } catch (e) { return {}; }
 }
 
+function dsIsClass(e) {
+  const id = String((e && e.id) || '');
+  return /_(morn|aft|arr|dep|sunrise|workshop|morn_arr|morn_dep)(_|$)/.test(id) && !/_opt_/.test(id) && !/optional/.test(String((e && e.resourceId) || ''));
+}
 // the day's classes, in time order (opening circles, tours and ceremonies are not shala set-ups)
 function dsClasses(date) {
   let evs = []; try { evs = typeof skedGetRetreatEvents === 'function' ? skedGetRetreatEvents(date) : []; } catch (e) { console.warn('[daily-shalas]', e); }
   const needField = { morn: 'morningNotes', morn_arr: 'morningNotes', morn_dep: 'morningNotes', aft: 'afternoonNotes', arr: 'arrivalNotes', dep: 'departureNotes' };
-  return evs.filter(e => {
-    const id = String(e.id || '');
-    return /_(morn|aft|arr|dep|sunrise|workshop|morn_arr|morn_dep)(_|$)/.test(id) && !/_opt_/.test(id) && !/optional/.test(String(e.resourceId || ''));
-  }).map(e => {
+  return evs.filter(dsIsClass).map(e => {
     const m = /_(morn_arr|morn_dep|morn|aft|arr|dep)$/.exec(String(e.id)), bk = m && (AppData.bookings || []).find(b => b.id === e.bkId);
     return { id: String(e.id), start: e.startTime, end: e.endTime, who: e.title || '', what: e.subtitle || '', shala: dsShala(e.resourceId), need: bk ? String((bk.scheduleRequest || {})[needField[m[1]]] || '').trim() : '' };
   }).sort((a, b) => String(a.start).localeCompare(String(b.start)));
@@ -67,19 +69,37 @@ async function dsRender() {
 }
 
 // re-read the day, change this one class, write it back
-async function dsAct(id, what) {
-  const cur = await dsFetch(dsDate), r = cur[id] || {}, now = new Date().toISOString();
+async function dsAct(id, what, date) {
+  const d = date || dsDate;
+  const cur = await dsFetch(d), r = cur[id] || {}, now = new Date().toISOString();
   if (what === 'start' && !r.startedAt) { r.startedAt = now; r.startedBy = dsWho(); }
   else if (what === 'finish' && !r.finishedAt) { if (!r.startedAt) { r.startedAt = now; r.startedBy = dsWho(); } r.finishedAt = now; r.finishedBy = dsWho(); }
   cur[id] = r;
-  try { await db.from('app_store').upsert({ key: dsKey(dsDate), value: cur, updated_at: now }); } catch (e) { if (typeof showToast === 'function') showToast('Could not save. Check your connection and try again.'); return; }
-  dsRender();
+  try { await db.from('app_store').upsert({ key: dsKey(d), value: cur, updated_at: now }); } catch (e) { if (typeof showToast === 'function') showToast('Could not save. Check your connection and try again.'); return; }
+  dsCache[d] = cur; dsRender(); dsRefreshCalendar();
 }
-async function dsUndo(id) {
+async function dsUndo(id, date) {
   if (!confirm('Clear this shala\'s start/finish times?')) return;
-  const cur = await dsFetch(dsDate); delete cur[id];
-  try { await db.from('app_store').upsert({ key: dsKey(dsDate), value: cur, updated_at: new Date().toISOString() }); } catch (e) { if (typeof showToast === 'function') showToast('Could not save.'); return; }
-  dsRender();
+  const d = date || dsDate, cur = await dsFetch(d); delete cur[id];
+  try { await db.from('app_store').upsert({ key: dsKey(d), value: cur, updated_at: new Date().toISOString() }); } catch (e) { if (typeof showToast === 'function') showToast('Could not save.'); return; }
+  dsCache[d] = cur; dsRender(); dsRefreshCalendar();
+}
+function dsRefreshCalendar() { try { if (typeof skedBuild === 'function' && document.getElementById('skedWrap')) skedBuild(); } catch (e) {} }
+// Called by the Calendar's List view (teacher-portal.js) for every event card: the maintenance team taps Start / Finish right on the shala class.
+function dsListActions(ev) {
+  if (!dsIsClass(ev) || !ev.date) return '';
+  const d = String(ev.date).slice(0, 10);
+  if (!dsCache[d]) {   // not loaded yet: fetch once, then redraw the list
+    if (!dsLoading[d]) { dsLoading[d] = true; dsFetch(d).then(v => { dsCache[d] = v; dsRefreshCalendar(); }); }
+    return '';
+  }
+  const r = dsCache[d][ev.id] || {}, id = dsEsc(ev.id).replace(/'/g, "\\'");
+  const b = bg => `padding:10px 20px;font-size:14px;font-weight:700;border:none;border-radius:8px;cursor:pointer;font-family:'Jost',sans-serif;color:#fff;background:${bg}`;
+  const st = e => `event.stopPropagation();${e}`;
+  const wrap = inner => `<div onclick="event.stopPropagation()" style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(0,0,0,.15);font-size:13px">${inner}</div>`;
+  if (r.finishedAt) return wrap(`<div style="color:#166534;font-weight:700">&#10003; Shala ready</div><div>Started <b>${dsClock(r.startedAt)}</b> by ${dsEsc(r.startedBy)} · Finished <b>${dsClock(r.finishedAt)}</b> by ${dsEsc(r.finishedBy)} · Took <b>${dsDur(r.startedAt, r.finishedAt)}</b> <a href="#" onclick="${st(`dsUndo('${id}','${d}')`)};return false" style="margin-left:6px;font-size:12px">undo</a></div>`);
+  if (r.startedAt) return wrap(`<div style="color:#92400e;font-weight:700">In progress · started <b>${dsClock(r.startedAt)}</b> by ${dsEsc(r.startedBy)}</div><button onclick="${st(`dsAct('${id}','finish','${d}')`)}" style="${b('#166534')};margin-top:6px">Finish</button> <a href="#" onclick="${st(`dsUndo('${id}','${d}')`)};return false" style="margin-left:8px;font-size:12px">undo</a>`);
+  return wrap(`<button onclick="${st(`dsAct('${id}','start','${d}')`)}" style="${b('#2d6a6a')}">Start</button>`);
 }
 function dsNav(n) { dsDate = n === 0 ? dsISO(new Date()) : dsAdd(dsDate || dsISO(new Date()), n); dsRender(); }
 function dsOpen(btn) {
@@ -87,6 +107,23 @@ function dsOpen(btn) {
   switchTab('dailyshalas', btn);
   try { localStorage.setItem('ama_last_tab', prev || 'dashboard'); } catch (e) {}
 }
+// The link amansalaportal.com/schedule-daily opens the Calendar in List view (the maintenance team's phone link): the login restores the Calendar tab,
+// then this switches it to List once the portal is open.
+(function () {
+  try {
+    if (!/^\/?schedule-daily\/?$/.test(location.pathname) || /[?&]mode=/.test(location.search)) return;
+    try { localStorage.setItem('ama_last_tab', 'skedda'); } catch (e) {}
+    let tries = 0;
+    const t = setInterval(() => {
+      const ready = typeof getCurrentSession === 'function' && getCurrentSession() && typeof skedSetView === 'function' && typeof AppData !== 'undefined' && (AppData.bookings || []).length;
+      if (ready) {
+        clearInterval(t);
+        if (typeof tuGo === 'function') tuGo('skedda');
+        setTimeout(() => skedSetView('list'), 400);
+      } else if (++tries > 600) clearInterval(t);
+    }, 500);
+  } catch (e) { console.warn('[daily-shalas] schedule-daily', e); }
+})();
 (function () {
   try {
     if (document.getElementById('tab-dailyshalas')) return;

@@ -836,7 +836,7 @@ function actSheetRenderSummary() {
             ${sel('guide2','Guide 2',guide2Opts)}
             ${sel('driver','Driver',driverOpts)}
             <div>
-              <label style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px">Van Assignment <span style="font-size:10px;color:#9ca3af;font-weight:400;text-transform:none">(${VAN_CAP}/van max${vansNeeded?' · need '+vansNeeded:''})</span><span style="display:block;font-size:10px;color:#6b7280;font-weight:400;text-transform:none;letter-spacing:0;margin-top:2px;max-width:330px">Small group: Amansala vehicle, gas only (FJ under 5, Infinity for 6, or the Amansala Van). Over that: hire a van (Miguel, 1,900 MXN).</span></label>
+              <label style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px">Van Assignment <span style="font-size:10px;color:#9ca3af;font-weight:400;text-transform:none">(${VAN_CAP}/van max${vansNeeded?' · need '+vansNeeded:''})</span><span style="display:block;font-size:10px;color:#6b7280;font-weight:400;text-transform:none;letter-spacing:0;margin-top:2px;max-width:330px">${actVehicleSuggestion(totalSigned)}</span></label>
               <div style="display:flex;gap:8px;flex-wrap:wrap">
                 ${['van1','van2','van3'].map((vk,i)=>{const v=ops[vk]||'';const color=v?'#1d4ed8':'#6b7280';return`<div><div style="font-size:10px;color:#9ca3af;margin-bottom:3px">Van ${i+1}</div><select onchange="actOpsSet('${opsKey}','${vk}',this.value)" style="padding:5px 9px;border:1.5px solid ${v?'#3b82f6':'#e0dbd2'};border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;color:${color};background:${v?'#dbeafe':'#f5f5f0'};outline:none"><option value="">— Not assigned —</option><option value="fj" ${v==='fj'?'selected':''}>🚙 FJ (Amansala, gas only)</option><option value="infinity" ${v==='infinity'?'selected':''}>🚙 Infinity (Amansala, gas only)</option><option value="inhouse" ${v==='inhouse'?'selected':''}>🚐 Amansala Van (gas only)</option><option value="miguel" ${(v==='miguel'||v===true||v==='true')?'selected':''}>🚐 Hired van — Miguel (1,900 MXN)</option></select></div>`;}).join('')}
               </div>
@@ -893,6 +893,14 @@ function actOpsRefreshCost(opsKey) {
   const totalSigned = parseInt(el.dataset.signed||'0');
   const aoId = el.dataset.aoid||'';
   el.innerHTML = actOpsCostHtml(ops, totalSigned, aoId, opsKey);
+}
+// Which vehicle fits a group (Darlene 2026-11-04): Amansala's own vehicles are free apart from gas; over 13 people a van is hired (1,900 MXN each).
+// Only a suggestion: the Van 1/2/3 dropdowns stay free to pick or change.
+function actVehicleSuggestion(n) {
+  n = parseInt(n) || 0;
+  if (n < 1) return 'Suggested vehicle shows once guests sign up: 1-5 FJ · 6 Infinity · 7-13 Amansala Van · 14+ hired vans (Miguel).';
+  const pick = n <= 5 ? 'FJ (gas only)' : n === 6 ? 'Infinity (gas only)' : n <= 13 ? 'Amansala Van (gas only)' : 'hire ' + Math.ceil(n / 13) + ' vans (Miguel, 1,900 MXN each)';
+  return '<b style="color:#1d4ed8">Suggested for ' + n + ' ' + (n === 1 ? 'person' : 'people') + ': ' + pick + '</b> — pick or change below.';
 }
 const ACT_COSTS = {
   ao1: {entrance:285, entranceLabel:'Tulum Ruins Entrance'},

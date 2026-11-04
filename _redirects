@@ -28,6 +28,8 @@ https://amansala-portal.netlify.app/*  https://amansalaportal.com/:splat  301!
 
 # Daily Shalas (modules/daily-shalas.js): the shala team signs in with their staff login and taps Start / Finish on each shala. Same kind of address as the sections above; stays above the /:slug catch-all.
 /dailyshalas  /booking-hub.html  200
+# Schedule list for the maintenance team's phones (modules/daily-shalas.js opens the Calendar in List view after login).
+/schedule-daily  /booking-hub.html  200
 
 # Public spa booking link for the 60 minute Crystal Balancing offer (service flagged offer=crystal). A 302, like /spa-staff, so the page sees ?offer=crystal.
 /spa-crystal  /spa-booking.html  302
