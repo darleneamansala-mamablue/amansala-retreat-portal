@@ -62,9 +62,18 @@ const dayLater = n => { now += n * 86400000; };
   // same day: no reminder yet
   sent.length = 0; let o = await L.sendReminders(KEY); assert.strictEqual(sent.length, 0); assert.deepStrictEqual(o.reminded, []);
   // 2. partial payment: no confirmation
-  pay(200); const c1 = await L.confirmIfPaid(KEY, { folioId: db.folios[0].id });
-  assert.strictEqual(c1.skipped, 'not paid in full'); assert.strictEqual(sent.length, 0);
+  pay(200); const c1 = await L.confirmIfPaid(KEY, { folioId: db.folios[0].id, paid: 200 });
+  assert.strictEqual(c1.skipped, 'not paid in full'); assert.strictEqual(sent.length, 0);   // partial message switched off
   console.log('partial payment, no confirmation: ok');
+  db.app_store.find(r => r.key === 'booking_payment_flow').value.partial = true;
+  const c1b = await L.confirmIfPaid(KEY, { folioId: db.folios[0].id, paid: 200 });
+  assert.strictEqual(c1b.mode, 'partial'); assert.strictEqual(c1b.balance, 400);
+  assert.deepStrictEqual(sent.map(s => s.ch), ['email', 'wa']);
+  assert.strictEqual(sent[1].template.name, 'booking_payment_partial');
+  assert.deepStrictEqual(sent[1].template.components[0].parameters.map(p => p.text).slice(0, 6), ['Ana', '$200.00 USD', 'from November 20 to 23rd', 'Garden', '$400.00 USD', 'November 10']);
+  assert.ok(/received your payment of <strong>\$200\.00 USD/.test(sent[0].html));
+  sent.length = 0;
+  console.log('partial payment message: ok');
   // 3. next day: reminder with what is left, once a day
   dayLater(1); o = await L.sendReminders(KEY);
   assert.deepStrictEqual(o.reminded, ['Ana Test $400.00 USD']);

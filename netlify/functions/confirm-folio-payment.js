@@ -93,7 +93,7 @@ exports.handler = async (event) => {
 
     notifyFolioPayment(hdrs, folioId, amount).catch(e => console.warn('[confirm-folio-payment] notify failed:', e.message));
     // a reservation made by staff that was waiting for this payment now gets its booking confirmation (booking-payment-lib.js)
-    for (const p of parts) { try { await confirmIfPaid(supaKey, { folioId: p.folioId }); } catch (e) { console.warn('[confirm-folio-payment] confirmation check failed:', e.message); } }
+    for (const p of parts) { try { await confirmIfPaid(supaKey, { folioId: p.folioId, paid: p.amount }); } catch (e) { console.warn('[confirm-folio-payment] confirmation check failed:', e.message); } }
 
     return {
       statusCode: 200,

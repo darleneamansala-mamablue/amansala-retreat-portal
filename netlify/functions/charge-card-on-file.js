@@ -91,7 +91,7 @@ exports.handler = async (event) => {
     });
     if (!insertRes.ok) return jsonErr(500, 'Charged but could not save to the folio: ' + await insertRes.text());
     // a reservation made by staff that was waiting for this payment now gets its booking confirmation (booking-payment-lib.js)
-    try { await confirmIfPaid(supaKey, { folioId }); } catch (e) { console.warn('[charge-card-on-file] confirmation check failed:', e.message); }
+    try { await confirmIfPaid(supaKey, { folioId, paid: pi.amount_received / 100 }); } catch (e) { console.warn('[charge-card-on-file] confirmation check failed:', e.message); }
   } catch (err) {
     return jsonErr(500, 'Charged but could not save to the folio: ' + err.message);
   }

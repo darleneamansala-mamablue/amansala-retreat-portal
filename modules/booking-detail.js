@@ -708,8 +708,8 @@ async function bdRecordTotalPayment(){
   _bdNotifyPayment(amount);
   // a staff-made reservation waiting for its first payment gets its booking confirmation now (booking-payment-lib.js)
   try{let token='';try{token=sessionStorage.getItem('amansala_staff_token')||'';}catch(e){}
-    fetch('/.netlify/functions/booking-paid-confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,folioId:fid})})
-      .then(r=>r.json()).then(x=>{if(x&&x.mode==='confirmed')showToast('Booking confirmation sent to the guest ✓');}).catch(()=>{});
+    fetch('/.netlify/functions/booking-paid-confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,folioId:fid,amount})})
+      .then(r=>r.json()).then(x=>{if(x&&x.mode==='confirmed')showToast('Booking confirmation sent to the guest ✓');else if(x&&x.mode==='partial')showToast(`Payment received message sent to the guest — ${fmt$(x.balance)} still to pay`);}).catch(()=>{});
   }catch(e){}
   await _bdLoadFolios();
 }

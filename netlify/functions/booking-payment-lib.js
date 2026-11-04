@@ -20,6 +20,7 @@ const VISITO_API = 'https://platform-api.visitoai.com/m2m/v1';
 const PENDING_KEY = 'booking_payment_pending';
 const TEMPLATE = 'booking_payment_request_v4';   // same text and layout as the email (Jorge 2026-11-04)
 const TEMPLATE_REMINDER = 'booking_payment_reminder_v3';
+const TEMPLATE_PARTIAL = 'booking_payment_partial';   // a partial payment: thanks + what is left (Jorge 2026-11-04)
 const DAYS_TO_PAY = 6;   // Jorge 2026-11-04: pay within 6 days of the request, a reminder every day until then
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -124,14 +125,20 @@ function localDate(n = 0) { return new Date(Date.now() + n * 86400000).toLocaleD
 const dueLabel = d => { const x = new Date(d + 'T12:00:00'); return `${MONTHS[x.getMonth()]} ${x.getDate()}`; };
 
 // the payment request (kind 'request') and the daily reminder (kind 'reminder'), by email and WhatsApp
-async function sendPayMessage(kind, { bookingId, name, email, phone, range, room, amount, dueDate, link }) {
+async function sendPayMessage(kind, { bookingId, name, email, phone, range, room, amount, dueDate, link, paid = 0 }) {
   const first = String(name || '').split(/\s+/)[0] || 'there', due = dueLabel(dueDate);
   const results = { email: null, whatsapp: null };
   const resendKey = process.env.RESEND_API_KEY;
   if (email && resendKey) {
     const btn = `<p><a href="${esc(link)}" style="display:inline-block;background:#2d6a6a;color:#ffffff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Pay my reservation</a></p>`;
     const tail = contactHtml();   // same closing block as the WhatsApp templates
-    const html = kind === 'reminder'
+    const html = kind === 'partial'
+      ? `<p>Hi ${esc(first)},</p>
+<p>Thank you! We have received your payment of <strong>${esc(money(paid))}</strong> for your reservation <strong>${esc(range)}</strong> in a <strong>${esc(room)}</strong> room.</p>
+<p>Remaining balance: <strong>${esc(money(amount))}</strong><br>Payment due by: <strong>${esc(due)}</strong></p>
+<p>You can pay the remaining balance securely using the link below:</p>${btn}
+<p>Once your payment is complete, we'll send you your booking confirmation.</p>${tail}`
+      : kind === 'reminder'
       ? `<p>Hi ${esc(first)},</p>
 <p>This is a friendly reminder that your reservation <strong>${esc(range)}</strong> in a <strong>${esc(room)}</strong> room is still waiting for payment.</p>
 <p>Remaining balance: <strong>${esc(money(amount))}</strong><br>Payment due by: <strong>${esc(due)}</strong></p>
@@ -141,7 +148,7 @@ async function sendPayMessage(kind, { bookingId, name, email, phone, range, room
 <p>Thank you for choosing Amansala! We're holding your reservation <strong>${esc(range)}</strong> in a <strong>${esc(room)}</strong> room.</p>
 <p>To secure your booking, please complete your payment of <strong>${esc(money(amount))}</strong> by <strong>${esc(due)}</strong> using the secure link below:</p>${btn}
 <p>As soon as your payment is received in full, we'll send you your booking confirmation with everything you need to know before your arrival.</p>${tail}`;
-    const subject = kind === 'reminder' ? 'Reminder: complete your Amansala reservation' : 'Complete your Amansala reservation';
+    const subject = kind === 'partial' ? 'Payment received – Amansala reservation' : kind === 'reminder' ? 'Reminder: complete your Amansala reservation' : 'Complete your Amansala reservation';
     try {
       const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: 'Amansala <retreats@amansala.com>', to: [email], reply_to: 'amansala.reservations@gmail.com', subject, html }) });
@@ -153,10 +160,11 @@ async function sendPayMessage(kind, { bookingId, name, email, phone, range, room
   if (phone && m2m && channelId) {
     try {
       const r = await fetch(`${VISITO_API}/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
-        method: 'POST', headers: { Authorization: `Bearer ${m2m}`, 'Content-Type': 'application/json', 'Idempotency-Key': `pay-${kind}-${bookingId}-${localDate()}` },
-        body: JSON.stringify({ to: phone, template: { name: kind === 'reminder' ? TEMPLATE_REMINDER : TEMPLATE, language: { code: 'en_US' }, components: [{ type: 'body', parameters: [
-          { type: 'text', text: first }, { type: 'text', text: range }, { type: 'text', text: room }, { type: 'text', text: money(amount) }, { type: 'text', text: due }, { type: 'text', text: link },
-        ] }] } }),
+        method: 'POST', headers: { Authorization: `Bearer ${m2m}`, 'Content-Type': 'application/json', 'Idempotency-Key': `pay-${kind}-${bookingId}-${localDate()}${kind === 'partial' ? '-' + Math.round(amount * 100) : ''}` },
+        body: JSON.stringify({ to: phone, template: { name: kind === 'partial' ? TEMPLATE_PARTIAL : kind === 'reminder' ? TEMPLATE_REMINDER : TEMPLATE, language: { code: 'en_US' }, components: [{ type: 'body', parameters: kind === 'partial'
+          ? [first, money(paid), range, room, money(amount), due, link].map(text => ({ type: 'text', text }))
+          : [first, range, room, money(amount), due, link].map(text => ({ type: 'text', text })),
+        }] } }),
       });
       const b = await r.json().catch(() => ({}));
       results.whatsapp = (r.ok && b.accepted !== false) ? 'sent' : `failed (${r.status})`;
@@ -176,7 +184,8 @@ async function balanceOf(key, regId) {
 
 // a payment just landed: the reservation is confirmed only once it is paid IN FULL (Jorge 2026-11-04: a partial payment
 // gets no confirmation, the daily reminder goes on with what is left)
-async function confirmIfPaid(key, { folioId, bookingId: bid } = {}) {
+// paid = the payment that just landed (a partial one gets a "payment received, this is what is left" message)
+async function confirmIfPaid(key, { folioId, bookingId: bid, paid = 0 } = {}) {
   if (!key || (!folioId && !bid)) return { skipped: 'no folio' };
   const [row] = await sget(key, `app_store?key=eq.${PENDING_KEY}&select=value`);
   const pending = (row && row.value) || {};
@@ -190,7 +199,21 @@ async function confirmIfPaid(key, { folioId, bookingId: bid } = {}) {
   const p = bookingId && pending[bookingId];
   if (!p || p.confirmedAt) return { skipped: 'not waiting for a payment' };
   const { balance } = await balanceOf(key, p.regId);
-  if (balance === null || balance > 0.005) return { skipped: 'not paid in full', balance };
+  if (balance === null || balance > 0.005) {
+    if (!(Number(paid) > 0) || balance === null) return { skipped: 'not paid in full', balance };
+    // the "payment received" message is switched on with booking_payment_flow.partial once its template is approved
+    const [flow] = await sget(key, `app_store?key=eq.booking_payment_flow&select=value`);
+    if (!(flow && flow.value && flow.value.partial)) return { skipped: 'not paid in full', balance };
+    const L0 = await loadBooking(key, bookingId);
+    if (!L0) return { skipped: 'not paid in full', balance };
+    const g = (L0.reg.guests || []).find(x => x && x.name) || {}, name = g.name || L0.bk.leader_name || 'Guest';
+    const { folios } = await balanceOf(key, p.regId), f = folios.find(x => x.id === p.folioId) || folios[0];
+    const results = await sendPayMessage('partial', { bookingId, name, email: g.email || L0.bk.leader_email || '', phone: g.phone || L0.bk.leader_phone || '',
+      range: dateRange(L0.reg.check_in || L0.bk.start_date, L0.reg.check_out || L0.bk.end_date), room: L0.roomType || 'room', amount: balance, paid: Number(paid),
+      dueDate: p.dueDate || localDate(), link: `${SITE.replace(/\/$/, '')}/guest-pay.html?token=${f.payment_token}&all=1` });
+    console.log('[booking-payment] partial payment', bookingId, name, money(paid), 'left', money(balance), JSON.stringify(results));
+    return { mode: 'partial', paid: Number(paid), balance, results };
+  }
   // claim it first, so two payments at once do not send two confirmations
   const claimed = await updatePending(key, m => { if (!m[bookingId] || m[bookingId].confirmedAt) return null; m[bookingId].confirmedAt = new Date().toISOString(); return m; });
   if (!claimed) return { skipped: 'already confirmed' };
