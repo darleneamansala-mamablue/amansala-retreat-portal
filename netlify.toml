@@ -95,3 +95,9 @@
 # Reading a staff schedule from a photo (Claude) takes 10-20 s: more than the 10 s default
 [functions."staff-schedule-photo"]
   timeout = 26
+
+# Rooms reservations waiting for payment: the daily reminder until the 6-day due date (booking-payment-lib.js).
+# 15:00 UTC = 10am Tulum.
+[functions."booking-payment-reminders"]
+  schedule = "0 15 * * *"
+  timeout = 26

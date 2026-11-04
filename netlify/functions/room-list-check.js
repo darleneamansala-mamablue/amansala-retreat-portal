@@ -1,4 +1,5 @@
 'use strict';
+const { overdueList } = require('./booking-payment-lib');
 
 // room-list-check.js — the daily room check (Jorge's ask 2026-11-03, after Heather Rex's guests "disappeared" from her
 // portal). Every morning at 7am Tulum (netlify.toml) it looks at every retreat that has not ended and finds:
@@ -177,7 +178,10 @@ async function run({ send = true, numbers: only } = {}) {
       problems.push({ kind: 'cblink', at: today, text: `Liga a Cloudbeds salvada: ${b ? (b.retreat_name || b.leader_name || 'Reserva') : l.booking_id} ${Object.keys(l.restored || {}).join(', ')} (guardó ${l.who || '?'} desde ${page})` });
     }
   } catch (e) { console.warn('[room-list-check] cb links', e.message); }
-  const rank = { clash: 0, nocharge: 1, cbsync: 2, cbcopy: 3, cblink: 4, outside: 5, duplicate: 6, transport: 7, cbmoved: 8 };
+  // 9. Rooms reservations past their 6-day payment date and still not paid in full (booking-payment-lib.js)
+  try { for (const t of await overdueList(key)) problems.push({ kind: 'payoverdue', at: today, text: `Pago vencido: ${t}` }); }
+  catch (e) { console.warn('[room-list-check] overdue payments', e.message); }
+  const rank = { clash: 0, nocharge: 1, payoverdue: 2, cbsync: 3, cbcopy: 4, cblink: 5, outside: 6, duplicate: 7, transport: 8, cbmoved: 9 };
   problems.sort((a, b) => rank[a.kind] - rank[b.kind] || String(a.at).localeCompare(String(b.at)));
   const msg = message(problems);
   const out = { date: today, bookings: bookings.length, problems: problems.map(p => p.text), sent: 0, failed: 0 };
