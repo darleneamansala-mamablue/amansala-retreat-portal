@@ -267,7 +267,8 @@ let actByRetreatBkId = '';
 
 function actRosterForBk(bkId) {
   const list = [];
-  (AppData.regs||[]).filter(r=>r.bookingId===bkId&&!r.isTeacherRoom).forEach(r=>{
+  // The leader's own (teacher) room counts too: the leader is on the sheet with the group (Darlene 2026-11-04, Heather Kasey)
+  (AppData.regs||[]).filter(r=>r.bookingId===bkId).forEach(r=>{
     (r.guests||[]).forEach(g=>{
       if (!g.name) return;
       const parts = g.name.trim().split(/\s+/);
@@ -353,6 +354,10 @@ function actByRetreatRender() {
 
   const entries = actByRetreatBuildEntries(actByRetreatBkId);
   if (!entries.length) {
+    const nm = actRosterForBk(actByRetreatBkId);
+    html += '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:12px"><div style="font-size:14.5px;font-weight:700;color:var(--dark);margin-bottom:6px">Names on the room list ('+nm.length+')</div>'
+      + (nm.length ? nm.map(g=>`<div style="font-size:12.5px;padding:2px 0">${menuEsc(g.last?g.last+', '+g.first:g.first)}${g.room?` <span style="color:#9ca3af;font-size:11px">(Rm ${menuEsc(g.room)})</span>`:''}</div>`).join('') : '<div style="font-size:12px;color:#c8bfb5">No guests on the room list yet.</div>')
+      + '</div>';
     html += '<div style="text-align:center;padding:40px;color:#9ca3af;font-size:13px">No activities scheduled for this retreat yet. Assign activities in the <b>Venues</b> tab.</div>';
   } else {
     const fmtDLong = ds=>{if(!ds)return'Date TBD';const d=new Date(ds+'T12:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});};
