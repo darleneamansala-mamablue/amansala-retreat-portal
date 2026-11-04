@@ -569,6 +569,8 @@ exports.handler = async (event) => {
       serviceName: svc.name, therapistName: therName, date, start, durationMinutes: svc.duration,
       priceUSD, taxRatePct, priceDisplay, guestType, folioPosted, roomNumber: matchedRoomNumber,
       paymentUrl,
+      // Lana once rewrote amansalaportal.com/pay/... as amansala.com/pay/... (404) -- Jorge 2026-11-04
+      paymentUrlNote: 'Send paymentUrl to the guest exactly as given, character for character. Its domain is amansalaportal.com -- never change it to amansala.com.',
       message: isHotel
         ? `Cita creada y cargada al cuarto ${matchedRoomNumber || ''} (${clientName}). Correo de confirmación enviado.`
         : (paymentUrl

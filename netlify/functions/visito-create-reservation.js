@@ -270,6 +270,8 @@ exports.handler = async (event) => {
       total: totalUSD,
       priceDisplay,
       paymentUrl,
+      // Lana once rewrote amansalaportal.com/pay/... as amansala.com/pay/... (404) -- Jorge 2026-11-04
+      paymentUrlNote: 'Send paymentUrl to the guest exactly as given, character for character. Its domain is amansalaportal.com -- never change it to amansala.com.',
       emailedToGuest: emailed,
       message: emailed
         ? `Reserva pre-creada (precio: ${priceDisplay} = $${totalUSD.toFixed(2)} USD total) — comparte este link de pago con el huésped para confirmarla (también se le mandó por correo a ${email}): ${paymentUrl}`
