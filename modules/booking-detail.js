@@ -733,6 +733,57 @@ function bdOpenStripePaymentTotal(){
   bdOpenStripePayment(target.folio.id,amount);
 }
 
+// ── Refunds (Jorge 2026-11-04): a Stripe card payment on a folio can be refunded in full or in part, by Jorge, Hilario
+// or Melissa only (checked again on the server, refund-folio-payment.js). The guest gets an email + WhatsApp.
+function _bdCanRefund(){const n=String(getCurrentSession()?.name||'').toLowerCase();return ['jorge','hilario','melissa'].some(x=>n.includes(x));}
+function bdOpenRefund(fid,itemId){
+  const f=_bdFolios.find(x=>x.folio.id===fid);const it=f&&f.items.find(x=>x.id===itemId);if(!it)return;
+  const pi=((it.description||'').match(/\bpi_[A-Za-z0-9]+/)||[])[0];
+  const paid=Math.abs(_bdItemTotal(it));
+  const done=_bdFolios.flatMap(x=>x.items).filter(x=>/^Refund/.test(x.description||'')&&(x.description||'').includes('of '+pi)).reduce((s,x)=>s+_bdItemTotal(x),0);
+  const left=Math.max(0,Math.round((paid-done)*100)/100);
+  let ov=document.getElementById('bdRefundModal');if(ov)ov.remove();
+  ov=document.createElement('div');ov.id='bdRefundModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(30,25,20,.45);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;padding:20px 22px;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:'Jost',sans-serif">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">Refund card payment</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">${escHtml(it.description||'')}<br>Paid ${fmt$(paid)}${done>0?` · already refunded ${fmt$(done)}`:''}</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bdRefundAmt').value='${left.toFixed(2)}'">Full (${fmt$(left)})</button>
+    </div>
+    <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Amount to refund (USD)</label>
+    <input id="bdRefundAmt" type="number" step="0.01" min="0.01" max="${left.toFixed(2)}" value="${left.toFixed(2)}" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;margin:4px 0 10px">
+    <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Reason</label>
+    <input id="bdRefundWhy" placeholder="e.g. cancelled extra night" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin:4px 0 10px">
+    <div style="font-size:11.5px;color:#92400e;background:#fffbeb;border-radius:8px;padding:8px 10px;margin-bottom:12px">The money goes back to the guest's card through Stripe and cannot be undone. The guest gets an email and a WhatsApp. If the refund is for a cancelled service, also remove or adjust its charge on the folio.</div>
+    <div id="bdRefundErr" style="font-size:12px;color:#b91c1c;margin-bottom:8px"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bdRefundModal').remove()">Cancel</button>
+      <button id="bdRefundGo" class="btn btn-danger btn-sm" onclick="bdDoRefund('${fid}','${itemId}',${left})">Refund</button>
+    </div></div>`;
+  ov.addEventListener('mousedown',e=>{if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);
+}
+async function bdDoRefund(fid,itemId,left){
+  const amt=Math.round(parseFloat(document.getElementById('bdRefundAmt').value)*100)/100;
+  const why=(document.getElementById('bdRefundWhy').value||'').trim();
+  const err=document.getElementById('bdRefundErr'),btn=document.getElementById('bdRefundGo');
+  if(!(amt>0)){err.textContent='Enter the amount to refund.';return;}
+  if(amt>left+0.001){err.textContent=`At most ${fmt$(left)}.`;return;}
+  if(!why){err.textContent='Write the reason.';return;}
+  if(!confirm(`Refund ${fmt$(amt)} to the guest's card? This cannot be undone.`))return;
+  btn.disabled=true;btn.textContent='Refunding…';err.textContent='';
+  let token='';try{token=sessionStorage.getItem('amansala_staff_token')||'';}catch(e){}
+  try{
+    const r=await fetch('/.netlify/functions/refund-folio-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,folioItemId:itemId,amount:amt,reason:why,requestId:Date.now().toString(36)})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.ok){err.textContent=d.error||'The refund did not go through.';btn.disabled=false;btn.textContent='Refund';return;}
+    document.getElementById('bdRefundModal').remove();
+    try{logActivity('Payment refunded',`${fmt$(amt)} to card (${d.refundId}) · ${why} · email ${d.email||'-'}, WhatsApp ${d.whatsapp||'-'}`,(_bdKind==='reg'?(AppData.regs.find(r=>r.id===_bdId)||{}).bookingId:null)||null);}catch(e){}
+    showToast(`Refunded ${fmt$(amt)} ✓ — guest notified`);
+    await _bdLoadFolios();
+  }catch(e){err.textContent='Connection problem — check Stripe before trying again.';btn.disabled=false;btn.textContent='Refund';}
+}
 function _bdFolioRowHtml(f){
   const total=_bdFolioTotal(f);
   const isOpen=f.folio.status==='open';
@@ -772,6 +823,7 @@ function _bdFolioRowHtml(f){
       <td style="padding:8px 12px;font-size:12.5px;text-align:right;font-weight:700;color:${isPayment?'#059669':'inherit'}">${fmt$(lineTotal)}</td>
       <td style="padding:8px 12px;text-align:right;white-space:nowrap">
         ${isOpen&&_moveTargets.length?`<select onchange="bdMoveItem('${fid}','${i.id}',this.value);this.value=''" title="Move this charge to another folio of this reservation" style="padding:2px 4px;font-size:11px;border:1px solid var(--border);border-radius:6px;max-width:110px"><option value="">Move to…</option>${_moveTargets.map(t=>`<option value="${t.folio.id}">${escHtml(t.folio.name)}</option>`).join('')}</select>`:''}
+        ${isPayment&&_bdCanRefund()&&/\bpi_[A-Za-z0-9]+/.test(i.description||'')&&!/^Refund/.test(i.description||'')?`<button class="btn btn-secondary btn-sm" onclick="bdOpenRefund('${fid}','${i.id}')" title="Refund this card payment through Stripe (full or partial)" style="padding:2px 8px;font-size:11px;color:#b45309">↩ Refund</button>`:''}
         ${isOpen?`<button class="btn btn-secondary btn-sm" onclick="bdToggleEditItem('${i.id}')" style="padding:2px 8px;font-size:11px">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="bdDeleteItem('${fid}','${i.id}')" style="padding:2px 8px;font-size:11px">✕</button>`:''}
       </td>
