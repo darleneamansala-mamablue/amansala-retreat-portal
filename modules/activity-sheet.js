@@ -805,7 +805,7 @@ function actSheetRenderSummary() {
       ${(()=>{
         const opsKey = e.ao.id+'|'+e.date;
         const ops = actOpsData[opsKey]||{};
-        const VAN_CAP=11;
+        const VAN_CAP=13;
         const vansNeeded = totalSigned>0?Math.ceil(totalSigned/VAN_CAP):0;
         const costElId = 'actCost_'+opsKey.replace(/[^a-z0-9]/gi,'_');
         const aoAC = ACT_COSTS[e.ao.id]||{};
@@ -838,7 +838,7 @@ function actSheetRenderSummary() {
             <div>
               <label style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px">Van Assignment <span style="font-size:10px;color:#9ca3af;font-weight:400;text-transform:none">(${VAN_CAP}/van max${vansNeeded?' · need '+vansNeeded:''})</span></label>
               <div style="display:flex;gap:8px;flex-wrap:wrap">
-                ${['van1','van2','van3'].map((vk,i)=>{const v=ops[vk]||'';const color=v?'#1d4ed8':'#6b7280';return`<div><div style="font-size:10px;color:#9ca3af;margin-bottom:3px">Van ${i+1}</div><select onchange="actOpsSet('${opsKey}','${vk}',this.value)" style="padding:5px 9px;border:1.5px solid ${v?'#3b82f6':'#e0dbd2'};border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;color:${color};background:${v?'#dbeafe':'#f5f5f0'};outline:none"><option value="">— Not assigned —</option><option value="inhouse" ${v==='inhouse'?'selected':''}>🏠 In-house (~$10 gas)</option><option value="miguel" ${(v==='miguel'||v===true||v==='true')?'selected':''}>🚐 Miguel (2,000 MXN)</option></select></div>`;}).join('')}
+                ${['van1','van2','van3'].map((vk,i)=>{const v=ops[vk]||'';const color=v?'#1d4ed8':'#6b7280';return`<div><div style="font-size:10px;color:#9ca3af;margin-bottom:3px">Van ${i+1}</div><select onchange="actOpsSet('${opsKey}','${vk}',this.value)" style="padding:5px 9px;border:1.5px solid ${v?'#3b82f6':'#e0dbd2'};border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;color:${color};background:${v?'#dbeafe':'#f5f5f0'};outline:none"><option value="">— Not assigned —</option><option value="inhouse" ${v==='inhouse'?'selected':''}>🏠 Amansala car (free, gas only)</option><option value="miguel" ${(v==='miguel'||v===true||v==='true')?'selected':''}>🚐 Miguel (1,900 MXN)</option></select></div>`;}).join('')}
               </div>
             </div>
             ${(e.ao.id!=='ao5'&&e.ao.id!=='ao9')?inp('actEntr_'+opsKey.replace(/[^a-z0-9]/gi,'_'),entranceLbl,entranceVal,defEntrance||'e.g. 500'):''}
@@ -895,7 +895,7 @@ function actOpsRefreshCost(opsKey) {
   el.innerHTML = actOpsCostHtml(ops, totalSigned, aoId, opsKey);
 }
 const ACT_COSTS = {
-  ao1: {entrance:515, entranceLabel:'Tulum Ruins Entrance'},
+  ao1: {entrance:285, entranceLabel:'Tulum Ruins Entrance'},
   ao3: {entrance:1000, entranceLabel:'Atik Art Tour Entrance'},
   ao6: {entrance:350, entranceLabel:'Grande Cenote Entrance'},
   ao9: {guideMXN:800, clayUSDpp:6, clientUSDpp:65},
@@ -905,7 +905,7 @@ const ACT_COSTS = {
 };
 
 function actOpsCostHtml(ops, totalSigned, aoId, opsKey) {
-  const VAN_COST_MIGUEL=2000, VAN_COST_INHOUSE=170, VAN_CAP=11; // 170 MXN ≈ $10 USD gas
+  const VAN_COST_MIGUEL=1900, VAN_COST_INHOUSE=170, VAN_CAP=13; // 1,900 MXN per van for up to 13 people (Darlene 2026-11-04); 170 MXN ≈ $10 USD gas for Amansala's own cars, which are free apart from gas
   const ac = ACT_COSTS[aoId]||{};
   // Count vans by type across van1/van2/van3
   const vanTypes = ['van1','van2','van3'].map(k=>ops[k]||'').filter(v=>v);
@@ -956,7 +956,7 @@ function actOpsCostHtml(ops, totalSigned, aoId, opsKey) {
     const clientUSDpp = ac.clientUSDpp||65;
     const vanMXN = miguelVans*VAN_COST_MIGUEL + inhouseVans*VAN_COST_INHOUSE;
     const vanUSD = Math.round(vanMXN/MXN_RATE);
-    const vanNote = [miguelVans?miguelVans+' Miguel (2,000 MXN ea)':'',inhouseVans?inhouseVans+' in-house (~$10 gas)':''].filter(Boolean).join(' + ');
+    const vanNote = [miguelVans?miguelVans+' Miguel (1,900 MXN ea)':'',inhouseVans?inhouseVans+' Amansala car (gas only)':''].filter(Boolean).join(' + ');
 
     const revenueUSD = totalSigned>0 ? clientUSDpp*totalSigned : 0;
     const clayCostUSD = totalSigned>0 ? clayUSDpp*totalSigned : 0;
@@ -1074,14 +1074,15 @@ function actOpsCostHtml(ops, totalSigned, aoId, opsKey) {
     </div>`;
   }
 
-  // Standard tours (ao1 Tulum 515, ao3 Atik 1000, ao6 Grande 350) and others
-  const GUIDE_COST=1000;
+  // Standard tours (ao1 Tulum 285, ao3 Atik 1000, ao6 Grande 350) and others. Every tour: guide 1,000 each, van 1,900 for up to 13 people (the guide pays no entrance).
+  const GUIDE_COST=(aoId==='ao1'&&totalSigned>=1&&totalSigned<=5)?900:1000;   // Tulum Ruins: guide 900 for 1-5 people; the rate for 6+ is still being agreed, so 1,000 is shown as a placeholder
+  const guideRatePending=aoId==='ao1'&&totalSigned>=6;
   const guideCount=(ops.guide1?1:0)+(ops.guide2?1:0)+(ops.guide3?1:0)||1;
   const guideCostEstimate=guideCount*GUIDE_COST;
   const guideCostConfirmed=ops.guideConfirmed?guideCostEstimate:0;
   const vansNeeded=totalSigned>0?Math.ceil(totalSigned/VAN_CAP):0;
   const vanCostTotal=miguelVans*VAN_COST_MIGUEL+inhouseVans*VAN_COST_INHOUSE;
-  const vanNote=[miguelVans?miguelVans+' Miguel (2,000 ea)':'',inhouseVans?inhouseVans+' in-house (~$10 gas)':''].filter(Boolean).join(' + ');
+  const vanNote=[miguelVans?miguelVans+' Miguel (1,900 ea)':'',inhouseVans?inhouseVans+' Amansala car (gas only)':''].filter(Boolean).join(' + ');
   const defaultEntrance=ac.entrance||0;
   const entrance=ops.entranceMXN!=null?parseFloat(ops.entranceMXN)||0:defaultEntrance;
   const entranceCost=entrance*totalSigned;
@@ -1089,15 +1090,16 @@ function actOpsCostHtml(ops, totalSigned, aoId, opsKey) {
   const needSecondGuide=totalSigned>VAN_CAP&&!ops.guide2;
   const costPP = totalSigned>0&&totalCost>0 ? Math.round(totalCost/totalSigned) : 0;
   const guideRow = ops.guideConfirmed
-    ? row('Guide'+(guideCount>1?'s':''),guideCostEstimate,guideCount+' × $1,000')
+    ? row('Guide'+(guideCount>1?'s':''),guideCostEstimate,guideCount+' × '+GUIDE_COST.toLocaleString())
     : `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12.5px;border-bottom:1px solid #f0ebe0;opacity:.65">
         <span style="color:#374151">Guide${guideCount>1?'s':''}<span style="font-size:10.5px;color:#f59e0b;margin-left:5px">est. — not yet confirmed</span></span>
         <span style="font-weight:600;color:var(--dark)">${guideCostEstimate.toLocaleString()} MXN</span>
       </div>`;
   return `<div>
-    ${needSecondGuide?`<div style="font-size:11.5px;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:7px 10px;margin-bottom:8px">⚠ <b>${totalSigned} sign-ups</b> — a 2nd guide is required for groups over 11.</div>`:''}
+    ${needSecondGuide?`<div style="font-size:11.5px;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:7px 10px;margin-bottom:8px">⚠ <b>${totalSigned} sign-ups</b> — a 2nd guide is required for groups over ${VAN_CAP}.</div>`:''}
     ${secHdr('Cost for Transport')}
     ${guideRow}
+    ${guideRatePending?'<div style="font-size:11px;color:#f59e0b;padding:3px 0">⚠ Tulum Ruins guide rate for 6+ people is not set yet — 1,000 MXN is shown for now.</div>':''}
     ${vansUsedTotal?row('Vans',vanCostTotal,vanNote):''}
     ${vansNeeded&&!vansUsedTotal?`<div style="font-size:11px;color:#f59e0b;padding:3px 0">⚠ ${totalSigned} pax — need ${vansNeeded} van${vansNeeded>1?'s':''}</div>`:''}
     ${secHdr('Cost for Entry')}
