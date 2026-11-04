@@ -1276,8 +1276,19 @@ async function bdConfirmTransfer(kind,id){
   const target=_bdTransferCandidates.find(c=>c.kind===kind&&c.id===id);if(!target)return;
   if(!confirm(`Move this folio to ${target.guestName} (Room ${target.room})? All its charges and payments go with it.`))return;
   const colSet=kind==='req'?{booking_request_id:id,registration_id:null}:{registration_id:id,booking_request_id:null};
+  const f=_bdFolios.find(x=>x.folio.id===_bdTransferFid);
   const {error}=await db.from('folios').update({...colSet,guest_name:target.guestName,name:target.guestName}).eq('id',_bdTransferFid);
   if(error){showToast('Error: '+error.message);return;}
+  // In the activity log of both reservations (Jorge 2026-11-04: who moved which folio where was untraceable)
+  try{
+    const total=f?f.items.reduce((s,i)=>s+Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100),0):0;
+    const subj=_bdSubject();
+    const fromReg=_bdKind==='reg'?AppData.regs.find(r=>r.id===_bdId):null;
+    const toReg=kind==='reg'?AppData.regs.find(r=>r.id===id):null;
+    const detail=`Folio "${f?f.folio.name:''}" (${f?f.items.length:0} items, ${fmt$(total)}): ${(subj&&subj.guestName)||'guest'} · ${(subj&&subj.room)||''} → ${target.guestName} · ${target.room}`;
+    logActivity('Folio transferred',detail,fromReg?fromReg.bookingId:null);
+    if(toReg&&(!fromReg||toReg.bookingId!==fromReg.bookingId))logActivity('Folio transferred',detail,toReg.bookingId);
+  }catch(e){}
   closeModal('bdTransferFolioModal');
   showToast('Folio transferred ✓');
   await _bdLoadFolios();
