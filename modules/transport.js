@@ -1153,6 +1153,10 @@ async function tr2LoadData() {
   tr2ActiveBooks.forEach(b => { bkMap[b.id] = b; });
 
   const roomLookup = {}, firstNameIdx = {}, emailRoomIdx = {};
+  // Name written differently on the transport form than on the room list (Jorge 2026-11-04, Monica Nov 1-6): words in
+  // another order ("Bedsole Hayden" / "Hayden Bedsole") match by the sorted-words key; a small spelling difference
+  // ("Bridgette" / "Brigitte" Martin) matches when it is the only guest of that retreat within 2 letters.
+  const normIdx = {}, normByBk = {};
   tr2NameMap = {};
   // Guests cancelled from a shared room (Jorge's ask 2026-09-26: Nicole
   // Chavez, cancelled but her real transport form submission kept showing
@@ -1188,6 +1192,11 @@ async function tr2LoadData() {
           }
           const key = tr2NormName(g.name);
           if (key) tr2NameMap[key] = { bkId: bk.id, retreatLabel, origName: g.name };
+          if (key) {
+            const nk = `${bk.id}|${key}`, hit = { room: reg.room || '', regId: reg.id, checkedInAt: reg.checkedInAt || null };
+            normIdx[nk] = normIdx[nk] ? { ...normIdx[nk], count: normIdx[nk].count + 1 } : { ...hit, count: 1 };
+            (normByBk[bk.id] = normByBk[bk.id] || []).push({ key, hit });
+          }
         }
         if (g.email && !isCancelled) {
           const ek = `${bk.id}|${g.email.toLowerCase().trim()}`;
@@ -1395,6 +1404,9 @@ async function tr2LoadData() {
     // now resolving the whole {room, regId, checkedInAt} match instead of just a room string,
     // so the Check In checkmark (Jorge's ask 2026-10-18) knows which registration to update.
     const matched = roomLookup[`${bkId}|${name.toLowerCase()}`] ?? (() => {
+      const nk = tr2NormName(name), ni = nk && normIdx[`${bkId}|${nk}`];
+      if (ni && ni.count === 1) return ni;
+      if (nk && nk.length >= 8) { const near = (normByBk[bkId] || []).filter(x => tr2Levenshtein(x.key, nk) <= 2); if (near.length === 1) return near[0].hit; }
       const fn = (d.firstName || '').trim().toLowerCase();
       if (fn.length >= 3) { const fi = firstNameIdx[`${bkId}|${fn}`]; if (fi && fi.count === 1) return fi; }
       const em = (d.email || '').toLowerCase().trim();
@@ -1481,6 +1493,9 @@ async function tr2LoadData() {
       (reg.guests || []).forEach(g => {
         if (!g.name || g.cancelled || reg.cancelled) return;
         if (transportedKeys.has(`${bk.id}|${tr2NormName(g.name)}`)) return;
+        // same small-spelling tolerance as the room match above ("Bridgette" on the list, "Brigitte" on her form)
+        { const gk = tr2NormName(g.name), pre = bk.id + '|';
+          if (gk.length >= 8 && [...transportedKeys].some(k => k.startsWith(pre) && tr2Levenshtein(k.slice(pre.length), gk) <= 2)) return; }
         // Only trust "this email already submitted" when the email actually identifies
         // ONE roster guest — several family members can share one household email in
         // the room list (emailRoomIdx.count>1), and without this guard, ANY of them
