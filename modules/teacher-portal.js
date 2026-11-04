@@ -5856,7 +5856,7 @@ function skedGetRetreatEvents(dateStr){
       const sr=bk.scheduleRequest;
       const ocTime=(sr.hasArrivalClass&&sr.arrivalSlot)?skedMinToTime(skedTimeToMin(sr.arrivalSlot)-15):'20:30';
       timeCounts[ocTime]=(timeCounts[ocTime]||0)+1;
-      openingCircleLeaders[bk.id]=timeCounts[ocTime]===1?'Ryan':'Max';
+      openingCircleLeaders[bk.id]=(typeof ocLeaderFor==='function'&&ocLeaderFor(bk.id))||'Max';   // every opening circle is Max unless someone else is chosen (Darlene 2026-11-04)
     });
   }
   AppData.bookings.filter(b=>b.status!=='cancelled'&&b.scheduleRequest?.adminStatus==='confirmed').forEach(bk=>{
@@ -5886,7 +5886,7 @@ function skedGetRetreatEvents(dateStr){
     const mornSkippedThisDay=skips.some(s=>s.date===dateStr&&s.period==='morn');
     // Arrival day — show arrival evening class if set, otherwise fall back to opening morning class
     if(isArrivalDay){
-      const ocLeader=openingCircleLeaders[bk.id]||'Ryan';
+      const ocLeader=openingCircleLeaders[bk.id]||(typeof ocLeaderFor==='function'&&ocLeaderFor(bk.id))||'Max';
       const arrSkipped=skips.some(s=>s.date===dateStr&&s.period==='arr');
       const hasRealArrivalClass=sr.hasArrivalClass&&sr.arrivalSlot;
       if(hasRealArrivalClass){
@@ -5901,7 +5901,7 @@ function skedGetRetreatEvents(dateStr){
         if(arShala&&!arrSkipped){
           const arDur=sr.arrivalDur||60;
           const arEnd=skedMinToTime(skedTimeToMin(sr.arrivalSlot)+arDur);
-          evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:arrLabel+(arrIsOrientation?' — opening circle with Max':'')+(sr.arrivalNotes?' 📝':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+          evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:arrLabel+(arrIsOrientation?' — opening circle with '+ocLeader:'')+(sr.arrivalNotes?' 📝':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
       } else {
         evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:'grande',date:dateStr,startTime:'20:30',endTime:'20:45',title,subtitle:'Orientation with Amansala — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
