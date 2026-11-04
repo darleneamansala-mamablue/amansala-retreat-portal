@@ -6107,9 +6107,10 @@ function skedBuild(){
       const endMin=ev.endTime?skedTimeToMin(ev.endTime):startMin+60;
       const top=(startMin-SKED_START_H*60)*(SKED_PX_HR/60);
       const height=Math.max(20,(endMin-startMin)*(SKED_PX_HR/60));
-      const color=ev.color||'#2d6a6a';
-      const bgColor=ev.bg||(color+'22');
-      const textColor=ev.textColor||color;
+      const _ts=typeof skedTypeStyle==='function'?skedTypeStyle(ev):null;   // Calendar colors by type (modules/calendar-type-colors.js)
+      const color=(_ts&&_ts.color)||ev.color||'#2d6a6a';
+      const bgColor=(_ts&&_ts.bg)||ev.bg||(color+'22');
+      const textColor=(_ts&&_ts.text)||ev.textColor||color;
       const evId=ev.isRetreat?ev.bkId:ev.id;
       html+='<div class="sked-event" style="top:'+top+'px;height:'+height+'px;background:'+bgColor+';border-left:3px solid '+color+'" onclick="event.stopPropagation();skedClickEvent(\''+ev.id+'\',\''+evId+'\','+ev.isRetreat+',\''+ev.date+'\')">';
       html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:3px;overflow:hidden">';
@@ -6171,7 +6172,7 @@ function skedBuildWeek(weekStart,DAYS_SHORT,MONTHS_LONG){
       const startMin=skedTimeToMin(ev.startTime);const endMin=ev.endTime?skedTimeToMin(ev.endTime):startMin+60;
       const top=(startMin-SKED_START_H*60)*(SKED_PX_HR/60);
       const height=Math.max(16,(endMin-startMin)*(SKED_PX_HR/60));
-      const color=ev.color||'#2d6a6a';const bgColor=ev.bg||(color+'22');
+      const _ts=typeof skedTypeStyle==='function'?skedTypeStyle(ev):null;const color=(_ts&&_ts.color)||ev.color||'#2d6a6a';const bgColor=(_ts&&_ts.bg)||ev.bg||(color+'22');
       const evId=ev.isRetreat?ev.bkId:ev.id;
       const isShalaRes=SKED_SHALAS.some(s=>s.id===ev.resourceId);
       const rsLabel=[...SKED_SHALAS,...SKED_ACTIVITIES].find(r=>r.id===ev.resourceId)?.name||'';
@@ -6207,7 +6208,7 @@ function skedBuildList(days,DAYS_LONG,MONTHS_LONG){
     const isToday=ds===fmtISO(new Date());
     h+='<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:'+(isToday?'var(--teal)':'var(--muted)')+';padding:8px 0 6px;border-bottom:2px solid '+(isToday?'var(--teal)':'var(--border)')+';margin-bottom:10px">'+DAYS_LONG[d.getDay()]+', '+MNTHS[d.getMonth()]+' '+d.getDate()+(isToday?' — Today':'')+'</div>';
     evs.forEach(ev=>{
-      const color=ev.color||'#2d6a6a';const bgColor=ev.bg||(color+'22');
+      const _ts=typeof skedTypeStyle==='function'?skedTypeStyle(ev):null;const color=(_ts&&_ts.color)||ev.color||'#2d6a6a';const bgColor=(_ts&&_ts.bg)||ev.bg||(color+'22');
       const isShalaRes=SKED_SHALAS.some(s=>s.id===ev.resourceId);
       const rsLabel=[...SKED_SHALAS,...SKED_ACTIVITIES].find(r=>r.id===ev.resourceId)?.name||ev.resourceId||'';
       const evId=ev.isRetreat?ev.bkId:ev.id;
