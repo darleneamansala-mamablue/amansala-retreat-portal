@@ -163,7 +163,7 @@ async function dbRender() {
   // special instructions from each retreat in house
   dbInHouse(dbDate).forEach(bk => {
     const sr = bk.scheduleRequest || {}; const who = bk.leaderName || bk.retreatName || 'Retreat';
-    [['Special request', sr.specialReq], ['Morning class note', sr.morningNotes], ['Afternoon class note', sr.afternoonNotes], ['Arrival class note', sr.arrivalNotes], ['Departure class note', sr.departureNotes]].forEach(([lab, txt], i) => {
+    [['Morning class note', sr.morningNotes], ['Afternoon class note', sr.afternoonNotes], ['Arrival class note', sr.arrivalNotes], ['Departure class note', sr.departureNotes]].forEach(([lab, txt], i) => {
       if (txt && String(txt).trim()) g.special.push({ id: bk.id + ':' + i, who, label: lab, text: String(txt).trim() });
     });
   });
@@ -172,6 +172,16 @@ async function dbRender() {
   // ----- header counts
   const openTasks = tasks.filter(t => !(t.auto ? t.auto.done : dbGet('tasks.' + t.id + '.done')));
   let html = '';
+  // 0. The whole day in time order: classes, opening circles, tours, ceremonies and extra activities together
+  const tagOf = { class: ['Class', '#e0f2fe', '#0369a1'], circle: ['Opening circle', '#fef3c7', '#92400e'], tour: ['Tour', '#dbeafe', '#1d4ed8'], extra: ['Ceremony / activity', '#fae8ff', '#86198f'] };
+  const dayAll = ['circle', 'class', 'tour', 'extra'].flatMap(k => buckets[k].map(e => ({ e, k }))).sort((a, b) => String(a.e.startTime).localeCompare(String(b.e.startTime)));
+  const needField = { morn: 'morningNotes', morn_arr: 'morningNotes', morn_dep: 'morningNotes', aft: 'afternoonNotes', arr: 'arrivalNotes', dep: 'departureNotes' };
+  const roomNeed = e => {   // the teacher's note for this class: what the room needs, shown right under the class
+    const m = /_(morn_arr|morn_dep|morn|aft|arr|dep)$/.exec(String(e.id || '')), bk = m && (AppData.bookings || []).find(b => b.id === e.bkId);
+    const t = bk && ((bk.scheduleRequest || {})[needField[m[1]]] || '').trim();
+    return t ? `<div style="margin:3px 0 0 120px;font-size:12.5px;color:#374151"><b>Room needs:</b> ${dbEsc(t)}</div>` : '';
+  };
+  html += dbCard('Day at a glance', dayAll.length ? dayAll.map(({ e, k }) => dbRow(`<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:${tagOf[k][1]};color:${tagOf[k][2]}">${tagOf[k][0]}</span>` + evLine(e) + roomNeed(e))).join('') : dbNone('Nothing scheduled today.'), dayAll.length);
   // 1. Arrivals
   const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}`)).join('') : dbNone('No retreat arrivals today.');
   html += dbCard('Arrivals', arrBody + (g.hkOk ? dbRow(`${g.rooms.length} room${g.rooms.length === 1 ? '' : 's'} arriving today (all guests)`) : ''), g.arrivals.length + ' retreat' + (g.arrivals.length === 1 ? '' : 's'));
@@ -213,7 +223,6 @@ async function dbRender() {
       <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:5px;color:${dbGet('tasks.snack:' + t.aoId + '.done') ? '#166534' : '#991b1b'};font-weight:600"><input type="checkbox" ${dbGet('tasks.snack:' + t.aoId + '.done') ? 'checked' : ''} onchange="dbSet('tasks.snack:${t.aoId}.done',this.checked);dbRender()"> Tour snack request is posted on the kitchen fridge</label></div>`;
   }).join('') : dbNone('No tours to prepare today.');
   g.tours.forEach(t => { if (!t.driver) pend.push('Driver for ' + t.name); if (!t.guides.length) pend.push('Guides for ' + t.name); if (!dbGet('tasks.snack:' + t.aoId + '.done')) pend.push('Snack request for ' + t.name); });
-  prep += g.special.length ? `<div style="padding:8px 14px;background:#faf8f4;font-size:11px;font-weight:700;color:#8a7e74;text-transform:uppercase;border-top:1px solid #f0ebe0">Special instructions</div>` + g.special.map(s => dbRow(`<b>${dbEsc(s.who)}</b> · ${dbEsc(s.label)}: ${dbEsc(s.text)}`)).join('') : '';
   html += dbCard('Tour and class preparation', prep);
   // 7. Outstanding tasks with an assignee
   html += dbCard('Tasks for today <span style="font-weight:500;color:#6b7280">— every open task needs someone</span>', tasks.length ? tasks.map(dbTaskRow).join('') : dbNone('Nothing to do today.'), openTasks.length + ' open');
@@ -286,8 +295,9 @@ async function dbSaveReport() {
   lines.push(`Arrivals: ${c.g.arrivals.map(b => (b.leaderName || b.retreatName) + ' (' + (b.pax || '?') + ')').join(', ') || 'none'}`);
   lines.push(`Departures: ${c.g.departures.map(b => (b.leaderName || b.retreatName) + ' (' + (b.pax || '?') + ')').join(', ') || 'none'}`);
   lines.push(`Rooms arriving: ${c.g.rooms.length} · ready: ${c.g.rooms.filter(r => r.status === 'clean').length}`);
+  const dayList = ['circle', 'class', 'tour', 'extra'].flatMap(k => c.buckets[k]).sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)));
   const sec = (title, list) => { lines.push('', title.toUpperCase()); (list.length ? list : ['none']).forEach(e => lines.push(typeof e === 'string' ? e : `${dbFmtT(e.startTime)} ${e.title || ''} · ${e.subtitle || ''}`)); };
-  sec('Classes', c.buckets.class); sec('Opening circles', c.buckets.circle); sec('Tours', c.buckets.tour); sec('Extra activities', c.buckets.extra);
+  sec('Day at a glance', dayList); sec('Classes', c.buckets.class); sec('Opening circles', c.buckets.circle); sec('Tours', c.buckets.tour); sec('Extra activities', c.buckets.extra);
   sec('Tasks', c.tasks.map(t => `[${(t.auto ? t.auto.done : dbGet('tasks.' + t.id + '.done')) ? 'x' : ' '}] ${t.text} — ${dbGet('tasks.' + t.id + '.assignee') || 'NOT ASSIGNED'}`));
   sec('Pending confirmation', c.pend);
   if (c.hours) sec('Staff hours', typeof shLines === 'function' ? shLines(c.hours) : []);
