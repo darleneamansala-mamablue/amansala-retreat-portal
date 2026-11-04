@@ -1195,13 +1195,13 @@ async function tr2LoadData() {
           if (key) {
             const nk = `${bk.id}|${key}`, hit = { room: reg.room || '', regId: reg.id, checkedInAt: reg.checkedInAt || null };
             normIdx[nk] = normIdx[nk] ? { ...normIdx[nk], count: normIdx[nk].count + 1 } : { ...hit, count: 1 };
-            (normByBk[bk.id] = normByBk[bk.id] || []).push({ key, hit });
+            (normByBk[bk.id] = normByBk[bk.id] || []).push({ key, hit, orig: g.name });
           }
         }
         if (g.email && !isCancelled) {
           const ek = `${bk.id}|${g.email.toLowerCase().trim()}`;
-          if (!emailRoomIdx[ek]) emailRoomIdx[ek] = { room: reg.room || '', regId: reg.id, checkedInAt: reg.checkedInAt || null, count: 0 };
-          emailRoomIdx[ek].count++;
+          if (!emailRoomIdx[ek]) emailRoomIdx[ek] = { room: reg.room || '', regId: reg.id, checkedInAt: reg.checkedInAt || null, count: 0, rooms: new Set() };
+          emailRoomIdx[ek].count++; emailRoomIdx[ek].rooms.add(reg.room || '');
         }
       });
     });
@@ -1410,7 +1410,24 @@ async function tr2LoadData() {
       const fn = (d.firstName || '').trim().toLowerCase();
       if (fn.length >= 3) { const fi = firstNameIdx[`${bkId}|${fn}`]; if (fi && fi.count === 1) return fi; }
       const em = (d.email || '').toLowerCase().trim();
-      if (em && bkId) { const ei = emailRoomIdx[`${bkId}|${em}`]; if (ei && ei.count === 1) return ei; }
+      // one email for the whole room (a couple sharing it) is still one room
+      if (em && bkId) { const ei = emailRoomIdx[`${bkId}|${em}`]; if (ei && (ei.count === 1 || ei.rooms.size === 1)) return ei; }
+      // Jorge 2026-11-04 (full Transport review): one form for a couple ("Jennifer & Steven Hammer"), or a room list entry
+      // with both names ("Blake Sasnett & Jesus Juarez"), a middle name ("Patricia Leanne Harrell McCoy" / "Leanne
+      // Harrell-McCoy"), a nickname with the same last name ("Becky Hotuje" / "Rebecca Hotujec", "Lori" / "Lorraine"
+      // Harbison): every word of one side inside the other, or the same last name within one letter -- only when it
+      // points to a single room of that retreat.
+      const nk2 = tr2NormName(name), toks = nk2 ? nk2.split(' ') : [], list = normByBk[bkId] || [];
+      const one = hits => { const rooms = new Set(hits.map(h => h.hit.room)); return hits.length && rooms.size === 1 ? hits[0].hit : null; };
+      if (toks.length >= 2) {
+        const sub = one(list.filter(x => { const xt = x.key.split(' '); return xt.length >= 2 && (toks.every(t => xt.includes(t)) || xt.every(t => toks.includes(t))); }));
+        if (sub) return sub;
+      }
+      const last = String(name || '').trim().split(/\s+/).pop().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]/g, '');
+      if (last.length >= 5) {
+        const ln = one(list.filter(x => { const xl = String(x.orig || '').trim().split(/\s+/).pop().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z]/g, ''); return xl.length >= 5 && tr2Levenshtein(xl, last) <= 1; }));
+        if (ln) return ln;
+      }
       return null;
     })();
     // Darlene 2026-10-24: a guest whose NAME matches a registration exactly takes that registration's room, even if an older manual room is still stored on the
@@ -1505,6 +1522,12 @@ async function tr2LoadData() {
         // did submit, never showed up as missing even though she never submitted).
         const gEm = (g.email || '').toLowerCase().trim();
         if (gEm && emailRoomIdx[`${bk.id}|${gEm}`]?.count === 1 && transportedEmails.has(`${bk.id}|${gEm}`)) return;
+        // a form whose name contains this guest's (a couple on one form: "Jennifer & Steven Hammer"), or this guest's
+        // name containing the form's (a middle name) -- not a shared email or last name, which a family that did not
+        // all submit also has (Katherine McClelland above)
+        { const gt = tr2NormName(g.name).split(' '), pre = bk.id + '|';
+          if (gt.length >= 2 && [...transportedKeys].some(k => { if (!k.startsWith(pre)) return false; const kt = k.slice(pre.length).split(' ');
+            return kt.length >= 2 && (gt.every(t => kt.includes(t)) || kt.every(t => gt.includes(t))); })) return; }
         const gFn = g.name.trim().split(/\s+/)[0].toLowerCase();
         if (gFn.length >= 3 && firstNameIdx[`${bk.id}|${gFn}`]?.count === 1 && transportedFirstNames.has(`${bk.id}|${gFn}`)) return;
         tr2AllEntries.push({
@@ -2471,7 +2494,7 @@ async function tr2DeleteEntry(rowId) {
 
 // ── Auto-match (name-based, for entries with no retreat assigned) ──
 function tr2NormName(name) {
-  return (name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z\s]/g, '').trim().split(/\s+/).sort().join(' ');
+  return (name || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[-_.]/g, ' ').replace(/[^a-z\s]/g, '').trim().split(/\s+/).sort().join(' ');
 }
 // Standard edit distance (insert/delete/substitute, each cost 1) -- used by tr2LoadData's
 // same-email name-variant clustering ("Elliot"/"Elliott"/"Elli" Free) to catch a one-letter
