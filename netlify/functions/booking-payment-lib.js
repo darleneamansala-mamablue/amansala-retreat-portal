@@ -12,14 +12,14 @@
 // A reservation with nothing to pay ($0) skips step 1 and is confirmed straight away, as before.
 const crypto = require('crypto');
 const { findOrCreateFolioLocked } = require('./folio-lib');
+const { contactHtml } = require('./message-format');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const SITE = process.env.URL || 'https://amansalaportal.com';
 const VISITO_API = 'https://platform-api.visitoai.com/m2m/v1';
-const WHATSAPP_URL = 'https://wa.me/529848795999';
 const PENDING_KEY = 'booking_payment_pending';
-const TEMPLATE = 'booking_payment_request_v3';   // same text as the email (Jorge 2026-11-04)
-const TEMPLATE_REMINDER = 'booking_payment_reminder_v2';
+const TEMPLATE = 'booking_payment_request_v4';   // same text and layout as the email (Jorge 2026-11-04)
+const TEMPLATE_REMINDER = 'booking_payment_reminder_v3';
 const DAYS_TO_PAY = 6;   // Jorge 2026-11-04: pay within 6 days of the request, a reminder every day until then
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -130,9 +130,7 @@ async function sendPayMessage(kind, { bookingId, name, email, phone, range, room
   const resendKey = process.env.RESEND_API_KEY;
   if (email && resendKey) {
     const btn = `<p><a href="${esc(link)}" style="display:inline-block;background:#2d6a6a;color:#ffffff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Pay my reservation</a></p>`;
-    const tail = `<p>If you have any questions, simply reply to this email or <a href="${WHATSAPP_URL}">message us on WhatsApp at +52 1 984 879 5999</a>.</p>
-<p>We look forward to welcoming you to Tulum!</p>
-<p>Warm regards,<br>The Amansala Team</p>`;
+    const tail = contactHtml();   // same closing block as the WhatsApp templates
     const html = kind === 'reminder'
       ? `<p>Hi ${esc(first)},</p>
 <p>This is a friendly reminder that your reservation <strong>${esc(range)}</strong> in a <strong>${esc(room)}</strong> room is still waiting for payment.</p>

@@ -14,6 +14,7 @@
 // Visito template) so there's only one confirmation message guests ever see,
 // regardless of which path created their reservation.
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
+const { confirmEmailHtml, formatV2, CONFIRM_TEMPLATE_V2 } = require('./message-format');
 const VISITO_API = 'https://platform-api.visitoai.com/m2m/v1';
 const GUEST_BOOK_URL = 'https://amansalaportal.com/guest-book.html';
 const WHATSAPP_CONTACT_URL = 'https://wa.me/529848795999';
@@ -62,6 +63,7 @@ exports.handler = async (event) => {
   const applyVars = (tpl, v) => tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => v[k] ?? '');
 
   const results = { email: null, whatsapp: null };
+  const v2 = supaKey ? await formatV2(supaKey) : false;   // the formal layout, same text by email and WhatsApp (message-format.js)
 
   // ── Email (Resend) — reuses the same email_guest_* slot Escape uses ──────
   const resendKey = process.env.RESEND_API_KEY;
@@ -76,7 +78,7 @@ exports.handler = async (event) => {
         const defaultSubject = `Your Amansala reservation – ${vars.roomType}`;
         const defaultBody = `<p>Hi ${vars.firstName},</p><p>Thank you for your booking. We are looking forward to hosting you ${vars.dateRange} in a ${vars.roomType} room.</p><p>Should you need anything prior to arrival we are here to assist you, and in the meantime please take a look at our <a href="${vars.guestBookUrl}">guest book</a> with helpful info.</p><hr><p><strong>Contact Us</strong><br><a href="${vars.whatsappUrl}">💬 Message us on WhatsApp</a><br>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
         const subj = applyVars(sett?.email_guest_subject || defaultSubject, vars);
-        const html = applyVars(sett?.email_guest_body    || defaultBody,    vars);
+        const html = sett?.email_guest_body ? applyVars(sett.email_guest_body, vars) : v2 ? confirmEmailHtml(vars) : defaultBody;
         const r = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
@@ -106,7 +108,7 @@ exports.handler = async (event) => {
   if (phone && waConfirmEnabled) {
     const visitoKey = process.env.VISITO_M2M_KEY;
     const channelId = process.env.VISITO_WA_CHANNEL_ID;
-    const templateName = process.env.VISITO_BOOKING_CONFIRM_TEMPLATE || 'booking_confirmation';
+    const templateName = v2 ? CONFIRM_TEMPLATE_V2 : (process.env.VISITO_BOOKING_CONFIRM_TEMPLATE || 'booking_confirmation');
     const templateLang = process.env.VISITO_BOOKING_CONFIRM_TEMPLATE_LANG || 'en_US';
     if (visitoKey && channelId) {
       try {

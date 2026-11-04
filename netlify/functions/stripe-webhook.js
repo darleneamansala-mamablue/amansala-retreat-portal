@@ -1,6 +1,7 @@
 'use strict';
 const crypto = require('crypto');
 const { sendPaymentNotification } = require('./notify-payment');
+const { confirmEmailHtml, formatV2, CONFIRM_TEMPLATE_V2 } = require('./message-format');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const VISITO_API = 'https://platform-api.visitoai.com/m2m/v1';
@@ -402,7 +403,8 @@ exports.handler = async (event) => {
         // Guest confirmation — Escape vs Extra Night template, see isExtraNight above
         if (sett?.[guestEnabledKey] !== false) {
           const subj = applyVars(sett?.[guestSubjectKey] || defaultGuestSubject, vars);
-          const body = applyVars(sett?.[guestBodyKey]    || defaultGuestBody,    vars);
+          const v2 = !isExtraNight && await formatV2(supaKey);   // the formal layout, same text by email and WhatsApp (message-format.js)
+          const body = sett?.[guestBodyKey] ? applyVars(sett[guestBodyKey], vars) : v2 ? confirmEmailHtml(vars) : defaultGuestBody;
           const gr   = await sendResend(meta.email, subj, body);
           if (!gr.ok) console.warn('[stripe-webhook] Guest email failed:', await gr.text());
           else        console.log('[stripe-webhook] Guest email sent to', meta.email, '(source:', meta.source || 'Escape', ')');
@@ -429,7 +431,7 @@ exports.handler = async (event) => {
         if (!isExtraNight && waConfirmEnabled) {
           const visitoKey = process.env.VISITO_M2M_KEY;
           const channelId = process.env.VISITO_WA_CHANNEL_ID;
-          const templateName = process.env.VISITO_BOOKING_CONFIRM_TEMPLATE || 'booking_confirmation';
+          const templateName = (await formatV2(supaKey)) ? CONFIRM_TEMPLATE_V2 : (process.env.VISITO_BOOKING_CONFIRM_TEMPLATE || 'booking_confirmation');
           const templateLang = process.env.VISITO_BOOKING_CONFIRM_TEMPLATE_LANG || 'en_US';
           const toPhone = (meta.phone || '').trim();
           if (visitoKey && channelId && toPhone) {

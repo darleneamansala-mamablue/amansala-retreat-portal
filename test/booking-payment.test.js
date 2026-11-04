@@ -56,7 +56,7 @@ const dayLater = n => { now += n * 86400000; };
   assert.strictEqual(db.folio_items.filter(i => i.category === 'Room').length, 1);
   assert.deepStrictEqual(sent.map(s => s.ch), ['email', 'wa']);
   assert.ok(/by <strong>November 10<\/strong>/.test(sent[0].html) && /wa\.me\/529848795999/.test(sent[0].html));
-  assert.strictEqual(sent[1].template.name, 'booking_payment_request_v3');
+  assert.strictEqual(sent[1].template.name, 'booking_payment_request_v4');
   assert.deepStrictEqual(sent[1].template.components[0].parameters.map(p => p.text).slice(0, 5), ['Ana', 'from November 20 to 23rd', 'Garden', '$600.00 USD', 'November 10']);
   console.log('request: ok');
   // same day: no reminder yet
@@ -68,7 +68,7 @@ const dayLater = n => { now += n * 86400000; };
   // 3. next day: reminder with what is left, once a day
   dayLater(1); o = await L.sendReminders(KEY);
   assert.deepStrictEqual(o.reminded, ['Ana Test $400.00 USD']);
-  assert.strictEqual(sent.find(s => s.ch === 'wa').template.name, 'booking_payment_reminder_v2');
+  assert.strictEqual(sent.find(s => s.ch === 'wa').template.name, 'booking_payment_reminder_v3');
   assert.ok(/Remaining balance: <strong>\$400\.00 USD/.test(sent.find(s => s.ch === 'email').html));
   sent.length = 0; o = await L.sendReminders(KEY); assert.strictEqual(sent.length, 0);
   dayLater(1); o = await L.sendReminders(KEY); assert.strictEqual(o.reminded.length, 1); assert.strictEqual(pending().bk1.reminders, 2);
