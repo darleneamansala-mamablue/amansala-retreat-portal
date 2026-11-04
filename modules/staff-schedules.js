@@ -61,6 +61,10 @@ function ssWorkersOn(date) {
 function ssSummary(w) { const on = (w || []).filter(x => x.working); return { total: on.length, am: on.filter(x => x.half === 'AM').length, pm: on.filter(x => x.half === 'PM').length }; }
 
 // ---- changing one day of a saved week (Jorge 2026-11-04): click a day -> OFF / 8-4 / 11-6 / 1-9 / Custom ----
+// Who may upload or change a schedule (Jorge 2026-11-04); everyone else only sees it. Substring match on the signed-in
+// name, same as Transport's pickup editors ("Jorge Canales" counts as jorge).
+const SS_EDIT_STAFF = ['darlene', 'irvin', 'melissa', 'jorge'];
+function ssCanEdit() { const n = ((typeof getCurrentSession === 'function' && getCurrentSession() && getCurrentSession().name) || '').trim().toLowerCase(); return SS_EDIT_STAFF.some(x => n.includes(x)); }
 const SS_QUICK = ['PSG', 'OFF', '8-4', '11-6', '1-9'];   // PSG = unpaid leave
 // departments whose sheet uses half days instead of hours (Jorge 2026-11-04: Camaristas, Cocina and Meseros only AM / PM)
 const SS_HALF_DAYS = ['PSG', 'OFF', 'AM', 'PM'];
@@ -71,6 +75,7 @@ function ssPickClose() { const m = document.getElementById('ssPickMenu'); if (m)
 function ssPickOutside(e) { const m = document.getElementById('ssPickMenu'); if (m && !m.contains(e.target)) ssPickClose(); }
 function ssPick(ev, ri, di) {
   ssPickClose();
+  if (!ssCanEdit()) { showToast('Only Darlene, Irvin, Melissa and Jorge can change the schedule.'); return; }
   const saved = (ssData[ssWeek] || {})[ssDept]; const r = saved && saved.rows[ri]; if (!r) return;
   const d = r.days[di] || {}, cur = (d.code || '') + (d.tag ? ' ' + d.tag : '');
   const box = ev.currentTarget.getBoundingClientRect(), m = document.createElement('div');
@@ -100,6 +105,7 @@ function ssSetCustom(ri, di) {
 // tag null = keep the day's FD/RSV; '' = no tag (a day off has none)
 async function ssSetDay(ri, di, code, tag) {
   ssPickClose();
+  if (!ssCanEdit()) return;
   const wk = ssWeek, dept = ssDept, cur = (ssData[wk] || {})[dept], r0 = cur && cur.rows[ri]; if (!r0) return;
   const who = (typeof getCurrentSession === 'function' && getCurrentSession() && getCurrentSession().name) || 'staff';
   const day = new Date(ssAdd(wk, di) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -154,7 +160,7 @@ window.addEventListener('pagehide', () => Object.keys(ssNotifyQueue).forEach(k =
 
 // ---- page ----
 async function ssSave() {
-  if (!ssPreview || !ssPreview.rows.length) return;
+  if (!ssPreview || !ssPreview.rows.length || !ssCanEdit()) return;
   const wk = ssMonday(ssPreview.weekStart || ssWeek), p = ssPreview;
   for (let i = 0; i < 8; i++) {
     const { data: row } = await db.from('app_store').select('value,updated_at').eq('key', SS_KEY).maybeSingle();
@@ -195,7 +201,7 @@ function ssPhotoShrink(file) {
   });
 }
 async function ssPhotoFile(file) {
-  if (!file || ssPhotoBusy) return;
+  if (!file || ssPhotoBusy || !ssCanEdit()) return;
   if (!/^image\//.test(file.type)) { showToast('That is not a picture.'); return; }
   const drop = document.getElementById('ssDrop');
   ssPhotoBusy = true; if (drop) drop.innerHTML = '<b>Reading the picture…</b><br><span style="font-size:11.5px;color:#9ca3af">This takes about 10-20 seconds.</span>';
@@ -238,7 +244,9 @@ async function ssRender() {
     <button class="btn btn-secondary" onclick="ssWeek=ssAdd(ssWeek,7);ssPreview=null;ssRender()">&#8250;</button>
     <button class="btn btn-secondary" onclick="ssWeek=ssMonday(ssISO(new Date()));ssPreview=null;ssRender()">This week</button>
     <span style="width:10px"></span>${SS_DEPTS.map(([k, l]) => { const has = !!((ssData[ssWeek] || {})[k]); return `<button onclick="ssDept='${k}';ssPreview=null;ssRender()" style="padding:6px 12px;border-radius:99px;border:1.5px solid ${ssDept === k ? '#2d6a6a' : '#d6cfc4'};background:${ssDept === k ? '#2d6a6a' : '#fff'};color:${ssDept === k ? '#fff' : '#374151'};font-weight:700;font-size:12px;cursor:pointer">${l} ${has ? '&#10003;' : ''}</button>`; }).join('')}</div>`;
-  html += `<div style="${card}"><div style="font-weight:700;margin-bottom:4px">1. Paste this department's schedule</div><div style="font-size:12.5px;color:#6b7280;margin-bottom:8px">In your spreadsheet, select the whole grid for ${ssEsc(SS_DEPTS.find(d => d[0] === ssDept)[1])} (names and the 7 days, including the date row if you can), copy it, and paste it here. Pick the right week above first.</div>
+  const canEdit = ssCanEdit();
+  if (!canEdit) html += `<div style="${card};font-size:12.5px;color:#6b7280">Only Darlene, Irvin, Melissa and Jorge can upload or change schedules. You can see them below.</div>`;
+  else html += `<div style="${card}"><div style="font-weight:700;margin-bottom:4px">1. Paste this department's schedule</div><div style="font-size:12.5px;color:#6b7280;margin-bottom:8px">In your spreadsheet, select the whole grid for ${ssEsc(SS_DEPTS.find(d => d[0] === ssDept)[1])} (names and the 7 days, including the date row if you can), copy it, and paste it here. Pick the right week above first.</div>
     <textarea id="ssPaste" rows="6" placeholder="Paste here" style="width:100%;padding:9px;border:1.5px solid #d6cfc4;border-radius:8px;font-family:monospace;font-size:12px"></textarea>
     <div style="margin-top:8px"><button class="btn btn-primary" onclick="ssRead()">Read it</button></div>
     <div id="ssDrop" ondragover="event.preventDefault();this.style.background='#ecfdf5'" ondragleave="this.style.background='#faf7f2'" ondrop="event.preventDefault();this.style.background='#faf7f2';ssPhotoFile(event.dataTransfer.files[0])" onclick="document.getElementById('ssPhotoInput').click()" style="margin-top:12px;border:2px dashed #c9bfb1;border-radius:10px;padding:16px;text-align:center;background:#faf7f2;cursor:pointer;font-size:13px;color:#4b5563">
@@ -254,7 +262,7 @@ async function ssRender() {
       ${unk ? `<div style="margin-top:6px;color:#b45309;font-size:12.5px">${unk} cell${unk === 1 ? ' was' : 's were'} not recognised (yellow). They count as not working until fixed in the spreadsheet.</div>` : ''}
       <div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-primary" ${p.rows.length ? '' : 'disabled'} onclick="ssSave()">Save this schedule</button><button class="btn btn-secondary" onclick="ssPreview=null;ssRender()">Cancel</button></div></div>`;
   }
-  html += `<div style="${card}"><div style="font-weight:700;margin-bottom:6px">Saved: ${ssEsc(SS_DEPTS.find(d => d[0] === ssDept)[1])}, this week</div>${saved ? ssGrid(saved.rows, ssWeek, true) + `<div style="font-size:11.5px;color:#9ca3af;margin-top:6px">Saved ${ssEsc(new Date(saved.savedAt).toLocaleString())} by ${ssEsc(saved.savedBy)}.${saved.editedAt ? ` Last change ${ssEsc(new Date(saved.editedAt).toLocaleString())} by ${ssEsc(saved.editedBy)}.` : ''} Click any day to change it. Pasting again for this week replaces it.</div>` : '<div style="color:#9ca3af">Not entered for this week. The Staffing Forecast shows this as not connected, never as zero staff.</div>'}</div>`;
+  html += `<div style="${card}"><div style="font-weight:700;margin-bottom:6px">Saved: ${ssEsc(SS_DEPTS.find(d => d[0] === ssDept)[1])}, this week</div>${saved ? ssGrid(saved.rows, ssWeek, canEdit) + `<div style="font-size:11.5px;color:#9ca3af;margin-top:6px">Saved ${ssEsc(new Date(saved.savedAt).toLocaleString())} by ${ssEsc(saved.savedBy)}.${saved.editedAt ? ` Last change ${ssEsc(new Date(saved.editedAt).toLocaleString())} by ${ssEsc(saved.editedBy)}.` : ''}${canEdit ? ' Click any day to change it. Pasting again for this week replaces it.' : ''}</div>` : '<div style="color:#9ca3af">Not entered for this week. The Staffing Forecast shows this as not connected, never as zero staff.</div>'}</div>`;
   el.innerHTML = html;
 }
 function ssOpen(btn) {

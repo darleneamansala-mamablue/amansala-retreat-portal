@@ -49,6 +49,7 @@ exports.handler = async (event) => {
   try { b = JSON.parse(event.body || '{}'); } catch (e) { return reply(400, { error: 'Invalid request' }); }
   const who = await staffAllowed({ headers: event.headers || {}, body: JSON.stringify({ token: b.token }) });
   if (!who) return reply(401, { error: 'Sign in again to read a photo.' });
+  if (!['darlene', 'irvin', 'melissa', 'jorge'].some(n => String(who.name || '').toLowerCase().includes(n))) return reply(403, { error: 'Only Darlene, Irvin, Melissa and Jorge can upload schedules.' });
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return reply(500, { error: 'Photo reading is not configured (missing ANTHROPIC_API_KEY).' });
   const mediaType = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(b.mediaType) ? b.mediaType : 'image/jpeg';
