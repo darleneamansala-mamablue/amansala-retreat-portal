@@ -1,4 +1,4 @@
-// ===== transport-room-notes.js — the Transport log's Notes column shows the ROOM LIST notes (not what the guest wrote), kept short (Darlene 2026-10-30) =====
+// ===== transport-room-notes.js — the Transport log's Notes column shows the ROOM LIST notes, then the guest's own form notes, kept short (Darlene 2026-10-30; guest notes back 2026-11-04, Jorge) =====
 // Loaded as a classic script AFTER transport.js; shares global scope. Standalone: tr2RenderRow is only wrapped, nothing is saved or changed.
 // On the team's Transport log, the Notes column used to show whatever the guest typed on the transport form (often long, e.g. "Happy to share a ride and wait up to 30 minutes…").
 // It now shows the internal notes from the retreat's Room List for that guest's room — the room's note plus that guest's own note ("Request ground floor", "W/ Extra Night: Nov 6-7"…) —
@@ -34,11 +34,14 @@
   window.tr2RenderRow = function (e) {
     const keep = e.notes;
     const isArr = e.type === 'arrival';
-    e.notes = isArr ? roomNote(e) : '';
+    // Jorge 2026-11-04: the guest's own transport-form notes are back in the column too ("People on our group on the same
+    // flight…"), after the Room List note -- both shortened, click to read all
+    const guestNote = String(keep || '').replace(/\s+/g, ' ').trim();
+    e.notes = [isArr ? roomNote(e) : '', guestNote].filter(Boolean).join(' · ');
     // the original draws e.notes inside <span>…</span>; swap that for the short, click-to-expand version
     try {
       let html = prev.apply(this, arguments);
-      if (isArr && e.notes) {
+      if (e.notes) {
         const orig = `<span style="font-size:11px;color:#6b7280;font-style:italic">${String(e.notes).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</span>`;
         const alt = `<span style="font-size:11px;color:#6b7280;font-style:italic">${esc(e.notes)}</span>`;
         const mine = window.trRoomNoteHtml(e.notes);

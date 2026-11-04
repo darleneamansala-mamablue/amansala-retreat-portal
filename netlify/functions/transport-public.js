@@ -16,7 +16,7 @@ const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const SITE = process.env.URL || 'https://amansalaportal.com';
 const hdrs = key => ({ apikey: key, Authorization: `Bearer ${key}` });
 const reply = (code, data) => ({ statusCode: code, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-const GUEST_KEYS = ['bookingId', 'isIndividual', 'firstName', 'lastName', 'email', 'flightNumber', 'arrivalDate', 'arrivalTime', 'arrivalAirport', 'arrivalOT',
+const GUEST_KEYS = ['bookingId', 'isIndividual', 'firstName', 'lastName', 'email', 'phone', 'flightNumber', 'arrivalDate', 'arrivalTime', 'arrivalAirport', 'arrivalOT',
   'departureDate', 'departureTime', 'departureAirport', 'departureOT', 'notes', 'willingToShare'];
 
 async function getAll(key, path) {
@@ -130,6 +130,7 @@ exports.handler = async (event) => {
     }
     const guest = {
       bookingId, isIndividual: bookingId === 'individual' || undefined, firstName, lastName, email, flightNumber: s(b.flightNumber).slice(0, 40),
+      phone: /^\+\d{7,15}$/.test(s(b.phone)) ? s(b.phone) : '',   // WhatsApp number with its country code (2026-11-04)
       arrivalDate: date(b.arrivalDate), arrivalTime: time(b.arrivalTime), arrivalOT: !!b.arrivalOT, arrivalAirport: b.arrivalOT ? '' : ap(b.arrivalAirport),
       departureDate: date(b.departureDate), departureTime: time(b.departureTime), departureOT: !!b.departureOT, departureAirport: b.departureOT ? '' : ap(b.departureAirport),
       notes: s(b.notes).slice(0, 2000), willingToShare: !!b.willingToShare,

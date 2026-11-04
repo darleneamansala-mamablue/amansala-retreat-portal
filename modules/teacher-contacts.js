@@ -16,7 +16,7 @@
     ['81', 'Japan +81'], ['86', 'China +86'], ['65', 'Singapore +65']];
   function splitPhone(raw) {
     const t = String(raw || '').trim(), d = t.replace(/\D/g, '');
-    if (!d) return { code: '1', num: '', guessed: false };
+    if (!d) return { code: '', num: '', guessed: false };
     if (t.startsWith('+') || t.startsWith('00')) {
       const dd = t.startsWith('00') ? d.slice(2) : d;
       const hit = CODES.map(c => c[0]).sort((a, b) => b.length - a.length).find(c => dd.startsWith(c));
@@ -25,7 +25,7 @@
     }
     if (d.length === 11 && d.startsWith('1')) return { code: '1', num: d.slice(1), guessed: false };
     if (d.length === 12 && d.startsWith('52')) return { code: '52', num: d.slice(2), guessed: false };
-    return { code: '1', num: d, guessed: true };   // no code written: assume +1, flag it
+    return { code: '', num: d, guessed: true };   // no code written: the country must be picked before saving (Jorge 2026-11-04)
   }
 
   function rows(bkId) {
@@ -51,7 +51,7 @@
     ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:900px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:Jost,sans-serif">
       <div style="padding:16px 20px;border-bottom:1px solid #f0ebe0;display:flex;align-items:center;justify-content:space-between;gap:10px">
         <div><div style="font-size:16px;font-weight:700;color:#2d2520">Participants' emails & phones</div>
-          <div style="font-size:12px;color:#8a7e74">${list.length} guests · change any email or phone, then Save all. Pick each phone's country so WhatsApp messages reach them. Orange = no country code was saved, please check.</div></div>
+          <div style="font-size:12px;color:#8a7e74">${list.length} guests · change any email or phone, then Save all. Pick each phone's country so WhatsApp messages reach them. A phone cannot be saved until its country is picked.</div></div>
         <button onclick="document.getElementById('tcContactsModal').remove()" style="border:none;background:none;font-size:20px;cursor:pointer;color:#8a7e74">✕</button>
       </div>
       <div style="overflow:auto;padding:4px 20px">
@@ -61,7 +61,7 @@
           <td style="padding:6px;font-size:12px;color:#8a7e74;white-space:nowrap">${esc(x.room)}</td>
           <td style="padding:6px;font-size:13px;font-weight:600;color:#2d2520">${esc(x.name)}${x.locked ? ' <span title="Locked by Amansala" style="font-size:11px">🔒</span>' : ''}</td>
           <td style="padding:6px"><input id="tc-em-${i}" type="email" value="${esc(x.email)}" ${x.locked ? 'disabled' : ''} style="${inp}"></td>
-          <td style="padding:6px;white-space:nowrap">${(() => { const sp = splitPhone(x.phone); return `<select id="tc-cc-${i}" ${x.locked ? 'disabled' : ''} title="Country code" style="padding:6px 4px;border:1.5px solid ${sp.guessed ? '#f59e0b' : '#e8dfd4'};background:${sp.guessed ? '#fffbeb' : '#fff'};border-radius:7px;font-size:12px;max-width:120px">${CODES.map(c => `<option value="${c[0]}" ${c[0] === sp.code ? 'selected' : ''}>${c[1]}</option>`).join('')}<option value="other" ${sp.code === 'other' ? 'selected' : ''}>Other (type +code)</option></select> <input id="tc-ph-${i}" type="tel" value="${esc(sp.code === 'other' ? '+' + sp.num : sp.num)}" ${x.locked ? 'disabled' : ''} placeholder="number" style="${inp};width:130px">${sp.guessed && sp.num ? '<div style="font-size:10px;color:#b45309;margin-top:2px">No country code was saved — check it</div>' : ''}`; })()}</td>
+          <td style="padding:6px;white-space:nowrap">${(() => { const sp = splitPhone(x.phone); return `<select id="tc-cc-${i}" ${x.locked ? 'disabled' : ''} title="Country code" style="padding:6px 4px;border:1.5px solid ${sp.guessed ? '#f59e0b' : '#e8dfd4'};background:${sp.guessed ? '#fffbeb' : '#fff'};border-radius:7px;font-size:12px;max-width:120px"><option value="" ${!sp.code ? 'selected' : ''}>— Country —</option>${CODES.map(c => `<option value="${c[0]}" ${c[0] === sp.code ? 'selected' : ''}>${c[1]}</option>`).join('')}<option value="other" ${sp.code === 'other' ? 'selected' : ''}>Other (type +code)</option></select> <input id="tc-ph-${i}" type="tel" value="${esc(sp.code === 'other' ? '+' + sp.num : sp.num)}" ${x.locked ? 'disabled' : ''} placeholder="number" style="${inp};width:130px">${sp.guessed && sp.num ? '<div style="font-size:10px;color:#b45309;margin-top:2px">Pick the country before saving</div>' : ''}`; })()}</td>
         </tr>`).join('') || '<tr><td colspan="4" style="padding:20px;text-align:center;color:#8a7e74">No guests on the room list yet.</td></tr>'}</tbody></table>
       </div>
       <div style="padding:14px 20px;border-top:1px solid #f0ebe0;display:flex;justify-content:flex-end;gap:8px;align-items:center">
@@ -79,10 +79,11 @@
     const list = ov._rows || [], changed = [], bad = [];
     list.forEach((x, i) => {
       if (x.locked) return;
-      const em = (document.getElementById('tc-em-' + i)?.value || '').trim(), cc = document.getElementById('tc-cc-' + i)?.value || '1';
+      const em = (document.getElementById('tc-em-' + i)?.value || '').trim(), cc = document.getElementById('tc-cc-' + i)?.value || '';
       const rawPh = (document.getElementById('tc-ph-' + i)?.value || '').trim(), digits = rawPh.replace(/\D/g, '');
       const ph = !digits ? '' : (cc === 'other' || rawPh.startsWith('+')) ? '+' + digits : '+' + cc + digits;
       if (digits && digits.length < 6) { bad.push(x.name + ' (phone)'); return; }
+      if (digits && !cc && !rawPh.startsWith('+')) { bad.push(x.name + ' (pick the country)'); const sel = document.getElementById('tc-cc-' + i); if (sel) sel.style.borderColor = '#dc2626'; return; }
       if (!okEmail(em)) { bad.push(x.name); return; }
       if (em !== x.email || ph !== x.phone) changed.push({ ...x, em, ph });
     });

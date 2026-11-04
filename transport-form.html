@@ -137,6 +137,7 @@
 
     input[type="text"],
     input[type="email"],
+    input[type="tel"],
     input[type="date"],
     input[type="time"],
     select,
@@ -157,6 +158,7 @@
 
     input[type="text"]:focus,
     input[type="email"]:focus,
+    input[type="tel"]:focus,
     input[type="date"]:focus,
     input[type="time"]:focus,
     select:focus,
@@ -455,11 +457,33 @@
             </div>
           </div>
 
-          <div class="field-row single" style="margin-bottom:18px;">
+          <div class="field-row" style="margin-bottom:18px;">
             <div class="field" id="field-email">
               <label for="email">Email <span class="req">*</span></label>
               <input type="email" id="email" name="email" autocomplete="email" required>
               <span class="field-err">Please enter a valid email address.</span>
+            </div>
+            <!-- WhatsApp phone with its country code (Jorge 2026-11-04): messages from Amansala (Visito) need the full number -->
+            <div class="field" id="field-phone">
+              <label for="phone">WhatsApp phone <span class="req">*</span></label>
+              <div style="display:flex;gap:8px">
+                <select id="phoneCountry" aria-label="Country code" style="width:46%;min-width:0">
+                  <option value="">Country…</option>
+                  <option value="1">US / Canada (+1)</option><option value="52">Mexico (+52)</option><option value="44">UK (+44)</option>
+                  <option value="61">Australia (+61)</option><option value="64">New Zealand (+64)</option><option value="353">Ireland (+353)</option>
+                  <option value="49">Germany (+49)</option><option value="33">France (+33)</option><option value="34">Spain (+34)</option>
+                  <option value="39">Italy (+39)</option><option value="31">Netherlands (+31)</option><option value="41">Switzerland (+41)</option>
+                  <option value="46">Sweden (+46)</option><option value="47">Norway (+47)</option><option value="45">Denmark (+45)</option>
+                  <option value="351">Portugal (+351)</option><option value="972">Israel (+972)</option><option value="971">UAE (+971)</option>
+                  <option value="55">Brazil (+55)</option><option value="54">Argentina (+54)</option><option value="57">Colombia (+57)</option>
+                  <option value="56">Chile (+56)</option><option value="51">Peru (+51)</option><option value="506">Costa Rica (+506)</option>
+                  <option value="63">Philippines (+63)</option><option value="91">India (+91)</option><option value="27">South Africa (+27)</option>
+                  <option value="81">Japan (+81)</option><option value="86">China (+86)</option><option value="65">Singapore (+65)</option>
+                  <option value="other">Other (type +code)</option>
+                </select>
+                <input type="tel" id="phone" name="phone" autocomplete="tel-national" placeholder="Phone number" style="flex:1;min-width:0">
+              </div>
+              <span class="field-err">Please choose your country and enter your phone number.</span>
             </div>
           </div>
 
@@ -952,6 +976,14 @@
       if (!validateEmail(email)) { markFieldInvalid('field-email'); valid = false; }
       else { clearFieldInvalid('field-email'); }
 
+      // WhatsApp phone: country picked + a number (or "Other" with the +code typed)
+      const phoneCc = document.getElementById('phoneCountry').value;
+      const phoneRaw = document.getElementById('phone').value.trim(), phoneDigits = phoneRaw.replace(/\D/g, '');
+      const phoneOk = phoneDigits.length >= 6 && (phoneCc && (phoneCc !== 'other' || phoneRaw.startsWith('+')));
+      const phone = !phoneOk ? '' : (phoneCc === 'other' || phoneRaw.startsWith('+')) ? '+' + phoneDigits : '+' + phoneCc + phoneDigits;
+      if (!phoneOk) { markFieldInvalid('field-phone'); valid = false; }
+      else { clearFieldInvalid('field-phone'); }
+
       // Retreat — skip if individual mode
       const bookingId = individualMode ? 'individual' : selectedBookingId;
 
@@ -1025,6 +1057,7 @@
         firstName:        firstName,
         lastName:         lastName,
         email:            email,
+        phone:            phone,
         flightNumber:     flightNumber,
         arrivalDate:      arrivalDate,
         arrivalTime:      arrivalTime,
@@ -1087,6 +1120,12 @@
       const fnEl = document.getElementById('firstName'); if (fnEl) fnEl.value = entry.firstName || '';
       const lnEl = document.getElementById('lastName');  if (lnEl) lnEl.value = entry.lastName  || '';
       const emEl = document.getElementById('email');     if (emEl) emEl.value = entry.email      || '';
+      if (entry.phone) {
+        const pd = String(entry.phone).replace(/\D/g, ''), sel = document.getElementById('phoneCountry'), ph = document.getElementById('phone');
+        const codes = [...sel.options].map(o => o.value).filter(v => /^\d+$/.test(v)).sort((a, b) => b.length - a.length);
+        const cc = String(entry.phone).startsWith('+') ? codes.find(c => pd.startsWith(c)) : '';
+        if (cc) { sel.value = cc; ph.value = pd.slice(cc.length); } else { sel.value = String(entry.phone).startsWith('+') ? 'other' : ''; ph.value = String(entry.phone).startsWith('+') ? '+' + pd : pd; }
+      }
       const flEl = document.getElementById('flightNumber'); if (flEl) flEl.value = entry.flightNumber || '';
 
       // Arrival
