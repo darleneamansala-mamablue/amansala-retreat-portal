@@ -6235,6 +6235,7 @@ function skedBuildList(days,DAYS_LONG,MONTHS_LONG){
       h+='<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#1a2332">'+escHtml(ev.title)+'</div>';
       if(ev.subtitle)h+='<div style="font-size:12px;color:#374151">'+escHtml(ev.subtitle)+'</div>';
       h+=shalaHtml;
+      if(typeof dsListActions==='function')h+=dsListActions(ev);   // Start / Finish for the shala team (modules/daily-shalas.js)
       h+='</div>';
       if(!ev.isRetreat)h+='<button onclick="event.stopPropagation();openSkedEditModal(\''+ev.id+'\')" style="font-size:10.5px;padding:3px 8px;border:1px solid var(--border);border-radius:5px;background:#fff;cursor:pointer;color:var(--muted)">Edit</button>';
       h+='</div>';
