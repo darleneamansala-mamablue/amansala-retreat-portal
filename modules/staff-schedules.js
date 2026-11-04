@@ -159,9 +159,11 @@ function ssNotifyChange(dept, week, line) {
 window.addEventListener('pagehide', () => Object.keys(ssNotifyQueue).forEach(k => ssNotifyFlush(k, true)));
 
 // ---- page ----
-async function ssSave() {
+// weekPick: 'screen' = the week on screen, 'paste' = the week of the dates in the paste/photo (asked when they differ:
+// Irvin's kitchen schedule 2026-11-04 went to the week of Oct 26 from its dates and looked "not saved" on this week)
+async function ssSave(weekPick) {
   if (!ssPreview || !ssPreview.rows.length || !ssCanEdit()) return;
-  const wk = ssMonday(ssPreview.weekStart || ssWeek), p = ssPreview;
+  const wk = weekPick === 'screen' ? ssWeek : ssMonday(ssPreview.weekStart || ssWeek), p = ssPreview;
   for (let i = 0; i < 8; i++) {
     const { data: row } = await db.from('app_store').select('value,updated_at').eq('key', SS_KEY).maybeSingle();
     const next = row && row.value ? JSON.parse(JSON.stringify(row.value)) : {};
@@ -254,13 +256,15 @@ async function ssRender() {
       <input id="ssPhotoInput" type="file" accept="image/*" style="display:none" onchange="ssPhotoFile(this.files[0]);this.value=''"></div></div>`;
   if (ssPreview) {
     const p = ssPreview, unk = p.rows.reduce((n, r) => n + r.days.filter(d => ssShift(d.code).unknown).length, 0);
-    html += `<div style="${card};border-color:#2d6a6a"><div style="font-weight:700;margin-bottom:6px">2. Check it, then save for the week of ${ssEsc(ssMonday(p.weekStart || ssWeek))}</div>
-      ${p.weekStart && ssMonday(p.weekStart) !== ssWeek ? `<div style="color:#b45309;font-size:12.5px;margin-bottom:6px">The dates in your paste start ${ssEsc(p.weekStart)}, so it will be saved to that week, not the one on screen.</div>` : ''}
+    html += `<div style="${card};border-color:#2d6a6a"><div style="font-weight:700;margin-bottom:6px">2. Check it, then save it</div>
+      ${p.weekStart && ssMonday(p.weekStart) !== ssWeek ? `<div style="color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;font-size:12.5px;font-weight:600;margin-bottom:8px">⚠ The dates in this schedule are for the week of ${ssEsc(new Date(ssMonday(p.weekStart) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))}, but the week on screen is ${ssEsc(new Date(ssWeek + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))}. Choose below which week to save it to.</div>` : ''}
       ${p.rows.length ? ssGrid(p.rows, ssMonday(p.weekStart || ssWeek)) : '<div style="color:#991b1b;font-weight:600">I could not find any staff rows. Each row needs a name followed by 7 days.</div>'}
       ${p.skipped.length ? `<div style="margin-top:8px;color:#b45309;font-size:12.5px">Skipped rows: ${p.skipped.map(ssEsc).join('; ')}</div>` : ''}
       ${p.photoNotes ? `<div style="margin-top:6px;color:#b45309;font-size:12.5px">From the picture: ${ssEsc(p.photoNotes)}</div>` : ''}
       ${unk ? `<div style="margin-top:6px;color:#b45309;font-size:12.5px">${unk} cell${unk === 1 ? ' was' : 's were'} not recognised (yellow). They count as not working until fixed in the spreadsheet.</div>` : ''}
-      <div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-primary" ${p.rows.length ? '' : 'disabled'} onclick="ssSave()">Save this schedule</button><button class="btn btn-secondary" onclick="ssPreview=null;ssRender()">Cancel</button></div></div>`;
+      <div style="margin-top:10px;display:flex;gap:8px">${p.weekStart && ssMonday(p.weekStart) !== ssWeek
+        ? `<button class="btn btn-primary" ${p.rows.length ? '' : 'disabled'} onclick="ssSave('screen')">Save to the week of ${ssEsc(new Date(ssWeek + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))} (on screen)</button><button class="btn btn-secondary" ${p.rows.length ? '' : 'disabled'} onclick="ssSave('paste')">Save to the week of ${ssEsc(new Date(ssMonday(p.weekStart) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))} (from the dates)</button>`
+        : `<button class="btn btn-primary" ${p.rows.length ? '' : 'disabled'} onclick="ssSave()">Save this schedule</button>`}<button class="btn btn-secondary" onclick="ssPreview=null;ssRender()">Cancel</button></div></div>`;
   }
   html += `<div style="${card}"><div style="font-weight:700;margin-bottom:6px">Saved: ${ssEsc(SS_DEPTS.find(d => d[0] === ssDept)[1])}, this week</div>${saved ? ssGrid(saved.rows, ssWeek, canEdit) + `<div style="font-size:11.5px;color:#9ca3af;margin-top:6px">Saved ${ssEsc(new Date(saved.savedAt).toLocaleString())} by ${ssEsc(saved.savedBy)}.${saved.editedAt ? ` Last change ${ssEsc(new Date(saved.editedAt).toLocaleString())} by ${ssEsc(saved.editedBy)}.` : ''}${canEdit ? ' Click any day to change it. Pasting again for this week replaces it.' : ''}</div>` : '<div style="color:#9ca3af">Not entered for this week. The Staffing Forecast shows this as not connected, never as zero staff.</div>'}</div>`;
   el.innerHTML = html;
