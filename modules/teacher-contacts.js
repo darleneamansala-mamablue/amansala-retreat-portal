@@ -6,6 +6,27 @@
 (function () {
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const okEmail = e => !e || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  // WhatsApp (Visito) needs the full number with its country code (Jorge 2026-11-04). Each phone gets a country picker; a
+  // number already written with "+" keeps its code, a bare 10-digit number is taken as US/Canada (+1, most of our guests)
+  // and highlighted so the teacher can check it. Saved as "+<code><number>".
+  const CODES = [['1', 'US / Canada +1'], ['52', 'Mexico +52'], ['44', 'UK +44'], ['61', 'Australia +61'], ['64', 'New Zealand +64'], ['353', 'Ireland +353'],
+    ['49', 'Germany +49'], ['33', 'France +33'], ['34', 'Spain +34'], ['39', 'Italy +39'], ['31', 'Netherlands +31'], ['41', 'Switzerland +41'], ['46', 'Sweden +46'],
+    ['47', 'Norway +47'], ['45', 'Denmark +45'], ['351', 'Portugal +351'], ['972', 'Israel +972'], ['971', 'UAE +971'], ['55', 'Brazil +55'], ['54', 'Argentina +54'],
+    ['57', 'Colombia +57'], ['56', 'Chile +56'], ['51', 'Peru +51'], ['506', 'Costa Rica +506'], ['63', 'Philippines +63'], ['91', 'India +91'], ['27', 'South Africa +27'],
+    ['81', 'Japan +81'], ['86', 'China +86'], ['65', 'Singapore +65']];
+  function splitPhone(raw) {
+    const t = String(raw || '').trim(), d = t.replace(/\D/g, '');
+    if (!d) return { code: '1', num: '', guessed: false };
+    if (t.startsWith('+') || t.startsWith('00')) {
+      const dd = t.startsWith('00') ? d.slice(2) : d;
+      const hit = CODES.map(c => c[0]).sort((a, b) => b.length - a.length).find(c => dd.startsWith(c));
+      if (hit) return { code: hit, num: dd.slice(hit.length), guessed: false };
+      return { code: 'other', num: dd, guessed: false };
+    }
+    if (d.length === 11 && d.startsWith('1')) return { code: '1', num: d.slice(1), guessed: false };
+    if (d.length === 12 && d.startsWith('52')) return { code: '52', num: d.slice(2), guessed: false };
+    return { code: '1', num: d, guessed: true };   // no code written: assume +1, flag it
+  }
 
   function rows(bkId) {
     const bk = AppData.bookings.find(b => b.id === bkId);
@@ -30,17 +51,17 @@
     ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:900px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:Jost,sans-serif">
       <div style="padding:16px 20px;border-bottom:1px solid #f0ebe0;display:flex;align-items:center;justify-content:space-between;gap:10px">
         <div><div style="font-size:16px;font-weight:700;color:#2d2520">Participants' emails & phones</div>
-          <div style="font-size:12px;color:#8a7e74">${list.length} guests · change any email or phone, then Save all. Include the country code in phones (+1, +52…).</div></div>
+          <div style="font-size:12px;color:#8a7e74">${list.length} guests · change any email or phone, then Save all. Pick each phone's country so WhatsApp messages reach them. Orange = no country code was saved, please check.</div></div>
         <button onclick="document.getElementById('tcContactsModal').remove()" style="border:none;background:none;font-size:20px;cursor:pointer;color:#8a7e74">✕</button>
       </div>
       <div style="overflow:auto;padding:4px 20px">
         <table style="width:100%;border-collapse:collapse"><thead><tr style="font-size:10.5px;color:#8a7e74;text-transform:uppercase;letter-spacing:.4px">
-          <th style="text-align:left;padding:8px 6px;width:70px">Room</th><th style="text-align:left;padding:8px 6px">Guest</th><th style="text-align:left;padding:8px 6px">Email</th><th style="text-align:left;padding:8px 6px;width:190px">Phone</th></tr></thead>
+          <th style="text-align:left;padding:8px 6px;width:70px">Room</th><th style="text-align:left;padding:8px 6px">Guest</th><th style="text-align:left;padding:8px 6px">Email</th><th style="text-align:left;padding:8px 6px;width:290px">Phone (country + number)</th></tr></thead>
         <tbody>${list.map((x, i) => `<tr style="border-top:1px solid #f5f0e8">
           <td style="padding:6px;font-size:12px;color:#8a7e74;white-space:nowrap">${esc(x.room)}</td>
           <td style="padding:6px;font-size:13px;font-weight:600;color:#2d2520">${esc(x.name)}${x.locked ? ' <span title="Locked by Amansala" style="font-size:11px">🔒</span>' : ''}</td>
           <td style="padding:6px"><input id="tc-em-${i}" type="email" value="${esc(x.email)}" ${x.locked ? 'disabled' : ''} style="${inp}"></td>
-          <td style="padding:6px"><input id="tc-ph-${i}" type="tel" value="${esc(x.phone)}" ${x.locked ? 'disabled' : ''} style="${inp}"></td>
+          <td style="padding:6px;white-space:nowrap">${(() => { const sp = splitPhone(x.phone); return `<select id="tc-cc-${i}" ${x.locked ? 'disabled' : ''} title="Country code" style="padding:6px 4px;border:1.5px solid ${sp.guessed ? '#f59e0b' : '#e8dfd4'};background:${sp.guessed ? '#fffbeb' : '#fff'};border-radius:7px;font-size:12px;max-width:120px">${CODES.map(c => `<option value="${c[0]}" ${c[0] === sp.code ? 'selected' : ''}>${c[1]}</option>`).join('')}<option value="other" ${sp.code === 'other' ? 'selected' : ''}>Other (type +code)</option></select> <input id="tc-ph-${i}" type="tel" value="${esc(sp.code === 'other' ? '+' + sp.num : sp.num)}" ${x.locked ? 'disabled' : ''} placeholder="number" style="${inp};width:130px">${sp.guessed && sp.num ? '<div style="font-size:10px;color:#b45309;margin-top:2px">No country code was saved — check it</div>' : ''}`; })()}</td>
         </tr>`).join('') || '<tr><td colspan="4" style="padding:20px;text-align:center;color:#8a7e74">No guests on the room list yet.</td></tr>'}</tbody></table>
       </div>
       <div style="padding:14px 20px;border-top:1px solid #f0ebe0;display:flex;justify-content:flex-end;gap:8px;align-items:center">
@@ -58,11 +79,14 @@
     const list = ov._rows || [], changed = [], bad = [];
     list.forEach((x, i) => {
       if (x.locked) return;
-      const em = (document.getElementById('tc-em-' + i)?.value || '').trim(), ph = (document.getElementById('tc-ph-' + i)?.value || '').trim();
+      const em = (document.getElementById('tc-em-' + i)?.value || '').trim(), cc = document.getElementById('tc-cc-' + i)?.value || '1';
+      const rawPh = (document.getElementById('tc-ph-' + i)?.value || '').trim(), digits = rawPh.replace(/\D/g, '');
+      const ph = !digits ? '' : (cc === 'other' || rawPh.startsWith('+')) ? '+' + digits : '+' + cc + digits;
+      if (digits && digits.length < 6) { bad.push(x.name + ' (phone)'); return; }
       if (!okEmail(em)) { bad.push(x.name); return; }
       if (em !== x.email || ph !== x.phone) changed.push({ ...x, em, ph });
     });
-    if (bad.length) { document.getElementById('tcContactsErr').textContent = 'Check the email of: ' + bad.join(', '); return; }
+    if (bad.length) { document.getElementById('tcContactsErr').textContent = 'Check: ' + bad.join(', '); return; }
     if (!changed.length) { ov.remove(); showToast('Nothing changed.'); return; }
     const ts = new Date().toISOString();
     changed.forEach(c => {
