@@ -22,6 +22,13 @@
       return [...new Set(parts)].join(' · ').replace(/\s+/g, ' ');
     } catch (err) { return ''; }
   }
+  // the room's staff-only Internal Notes (Booking Detail → Internal Notes), on arrivals and departures (Jorge 2026-11-04)
+  function internalNote(e) {
+    try {
+      return [...new Set((AppData.regs || []).filter(r => r.bookingId === e.retreatId && !r.cancelled && sameRoom(r.room, e.room))
+        .map(r => String(r.internalNotes || '').trim()).filter(Boolean))].join(' · ').replace(/\s+/g, ' ');
+    } catch (err) { return ''; }
+  }
   window.tnExpand = function (el) { const full = el.getAttribute('data-full'); if (!full) return; const open = el.getAttribute('data-open') === '1'; el.textContent = open ? full.slice(0, MAX).trim() + '…' : full; el.setAttribute('data-open', open ? '0' : '1'); };
   window.trRoomNoteHtml = function (full) {
     if (!full) return '';
@@ -32,7 +39,7 @@
   // the same text for the printed sheet (Imprimir): Room List note on arrivals, then the guest's own form notes, in full
   window.trCombinedNotes = function (e) {
     const guestNote = String((e && e.notes) || '').replace(/\s+/g, ' ').trim();
-    return [e && e.type === 'arrival' ? roomNote(e) : '', guestNote].filter(Boolean).join(' · ');
+    return [e && e.type === 'arrival' ? roomNote(e) : '', internalNote(e), guestNote].filter(Boolean).join(' · ');
   };
   const prev = window.tr2RenderRow;
   if (typeof prev !== 'function') return;
@@ -42,7 +49,7 @@
     // Jorge 2026-11-04: the guest's own transport-form notes are back in the column too ("People on our group on the same
     // flight…"), after the Room List note -- both shortened, click to read all
     const guestNote = String(keep || '').replace(/\s+/g, ' ').trim();
-    e.notes = [isArr ? roomNote(e) : '', guestNote].filter(Boolean).join(' · ');
+    e.notes = [isArr ? roomNote(e) : '', internalNote(e), guestNote].filter(Boolean).join(' · ');
     // the original draws e.notes inside <span>…</span>; swap that for the short, click-to-expand version
     try {
       let html = prev.apply(this, arguments);
