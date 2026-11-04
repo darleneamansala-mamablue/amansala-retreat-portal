@@ -31,7 +31,12 @@ exports.handler = async (event) => {
   const get = async p => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${p}`, { headers: H }); return r.ok ? r.json() : []; };
   try {
     const since = localDate(-1);
-    const bks = await get(`bookings?select=id,retreat_name,leader_name,start_date,end_date,status,booking_type,confirmation_number&status=neq.cancelled&end_date=gte.${since}&order=start_date&limit=1000`);
+    const bks = [];
+    for (let off = 0; off < 20000; off += 1000) {   // paged: there are more than 1000 current and future reservations
+      const page = await get(`bookings?select=id,retreat_name,leader_name,start_date,end_date,status,booking_type,confirmation_number&status=neq.cancelled&end_date=gte.${since}&order=id&limit=1000&offset=${off}`);
+      bks.push(...page);
+      if (page.length < 1000) break;
+    }
     const byId = new Map(bks.map(b => [b.id, b]));
     const regs = [];
     for (let off = 0; off < 20000; off += 1000) {   // paged: PostgREST returns 1000 rows at most
