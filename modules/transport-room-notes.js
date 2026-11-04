@@ -29,6 +29,11 @@
     return `<span title="${esc(full)}" data-full="${esc(full)}" data-open="0" onclick="event.stopPropagation();tnExpand(this)" style="font-size:11px;color:#6b7280;font-style:italic;cursor:pointer">${esc(full.slice(0, MAX).trim())}…</span>`;
   };
 
+  // the same text for the printed sheet (Imprimir): Room List note on arrivals, then the guest's own form notes, in full
+  window.trCombinedNotes = function (e) {
+    const guestNote = String((e && e.notes) || '').replace(/\s+/g, ' ').trim();
+    return [e && e.type === 'arrival' ? roomNote(e) : '', guestNote].filter(Boolean).join(' · ');
+  };
   const prev = window.tr2RenderRow;
   if (typeof prev !== 'function') return;
   window.tr2RenderRow = function (e) {

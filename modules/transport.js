@@ -997,7 +997,7 @@ function tr2PrintView() {
   // no "pick up before the flight" step) -- drop the column entirely when
   // printing arrivals only, instead of showing an empty "—" on every row.
   const showPickupCol = tr2View !== 'arrivals';
-  const printCols = 5 + (showTypeCol ? 1 : 0) + (showPickupCol ? 1 : 0);
+  const printCols = 6 + (showTypeCol ? 1 : 0) + (showPickupCol ? 1 : 0);   // + Notas (Jorge 2026-11-04)
 
   const groups = new Map();
   filtered.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
@@ -1014,6 +1014,7 @@ function tr2PrintView() {
         ${showPickupCol ? `<td>${e.ot ? '—' : escHtml(e.type === 'departure' ? ((e.groupPickup || e.pickup) || '—') : '—')}</td>` : ''}
         <td>${e.ot ? '—' : escHtml(e.time || '')}</td>
         <td>${escHtml(e.retreatLabel || '')}</td>
+        <td style="font-size:10.5px;color:#4b5563;max-width:260px">${escHtml(typeof trCombinedNotes === 'function' ? trCombinedNotes(e) : String(e.notes || '').replace(/\s+/g, ' '))}</td>
       </tr>`;
 
   // Jorge's ask 2026-10-19, then follow-up same day: pure category order within a shared-ride
@@ -1123,7 +1124,7 @@ function tr2PrintView() {
       <div class="sub">${escHtml(retreatLabel)} · ${escHtml(rangeLabel)}</div>
     </div>
     <table>
-      <thead><tr><th>Habitación</th><th>Nombre</th>${showTypeCol ? '<th>Tipo</th>' : ''}<th>Aeropuerto</th>${showPickupCol ? '<th>Pick-up</th>' : ''}<th>Hora Vuelo</th><th>Retiro</th></tr></thead>
+      <thead><tr><th>Habitación</th><th>Nombre</th>${showTypeCol ? '<th>Tipo</th>' : ''}<th>Aeropuerto</th>${showPickupCol ? '<th>Pick-up</th>' : ''}<th>Hora Vuelo</th><th>Retiro</th><th>Notas</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
   </body></html>`);
