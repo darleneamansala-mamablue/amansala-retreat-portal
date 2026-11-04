@@ -18,8 +18,8 @@ const SITE = process.env.URL || 'https://amansalaportal.com';
 const VISITO_API = 'https://platform-api.visitoai.com/m2m/v1';
 const WHATSAPP_URL = 'https://wa.me/529848795999';
 const PENDING_KEY = 'booking_payment_pending';
-const TEMPLATE = 'booking_payment_request_v2';
-const TEMPLATE_REMINDER = 'booking_payment_reminder';
+const TEMPLATE = 'booking_payment_request_v3';   // same text as the email (Jorge 2026-11-04)
+const TEMPLATE_REMINDER = 'booking_payment_reminder_v2';
 const DAYS_TO_PAY = 6;   // Jorge 2026-11-04: pay within 6 days of the request, a reminder every day until then
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
