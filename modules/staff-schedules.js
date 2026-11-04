@@ -70,15 +70,20 @@ function ssPick(ev, ri, di) {
   const d = r.days[di] || {}, cur = (d.code || '') + (d.tag ? ' ' + d.tag : '');
   const box = ev.currentTarget.getBoundingClientRect(), m = document.createElement('div');
   m.id = 'ssPickMenu';
-  m.style.cssText = `position:fixed;z-index:9999;top:${Math.min(box.bottom + 4, innerHeight - 190)}px;left:${Math.min(box.left, innerWidth - 230)}px;width:220px;background:#fff;border:1px solid #d6cfc4;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px;font-family:inherit`;
-  const btn = 'display:block;width:100%;text-align:left;padding:7px 10px;margin:2px 0;border:1px solid #e8dfd4;border-radius:7px;background:#fff;cursor:pointer;font-size:13px;font-weight:600';
-  m.innerHTML = `<div style="font-size:11.5px;color:#6b7280;margin:0 2px 6px">${ssEsc(r.name)} · ${new Date(ssAdd(ssWeek, di) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })} · now <b>${ssEsc(cur || '—')}</b></div>
-    ${SS_QUICK.map(c => { const off = !ssShift(c).working; return `<button style="${btn};${off ? 'color:#991b1b' : 'color:#166534'}" onclick="ssSetDay(${ri},${di},'${c}',${off ? "''" : 'null'})">${c}${c === 'PSG' ? ' <span style="font-size:10px;color:#6b7280;font-weight:500">unpaid leave</span>' : ''}${!off && d.tag ? ` <span style="font-size:10px;color:#6b7280">${ssEsc(d.tag)}</span>` : ''}</button>`; }).join('')}
-    <div style="margin-top:6px;border-top:1px solid #f0ebe0;padding-top:6px"><div style="font-size:11.5px;font-weight:700;color:#374151;margin:0 2px 4px">Custom</div>
+  m.style.cssText = `position:fixed;z-index:9999;top:0;left:0;width:210px;max-height:calc(100vh - 16px);overflow-y:auto;background:#fff;border:1px solid #d6cfc4;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:7px;font-family:inherit`;
+  // compact chips, two per row, so the whole menu fits under (or over) the cell
+  const btn = 'flex:1 1 calc(50% - 4px);text-align:center;padding:4px 6px;border:1px solid #e8dfd4;border-radius:6px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap';
+  m.innerHTML = `<div style="font-size:11px;color:#6b7280;margin:0 2px 5px">${ssEsc(r.name)} · ${new Date(ssAdd(ssWeek, di) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })} · now <b>${ssEsc(cur || '—')}</b></div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">${SS_QUICK.map(c => { const off = !ssShift(c).working; return `<button style="${btn};${off ? 'color:#991b1b' : 'color:#166534'}" title="${c === 'PSG' ? 'Unpaid leave' : c === 'OFF' ? 'Day off' : ''}" onclick="ssSetDay(${ri},${di},'${c}',${off ? "''" : 'null'})">${c}${!off && d.tag ? ` <span style="font-size:10px;color:#6b7280">${ssEsc(d.tag)}</span>` : ''}</button>`; }).join('')}</div>
+    <div style="margin-top:6px;border-top:1px solid #f0ebe0;padding-top:5px"><div style="font-size:11px;font-weight:700;color:#374151;margin:0 2px 3px">Custom</div>
       <div style="display:flex;gap:4px"><input id="ssPickCustom" value="${ssEsc(cur)}" placeholder="e.g. 10-6 FD, VACACIONES" style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px" onkeydown="if(event.key==='Enter')ssSetCustom(${ri},${di})">
       <button class="btn btn-primary btn-sm" onclick="ssSetCustom(${ri},${di})">Save</button></div>
-      <div style="font-size:10.5px;color:#9ca3af;margin:4px 2px 0">Hours like 10-6, AM, PM, OFF, VACACIONES, INC, PERMISO, PSG. Add FD or RSV after the hours.</div></div>`;
+      <div style="font-size:10px;color:#9ca3af;margin:3px 2px 0">e.g. 10-6, AM, VACACIONES, INC, PERMISO. Add FD or RSV after the hours.</div></div>`;
   document.body.appendChild(m);
+  // under the cell when it fits, otherwise above it, always inside the window
+  const h = m.offsetHeight, below = innerHeight - box.bottom - 8;
+  m.style.top = Math.max(8, below >= h ? box.bottom + 4 : box.top - h - 4) + 'px';
+  m.style.left = Math.max(8, Math.min(box.left, innerWidth - m.offsetWidth - 8)) + 'px';
   setTimeout(() => document.addEventListener('mousedown', ssPickOutside, true), 0);
 }
 function ssSetCustom(ri, di) {
