@@ -64,7 +64,9 @@ function ssSummary(w) { const on = (w || []).filter(x => x.working); return { to
 const SS_QUICK = ['PSG', 'OFF', '8-4', '11-6', '1-9'];   // PSG = unpaid leave
 // departments whose sheet uses half days instead of hours (Jorge 2026-11-04: Camaristas, Cocina and Meseros only AM / PM)
 const SS_HALF_DAYS = ['PSG', 'OFF', 'AM', 'PM'];
-const SS_QUICK_BY_DEPT = { housekeeping: SS_HALF_DAYS, kitchen: SS_HALF_DAYS, waitstaff: SS_HALF_DAYS };
+// Mantenimiento: half days AND hours (its sheet has AM / PM plus 10-6, 12-8)
+const SS_QUICK_BY_DEPT = { housekeeping: SS_HALF_DAYS, kitchen: SS_HALF_DAYS, waitstaff: SS_HALF_DAYS,
+  maintenance: ['PSG', 'OFF', 'AM', 'PM', '8-4', '10-6', '11-6', '12-8', '1-9'] };
 function ssPickClose() { const m = document.getElementById('ssPickMenu'); if (m) m.remove(); document.removeEventListener('mousedown', ssPickOutside, true); }
 function ssPickOutside(e) { const m = document.getElementById('ssPickMenu'); if (m && !m.contains(e.target)) ssPickClose(); }
 function ssPick(ev, ri, di) {
@@ -81,7 +83,7 @@ function ssPick(ev, ri, di) {
     <div style="margin-top:6px;border-top:1px solid #f0ebe0;padding-top:5px"><div style="font-size:11px;font-weight:700;color:#374151;margin:0 2px 3px">Custom</div>
       <div style="display:flex;gap:4px"><input id="ssPickCustom" value="${ssEsc(cur)}" placeholder="e.g. 10-6 FD, VACACIONES" style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px" onkeydown="if(event.key==='Enter')ssSetCustom(${ri},${di})">
       <button class="btn btn-primary btn-sm" onclick="ssSetCustom(${ri},${di})">Save</button></div>
-      <div style="font-size:10px;color:#9ca3af;margin:3px 2px 0">${SS_QUICK_BY_DEPT[ssDept] ? 'e.g. AM, PM, VACACIONES, INC, PERMISO.' : 'e.g. 10-6, AM, VACACIONES, INC, PERMISO. Add FD or RSV after the hours.'}</div></div>`;
+      <div style="font-size:10px;color:#9ca3af;margin:3px 2px 0">${SS_QUICK_BY_DEPT[ssDept] === SS_HALF_DAYS ? 'e.g. AM, PM, VACACIONES, INC, PERMISO.' : 'e.g. 10-6, AM, VACACIONES, INC, PERMISO. Add FD or RSV after the hours.'}</div></div>`;
   document.body.appendChild(m);
   // under the cell when it fits, otherwise above it, always inside the window
   const h = m.offsetHeight, below = innerHeight - box.bottom - 8;
