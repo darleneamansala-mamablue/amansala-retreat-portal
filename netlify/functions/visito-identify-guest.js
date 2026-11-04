@@ -6,6 +6,7 @@
 // current or next stay in the portal comes back: name, portal reservation number, room, room type, dates, retreat or
 // group, checked in or not, and what is still to pay on their folio. Only that guest's own stay (the phone must be on the
 // reservation) -- never the rest of their group.
+const { signGuestLink } = require('./guest-link-lib');
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 
 const digits = s => String(s || '').replace(/\D/g, '');
@@ -67,6 +68,8 @@ exports.handler = async (event) => {
         checkIn, checkOut, group: bk.booking_type === 'room_only' ? 'Room only' : (bk.retreat_name || bk.leader_name || 'Retreat'),
         status: r.checked_out_at ? 'checked out' : r.checked_in_at ? 'in house (checked in)' : 'not checked in yet',
         balanceDue: await balanceOf('registration_id', r.id),
+        // personal spa link: the spa page opens with their name, room, email and phone filled in (Jorge 2026-11-04)
+        spaLink: (t => t ? 'https://amansalaportal.com/spa?g=' + t : null)(signGuestLink(r.id, g.name, checkOut)),
       });
     }
     for (const q of reqHits) {
@@ -77,7 +80,8 @@ exports.handler = async (event) => {
       });
     }
     stays.sort((a, b) => String(a.checkIn).localeCompare(String(b.checkIn)));
-    return ok({ success: true, phone: '+' + phone, current: stays[0], others: stays.slice(1) });
+    return ok({ success: true, phone: '+' + phone, current: stays[0], others: stays.slice(1),
+      instructions: 'To book a spa treatment, send the guest their own spaLink (name and room already filled in) instead of the general https://amansalaportal.com/spa link.' });
   } catch (err) {
     console.error('[visito-identify-guest]', err.message);
     return jsonErr(500, err.message);

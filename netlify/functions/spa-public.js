@@ -6,6 +6,7 @@
 // save appointments and send emails from the browser. Now:
 //   GET  ?action=catalog         the catalog alone (spa-landing.html)
 //   GET  ?action=init            catalog without staff contact/pay, busy times without names, schedules, rotation, blocks
+//   GET  ?action=guest&g=        a personal link from Lana (guest-link-lib): that guest's name, room, email, phone, stay
 //   GET  ?action=appt&id=        one appointment for its confirmation / cancel link (no contact details)
 //   POST {action:'lookup', name, room}      the stay window of a hotel guest ({start,end} or {})
 //   POST {action:'book', ...}               re-checks the slot, matches the guest, charges the folio at the catalog price
@@ -14,6 +15,7 @@
 // The appointment id stays the key of the confirmation / cancel links, as before.
 const { findOrCreateFolioLocked } = require('./folio-lib');
 const { sendMail } = require('./mail-lib');
+const { verifyGuestLink } = require('./guest-link-lib');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
@@ -419,6 +421,16 @@ exports.handler = async (event) => {
       const q = event.queryStringParameters || {};
       if (q.action === 'init') return reply(200, await init(key));
       if (q.action === 'catalog') { const sd = await getKey(key, 'spa_data'); return reply(200, { spaData: publicSpaData((sd && sd.value) || {}) }); }   // spa-landing.html
+      if (q.action === 'guest') {
+        const c = verifyGuestLink(q.g);
+        if (!c) return reply(200, {});
+        const [reg] = await (await fetch(`${SUPABASE_URL}/rest/v1/registrations?id=eq.${encodeURIComponent(c.r)}&select=room,guests,booking_id,cancelled,check_in,check_out`, { headers: hdrs(key) })).json();
+        if (!reg || reg.cancelled || !reg.room) return reply(200, {});
+        const [bk] = await (await fetch(`${SUPABASE_URL}/rest/v1/bookings?id=eq.${encodeURIComponent(reg.booking_id)}&select=start_date,end_date,status`, { headers: hdrs(key) })).json();
+        const g = (reg.guests || []).find(x => x && !x.cancelled && norm(x.name) === norm(c.n));
+        if (!g || !bk || bk.status === 'cancelled') return reply(200, {});
+        return reply(200, { name: g.name, room: reg.room, email: g.email || '', phone: g.phone || '', start: reg.check_in || bk.start_date, end: reg.check_out || bk.end_date });
+      }
       if (q.action === 'appt') {
         const cur = await getKey(key, 'spa_appointments');
         const a = ((cur && cur.value) || []).find(x => x && x.id === String(q.id || ''));
