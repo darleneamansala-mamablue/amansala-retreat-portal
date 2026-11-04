@@ -40,7 +40,7 @@ exports.handler = async (event) => {
     const byId = new Map(bks.map(b => [b.id, b]));
     const regs = [];
     for (let off = 0; off < 20000; off += 1000) {   // paged: PostgREST returns 1000 rows at most
-      const page = await get(`registrations?select=id,booking_id,room,room_type_id,guests,check_in,check_out,cancelled,checked_in_at,checked_out_at&cancelled=is.false&order=id&limit=1000&offset=${off}`);
+      const page = await get(`registrations?select=id,booking_id,room,room_type_id,guests,check_in,check_out,cancelled,checked_in_at,checked_out_at&cancelled=not.is.true&order=id&limit=1000&offset=${off}`);
       regs.push(...page.filter(r => byId.has(r.booking_id)));
       if (page.length < 1000) break;
     }
