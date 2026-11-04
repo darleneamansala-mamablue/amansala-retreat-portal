@@ -836,9 +836,9 @@ function actSheetRenderSummary() {
             ${sel('guide2','Guide 2',guide2Opts)}
             ${sel('driver','Driver',driverOpts)}
             <div>
-              <label style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px">Van Assignment <span style="font-size:10px;color:#9ca3af;font-weight:400;text-transform:none">(${VAN_CAP}/van max${vansNeeded?' · need '+vansNeeded:''})</span></label>
+              <label style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:5px">Van Assignment <span style="font-size:10px;color:#9ca3af;font-weight:400;text-transform:none">(${VAN_CAP}/van max${vansNeeded?' · need '+vansNeeded:''})</span><span style="display:block;font-size:10px;color:#6b7280;font-weight:400;text-transform:none;letter-spacing:0;margin-top:2px;max-width:330px">Small group: Amansala vehicle, gas only (FJ under 5, Infinity for 6, or the Amansala Van). Over that: hire a van (Miguel, 1,900 MXN).</span></label>
               <div style="display:flex;gap:8px;flex-wrap:wrap">
-                ${['van1','van2','van3'].map((vk,i)=>{const v=ops[vk]||'';const color=v?'#1d4ed8':'#6b7280';return`<div><div style="font-size:10px;color:#9ca3af;margin-bottom:3px">Van ${i+1}</div><select onchange="actOpsSet('${opsKey}','${vk}',this.value)" style="padding:5px 9px;border:1.5px solid ${v?'#3b82f6':'#e0dbd2'};border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;color:${color};background:${v?'#dbeafe':'#f5f5f0'};outline:none"><option value="">— Not assigned —</option><option value="inhouse" ${v==='inhouse'?'selected':''}>🏠 Amansala car (free, gas only)</option><option value="miguel" ${(v==='miguel'||v===true||v==='true')?'selected':''}>🚐 Miguel (1,900 MXN)</option></select></div>`;}).join('')}
+                ${['van1','van2','van3'].map((vk,i)=>{const v=ops[vk]||'';const color=v?'#1d4ed8':'#6b7280';return`<div><div style="font-size:10px;color:#9ca3af;margin-bottom:3px">Van ${i+1}</div><select onchange="actOpsSet('${opsKey}','${vk}',this.value)" style="padding:5px 9px;border:1.5px solid ${v?'#3b82f6':'#e0dbd2'};border-radius:7px;font-family:'Jost',sans-serif;font-size:12px;color:${color};background:${v?'#dbeafe':'#f5f5f0'};outline:none"><option value="">— Not assigned —</option><option value="fj" ${v==='fj'?'selected':''}>🚙 FJ (Amansala, gas only)</option><option value="infinity" ${v==='infinity'?'selected':''}>🚙 Infinity (Amansala, gas only)</option><option value="inhouse" ${v==='inhouse'?'selected':''}>🚐 Amansala Van (gas only)</option><option value="miguel" ${(v==='miguel'||v===true||v==='true')?'selected':''}>🚐 Hired van — Miguel (1,900 MXN)</option></select></div>`;}).join('')}
               </div>
             </div>
             ${(e.ao.id!=='ao5'&&e.ao.id!=='ao9')?inp('actEntr_'+opsKey.replace(/[^a-z0-9]/gi,'_'),entranceLbl,entranceVal,defEntrance||'e.g. 500'):''}
@@ -910,7 +910,7 @@ function actOpsCostHtml(ops, totalSigned, aoId, opsKey) {
   // Count vans by type across van1/van2/van3
   const vanTypes = ['van1','van2','van3'].map(k=>ops[k]||'').filter(v=>v);
   const miguelVans = vanTypes.filter(v=>v==='miguel'||v===true||v==='true').length;
-  const inhouseVans = vanTypes.filter(v=>v==='inhouse').length;
+  const inhouseVans = vanTypes.filter(v=>v==='inhouse'||v==='fj'||v==='infinity').length;   // Amansala's own vehicles: FJ, Infinity, Amansala Van (value 'inhouse'), all free apart from gas
   const vansUsedTotal = miguelVans + inhouseVans;
   const VAN_COST = VAN_COST_MIGUEL; // keep for backwards compat below
 
