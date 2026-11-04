@@ -4963,6 +4963,7 @@ function _renderTeacherTransportInner(bkId){
     <span style="font-size:13px;font-weight:800;color:${submittedCount<roster.length?'#b91c1c':'#15803d'}">${submittedCount} / ${roster.length} guests submitted</span>
     <div style="display:flex;gap:8px">
       <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${_trFormUrl}').then(()=>{this.textContent='✓ Copied!';setTimeout(()=>this.textContent='🔗 Copy Form Link',1800)})" style="padding:6px 14px;border:1px solid #e8dfd4;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;cursor:pointer;color:#5a5048">🔗 Copy Form Link</button>
+      ${typeof tcOpenContacts==='function'?`<button onclick="tcOpenContacts('${bkId}')" style="padding:6px 14px;border:1px solid #e8dfd4;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;cursor:pointer;color:#0e7490;font-weight:600">✎ Edit emails & phones</button>`:''}
       <button onclick="renderTeacherTransport('${bkId}')" style="padding:6px 14px;border:1px solid #e8dfd4;border-radius:8px;background:#fff;font-family:'Jost',sans-serif;font-size:12px;cursor:pointer;color:#5a5048">↻ Refresh</button>
     </div>
   </div>`;
