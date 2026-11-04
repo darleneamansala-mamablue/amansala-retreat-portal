@@ -117,6 +117,7 @@ async function ssSetDay(ri, di, code, tag) {
       ssData = next; ssRender();
       const newTxt = nd.code + (nd.tag ? ' ' + nd.tag : '');
       if (typeof logActivity === 'function') logActivity('Staff schedule changed', `${r0.name} · ${day}: ${prevTxt || '—'} → ${newTxt} (${(SS_DEPTS.find(d => d[0] === dept) || [, dept])[1]})`, null);
+      ssNotifyChange(dept, wk, `${r0.name} · ${new Date(ssAdd(wk, di) + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}: ${prevTxt || '—'} → ${newTxt}`);
       showToast(`${r0.name}, ${day}: ${newTxt}`);
       return;
     }
@@ -124,6 +125,27 @@ async function ssSetDay(ri, di, code, tag) {
   }
   showToast('Could not save. Try again.');
 }
+
+// ---- WhatsApp to HR (Irving) when a schedule is uploaded or changed (Jorge 2026-11-04) --
+// netlify/functions/staff-schedule-notify.js. Single-day changes are grouped: one message per department and week
+// a minute after the last click (or when the page is closed), not one per click.
+let ssNotifyQueue = {};
+function ssNotifySend(body, beacon) {
+  let token = ''; try { token = sessionStorage.getItem('amansala_staff_token') || ''; } catch (e) {}
+  const payload = JSON.stringify({ token, ...body });
+  if (beacon && navigator.sendBeacon) { navigator.sendBeacon('/.netlify/functions/staff-schedule-notify', new Blob([payload], { type: 'application/json' })); return; }
+  fetch('/.netlify/functions/staff-schedule-notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(e => console.warn('[staff-schedules] notify', e));
+}
+function ssNotifyFlush(k, beacon) {
+  const q = ssNotifyQueue[k]; if (!q) return;
+  clearTimeout(q.timer); delete ssNotifyQueue[k];
+  ssNotifySend({ kind: 'change', dept: q.dept, week: q.week, detail: q.lines.join(' · ') }, beacon);
+}
+function ssNotifyChange(dept, week, line) {
+  const k = dept + '|' + week, q = ssNotifyQueue[k] || (ssNotifyQueue[k] = { dept, week, lines: [] });
+  q.lines.push(line); clearTimeout(q.timer); q.timer = setTimeout(() => ssNotifyFlush(k), 60000);
+}
+window.addEventListener('pagehide', () => Object.keys(ssNotifyQueue).forEach(k => ssNotifyFlush(k, true)));
 
 // ---- page ----
 async function ssSave() {
@@ -136,7 +158,11 @@ async function ssSave() {
     let ok = false;
     if (row) { const { data: upd, error } = await db.from('app_store').update({ value: next, updated_at: new Date().toISOString() }).eq('key', SS_KEY).eq('updated_at', row.updated_at).select('key'); if (error) { showToast('Could not save.'); return; } ok = !!(upd && upd.length); }
     else { const { error } = await db.from('app_store').insert({ key: SS_KEY, value: next, updated_at: new Date().toISOString() }); if (error) { showToast('Could not save.'); return; } ok = true; }
-    if (ok) { ssData = next; ssPreview = null; ssWeek = wk; showToast('Schedule saved for the week of ' + wk + '.'); ssRender(); return; }
+    if (ok) {
+      const replaced = !!(row && row.value && row.value[wk] && row.value[wk][ssDept]), off = p.rows.reduce((n, r) => n + r.days.filter(d => !ssShift(d.code).working).length, 0);
+      ssNotifySend({ kind: 'upload', dept: ssDept, week: wk, detail: `${p.rows.length} personas${p.photoNotes !== undefined ? ' (leído de una foto)' : ''}${replaced ? ', reemplaza el horario anterior' : ''}: ${p.rows.map(r => r.name).join(', ')} · ${off} días libres en la semana` });
+      ssData = next; ssPreview = null; ssWeek = wk; showToast('Schedule saved for the week of ' + wk + '.'); ssRender(); return;
+    }
     await new Promise(r => setTimeout(r, 80 + Math.random() * 200));
   }
   showToast('Could not save. Try again.');
