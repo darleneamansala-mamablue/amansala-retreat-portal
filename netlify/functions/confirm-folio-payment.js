@@ -10,6 +10,7 @@ const { groupItems, allocatePayment } = require('./folio-group');
 // uses, so existing balance/Rate-and-Folios logic picks it up automatically.
 // Used by both guest-pay.html (guest self-pay) and the admin "Charge Card" flow.
 const { sendPaymentNotification } = require('./notify-payment');
+const { confirmIfPaid } = require('./booking-payment-lib');
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
 
@@ -91,6 +92,8 @@ exports.handler = async (event) => {
     }
 
     notifyFolioPayment(hdrs, folioId, amount).catch(e => console.warn('[confirm-folio-payment] notify failed:', e.message));
+    // a reservation made by staff that was waiting for this payment now gets its booking confirmation (booking-payment-lib.js)
+    for (const p of parts) { try { await confirmIfPaid(supaKey, { folioId: p.folioId }); } catch (e) { console.warn('[confirm-folio-payment] confirmation check failed:', e.message); } }
 
     return {
       statusCode: 200,

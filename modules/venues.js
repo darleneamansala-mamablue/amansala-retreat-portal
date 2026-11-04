@@ -1208,13 +1208,19 @@ function rmSaveNewBooking(){
   // get, since a staff-created Rooms reservation is just a third way the
   // same reservation comes in (Jorge's ask 2026-10-05). Fire-and-forget,
   // never blocks the save.
+  // Jorge 2026-11-04: pay first -- the guest is asked to pay at their folio link (email + WhatsApp) and the booking
+  // confirmation goes out with the first payment (netlify/functions/booking-payment-lib.js). A $0 reservation, or while
+  // the switch app_store 'booking_payment_flow' is off, gets the confirmation right away as before. Sent once this save
+  // has reached the database (the server reads the booking and opens its folio).
   if(leaderEmail||leaderPhone){
-    const rt=AppData.roomTypes.find(r=>r.id===rtId);
-    fetch('/.netlify/functions/send-booking-confirmation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      firstName:leader.split(' ')[0]||'',lastName:leader.split(' ').slice(1).join(' ')||'',
-      email:leaderEmail||'',phone:leaderPhone||'',checkIn:start,checkOut:end,
-      roomType:rt?.name||type,bookingId:newId,
-    })}).catch(e=>console.warn('[rmSaveNewBooking] confirmation send failed',e.message));
+    let token='';try{token=sessionStorage.getItem('amansala_staff_token')||'';}catch(e){}
+    Promise.resolve(typeof _saveAllBusy!=='undefined'?_saveAllBusy:null).catch(()=>{}).then(()=>
+      fetch('/.netlify/functions/send-booking-payment-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,bookingId:newId})})
+        .then(r=>r.json()).then(d=>{
+          if(d&&d.mode==='payment_requested')showToast(`Payment link sent to ${leader} (${fmt$(d.amount)}) — the confirmation goes out after the payment`);
+          else if(d&&d.error)console.warn('[rmSaveNewBooking] payment request',d.error);
+        })
+    ).catch(e=>console.warn('[rmSaveNewBooking] payment request failed',e.message));
   }
   // Optional staff commission on the sale — same 5%-of-pretax convention as
   // room upgrades (tr2ConfirmUpgrade in modules/transport.js). Jorge's ask

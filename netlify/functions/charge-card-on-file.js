@@ -7,6 +7,7 @@
 // same representation every other folio payment (Cash/Zelle/Stripe link/etc.)
 // already uses.
 const { sendPaymentNotification } = require('./notify-payment');
+const { confirmIfPaid } = require('./booking-payment-lib');
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
 
@@ -89,6 +90,8 @@ exports.handler = async (event) => {
       }),
     });
     if (!insertRes.ok) return jsonErr(500, 'Charged but could not save to the folio: ' + await insertRes.text());
+    // a reservation made by staff that was waiting for this payment now gets its booking confirmation (booking-payment-lib.js)
+    try { await confirmIfPaid(supaKey, { folioId }); } catch (e) { console.warn('[charge-card-on-file] confirmation check failed:', e.message); }
   } catch (err) {
     return jsonErr(500, 'Charged but could not save to the folio: ' + err.message);
   }
