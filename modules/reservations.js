@@ -235,6 +235,15 @@ async function _resAttachFolioBalances(rows){
     rows.forEach(r=>{if(r.balance==null)r.balance=null;});
   }
 }
+// Check In / Check Out from Arrivals / In House / Departures, written to the activity log (who did it was untraceable
+// before: room 26, 2026-11-01)
+function _resLogStay(action,type,id){
+  try{
+    if(type==='individual'){const r=_resRequests.find(x=>x.id===id);if(r)logActivity(action,`${[r.firstName,r.lastName].filter(Boolean).join(' ')||'Guest'} · ${r.room||r.roomTypeName||''}`,null);return;}
+    const reg=AppData.regs.find(x=>x.id===id);
+    if(reg)logActivity(action,`${(reg.guests||[]).map(g=>g.name).filter(Boolean).join(' & ')||'Guest'} · ${reg.room||''}`,reg.bookingId);
+  }catch(e){}
+}
 async function resCheckIn(type,id){
   if(type==='individual'){
     const r=_resRequests.find(x=>x.id===id);if(!r)return;
@@ -249,6 +258,7 @@ async function resCheckIn(type,id){
     if(error){showToast('Error: '+error.message);return;}
     reg.checkedInAt=now;
   }
+  _resLogStay('Checked in',type,id);
   showToast('Checked in ✓');
   _resRender();
   if(typeof hkInit==='function'&&document.getElementById('tab-housekeeping')?.classList.contains('active'))hkInit();
@@ -271,6 +281,7 @@ async function resCheckOut(type,id){
     if(error){showToast('Error: '+error.message);return;}
     reg.checkedOutAt=now;
   }
+  _resLogStay('Checked out',type,id);
   showToast('Checked out ✓');
   _resRender();
   if(typeof hkInit==='function'&&document.getElementById('tab-housekeeping')?.classList.contains('active'))hkInit();

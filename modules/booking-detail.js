@@ -1708,6 +1708,16 @@ async function _bdSwapGuestRooms(regA,regB,roomA,roomB,checkInA,checkOutA){
   }
 }
 
+// Check In / Check Out / Undo used to leave no trace in the activity log, so a wrong click could not be traced back
+// (room 26, Sue Elliot & Mary Daigneault: checked out 9 minutes after check-in on 2026-11-01, nobody knew who).
+function _bdLogStay(action){
+  try{
+    const subj=_bdSubject();
+    const names=subj?_joinNames((subj.allGuests||[]).map(g=>g.name)):'';
+    const reg=_bdKind==='req'?null:AppData.regs.find(r=>r.id===_bdId);
+    logActivity(action,`${names||'Guest'} · ${(subj&&subj.room)||(reg&&reg.room)||''}`,reg?reg.bookingId:null);
+  }catch(e){}
+}
 async function bdCheckIn(){
   const now=new Date().toISOString();
   if(_bdKind==='req'){
@@ -1721,6 +1731,7 @@ async function bdCheckIn(){
     if(error){showToast('Error: '+error.message);return;}
     reg.checkedInAt=now;
   }
+  _bdLogStay('Checked in');
   showToast('Checked in ✓');
   _bdRender();
 }
@@ -1745,6 +1756,7 @@ async function bdCheckOut(){
     if(error){showToast('Error: '+error.message);return;}
     reg.checkedOutAt=now;
   }
+  _bdLogStay('Checked out');
   showToast('Checked out ✓');
   _bdRender();
 }
@@ -1762,6 +1774,7 @@ async function bdUndoCheckOut(){
     if(error){showToast('Error: '+error.message);return;}
     reg.checkedOutAt=null;
   }
+  _bdLogStay('Check-out undone');
   showToast('Check-out undone ✓ — back In House');
   _bdRender();
 }
