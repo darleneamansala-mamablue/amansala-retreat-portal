@@ -4774,7 +4774,7 @@ function _trBuildTransportTable(guests,type,result){
   });
   const _todayStr=new Date().toISOString().slice(0,10);
   const _tomorrowStr=new Date(Date.now()+86400000).toISOString().slice(0,10);
-  const _colCount=9; // Guest, Room, Date, Time, Airport, Flight, Notes, + exactly one of Pickup/Share, + Est. Cost (matches the original group-separator row's colspan)
+  const _colCount=11; // Guest, Room, Phone, Email, Date, Time, Airport, Flight, Notes, + exactly one of Pickup/Share, + Est. Cost (matches the original group-separator row's colspan)
 
   // Guests who haven't submitted: bold red name + a "Remind" button when we have a usable email. An email counts as
   // unusable when it is the teacher's own (room-list entries fall back to the leader's email as a placeholder) or is
@@ -4800,6 +4800,11 @@ function _trBuildTransportTable(guests,type,result){
     const driverBadge=tr?.driver_confirmed
       ?`<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;background:#d1fae5;color:#065f46;margin-left:6px;white-space:nowrap">✓ Driver confirmed</span>`
       :'';
+
+    // Phone and email (Jorge 2026-11-04): what the guest wrote on the transport form, else what the room list has
+    const _ph=String((tr&&tr.phone)||g.phone||'').trim(), _em=String((tr&&tr.email)||g.email||'').trim();
+    const phoneCell=_ph?`<a href="tel:${escHtml(_ph.replace(/[^\d+]/g,''))}" style="color:#2d2520;text-decoration:none;white-space:nowrap">${escHtml(_ph)}</a>`:dash;
+    const emailCell=_em?`<a href="mailto:${escHtml(_em)}" title="${escHtml(_em)}" style="color:#0e7490;text-decoration:none;display:inline-block;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">${escHtml(_em)}</a>`:dash;
 
     let dateCell=dash;
     if(ot)dateCell=`<span style="font-size:11px;color:#8a7e74;font-style:italic">Own transport</span>`;
@@ -4868,6 +4873,8 @@ function _trBuildTransportTable(guests,type,result){
     return dateHeader+sep+`<tr style="border-bottom:1px solid #f0ece4;background:${rowBg}">
       <td style="padding:10px 12px;font-size:13px;font-weight:600;white-space:nowrap">${tr?`${dot}${escHtml(g.name)}${driverBadge}`:_trMissingNameCell(g,_trBkId,_trSharedEmails)}</td>
       <td style="padding:10px 12px;font-size:12px;color:#8a7e74;white-space:nowrap">${g.room?escHtml(g.room):'—'}</td>
+      <td style="padding:10px 12px;font-size:12px">${phoneCell}</td>
+      <td style="padding:10px 12px;font-size:12px">${emailCell}</td>
       <td style="padding:10px 12px;font-size:12px">${dateCell}</td>
       <td style="padding:10px 12px;font-size:12px">${timeCell}</td>
       <td style="padding:10px 12px;font-size:12px">${apCell}</td>
@@ -4883,6 +4890,8 @@ function _trBuildTransportTable(guests,type,result){
     <thead><tr style="background:#faf7f2">
       <th style="${thS}">Guest</th>
       <th style="${thS}">Room</th>
+      <th style="${thS}">Phone</th>
+      <th style="${thS}">Email</th>
       <th style="${thS}">Date</th>
       <th style="${thS}">Time</th>
       <th style="${thS}">Airport</th>
