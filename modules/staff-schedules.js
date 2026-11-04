@@ -62,8 +62,9 @@ function ssSummary(w) { const on = (w || []).filter(x => x.working); return { to
 
 // ---- changing one day of a saved week (Jorge 2026-11-04): click a day -> OFF / 8-4 / 11-6 / 1-9 / Custom ----
 const SS_QUICK = ['PSG', 'OFF', '8-4', '11-6', '1-9'];   // PSG = unpaid leave
-// departments whose sheet uses half days instead of hours (Jorge 2026-11-04: Camaristas only AM / PM)
-const SS_QUICK_BY_DEPT = { housekeeping: ['PSG', 'OFF', 'AM', 'PM'] };
+// departments whose sheet uses half days instead of hours (Jorge 2026-11-04: Camaristas, Cocina and Meseros only AM / PM)
+const SS_HALF_DAYS = ['PSG', 'OFF', 'AM', 'PM'];
+const SS_QUICK_BY_DEPT = { housekeeping: SS_HALF_DAYS, kitchen: SS_HALF_DAYS, waitstaff: SS_HALF_DAYS };
 function ssPickClose() { const m = document.getElementById('ssPickMenu'); if (m) m.remove(); document.removeEventListener('mousedown', ssPickOutside, true); }
 function ssPickOutside(e) { const m = document.getElementById('ssPickMenu'); if (m && !m.contains(e.target)) ssPickClose(); }
 function ssPick(ev, ri, di) {
