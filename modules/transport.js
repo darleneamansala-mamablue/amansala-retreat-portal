@@ -1014,7 +1014,7 @@ function tr2PrintView() {
         ${showPickupCol ? `<td>${e.ot ? '—' : escHtml(e.type === 'departure' ? ((e.groupPickup || e.pickup) || '—') : '—')}</td>` : ''}
         <td>${e.ot ? '—' : escHtml(e.time || '')}</td>
         <td>${escHtml(e.retreatLabel || '')}</td>
-        <td style="font-size:10.5px;color:#4b5563;max-width:260px">${escHtml(typeof trCombinedNotes === 'function' ? trCombinedNotes(e) : String(e.notes || '').replace(/\s+/g, ' '))}</td>
+        <td style="font-size:10.5px;color:#4b5563;max-width:260px">${typeof trNotesPrintHtml === 'function' ? trNotesPrintHtml(e) : escHtml(String(e.notes || '').replace(/\s+/g, ' '))}</td>
       </tr>`;
 
   // Jorge's ask 2026-10-19, then follow-up same day: pure category order within a shared-ride

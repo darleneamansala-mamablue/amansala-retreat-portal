@@ -605,8 +605,13 @@ function _bdRender(){
         </table>
         <div style="margin-top:10px">
           <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px">${_bdKind==='req'?'Guest Notes':'Notes'}</label>
-          <textarea id="bdNotes" placeholder="${_bdKind==='req'?'Notes the guest submitted...':'Internal notes...'}" style="width:100%;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;resize:vertical">${escHtml(subj.notes||'')}</textarea>
-          <button class="btn btn-secondary btn-sm" onclick="bdSaveNotes()" style="margin-top:6px">Save</button>
+          ${_bdNotesFromRetreat(subj)
+            // Jorge 2026-11-04: a retreat guest's Notes are the room notes of the retreat's Room List (the teacher's Edit Guest
+            // → Room notes) -- read here, changed only there
+            ?`<div style="width:100%;min-height:44px;padding:8px 10px;border:1.5px dashed var(--border);border-radius:8px;font-size:12.5px;background:#faf8f4;color:${subj.notes?'var(--text)':'var(--muted)'};white-space:pre-wrap">${subj.notes?escHtml(subj.notes):'No room notes.'}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Edited only in the retreat's Room List (Edit Guest → Room notes).</div>`
+            :`<textarea id="bdNotes" placeholder="${_bdKind==='req'?'Notes the guest submitted...':'Internal notes...'}" style="width:100%;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:12.5px;resize:vertical">${escHtml(subj.notes||'')}</textarea>
+          <button class="btn btn-secondary btn-sm" onclick="bdSaveNotes()" style="margin-top:6px">Save</button>`}
         </div>
         <div style="margin-top:14px">
           <label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px">Internal Notes</label>
@@ -1390,7 +1395,11 @@ async function bdSendToGuest(fid){
 // AppData, unlike registrations (mutated in place above, already live).
 function _bdNotifyReqChanged(){if(typeof resRefresh==='function')resRefresh();}
 
+// A retreat registration's Notes belong to the retreat's Room List (read-only in Booking Detail); Room Only reservations
+// and Booking Engine requests keep editing them here
+function _bdNotesFromRetreat(subj){return _bdKind==='reg'&&!!subj&&subj.bookingType!=='room_only';}
 async function bdSaveNotes(){
+  if(_bdNotesFromRetreat(_bdSubject())){showToast('These notes are edited in the retreat\'s Room List.');return;}
   const notes=document.getElementById('bdNotes')?.value||'';
   if(_bdKind==='req'){
     const {error}=await db.from('booking_requests').update({notes}).eq('id',_bdId);

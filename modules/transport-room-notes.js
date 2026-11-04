@@ -1,4 +1,4 @@
-// ===== transport-room-notes.js — the Transport log's Notes column shows the ROOM LIST notes, then the guest's own form notes, kept short (Darlene 2026-10-30; guest notes back 2026-11-04, Jorge) =====
+// ===== transport-room-notes.js — the Transport log's Notes column: Room notes, Internal notes and the guest's form notes, each on its own labeled line, kept short (Darlene 2026-10-30; Jorge 2026-11-04) =====
 // Loaded as a classic script AFTER transport.js; shares global scope. Standalone: tr2RenderRow is only wrapped, nothing is saved or changed.
 // On the team's Transport log, the Notes column used to show whatever the guest typed on the transport form (often long, e.g. "Happy to share a ride and wait up to 30 minutes…").
 // It now shows the internal notes from the retreat's Room List for that guest's room — the room's note plus that guest's own note ("Request ground floor", "W/ Extra Night: Nov 6-7"…) —
@@ -36,28 +36,34 @@
     return `<span title="${esc(full)}" data-full="${esc(full)}" data-open="0" onclick="event.stopPropagation();tnExpand(this)" style="font-size:11px;color:#6b7280;font-style:italic;cursor:pointer">${esc(full.slice(0, MAX).trim())}…</span>`;
   };
 
-  // the same text for the printed sheet (Imprimir): Room List note on arrivals, then the guest's own form notes, in full
-  window.trCombinedNotes = function (e) {
-    const guestNote = String((e && e.notes) || '').replace(/\s+/g, ' ').trim();
-    return [e && e.type === 'arrival' ? roomNote(e) : '', internalNote(e), guestNote].filter(Boolean).join(' · ');
+  // Jorge 2026-11-04: the notes one under the other, each with its label, never run together --
+  //   Room notes     = the Room List / teacher's notes for the room and the guest (Booking Detail "Notes")
+  //   Internal notes = staff-only (Booking Detail "Internal Notes")
+  //   Guest form     = what the guest wrote on the transport form
+  function noteParts(e, guestNote) {
+    return [['Room notes', roomNote(e)], ['Internal notes', internalNote(e)], ['Guest form', String(guestNote || '').replace(/\s+/g, ' ').trim()]]
+      .filter(p => p[1]);
+  }
+  const label = t => `<span style="font-size:9.5px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.3px;margin-right:4px">${t}</span>`;
+  // the printed sheet (Imprimir): same parts, in full
+  window.trNotesPrintHtml = function (e) {
+    return noteParts(e, e && e.notes).map(p => `<div style="margin:1px 0">${label(p[0])}${esc(p[1])}</div>`).join('');
   };
+  window.trCombinedNotes = function (e) { return noteParts(e, e && e.notes).map(p => p[0] + ': ' + p[1]).join('\n'); };
+
   const prev = window.tr2RenderRow;
   if (typeof prev !== 'function') return;
+  const MARK = '__trnotes__';
   window.tr2RenderRow = function (e) {
     const keep = e.notes;
-    const isArr = e.type === 'arrival';
-    // Jorge 2026-11-04: the guest's own transport-form notes are back in the column too ("People on our group on the same
-    // flight…"), after the Room List note -- both shortened, click to read all
-    const guestNote = String(keep || '').replace(/\s+/g, ' ').trim();
-    e.notes = [isArr ? roomNote(e) : '', internalNote(e), guestNote].filter(Boolean).join(' · ');
-    // the original draws e.notes inside <span>…</span>; swap that for the short, click-to-expand version
+    const parts = noteParts(e, keep);
+    e.notes = parts.length ? MARK : '';
+    // the original draws e.notes inside <span>…</span>; swap that span for the labeled lines (each shortened, click to read all)
     try {
       let html = prev.apply(this, arguments);
-      if (e.notes) {
-        const orig = `<span style="font-size:11px;color:#6b7280;font-style:italic">${String(e.notes).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</span>`;
-        const alt = `<span style="font-size:11px;color:#6b7280;font-style:italic">${esc(e.notes)}</span>`;
-        const mine = window.trRoomNoteHtml(e.notes);
-        html = html.indexOf(orig) >= 0 ? html.replace(orig, () => mine) : html.indexOf(alt) >= 0 ? html.replace(alt, () => mine) : html;
+      if (parts.length) {
+        const mine = parts.map(p => `<div style="margin:1px 0;line-height:1.35">${label(p[0])}${window.trRoomNoteHtml(p[1])}</div>`).join('');
+        html = html.replace(/<span[^>]*>__trnotes__<\/span>/, () => mine);
       }
       return html;
     } finally { e.notes = keep; }
