@@ -5893,11 +5893,15 @@ function skedGetRetreatEvents(dateStr){
         const arShala=sr.arrivalShala1||effMornShala;
         const ocTime=skedMinToTime(skedTimeToMin(sr.arrivalSlot)-15);
         const ocEnd=sr.arrivalSlot;
-        evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:arShala||'grande',date:dateStr,startTime:ocTime,endTime:ocEnd,title,subtitle:'Orientation with Amansala — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+        // When the teacher's own arrival class is already named "Orientation ..." (e.g. "Opening Yoga | Orientation W Amansala"), the separate
+        // "Orientation with Amansala" circle line would say the same thing twice (Darlene 2026-11-04): one line, with Max leading the circle.
+        const arrLabel=tsEffClassLabel(sr,'arrival','Arrival Evening Class');
+        const arrIsOrientation=/orientation/i.test(arrLabel)&&arShala&&!arrSkipped;
+        if(!arrIsOrientation)evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:arShala||'grande',date:dateStr,startTime:ocTime,endTime:ocEnd,title,subtitle:'Orientation with Amansala — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         if(arShala&&!arrSkipped){
           const arDur=sr.arrivalDur||60;
           const arEnd=skedMinToTime(skedTimeToMin(sr.arrivalSlot)+arDur);
-          evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:tsEffClassLabel(sr,'arrival','Arrival Evening Class')+(sr.arrivalNotes?' 📝':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
+          evs.push({id:'ret_'+bk.id+'_arr',resourceId:arShala,date:dateStr,startTime:sr.arrivalSlot,endTime:arEnd,title,subtitle:arrLabel+(arrIsOrientation?' — opening circle with Max':'')+(sr.arrivalNotes?' 📝':''),color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
         }
       } else {
         evs.push({id:'ret_'+bk.id+'_opencircle',resourceId:'grande',date:dateStr,startTime:'20:30',endTime:'20:45',title,subtitle:'Orientation with Amansala — '+ocLeader,color:pal.border,bg:pal.bg,textColor:pal.text,isRetreat:true,bkId:bk.id});
