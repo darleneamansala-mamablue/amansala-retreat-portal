@@ -370,6 +370,16 @@ async function sbSubmitHotel(){
   SB.stayStart=window_?window_.start:null;
   SB.stayEnd=window_?window_.end:null;
   if(btn){btn.disabled=false;btn.textContent=origLabel;}
+  // no reservation found for that name + room: the treatment could not go on the room folio, so say it before they go on
+  // (Jorge 2026-11-04); a second click continues anyway and the front desk confirms it
+  const key=(first+' '+last+'|'+room).toLowerCase();
+  if(!window_&&SB._noStayKey!==key){
+    SB._noStayKey=key;
+    let w=document.getElementById('sbNoStay');
+    if(!w){w=document.createElement('div');w.id='sbNoStay';w.style.cssText='margin-top:12px;padding:12px 14px;border-radius:10px;background:#fff7ed;color:#9a3412;font-size:13px;line-height:1.5';btn&&btn.after(w);}
+    w.innerHTML='We could not find a reservation with that name and room number. Please check them (use the name and room on your reservation) so we can charge the treatment to your room.<br>Press <b>Continue</b> again to book anyway — our front desk will confirm it with you.';
+    return;
+  }
   setStep(5);
 }
 

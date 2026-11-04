@@ -172,11 +172,15 @@ function meet(sd, rot, a) {
   if (ther && (norm(ther.firstName) === maria || norm(`${ther.firstName || ''} ${ther.lastName || ''}`) === maria)) return { where: 'Grande Reception', text: 'Please meet in the Grande Reception.' };
   return { where: 'The rooftop of Chica', text: 'You can meet your therapist on the rooftop of Chica. Your therapist will come out and look for you on the deck.' };
 }
-async function mailConfirm(sd, rot, a, svc, firstName, folioPosted) {
+function confirmParts(sd, rot, a) {
   const ther = (sd.therapists || []).find(t => t.id === a.therapistId);
   const therName = ther && (a.therapistPreference || {}).type === 'specific' ? `${ther.firstName} ${ther.lastName || ''}`.trim() : 'Assigned by our team';
   const room = (sd.rooms || []).find(r => r.id === a.roomId), m = meet(sd, rot, a);
   const meetAt = m.where || (room ? (room.location ? `${room.name} — ${room.location}` : room.name) : 'Our spa reception');
+  return { therName, meetAt, m };
+}
+async function mailConfirm(sd, rot, a, svc, firstName, folioPosted) {
+  const { therName, meetAt, m } = confirmParts(sd, rot, a);
   const body = `<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(firstName)}, you're booked! Here are your appointment details:</p>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px">
         ${row('Service', esc(svc.name))}${row('Date', fmtDateLong(a.date))}${row('Time', fmtT(a.start))}${row('Therapist', esc(therName))}${row('Meet at', esc(meetAt))}
@@ -193,6 +197,24 @@ async function mailConfirm(sd, rot, a, svc, firstName, folioPosted) {
         <a href="${SITE}/spa-booking.html?confirmation=${a.id}" style="display:inline-block;color:#2d6a6a;text-decoration:underline;font-size:13px;font-weight:600">View this confirmation anytime</a>
       </div>`;
   return sendMail({ to: a.email, subject: 'Spa Appointment Confirmed — Amansala', html: emailShell('Your Spa Appointment is Confirmed', body) });
+}
+// The same confirmation by WhatsApp (Jorge 2026-11-04), Visito template spa_appointment_confirmed. The number must carry its
+// country code: written with + / 11+ digits, or a bare 10-digit number that matches the reservation's phone (which has it).
+async function waConfirm(sd, rot, a, svc, firstName, folioPosted, guestPhone) {
+  const visitoKey = process.env.VISITO_M2M_KEY, channelId = process.env.VISITO_WA_CHANNEL_ID;
+  const d = String(a.phone || '').replace(/\D/g, ''), gd = String(guestPhone || '').replace(/\D/g, '');
+  const to = d.length >= 11 ? d : (d.length === 10 && gd.length > 10 && gd.endsWith(d) ? gd : '');
+  if (!visitoKey || !channelId || !to) return 'skipped';
+  const { therName, meetAt } = confirmParts(sd, rot, a);
+  const pay = folioPosted ? 'Charged to your room folio' : a.paymentStatus === 'PAID' ? 'Paid online' : 'Our front desk will confirm it with you';
+  const params = [firstName || 'there', svc.name, fmtDateLong(a.date), fmtT(a.start), therName, meetAt, pay, `${SITE}/spa-booking.html?cancel=${a.id}`];
+  const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
+    method: 'POST', headers: { Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': 'spa-confirm-' + a.id },
+    body: JSON.stringify({ to, template: { name: 'spa_appointment_confirmed', language: { code: 'en_US' }, components: [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: String(t) })) }] } }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok || body.accepted === false) console.warn('[spa-public] WhatsApp confirmation failed:', r.status, JSON.stringify(body).slice(0, 300));
+  return r.ok && body.accepted !== false ? 'sent' : 'failed';
 }
 async function mailTherapistNew(sd, a, svc) {
   const targets = a.therapistId ? (sd.therapists || []).filter(t => t.id === a.therapistId) : (sd.therapists || []).filter(t => t.active && (t.services || []).some(s => s.serviceId === svc.id));
@@ -363,6 +385,7 @@ async function book(key, b) {
     return reply(200, { conflict: true, refunded });
   }
   try { await mailConfirm(sd, rot, appt, svc, firstName, folioPosted); await mailTherapistNew(sd, appt, svc); } catch (e) { console.warn('[spa-public] email failed:', e.message); }
+  try { await waConfirm(sd, rot, appt, svc, firstName, folioPosted, match && match.guest && match.guest.phone); } catch (e) { console.warn('[spa-public] WhatsApp failed:', e.message); }
   return reply(200, { ok: true, appt: apptView(appt), folioPosted, email });
 }
 
