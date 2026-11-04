@@ -727,6 +727,8 @@ function _bdFolioRowHtml(f){
   const total=_bdFolioTotal(f);
   const isOpen=f.folio.status==='open';
   const fid=f.folio.id;
+  // the other open folios of this reservation a charge can be moved to (Jorge 2026-11-04)
+  const _moveTargets=_bdFolios.filter(x=>x.folio.id!==fid&&x.folio.status==='open');
   const itemRows=f.items.map(i=>{
     const isPayment=Number(i.unit_price)<0;
     const lineTotal=_bdItemTotal(i);
@@ -759,6 +761,7 @@ function _bdFolioRowHtml(f){
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${i.tax_rate?i.tax_rate+'%':'—'}</td>
       <td style="padding:8px 12px;font-size:12.5px;text-align:right;font-weight:700;color:${isPayment?'#059669':'inherit'}">${fmt$(lineTotal)}</td>
       <td style="padding:8px 12px;text-align:right;white-space:nowrap">
+        ${isOpen&&_moveTargets.length?`<select onchange="bdMoveItem('${fid}','${i.id}',this.value);this.value=''" title="Move this charge to another folio of this reservation" style="padding:2px 4px;font-size:11px;border:1px solid var(--border);border-radius:6px;max-width:110px"><option value="">Move to…</option>${_moveTargets.map(t=>`<option value="${t.folio.id}">${escHtml(t.folio.name)}</option>`).join('')}</select>`:''}
         ${isOpen?`<button class="btn btn-secondary btn-sm" onclick="bdToggleEditItem('${i.id}')" style="padding:2px 8px;font-size:11px">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="bdDeleteItem('${fid}','${i.id}')" style="padding:2px 8px;font-size:11px">✕</button>`:''}
       </td>
@@ -777,6 +780,7 @@ function _bdFolioRowHtml(f){
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f8fafc;border-bottom:1px solid var(--border)">
       <div>
         <span style="font-weight:700;font-size:13.5px">${escHtml(f.folio.name)}</span>
+        <button onclick="bdRenameFolio('${fid}')" title="Rename this folio" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:12px;color:var(--muted);padding:0 2px">✏️</button>
         <span style="margin-left:10px;font-size:12px;color:var(--muted)">Total ${fmt$(total)}</span>
         <span style="margin-left:10px;font-size:12px;font-weight:700;color:${total>0?'#dc2626':'#059669'}">Balance ${fmt$(total)}</span>
         <span style="margin-left:10px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${isOpen?'#fef3c7':'#dcfce7'};color:${isOpen?'#92400e':'#15803d'}">${f.folio.status.toUpperCase()}</span>
@@ -1123,6 +1127,35 @@ async function bdSaveEditItem(fid,itemId){
   await _bdLoadFolios();
 }
 
+// Rename a folio (Jorge 2026-11-04). Only the name shown on the folio and on the guest's payment page changes:
+// guest_name stays, since charges sent from other screens (spa, transport, restaurant) find the folio by it.
+async function bdRenameFolio(fid){
+  const f=_bdFolios.find(x=>x.folio.id===fid);if(!f)return;
+  const name=(prompt('Folio name:',f.folio.name||'')||'').trim();
+  if(!name||name===f.folio.name)return;
+  const {error}=await db.from('folios').update({name}).eq('id',fid);
+  if(error){showToast('Error: '+error.message);return;}
+  const reg=_bdKind==='reg'?AppData.regs.find(r=>r.id===_bdId):null;
+  logActivity('Folio renamed',`"${f.folio.name}" → "${name}" · ${(_bdSubject()||{}).room||''}`,reg?reg.bookingId:null);
+  showToast('Folio renamed ✓');
+  await _bdLoadFolios();
+}
+// Move one charge (or payment) to another open folio of the same reservation (Jorge 2026-11-04): the row itself moves,
+// with its commission link (commissions.folio_item_id) intact.
+async function bdMoveItem(fid,itemId,toFid){
+  if(!toFid||toFid===fid)return;
+  const from=_bdFolios.find(x=>x.folio.id===fid),to=_bdFolios.find(x=>x.folio.id===toFid);
+  const it=from&&from.items.find(i=>i.id===itemId);
+  if(!from||!to||!it)return;
+  if(to.folio.status!=='open'){showToast('That folio is closed — reopen it first.');return;}
+  if(!confirm(`Move "${it.description}" (${fmt$(_bdItemTotal(it))}) from "${from.folio.name}" to "${to.folio.name}"?`)){await _bdLoadFolios();return;}
+  const {error}=await db.from('folio_items').update({folio_id:toFid}).eq('id',itemId).eq('folio_id',fid);
+  if(error){showToast('Error: '+error.message);return;}
+  const reg=_bdKind==='reg'?AppData.regs.find(r=>r.id===_bdId):null;
+  logActivity('Charge moved to another folio',`${it.description} (${fmt$(_bdItemTotal(it))}): "${from.folio.name}" → "${to.folio.name}" · ${(_bdSubject()||{}).room||''}`,reg?reg.bookingId:null);
+  showToast('Charge moved ✓');
+  await _bdLoadFolios();
+}
 async function bdDeleteItem(fid,itemId){
   if(!confirm('Remove this charge?'))return;
   const f=_bdFolios.find(x=>x.folio.id===fid);
