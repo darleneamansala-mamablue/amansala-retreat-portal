@@ -31,10 +31,11 @@ function tcwBuildRows() {
     (bk.retreatActivities || []).forEach(a => {
       const d = String(a.date || '').slice(0, 10);
       if (!a || !ids.includes(a.aoId) || !days.includes(d)) return;
+      if (typeof ADD_ONS !== 'undefined' && !ADD_ONS.some(x => x.id === a.aoId)) return;   // tour removed from the catalog
       const k = a.aoId + '|' + d;
       const r = map[k] = map[k] || { key: k, aoId: a.aoId, date: d, times: [], groups: [] };
       if (a.time) r.times.push(a.time);
-      r.groups.push({ name: bk.leaderName || bk.retreatName || 'Retreat', pax: Number(bk.pax) || 0, prepaid: !!a.prepaid, session: a.session });
+      r.groups.push({ id: String(bk.id || bk.leaderName || bk.retreatName || ''), name: bk.leaderName || bk.retreatName || 'Retreat', pax: Number(bk.pax) || 0, prepaid: !!a.prepaid, session: a.session });
     });
   });
   return { days, rows: Object.values(map).sort((x, y) => x.date.localeCompare(y.date) || (x.times[0] || '99').localeCompare(y.times[0] || '99')) };
@@ -92,6 +93,10 @@ async function tcwRender() {
         : `<div><div style="${lbl}">Guide 1</div>${sel(r, 'guide1', '— choose —')}</div>
            <div><div style="${lbl}">Guide 2</div>${sel(r, 'guide2', '— optional —')}</div>
            <div><div style="${lbl}">Guide 3</div>${sel(r, 'guide3', '— optional —')}</div>`;
+      // Admin only: how many from each group actually went (the guides still see just the one total above)
+      const gp = ops.groupPax || {}, seen = new Set();
+      const groupBox = (tcwIsAdmin() && ops.status !== 'cancelled' && r.groups.length > 1) ? `<div style="flex-basis:100%;display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding-top:6px;border-top:1px dashed #e8dfd4"><span style="${lbl};margin:0">Went from each group</span>` +
+        r.groups.filter(g => !seen.has(g.id) && seen.add(g.id)).map(g => `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px">${tcwEsc(g.name)}${g.pax ? ' (' + g.pax + ')' : ''}<input type="number" min="0" value="${tcwEsc(gp[g.id] == null ? '' : gp[g.id])}" onchange="tcwSetGroup('${r.key}','${tcwEsc(g.id).replace(/'/g, "\\'")}',this.value)" style="padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;width:70px"></label>`).join('') + '</div>' : '';
       html += `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:12px 14px;border-top:1px solid #f0ebe0">
         <div style="min-width:210px;flex:1"><div style="font-weight:700;font-size:14px">${tcwEsc(nm(r.aoId))} <span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:${tour ? '#dbeafe' : '#fae8ff'};color:${tour ? '#1d4ed8' : '#86198f'}">${tour ? 'Tour' : 'Ceremony'}</span></div>
           <div style="font-size:12px;color:#6b7280">${tcwEsc(times)} · ${who}</div></div>
@@ -101,7 +106,7 @@ async function tcwRender() {
           ? `<input type="text" value="${tcwEsc(ops.cancelReason || '')}" placeholder="e.g. not enough ppl" onchange="tcwSet('${r.key}','cancelReason',this.value)" style="padding:7px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;width:150px">`
           : ''}<input type="number" min="0" value="${tcwEsc(ops.paxCount == null ? '' : ops.paxCount)}" placeholder="${ops.status === 'cancelled' ? '# signed up' : 'signed up'}" onchange="tcwSet('${r.key}','paxCount',this.value)" style="padding:7px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px;width:${ops.status === 'cancelled' ? '90' : '110'}px;${ops.status === 'cancelled' ? 'margin-left:6px' : ''}"></div>
         <div style="flex:1;min-width:200px"><div style="font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Who does what</div><input type="text" value="${tcwEsc(ops.staffNote || '')}" placeholder="e.g. María Luisa leads, Gaby plays music" onchange="tcwSet('${r.key}','staffNote',this.value)" style="width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid #d6cfc4;border-radius:7px;font-family:'Jost',sans-serif;font-size:13px"></div>
-      </div>`;
+      ${groupBox}</div>`;
     });
     html += '</div>';
   });
@@ -115,15 +120,15 @@ function tcwReport() {
     (bk.retreatActivities || []).forEach(a => {
       const d = String(a && a.date || '').slice(0, 10); if (!a || !ids.includes(a.aoId) || !d) return;
       const k = a.aoId + '|' + d, r = rows[k] = rows[k] || { key: k, aoId: a.aoId, date: d, times: [], groups: [] };
-      if (a.time) r.times.push(a.time); r.groups.push((bk.leaderName || bk.retreatName || 'Retreat') + (Number(bk.pax) ? ' (' + bk.pax + ')' : ''));
+      if (a.time) r.times.push(a.time); r.groups.push((bk.leaderName || bk.retreatName || 'Retreat') + (Number(bk.pax) ? ' (' + bk.pax + ')' : '')); (r.gids = r.gids || {})[String(bk.id || bk.leaderName || bk.retreatName || '')] = bk.leaderName || bk.retreatName || 'Retreat';
     });
   });
   const nm = id => ((typeof ADD_ONS !== 'undefined' ? ADD_ONS : []).find(a => a.id === id) || {}).name || id;
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const out = [['Date', 'Time', 'Activity', 'Type', 'Groups (guests)', 'Status', 'Cancel reason', 'Pax signed up', 'Guides / shaman', 'Fire keeper'].map(q).join(',')];
+  const out = [['Date', 'Time', 'Activity', 'Type', 'Groups (guests)', 'Status', 'Cancel reason', 'Pax signed up', 'Went per group', 'Guides / shaman', 'Fire keeper'].map(q).join(',')];
   Object.values(rows).sort((x, y) => x.date.localeCompare(y.date) || (x.times[0] || '').localeCompare(y.times[0] || '')).forEach(r => {
     const o = (typeof actOpsData !== 'undefined' && actOpsData[r.key]) || {};
-    out.push([r.date, [...new Set(r.times)].sort().map(tcwFmtT).join(' & '), nm(r.aoId), TCW_TOURS.includes(r.aoId) ? 'Tour' : 'Ceremony', r.groups.join('; '), o.status === 'cancelled' ? 'Cancelled' : 'Running', o.cancelReason || '', o.paxCount == null ? '' : o.paxCount,
+    out.push([r.date, [...new Set(r.times)].sort().map(tcwFmtT).join(' & '), nm(r.aoId), TCW_TOURS.includes(r.aoId) ? 'Tour' : 'Ceremony', r.groups.join('; '), o.status === 'cancelled' ? 'Cancelled' : 'Running', o.cancelReason || '', o.paxCount == null ? '' : o.paxCount, Object.keys(o.groupPax || {}).map(g => ((r.gids || {})[g] || g) + ': ' + o.groupPax[g]).join('; '),
       r.aoId === 'ao5' ? o.shaman || '' : [o.guide1, o.guide2, o.guide3].filter(Boolean).join(' & '), o.fireKeeper || ''].map(q).join(','));
   });
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + out.join('\n')], { type: 'text/csv' })); a.download = 'tours-ceremonies-report.csv'; a.click();
@@ -141,6 +146,19 @@ async function tcwRemoveGuide(name) {
 }
 function tcwNav(n) { tcwWeek = n === 0 ? tcwISO(tcwSunday(new Date())) : tcwAdd(tcwWeek, n); tcwRender(); }
 function tcwSetFilter(f) { tcwFilter = f; tcwRender(); }
+function tcwIsAdmin() { try { return (typeof getCurrentSession === 'function' && getCurrentSession()?.role === 'admin'); } catch (e) { return false; } }
+// Per-group "went" counts live in actOpsData[key].groupPax = { bookingId: n }; the row's # of pax is their sum.
+function tcwSetGroup(key, gid, val) {
+  if (typeof actOpsData === 'undefined') return;
+  const o = actOpsData[key] = actOpsData[key] || {};
+  o.groupPax = o.groupPax || {};
+  if (val === '' || val == null) delete o.groupPax[gid]; else o.groupPax[gid] = Math.max(0, parseInt(val, 10) || 0);
+  const vals = Object.values(o.groupPax);
+  o.paxCount = vals.length ? String(vals.reduce((a, b) => a + b, 0)) : '';
+  if (typeof actOpsSave === 'function') actOpsSave();
+  if (typeof showToast === 'function') showToast('Saved.');
+  tcwRender();
+}
 function tcwSet(key, field, val) {
   if (typeof actOpsData === 'undefined') return;
   if (!actOpsData[key]) actOpsData[key] = {};

@@ -1411,7 +1411,9 @@ function rsBackToSearch(){
 // incidents: Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b for
 // Nov 1-6, 2026). Without this, a room like that showed up as "available"
 // here even though it's genuinely occupied for the requested dates.
-function rsComputeAvailability(checkIn,checkOut,extReservations){
+// opts.includeBeds: also return the bed-by-bed room types (bd1-4, Casita 4 rooms) -- Booking Detail's Room dropdown needs
+// them to move a guest to one bed ("32a"); the room search keeps leaving them out so a room is not offered twice.
+function rsComputeAvailability(checkIn,checkOut,extReservations,opts){
   // room → {label, bkId} of whichever retreat is blocking it, so a blocked
   // room can still be shown (in red) with who has it — lets staff assess
   // whether that retreat could give it up, instead of just hiding it.
@@ -1457,7 +1459,7 @@ function rsComputeAvailability(checkIn,checkOut,extReservations){
     const info=blockedBy.get(room);
     (typeof getRoomCounterparts==='function'?getRoomCounterparts(room)||[]:[]).forEach(cp=>{if(!blockedBy.has(cp))blockedBy.set(cp,info);});
   });
-  return AppData.roomTypes.filter(rt=>!DUPLICATE_ROOM_ENTRY_IDS.has(rt.id)).map(rt=>{
+  return AppData.roomTypes.filter(rt=>(opts&&opts.includeBeds)||!DUPLICATE_ROOM_ENTRY_IDS.has(rt.id)).map(rt=>{
     const rooms=rt.rooms||[];
     const roomStatus=rooms.map(r=>{const b=blockedBy.get(r);return{room:r,available:!b,blockedByLabel:b?b.label:null,blockedByBkId:b?b.bkId:null};});
     const availableRooms=roomStatus.filter(x=>x.available).map(x=>x.room);
@@ -1873,7 +1875,7 @@ function venSave(){const lead=document.getElementById('vm-leader').value.trim(),
   if(datesChanged){
     const hasContract=!!(bk.contractSignedAt||bk.contractSignature);
     const hasSched=!!bk.scheduleRequest?.submittedAt;
-    const hasCbRes=bk.cbReservationIds&&Object.keys(bk.cbReservationIds).length>0;
+    const hasCbRes=bk.cbReservationIds&&Object.values(bk.cbReservationIds).some(Boolean);
     const lines=[];
     lines.push(`• Venue block will move to ${fmtDate(start)} – ${fmtDate(end)}`);
     lines.push('• Room block stays assigned (same rooms, new dates)');
@@ -1882,7 +1884,7 @@ function venSave(){const lead=document.getElementById('vm-leader').value.trim(),
     if(hasSched)lines.push('• Teacher schedule will be deleted — teacher must resubmit');
     if(!confirm('Changing dates will trigger the following:\n\n'+lines.join('\n')+'\n\nContinue?'))return;
     // Cancel Cloudbeds reservations
-    if(hasCbRes){cancelCloudbedReservations(bk).catch(e=>console.warn('[CB cancel on date change]',e));bk.cbReservationIds={};bk.cbGuestIds={};bk.cbAdjustmentIds={};}
+    if(hasCbRes){cancelCloudbedReservations(bk).catch(e=>console.warn('[CB cancel on date change]',e));cbUnlinkAll(bk);bk.cbGuestIds={};bk.cbAdjustmentIds={};}
     // Wipe contract
     if(hasContract){delete bk.contractSignedAt;delete bk.contractSignature;delete bk.contractSentViaPortal;delete bk.contractSentAt;if(bk.depositInvoice)bk.depositInvoice.status='pending';}
     // Reset status back to requested

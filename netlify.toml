@@ -57,6 +57,11 @@
   schedule = "40 11 * * *"
   timeout = 26
 
+# The portal's clear signal on a night someone asked for it (app_store 'clear_signal_scheduled' = {"date": <Tulum date>}):
+# every open tab reloads its bookings and guests from the database. 03:00 UTC = 10pm Tulum.
+[functions."portal-clear-signal"]
+  schedule = "0 3 * * *"
+
 # Daily room check (Jorge's ask 2026-11-03): guests outside their retreat's room list, the same guest twice, a room
 # given to two bookings on the same nights -> one WhatsApp to app_store 'room_check_alert' numbers. 12:00 UTC = 7am Tulum.
 [functions."room-list-check"]

@@ -348,6 +348,13 @@ async function restoreCancelledReservations(reservationIds){
   showToast(`Restored ${ok} reservation${ok!==1?'s':''}${fail?` (${fail} failed)`:''}. Refresh Cloudbeds to confirm.`);
 }
 
+// Unlinks every room of a retreat from its Cloudbeds reservation. Each key is set to null rather than the map emptied:
+// the database puts back a link that simply goes missing while its room is still on the list (sql/cb_links_guard.sql --
+// an old copy saved over the real one lost Heather Rex's links, 2026-11-04); null is how a screen says "unlink on purpose".
+function cbUnlinkAll(bk){
+  const m={};Object.keys(bk.cbReservationIds||{}).forEach(k=>{m[k]=null;});
+  bk.cbReservationIds=m;
+}
 async function cancelCloudbedReservations(bk,{wait=false}={}){
   if(!bk)return;
   // Deduplicate IDs in case any rooms share a reservation (migration safety)
@@ -399,7 +406,7 @@ function resetCbReservationIds(){
   const bk=AppData.bookings.find(b=>b.id===blockEditBkId);
   if(!bk)return;
   if(!confirm('Clear all stored Cloudbeds reservation IDs for this retreat?\n\nThis will NOT cancel the existing reservations in Cloudbeds — it just lets the portal re-create them on the next Save Block.'))return;
-  bk.cbReservationIds={};
+  cbUnlinkAll(bk);
   bk.cbGuestIds={};
   bk.cbAdjustmentIds={};
   bk.cbAllotmentBlockCode=null;
@@ -708,7 +715,7 @@ async function cbSyncAllNames(){
 }
 
 async function cbSyncAllFix(){
-  const bks=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.blockedRooms?.length&&Object.keys(b.cbReservationIds||{}).length>0);
+  const bks=AppData.bookings.filter(b=>b.status!=='cancelled'&&b.blockedRooms?.length&&Object.values(b.cbReservationIds||{}).some(Boolean));
   if(!bks.length){showToast('No retreats to fix.');return;}
   const names=bks.map(b=>b.retreatName||b.row||b.id).join('\n• ');
   if(!confirm(`This will CANCEL all Cloudbeds reservations for ${bks.length} retreat(s) and recreate them cleanly (fixes negative rate entries):\n\n• ${names}\n\nContinue?`))return;
@@ -724,7 +731,7 @@ async function cbSyncAllFix(){
     const nIds=Object.keys(bk.cbReservationIds||{}).length;
     _cbSyncLog((bk.retreatName||bk.id)+': cancelling '+nIds+' CB reservation(s)…');
     await cancelCloudbedReservations(bk,{wait:true});
-    bk.cbReservationIds={};bk.cbGuestIds={};bk.cbAdjustmentIds={};
+    cbUnlinkAll(bk);bk.cbGuestIds={};bk.cbAdjustmentIds={};
     bk.cbAllotmentBlockCode=null;bk.cbGroupCode=null;bk.cbEventId=null;
     saveAll();
     // Wait 3s for Cloudbeds to process cancellations before recreating

@@ -100,7 +100,7 @@ function _bdSourceLabel(source){
 // though it shows as "occupied" by itself.
 function _bdAvailableRoomsForEdit(checkIn,checkOut,currentRoom){
   if(!checkIn||!checkOut||typeof rsComputeAvailability!=='function')return currentRoom?[currentRoom]:[];
-  const byType=rsComputeAvailability(checkIn,checkOut,[]);
+  const byType=rsComputeAvailability(checkIn,checkOut,[],{includeBeds:true});
   const rooms=new Set();
   byType.forEach(t=>(t.availableRooms||[]).forEach(r=>rooms.add(r)));
   if(currentRoom)rooms.add(currentRoom);
@@ -128,7 +128,7 @@ function _bdWithinSwapWindow(myCheckIn,otherCheckIn){
 // that different data model is out of scope here.
 function _bdRoomOptionsForEdit(checkIn,checkOut,currentRoom){
   if(!checkIn||!checkOut||typeof rsComputeAvailability!=='function')return currentRoom?[{room:currentRoom,label:currentRoom}]:[];
-  const byType=rsComputeAvailability(checkIn,checkOut,[]);
+  const byType=rsComputeAvailability(checkIn,checkOut,[],{includeBeds:true});
   const seen=new Map();
   byType.forEach(t=>(t.roomStatus||[]).forEach(rs=>{
     if(seen.has(rs.room))return;
@@ -314,6 +314,16 @@ async function _bdLoadFoliosNow(){
         justSeeded=true;
       }
     }
+    // Every other folio of this same room whose name is not another guest's of it shows here too. Only the folio under the
+    // exact current name used to show: Korrina Hughes (32a) moved to CH1 and renamed "Korrina L Hughes and Allan Hughes"
+    // kept her own folio, filed under "Korrina L Hughes" -- it was there but nobody could see it (2026-11-04).
+    try{
+      const {data:allF}=await db.from('folios').select('*').eq(subj.folioCol,folioSubjId);
+      const _n=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
+      const others=new Set((subj.allGuests||[]).map(g=>_n(g.name)).filter(x=>x&&x!==_n(guestName)));
+      (allF||[]).forEach(f=>{if(!folios.some(x=>x.id===f.id)&&!others.has(_n(f.guest_name)))folios.push(f);});
+      folios.sort((x,y)=>new Date(x.created_at||0)-new Date(y.created_at||0));
+    }catch(e){}
     const folioIds=folios.map(f=>f.id);
     let {data:items,error:iErr}=await db.from('folio_items').select('*').in('folio_id',folioIds).order('created_at',{ascending:true});
     if(iErr)throw iErr;
@@ -717,6 +727,8 @@ function _bdFolioRowHtml(f){
   const total=_bdFolioTotal(f);
   const isOpen=f.folio.status==='open';
   const fid=f.folio.id;
+  // the other open folios of this reservation a charge can be moved to (Jorge 2026-11-04)
+  const _moveTargets=_bdFolios.filter(x=>x.folio.id!==fid&&x.folio.status==='open');
   const itemRows=f.items.map(i=>{
     const isPayment=Number(i.unit_price)<0;
     const lineTotal=_bdItemTotal(i);
@@ -749,6 +761,7 @@ function _bdFolioRowHtml(f){
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${i.tax_rate?i.tax_rate+'%':'—'}</td>
       <td style="padding:8px 12px;font-size:12.5px;text-align:right;font-weight:700;color:${isPayment?'#059669':'inherit'}">${fmt$(lineTotal)}</td>
       <td style="padding:8px 12px;text-align:right;white-space:nowrap">
+        ${isOpen&&_moveTargets.length?`<select onchange="bdMoveItem('${fid}','${i.id}',this.value);this.value=''" title="Move this charge to another folio of this reservation" style="padding:2px 4px;font-size:11px;border:1px solid var(--border);border-radius:6px;max-width:110px"><option value="">Move to…</option>${_moveTargets.map(t=>`<option value="${t.folio.id}">${escHtml(t.folio.name)}</option>`).join('')}</select>`:''}
         ${isOpen?`<button class="btn btn-secondary btn-sm" onclick="bdToggleEditItem('${i.id}')" style="padding:2px 8px;font-size:11px">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="bdDeleteItem('${fid}','${i.id}')" style="padding:2px 8px;font-size:11px">✕</button>`:''}
       </td>
@@ -767,6 +780,7 @@ function _bdFolioRowHtml(f){
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#f8fafc;border-bottom:1px solid var(--border)">
       <div>
         <span style="font-weight:700;font-size:13.5px">${escHtml(f.folio.name)}</span>
+        <button onclick="bdRenameFolio('${fid}')" title="Rename this folio" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:12px;color:var(--muted);padding:0 2px">✏️</button>
         <span style="margin-left:10px;font-size:12px;color:var(--muted)">Total ${fmt$(total)}</span>
         <span style="margin-left:10px;font-size:12px;font-weight:700;color:${total>0?'#dc2626':'#059669'}">Balance ${fmt$(total)}</span>
         <span style="margin-left:10px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${isOpen?'#fef3c7':'#dcfce7'};color:${isOpen?'#92400e':'#15803d'}">${f.folio.status.toUpperCase()}</span>
@@ -1113,6 +1127,35 @@ async function bdSaveEditItem(fid,itemId){
   await _bdLoadFolios();
 }
 
+// Rename a folio (Jorge 2026-11-04). Only the name shown on the folio and on the guest's payment page changes:
+// guest_name stays, since charges sent from other screens (spa, transport, restaurant) find the folio by it.
+async function bdRenameFolio(fid){
+  const f=_bdFolios.find(x=>x.folio.id===fid);if(!f)return;
+  const name=(prompt('Folio name:',f.folio.name||'')||'').trim();
+  if(!name||name===f.folio.name)return;
+  const {error}=await db.from('folios').update({name}).eq('id',fid);
+  if(error){showToast('Error: '+error.message);return;}
+  const reg=_bdKind==='reg'?AppData.regs.find(r=>r.id===_bdId):null;
+  logActivity('Folio renamed',`"${f.folio.name}" → "${name}" · ${(_bdSubject()||{}).room||''}`,reg?reg.bookingId:null);
+  showToast('Folio renamed ✓');
+  await _bdLoadFolios();
+}
+// Move one charge (or payment) to another open folio of the same reservation (Jorge 2026-11-04): the row itself moves,
+// with its commission link (commissions.folio_item_id) intact.
+async function bdMoveItem(fid,itemId,toFid){
+  if(!toFid||toFid===fid)return;
+  const from=_bdFolios.find(x=>x.folio.id===fid),to=_bdFolios.find(x=>x.folio.id===toFid);
+  const it=from&&from.items.find(i=>i.id===itemId);
+  if(!from||!to||!it)return;
+  if(to.folio.status!=='open'){showToast('That folio is closed — reopen it first.');return;}
+  if(!confirm(`Move "${it.description}" (${fmt$(_bdItemTotal(it))}) from "${from.folio.name}" to "${to.folio.name}"?`)){await _bdLoadFolios();return;}
+  const {error}=await db.from('folio_items').update({folio_id:toFid}).eq('id',itemId).eq('folio_id',fid);
+  if(error){showToast('Error: '+error.message);return;}
+  const reg=_bdKind==='reg'?AppData.regs.find(r=>r.id===_bdId):null;
+  logActivity('Charge moved to another folio',`${it.description} (${fmt$(_bdItemTotal(it))}): "${from.folio.name}" → "${to.folio.name}" · ${(_bdSubject()||{}).room||''}`,reg?reg.bookingId:null);
+  showToast('Charge moved ✓');
+  await _bdLoadFolios();
+}
 async function bdDeleteItem(fid,itemId){
   if(!confirm('Remove this charge?'))return;
   const f=_bdFolios.find(x=>x.folio.id===fid);
@@ -1276,8 +1319,19 @@ async function bdConfirmTransfer(kind,id){
   const target=_bdTransferCandidates.find(c=>c.kind===kind&&c.id===id);if(!target)return;
   if(!confirm(`Move this folio to ${target.guestName} (Room ${target.room})? All its charges and payments go with it.`))return;
   const colSet=kind==='req'?{booking_request_id:id,registration_id:null}:{registration_id:id,booking_request_id:null};
+  const f=_bdFolios.find(x=>x.folio.id===_bdTransferFid);
   const {error}=await db.from('folios').update({...colSet,guest_name:target.guestName,name:target.guestName}).eq('id',_bdTransferFid);
   if(error){showToast('Error: '+error.message);return;}
+  // In the activity log of both reservations (Jorge 2026-11-04: who moved which folio where was untraceable)
+  try{
+    const total=f?f.items.reduce((s,i)=>s+Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100),0):0;
+    const subj=_bdSubject();
+    const fromReg=_bdKind==='reg'?AppData.regs.find(r=>r.id===_bdId):null;
+    const toReg=kind==='reg'?AppData.regs.find(r=>r.id===id):null;
+    const detail=`Folio "${f?f.folio.name:''}" (${f?f.items.length:0} items, ${fmt$(total)}): ${(subj&&subj.guestName)||'guest'} · ${(subj&&subj.room)||''} → ${target.guestName} · ${target.room}`;
+    logActivity('Folio transferred',detail,fromReg?fromReg.bookingId:null);
+    if(toReg&&(!fromReg||toReg.bookingId!==fromReg.bookingId))logActivity('Folio transferred',detail,toReg.bookingId);
+  }catch(e){}
   closeModal('bdTransferFolioModal');
   showToast('Folio transferred ✓');
   await _bdLoadFolios();
@@ -1427,8 +1481,9 @@ async function bdSyncCloudbeds(){
     }catch(e){bdStickyAlert('No pude conectar con Cloudbeds para verificar el enlace actual: '+e.message+'. Intenta de nuevo en un momento.','error');return;}
     if(checkData.errored){bdStickyAlert('No pude confirmar el estado de la reserva enlazada en Cloudbeds ahorita (puede ser temporal) — intenta de nuevo en un momento antes de asumir que ya no existe.','warn');return;}
     if(checkData.active){bdStickyAlert(`Ya está enlazado a una reserva activa en Cloudbeds (estado: ${checkData.status}) — todo en orden, no hace falta hacer nada.`,'success');return;}
-    // Confirmed gone/cancelled -- clear the stale link and fall through to search-or-create.
-    delete bk.cbReservationIds[reg.room];
+    // Confirmed gone/cancelled -- clear the stale link and fall through to search-or-create. null, not delete: a key that
+    // just goes missing is put back by the database while the room is on the list (sql/cb_links_guard.sql).
+    bk.cbReservationIds[reg.room]=null;
     try{await db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id);}
     catch(e){bdStickyAlert('Error limpiando el enlace viejo: '+e.message,'error');return;}
     bdStickyAlert(`La reserva enlazada (${existingId}) ya no existe en Cloudbeds (estado: ${checkData.status||'no encontrada'}) — buscando una reserva real para reemplazarla…`,'warn');
@@ -1707,6 +1762,16 @@ async function _bdSwapGuestRooms(regA,regB,roomA,roomB,checkInA,checkOutA){
   }
 }
 
+// Check In / Check Out / Undo used to leave no trace in the activity log, so a wrong click could not be traced back
+// (room 26, Sue Elliot & Mary Daigneault: checked out 9 minutes after check-in on 2026-11-01, nobody knew who).
+function _bdLogStay(action){
+  try{
+    const subj=_bdSubject();
+    const names=subj?_joinNames((subj.allGuests||[]).map(g=>g.name)):'';
+    const reg=_bdKind==='req'?null:AppData.regs.find(r=>r.id===_bdId);
+    logActivity(action,`${names||'Guest'} · ${(subj&&subj.room)||(reg&&reg.room)||''}`,reg?reg.bookingId:null);
+  }catch(e){}
+}
 async function bdCheckIn(){
   const now=new Date().toISOString();
   if(_bdKind==='req'){
@@ -1720,6 +1785,7 @@ async function bdCheckIn(){
     if(error){showToast('Error: '+error.message);return;}
     reg.checkedInAt=now;
   }
+  _bdLogStay('Checked in');
   showToast('Checked in ✓');
   _bdRender();
 }
@@ -1744,6 +1810,7 @@ async function bdCheckOut(){
     if(error){showToast('Error: '+error.message);return;}
     reg.checkedOutAt=now;
   }
+  _bdLogStay('Checked out');
   showToast('Checked out ✓');
   _bdRender();
 }
@@ -1761,6 +1828,7 @@ async function bdUndoCheckOut(){
     if(error){showToast('Error: '+error.message);return;}
     reg.checkedOutAt=null;
   }
+  _bdLogStay('Check-out undone');
   showToast('Check-out undone ✓ — back In House');
   _bdRender();
 }

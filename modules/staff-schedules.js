@@ -60,6 +60,71 @@ function ssWorkersOn(date) {
 }
 function ssSummary(w) { const on = (w || []).filter(x => x.working); return { total: on.length, am: on.filter(x => x.half === 'AM').length, pm: on.filter(x => x.half === 'PM').length }; }
 
+// ---- changing one day of a saved week (Jorge 2026-11-04): click a day -> OFF / 8-4 / 11-6 / 1-9 / Custom ----
+const SS_QUICK = ['PSG', 'OFF', '8-4', '11-6', '1-9'];   // PSG = unpaid leave
+function ssPickClose() { const m = document.getElementById('ssPickMenu'); if (m) m.remove(); document.removeEventListener('mousedown', ssPickOutside, true); }
+function ssPickOutside(e) { const m = document.getElementById('ssPickMenu'); if (m && !m.contains(e.target)) ssPickClose(); }
+function ssPick(ev, ri, di) {
+  ssPickClose();
+  const saved = (ssData[ssWeek] || {})[ssDept]; const r = saved && saved.rows[ri]; if (!r) return;
+  const d = r.days[di] || {}, cur = (d.code || '') + (d.tag ? ' ' + d.tag : '');
+  const box = ev.currentTarget.getBoundingClientRect(), m = document.createElement('div');
+  m.id = 'ssPickMenu';
+  m.style.cssText = `position:fixed;z-index:9999;top:0;left:0;width:210px;max-height:calc(100vh - 16px);overflow-y:auto;background:#fff;border:1px solid #d6cfc4;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:7px;font-family:inherit`;
+  // compact chips, two per row, so the whole menu fits under (or over) the cell
+  const btn = 'flex:1 1 calc(50% - 4px);text-align:center;padding:4px 6px;border:1px solid #e8dfd4;border-radius:6px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap';
+  m.innerHTML = `<div style="font-size:11px;color:#6b7280;margin:0 2px 5px">${ssEsc(r.name)} · ${new Date(ssAdd(ssWeek, di) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })} · now <b>${ssEsc(cur || '—')}</b></div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">${SS_QUICK.map(c => { const off = !ssShift(c).working; return `<button style="${btn};${off ? 'color:#991b1b' : 'color:#166534'}" title="${c === 'PSG' ? 'Unpaid leave' : c === 'OFF' ? 'Day off' : ''}" onclick="ssSetDay(${ri},${di},'${c}',${off ? "''" : 'null'})">${c}${!off && d.tag ? ` <span style="font-size:10px;color:#6b7280">${ssEsc(d.tag)}</span>` : ''}</button>`; }).join('')}</div>
+    <div style="margin-top:6px;border-top:1px solid #f0ebe0;padding-top:5px"><div style="font-size:11px;font-weight:700;color:#374151;margin:0 2px 3px">Custom</div>
+      <div style="display:flex;gap:4px"><input id="ssPickCustom" value="${ssEsc(cur)}" placeholder="e.g. 10-6 FD, VACACIONES" style="flex:1;min-width:0;padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px" onkeydown="if(event.key==='Enter')ssSetCustom(${ri},${di})">
+      <button class="btn btn-primary btn-sm" onclick="ssSetCustom(${ri},${di})">Save</button></div>
+      <div style="font-size:10px;color:#9ca3af;margin:3px 2px 0">e.g. 10-6, AM, VACACIONES, INC, PERMISO. Add FD or RSV after the hours.</div></div>`;
+  document.body.appendChild(m);
+  // under the cell when it fits, otherwise above it, always inside the window
+  const h = m.offsetHeight, below = innerHeight - box.bottom - 8;
+  m.style.top = Math.max(8, below >= h ? box.bottom + 4 : box.top - h - 4) + 'px';
+  m.style.left = Math.max(8, Math.min(box.left, innerWidth - m.offsetWidth - 8)) + 'px';
+  setTimeout(() => document.addEventListener('mousedown', ssPickOutside, true), 0);
+}
+function ssSetCustom(ri, di) {
+  const v = String((document.getElementById('ssPickCustom') || {}).value || '').trim().replace(/\s+/g, ' ');
+  if (!v) return;
+  const t = /\s+(FD|RSV)$/i.exec(v);
+  ssSetDay(ri, di, t ? v.slice(0, t.index).trim() : v, t ? t[1].toUpperCase() : '');
+}
+// tag null = keep the day's FD/RSV; '' = no tag (a day off has none)
+async function ssSetDay(ri, di, code, tag) {
+  ssPickClose();
+  const wk = ssWeek, dept = ssDept, cur = (ssData[wk] || {})[dept], r0 = cur && cur.rows[ri]; if (!r0) return;
+  const who = (typeof getCurrentSession === 'function' && getCurrentSession() && getCurrentSession().name) || 'staff';
+  const day = new Date(ssAdd(wk, di) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  for (let i = 0; i < 8; i++) {
+    const { data: row } = await db.from('app_store').select('value,updated_at').eq('key', SS_KEY).maybeSingle();
+    const next = row && row.value ? JSON.parse(JSON.stringify(row.value)) : {};
+    const dep = (next[wk] || {})[dept];
+    // the same person, found by name (someone may have pasted the week again meanwhile)
+    const r = dep && (dep.rows[ri] && dep.rows[ri].name === r0.name ? dep.rows[ri] : dep.rows.find(x => x.name === r0.name));
+    if (!r) { showToast('This schedule changed meanwhile — open it again.'); ssData = next; ssRender(); return; }
+    const before = r.days[di] || {}, prevTxt = (before.code || '') + (before.tag ? ' ' + before.tag : '');
+    const nd = { code };
+    const keep = tag === null ? before.tag : tag;
+    if (keep && ssShift(code).working) nd.tag = keep;
+    r.days[di] = nd;
+    dep.editedAt = new Date().toISOString(); dep.editedBy = who;
+    const { data: upd, error } = await db.from('app_store').update({ value: next, updated_at: new Date().toISOString() }).eq('key', SS_KEY).eq('updated_at', row.updated_at).select('key');
+    if (error) { showToast('Could not save.'); return; }
+    if (upd && upd.length) {
+      ssData = next; ssRender();
+      const newTxt = nd.code + (nd.tag ? ' ' + nd.tag : '');
+      if (typeof logActivity === 'function') logActivity('Staff schedule changed', `${r0.name} · ${day}: ${prevTxt || '—'} → ${newTxt} (${(SS_DEPTS.find(d => d[0] === dept) || [, dept])[1]})`, null);
+      showToast(`${r0.name}, ${day}: ${newTxt}`);
+      return;
+    }
+    await new Promise(res => setTimeout(res, 80 + Math.random() * 200));
+  }
+  showToast('Could not save. Try again.');
+}
+
 // ---- page ----
 async function ssSave() {
   if (!ssPreview || !ssPreview.rows.length) return;
@@ -82,12 +147,12 @@ function ssRead() {
   if (!ssPreview.weekStart) ssPreview.weekStart = ssWeek;
   ssRender();
 }
-function ssGrid(rows, wk) {
+function ssGrid(rows, wk, editable) {
   const days = Array.from({ length: 7 }, (_, i) => ssAdd(wk, i)), th = 'padding:5px 7px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;border-bottom:1.5px solid #e8dfd4;text-align:center;white-space:nowrap';
   let html = `<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12.5px;width:100%"><thead><tr><th style="${th};text-align:left">Name</th>${days.map(d => `<th style="${th}">${new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}</th>`).join('')}</tr></thead><tbody>`, sec = null;
-  rows.forEach(r => {
+  rows.forEach((r, ri) => {
     if (r.section !== sec) { sec = r.section; if (sec) html += `<tr><td colspan="8" style="padding:5px 7px;background:#f5f1eb;font-weight:700;font-size:12px">${ssEsc(sec)}</td></tr>`; }
-    html += `<tr style="border-top:1px solid #f0ebe0"><td style="padding:5px 7px;font-weight:600;white-space:nowrap">${ssEsc(r.name)}</td>${r.days.map(d => { const s = ssShift(d.code); return `<td style="padding:4px 6px;text-align:center;${s.working ? 'background:#ecfdf5;color:#166534' : s.unknown ? 'background:#fffbeb;color:#92400e' : 'background:#fef2f2;color:#991b1b'};font-weight:600" title="${ssEsc(s.working ? 'Working' : s.reason)}">${ssEsc(d.code)}${d.tag ? ' <span style="font-size:10px;color:#6b7280">' + d.tag + '</span>' : ''}</td>`; }).join('')}</tr>`;
+    html += `<tr style="border-top:1px solid #f0ebe0"><td style="padding:5px 7px;font-weight:600;white-space:nowrap">${ssEsc(r.name)}</td>${r.days.map((d, di) => { const s = ssShift(d.code); return `<td ${editable ? `onclick="ssPick(event,${ri},${di})" ` : ''}style="padding:4px 6px;text-align:center;${editable ? 'cursor:pointer;' : ''}${s.working ? 'background:#ecfdf5;color:#166534' : s.unknown ? 'background:#fffbeb;color:#92400e' : 'background:#fef2f2;color:#991b1b'};font-weight:600" title="${ssEsc(s.working ? 'Working' : s.reason)}">${ssEsc(d.code)}${d.tag ? ' <span style="font-size:10px;color:#6b7280">' + d.tag + '</span>' : ''}</td>`; }).join('')}</tr>`;
   });
   return html + '</tbody></table></div>';
 }
@@ -114,7 +179,7 @@ async function ssRender() {
       ${unk ? `<div style="margin-top:6px;color:#b45309;font-size:12.5px">${unk} cell${unk === 1 ? ' was' : 's were'} not recognised (yellow). They count as not working until fixed in the spreadsheet.</div>` : ''}
       <div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-primary" ${p.rows.length ? '' : 'disabled'} onclick="ssSave()">Save this schedule</button><button class="btn btn-secondary" onclick="ssPreview=null;ssRender()">Cancel</button></div></div>`;
   }
-  html += `<div style="${card}"><div style="font-weight:700;margin-bottom:6px">Saved: ${ssEsc(SS_DEPTS.find(d => d[0] === ssDept)[1])}, this week</div>${saved ? ssGrid(saved.rows, ssWeek) + `<div style="font-size:11.5px;color:#9ca3af;margin-top:6px">Saved ${ssEsc(new Date(saved.savedAt).toLocaleString())} by ${ssEsc(saved.savedBy)}. Pasting again for this week replaces it.</div>` : '<div style="color:#9ca3af">Not entered for this week. The Staffing Forecast shows this as not connected, never as zero staff.</div>'}</div>`;
+  html += `<div style="${card}"><div style="font-weight:700;margin-bottom:6px">Saved: ${ssEsc(SS_DEPTS.find(d => d[0] === ssDept)[1])}, this week</div>${saved ? ssGrid(saved.rows, ssWeek, true) + `<div style="font-size:11.5px;color:#9ca3af;margin-top:6px">Saved ${ssEsc(new Date(saved.savedAt).toLocaleString())} by ${ssEsc(saved.savedBy)}.${saved.editedAt ? ` Last change ${ssEsc(new Date(saved.editedAt).toLocaleString())} by ${ssEsc(saved.editedBy)}.` : ''} Click any day to change it. Pasting again for this week replaces it.</div>` : '<div style="color:#9ca3af">Not entered for this week. The Staffing Forecast shows this as not connected, never as zero staff.</div>'}</div>`;
   el.innerHTML = html;
 }
 function ssOpen(btn) {

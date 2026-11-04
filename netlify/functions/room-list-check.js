@@ -164,7 +164,20 @@ async function run({ send = true, numbers: only } = {}) {
     const last = ((await r.json())[0] || {}).value || null;
     if (last && last.date === today) for (const t of last.copies || []) problems.push({ kind: 'cbcopy', at: today, text: `Copia en Cloudbeds: ${t}` });
   } catch (e) { console.warn('[room-list-check] cb copies', e.message); }
-  const rank = { clash: 0, nocharge: 1, cbsync: 2, cbcopy: 3, outside: 4, duplicate: 5, transport: 6, cbmoved: 7 };
+  // 8. Cloudbeds links the database put back since yesterday's check (sql/cb_links_guard.sql): some screen saved an old
+  //    copy that would have dropped them. Who / which page tells us where it comes from.
+  try {
+    const since = new Date(Date.now() - 86400000).toISOString();
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/cb_links_log?select=booking_id,at,who,page,restored&restored=not.is.null&at=gte.${since}&order=at.asc`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+    const rows = r.ok ? await r.json() : [];
+    const byId = new Map(bookings.map(b => [String(b.id), b]));
+    for (const l of rows) {
+      const b = byId.get(String(l.booking_id));
+      const page = String(l.page || '').replace(/^https?:\/\/[^/]+/, '').split('?')[0] || '?';
+      problems.push({ kind: 'cblink', at: today, text: `Liga a Cloudbeds salvada: ${b ? (b.retreat_name || b.leader_name || 'Reserva') : l.booking_id} ${Object.keys(l.restored || {}).join(', ')} (guardó ${l.who || '?'} desde ${page})` });
+    }
+  } catch (e) { console.warn('[room-list-check] cb links', e.message); }
+  const rank = { clash: 0, nocharge: 1, cbsync: 2, cbcopy: 3, cblink: 4, outside: 5, duplicate: 6, transport: 7, cbmoved: 8 };
   problems.sort((a, b) => rank[a.kind] - rank[b.kind] || String(a.at).localeCompare(String(b.at)));
   const msg = message(problems);
   const out = { date: today, bookings: bookings.length, problems: problems.map(p => p.text), sent: 0, failed: 0 };
