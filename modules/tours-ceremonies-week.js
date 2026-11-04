@@ -71,6 +71,7 @@ async function tcwRender() {
     <button onclick="tcwAddGuide()" style="padding:7px 14px;font-size:12.5px;font-weight:700;border:none;border-radius:7px;background:#2d6a6a;color:#fff;cursor:pointer;font-family:'Jost',sans-serif">+ Add</button>
     ${custom.length ? '<span style="font-size:11.5px;color:#6b7280;margin-left:8px">Added by you:</span>' + custom.map(n => `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:99px;background:#f0ebe0;font-size:12.5px">${tcwEsc(n)}<button title="Remove ${tcwEsc(n)} from the list" onclick="tcwRemoveGuide('${tcwEsc(n).replace(/'/g, "\\'")}')" style="border:none;background:none;cursor:pointer;color:#b91c1c;font-size:15px;line-height:1;padding:0 4px">&times;</button></span>`).join('') : ''}
   </div>`;
+  if (typeof tdStripHtml === 'function') html += tdStripHtml();   // Add a driver (modules/tour-drivers.js)
   if (!rows.length) html += '<div style="padding:40px;text-align:center;color:#9ca3af;background:#fff;border-radius:10px">No tours or ceremonies are scheduled this week.</div>';
   days.forEach(d => {
     const dr = rows.filter(r => r.date === d); if (!dr.length) return;
