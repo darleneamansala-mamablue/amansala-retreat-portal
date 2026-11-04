@@ -1752,9 +1752,9 @@ function tr2BuildView() {
   // next to the room number, and in Upgrade mode an Options column (lateral same-category
   // room swaps, see tr2OptionsCell/tr2SwapRooms) sits right before Upgrade. Column count
   // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
-  const totalCols = tr2UpgradeMode ? 11 : 10;
+  const totalCols = tr2UpgradeMode ? 13 : 12;   // + Email and Phone (Jorge 2026-11-04)
   const tableHeader = `<thead><tr>
-    ${TH('Habitación','80px')}${TH('Check In','70px')}${TH('Nombre')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}
+    ${TH('Habitación','80px')}${TH('Check In','70px')}${TH('Nombre')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
     ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}
     ${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
@@ -1915,7 +1915,9 @@ function tr2RenderRow(e, color, groupPax) {
     ? `<button onclick="event.stopPropagation();tr2ToggleCheckIn('${e.regId}',${!e.checkedIn})" title="${e.checkedIn ? 'Checked in -- click to undo' : 'Click to check in'}" style="border:none;border-radius:50%;width:20px;height:20px;line-height:1;font-size:12px;cursor:pointer;flex-shrink:0;background:${e.checkedIn ? '#16a34a' : '#f1f5f9'};color:${e.checkedIn ? '#fff' : '#9ca3af'}">✓</button>`
     : '';
 
-  return `<tr style="${rowBg};cursor:grab" draggable="true" ondragstart="tr2DragStart(event,'${e.type}|${e.rowId}')" ondragend="this.style.opacity=''">
+  // Jorge 2026-11-04: dropping onto ANY row of a ride joins that ride (before, only the thin "arrastra aquí" bar took it)
+  const dropAttrs = e.ot ? '' : `ondragover="event.preventDefault();this.style.outline='2px solid #4db6ac'" ondragleave="if(!this.contains(event.relatedTarget))this.style.outline=''" ondrop="event.preventDefault();this.style.outline='';tr2Drop('${e.type}|${e.rowId}')"`;
+  return `<tr style="${rowBg};cursor:grab" draggable="true" ondragstart="tr2DragStart(event,'${e.type}|${e.rowId}')" ondragend="this.style.opacity=''" ${dropAttrs}>
     ${TD(e.room ? escHtml(e.room) : `<span style="color:#d1d5db">—</span>`, 'font-weight:600')}
     ${TD(checkInCell, 'text-align:center')}
     ${TD(nameCell)}
@@ -1923,6 +1925,7 @@ function tr2RenderRow(e, color, groupPax) {
     ${TD(airportBadge, 'text-align:center')}
     ${TD(timeCell)}
     ${TD(e.retreatLabel ? `<span style="font-size:11px;color:#6b7280">${escHtml(e.retreatLabel)}</span>` : '')}
+    ${(() => { const c = tr2Contact(e); return TD(c.email ? `<a href="mailto:${escHtml(c.email)}" onclick="event.stopPropagation()" style="font-size:11px;color:#2563eb;word-break:break-all">${escHtml(c.email)}</a>` : '<span style="color:#d1d5db">—</span>', 'max-width:180px') + TD(c.phone ? `<span style="font-size:11px;white-space:nowrap">${escHtml(c.phone)}</span>` : '<span style="color:#d1d5db">—</span>'); })()}
     ${tr2UpgradeMode ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2OptionsCell(e)}</td><td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2UpgradeCell(e)}</td>` : TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.notes)}</span>` : '')}
     ${TD(costCell)}
     <td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap">
@@ -1932,12 +1935,24 @@ function tr2RenderRow(e, color, groupPax) {
   </tr>`;
 }
 
+// Email / phone shown in the list: the room list's guest (what the teacher and staff edit) wins, the transport form's
+// own email/phone is the fallback (Jorge 2026-11-04)
+function tr2Contact(e) {
+  const raw = (tr2RawRows[e.rowId] || {}).data || {};
+  const reg = e.regId ? (AppData.regs || []).find(r => r.id === e.regId) : null;
+  const nm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const gs = ((reg && reg.guests) || []).filter(g => g && g.name && !g.cancelled);
+  const g = gs.find(x => nm(x.name) === nm(e.guest)) || (gs.length === 1 ? gs[0] : null) || {};
+  return { email: (g.email || e.email || raw.email || '').trim(), phone: (g.phone || raw.phone || '').trim() };
+}
+
 // ── Drag and drop grouping ──
 function tr2DragStart(event, rowId) { tr2DragSrc = rowId; event.dataTransfer.effectAllowed = 'move'; event.currentTarget?.style && (event.currentTarget.style.opacity = '0.5'); }
 async function tr2Drop(targetFirstDirId) {
   if (!tr2DragSrc) return;
   const src = tr2DragSrc; tr2DragSrc = null;
   if (src === targetFirstDirId) return;
+  if (tr2GroupKeyMap.get(src) && tr2GroupKeyMap.get(src) === tr2GroupKeyMap.get(targetFirstDirId)) return;   // already in that ride
   const srcType = src.split('|')[0], tgtType = targetFirstDirId.split('|')[0];
   if (srcType !== tgtType) return;
   let targetKey = tr2GroupKeyMap.get(targetFirstDirId);
