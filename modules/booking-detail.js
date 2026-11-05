@@ -72,7 +72,7 @@ function _bdSubject(){
   };
 }
 
-const _BD_PAY_METHODS=['Cash','Zelle','Venmo','Paypal','Bank Transfer','Clip','Credit Card (Stripe)','Card on File'];
+const _BD_PAY_METHODS=['Cash','Zelle','Venmo','Paypal','Bank Transfer','Clip','Credit Card (Stripe)','Card on File','Expedia Collect'];   // Expedia Collect: Expedia charged the guest and pays Amansala (Jorge 2026-11-05)
 
 function _bdCardLabel(reg){
   const brand=reg.stripeCardBrand?reg.stripeCardBrand.charAt(0).toUpperCase()+reg.stripeCardBrand.slice(1):'Card';
