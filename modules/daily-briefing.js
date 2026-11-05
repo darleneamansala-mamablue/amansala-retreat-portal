@@ -172,6 +172,14 @@ function dbRoomUpgrade(b) {
     }).join('');
   } catch (e) { return ''; }
 }
+// A class, tour or activity that has already finished is crossed out with a green tick (Darlene 2026-11-05): everything on a past day, or on today anything whose end time (Tulum time) has gone by.
+function dbEvDone(e) {
+  const t = new Date(Date.now() - 5 * 3600000), today = t.toISOString().slice(0, 10);
+  if (dbDate < today) return true; if (dbDate > today) return false;
+  const end = String(e.endTime || e.startTime || ''); if (!end) return false;
+  const [h, m] = end.split(':').map(Number); return h * 60 + (m || 0) <= t.getUTCHours() * 60 + t.getUTCMinutes();
+}
+const dbDoneWrap = (e, inner) => dbEvDone(e) ? `<span title="Done" style="color:#15803d;font-weight:800;margin-right:6px">✓</span><span style="opacity:.6;text-decoration:line-through">${inner}</span>` : inner;
 function dbArrNote(b) { const sr = b.scheduleRequest || {}; return dbEsc(String(sr.specialRequests || '').trim()); }
 function dbDepNote(b) {
   const out = [];
@@ -368,7 +376,7 @@ async function dbRender() {
     return t ? `<div style="margin:3px 0 0 120px;font-size:12.5px;color:#374151"><b>Room needs:</b> ${dbEsc(t)}</div>` : '';
   };
   // Two sections, each in time order (Darlene 2026-11-04): Classes (with the opening circles), and Tours and activities (tours, ceremonies, extras)
-  const glanceRows = list => list.map(({ e, k }) => dbRow(`<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:${tagOf[k][1]};color:${tagOf[k][2]}">${tagOf[k][0]}</span>` + (k === 'tour' || k === 'extra' ? `<span style="color:#b91c1c;font-weight:600">${evLine(e)}</span>${dbActPeople(e)}` : evLine(e)) + roomNeed(e))).join('');   // tours and activities are red (Darlene 2026-11-04)
+  const glanceRows = list => list.map(({ e, k }) => dbRow(dbDoneWrap(e, `<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:${tagOf[k][1]};color:${tagOf[k][2]}">${tagOf[k][0]}</span>` + (k === 'tour' || k === 'extra' ? `<span style="color:#b91c1c;font-weight:600">${evLine(e)}</span>${dbActPeople(e)}` : evLine(e)) + roomNeed(e)))).join('');   // tours and activities are red (Darlene 2026-11-04)
   const dayClasses = dayAll.filter(x => x.k === 'class' || x.k === 'circle'), dayTours = dayAll.filter(x => x.k === 'tour' || x.k === 'extra');
   // The page has four views of the day, picked at the top (Darlene 2026-11-04): Daily flow (everything together in time order), Classes, Tours, Special notes
   // Only what is scheduled today is listed (Darlene 2026-11-04); a tour appears here as soon as its day and time are filled in on the Activities page.
@@ -426,7 +434,7 @@ async function dbRender() {
   html += dbCard('Departures', (g.departures.length ? g.departures.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${dbDepCount(b)} · checking out today${dbDepNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#991b1b;font-weight:600">' + dbDepNote(b) + '</div>' : ''}`)).join('') + depRows + doneNote : dbNone('No retreat departures today.')) +
     depT.filter(t => { const rg = dbRegOf(t.sub); return !(rg && rg.checkedOutAt); }).map(t => dbRow(`Airport departure <b>${dbFmtT(t.sub.departureTime) || PENDING}</b> · ${dbRoomOf(t.sub)}${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')}${dbRetreatTag(t.sub)} · driver ${dbEsc(t.name)}`)).join(''), g.departures.length + ' retreat' + (g.departures.length === 1 ? '' : 's'));
   // 5. Classes, opening circles, tours, extra activities
-  const evCard = (title, list, empty) => dbCard(title, list.length ? list.map(e => dbRow(evLine(e))).join('') : dbNone(empty), list.length);
+  const evCard = (title, list, empty) => dbCard(title, list.length ? list.map(e => dbRow(dbDoneWrap(e, evLine(e)))).join('') : dbNone(empty), list.length);
   html += evCard('Classes', buckets.class, 'No classes today.') + evCard('Opening circles / orientations', buckets.circle, 'No opening circle today.') + evCard('Tours', buckets.tour, 'No tours today.') + evCard('Extra activities and ceremonies', buckets.extra, 'No extra activities today.');
   // 6. Tour preparation
   let prep = g.tours.length ? g.tours.map(t => {
