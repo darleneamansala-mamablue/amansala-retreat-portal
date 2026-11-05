@@ -295,11 +295,21 @@ async function runAction(key, who, a) {
       let waOk = false;
       if (to.length >= 11 && process.env.VISITO_M2M_KEY && process.env.VISITO_WA_CHANNEL_ID) {
         try {
-          const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(process.env.VISITO_WA_CHANNEL_ID)}/send`, {
-            method: 'POST', headers: { Authorization: `Bearer ${process.env.VISITO_M2M_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `spa-link-${to}-${x.date}-${x.start}-${Date.now()}` },
-            body: JSON.stringify({ to, template: { name: 'manual_booking_payment_link', language: { code: 'en_US' }, components: [{ type: 'body', parameters: [{ type: 'text', text: x.firstName || 'there' }, { type: 'text', text: d.paymentUrl }] }] } }),
-          });
-          const j = await r.json().catch(() => ({})); waOk = r.ok && j.accepted !== false;
+          // formal, in English, with the treatment, duration, date, time and total -- never the therapist (Jorge 2026-11-05):
+          // template spa_payment_request; the short manual_booking_payment_link while Meta has not approved it
+          const send = async (name, params) => {
+            const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(process.env.VISITO_WA_CHANNEL_ID)}/send`, {
+              method: 'POST', headers: { Authorization: `Bearer ${process.env.VISITO_M2M_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `spa-link-${name}-${to}-${x.date}-${x.start}-${Date.now()}` },
+              body: JSON.stringify({ to, template: { name, language: { code: 'en_US' }, components: [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: String(t) })) }] } }),
+            });
+            const j = await r.json().catch(() => ({})); return r.ok && j.accepted !== false;
+          };
+          const dateLong = new Date(x.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+          const [hh, mm] = String(x.start).split(':').map(Number), time = `${((hh % 12) || 12)}:${String(mm || 0).padStart(2, '0')} ${hh >= 12 ? 'PM' : 'AM'}`;
+          const price = Number(d.priceUSD) || 0, total = `$${(price * 1.13).toFixed(2)} USD (13% tax included)`;
+          const mins = d.durationMinutes ? `${d.durationMinutes} minutes` : 'see your email';
+          waOk = await send('spa_payment_request', [x.firstName || 'Guest', d.serviceName || 'Spa treatment', mins, dateLong, time, total, d.paymentUrl])
+            || await send('manual_booking_payment_link', [x.firstName || 'there', d.paymentUrl]);
         } catch (e) {}
       }
       chk.summary += ` — payment link sent by email${waOk ? ' and WhatsApp' : ' (WhatsApp could not be sent' + (to.length < 11 ? ': the phone needs its country code' : '') + ')'}`;
