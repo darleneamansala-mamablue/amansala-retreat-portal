@@ -103,9 +103,11 @@ function dbRetreatTag(sub) {
   const bk = (AppData.bookings || []).find(x => x.id === sub.bookingId); if (!bk) return '';
   const nm = bk.retreatName || bk.leaderName; return nm ? ` <span style="color:#0f766e;font-weight:600">· ${dbEsc(nm)}</span>` : '';
 }
+// An extra night or a room-only stay before a retreat is not the retreat starting: its opening circle is on the retreat's own start day (Darlene 2026-11-05, Katherine McClelland and Korina start on the 6th).
+function dbIsRetreatStart(b) { return b.bookingType !== 'room_only' && !/extra\s*night/i.test((b.retreatName || '') + ' ' + (b.leaderName || '')); }
 // Opening circle leader (Max unless someone else is picked here); saved per retreat by opening-circle-leader.js and read by the Calendar.
 function dbCircleLeader(b) {
-  if (typeof ocLeaderFor !== 'function') return '';
+  if (typeof ocLeaderFor !== 'function' || !dbIsRetreatStart(b)) return '';
   const cur = ocLeaderFor(b.id);
   return `<span style="font-size:12px;color:#6b7280;margin-right:6px">Opening circle:</span><select onchange="ocSetLeader('${b.id}',this.value)" style="padding:3px 6px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px;margin-right:10px">${[...new Set([...DB_CIRCLE_LEADERS, cur])].map(n => `<option value="${dbEsc(n)}" ${n === cur ? 'selected' : ''}>${dbEsc(n)}</option>`).join('')}</select>`;
 }
@@ -285,6 +287,16 @@ async function dbRender() {
   // classify scheduler events
   const buckets = { circle: [], class: [], tour: [], extra: [] };
   g.events.forEach(ev => { const c = dbClassify(ev); if (buckets[c]) buckets[c].push(ev); });
+  // Every retreat arriving today has an opening circle (Darlene 2026-11-05: Katherine McClelland and Korina had none). The scheduler only draws one for a retreat whose schedule is confirmed, so a
+  // retreat arriving today with none gets one here: 15 minutes before its arrival class, or 8:30 pm after dinner, in Grande, led by Max unless another leader was picked.
+  const toMin = t => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + (m || 0); }, fromMin = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  g.arrivals.filter(dbIsRetreatStart).forEach(bk => {
+    const has = [...buckets.circle, ...buckets.class].some(e => e.bkId === bk.id && (/_opencircle$/.test(String(e.id || '')) || /opening circle/i.test(e.subtitle || '')));
+    if (has) return;
+    const sr = bk.scheduleRequest || {}, slot = sr.hasArrivalClass && sr.arrivalSlot ? sr.arrivalSlot : '';
+    const st = slot ? fromMin(toMin(slot) - 15) : '20:30', en = slot || '20:45', who = typeof ocLeaderFor === 'function' ? ocLeaderFor(bk.id) : 'Max';
+    buckets.circle.push({ id: 'ret_' + bk.id + '_opencircle', bkId: bk.id, resourceId: sr.arrivalShala1 || 'grande', startTime: st, endTime: en, title: bk.leaderName || bk.retreatName || 'Retreat', subtitle: 'Orientation with Amansala — ' + who + (sr.adminStatus === 'confirmed' ? '' : ' (schedule not confirmed yet)') });
+  });
   Object.keys(buckets).forEach(k => buckets[k].sort((a, b) => String(a.startTime).localeCompare(String(b.startTime))));
   // A tour or ceremony marked Cancelled on Tours & Ceremonies (with its reason, e.g. not enough sign-ups) shows as cancelled here too.
   const cancelOf = id => { const m = /_ao_(ao\d+)/.exec(String(id || '')), o = m && typeof actOpsData !== 'undefined' && actOpsData[m[1] + '|' + dbDate]; return o && o.status === 'cancelled' ? String(o.cancelReason || '').trim().replace(/^./, c => c.toUpperCase()) || 'No reason given' : null; };
