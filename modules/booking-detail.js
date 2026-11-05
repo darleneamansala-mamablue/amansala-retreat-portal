@@ -307,7 +307,11 @@ async function _bdLoadFoliosNow(){
       // that has nothing to do with anything -- retreat room billing is tracked
       // entirely at the group level, calcBkBalance/the retreat's own BILL/PAID/
       // BAL DUE bar, never per-guest folios).
-      if(subj.folioCol==='registration_id'&&subj.bookingType==='room_only'&&subj.rate>0){
+      // Only when the reservation itself carries a price (Room Total typed in Rooms): one imported from Cloudbeds or with no
+      // price has none, and its room was paid (or is billed) in Cloudbeds -- seeding the room type's price here gave Susan &
+      // Edward McClelland a $575 "balance" on a night already paid in Cloudbeds (Jorge 2026-11-05)
+      const _bkOfSubj=_bdKind==='reg'?AppData.bookings.find(b=>b.id===(AppData.regs.find(r=>r.id===_bdId)||{}).bookingId):null;
+      if(subj.folioCol==='registration_id'&&subj.bookingType==='room_only'&&subj.rate>0&&_bkOfSubj&&Number(_bkOfSubj.roomRateTotal)>0&&!/cloudbeds/i.test(_bkOfSubj.retreatName||'')){
         const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
         const {error:riErr}=await db.from('folio_items').insert({folio_id:created.id,description:`Room charge — ${subj.room||'Room'}`,qty:nights,unit_price:subj.rate,tax_rate:0,category:'Room'});
         if(riErr)throw riErr;
