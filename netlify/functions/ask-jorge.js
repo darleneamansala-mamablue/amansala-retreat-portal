@@ -131,7 +131,7 @@ exports.handler = async (event) => {
         let out;
         try {
           if (u.name === 'find_guest') out = await findGuest(key, u.input || {});
-          else if (u.name === 'notify_jorge') { if (notified) out = { already: true }; else { notified = await notifyJorge(key, who, page, (u.input || {}).summary); out = notified; } }
+          else if (u.name === 'notify_jorge') { if (notified) out = { already: true }; else { notified = await notifyJorge(key, who, page, (u.input || {}).summary); out = { sentToJorge: !!notified.sent }; } }
           else out = { error: 'unknown tool' };
         } catch (e) { out = { error: e.message }; }
         results.push({ type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out).slice(0, 8000) });
