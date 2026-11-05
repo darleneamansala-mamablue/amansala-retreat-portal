@@ -357,7 +357,10 @@ async function dbRender() {
   const fmtLong = new Date(dbDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   // classify scheduler events
   const buckets = { circle: [], class: [], tour: [], extra: [] };
-  g.events.forEach(ev => { const c = dbClassify(ev); if (buckets[c]) buckets[c].push(ev); });
+  // A retreat's opening circle is listed once, at the orientation time (Darlene 2026-11-05: Katherine McClelland showed at 8:15 AND at 8:30): when the arrival class is itself the opening circle / an orientation,
+  // the separate "Orientation with Amansala" line already covers it, so the arrival-class copy is left out of this page.
+  const ocBks = new Set(g.events.filter(ev => /_opencircle$/.test(String(ev.id || ''))).map(ev => ev.bkId));
+  g.events.forEach(ev => { if (/_arr$/.test(String(ev.id || '')) && ocBks.has(ev.bkId) && /opening\s*circle|orientation/i.test(ev.subtitle || '')) return; const c = dbClassify(ev); if (buckets[c]) buckets[c].push(ev); });
   // Every retreat arriving today has an opening circle (Darlene 2026-11-05: Katherine McClelland and Korina had none). The scheduler only draws one for a retreat whose schedule is confirmed, so a
   // retreat arriving today with none gets one here: 15 minutes before its arrival class, or 8:30 pm after dinner, in Grande, led by Max unless another leader was picked.
   const toMin = t => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + (m || 0); }, fromMin = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
@@ -499,25 +502,7 @@ async function dbRender() {
   const total = sold.reduce((n, x) => n + Number(x.upgrade_total != null ? x.upgrade_total : x.upgrade_pretax || 0), 0);
   const summary = dbRow(`<b>${sold.length}</b> sold${sold.length ? ` for <b style="color:#166534">${money(total)}</b>` : ''} · <b>${answers.declined}</b> declined${declinedNames.length ? ' (' + declinedNames.map(dbEsc).join(', ') + ')' : ''} · <b>${answers.accepted}</b> accepted at check-in · <b>${answers.none}</b> not offered`);
   html += dbCard('Upgrades', summary + (soldRows || freeRows ? soldRows + freeRows : dbNone('No upgrades sold or confirmed for this day.')), sold.length + freeMoves.length);
-  // 8. After-dinner orientations
-  const needOr = g.arrivals.filter(dbIsRetreatStart).map(bk => {   // an extra night before a retreat has no orientation of its own: it is on the retreat's start day
-    const sr = bk.scheduleRequest || {}, o = dbGet('orientation.' + bk.id) || {};
-    const hasWelcome = !!sr.hasArrivalClass && !!sr.arrivalSlot;
-    return { bk, sr, o, hasWelcome, scheduled: !!(o.time && o.location && o.leader) };
-  });
-  const orBody = needOr.length ? needOr.map(x => {
-    const nm = dbEsc(x.bk.leaderName || x.bk.retreatName);
-    if (x.hasWelcome) return dbRow(`<b>${nm}</b> · welcome class at ${dbFmtT(x.sr.arrivalSlot)}. No separate orientation needed.`);
-    if (x.scheduled) return dbRow(`<b>${nm}</b> · after-dinner orientation <b>${dbFmtT(x.o.time)}</b> · ${dbEsc(x.o.location)} · led by <b>${dbEsc(x.o.leader)}</b> <a href="#" onclick="dbEditOrient('${x.bk.id}');return false" style="font-size:12px;margin-left:8px">change</a>`);
-    pend.push('Orientation for ' + (x.bk.leaderName || 'retreat'));
-    return `<div style="padding:10px 14px;border-top:1px solid #f0ebe0;background:#fff7f7"><div style="font-weight:700;color:#991b1b">${nm}: no welcome class and no orientation scheduled. Needs scheduling.</div>
-      <div id="dbOr_${x.bk.id}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
-        <input type="time" id="dbOrT_${x.bk.id}" value="${x.o.time || '20:30'}" style="padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px">
-        <input type="text" id="dbOrL_${x.bk.id}" value="${dbEsc(x.o.location || '')}" placeholder="Location (e.g. Grande shala)" style="padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px;min-width:190px">
-        <select id="dbOrP_${x.bk.id}" style="padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px"><option value="">— who leads it —</option>${[...new Set([...DB_CIRCLE_LEADERS, x.o.leader].filter(Boolean))].map(n => `<option value="${dbEsc(n)}" ${n === x.o.leader ? 'selected' : ''}>${dbEsc(n)}</option>`).join('')}</select>
-        <button onclick="dbSaveOrient('${x.bk.id}')" class="btn btn-primary" style="font-size:12.5px">Schedule it</button></div></div>`;
-  }).join('') : dbNone('No retreat arrives today.');
-  html += dbCard('After-dinner orientations', orBody);
+  // (The separate After-dinner orientations card was removed, Darlene 2026-11-05: orientations are listed once, in the Opening circles / orientations list above.)
   // (The Teacher arrival checklist was removed from the briefing, Darlene 2026-11-04: the Host Checklist is the only checklist.)
   // 10. Attendance
   // Only the host matters here (Darlene 2026-11-04): who is working as the host today, and their hours. The other departments are no longer asked.
