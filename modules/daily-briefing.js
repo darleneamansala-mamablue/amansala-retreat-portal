@@ -141,6 +141,13 @@ function dbActPeople(e) {
   bits.push(signed ? `<b style="color:#7c3aed">${signed} signed up</b>` : (included ? '' : '<span style="color:#9ca3af">nobody signed up yet</span>'));
   return ' <span style="margin-left:6px;font-size:12.5px">· ' + bits.filter(Boolean).join(' · ') + '</span>';
 }
+// The room a transport guest is in, from the room list (matched by name, inside the same booking when the request names one); blank when no registered guest matches
+function dbRoomOf(sub) {
+  const nm = ((sub.firstName || '') + ' ' + (sub.lastName || '')).trim().toLowerCase(); if (!nm) return '';
+  const hit = (AppData.regs || []).find(r => !r.cancelled && (!sub.bookingId || r.bookingId === sub.bookingId) && (r.guests || []).some(g => String(g.name || '').trim().toLowerCase() === nm))
+    || (AppData.regs || []).find(r => !r.cancelled && (r.guests || []).some(g => String(g.name || '').trim().toLowerCase() === nm));
+  return hit && hit.room ? 'Room <b>' + dbEsc(hit.room) + '</b> · ' : '';
+}
 function dbArrNote(b) { const sr = b.scheduleRequest || {}; return dbEsc(String(sr.specialRequests || '').trim()); }
 function dbDepNote(b) {
   const out = [];
@@ -379,17 +386,17 @@ async function dbRender() {
   if (g.departures.length && typeof cbScan === 'function' && typeof cbState !== 'undefined' && typeof cbToday === 'function' && dbDate === cbToday()) {
     const w = cbState.window; cbState.window = 'today'; try { (await cbScan()).forEach(r => { depBal[r.regId] = r; }); } catch (e) {} cbState.window = w;
   }
-  const depIds = new Set(g.departures.map(b => b.id));
-  const depGuests = (AppData.regs || []).filter(r => { const b = (AppData.bookings || []).find(x => x.id === r.bookingId); return b && depIds.has(b.id) && !r.cancelled && String(r.checkOut || b.endDate || '').slice(0, 10) === dbDate; })
+  // Every guest whose own check-out is today, whichever retreat or booking they are on (a guest who shortened or extended a stay leaves on a different day from the retreat: Darlene 2026-11-05)
+  const depGuests = (AppData.regs || []).filter(r => { const b = (AppData.bookings || []).find(x => x.id === r.bookingId); return b && b.status !== 'cancelled' && !(b.flags || []).includes('archived') && !r.cancelled && String(r.checkOut || b.endDate || '').slice(0, 10) === dbDate; })
     .sort((a, b) => (!!a.checkedOutAt - !!b.checkedOutAt) || String(a.room).localeCompare(String(b.room), undefined, { numeric: true }));
   const balPill = r => { if (!r) return ''; const m = typeof cbMoney === 'function' ? cbMoney(Math.abs(r.balance)) : '$' + Math.abs(r.balance).toFixed(2);
     return r.status === 'owes' ? `<b style="color:#b91c1c">Owes ${m}</b>` : r.status === 'zero' ? '<b style="color:#166534">Paid</b>' : r.status === 'credit' ? `<b style="color:#1d4ed8">Credit ${m}</b>` : '<span style="color:#9ca3af">No bill yet</span>'; };
   const depRows = depGuests.map(r => {
     const nm = (r.guests || []).map(x => x.name).filter(Boolean).join(' & ') || 'Guest', out = !!r.checkedOutAt, rec = dbCoLog[r.id];
-    return dbRow(`<span onclick="dbToggleOut('${r.id}')" title="${out ? 'Checked out (click to undo)' : 'Click when checked out'}" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:8px;vertical-align:middle;border:2px solid ${out ? '#15803d' : '#9ca3af'};border-radius:5px;background:${out ? '#15803d' : '#fff'};color:#fff;font-size:14px;font-weight:800;line-height:1">${out ? '✓' : ''}</span>Room <b>${dbEsc(r.room || '—')}</b> · ${dbEsc(nm)} · ${balPill(depBal[r.id])} · ${out ? `<b style="color:#166534">Checked out</b>${rec ? ` <span title="${dbEsc(rec.by)}" style="display:inline-block;background:#dcfce7;color:#166534;border-radius:99px;padding:1px 8px;font-size:11.5px;font-weight:800">${dbEsc(dbInitials(rec.by))}</span>` : ''}` : '<span style="color:#92400e;font-weight:600">Not checked out</span>'}`, !out && depBal[r.id] && depBal[r.id].status === 'owes');
+    return dbRow(`<span onclick="dbToggleOut('${r.id}')" title="${out ? 'Checked out (click to undo)' : 'Click when checked out'}" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:8px;vertical-align:middle;border:2px solid ${out ? '#15803d' : '#9ca3af'};border-radius:5px;background:${out ? '#15803d' : '#fff'};color:#fff;font-size:14px;font-weight:800;line-height:1">${out ? '✓' : ''}</span>Room <b>${dbEsc(r.room || '—')}</b> · ${dbEsc(nm)}${(() => { const bk = (AppData.bookings || []).find(x => x.id === r.bookingId); return bk && !g.departures.some(d => d.id === bk.id) ? ' <span style="color:#0f766e;font-weight:600">· ' + dbEsc(bk.retreatName || bk.leaderName || '') + '</span>' : ''; })()} · ${balPill(depBal[r.id])} · ${out ? `<b style="color:#166534">Checked out</b>${rec ? ` <span title="${dbEsc(rec.by)}" style="display:inline-block;background:#dcfce7;color:#166534;border-radius:99px;padding:1px 8px;font-size:11.5px;font-weight:800">${dbEsc(dbInitials(rec.by))}</span>` : ''}` : '<span style="color:#92400e;font-weight:600">Not checked out</span>'}`, !out && depBal[r.id] && depBal[r.id].status === 'owes');
   }).join('');
   html += dbCard('Departures', (g.departures.length ? g.departures.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${dbDepCount(b)} · checking out today${dbDepNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#991b1b;font-weight:600">' + dbDepNote(b) + '</div>' : ''}`)).join('') + depRows : dbNone('No retreat departures today.')) +
-    depT.map(t => dbRow(`Airport departure <b>${dbFmtT(t.sub.departureTime) || PENDING}</b> · ${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')}${dbRetreatTag(t.sub)} · driver ${dbEsc(t.name)}`)).join(''), g.departures.length + ' retreat' + (g.departures.length === 1 ? '' : 's'));
+    depT.map(t => dbRow(`Airport departure <b>${dbFmtT(t.sub.departureTime) || PENDING}</b> · ${dbRoomOf(t.sub)}${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')}${dbRetreatTag(t.sub)} · driver ${dbEsc(t.name)}`)).join(''), g.departures.length + ' retreat' + (g.departures.length === 1 ? '' : 's'));
   // 5. Classes, opening circles, tours, extra activities
   const evCard = (title, list, empty) => dbCard(title, list.length ? list.map(e => dbRow(evLine(e))).join('') : dbNone(empty), list.length);
   html += evCard('Classes', buckets.class, 'No classes today.') + evCard('Opening circles / orientations', buckets.circle, 'No opening circle today.') + evCard('Tours', buckets.tour, 'No tours today.') + evCard('Extra activities and ceremonies', buckets.extra, 'No extra activities today.');
