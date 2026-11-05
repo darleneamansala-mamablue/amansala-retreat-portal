@@ -93,13 +93,14 @@
         let x;
         if (p.action.client) {
           x = await runClient(p.action);
+          if (!x.ok) fetch('/.netlify/functions/ask-jorge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, clientFailed: { summary: p.summary, message: x.message }, page: page() }) }).catch(() => {});
           if (x.ok) { x.message = '✓ ' + p.summary; fetch('/.netlify/functions/ask-jorge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, logClient: { type: p.action.type, summary: p.summary, bookingId: x.bookingId } }) }).catch(() => {}); }
         } else {
-          const r = await fetch('/.netlify/functions/ask-jorge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, execute: p.action, page: page() }) });
+          const r = await fetch('/.netlify/functions/ask-jorge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, execute: p.action, summary: p.summary, page: page() }) });
           x = await r.json().catch(() => ({}));
         }
         if (x.ok) { done(x.message + ' — refresh the screen to see it.', '#047857'); msgs.push({ role: 'assistant', content: 'Done: ' + p.summary }); }
-        else { done('Not saved: ' + (x.message || x.error || 'error'), '#b91c1c'); msgs.push({ role: 'assistant', content: 'Could not do it: ' + (x.message || '') }); }
+        else { done('Not saved: ' + (x.message || x.error || 'error') + ' — Jorge was told.', '#b91c1c'); msgs.push({ role: 'assistant', content: 'Could not do it: ' + (x.message || '') }); }
       } catch (e) { done('Connection problem — nothing was saved.', '#b91c1c'); }
     };
   }

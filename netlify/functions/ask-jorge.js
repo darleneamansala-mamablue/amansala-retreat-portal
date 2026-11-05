@@ -43,7 +43,10 @@ How to answer:
 - Things you cannot do (refunds, cancelling, deleting, charging a card with Stripe): explain how they do it
   themselves, step by step.
 - If it needs a decision (money, refunds, discounts, comps, who pays) or looks like a system error, call notify_jorge with a
-  clear one-paragraph summary and tell them you sent it to Jorge and he will reply by WhatsApp.
+  request (what they asked) and reason (why it could not be done), and tell them you sent it to Jorge and he will reply.
+- Spa: before booking, look the person up with find_guest for the appointment date. If they are a guest staying in the hotel
+  that day, book it as guestType hotel with their room: it is charged to their room automatically and NO payment link is sent.
+  Payment links are only for people who are not staying in the hotel (guestType offsite).
 - Never invent prices, policies or reservation details.
 
 STAFF GUIDE
@@ -70,8 +73,10 @@ const TOOLS = [
       qty: { type: 'number' }, unitPrice: { type: 'number' }, taxRate: { type: 'number' },
       method: { type: 'string', enum: ['Cash', 'Zelle', 'Venmo', 'Paypal', 'Bank Transfer', 'Clip', 'Expedia Collect'] }, amount: { type: 'number' }, reference: { type: 'string' },
       note: { type: 'string' }, on: { type: 'boolean' } }, required: ['type'] } },
-  { name: 'notify_jorge', description: 'Send this question to Jorge by WhatsApp and email when you cannot solve it or it needs his decision.',
-    input_schema: { type: 'object', properties: { summary: { type: 'string', description: 'What the staff member needs, in Spanish, one short paragraph, with names/rooms/amounts involved' } }, required: ['summary'] } },
+  { name: 'notify_jorge', description: 'Send this to Jorge by WhatsApp and email when you cannot solve it or it needs his decision.',
+    input_schema: { type: 'object', properties: {
+      request: { type: 'string', description: 'What the staff member asked for, in Spanish, with names / rooms / amounts' },
+      reason: { type: 'string', description: 'Why you could not do or answer it, in Spanish (e.g. "es una decisión de dinero", "el asistente no puede hacer reembolsos", "falló: el cuarto está ocupado")' } }, required: ['request', 'reason'] } },
 ];
 
 const H = key => ({ apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' });
@@ -105,8 +110,9 @@ async function findGuest(key, { name = '', room = '', date = '' }) {
   return out.length ? out : { message: `No guest found for ${[name && 'name "' + name + '"', room && 'room ' + room].filter(Boolean).join(' and ')} on ${day}.` };
 }
 
-async function notifyJorge(key, who, page, summary) {
-  const text = String(summary || '').slice(0, 900);
+async function notifyJorge(key, who, page, request, reason) {
+  const req = String(request || '').replace(/\s+/g, ' ').trim().slice(0, 600), why = String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+  const text = `Pidió: ${req}\nNo se pudo porque: ${why}`;
   // keep it
   try {
     const g = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.ask_jorge_questions&select=value`, { headers: H(key) });
@@ -120,13 +126,14 @@ async function notifyJorge(key, who, page, summary) {
     try {
       const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
         method: 'POST', headers: { Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: JORGE_PHONE, template: { name: 'amansala_pregunta_portal', language: { code: 'es_MX' }, components: [{ type: 'body', parameters: [who.name || 'Alguien del staff', text, page || 'Portal'].map(t => ({ type: 'text', text: String(t).replace(/\s*\n\s*/g, ' ').slice(0, 900) })) }] } }),
+        body: JSON.stringify({ to: JORGE_PHONE, template: { name: 'amansala_ask_jorge_v2', language: { code: 'es_MX' }, components: [{ type: 'body', parameters: [who.name || 'Alguien del staff', req || '-', why || '-', page || 'Portal'].map(t => ({ type: 'text', text: String(t).slice(0, 900) })) }] } }),
       });
       const j = await r.json().catch(() => ({})); wa = r.ok && j.accepted !== false ? 'sent' : 'failed';
     } catch (e) { wa = 'failed'; }
   }
-  const mail = await sendMail({ to: 'Jorge@amansala.com', subject: `Ask Jorge — pregunta de ${who.name || 'staff'}`,
-    html: `<p><b>${(who.name || 'Alguien del staff')}</b> preguntó en el portal (${page || 'Portal'}) y el asistente no pudo resolverlo:</p><p style="white-space:pre-wrap">${text.replace(/</g, '&lt;')}</p>` }).catch(() => false);
+  const e = v => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const mail = await sendMail({ to: 'Jorge@amansala.com', subject: `Ask Jorge — ${who.name || 'staff'}: ${req.slice(0, 70)}`,
+    html: `<p style="font-size:16px"><b>Ask Jorge</b></p><p><b>${e(who.name || 'Alguien del staff')}</b> pidió: ${e(req)}</p><p><b>No se pudo porque:</b> ${e(why)}</p><p style="color:#6b7280">Pantalla: ${e(page || 'Portal')}</p>` }).catch(() => false);
   return { sent: wa === 'sent' || mail, whatsapp: wa, email: mail ? 'sent' : 'failed' };
 }
 
@@ -219,6 +226,12 @@ async function checkOtherAction(key, a) {
   if (t === 'spa_booking') {
     const need = ['serviceId', 'date', 'start', 'therapistId', 'firstName', 'lastName', 'email', 'phone', 'guestType'].filter(k => !a[k]);
     if (need.length) return { error: 'Missing: ' + need.join(', ') };
+    // a guest staying in the hotel that day is always charged to the room (no payment link), whatever was asked
+    try {
+      const stays = await findGuest(key, { name: `${a.firstName} ${a.lastName}`, date: a.date });
+      const st = Array.isArray(stays) ? stays.find(x => x.status !== 'checked out') : null;
+      if (st) { a.guestType = 'hotel'; a.roomNumber = st.room; }
+    } catch (e) {}
     if (a.guestType === 'hotel' && !a.roomNumber) return { error: 'For a hotel guest I need their room number.' };
     const [row] = await get('app_store?key=eq.spa_data&select=value');
     const svc = (((row && row.value) || {}).services || []).find(x => x && x.id === a.serviceId && x.active);
@@ -286,6 +299,10 @@ exports.handler = async (event) => {
   const apiKey = process.env.ANTHROPIC_API_KEY, key = process.env.SUPABASE_SERVICE_KEY;
   if (!apiKey || !key) return reply(500, { error: 'The assistant is not configured.' });
   const page = String(b.page || '').slice(0, 60);
+  if (b.clientFailed) {   // a move / new reservation that failed in the person's tab
+    await notifyJorge(key, who, page, `Confirmó una acción: ${String(b.clientFailed.summary || '')}`, `falló — ${String(b.clientFailed.message || '')}`).catch(() => {});
+    return reply(200, { ok: true });
+  }
   if (b.logClient) {   // a move / new reservation done in the person's tab: write it in the activity log
     const x = b.logClient;
     await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, { method: 'POST', headers: { ...H(key), Prefer: 'return=minimal' },
@@ -293,8 +310,11 @@ exports.handler = async (event) => {
     return reply(200, { ok: true });
   }
   if (b.execute) {   // the person pressed Confirm on a proposed action
-    try { return reply(200, await runAction(key, who, b.execute)); }
-    catch (e) { console.error('[ask-jorge] action', e.message); return reply(200, { ok: false, message: 'It could not be saved: ' + e.message }); }
+    let res;
+    try { res = await runAction(key, who, b.execute); }
+    catch (e) { console.error('[ask-jorge] action', e.message); res = { ok: false, message: 'It could not be saved: ' + e.message }; }
+    if (!res.ok) await notifyJorge(key, who, page, `Confirmó una acción: ${String(b.summary || b.execute.type || '')}`, `falló — ${res.message}`).catch(() => {});
+    return reply(200, { ...res, notifiedJorge: !res.ok });
   }
   const history = (Array.isArray(b.messages) ? b.messages : []).slice(-16)
     .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
@@ -331,7 +351,7 @@ exports.handler = async (event) => {
           }
           else if (u.name === 'spa_availability') out = await visitoTool('visito-spa-check-availability', u.input || {});
           else if (u.name === 'propose_action') { const c = await checkAction(key, u.input || {}); if (c.error) out = { error: c.error }; else { proposals.push(c); out = { proposed: true, waitingForTheirConfirmation: true, summary: c.summary }; } }
-          else if (u.name === 'notify_jorge') { if (notified) out = { already: true }; else { notified = await notifyJorge(key, who, page, (u.input || {}).summary); out = { sentToJorge: !!notified.sent }; } }
+          else if (u.name === 'notify_jorge') { if (notified) out = { already: true }; else { notified = await notifyJorge(key, who, page, (u.input || {}).request || (u.input || {}).summary, (u.input || {}).reason); out = { sentToJorge: !!notified.sent }; } }
           else out = { error: 'unknown tool' };
         } catch (e) { out = { error: e.message }; }
         results.push({ type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out).slice(0, 8000) });
