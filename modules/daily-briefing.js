@@ -15,6 +15,8 @@ const DB_KEY = 'daily_briefing', DB_REPORTS = 'daily_reports';
 const DB_TOURS = ['ao1', 'ao2', 'ao3', 'ao6', 'ao7', 'ao16'], DB_CEREMONIES = ['ao4', 'ao5', 'ao9', 'ao10'];
 // The Teacher arrival checklist's "who" and opening-circle-leader dropdowns offer only these people (Darlene 2026-11-04). A name already saved on an item stays so it never disappears.
 const DB_CHECKLIST_WHO = ['Rubi', 'Darlene', 'Jorge', 'Hilario', 'Max', 'Michelle', 'Melissa'];
+// Who can lead an opening circle / orientation (Darlene 2026-11-05): only these four.
+const DB_CIRCLE_LEADERS = ['Max', 'Ryan', 'Darlene', 'Michelle'];
 const DB_DEPTS = ['Housekeeping', 'Cajeras', 'Kitchen', 'Restaurant Captain', 'Front Desk'];
 const DB_CHECKLIST = [
   ['meet', 'Meet the teacher'], ['review', 'Review the schedule and special requests with the teacher'], ['allergies', 'Record allergies'],
@@ -105,7 +107,7 @@ function dbRetreatTag(sub) {
 function dbCircleLeader(b) {
   if (typeof ocLeaderFor !== 'function') return '';
   const cur = ocLeaderFor(b.id);
-  return `<span style="font-size:12px;color:#6b7280;margin-right:6px">Opening circle:</span><select onchange="ocSetLeader('${b.id}',this.value)" style="padding:3px 6px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px;margin-right:10px">${[...new Set([...DB_CHECKLIST_WHO, cur])].map(n => `<option value="${dbEsc(n)}" ${n === cur ? 'selected' : ''}>${dbEsc(n)}</option>`).join('')}</select>`;
+  return `<span style="font-size:12px;color:#6b7280;margin-right:6px">Opening circle:</span><select onchange="ocSetLeader('${b.id}',this.value)" style="padding:3px 6px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px;margin-right:10px">${[...new Set([...DB_CIRCLE_LEADERS, cur])].map(n => `<option value="${dbEsc(n)}" ${n === cur ? 'selected' : ''}>${dbEsc(n)}</option>`).join('')}</select>`;
 }
 const dbInitials = n => { const w = String(n || '').trim().split(/\s+/).filter(Boolean); return (w.length > 1 ? w.map(x => x[0]).join('') : (w[0] || '?').slice(0, 2)).slice(0, 3).toUpperCase(); };
 // Check a guest out from the briefing (same registration update as Reservations), and record WHO did it for the initials.
@@ -369,7 +371,7 @@ async function dbRender() {
       <div id="dbOr_${x.bk.id}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
         <input type="time" id="dbOrT_${x.bk.id}" value="${x.o.time || '20:30'}" style="padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px">
         <input type="text" id="dbOrL_${x.bk.id}" value="${dbEsc(x.o.location || '')}" placeholder="Location (e.g. Grande shala)" style="padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px;min-width:190px">
-        <select id="dbOrP_${x.bk.id}" style="padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px"><option value="">— who leads it —</option>${dbStaff().map(n => `<option value="${dbEsc(n)}" ${n === x.o.leader ? 'selected' : ''}>${dbEsc(n)}</option>`).join('')}</select>
+        <select id="dbOrP_${x.bk.id}" style="padding:6px 8px;border:1.5px solid #d6cfc4;border-radius:7px"><option value="">— who leads it —</option>${[...new Set([...DB_CIRCLE_LEADERS, x.o.leader].filter(Boolean))].map(n => `<option value="${dbEsc(n)}" ${n === x.o.leader ? 'selected' : ''}>${dbEsc(n)}</option>`).join('')}</select>
         <button onclick="dbSaveOrient('${x.bk.id}')" class="btn btn-primary" style="font-size:12.5px">Schedule it</button></div></div>`;
   }).join('') : dbNone('No retreat arrives today.');
   html += dbCard('After-dinner orientations', orBody);
