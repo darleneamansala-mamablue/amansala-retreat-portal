@@ -220,9 +220,10 @@ async function checkOtherAction(key, a) {
     const need = ['serviceId', 'date', 'start', 'therapistId', 'firstName', 'lastName', 'email', 'phone', 'guestType'].filter(k => !a[k]);
     if (need.length) return { error: 'Missing: ' + need.join(', ') };
     if (a.guestType === 'hotel' && !a.roomNumber) return { error: 'For a hotel guest I need their room number.' };
-    const svcs = await visitoTool('visito-spa-list-services', {});
-    const svc = ((svcs && (svcs.services || svcs.data)) || []).find(x => x.id === a.serviceId || x.serviceId === a.serviceId);
-    const sname = svc ? (svc.name || svc.serviceName) : a.serviceId;
+    const [row] = await get('app_store?key=eq.spa_data&select=value');
+    const svc = (((row && row.value) || {}).services || []).find(x => x && x.id === a.serviceId && x.active);
+    if (!svc) return { error: 'That spa service was not found — list the services again.' };
+    const sname = svc.name;
     return { action: { type: t, serviceId: a.serviceId, date: a.date, start: a.start, therapistId: a.therapistId, roomId: a.spaRoomId || null, firstName: a.firstName, lastName: a.lastName, email: a.email, phone: a.phone, guestType: a.guestType, roomNumber: a.roomNumber || null, guestCount: a.guestCount || null },
       summary: `Book ${sname} for ${a.firstName} ${a.lastName} on ${a.date} at ${a.start}${a.guestType === 'hotel' ? ' (room ' + a.roomNumber + ', charged to the room)' : ' (outside guest: payment link by email/WhatsApp)'}` };
   }
@@ -324,7 +325,10 @@ exports.handler = async (event) => {
         try {
           if (u.name === 'find_guest') out = await findGuest(key, u.input || {});
           else if (u.name === 'room_availability') out = await roomAvailability(key, u.input || {});
-          else if (u.name === 'spa_services') out = await visitoTool('visito-spa-list-services', {});
+          else if (u.name === 'spa_services') {
+            const [row] = await (await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_data&select=value`, { headers: H(key) })).json();
+            out = (((row && row.value) || {}).services || []).filter(x => x && x.active).map(x => ({ serviceId: x.id, name: x.name, minutes: x.duration, priceUSD: x.price, group: x.sessionType === 'group', category: x.category }));
+          }
           else if (u.name === 'spa_availability') out = await visitoTool('visito-spa-check-availability', u.input || {});
           else if (u.name === 'propose_action') { const c = await checkAction(key, u.input || {}); if (c.error) out = { error: c.error }; else { proposals.push(c); out = { proposed: true, waitingForTheirConfirmation: true, summary: c.summary }; } }
           else if (u.name === 'notify_jorge') { if (notified) out = { already: true }; else { notified = await notifyJorge(key, who, page, (u.input || {}).summary); out = { sentToJorge: !!notified.sent }; } }
