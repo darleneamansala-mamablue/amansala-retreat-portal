@@ -456,12 +456,8 @@ async function dbRender() {
   const hostIn = (path, val, ph, w) => `<input type="text" value="${dbEsc(val)}" placeholder="${ph}" onchange="dbSet('${path}',this.value);dbRender()" style="padding:6px 10px;border:1.5px solid ${val ? '#d6cfc4' : '#fca5a5'};border-radius:7px;min-width:${w}px">`;
   const fromSched = (!savedWho && autoWho) || (!savedHours && autoHours);
   html += dbCard('Host today', dbRow(`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b style="min-width:70px">Host</b>${hostIn('attendance.Host.present', hostWho, 'Who is the host today', 220)}${hostIn('attendance.Host.hours', hostHours, 'Hours (e.g. 8 am – 4 pm)', 190)}${hostWho && hostHours ? '' : PENDING}</div>` + (fromSched ? '<div style="margin-top:4px;font-size:12px;color:#6b7280">Filled in from the Reception schedule on the Staff Schedules page. Type over it to change today.</div>' : '') + ((savedWho || savedHours) && (autoWho || autoHours) ? `<div style="margin-top:4px;font-size:12px"><a href="#" onclick="dbSet('attendance.Host.present','');dbSet('attendance.Host.hours','');dbRender();return false" style="color:#2d6a6a;font-weight:700">Use the schedule again</a> <span style="color:#6b7280">(the box has typed text that hides it)</span></div>` : '') + (autoNote && !hostWho ? `<div style="margin-top:4px;font-size:12px;color:#92400e">${dbEsc(autoNote)}</div>` : '')));
-  // 11. Staff hours (from the Team Pendings staff records; managers and admins only, nothing invented)
+  // (The Staff hours card and its warnings were removed from the briefing, Darlene 2026-11-05: only the host and the host's hours are needed.)
   let hours = null;
-  if (typeof dbCanSeeHours === 'function' && dbCanSeeHours() && typeof shLoad === 'function') {
-    hours = await shLoad(dbDate);
-    html += dbCard('Staff hours <span style="font-weight:500;color:#6b7280">— scheduled and actual are shown separately</span>', shHtml(hours), hours.ok ? hours.rows.length + ' staff' : 'not connected');
-  }
   html += roomCard;
   // summary strip on top
   const strip = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${[['Arrivals', g.arrivals.length, '#1d4ed8'], ['Departures', g.departures.length, '#475569'], ['Tours', g.tours.filter(t => !t.cancelled).length, '#0d9488'], ['Pending confirmation', [...new Set(pend)].length, pend.length ? '#b45309' : '#166534']].map(([l, n, c]) => `<div style="background:#fff;border:1.5px solid ${c}55;border-radius:10px;padding:8px 16px;min-width:110px"><div style="font-size:22px;font-weight:700;color:${c}">${n}</div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b7280">${l}</div></div>`).join('')}</div>`;
