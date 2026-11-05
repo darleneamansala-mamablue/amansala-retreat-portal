@@ -7,6 +7,8 @@ let actSheetMonday = null;
 let actSheetSignups = {}; // { bookingId: [{firstName,lastName,activities,...}] }
 // A retreat that has ended no longer appears on the sign-up (By Retreat list and Summary); it stays on its last day. (Darlene 2026-10-17)
 const actNotPast = b => String((b && b.endDate) || '9999').slice(0, 10) >= new Date().toISOString().slice(0, 10);
+// An activity is current when its day is today or later (undated ones stay: they are still to be set). Only current activities are listed on the activity pages (Darlene 2026-11-05).
+const actIsCurrent = d => !d || String(d).slice(0, 10) >= new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
 let actOpsData = {}; // { 'aoId|date': {guide, van1, van2, guideConfirmed, driverConfirmed, entranceMXN} }
 let actSummaryFilterBkId = '';
 let actSummaryShowUndated = false;
@@ -292,6 +294,7 @@ function actByRetreatBuildEntries(bkId) {
     // to print as "undefined" or a raw code like "ao12" (Darlene 2026-09-26) —
     // or for a tour on the arrival/departure day (activity-rules.js).
     if (a.aoId==='undefined' || !aoMap[a.aoId] || ACT_SHEET_HIDDEN.has(a.aoId)) return false;
+    if (!actIsCurrent(a.date)) return false;
     if (typeof tourDateAllowed==='function' && a.date && !tourDateAllowed(bk,a.date.slice(0,10))) return false;
     const key = a.aoId+'|'+(a.date||'');
     if (seen.has(key)) return false;
@@ -606,7 +609,7 @@ function actSheetRenderSummary() {
     // Existing scheduled activities
     (bk.retreatActivities||[]).forEach(act=>{
       if (ACT_SHEET_HIDDEN.has(act.aoId)) return;
-      if (act.date && String(act.date).slice(0,10) < new Date(Date.now()-5*3600000).toISOString().slice(0,10)) return;   // an activity whose day has passed is not on the Sign-Up Summary (Darlene 2026-11-05, a Group Salsa Class on Oct 14)
+      if (!actIsCurrent(act.date)) return;   // an activity whose day has passed is not on the Sign-Up Summary (Darlene 2026-11-05, a Group Salsa Class on Oct 14)
       const ao = aoMap[act.aoId]||{name:act.aoId,price:0,dur:0};
       const key = act.aoId+'|'+(act.date||'');
       const signedUp = sups.filter(s=>(s.activities||[]).includes(act.aoId))
