@@ -26,11 +26,11 @@ function toE164(p) {
 }
 const fmtTime = t => { const [h, m] = String(t || '00:00').split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 
-async function sendWhatsApp(to, vars, idem, template) {
+async function sendWhatsApp(to, vars, idem, template, lang) {
   const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(process.env.VISITO_WA_CHANNEL_ID)}/send`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.VISITO_M2M_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': idem },
-    body: JSON.stringify({ to, template: { name: template, language: { code: process.env.VISITO_SPA_ALERT_TEMPLATE_LANG || 'en_US' }, components: [{ type: 'body', parameters: vars.map(text => ({ type: 'text', text })) }] } }),
+    body: JSON.stringify({ to, template: { name: template, language: { code: lang || process.env.VISITO_SPA_ALERT_TEMPLATE_LANG || 'en_US' }, components: [{ type: 'body', parameters: vars.map(text => ({ type: 'text', text })) }] } }),
   });
   const j = await r.json().catch(() => ({}));
   return r.ok && j.accepted !== false ? { ok: true } : { ok: false, reason: `${r.status} ${JSON.stringify(j).slice(0, 120)}` };
@@ -50,6 +50,11 @@ async function sendSms(to, body) {
   return r.ok ? { ok: true, sid: j.sid } : { ok: false, reason: j.message || 'twilio_error' };
 }
 
+// Spanish, for the staff messages (Jorge 2026-11-05): "viernes 6 de noviembre"; and who the client is: hotel guest + room, or Offsite
+const esDate = day => new Date(day + 'T12:00:00Z').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+const guestLabel = a => a && a.guestType === 'hotel' ? `Huésped, cuarto ${a.roomNumber || a.guestRoom || '?'}` : 'Offsite';
+// front desk of the spa: last-minute bookings go to them (app_store 'spa_desk_alert_numbers' can replace this list)
+const DESK_DEFAULT = [{ name: 'Rubi', phone: '+529841168801' }, { name: 'Kike', phone: '+529842391572' }, { name: 'Rosi', phone: '+529841367205' }];
 const waReady = template => !!(template && process.env.VISITO_M2M_KEY && process.env.VISITO_WA_CHANNEL_ID);
 
-module.exports = { SUPABASE_URL, TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady };
+module.exports = { SUPABASE_URL, TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady, esDate, guestLabel, DESK_DEFAULT };

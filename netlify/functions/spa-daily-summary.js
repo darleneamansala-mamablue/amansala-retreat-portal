@@ -1,12 +1,14 @@
 'use strict';
 
-// Runs at 8:30 PM Tulum (01:30 UTC). Texts each therapist their booked services for TOMORROW:
+// Runs at 8:00 PM Tulum (01:00 UTC; Jorge 2026-11-05). Sends each therapist, one message each, their booked services for TOMORROW:
+// time, service and duration, client, hotel guest + room or Offsite -- WhatsApp template spa_resumen_terapeuta (Spanish).
+// Before: 8:30 PM, English, only for the therapists in onlyTherapists.
 // time, type of service, client name. Uses the same spa_text_alerts_config (enabled, onlyTherapists) as spa-text-alerts.js.
 // WhatsApp template (VISITO_SPA_SUMMARY_TEMPLATE) takes 3 variables: {{1}} first name, {{2}} date, {{3}} the list (WhatsApp variables
 // can't hold line breaks, so the list is joined with "   •   "). Falls back to Twilio SMS (with line breaks) when no template is set.
 // Sent once per therapist per day (spa_text_alerts_sent key "summary|date|therapistId").
 
-const { TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady } = require('./spa-alert-lib');
+const { TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady, esDate, guestLabel } = require('./spa-alert-lib');
 
 const tulumDate = (offsetDays = 0) => new Date(Date.now() + offsetDays * 86400000).toLocaleDateString('en-CA', { timeZone: TZ });
 
@@ -20,7 +22,7 @@ exports.handler = async () => {
   const services = (spa && spa.services) || [], therapists = (spa && spa.therapists) || [];
   const only = Array.isArray(cfg.onlyTherapists) && cfg.onlyTherapists.length ? cfg.onlyTherapists.map(s => s.toLowerCase()) : null;
   const day = tulumDate(1);
-  const pretty = new Date(day + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const pretty = esDate(day);
   let texted = 0;
   for (const t of therapists) {
     const sk = `summary|${day}|${t.id}`;
@@ -28,11 +30,11 @@ exports.handler = async () => {
     if (only && !only.includes(String(t.firstName || '').toLowerCase())) continue;
     const mine = (appts || []).filter(a => a && a.therapistId === t.id && a.date === day && a.status !== 'CANCELLED' && a.status !== 'NO_SHOW').sort((x, y) => String(x.start).localeCompare(String(y.start)));
     if (!mine.length) continue;
-    const lines = mine.map(a => { const sv = services.find(s => s.id === a.serviceId) || {}; return `${fmtTime(a.start)} | ${sv.name || 'Service'}${sv.duration ? ' ' + sv.duration + ' min' : ''} | ${a.clientName || 'Guest'}`; });
-    const template = process.env.VISITO_SPA_SUMMARY_TEMPLATE;
+    const lines = mine.map(a => { const sv = services.find(s => s.id === a.serviceId) || {}; return `${fmtTime(a.start)} · ${sv.name || 'Servicio'}${sv.duration || a.duration ? ' (' + (sv.duration || a.duration) + ' min)' : ''} · ${a.clientName || 'Cliente'} · ${guestLabel(a)}`; });
+    const template = process.env.VISITO_SPA_SUMMARY_TEMPLATE_ES || 'spa_resumen_terapeuta';
     const res = waReady(template)
-      ? await sendWhatsApp(toE164(t.phone), [t.firstName || 'there', pretty, lines.join('   •   ')], `spa-sum-${day}-${t.id}`, template)
-      : await sendSms(toE164(t.phone), `Hi ${t.firstName || 'there'}, your services booked for tomorrow, ${pretty}, are:\n${lines.join('\n')}\nPlease confirm all your services through the portal: https://amansalaportal.com/booking-hub.html?mode=confirm\nIf you can't provide any of them, contact the Spa Concierge so we can arrange coverage.`);
+      ? await sendWhatsApp(toE164(t.phone), [t.firstName || 'equipo', pretty, lines.join('   •   ')], `spa-sum-${day}-${t.id}`, template, 'es_MX')
+      : await sendSms(toE164(t.phone), `Hola ${t.firstName || ''}, tus servicios de spa para mañana, ${pretty}:\n${lines.join('\n')}`);
     if (res.ok) { sent[sk] = new Date().toISOString(); texted++; } else if (res.reason !== 'twilio_not_configured') sent[sk] = 'failed: ' + res.reason;
   }
   await supa(key, 'app_store', 'POST', { key: 'spa_text_alerts_sent', value: sent });

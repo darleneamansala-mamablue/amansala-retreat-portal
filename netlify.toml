@@ -88,9 +88,9 @@
 [functions."spa-text-alerts"]
   schedule = "*/5 * * * *"
 
-# 8:30 PM Tulum (01:30 UTC): texts each therapist tomorrow's services. Same on/off setting as spa-text-alerts.
+# 8:00 PM Tulum (01:00 UTC): each therapist gets tomorrow's services (WhatsApp spa_resumen_terapeuta). Same on/off setting as spa-text-alerts.
 [functions."spa-daily-summary"]
-  schedule = "30 1 * * *"
+  schedule = "0 1 * * *"
 
 # Reading a staff schedule from a photo (Claude) takes 10-20 s: more than the 10 s default
 [functions."staff-schedule-photo"]

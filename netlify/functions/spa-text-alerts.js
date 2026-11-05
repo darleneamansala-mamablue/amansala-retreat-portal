@@ -12,7 +12,7 @@
 // first run only records what exists. WhatsApp template for that: VISITO_SPA_CANCEL_TEMPLATE (same 3 variables).
 //   spa_text_alerts_config: { enabled, notifyAllBookings (true = text every new booking, not only last-minute), enabledAt, onlyTherapists: ['Rubi Test'] (optional test list), lastMinuteHours }
 
-const { TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady } = require('./spa-alert-lib');
+const { TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady, esDate, guestLabel, DESK_DEFAULT } = require('./spa-alert-lib');
 
 exports.handler = async () => {
   const key = process.env.SUPABASE_SERVICE_KEY;
@@ -33,6 +33,16 @@ exports.handler = async () => {
     const sameDay = a.date === new Date(created - 5 * 3600000).toISOString().slice(0, 10); // booked today for today (Tulum)
     if ((!cfg.notifyAllBookings && !sameDay && (start - created) / 3600000 >= hours) || start < Date.now()) continue;
     const t = therapists.find(x => x.id === a.therapistId);
+    // Jorge 2026-11-05: every last-minute booking also goes to the spa front desk (Rubi, Kike, Rosi), formal, in Spanish, so they
+    // decide whether it stays with that therapist or is moved -- once per booking, whoever the therapist is
+    if (!sent['desk|' + a.id]) {
+      const deskRaw = await getKey(key, 'spa_desk_alert_numbers'), desk = Array.isArray(deskRaw) && deskRaw.length ? deskRaw : DESK_DEFAULT;
+      const sv = services.find(s => s.id === a.serviceId) || {};
+      const vars = [esDate(a.date), fmtTime(a.start), `${sv.name || 'Servicio'}${sv.duration || a.duration ? ' (' + (sv.duration || a.duration) + ' min)' : ''}`, a.clientName || 'Cliente', guestLabel(a), t ? `${t.firstName || ''} ${t.lastName || ''}`.trim() : 'Sin asignar'];
+      let okAny = false;
+      for (const d of desk) { const r = await sendWhatsApp(toE164(d.phone), vars, `spa-desk-${a.id}-${String(d.phone).replace(/\D/g, '')}`, 'spa_reserva_ultimo_minuto', 'es_MX'); if (r.ok) okAny = true; else console.error('[spa-text-alerts] desk', d.name, r.reason); }
+      if (okAny) sent['desk|' + a.id] = new Date().toISOString();
+    }
     if (!t || !t.phone) { skipped++; continue; }
     if (only && !only.includes(String(t.firstName || '').toLowerCase())) continue;
     const svc = (services.find(s => s.id === a.serviceId) || {}).name || 'Service';
