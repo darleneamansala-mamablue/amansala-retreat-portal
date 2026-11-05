@@ -213,20 +213,21 @@ async function _resAttachFolioBalances(rows){
     if(iErr)throw iErr;
     const totalByFolio={};
     (items||[]).forEach(i=>{totalByFolio[i.folio_id]=(totalByFolio[i.folio_id]||0)+Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100);});
-    const balanceByKey={};
-    folios.forEach(f=>{
-      const key=`${f.registration_id||''}:${f.booking_request_id||''}:${f.guest_name}`;
-      balanceByKey[key]=(balanceByKey[key]||0)+(totalByFolio[f.id]||0);
-    });
+    // Every folio of the guest's room counts, not only the one filed under their exact name -- same rule as Booking
+    // Detail's folio list: a second folio (renamed, moved with Transfer Folio, a name written another way) is still theirs
+    // unless it is filed under ANOTHER guest of that room (Jorge 2026-11-05: Departures showed one folio's balance only).
+    // A merged row (2+ names sharing one single-bed room) sums every sharing guest's own folio.
+    const _n=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
     rows.forEach(r=>{
-      // A merged row (2+ names sharing one single-bed room) sums every
-      // sharing guest's own folio -- each still has their own separate one.
-      const names=r.type==='group'?(r.guestNames||[r.name]):[r.name];
+      const isReg=r.type==='group', anchorId=isReg?_resFolioAnchorId(r.id):r.id;
+      const mine=new Set((isReg?(r.guestNames||[r.name]):[r.name]).map(_n));
+      const reg=isReg?AppData.regs.find(x=>x.id===anchorId):null;
+      const others=new Set(((reg&&reg.guests)||[]).map(g=>_n(g&&g.name)).filter(x=>x&&!mine.has(x)));
       let sum=null;
-      const anchorId=r.type==='group'?_resFolioAnchorId(r.id):r.id;
-      names.forEach(n=>{
-        const key=r.type==='group'?`${anchorId}::${n}`:`:${anchorId}:${n}`;
-        if(balanceByKey[key]!=null)sum=(sum||0)+balanceByKey[key];
+      folios.forEach(f=>{
+        if((isReg?f.registration_id:f.booking_request_id)!==anchorId)return;
+        if(others.has(_n(f.guest_name)))return;
+        sum=(sum||0)+(totalByFolio[f.id]||0);
       });
       if(sum!=null)r.balance=+sum.toFixed(2);
     });
