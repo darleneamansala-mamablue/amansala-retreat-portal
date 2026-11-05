@@ -166,7 +166,18 @@ function dbTaskRow(t) {
       <input type="checkbox" ${done ? 'checked' : ''} ${t.auto ? 'disabled' : ''} onchange="dbSet('tasks.${t.id}.done',this.checked);dbRender()"> ${dbEsc(t.text)}${t.auto && t.auto.note ? ' — ' + dbEsc(t.auto.note) : ''}</label>
     ${done ? (assignee ? `<span style="font-size:12px;color:#166534">${dbEsc(assignee)}</span>` : '') : dbAssign(t.id)}</div>`;
 }
-const dbCard = (title, inner, count) => `<div style="background:#fff;border-radius:10px;margin-bottom:14px;overflow:hidden;border:1px solid #e8dfd4"><div style="padding:9px 14px;background:#f5f1eb;font-weight:700;font-size:13.5px;display:flex;justify-content:space-between;gap:10px">${title}${count != null ? `<span style="font-weight:600;color:#6b7280">${count}</span>` : ''}</div>${inner}</div>`;
+// Every card folds up when you click its title, and stays folded (per device) until you open it again (Darlene 2026-11-04).
+const DB_FOLD = 'db_folded_cards';
+const dbFolded = () => { try { return JSON.parse(localStorage.getItem(DB_FOLD) || '[]'); } catch (e) { return []; } };
+function dbToggleCard(h) {
+  const key = h.getAttribute('data-key'), body = h.nextElementSibling, open = body.style.display === 'none';
+  body.style.display = open ? '' : 'none'; h.querySelector('.db-chev').textContent = open ? '▾' : '▸';
+  try { const f = dbFolded().filter(k => k !== key); if (!open) f.push(key); localStorage.setItem(DB_FOLD, JSON.stringify(f)); } catch (e) {}
+}
+const dbCard = (title, inner, count) => {
+  const key = String(title).replace(/<[^>]*>/g, '').split(' —')[0].trim(), shut = dbFolded().includes(key);
+  return `<div style="background:#fff;border-radius:10px;margin-bottom:14px;overflow:hidden;border:1px solid #e8dfd4"><div data-key="${dbEsc(key)}" onclick="dbToggleCard(this)" title="Click to fold or open" style="cursor:pointer;user-select:none;padding:9px 14px;background:#f5f1eb;font-weight:700;font-size:13.5px;display:flex;justify-content:space-between;gap:10px"><span><span class="db-chev" style="display:inline-block;width:16px;color:#6b7280">${shut ? '▸' : '▾'}</span>${title}</span>${count != null ? `<span style="font-weight:600;color:#6b7280">${count}</span>` : ''}</div><div${shut ? ' style="display:none"' : ''}>${inner}</div></div>`;
+};
 const dbRow = (inner, bad) => `<div style="padding:8px 14px;border-top:1px solid #f0ebe0;font-size:13.5px;${bad ? 'background:#fff7f7' : ''}">${inner}</div>`;
 const dbNone = t => `<div style="padding:12px 14px;color:#9ca3af;font-size:13px">${t}</div>`;
 
