@@ -66,6 +66,13 @@ function dbSet(path, val) {          // path like 'tasks.snack:ao6.done'
 function dbGet(path) { let o = dbDay(); for (const p of path.split('.')) { if (o == null) return undefined; o = o[p]; } return o; }
 
 // Arrival: the retreat's own special requests. Departure: a large pending balance, or a late check-out request (found in the booking / teacher notes).
+// A box with a tick once guests are marked as arrived (checked in on Reservations / the booking screen / the Transport log); it fills as more of the group arrives.
+function dbArrivedBox(b) {
+  const regs = (AppData.regs || []).filter(r => r.bookingId === b.id && !r.cancelled), n = regs.length, k = regs.filter(r => r.checkedInAt).length;
+  if (!n) return '';
+  const all = k === n, some = k > 0;
+  return `<span title="${k} of ${n} marked as arrived" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:8px;vertical-align:middle;border:2px solid ${all ? '#15803d' : some ? '#d97706' : '#9ca3af'};border-radius:5px;background:${all ? '#15803d' : '#fff'};color:#fff;font-size:14px;font-weight:800;line-height:1">${all ? '✓' : ''}</span><span style="font-size:12px;font-weight:700;margin-right:8px;color:${all ? '#15803d' : some ? '#b45309' : '#6b7280'}">${all ? 'Arrived' : k + ' of ' + n + ' arrived'}</span>`;
+}
 function dbArrNote(b) { const sr = b.scheduleRequest || {}; return dbEsc(String(sr.specialRequests || '').trim()); }
 function dbDepNote(b) {
   const out = [];
@@ -229,7 +236,7 @@ async function dbRender() {
   else if (dbTab === 'notes') html += dbCard('Special notes', notesRows || dbNone('No special notes today.'));
   else html += dbCard('Daily flow <span style="font-weight:500;color:#6b7280">— classes, circles, tours and activities together, in time order</span>', dayAll.length ? glanceRows(dayAll) : dbNone('Nothing scheduled today.'), dayAll.length);
   // 1. Arrivals
-  const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}${dbArrNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#374151"><b>Special notes:</b> ' + dbArrNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat arrivals today.');
+  const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`${dbArrivedBox(b)}<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}${dbArrNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#374151"><b>Special notes:</b> ' + dbArrNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat arrivals today.');
   html += dbCard('Arrivals', arrBody + (g.hkOk ? dbRow(`${g.rooms.length} room${g.rooms.length === 1 ? '' : 's'} arriving today (all guests)`) : ''), g.arrivals.length + ' retreat' + (g.arrivals.length === 1 ? '' : 's'));
   // 2. Room readiness & A/C
   let rr;
