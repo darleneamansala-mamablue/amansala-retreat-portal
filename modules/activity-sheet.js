@@ -606,6 +606,7 @@ function actSheetRenderSummary() {
     // Existing scheduled activities
     (bk.retreatActivities||[]).forEach(act=>{
       if (ACT_SHEET_HIDDEN.has(act.aoId)) return;
+      if (act.date && String(act.date).slice(0,10) < new Date(Date.now()-5*3600000).toISOString().slice(0,10)) return;   // an activity whose day has passed is not on the Sign-Up Summary (Darlene 2026-11-05, a Group Salsa Class on Oct 14)
       const ao = aoMap[act.aoId]||{name:act.aoId,price:0,dur:0};
       const key = act.aoId+'|'+(act.date||'');
       const signedUp = sups.filter(s=>(s.activities||[]).includes(act.aoId))
