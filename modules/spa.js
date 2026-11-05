@@ -87,6 +87,7 @@ async function spaLoad() {
         rooms: SPA_DEFAULT_ROOMS.map(name => ({ id: spaNewId('rm'), name, location: '' })),
         therapists: [],
       };
+      SpaData._seededDefaults = true;   // spaSave never merges these into real settings (see there)
       // NOT saved here (Darlene 2026-11-05): an empty read (expired login, dropped connection) used to land here and the defaults, with no therapists, were written over the real
       // spa settings. The defaults now stay in this tab until somebody really edits something, and spaSave then merges with what is on the server.
     }
@@ -110,6 +111,18 @@ async function spaSave(opts) {
     // instead of being overwritten by this tab's stale copy of it.
     const { data } = await db.from('app_store').select('value').eq('key', 'spa_data').maybeSingle();
     const serverVal = (data && data.value) || {};
+    // This tab started from the built-in defaults (its first read came back empty) but the server HAS settings: merging
+    // would add the default services and rooms again under new ids -- the repeated "Spa Room 1-6" / "60 Minute Massage"
+    // sets of Oct 25, Oct 30, Nov 1 and Nov 2 (Jorge 2026-11-05). Take the server's settings instead and ask to redo it.
+    if (SpaData._seededDefaults) {
+      if ((serverVal.services || []).length) {
+        SpaData = serverVal;
+        if (typeof showToast === 'function') showToast('Spa settings were reloaded from the server — please make that change again.');
+        try { if (typeof spaRender === 'function') spaRender(); } catch (e) {}
+        return;
+      }
+      delete SpaData._seededDefaults;   // the server really is empty: a first setup, save as usual
+    }
     const mergeById = (serverList, clientList) => {
       const byId = {};
       (serverList || []).forEach(x => { byId[x.id] = x; });
