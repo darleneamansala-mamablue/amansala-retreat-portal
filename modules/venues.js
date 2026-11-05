@@ -1148,6 +1148,30 @@ async function _rmSyncReservationCommission(bookingId,roomRateTotal){
     await db.from('commissions').update({upgrade_pretax:roomRateTotal,upgrade_total:total,commission_amount:commissionAmount}).eq('id',existing.id);
   }catch(e){console.warn('[commission] reservation sync failed:',e.message);}
 }
+async function rmPushNewToCloudbeds(bkId,room,start,end,o){
+  try{
+    await Promise.resolve(typeof _saveAllBusy!=='undefined'?_saveAllBusy:null).catch(()=>{});
+    const r=await fetch(`${CLOUDBEDS_PROXY}?action=createReservation`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      roomName:room,startDate:start,endDate:end,groupName:o.type||'',leaderName:o.leader,guestFullName:o.leader,guestEmail:o.leaderEmail||'',guestPhone:o.leaderPhone||'',
+      adults:o.adults||1,dailyRate:o.rate||0,bookingId:bkId})});
+    const d=await r.json().catch(()=>({}));
+    const bk=AppData.bookings.find(b=>b.id===bkId);
+    if(d&&d.reservationId&&bk){
+      bk.cbReservationIds={...(bk.cbReservationIds||{}),[room]:String(d.reservationId)};
+      if(d.guestId)bk.cbGuestIds={...(bk.cbGuestIds||{}),[room]:d.guestId};
+      await db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds,cb_guest_ids:bk.cbGuestIds||{}}).eq('id',bkId);
+      logActivity('Cloudbeds reservation created',`${o.leader} · ${room} · ${fmtDate(start)} – ${fmtDate(end)} (#${d.reservationId})`,bkId);
+      showToast(`Also created in Cloudbeds ✓ (${room})`);
+    }else{
+      const why=d&&d.reason==='not_available'?'the room is taken in Cloudbeds for those dates':(d&&(d.error||d.reason))||'no answer';
+      logActivity('Cloudbeds reservation NOT created',`${o.leader} · ${room} · ${fmtDate(start)} – ${fmtDate(end)}: ${why}`,bkId);
+      showToast(`⚠ Not created in Cloudbeds (${room}): ${why}. Use "Sync Cloudbeds" in the reservation.`);
+    }
+  }catch(e){
+    try{logActivity('Cloudbeds reservation NOT created',`${o.leader} · ${room}: ${e.message}`,bkId);}catch(_){}
+    showToast('⚠ Not created in Cloudbeds: '+e.message);
+  }
+}
 function rmSaveNewBooking(){
   const room=_rmRoom,rtId=_rmRtId;
   const start=document.getElementById('rm-start').value,end=document.getElementById('rm-end').value;
@@ -1204,6 +1228,10 @@ function rmSaveNewBooking(){
   AppData.regs.push({id:uid(),bookingId:newId,room,roomTypeId:rtId,guests:[{name:leader,email:leaderEmail||'',phone:leaderPhone||'',notes:''}],charges:[],notes:''});
   saveAll();rmClose();venBuild();rcBuild();
   logActivity('Room-only booking created',`${leader} · ${room} · ${type} · ${fmtDate(start)} – ${fmtDate(end)}${rate?' · '+fmt$(rate)+'/night':''}`,newId);
+  // Jorge 2026-11-05 (Maria Mattsson, rooms 20 + GV13): a reservation made here was never sent to Cloudbeds -- only a later
+  // "Sync Cloudbeds" click in Booking Detail did it -- so Cloudbeds still sold those rooms. Created there right away and
+  // linked; if Cloudbeds refuses (room taken there), the team is told and it is logged.
+  rmPushNewToCloudbeds(newId,room,start,end,{type,leader,leaderEmail,leaderPhone,adults,rate});
   // Guest confirmation (email + WhatsApp) — same message Escape/Lana guests
   // get, since a staff-created Rooms reservation is just a third way the
   // same reservation comes in (Jorge's ask 2026-10-05). Fire-and-forget,
