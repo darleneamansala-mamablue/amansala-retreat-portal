@@ -21,7 +21,7 @@ const DB_CHECKLIST = [
   ['tip', 'Give the tip envelope'], ['sound', 'Do the sound check'], ['room', 'Check the room together'],
   ['departure', 'Confirm departure details'], ['spa', 'Explain the complimentary spa service'], ['circle', 'Assign the opening-circle leader'],
 ];
-let dbTab = 'flow';
+let dbTab = 'flow', dbCoLog = {};
 const DB_BALANCE_FLAG = 500;       // a pending balance over this (USD) is flagged on the departure line
 const DB_LATE_CO = /late\s*check[\s-]*out|check[\s-]*out\s*late|stay\s*(?:until|till)\s*\d/i;
 let dbDate = null, dbData = {}, dbReports = {}, dbLoaded = false, dbCtx = null;
@@ -51,6 +51,7 @@ const PENDING = '<span style="background:#fef3c7;color:#92400e;border:1px solid 
 async function dbLoad() {
   try {
     const { data } = await db.from('app_store').select('value').eq('key', DB_KEY).maybeSingle(); if (data && data.value) dbData = data.value;
+    try { const c = await db.from('app_store').select('value').eq('key', 'checkout_log').maybeSingle(); if (c.data && c.data.value) dbCoLog = c.data.value; } catch (e) {}
     const r = await db.from('app_store').select('value').eq('key', DB_REPORTS).maybeSingle(); if (r.data && r.data.value) dbReports = r.data.value;
   } catch (e) {}
   dbLoaded = true;
@@ -99,6 +100,25 @@ function dbDepCount(b) {
 function dbRetreatTag(sub) {
   const bk = (AppData.bookings || []).find(x => x.id === sub.bookingId); if (!bk) return '';
   const nm = bk.retreatName || bk.leaderName; return nm ? ` <span style="color:#0f766e;font-weight:600">· ${dbEsc(nm)}</span>` : '';
+}
+// Opening circle leader (Max unless someone else is picked here); saved per retreat by opening-circle-leader.js and read by the Calendar.
+function dbCircleLeader(b) {
+  if (typeof ocLeaderFor !== 'function') return '';
+  const cur = ocLeaderFor(b.id);
+  return `<span style="font-size:12px;color:#6b7280;margin-right:6px">Opening circle:</span><select onchange="ocSetLeader('${b.id}',this.value)" style="padding:3px 6px;border:1.5px solid #d6cfc4;border-radius:7px;font-size:12.5px;margin-right:10px">${[...new Set([...DB_CHECKLIST_WHO, cur])].map(n => `<option value="${dbEsc(n)}" ${n === cur ? 'selected' : ''}>${dbEsc(n)}</option>`).join('')}</select>`;
+}
+const dbInitials = n => { const w = String(n || '').trim().split(/\s+/).filter(Boolean); return (w.length > 1 ? w.map(x => x[0]).join('') : (w[0] || '?').slice(0, 2)).slice(0, 3).toUpperCase(); };
+// Check a guest out from the briefing (same registration update as Reservations), and record WHO did it for the initials.
+async function dbToggleOut(regId) {
+  const reg = (AppData.regs || []).find(r => r.id === regId); if (!reg) return;
+  if (reg.checkedOutAt && !confirm('Undo this check-out?')) return;
+  const now = reg.checkedOutAt ? null : new Date().toISOString();
+  const { error } = await db.from('registrations').update({ checked_out_at: now }).eq('id', regId);
+  if (error) { showToast('Error: ' + error.message); return; }
+  reg.checkedOutAt = now;
+  try { const { data } = await db.from('app_store').select('value').eq('key', 'checkout_log').maybeSingle(); const all = Object.assign({}, (data && data.value) || {}); if (now) all[regId] = { by: dbWho(), at: now }; else delete all[regId]; await db.from('app_store').upsert({ key: 'checkout_log', value: all, updated_at: now || new Date().toISOString() }); dbCoLog = all; } catch (e) {}
+  try { if (typeof _resLogStay === 'function') _resLogStay(now ? 'Checked out' : 'Check-out undone', 'group', regId); } catch (e) {}
+  showToast(now ? 'Checked out ✓' : 'Check-out removed'); dbRender();
 }
 function dbArrNote(b) { const sr = b.scheduleRequest || {}; return dbEsc(String(sr.specialRequests || '').trim()); }
 function dbDepNote(b) {
@@ -156,7 +176,7 @@ async function dbGather(date) {
 }
 function dbClassify(ev) {
   const id = String(ev.id || '');
-  if (/_opencircle$/.test(id)) return 'circle';
+  if (/_opencircle$/.test(id) || (/_arr$/.test(id) && /opening circle/i.test(ev.subtitle || ''))) return 'circle';
   if (/_prepaid_opt_/.test(id) || /_opt_/.test(id)) return 'skip';              // duplicate "optional" columns of the same activity
   const m = /_ao_(ao\d+)/.exec(id);
   if (m) return DB_TOURS.includes(m[1]) ? 'tour' : 'extra';
@@ -274,7 +294,7 @@ async function dbRender() {
   else if (dbTab === 'notes') html += dbCard('Special notes', notesRows || dbNone('No special notes today.'));
   else html += dbCard('Daily flow <span style="font-weight:500;color:#6b7280">— classes, circles, tours and activities together, in time order</span>', dayAll.length ? glanceRows(dayAll) : dbNone('Nothing scheduled today.'), dayAll.length);
   // 1. Arrivals
-  const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`${dbArrivedBox(b)}<b>${dbEsc(b.leaderName || b.retreatName)}</b>${b.retreatName && b.retreatName !== b.leaderName ? ' <span style="color:#0f766e;font-weight:600">(' + dbEsc(b.retreatName) + ')</span>' : ''} · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}${dbArrNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#374151"><b>Special notes:</b> ' + dbArrNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat arrivals today.');
+  const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`${dbArrivedBox(b)}${dbCircleLeader(b)}<b>${dbEsc(b.leaderName || b.retreatName)}</b>${b.retreatName && b.retreatName !== b.leaderName ? ' <span style="color:#0f766e;font-weight:600">(' + dbEsc(b.retreatName) + ')</span>' : ''} · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}${dbArrNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#374151"><b>Special notes:</b> ' + dbArrNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat arrivals today.');
   html += dbCard('Arrivals', arrBody + (g.hkOk ? dbRow(`${g.rooms.length} room${g.rooms.length === 1 ? '' : 's'} arriving today (all guests)`) : ''), g.arrivals.length + ' retreat' + (g.arrivals.length === 1 ? '' : 's'));
   // 2. Room readiness & A/C
   let rr;
@@ -292,16 +312,26 @@ async function dbRender() {
   const arrT = g.transport.filter(t => t.kind === 'arrival').sort((a, b) => String(a.sub.arrivalTime).localeCompare(String(b.sub.arrivalTime)));
   const sal = arrT.filter(t => /salamon/i.test(t.name)), oth = arrT.filter(t => !/salamon/i.test(t.name));
   const tLine = t => {
-    const s = t.sub, st = t.rec ? t.rec.status : 'pending', last = t.rec && t.rec.history && t.rec.history.length ? t.rec.history[t.rec.history.length - 1] : null;
-    const missing = !s.flightNumber || !s.arrivalTime;
-    if (missing) pend.push('Flight details: ' + ((typeof trTransportFullName === 'function' ? trTransportFullName(s) : '') || 'guest'));
-    const here = dbSubArrived(s);
-    return dbRow(`${dbTick(here)}<b>${dbFmtT(s.arrivalTime) || PENDING}</b> · ${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(s) : '') || 'Guest')}${dbRetreatTag(s)} · ${s.flightNumber ? 'Flight ' + dbEsc(s.flightNumber) : PENDING + ' flight'} · ${dbEsc(s.arrivalAirport || '')} · driver <b>${dbEsc(t.name)}</b> · <span style="color:${here ? '#166534' : '#92400e'};font-weight:700">${here ? 'Arrived' : 'Pending to arrive'}</span>${last ? ` · <span style="color:#6b7280">last update: ${dbEsc(last.event)}${last.detail ? ' (' + dbEsc(last.detail) + ')' : ''}</span>` : ''}`, missing || (st !== 'confirmed' && !here));
+    const s = t.sub, st = t.rec ? t.rec.status : 'pending', here = dbSubArrived(s), up = typeof tr2ConfirmedUpgrades !== 'undefined' ? tr2ConfirmedUpgrades.get(s.id) : null;
+    return dbRow(`${dbTick(here)}<b>${dbFmtT(s.arrivalTime) || PENDING}</b> · ${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(s) : '') || 'Guest')}${dbRetreatTag(s)} · driver <b>${dbEsc(t.name)}</b> · <span style="color:${here ? '#166534' : '#92400e'};font-weight:700">${here ? 'Arrived' : 'Pending to arrive'}</span>${up ? ' · <b style="color:#7c3aed">Upgrade: room ' + dbEsc(up.newRoom) + '</b>' : ''}`, !here);
   };
   html += dbCard("Salamon's arrivals", (sal.length ? sal.map(tLine).join('') : dbNone('No airport arrivals for Salamon today.')) + (oth.length ? `<div style="padding:6px 14px;background:#faf8f4;font-size:11px;font-weight:700;color:#8a7e74;text-transform:uppercase">Other drivers</div>` + oth.map(tLine).join('') : ''), arrT.length + ' arrival' + (arrT.length === 1 ? '' : 's'));
   // 4. Departures
   const depT = g.transport.filter(t => t.kind === 'departure');
-  html += dbCard('Departures', (g.departures.length ? g.departures.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${dbDepCount(b)} · checking out today${dbDepNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#991b1b;font-weight:600">' + dbDepNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat departures today.')) +
+  const depBal = {};
+  if (g.departures.length && typeof cbScan === 'function' && typeof cbState !== 'undefined' && typeof cbToday === 'function' && dbDate === cbToday()) {
+    const w = cbState.window; cbState.window = 'today'; try { (await cbScan()).forEach(r => { depBal[r.regId] = r; }); } catch (e) {} cbState.window = w;
+  }
+  const depIds = new Set(g.departures.map(b => b.id));
+  const depGuests = (AppData.regs || []).filter(r => { const b = (AppData.bookings || []).find(x => x.id === r.bookingId); return b && depIds.has(b.id) && !r.cancelled && String(r.checkOut || b.endDate || '').slice(0, 10) === dbDate; })
+    .sort((a, b) => (!!a.checkedOutAt - !!b.checkedOutAt) || String(a.room).localeCompare(String(b.room), undefined, { numeric: true }));
+  const balPill = r => { if (!r) return ''; const m = typeof cbMoney === 'function' ? cbMoney(Math.abs(r.balance)) : '$' + Math.abs(r.balance).toFixed(2);
+    return r.status === 'owes' ? `<b style="color:#b91c1c">Owes ${m}</b>` : r.status === 'zero' ? '<b style="color:#166534">Paid</b>' : r.status === 'credit' ? `<b style="color:#1d4ed8">Credit ${m}</b>` : '<span style="color:#9ca3af">No bill yet</span>'; };
+  const depRows = depGuests.map(r => {
+    const nm = (r.guests || []).map(x => x.name).filter(Boolean).join(' & ') || 'Guest', out = !!r.checkedOutAt, rec = dbCoLog[r.id];
+    return dbRow(`<span onclick="dbToggleOut('${r.id}')" title="${out ? 'Checked out (click to undo)' : 'Click when checked out'}" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:8px;vertical-align:middle;border:2px solid ${out ? '#15803d' : '#9ca3af'};border-radius:5px;background:${out ? '#15803d' : '#fff'};color:#fff;font-size:14px;font-weight:800;line-height:1">${out ? '✓' : ''}</span>Room <b>${dbEsc(r.room || '—')}</b> · ${dbEsc(nm)} · ${balPill(depBal[r.id])} · ${out ? `<b style="color:#166534">Checked out</b>${rec ? ` <span title="${dbEsc(rec.by)}" style="display:inline-block;background:#dcfce7;color:#166534;border-radius:99px;padding:1px 8px;font-size:11.5px;font-weight:800">${dbEsc(dbInitials(rec.by))}</span>` : ''}` : '<span style="color:#92400e;font-weight:600">Not checked out</span>'}`, !out && depBal[r.id] && depBal[r.id].status === 'owes');
+  }).join('');
+  html += dbCard('Departures', (g.departures.length ? g.departures.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${dbDepCount(b)} · checking out today${dbDepNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#991b1b;font-weight:600">' + dbDepNote(b) + '</div>' : ''}`)).join('') + depRows : dbNone('No retreat departures today.')) +
     depT.map(t => dbRow(`Airport departure <b>${dbFmtT(t.sub.departureTime) || PENDING}</b> · ${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')}${dbRetreatTag(t.sub)} · driver ${dbEsc(t.name)}`)).join(''), g.departures.length + ' retreat' + (g.departures.length === 1 ? '' : 's'));
   // 5. Classes, opening circles, tours, extra activities
   const evCard = (title, list, empty) => dbCard(title, list.length ? list.map(e => dbRow(evLine(e))).join('') : dbNone(empty), list.length);
@@ -317,9 +347,11 @@ async function dbRender() {
   }).join('') : dbNone('No tours to prepare today.');
   g.tours.filter(t => !t.cancelled).forEach(t => { if (!t.driver) pend.push('Driver for ' + t.name); if (!t.guides.length) pend.push('Guides for ' + t.name); if (!dbGet('tasks.snack:' + t.aoId + '.done')) pend.push('Snack request for ' + t.name); });
   html += dbCard('Tour and class preparation', prep);
-  // 7. Outstanding tasks with an assignee
-  html += dbCard('Tasks for today <span style="font-weight:500;color:#6b7280">— every open task needs someone</span>', tasks.length ? tasks.map(dbTaskRow).join('') : dbNone('Nothing to do today.'), openTasks.length + ' open');
-  openTasks.forEach(t => { if (!dbGet('tasks.' + t.id + '.assignee')) pend.push('Nobody assigned: ' + t.text); });
+  // 7. Rooms ready to show, and upgrades (replaces the task list, Darlene 2026-11-04)
+  const readyRooms = (g.rooms || []).filter(r => r.status === 'clean');
+  html += dbCard('Rooms ready to show', g.hkOk ? (readyRooms.length ? readyRooms.map(r => dbRow(`<b style="color:#166534">Room ${dbEsc(r.room)}</b> · ${dbEsc(r.who)} · ready`)).join('') : dbNone('No arriving room is ready yet.')) : dbRow(PENDING + ' Room readiness comes from Housekeeping and is shown for today only.'), g.hkOk ? readyRooms.length + ' of ' + g.rooms.length : null);
+  const upgrades = g.transport.filter(t => t.kind === 'arrival' && typeof tr2ConfirmedUpgrades !== 'undefined' && tr2ConfirmedUpgrades.get(t.sub.id));
+  html += dbCard('Upgrades', upgrades.length ? upgrades.map(t => { const u = tr2ConfirmedUpgrades.get(t.sub.id); return dbRow(`<b>${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')}</b>${dbRetreatTag(t.sub)} · moved to room <b style="color:#7c3aed">${dbEsc(u.newRoom)}</b> · ${u.lateral ? 'free move' : 'paid upgrade'}${u.staffName ? ' · sold by ' + dbEsc(u.staffName) : ''}`); }).join('') : dbNone('No upgrades confirmed for today.'), upgrades.length);
   // 8. After-dinner orientations
   const needOr = g.arrivals.map(bk => {
     const sr = bk.scheduleRequest || {}, o = dbGet('orientation.' + bk.id) || {};
@@ -339,21 +371,7 @@ async function dbRender() {
         <button onclick="dbSaveOrient('${x.bk.id}')" class="btn btn-primary" style="font-size:12.5px">Schedule it</button></div></div>`;
   }).join('') : dbNone('No retreat arrives today.');
   html += dbCard('After-dinner orientations', orBody);
-  // 9. Teacher arrival checklist
-  const chk = g.arrivals.length ? g.arrivals.map(bk => {
-    const base = 'checklist.' + bk.id, nm = dbEsc(bk.leaderName || bk.retreatName);
-    const doneN = DB_CHECKLIST.filter(([k]) => dbGet(base + '.' + k + '.done')).length;
-    const items = DB_CHECKLIST.map(([k, label]) => {
-      const done = !!dbGet(base + '.' + k + '.done'), who = dbGet(base + '.' + k + '.assignee') || '';
-      let extra = '';
-      if (k === 'allergies') { const a = dbGet(base + '.allergies.text'); extra = `<input type="text" value="${dbEsc(a || '')}" placeholder="Allergies (write 'none' if none)" onchange="dbSet('${base}.allergies.text',this.value);dbRender()" style="padding:5px 8px;border:1.5px solid ${a ? '#d6cfc4' : '#fca5a5'};border-radius:7px;min-width:220px">${a ? '' : PENDING}`; if (!a) pend.push('Allergies: ' + (bk.leaderName || 'teacher')); }
-      if (k === 'circle') { const l = dbGet(base + '.circle.leader') || ''; extra = `<select onchange="dbSet('${base}.circle.leader',this.value);dbRender()" style="padding:5px 8px;border:1.5px solid ${l ? '#d6cfc4' : '#fca5a5'};border-radius:7px"><option value="">— opening-circle leader —</option>${[...new Set([...DB_CHECKLIST_WHO, l].filter(Boolean))].map(n => `<option value="${dbEsc(n)}" ${n === l ? 'selected' : ''}>${dbEsc(n)}</option>`).join('')}</select>${l ? '' : PENDING}`; if (!l) pend.push('Opening-circle leader: ' + (bk.leaderName || 'teacher')); }
-      const sel = k === 'circle' ? '' : `<select onchange="dbSet('${base}.${k}.assignee',this.value);dbRender()" style="padding:5px 8px;border:1.5px solid ${(done || who) ? '#d6cfc4' : '#fca5a5'};border-radius:7px;font-size:12.5px"><option value="">— who —</option>${[...new Set([...DB_CHECKLIST_WHO, who].filter(Boolean))].map(n => `<option value="${dbEsc(n)}" ${n === who ? 'selected' : ''}>${dbEsc(n)}</option>`).join('')}</select>`;
-      return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:7px 14px;border-top:1px solid #f0ebe0;background:${done ? '#f7fdf9' : '#fff7f7'}"><label style="display:flex;gap:8px;align-items:center;flex:1;min-width:250px;font-size:13.5px;font-weight:600;color:${done ? '#166534' : '#991b1b'}"><input type="checkbox" ${done ? 'checked' : ''} onchange="dbSet('${base}.${k}.done',this.checked);dbRender()"> ${dbEsc(label)}</label>${extra}${sel}</div>`;
-    }).join('');
-    return `<div style="padding:8px 14px;background:#faf8f4;font-weight:700;border-top:1px solid #e8dfd4">${nm} <span style="color:${doneN === DB_CHECKLIST.length ? '#166534' : '#991b1b'};font-weight:600">· ${doneN} of ${DB_CHECKLIST.length} done</span></div>${items}`;
-  }).join('') : dbNone('No teacher arrives today.');
-  html += dbCard('Teacher arrival checklist', chk);
+  // (The Teacher arrival checklist was removed from the briefing, Darlene 2026-11-04: the Host Checklist is the only checklist.)
   // 10. Attendance
   // Only the host matters here (Darlene 2026-11-04): who is working as the host today, and their hours. The other departments are no longer asked.
   const hostWho = dbGet('attendance.Host.present') || '', hostHours = dbGet('attendance.Host.hours') || '';
@@ -368,7 +386,7 @@ async function dbRender() {
   }
   html += roomCard;
   // summary strip on top
-  const strip = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${[['Arrivals', g.arrivals.length, '#1d4ed8'], ['Departures', g.departures.length, '#475569'], ['Tours', g.tours.filter(t => !t.cancelled).length, '#0d9488'], ['Open tasks', openTasks.length, openTasks.length ? '#b91c1c' : '#166534'], ['Pending confirmation', [...new Set(pend)].length, pend.length ? '#b45309' : '#166534']].map(([l, n, c]) => `<div style="background:#fff;border:1.5px solid ${c}55;border-radius:10px;padding:8px 16px;min-width:110px"><div style="font-size:22px;font-weight:700;color:${c}">${n}</div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b7280">${l}</div></div>`).join('')}</div>`;
+  const strip = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${[['Arrivals', g.arrivals.length, '#1d4ed8'], ['Departures', g.departures.length, '#475569'], ['Tours', g.tours.filter(t => !t.cancelled).length, '#0d9488'], ['Pending confirmation', [...new Set(pend)].length, pend.length ? '#b45309' : '#166534']].map(([l, n, c]) => `<div style="background:#fff;border:1.5px solid ${c}55;border-radius:10px;padding:8px 16px;min-width:110px"><div style="font-size:22px;font-weight:700;color:${c}">${n}</div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b7280">${l}</div></div>`).join('')}</div>`;
   dbCtx = { g, tasks, openTasks, pend: [...new Set(pend)], buckets, fmtLong, hours };
   el.innerHTML = `<div style="font-size:12px;color:#6b7280;margin:0 0 10px">${dbEsc(fmtLong)}. Pulled from the portal; classes, circles, tours and activities are the main scheduler's own list.</div>` + strip + html;
   const lab = document.getElementById('dbriefDate'); if (lab) lab.textContent = fmtLong;
