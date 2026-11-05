@@ -73,6 +73,16 @@ function dbArrivedBox(b) {
   const all = k === n, some = k > 0;
   return `<span title="${k} of ${n} marked as arrived" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:8px;vertical-align:middle;border:2px solid ${all ? '#15803d' : some ? '#d97706' : '#9ca3af'};border-radius:5px;background:${all ? '#15803d' : '#fff'};color:#fff;font-size:14px;font-weight:800;line-height:1">${all ? '✓' : ''}</span><span style="font-size:12px;font-weight:700;margin-right:8px;color:${all ? '#15803d' : some ? '#b45309' : '#6b7280'}">${all ? 'Arrived' : k + ' of ' + n + ' arrived'}</span>`;
 }
+// Anyone who has been checked in is marked as arrived (Darlene 2026-11-04): a ticked box on each airport arrival. The Transport log's own check-in is used when it is loaded,
+// otherwise the guest's name is matched to the room list's checked-in registrations.
+function dbTick(on) { return `<span title="${on ? 'Marked as arrived' : 'Not marked as arrived yet'}" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:8px;vertical-align:middle;border:2px solid ${on ? '#15803d' : '#9ca3af'};border-radius:5px;background:${on ? '#15803d' : '#fff'};color:#fff;font-size:14px;font-weight:800;line-height:1">${on ? '✓' : ''}</span>`; }
+function dbSubArrived(sub) {
+  try {
+    const e = (typeof tr2AllEntries !== 'undefined' ? tr2AllEntries : []).find(x => x.rowId === sub.id && x.type === 'arrival'); if (e && e.checkedIn) return true;
+    const nm = ((sub.firstName || '') + ' ' + (sub.lastName || '')).trim().toLowerCase(); if (!nm) return false;
+    return (AppData.regs || []).some(r => r.checkedInAt && (!sub.bookingId || r.bookingId === sub.bookingId) && (r.guests || []).some(g => String(g.name || '').trim().toLowerCase() === nm));
+  } catch (err) { return false; }
+}
 function dbArrNote(b) { const sr = b.scheduleRequest || {}; return dbEsc(String(sr.specialRequests || '').trim()); }
 function dbDepNote(b) {
   const out = [];
@@ -268,7 +278,8 @@ async function dbRender() {
     const s = t.sub, st = t.rec ? t.rec.status : 'pending', last = t.rec && t.rec.history && t.rec.history.length ? t.rec.history[t.rec.history.length - 1] : null;
     const missing = !s.flightNumber || !s.arrivalTime;
     if (missing) pend.push('Flight details: ' + ((typeof trTransportFullName === 'function' ? trTransportFullName(s) : '') || 'guest'));
-    return dbRow(`<b>${dbFmtT(s.arrivalTime) || PENDING}</b> · ${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(s) : '') || 'Guest')} · ${s.flightNumber ? 'Flight ' + dbEsc(s.flightNumber) : PENDING + ' flight'} · ${dbEsc(s.arrivalAirport || '')} · driver <b>${dbEsc(t.name)}</b> · <span style="color:${st === 'confirmed' ? '#166534' : '#92400e'};font-weight:600">${dbEsc(st)}</span>${last ? ` · <span style="color:#6b7280">last update: ${dbEsc(last.event)}${last.detail ? ' (' + dbEsc(last.detail) + ')' : ''}</span>` : ''}`, missing || st !== 'confirmed');
+    const here = dbSubArrived(s);
+    return dbRow(`${dbTick(here)}<b>${dbFmtT(s.arrivalTime) || PENDING}</b> · ${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(s) : '') || 'Guest')} · ${s.flightNumber ? 'Flight ' + dbEsc(s.flightNumber) : PENDING + ' flight'} · ${dbEsc(s.arrivalAirport || '')} · driver <b>${dbEsc(t.name)}</b> · <span style="color:${st === 'confirmed' ? '#166534' : '#92400e'};font-weight:600">${dbEsc(st)}</span>${last ? ` · <span style="color:#6b7280">last update: ${dbEsc(last.event)}${last.detail ? ' (' + dbEsc(last.detail) + ')' : ''}</span>` : ''}`, missing || (st !== 'confirmed' && !here));
   };
   html += dbCard("Salamon's arrivals", (sal.length ? sal.map(tLine).join('') : dbNone('No airport arrivals for Salamon today.')) + (oth.length ? `<div style="padding:6px 14px;background:#faf8f4;font-size:11px;font-weight:700;color:#8a7e74;text-transform:uppercase">Other drivers</div>` + oth.map(tLine).join('') : ''), arrT.length + ' arrival' + (arrT.length === 1 ? '' : 's'));
   // 4. Departures
