@@ -277,11 +277,12 @@ if(typeof _actvNotifRowHtml==='function'){
     const r=n.req;
     const what=r.kind==='more_rooms'
       ?`wants <strong>${r.qty} more ${escHtml(r.typeName)}</strong>`
-      :`${escHtml((r.names||[]).join(' &amp; '))} want <strong>two beds</strong> (${escHtml(r.twinName||'twin room')}) instead of a ${escHtml(r.kingName||'king')}`;
+      :`${escHtml((r.names||[]).join(' & '))} want <strong>two beds</strong> (${escHtml(r.twinName||'twin room')}) instead of a ${escHtml(r.kingName||'king')}`;
     const b=(label,st,col)=>`<button onclick="event.stopPropagation();rpResolve('${n.bookingId}','${r.id}','${st}')" style="padding:3px 10px;border-radius:6px;border:1.5px solid ${col};background:#fff;color:${col};font-size:11.5px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">${label}</button>`;
     return `<div style="background:#fffbeb;border-left:3px solid #f59e0b;padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span style="font-size:14px;flex-shrink:0">🛏</span>
       <span style="cursor:pointer" onclick="openBookingFromNotif('${n.bookingId}')"><strong>${escHtml(n.label)}</strong> ${what}</span>
+      ${r.createdAt?`<span style="font-size:11.5px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:99px;padding:1px 9px;white-space:nowrap">Requested ${(()=>{try{return new Date(r.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Cancun'});}catch(e){return '';}})()}</span>`:''}
       <span style="margin-left:auto;display:flex;gap:6px">${b('Approve','approved','#15803d')}${b('Decline','declined','#b91c1c')}</span></div>`;
   };
 }
