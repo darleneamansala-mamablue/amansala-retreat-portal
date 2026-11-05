@@ -180,6 +180,30 @@ function dbEvDone(e) {
   const [h, m] = end.split(':').map(Number); return h * 60 + (m || 0) <= t.getUTCHours() * 60 + t.getUTCMinutes();
 }
 const dbDoneWrap = (e, inner) => dbEvDone(e) ? `<span title="Done" style="color:#15803d;font-weight:800;margin-right:6px">✓</span><span style="opacity:.6;text-decoration:line-through">${inner}</span>` : inner;
+// What each departing guest owes (Darlene 2026-11-05: "here we would like to see what they owe"). Read from the guests' folios (the same sums as the Checkout Balances page), after the page is drawn so the briefing
+// is not held up; a guest with no folio says so, and if the balances cannot be read the line says that, with a Try again link, instead of staying blank. Today only (balances are read for today's check-outs).
+async function dbFillBalances() {
+  const root = document.getElementById('dbriefBody'); if (!root) return;
+  const spans = [...root.querySelectorAll('.db-bal')], totals = [...root.querySelectorAll('.db-bal-total')]; if (!spans.length && !totals.length) return;
+  let map = {}, err = '';
+  try {
+    if (dbDate !== (typeof cbToday === 'function' ? cbToday() : dbISO(new Date()))) throw new Error('Balances are shown for today\'s check-outs only.');
+    if (typeof cbScan !== 'function' || typeof cbState === 'undefined') throw new Error('The Checkout Balances page is not loaded.');
+    const w = cbState.window; cbState.window = 'today';
+    try { (await cbScan()).forEach(r => { map[r.regId] = r; }); } finally { cbState.window = w; }
+  } catch (e) { err = e.message || String(e); }
+  const money = n => typeof cbMoney === 'function' ? cbMoney(Math.abs(n)) : '$' + Math.abs(n).toFixed(2);
+  spans.forEach(sp => {
+    const r = map[sp.dataset.reg];
+    sp.outerHTML = r ? (r.status === 'owes' ? `<b style="color:#b91c1c">Owes ${money(r.balance)}</b>` : r.status === 'zero' ? '<b style="color:#166534">Paid</b>' : r.status === 'credit' ? `<b style="color:#1d4ed8">Credit ${money(r.balance)}</b>` : '<span style="color:#9ca3af">No bill yet</span>')
+      : !err ? '<span style="color:#9ca3af">No bill found</span>' : `<span style="color:#b91c1c" title="${dbEsc(err)}">balance not loaded</span> <a href="#" onclick="dbFillBalances();return false" style="font-size:12px;color:#2d6a6a;font-weight:700">Try again</a>`;
+  });
+  totals.forEach(t => {
+    const regs = (AppData.regs || []).filter(r => r.bookingId === t.dataset.bk && map[r.id]);
+    const owed = regs.reduce((n, r) => n + (map[r.id].status === 'owes' ? map[r.id].balance : 0), 0), owing = regs.filter(r => map[r.id].status === 'owes').length;
+    t.innerHTML = regs.length ? (owed > 0 ? `· <b style="color:#b91c1c">owes ${money(owed)}</b> <span style="color:#6b7280">(${owing} guest${owing === 1 ? '' : 's'})</span>` : '· <b style="color:#166534">nothing owed</b>') : '';
+  });
+}
 function dbArrNote(b) { const sr = b.scheduleRequest || {}; return dbEsc(String(sr.specialRequests || '').trim()); }
 function dbDepNote(b) {
   const out = [];
@@ -415,23 +439,19 @@ async function dbRender() {
   html += dbCard("Salamon's arrivals", (sal.length ? sal.map(tLine).join('') : dbNone('No airport arrivals for Salamon today.')) + (oth.length ? `<div style="padding:6px 14px;background:#faf8f4;font-size:11px;font-weight:700;color:#8a7e74;text-transform:uppercase">Other drivers</div>` + oth.map(tLine).join('') : ''), arrT.length + ' arrival' + (arrT.length === 1 ? '' : 's'));
   // 4. Departures
   const depT = g.transport.filter(t => t.kind === 'departure');
-  const depBal = {};
-  if (g.departures.length && typeof cbScan === 'function' && typeof cbState !== 'undefined' && typeof cbToday === 'function' && dbDate === cbToday()) {
-    const w = cbState.window; cbState.window = 'today'; try { (await cbScan()).forEach(r => { depBal[r.regId] = r; }); } catch (e) {} cbState.window = w;
-  }
+  // (What each guest owes is filled in after the page is drawn: dbFillBalances.)
   // Every guest whose own check-out is today, whichever retreat or booking they are on (a guest who shortened or extended a stay leaves on a different day from the retreat: Darlene 2026-11-05)
   const depGuests = (AppData.regs || []).filter(r => { const b = (AppData.bookings || []).find(x => x.id === r.bookingId); return b && b.status !== 'cancelled' && !(b.flags || []).includes('archived') && !r.cancelled && String(r.checkOut || b.endDate || '').slice(0, 10) === dbDate; })
     .sort((a, b) => (!!a.checkedOutAt - !!b.checkedOutAt) || String(a.room).localeCompare(String(b.room), undefined, { numeric: true }));
-  const balPill = r => { if (!r) return ''; const m = typeof cbMoney === 'function' ? cbMoney(Math.abs(r.balance)) : '$' + Math.abs(r.balance).toFixed(2);
-    return r.status === 'owes' ? `<b style="color:#b91c1c">Owes ${m}</b>` : r.status === 'zero' ? '<b style="color:#166534">Paid</b>' : r.status === 'credit' ? `<b style="color:#1d4ed8">Credit ${m}</b>` : '<span style="color:#9ca3af">No bill yet</span>'; };
+  const balPill = r => `<span class="db-bal" data-reg="${r.id}" style="color:#9ca3af">checking what they owe…</span>`;
   // A guest who is already checked out is no longer listed (Darlene 2026-11-05): one grey line says how many, with their names. Their airport line is dropped too.
   const depLeft = depGuests.filter(r => !r.checkedOutAt), depDone = depGuests.filter(r => r.checkedOutAt);
   const doneNote = depDone.length ? dbRow(`<span style="color:#6b7280;font-size:12.5px">✓ ${depDone.length} already checked out: ${depDone.map(r => dbEsc((r.guests || []).map(x => x.name).filter(Boolean)[0] || 'Room ' + r.room)).join(', ')}</span>`) : '';
   const depRows = depLeft.map(r => {
     const nm = (r.guests || []).map(x => x.name).filter(Boolean).join(' & ') || 'Guest', out = !!r.checkedOutAt, rec = dbCoLog[r.id];
-    return dbRow(`<span onclick="dbToggleOut('${r.id}')" title="${out ? 'Checked out (click to undo)' : 'Click when checked out'}" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:8px;vertical-align:middle;border:2px solid ${out ? '#15803d' : '#9ca3af'};border-radius:5px;background:${out ? '#15803d' : '#fff'};color:#fff;font-size:14px;font-weight:800;line-height:1">${out ? '✓' : ''}</span>Room <b>${dbEsc(r.room || '—')}</b> · ${dbEsc(nm)}${(() => { const bk = (AppData.bookings || []).find(x => x.id === r.bookingId); return bk && !g.departures.some(d => d.id === bk.id) ? ' <span style="color:#0f766e;font-weight:600">· ' + dbEsc(bk.retreatName || bk.leaderName || '') + '</span>' : ''; })()} · ${balPill(depBal[r.id])} · ${out ? `<b style="color:#166534">Checked out</b>${rec ? ` <span title="${dbEsc(rec.by)}" style="display:inline-block;background:#dcfce7;color:#166534;border-radius:99px;padding:1px 8px;font-size:11.5px;font-weight:800">${dbEsc(dbInitials(rec.by))}</span>` : ''}` : '<span style="color:#92400e;font-weight:600">Not checked out</span>'}`, !out && depBal[r.id] && depBal[r.id].status === 'owes');
+    return dbRow(`<span onclick="dbToggleOut('${r.id}')" title="${out ? 'Checked out (click to undo)' : 'Click when checked out'}" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:8px;vertical-align:middle;border:2px solid ${out ? '#15803d' : '#9ca3af'};border-radius:5px;background:${out ? '#15803d' : '#fff'};color:#fff;font-size:14px;font-weight:800;line-height:1">${out ? '✓' : ''}</span>Room <b>${dbEsc(r.room || '—')}</b> · ${dbEsc(nm)}${(() => { const bk = (AppData.bookings || []).find(x => x.id === r.bookingId); return bk && !g.departures.some(d => d.id === bk.id) ? ' <span style="color:#0f766e;font-weight:600">· ' + dbEsc(bk.retreatName || bk.leaderName || '') + '</span>' : ''; })()} · ${balPill(r)} · ${out ? `<b style="color:#166534">Checked out</b>${rec ? ` <span title="${dbEsc(rec.by)}" style="display:inline-block;background:#dcfce7;color:#166534;border-radius:99px;padding:1px 8px;font-size:11.5px;font-weight:800">${dbEsc(dbInitials(rec.by))}</span>` : ''}` : '<span style="color:#92400e;font-weight:600">Not checked out</span>'}`, !out && false);
   }).join('');
-  html += dbCard('Departures', (g.departures.length ? g.departures.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${dbDepCount(b)} · checking out today${dbDepNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#991b1b;font-weight:600">' + dbDepNote(b) + '</div>' : ''}`)).join('') + depRows + doneNote : dbNone('No retreat departures today.')) +
+  html += dbCard('Departures', (g.departures.length ? g.departures.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${dbDepCount(b)} · checking out today <span class="db-bal-total" data-bk="${b.id}"></span>${dbDepNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#991b1b;font-weight:600">' + dbDepNote(b) + '</div>' : ''}`)).join('') + depRows + doneNote : dbNone('No retreat departures today.')) +
     depT.filter(t => { const rg = dbRegOf(t.sub); return !(rg && rg.checkedOutAt); }).map(t => dbRow(`Airport departure <b>${dbFmtT(t.sub.departureTime) || PENDING}</b> · ${dbRoomOf(t.sub)}${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')}${dbRetreatTag(t.sub)} · driver ${dbEsc(t.name)}`)).join(''), g.departures.length + ' retreat' + (g.departures.length === 1 ? '' : 's'));
   // 5. Classes, opening circles, tours, extra activities
   const evCard = (title, list, empty) => dbCard(title, list.length ? list.map(e => dbRow(dbDoneWrap(e, evLine(e)))).join('') : dbNone(empty), list.length);
@@ -523,6 +543,7 @@ async function dbRender() {
   // summary strip on top
   const strip = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${[['Arrivals', g.arrivals.length, '#1d4ed8'], ['Departures', g.departures.length, '#475569'], ['Tours', g.tours.filter(t => !t.cancelled).length, '#0d9488'], ['Pending confirmation', [...new Set(pend)].length, pend.length ? '#b45309' : '#166534']].map(([l, n, c]) => `<div style="background:#fff;border:1.5px solid ${c}55;border-radius:10px;padding:8px 16px;min-width:110px"><div style="font-size:22px;font-weight:700;color:${c}">${n}</div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b7280">${l}</div></div>`).join('')}</div>`;
   dbCtx = { g, tasks, openTasks, pend: [...new Set(pend)], buckets, fmtLong, hours };
+  setTimeout(dbFillBalances, 0);
   el.innerHTML = `<div style="font-size:12px;color:#6b7280;margin:0 0 10px">${dbEsc(fmtLong)}. Pulled from the portal; classes, circles, tours and activities are the main scheduler's own list.</div>` + strip + html;
   const lab = document.getElementById('dbriefDate'); if (lab) lab.textContent = fmtLong;
 }
