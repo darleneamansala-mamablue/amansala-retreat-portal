@@ -154,7 +154,11 @@ function dbRoomUpgrade(b) {
   try {
     const regs = (AppData.regs || []).filter(r => r.bookingId === b.id && !r.cancelled && r.room), rooms = [...new Set([...regs.map(r => r.room), ...(regs.length ? [] : (b.blockedRooms || []))])];
     if (!rooms.length) return '<div style="margin-top:3px;font-size:12.5px;color:#92400e">Room not assigned yet</div>';
-    return rooms.map(room => {
+    // Sorted for the front desk (Darlene 2026-11-05): first by when the guest lands (the Transport arrival time), then by room type, then by room, so everyone arriving together is grouped and the beds
+    // of one room (6a, 6b, 6c) sit together. Each line starts with that arrival time.
+    let subs = []; try { subs = typeof loadTransport === 'function' ? loadTransport().filter(x => x.arrivalDate === dbDate && x.arrivalTime) : []; } catch (e) {}
+    const landing = names => { const t = subs.filter(x => names.includes(((x.firstName || '') + ' ' + (x.lastName || '')).trim().toLowerCase())).map(x => String(x.arrivalTime).slice(0, 5)).sort(); return t[0] || ''; };
+    const items = rooms.map(room => {
       const byList = (AppData.roomTypes || []).find(x => (x.rooms || []).includes(room)), rtId = (typeof tr2LookupRtId === 'function' && tr2LookupRtId(room)) || (byList && byList.id) || null, rt = rtId && (AppData.roomTypes || []).find(x => x.id === rtId);
       const reg = regs.find(r => r.room === room), who = reg ? (reg.guests || []).map(g => g.name).filter(Boolean)[0] : '';
       let up = '';
@@ -168,8 +172,12 @@ function dbRoomUpgrade(b) {
         });
         up = opts.length ? ` · <b style="color:#7c3aed">Upgrade to sell:</b> ${opts.join(' · ')}` : ' · <span style="color:#9ca3af">no upgrade available</span>';
       }
-      return `<div style="margin-top:3px;font-size:12.5px;color:#374151">Room <b>${dbEsc(room)}</b>${rt ? ' · ' + dbEsc(rt.name) : ''}${who && regs.length > 1 ? ' · ' + dbEsc(who) : ''}${up}</div>`;
-    }).join('');
+      const gnames = (regs.filter(r => r.room === room).flatMap(r => (r.guests || []).map(g => String(g.name || '').trim().toLowerCase())).filter(Boolean)), t = landing(gnames);
+      const typeIdx = rt ? (AppData.roomTypes || []).findIndex(x => x.id === rt.id) : 999, base = String(room).replace(/[-\s]*[a-zA-Z]+$/, '');
+      return { t, typeIdx, base, room, html: `<div style="margin-top:3px;font-size:12.5px;color:#374151">${t ? '<b style="color:#0f766e">' + dbFmtT(t) + '</b> · ' : ''}Room <b>${dbEsc(room)}</b>${rt ? ' · ' + dbEsc(rt.name) : ''}${who && regs.length > 1 ? ' · ' + dbEsc(who) : ''}${up}</div>` };
+    });
+    items.sort((a, b) => (a.t || '99:99').localeCompare(b.t || '99:99') || a.typeIdx - b.typeIdx || String(a.base).localeCompare(String(b.base), undefined, { numeric: true }) || String(a.room).localeCompare(String(b.room), undefined, { numeric: true }));
+    return items.map(x => x.html).join('');
   } catch (e) { return ''; }
 }
 // A class, tour or activity that has already finished is crossed out with a green tick (Darlene 2026-11-05): everything on a past day, or on today anything whose end time (Tulum time) has gone by.
