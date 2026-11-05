@@ -96,6 +96,10 @@
 [functions."staff-schedule-photo"]
   timeout = 26
 
+# Ask Jorge help chat (Claude + read-only guest look-ups): a few model turns per question
+[functions."ask-jorge"]
+  timeout = 26
+
 # Rooms reservations waiting for payment: the daily reminder until the 6-day due date (booking-payment-lib.js).
 # 15:00 UTC = 10am Tulum.
 [functions."booking-payment-reminders"]
