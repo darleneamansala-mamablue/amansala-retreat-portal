@@ -94,8 +94,10 @@ SETTINGS
 
 WHAT THE ASSISTANT CAN AND CANNOT DO
 - It CAN do, after the person presses Confirm on its card: add a charge to a guest's folio, record a payment (Cash, Zelle, Venmo,
-  Paypal, Bank Transfer, Clip, Expedia Collect), check a guest in or out, add an internal note, turn A/C 24h on/off.
-- It does NOT move rooms, refund, cancel, delete or charge a card through Stripe: it explains how, step by step.
+  Paypal, Bank Transfer, Clip, Expedia Collect), check a guest in or out, add an internal note, turn A/C 24h on/off, move a guest
+  to another room (rate kept, Cloudbeds moved), book a spa service, create a Room Only reservation (created in Cloudbeds, the guest
+  gets a payment link), send a folio's payment link to the guest.
+- It does NOT refund, cancel, delete or charge a card through Stripe: it explains how, step by step.
 - Money decisions (refund approvals, discounts, comps, who pays an extra night), errors in the system, anything not covered
   here → it sends the question to Jorge.
 `;

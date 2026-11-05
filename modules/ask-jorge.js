@@ -34,7 +34,7 @@
     const inp = document.getElementById('ajIn');
     inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.ajSend(); } });
     render();
-    if (!msgs.length) addBubble('assistant', 'Hola 👋 Pregúntame cómo hacer algo en el portal o algo de un huésped. También lo puedo hacer por ti: agregar un cargo, registrar un pago, check-in / check-out, una nota interna o el A/C 24h (tú confirmas antes de guardar). Si no lo sé, le mando tu pregunta a Jorge.');
+    if (!msgs.length) addBubble('assistant', 'Hola 👋 Pregúntame cómo hacer algo en el portal o algo de un huésped. También lo hago por ti: cargos, pagos, check-in / check-out, mover de cuarto, reservas nuevas, reservar spa, enviar links de pago, notas internas y A/C 24h (tú confirmas antes de guardar). Si no lo sé, le mando tu pregunta a Jorge.');
     inp.focus();
   }
   function addBubble(role, text) {
@@ -44,6 +44,36 @@
     d.style.cssText = `margin:6px 0;display:flex;${mine ? 'justify-content:flex-end' : ''}`;
     d.innerHTML = `<div style="max-width:85%;padding:8px 11px;border-radius:12px;${mine ? 'background:#0e7490;color:#fff' : 'background:#fff;border:1px solid #e5e7eb;color:#1f2937'}">${fmt(text)}</div>`;
     log.appendChild(d); log.scrollTop = log.scrollHeight;
+  }
+  // Moves and new reservations run here, in the person's own tab, through the same functions as the Rooms screen
+  // (rcMoveRoom: room list, rate freeze, Cloudbeds move; New booking: Cloudbeds + pay-first link)
+  async function runClient(x) {
+    if (x.type === 'move_room') {
+      const reg = AppData.regs.find(r => r.id === x.regId); if (!reg) return { ok: false, message: 'Guest not found in this screen — reload and try again.' };
+      const bk = AppData.bookings.find(b => b.id === reg.bookingId); if (!bk) return { ok: false, message: 'Reservation not found.' };
+      try { rcMoveRoom(bk.id, reg.room, x.toRoom); } catch (e) { console.warn('[ask-jorge] move', e); }
+      const moved = AppData.regs.find(r => r.id === x.regId);
+      return moved && String(moved.room) === String(x.toRoom) ? { ok: true, bookingId: bk.id } : { ok: false, message: 'The move could not be done (the room may be taken).' };
+    }
+    if (x.type === 'new_booking') {
+      const conflict = AppData.bookings.some(b => b.status !== 'cancelled' && roomListBlocks(b.blockedRooms, x.room) && datesOverlap(x.checkIn, x.checkOut, b.startDate, b.endDate));
+      if (conflict) return { ok: false, message: `Room ${x.room} is already booked for part of these dates.` };
+      const rt = AppData.roomTypes.find(t => (t.rooms || []).includes(x.room));
+      const nights = Math.round((pd(x.checkOut) - pd(x.checkIn)) / DAY_MS), newId = uid(), ts = new Date().toISOString();
+      AppData.bookings.push({ id: newId, bookingType: 'room_only', leaderName: x.guestName, leaderEmail: x.email || '', leaderPhone: x.phone || '', notes: x.notes || '', mealPlan: 'none', retreatName: x.bookingType,
+        startDate: x.checkIn, endDate: x.checkOut, row: findAvailableRow(x.checkIn, x.checkOut, null), pax: x.adults || 1, status: 'confirmed', docLink: '', roomAssignments: [], roomTypeId: rt ? rt.id : '',
+        blockedRooms: [x.room], roomRateTotal: (x.rate || 0) * nights, roomRateNights: nights, charges: [], payments: [], cbReservationIds: {}, createdAt: ts, updatedAt: ts });
+      AppData.regs.push({ id: uid(), bookingId: newId, room: x.room, roomTypeId: rt ? rt.id : '', guests: [{ name: x.guestName, email: x.email || '', phone: x.phone || '', notes: '' }], charges: [], notes: '', createdAt: ts, updatedAt: ts });
+      await saveAll();
+      try { if (typeof rmPushNewToCloudbeds === 'function') rmPushNewToCloudbeds(newId, x.room, x.checkIn, x.checkOut, { type: x.bookingType, leader: x.guestName, leaderEmail: x.email, leaderPhone: x.phone, adults: x.adults, rate: x.rate }); } catch (e) {}
+      if (x.email || x.phone) {
+        let token = ''; try { token = sessionStorage.getItem('amansala_staff_token') || ''; } catch (e) {}
+        fetch('/.netlify/functions/send-booking-payment-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, bookingId: newId }) }).catch(() => {});
+      }
+      try { if (typeof venBuild === 'function') venBuild(); if (typeof rcBuild === 'function') rcBuild(); } catch (e) {}
+      return { ok: true, bookingId: newId };
+    }
+    return { ok: false, message: 'Unknown action.' };
   }
   // a proposed change: nothing is saved until Confirm
   function addCard(p) {
@@ -60,8 +90,14 @@
       d.querySelectorAll('button').forEach(b => b.disabled = true);
       let token = ''; try { token = sessionStorage.getItem('amansala_staff_token') || ''; } catch (e) {}
       try {
-        const r = await fetch('/.netlify/functions/ask-jorge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, execute: p.action, page: page() }) });
-        const x = await r.json().catch(() => ({}));
+        let x;
+        if (p.action.client) {
+          x = await runClient(p.action);
+          if (x.ok) { x.message = '✓ ' + p.summary; fetch('/.netlify/functions/ask-jorge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, logClient: { type: p.action.type, summary: p.summary, bookingId: x.bookingId } }) }).catch(() => {}); }
+        } else {
+          const r = await fetch('/.netlify/functions/ask-jorge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, execute: p.action, page: page() }) });
+          x = await r.json().catch(() => ({}));
+        }
         if (x.ok) { done(x.message + ' — refresh the screen to see it.', '#047857'); msgs.push({ role: 'assistant', content: 'Done: ' + p.summary }); }
         else { done('Not saved: ' + (x.message || x.error || 'error'), '#b91c1c'); msgs.push({ role: 'assistant', content: 'Could not do it: ' + (x.message || '') }); }
       } catch (e) { done('Connection problem — nothing was saved.', '#b91c1c'); }
