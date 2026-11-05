@@ -13,7 +13,10 @@ const money = n => '$' + Number(n).toFixed(2);
 const REFUNDERS = ['jorge', 'hilario', 'melissa'];
 const TYPES = ['remove_charge', 'edit_charge', 'refund_payment', 'spa_cancel', 'spa_move', 'therapist_confirm', 'transport_change', 'room_status', 'cloudbeds_fix'];
 const send = async (key, method, path, body) => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method, headers: { ...H(key), Prefer: 'return=minimal' }, body: body ? JSON.stringify(body) : undefined }); if (!r.ok) throw new Error((await r.text()).slice(0, 200)); };
-const fnCall = async (file, body, headers = {}) => { const r = await require('./' + file).handler({ httpMethod: 'POST', headers, body: JSON.stringify(body) }); let d = {}; try { d = JSON.parse(r.body || '{}'); } catch (e) {} return { status: r.statusCode, d }; };
+// static requires (not require('./' + name)): a dynamic one makes Netlify pack the whole folder, so this file's bundle came out
+// identical to ask-jorge.js's and ask-jorge was left without its function (500 on every call, 2026-11-05)
+const FNS = { 'refund-folio-payment': require('./refund-folio-payment'), 'spa-therapist-confirm': require('./spa-therapist-confirm') };
+const fnCall = async (file, body, headers = {}) => { const r = await FNS[file].handler({ httpMethod: 'POST', headers, body: JSON.stringify(body) }); let d = {}; try { d = JSON.parse(r.body || '{}'); } catch (e) {} return { status: r.statusCode, d }; };
 const cb = async (action, body) => { const r = await fetch(`${SITE}/.netlify/functions/cloudbeds?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r.json().catch(() => ({})); };
 const fmt12 = hm => { const [h, m] = String(hm || '').split(':').map(Number); return isNaN(h) ? hm : `${(h % 12) || 12}:${String(m || 0).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 
