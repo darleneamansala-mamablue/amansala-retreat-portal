@@ -106,8 +106,9 @@ async function revokedAt(key, kind, id) {
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.session_revocations&select=value`, { headers: hdrs(key) });
     const [row] = r.ok ? await r.json() : [];
-    const t = row && row.value && row.value[`${kind}:${id}`];
-    return t ? Date.parse(t) : 0;
+    // '*' = everyone signed out at that time (Jorge 2026-11-05: after restoring the spa settings, no old tab may save its copy)
+    const v = (row && row.value) || {}, t = Math.max(v[`${kind}:${id}`] ? Date.parse(v[`${kind}:${id}`]) : 0, v['*'] ? Date.parse(v['*']) : 0);
+    return t || 0;
   } catch (e) { return 0; }
 }
 async function revokeSessions(key, kind, id) {
