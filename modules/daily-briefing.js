@@ -438,8 +438,26 @@ async function dbRender() {
   // 7. Rooms ready to show, and upgrades (replaces the task list, Darlene 2026-11-04)
   const readyRooms = (g.rooms || []).filter(r => r.status === 'clean');
   html += dbCard('Rooms ready to show', g.hkOk ? (readyRooms.length ? readyRooms.map(r => dbRow(`<b style="color:#166534">Room ${dbEsc(r.room)}</b> · ${dbEsc(r.who)} · ready`)).join('') : dbNone('No arriving room is ready yet.')) : dbRow(PENDING + ' Room readiness comes from Housekeeping and is shown for today only.'), g.hkOk ? readyRooms.length + ' of ' + g.rooms.length : null);
-  const upgrades = g.transport.filter(t => t.kind === 'arrival' && typeof tr2ConfirmedUpgrades !== 'undefined' && tr2ConfirmedUpgrades.get(t.sub.id));
-  html += dbCard('Upgrades', upgrades.length ? upgrades.map(t => { const u = tr2ConfirmedUpgrades.get(t.sub.id); return dbRow(`<b>${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')}</b>${dbRetreatTag(t.sub)} · moved to room <b style="color:#7c3aed">${dbEsc(u.newRoom)}</b> · ${u.lateral ? 'free move' : 'paid upgrade'}${u.staffName ? ' · sold by ' + dbEsc(u.staffName) : ''}`); }).join('') : dbNone('No upgrades confirmed for today.'), upgrades.length);
+  // Upgrades for the day (Darlene 2026-11-05): each one sold with who sold it and for how much (the commission record made when the upgrade is confirmed on the Transport tab: guest, rooms, price, seller),
+  // free room moves, and how many were declined (the answer staff give on the check-in form).
+  let sold = [], answers = { accepted: 0, declined: 0, none: 0 }, declinedNames = [];
+  try { const { data } = await db.from('commissions').select('staff_name,guest_name,room_from,room_to,upgrade_pretax,upgrade_total,date,type').eq('type', 'upgrade').eq('date', dbDate); sold = data || []; } catch (e) {}
+  try {
+    if (typeof ciLoad === 'function') await ciLoad(true);
+    Object.entries(typeof ciLog !== 'undefined' ? ciLog : {}).forEach(([id, r]) => {
+      if (!r || !r.upgrade || !r.at) return;
+      const day = new Date(new Date(r.at).getTime() - 5 * 3600000).toISOString().slice(0, 10); if (day !== dbDate) return;
+      if (answers[r.upgrade] != null) answers[r.upgrade]++;
+      if (r.upgrade === 'declined') { const reg = (AppData.regs || []).find(x => x.id === id); declinedNames.push(reg ? ((reg.guests || []).map(g => g.name).filter(Boolean)[0] || 'Room ' + reg.room) : 'a guest'); }
+    });
+  } catch (e) {}
+  const freeMoves = g.transport.filter(t => t.kind === 'arrival' && typeof tr2ConfirmedUpgrades !== 'undefined' && tr2ConfirmedUpgrades.get(t.sub.id) && (tr2ConfirmedUpgrades.get(t.sub.id).lateral || !sold.some(x => String(x.room_to) === String(tr2ConfirmedUpgrades.get(t.sub.id).newRoom))));
+  const money = n => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const soldRows = sold.map(x => dbRow(`<b>${dbEsc(x.guest_name || 'Guest')}</b> · room ${dbEsc(x.room_from)} → <b style="color:#7c3aed">${dbEsc(x.room_to)}</b> · <b style="color:#166534">${money(x.upgrade_total != null ? x.upgrade_total : x.upgrade_pretax)}</b>${x.upgrade_total != null && x.upgrade_pretax != null ? ` <span style="color:#6b7280;font-size:12px">(${money(x.upgrade_pretax)} before tax)</span>` : ''} · sold by <b>${dbEsc(x.staff_name || 'no seller recorded')}</b>`)).join('');
+  const freeRows = freeMoves.map(t => { const u = tr2ConfirmedUpgrades.get(t.sub.id); return dbRow(`<b>${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')}</b>${dbRetreatTag(t.sub)} · moved to room <b style="color:#7c3aed">${dbEsc(u.newRoom)}</b> · ${u.lateral ? 'free move' : 'upgrade'}${u.staffName ? ' · by ' + dbEsc(u.staffName) : ''}`); }).join('');
+  const total = sold.reduce((n, x) => n + Number(x.upgrade_total != null ? x.upgrade_total : x.upgrade_pretax || 0), 0);
+  const summary = dbRow(`<b>${sold.length}</b> sold${sold.length ? ` for <b style="color:#166534">${money(total)}</b>` : ''} · <b>${answers.declined}</b> declined${declinedNames.length ? ' (' + declinedNames.map(dbEsc).join(', ') + ')' : ''} · <b>${answers.accepted}</b> accepted at check-in · <b>${answers.none}</b> not offered`);
+  html += dbCard('Upgrades', summary + (soldRows || freeRows ? soldRows + freeRows : dbNone('No upgrades sold or confirmed for this day.')), sold.length + freeMoves.length);
   // 8. After-dinner orientations
   const needOr = g.arrivals.filter(dbIsRetreatStart).map(bk => {   // an extra night before a retreat has no orientation of its own: it is on the retreat's start day
     const sr = bk.scheduleRequest || {}, o = dbGet('orientation.' + bk.id) || {};
