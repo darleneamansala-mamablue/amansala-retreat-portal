@@ -1100,8 +1100,8 @@ const BE_DEFAULT_EXTRA_NIGHT_BODY = `<p>Hi {{firstName}},</p>\n<p>Your extra nig
 // modules/venues.js. Linked to group season rates via the {{season}} var.
 const BE_DEFAULT_GROUP_SUBJECT = 'Your Amansala group retreat – {{retreatName}}';
 const BE_DEFAULT_GROUP_BODY = `<p>Hi {{firstName}},</p>\n<p>Thank you for booking your group retreat with <strong>Amansala Tulum</strong>!</p>\n<p><strong>Retreat:</strong> {{retreatName}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Guests:</strong> {{pax}}<br><strong>Season:</strong> {{season}}</p>\n<p>Our team will follow up shortly with your group rate details and next steps.</p>\n<p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
-const BE_DEFAULT_STAFF_SUBJECT = 'New booking: {{firstName}} {{lastName}} – {{roomType}}';
-const BE_DEFAULT_STAFF_BODY = `<p><strong>New booking received!</strong></p>\n<p><strong>Guest:</strong> {{firstName}} {{lastName}}<br><strong>Email:</strong> {{email}}<br><strong>Phone:</strong> {{phone}}<br><strong>Room type:</strong> {{roomType}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Amount paid:</strong> {{amount}}</p>`;
+const BE_DEFAULT_STAFF_SUBJECT = 'New booking ({{bookingType}}): {{firstName}} {{lastName}} – {{roomType}}';
+const BE_DEFAULT_STAFF_BODY = `<p><strong>New booking received!</strong></p>\n<p><strong>Booking type:</strong> {{bookingType}}<br><strong>Guest:</strong> {{firstName}} {{lastName}}<br><strong>Email:</strong> {{email}}<br><strong>Phone:</strong> {{phone}}<br><strong>Room type:</strong> {{roomType}}<br><strong>Check-in:</strong> {{checkIn}}<br><strong>Check-out:</strong> {{checkOut}}<br><strong>Nights:</strong> {{nights}}<br><strong>Amount paid:</strong> {{amount}}</p>`;
 // Sent daily by netlify/functions/send-booking-lifecycle-emails.js (pg_cron) —
 // reminder 3 days before check-in, "in hotel" the day after arrival, and a
 // check-out-day message, each only once per booking (Jorge's ask 2026-09-22).
@@ -1204,7 +1204,7 @@ function beRenderEmails() {
   document.getElementById('beBody').innerHTML = `
     <div style="max-width:760px;margin:0 auto">
       <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 16px;margin-bottom:20px;font-size:12px;color:#0369a1">
-        <strong>Available variables:</strong> {{firstName}}, {{lastName}}, {{roomType}}, {{checkIn}}, {{checkOut}}, {{nights}}, {{amount}}, {{email}}, {{phone}} para Escape, Extra Night, Staff, Reminder, In-Hotel y Check-out — usa el menú "Insert variable…" en cada uno para agregarlas sin escribirlas a mano. <strong>Pre-Arrival Groups</strong> usa su propio set (ver nota debajo de ese template) ya que aún no tiene cuarto ni monto asignado.
+        <strong>Available variables:</strong> {{firstName}}, {{lastName}}, {{roomType}}, {{checkIn}}, {{checkOut}}, {{nights}}, {{amount}}, {{email}}, {{phone}}, {{bookingType}} para Escape, Extra Night, Staff, Reminder, In-Hotel y Check-out — usa el menú "Insert variable…" en cada uno para agregarlas sin escribirlas a mano. <strong>Pre-Arrival Groups</strong> usa su propio set (ver nota debajo de ese template) ya que aún no tiene cuarto ni monto asignado.
       </div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:20px">
         <div style="display:flex;align-items:center;margin-bottom:16px">

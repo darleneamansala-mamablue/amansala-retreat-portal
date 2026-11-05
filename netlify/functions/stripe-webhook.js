@@ -128,6 +128,16 @@ async function createInitialFolio(supaKey, bookingRequestId, meta, pi) {
   if (!itemsRes.ok) throw new Error('folio_items insert failed: ' + (await itemsRes.text()).slice(0, 300));
 }
 
+// What kind of reservation it was, for the staff "New booking" email (Jorge 2026-11-05): Escape (book.html), Extra Night
+// (extra-nights.html) or one Lana made on WhatsApp (visito-create-reservation.js: 'Visito AI' / 'Visito AI (Extra Night)')
+function bookingTypeLabel(source) {
+  const s = String(source || 'Escape');
+  if (/^Visito AI/.test(s)) return /Extra Night/.test(s) ? 'Extra Night — by Lana (WhatsApp)' : 'Escape — by Lana (WhatsApp)';
+  if (/Extra Night/.test(s)) return 'Extra Night';
+  if (/^Escape$/i.test(s)) return 'Escape';
+  return s;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -374,6 +384,7 @@ exports.handler = async (event) => {
           email:     meta.email       || '',
           phone:     meta.phone       || '',
           guestBookUrl: GUEST_BOOK_URL,
+          bookingType: bookingTypeLabel(meta.source),
           whatsappUrl:  WHATSAPP_CONTACT_URL,
         };
         const applyVars = (tpl, v) => tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => v[k] ?? '');
@@ -391,8 +402,8 @@ exports.handler = async (event) => {
         const defaultGuestBody    = isExtraNight
           ? `<p>Hi ${vars.firstName},</p><p>Your extra night at <strong>Amansala Tulum</strong> is confirmed!</p><p><strong>Room type:</strong> ${vars.roomType}<br><strong>Check-in:</strong> ${vars.checkIn}<br><strong>Check-out:</strong> ${vars.checkOut}<br><strong>Nights:</strong> ${vars.nights}<br><strong>Amount paid:</strong> ${vars.amount}</p><p>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`
           : `<p>Hi ${vars.firstName},</p><p>Thank you for your booking. We are looking forward to hosting you ${vars.dateRange} in a ${vars.roomType} room.</p><p>Should you need anything prior to arrival we are here to assist you, and in the meantime please take a look at our <a href="${vars.guestBookUrl}">guest book</a> with helpful info.</p><hr><p><strong>Contact Us</strong><br><a href="${vars.whatsappUrl}">💬 Message us on WhatsApp</a><br>Questions? <a href="mailto:amansala.reservations@gmail.com">amansala.reservations@gmail.com</a></p>`;
-        const defaultStaffSubject = `New booking: ${vars.firstName} ${vars.lastName} – ${vars.roomType}`;
-        const defaultStaffBody    = `<p><strong>New booking received!</strong></p><p><strong>Guest:</strong> ${vars.firstName} ${vars.lastName}<br><strong>Email:</strong> ${vars.email}<br><strong>Phone:</strong> ${vars.phone}<br><strong>Room type:</strong> ${vars.roomType}<br><strong>Check-in:</strong> ${vars.checkIn}<br><strong>Check-out:</strong> ${vars.checkOut}<br><strong>Nights:</strong> ${vars.nights}<br><strong>Amount paid:</strong> ${vars.amount}</p>`;
+        const defaultStaffSubject = `New booking (${vars.bookingType}): ${vars.firstName} ${vars.lastName} – ${vars.roomType}`;
+        const defaultStaffBody    = `<p><strong>New booking received!</strong></p><p><strong>Booking type:</strong> ${vars.bookingType}<br><strong>Guest:</strong> ${vars.firstName} ${vars.lastName}<br><strong>Email:</strong> ${vars.email}<br><strong>Phone:</strong> ${vars.phone}<br><strong>Room type:</strong> ${vars.roomType}<br><strong>Check-in:</strong> ${vars.checkIn}<br><strong>Check-out:</strong> ${vars.checkOut}<br><strong>Nights:</strong> ${vars.nights}<br><strong>Amount paid:</strong> ${vars.amount}</p>`;
 
         const sendResend = (to, subject, html) => fetch('https://api.resend.com/emails', {
           method:  'POST',
@@ -468,8 +479,10 @@ exports.handler = async (event) => {
         // Staff notification
         if (sett?.email_staff_enabled !== false) {
           const staffTo = sett?.email_staff_to || 'amansala.reservations@gmail.com';
-          const subj    = applyVars(sett?.email_staff_subject || defaultStaffSubject, vars);
-          const body    = applyVars(sett?.email_staff_body    || defaultStaffBody,    vars);
+          // the booking type always shows (Jorge 2026-11-05), also in a subject/body customized before {{bookingType}} existed
+          const subjTpl = sett?.email_staff_subject || defaultStaffSubject, bodyTpl = sett?.email_staff_body || defaultStaffBody;
+          const subj    = applyVars(/\{\{bookingType\}\}|New booking \(/.test(subjTpl) ? subjTpl : subjTpl.replace(/^New booking:/, 'New booking ({{bookingType}}):').replace(/^(?!New booking \()/, '[{{bookingType}}] '), vars);
+          const body    = applyVars(/\{\{bookingType\}\}|Booking type:/.test(bodyTpl) ? bodyTpl : `<p><strong>Booking type:</strong> {{bookingType}}</p>` + bodyTpl, vars);
           const sr      = await sendResend(staffTo, subj, body);
           if (!sr.ok) console.warn('[stripe-webhook] Staff email failed:', await sr.text());
           else        console.log('[stripe-webhook] Staff notification sent to', staffTo);
