@@ -213,7 +213,7 @@ function rpRenderTeacher(){
   ((rpStore[bk.id]||{}).requests||[]).filter(r=>r.status==='approved'||r.status==='declined').slice(-3).forEach(r=>{
     const what=r.kind==='more_rooms'?`${r.qty} more ${r.typeName}`:`two-bed room for ${(r.names||[]).join(' & ')}`;
     html+=card(r.status==='approved'?'#f0fdf4':'#f9fafb',r.status==='approved'?'#86efac':'#e5e7eb','Room request',
-      r.status==='approved'?`Approved: ${escHtml(what)}. We will update your rooms shortly.`:`Not available this time: ${escHtml(what)}. Please email us if you would like to talk it through.`);
+      r.status==='approved'?(r.added?`Added: ${escHtml(what)}. It is now in your room list.`:`Approved: ${escHtml(what)}. We will update your rooms shortly.`):`Not available this time: ${escHtml(what)}. Please email us if you would like to talk it through.`);
   });
   box.innerHTML=html?`<div style="padding:10px 28px 0">${html}</div>`:'';
 }
@@ -249,13 +249,71 @@ function rpPendingList(){
   });
   return out;
 }
+// Approve (Darlene 2026-11-05): for "more rooms" it ADDS the rooms to the retreat's block when that many are free for its dates, and the request becomes "Added". When they are not all free it
+// stays a request (nothing is added) and says why, with the rooms of that type other retreats hold but have nobody in, so you can release one from their list and give it to this leader.
+// Only single-room types (Beachfront King, Superior, Garden Plus, Garden, Simple n Small) are added automatically; shared-bed types (Double, Triple, Quad, Beachview Double) need a person to choose the bed.
+const RP_AUTO_TYPES=new Set(['rt1','rt2','rt3','rt4','rt5']);
+function rpFreeRooms(bk,rt){
+  const mine=new Set((bk.blockedRooms||[]).map(x=>String(x).toLowerCase()));
+  return (rt.rooms||[]).filter(room=>{
+    if(mine.has(String(room).toLowerCase()))return false;
+    return !AppData.bookings.some(b=>b.id!==bk.id&&b.status!=='cancelled'&&!(b.flags||[]).includes('archived')&&String(b.endDate||'').slice(0,10)>=String(bk.startDate||'').slice(0,10)&&String(b.startDate||'').slice(0,10)<=String(bk.endDate||'').slice(0,10)&&(b.blockedRooms||[]).some(x=>String(x).toLowerCase()===String(room).toLowerCase()));
+  });
+}
+function rpHeldEmpty(bk,rt){
+  const out=[];
+  AppData.bookings.filter(b=>b.id!==bk.id&&b.status!=='cancelled'&&!(b.flags||[]).includes('archived')&&String(b.endDate||'').slice(0,10)>=String(bk.startDate||'').slice(0,10)&&String(b.startDate||'').slice(0,10)<=String(bk.endDate||'').slice(0,10)).forEach(b=>{
+    const rooms=(b.blockedRooms||[]).filter(x=>(rt.rooms||[]).some(y=>String(y).toLowerCase()===String(x).toLowerCase()));
+    const empty=rooms.filter(x=>!(AppData.regs||[]).some(g=>g.bookingId===b.id&&String(g.room||'').toLowerCase()===String(x).toLowerCase()&&(g.guests||[]).some(z=>z&&z.name)));
+    if(empty.length)out.push((b.leaderName||b.retreatName||'Retreat')+' ('+empty.length+')');
+  });
+  return out;
+}
+async function rpAutoAdd(bkId,r){
+  const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return{ok:false,note:'Retreat not found.'};
+  const rt=(AppData.roomTypes||[]).find(t=>t.id===r.typeId);
+  if(!rt)return{ok:false,note:'Room type not found: it stays a request.'};
+  if(bk.allLocked)return{ok:false,note:'This retreat\'s room list is locked: it stays a request.'};
+  if(!RP_AUTO_TYPES.has(rt.id))return{ok:false,note:rt.name+' needs a person to choose the room: it stays a request.'};
+  try{
+    const{data:fresh}=await db.from('bookings').select('blocked_rooms').eq('id',bkId).maybeSingle();
+    if(fresh&&Array.isArray(fresh.blocked_rooms))bk.blockedRooms=fresh.blocked_rooms;   // never overwrite a newer list
+  }catch(e){}
+  const free=rpFreeRooms(bk,rt),qty=Math.max(1,parseInt(r.qty,10)||1);
+  if(free.length<qty){
+    const held=rpHeldEmpty(bk,rt);
+    return{ok:false,note:'No '+rt.name+' room is free for these dates'+(free.length?' (only '+free.length+' of '+qty+')':'')+'. It stays a request.'+(held.length?' Held but empty by other retreats: '+held.join(', ')+'.':'')};
+  }
+  const getBase=x=>String(x).replace(/[-\s]*[a-zA-Z]+$/,''),bases=new Set((bk.blockedRooms||[]).map(getBase)),pick=[];
+  free.forEach(x=>{if(pick.length<qty&&!bases.has(getBase(x))&&!pick.some(y=>getBase(y)===getBase(x)))pick.push(x);});
+  free.forEach(x=>{if(pick.length<qty&&!pick.includes(x))pick.push(x);});
+  const list=[...(bk.blockedRooms||[]),...pick],now=new Date().toISOString();
+  const{error}=await db.from('bookings').update({blocked_rooms:list,blocked_rooms_updated_at:now}).eq('id',bkId);
+  if(error)return{ok:false,note:'Could not add the rooms ('+error.message+'): it stays a request.'};
+  bk.blockedRooms=list;bk.blockedRoomsUpdatedAt=now;
+  try{if(typeof saveAll==='function')saveAll();}catch(e){}
+  return{ok:true,rooms:pick};
+}
+function rpAddedList(){   // rooms added in the last 3 days stay on the list as "Added"
+  const out=[],cut=Date.now()-3*864e5;
+  Object.keys(rpStore).forEach(bkId=>{
+    const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk||bk.status==='cancelled')return;
+    (rpStore[bkId].requests||[]).filter(r=>r.status==='approved'&&r.added&&r.added.length&&new Date(r.resolvedAt||0).getTime()>cut).forEach(r=>out.push({...r,bookingId:bkId}));
+  });
+  return out;
+}
 async function rpResolve(bkId,reqId,status){
   const st=await rpLoad(bkId);
   const r=st.requests.find(x=>x.id===reqId);if(!r)return;
+  if(status==='approved'&&r.kind==='more_rooms'){
+    const res=await rpAutoAdd(bkId,r);
+    if(!res.ok){r.note=res.note;await rpSave(bkId);if(typeof buildDashboard==='function')buildDashboard();showToast(res.note);return;}
+    r.added=res.rooms;r.note='';
+  }
   r.status=status;r.resolvedAt=new Date().toISOString();
   await rpSave(bkId);
   if(typeof buildDashboard==='function')buildDashboard();
-  showToast(status==='approved'?'Approved — block the rooms for this retreat.':'Declined.');
+  showToast(status==='approved'?(r.added?'Added '+r.added.length+' '+r.typeName+(r.added.length===1?' room':' rooms')+' to this retreat.':'Approved.'):'Declined.');
 }
 
 if(typeof ACTV_NOTIF_SECTIONS!=='undefined'&&!ACTV_NOTIF_SECTIONS.find(s=>s.id==='room_requests'))
@@ -267,6 +325,7 @@ if(typeof computeActivityNotifs==='function'){
     const notifs=_rpOrigNotifs.apply(this,arguments);
     if(!(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE)&&Date.now()-rpAdminLoadedAt>60000)rpAdminRefresh();
     rpPendingList().forEach(r=>notifs.push({id:'room_request_'+r.id,type:'room_request',bookingId:r.bookingId,label:r.label||'',ts:new Date(r.createdAt),isNew:true,req:r}));
+    rpAddedList().forEach(r=>notifs.push({id:'room_added_'+r.id,type:'room_request',bookingId:r.bookingId,label:r.label||'',ts:new Date(r.resolvedAt||r.createdAt),isNew:false,req:r}));
     return notifs;
   };
 }
@@ -275,6 +334,11 @@ if(typeof _actvNotifRowHtml==='function'){
   _actvNotifRowHtml=function(n){
     if(n.type!=='room_request')return _rpOrigRow.apply(this,arguments);
     const r=n.req;
+    if(r.status==='approved'&&r.added){
+      return `<div style="background:#f0fdf4;border-left:3px solid #16a34a;padding:8px 14px;border-radius:6px;font-size:12.5px;color:#374151;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:14px;flex-shrink:0">✅</span>
+      <span style="cursor:pointer" title="Open this retreat's room block" onclick="if(typeof openBlockModal==='function')openBlockModal('${n.bookingId}')"><strong style="text-decoration:underline;color:#166534">${escHtml(n.label)}</strong> <b style="color:#166534">Added</b> ${r.added.length} ${escHtml(r.typeName)} (${escHtml(r.added.join(', '))})</span>
+      <span style="font-size:11.5px;color:#6b7280">${(()=>{try{return new Date(r.resolvedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Cancun'});}catch(e){return '';}})()}</span></div>`;
+    }
     const what=r.kind==='more_rooms'
       ?`wants <strong>${r.qty} more ${escHtml(r.typeName)}</strong>`
       :`${escHtml((r.names||[]).join(' & '))} want <strong>two beds</strong> (${escHtml(r.twinName||'twin room')}) instead of a ${escHtml(r.kingName||'king')}`;
@@ -284,6 +348,6 @@ if(typeof _actvNotifRowHtml==='function'){
       <span style="cursor:pointer" title="Open this retreat's room block" onclick="if(typeof openBlockModal==='function')openBlockModal('${n.bookingId}');else openBookingFromNotif('${n.bookingId}')"><strong style="text-decoration:underline;color:#2d6a6a">${escHtml(n.label)}</strong> ${what}</span>
       <a href="#" title="Open the retreat's room list" onclick="event.stopPropagation();openBookingFromNotif('${n.bookingId}');return false" style="font-size:11.5px;font-weight:700;color:#2d6a6a">Room list</a>
       ${r.createdAt?`<span style="font-size:11.5px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:99px;padding:1px 9px;white-space:nowrap">Requested ${(()=>{try{return new Date(r.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Cancun'});}catch(e){return '';}})()}</span>`:''}
-      <span style="margin-left:auto;display:flex;gap:6px">${b('Approve','approved','#15803d')}${b('Decline','declined','#b91c1c')}</span></div>`;
+      <span style="margin-left:auto;display:flex;gap:6px">${b('Approve','approved','#15803d')}${b('Decline','declined','#b91c1c')}</span>${r.note?`<div style="flex-basis:100%;font-size:12px;font-weight:600;color:#b45309;background:#fffbeb;border:1px dashed #f59e0b;border-radius:8px;padding:5px 10px">${escHtml(r.note)}</div>`:''}</div>`;
   };
 }
