@@ -155,14 +155,23 @@ function dbGuestNames(bk) {
   (AppData.regs || []).filter(r => r.bookingId === bk.id && !r.cancelled).forEach(r => (r.guests || []).forEach(g => { if (g && g.name && !g.cancelled) out.push(g.name); }));
   return out;
 }
+// Somebody who lands AFTER the activity starts is not there for it (Darlene 2026-11-05: Katherine McClelland arrives at 5:00 pm, so she cannot do the 3:00 pm Mayan Clay): her transfer's arrival time today is later than the activity time.
+function dbNotThereYet(name, time) {
+  try {
+    if (!time || typeof loadTransport !== 'function') return false;
+    const nm = String(name || '').trim().toLowerCase(), t = String(time).slice(0, 5);
+    return loadTransport().some(s => s.arrivalDate === dbDate && s.arrivalTime && String(s.arrivalTime).slice(0, 5) > t && ((s.firstName || '') + ' ' + (s.lastName || '')).trim().toLowerCase() === nm);
+  } catch (e) { return false; }
+}
 function dbParticipants(bk, aoId) {
-  const act = (bk.retreatActivities || []).find(a => a.aoId === aoId);
-  // A pre-paid tour that was added as a REQUEST (requestedTime) and is not part of the group's package is just for that person, the leader: nobody else is added (Darlene 2026-11-05, Jodi's Tulum Ruins).
-  if (act && act.prepaid && act.requestedTime && !(bk.packages || []).includes(aoId)) return { names: [bk.leaderName || bk.retreatName || 'Leader'], basis: 'pre-paid for the leader only' };
-  if (act && act.prepaid) return { names: dbGuestNames(bk), basis: 'included for the whole group' };
+  const act = (bk.retreatActivities || []).find(a => a.aoId === aoId && String(a.date).slice(0, 10) === dbDate) || (bk.retreatActivities || []).find(a => a.aoId === aoId);
+  const here = r => ({ ...r, names: r.names.filter(n => !dbNotThereYet(n, act && act.time)) });
+  // A pre-paid tour that is not part of the group's package is just for that person, the leader: nobody else is added (Darlene 2026-11-05, Jodi's Tulum Ruins).
+  if (act && act.prepaid && !(bk.packages || []).includes(aoId)) return here({ names: [bk.leaderName || bk.retreatName || 'Leader'], basis: 'pre-paid for the leader only' });
+  if (act && act.prepaid) return here({ names: dbGuestNames(bk), basis: 'included for the whole group' });
   const sups = (typeof actSheetSignups !== 'undefined' && actSheetSignups[bk.id]) || [];
   const names = sups.filter(s => (s.activities || []).includes(aoId)).map(s => ((s.firstName || '') + ' ' + (s.lastName || '')).trim()).filter(Boolean);
-  return { names, basis: 'signed up' };
+  return here({ names, basis: 'signed up' });
 }
 async function dbGather(date) {
   const g = { date, arrivals: [], departures: [], rooms: [], transport: [], events: [], tours: [], special: [], notReady: [], ac: [] };
@@ -205,8 +214,9 @@ function dbClassify(ev) {
     // Only the retreats that really have somebody signed up are named; a retreat with nobody signed up is taken out (Darlene 2026-11-05, Heather Kasey), and an activity nobody joined is not listed at all.
     if (ao) {
       const groups = [];
-      (AppData.bookings || []).filter(b => b.status !== 'cancelled' && (b.retreatActivities || []).some(x => x.aoId === ao.id && String(x.date).slice(0, 10) === dbDate)).forEach(b => {
-        const n = dbParticipants(b, ao.id).names.length; if (n) groups.push((b.leaderName || b.retreatName || 'Retreat') + ' (' + n + ' signed up)');
+      // If it is included (pre-paid) for a retreat it is not optional for them (Darlene 2026-11-05), so that retreat is not listed here.
+      (AppData.bookings || []).filter(b => b.status !== 'cancelled' && (b.retreatActivities || []).some(x => x.aoId === ao.id && String(x.date).slice(0, 10) === dbDate) && !(b.retreatActivities || []).some(x => x.aoId === ao.id && String(x.date).slice(0, 10) === dbDate && x.prepaid)).forEach(b => {
+        const n = ((typeof actSheetSignups !== 'undefined' && actSheetSignups[b.id]) || []).filter(x => (x.activities || []).includes(ao.id) && !dbNotThereYet(((x.firstName || '') + ' ' + (x.lastName || '')).trim(), (b.retreatActivities.find(y => y.aoId === ao.id && String(y.date).slice(0, 10) === dbDate) || {}).time)).length; if (n) groups.push((b.leaderName || b.retreatName || 'Retreat') + ' (' + n + ' signed up)');
       });
       if (!groups.length) return 'skip';
       ev.subtitle = groups.join(' · ') + ' · ' + (String(ev.subtitle || '').match(/Optional.*$/) || ['Optional'])[0];
