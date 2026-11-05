@@ -1505,13 +1505,16 @@ async function tr2LoadData() {
   const realArrivalsByDay = new Map();   // date -> [normalized names]
   const realArrivalsRawByDay = new Map();
   const rawTok = n => String(n || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\([^)]*\)/g, ' ').replace(/[^a-z\s]/g, ' ').trim().split(/\s+/).filter(Boolean);
-  tr2AllEntries.forEach(e => { if (e.type !== 'arrival' || e.isSynthetic || !e.date) return; const l = realArrivalsByDay.get(e.date) || []; l.push(tr2NormName(e.guest)); realArrivalsByDay.set(e.date, l);
-    const r = realArrivalsRawByDay.get(e.date) || []; r.push(e.guest); realArrivalsRawByDay.set(e.date, r); });
+  // keyed 'a|date' (arrivals) and 'd|date' (departures): an extra night AFTER a retreat is covered by the departure form
+  tr2AllEntries.forEach(e => { if (e.isSynthetic || !e.date) return; const k = (e.type === 'arrival' ? 'a|' : 'd|') + e.date;
+    const l = realArrivalsByDay.get(k) || []; l.push(tr2NormName(e.guest)); realArrivalsByDay.set(k, l);
+    const r = realArrivalsRawByDay.get(k) || []; r.push(e.guest); realArrivalsRawByDay.set(k, r); });
   const _dayShift = (d, n) => new Date(Date.parse(d + 'T12:00:00Z') + n * 86400000).toISOString().slice(0, 10);
-  const arrivedElsewhere = (name, date) => {
+  const arrivedElsewhere = (name, date, endDate) => {
     if (!date) return false;
-    const near = [-1, 0, 1].flatMap(n => realArrivalsByDay.get(_dayShift(date, n)) || []);
-    const nearRaw = [-1, 0, 1].flatMap(n => realArrivalsRawByDay.get(_dayShift(date, n)) || []);
+    const keys = [-1, 0, 1].map(n => 'a|' + _dayShift(date, n)).concat(endDate ? [-1, 0, 1].map(n => 'd|' + _dayShift(endDate, n)) : []);
+    const near = keys.flatMap(k => realArrivalsByDay.get(k) || []);
+    const nearRaw = keys.flatMap(k => realArrivalsRawByDay.get(k) || []);
     if (!near.length) return false;
     const parts = String(name).split(/\s*(?:&amp;|&|\band\b|\/|\+)\s*/i).map(x => x.trim()).filter(Boolean);
     return parts.length > 0 && parts.every(part => {
@@ -1555,7 +1558,7 @@ async function tr2LoadData() {
             return kt.length >= 2 && (gt.every(t => kt.includes(t)) || kt.every(t => gt.includes(t))); })) return; }
         const gFn = g.name.trim().split(/\s+/)[0].toLowerCase();
         if (gFn.length >= 3 && firstNameIdx[`${bk.id}|${gFn}`]?.count === 1 && transportedFirstNames.has(`${bk.id}|${gFn}`)) return;
-        if (arrivedElsewhere(g.name, reg.checkIn || bk.startDate)) return;
+        if (arrivedElsewhere(g.name, reg.checkIn || bk.startDate, reg.checkOut || bk.endDate)) return;
         tr2AllEntries.push({
           rowId: `synth-${reg.id}-${tr2NormName(g.name)}`, type: 'arrival', date: bk.startDate, time: '',
           guest: g.name, email: g.email || '', flight: '', airport: '', ot: true, share: false, notes: '',
