@@ -31,12 +31,12 @@ let dbDate = null, dbData = {}, dbReports = {}, dbLoaded = false, dbCtx = null;
 const DB_ROOM_WORDS = /\b(straps?|pillows?|mats?|blocks?|bolsters?|blankets?|chairs?|props?|speakers?|sound system|mics?|microphones?|candles?|tables?|heaters?|fans?|lights?|lighting|set ?up|rugs?|towels?|cushions?|incense|altar|bells?|bowls?|projector|screen|whiteboard)\b/i;
 function dbRoomNeedText(note) { return String(note || '').split(/(?<=[.!?])\s+|\n+/).filter(x => DB_ROOM_WORDS.test(x)).join(' ').trim(); }
 // Shala names are bold and each has its own color (Darlene 2026-11-04): Beachfront blue, Grande orange, Chica purple, Heaven green.
-const DB_SHALA_COLOR = { beachfront: '#1d4ed8', grande: '#ea580c', chica: '#7e22ce', heaven: '#15803d', skye: '#0e7490' };
+const DB_SHALA_COLOR = { beachfront: '#1d4ed8', grande: '#ea580c', chica: '#7e22ce', heaven: '#15803d', skye: '#0e7490', casa_grande_living: '#7c4a21' };   // Casa Grande Living Room is brown
 function dbPlace(id) {
   const sh = (typeof SKED_SHALAS !== 'undefined' ? SKED_SHALAS : []).find(x => x.id === id), c = DB_SHALA_COLOR[id];
   if (c) return `<b style="color:${c}">${dbEsc(sh ? sh.name : id)}</b>`;
   const ac = (typeof SKED_ACTIVITIES !== 'undefined' ? SKED_ACTIVITIES : []).find(x => x.id === id);
-  return `<span style="color:#6b7280">${dbEsc(ac ? ac.name : id)}</span>`;
+  return `<span style="color:#6b7280">${dbEsc(ac ? ac.name : (sh ? sh.name : id))}</span>`;
 }
 function dbEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 function dbISO(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
