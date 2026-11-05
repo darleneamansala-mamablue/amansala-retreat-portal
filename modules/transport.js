@@ -2484,11 +2484,15 @@ async function tr2SaveEdit(rowId) {
     departureOT: g('tr2-e-dep-ot')?.checked || false, willingToShare: g('tr2-e-share')?.checked || false, notes: g('tr2-e-notes')?.value.trim() || '',
     serviceCost: g('tr2-e-cost')?.value !== '' ? Number(g('tr2-e-cost').value) : null,
   };
-  { // never save a time without its day: the row would be hidden everywhere
-    const st = tr2StayDates(tr2AllEntries.find(e => e.rowId === rowId));
-    if (!updatedData.arrivalDate && (updatedData.arrivalTime || updatedData.flightNumber || updatedData.arrivalOT)) updatedData.arrivalDate = st.in;
-    if (!updatedData.departureDate && (updatedData.departureTime || updatedData.departureOT)) updatedData.departureDate = st.out;
-  }
+  // Jorge 2026-11-05: both dates are required -- a row without its date is hidden everywhere (Alissa Rodgers)
+  { const miss = [];
+    if (!updatedData.arrivalDate) miss.push(['tr2-e-arr-date', 'arrival date']);
+    if (!updatedData.departureDate) miss.push(['tr2-e-dep-date', 'departure date']);
+    if (miss.length) {
+      miss.forEach(([id]) => { const el = g(id); if (el) { el.style.borderColor = '#dc2626'; el.style.background = '#fef2f2'; } });
+      showToast('Please fill in the ' + miss.map(m => m[1]).join(' and ') + ' before saving.');
+      return;
+    } }
   // Pick up override: field is read-only for everyone except Hilario/Jorge (see
   // tr2CanEditPickup), so a non-privileged save must never touch the stored
   // override -- it's already carried over unchanged via ...oldData above.
