@@ -410,7 +410,7 @@ async function dbRender() {
   const upgrades = g.transport.filter(t => t.kind === 'arrival' && typeof tr2ConfirmedUpgrades !== 'undefined' && tr2ConfirmedUpgrades.get(t.sub.id));
   html += dbCard('Upgrades', upgrades.length ? upgrades.map(t => { const u = tr2ConfirmedUpgrades.get(t.sub.id); return dbRow(`<b>${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')}</b>${dbRetreatTag(t.sub)} · moved to room <b style="color:#7c3aed">${dbEsc(u.newRoom)}</b> · ${u.lateral ? 'free move' : 'paid upgrade'}${u.staffName ? ' · sold by ' + dbEsc(u.staffName) : ''}`); }).join('') : dbNone('No upgrades confirmed for today.'), upgrades.length);
   // 8. After-dinner orientations
-  const needOr = g.arrivals.map(bk => {
+  const needOr = g.arrivals.filter(dbIsRetreatStart).map(bk => {   // an extra night before a retreat has no orientation of its own: it is on the retreat's start day
     const sr = bk.scheduleRequest || {}, o = dbGet('orientation.' + bk.id) || {};
     const hasWelcome = !!sr.hasArrivalClass && !!sr.arrivalSlot;
     return { bk, sr, o, hasWelcome, scheduled: !!(o.time && o.location && o.leader) };
