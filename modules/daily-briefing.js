@@ -210,17 +210,16 @@ async function dbRender() {
   const glanceRows = list => list.map(({ e, k }) => dbRow(`<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:${tagOf[k][1]};color:${tagOf[k][2]}">${tagOf[k][0]}</span>` + evLine(e) + roomNeed(e))).join('');
   const dayClasses = dayAll.filter(x => x.k === 'class' || x.k === 'circle'), dayTours = dayAll.filter(x => x.k === 'tour' || x.k === 'extra');
   // The page has four views of the day, picked at the top (Darlene 2026-11-04): Daily flow (everything together in time order), Classes, Tours, Special notes
-  const optionalRows = [...DB_TOURS, ...DB_CEREMONIES].filter(id => id !== 'ao3' && !new Set(dayTours.map(x => { const m = /_ao_(ao\d+)/.exec(String(x.e.id || '')); return m && m[1]; })).has(id))
-    .map(id => dbRow(`<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:#f3f4f6;color:#4b5563">Optional</span><span style="color:#4b5563">${dbEsc(dbName(id))}</span> <span style="color:#9ca3af;font-size:12.5px">· not scheduled today</span>`)).join('');
+  // Only what is scheduled today is listed (Darlene 2026-11-04); a tour appears here as soon as its day and time are filled in on the Activities page.
   const notesRows = (g.special.length ? g.special.map(x => dbRow(`<b>${dbEsc(x.who)}</b> · ${dbEsc(x.label)}: ${dbEsc(x.text)}`)).join('') : '') +
     g.arrivals.map(b => { const n = dbArrNote(b); return n ? dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · arriving: ${n}`) : ''; }).join('') +
     g.departures.map(b => { const n = dbDepNote(b); return n ? dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · departing: ${n}`) : ''; }).join('');
   const tabBtn = (k, label) => `<button onclick="dbTab='${k}';dbRender()" style="padding:8px 18px;border:1.5px solid ${dbTab === k ? '#2d6a6a' : '#d6cfc4'};background:${dbTab === k ? '#2d6a6a' : '#fff'};color:${dbTab === k ? '#fff' : '#1f2937'};border-radius:99px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">${label}</button>`;
   html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px">${tabBtn('flow', 'Daily flow')}${tabBtn('classes', 'Classes')}${tabBtn('tours', 'Tours')}${tabBtn('notes', 'Special notes')}</div>`;
   if (dbTab === 'classes') html += dbCard('Classes', dayClasses.length ? glanceRows(dayClasses) : dbNone('No classes today.'), dayClasses.length);
-  else if (dbTab === 'tours') html += dbCard('Tours and activities', (dayTours.length ? glanceRows(dayTours) : '') + optionalRows, dayTours.length + ' scheduled');
+  else if (dbTab === 'tours') html += dbCard('Tours and activities', dayTours.length ? glanceRows(dayTours) : dbNone('No tours or activities scheduled today.'), dayTours.length + ' scheduled');
   else if (dbTab === 'notes') html += dbCard('Special notes', notesRows || dbNone('No special notes today.'));
-  else html += dbCard('Daily flow <span style="font-weight:500;color:#6b7280">— classes, circles, tours and activities together, in time order</span>', (dayAll.length ? glanceRows(dayAll) : dbNone('Nothing scheduled today.')) + optionalRows, dayAll.length);
+  else html += dbCard('Daily flow <span style="font-weight:500;color:#6b7280">— classes, circles, tours and activities together, in time order</span>', dayAll.length ? glanceRows(dayAll) : dbNone('Nothing scheduled today.'), dayAll.length);
   // 1. Arrivals
   const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}${dbArrNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#374151"><b>Special notes:</b> ' + dbArrNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat arrivals today.');
   html += dbCard('Arrivals', arrBody + (g.hkOk ? dbRow(`${g.rooms.length} room${g.rooms.length === 1 ? '' : 's'} arriving today (all guests)`) : ''), g.arrivals.length + ' retreat' + (g.arrivals.length === 1 ? '' : 's'));
