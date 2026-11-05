@@ -68,22 +68,25 @@
   }
   function card() {
     const today = new Date(); today.setHours(12, 0, 0, 0);
-    const t = stats(iso(today));
+    // The day picked in the 7-day strip (Darlene 2026-11-05): the whole card (dark line, tiles, list) follows it, not only the list under the strip
+    const selDay = window._droDay || iso(today), isToday = selDay === iso(today), niceDay = new Date(selDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const t = stats(selDay);
     const tile = (n, sub, label, bg, key) => '<div onclick="droShow(\''+key+'\')" title="Click to see who" style="cursor:pointer;flex:1;min-width:130px;background:' + bg + ';border-radius:10px;padding:12px 14px"><div style="font-size:30px;font-weight:800;color:#1f2d2d;line-height:1">' + n + '</div><div style="font-size:12.5px;font-weight:700;color:#1f2d2d;margin-top:4px">' + label + '</div><div style="font-size:11.5px;color:#4b5563">' + sub + '</div></div>';
     const bk = (n, r) => (n === 1 ? '1 booking' : n + ' bookings') + ' · ' + (r === 1 ? '1 room' : r + ' rooms');
     let strip = '';
     for (let i = 0; i < 7; i++) {
       const d = new Date(today); d.setDate(d.getDate() + i);
       const s = stats(iso(d));
-      strip += '<div onclick="droShow(\'day:' + iso(d) + '\')" title="Click to see this day\'s arrivals" style="cursor:pointer;flex:1;min-width:58px;text-align:center;padding:6px 2px;border-radius:8px;background:' + (i ? '#f6f3ec' : '#e0f2fe') + '"><div style="font-size:10.5px;font-weight:700;color:#4b5563">' + d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + d.getDate() + '</div><div style="font-size:18px;font-weight:800;color:#1f2d2d">' + s.gIn + '</div></div>';
+      strip += '<div onclick="droPick(\'' + iso(d) + '\')" title="Click to show this day" style="cursor:pointer;flex:1;min-width:58px;text-align:center;padding:6px 2px;border-radius:8px;border:2px solid ' + (iso(d) === selDay ? '#2d6a6a' : 'transparent') + ';background:' + (iso(d) === selDay ? '#e0f2fe' : '#f6f3ec') + '"><div style="font-size:10.5px;font-weight:700;color:#4b5563">' + d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + d.getDate() + '</div><div style="font-size:18px;font-weight:800;color:#1f2d2d">' + s.gIn + '</div></div>';
     }
     const lists = { in: t.inh, arr: t.arr, dep: t.dep };
+    window._droTitle = isToday ? { in: 'In house tonight', arr: 'Arriving today', dep: 'Departing today' } : { in: 'In house on ' + niceDay, arr: 'Arriving ' + niceDay, dep: 'Departing ' + niceDay };
     window._droLists = {}; Object.keys(lists).forEach(k => { window._droLists[k] = lists[k].map(b => b.id); });
     const names = '<div id="droPanel" style="display:none;margin-top:10px;padding:10px 12px;background:#faf8f3;border-radius:10px"></div>';
     return '<div id="droCard" style="background:#fff;border-radius:14px;padding:16px 18px;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,.06)">'
       + '<div style="font-size:15px;font-weight:800;color:#1f2d2d;margin-bottom:10px">🏨 Room-only guests today &amp; BBC / RNR</div>'
-      + (function () { const ev = everyone(iso(today), t.gIn); return '<div style="background:#1f2d2d;color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13.5px"><b style="font-size:20px">' + ev.total + '</b> guests in house tonight, everyone <span style="opacity:.85">· ' + t.gIn + ' room-only · ' + ev.grp + ' in ' + ev.n + ' retreat / BBC / RNR group' + (ev.n === 1 ? '' : 's') + ' (guests on each group\'s room list for tonight)</span></div>'; })()
-      + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + tile(t.gIn, bk(t.inh.length, t.rIn), 'Room-only guests in house tonight', '#dcfce7', 'in') + tile(t.gArr, bk(t.arr.length, t.rArr), 'Room-only guests arriving today', '#e0f2fe', 'arr') + tile(t.gDep, bk(t.dep.length, t.rDep), 'Room-only guests departing today', '#fef3c7', 'dep') + '</div>'
+      + (function () { const ev = everyone(selDay, t.gIn); return '<div style="background:#1f2d2d;color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13.5px"><b style="font-size:20px">' + ev.total + '</b> guests in house ' + (isToday ? 'tonight' : 'on ' + niceDay) + ', everyone <span style="opacity:.85">· ' + t.gIn + ' room-only · ' + ev.grp + ' in ' + ev.n + ' retreat / BBC / RNR group' + (ev.n === 1 ? '' : 's') + ' (guests on each group\'s room list ' + (isToday ? 'for tonight' : 'for that night') + ')</span></div>'; })()
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + tile(t.gIn, bk(t.inh.length, t.rIn), 'Room-only guests in house ' + (isToday ? 'tonight' : 'on ' + niceDay), '#dcfce7', 'in') + tile(t.gArr, bk(t.arr.length, t.rArr), 'Room-only guests arriving ' + (isToday ? 'today' : 'on ' + niceDay), '#e0f2fe', 'arr') + tile(t.gDep, bk(t.dep.length, t.rDep), 'Room-only guests departing ' + (isToday ? 'today' : 'on ' + niceDay), '#fef3c7', 'dep') + '</div>'
       + '<div style="font-size:11.5px;font-weight:700;color:#4b5563;margin:12px 0 4px">Guests in house, next 7 days</div><div style="display:flex;gap:6px;flex-wrap:wrap">' + strip + '</div>'
       + names
       + groupsHtml(iso(today), iso(new Date(today.getTime() + 14 * 864e5)))
@@ -116,6 +119,7 @@
   }
   const notesHtml = b => notesOf(b).map(n => '<div style="margin-top:2px;font-size:12px;color:' + (n.none ? '#4b5563' : '#7c2d12') + '"><b>📝 ' + n.label + ':</b> ' + esc(n.text) + '</div>').join('');
   // Click a tile: list the guests behind the number; click a guest to open their booking (Darlene 2026-11-02: "we need to be able to see who the one guest is or click into it")
+  window.droPick = function (ds) { window._droDay = ds === iso(new Date()) ? null : ds; try { paint(); } catch (e) {} };
   window.droShow = function (key) {
     const box = document.getElementById('droPanel'); if (!box) return;
     if (box.dataset.k === key && box.style.display !== 'none') { box.style.display = 'none'; return; }
@@ -136,7 +140,7 @@
       box.innerHTML = '<div style="font-size:13.5px;font-weight:800;color:#1f2d2d">' + nice + '</div>' + section('Arriving', arrIds) + section('Departing', depIds) + section('Already in house', stay);
       return;
     }
-    const ids = (window._droLists || {})[key] || [], title = { in: 'In house tonight', arr: 'Arriving today', dep: 'Departing today' }[key];
+    const ids = (window._droLists || {})[key] || [], title = (window._droTitle || { in: 'In house tonight', arr: 'Arriving today', dep: 'Departing today' })[key];
     box.innerHTML = '<div style="font-size:12.5px;font-weight:800;color:#1f2d2d;margin-bottom:4px">' + title + '</div>' + (ids.length ? rowsFor(ids) : '<div style="font-size:12.5px;color:#4b5563">Nobody.</div>');
   };
   // Click a guest: a short summary of the booking, with a button for the full booking / folio (Darlene 2026-11-02: "a summary of the bookings when we click it")
