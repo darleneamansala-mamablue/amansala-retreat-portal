@@ -83,6 +83,18 @@ function dbSubArrived(sub) {
     return (AppData.regs || []).some(r => r.checkedInAt && (!sub.bookingId || r.bookingId === sub.bookingId) && (r.guests || []).some(g => String(g.name || '').trim().toLowerCase() === nm));
   } catch (err) { return false; }
 }
+// Departures: the guests who are really leaving today (their own check-out date), not the retreat's contracted headcount. Guests already checked out earlier are not counted.
+function dbDepCount(b) {
+  const regs = (AppData.regs || []).filter(r => r.bookingId === b.id && !r.cancelled);
+  if (!regs.length) return (b.pax || '?') + ' guests';
+  let n = 0;
+  regs.forEach(r => {
+    const co = String(r.checkOut || b.endDate || '').slice(0, 10), out = r.checkedOutAt ? String(r.checkedOutAt).slice(0, 10) : '';
+    if (co !== dbDate || (out && out < dbDate)) return;
+    n += new Set((r.guests || []).filter(g => g.name).map(g => g.name.trim().toLowerCase())).size || 1;
+  });
+  return n + ' guest' + (n === 1 ? '' : 's') + ' leaving';
+}
 function dbArrNote(b) { const sr = b.scheduleRequest || {}; return dbEsc(String(sr.specialRequests || '').trim()); }
 function dbDepNote(b) {
   const out = [];
@@ -284,7 +296,7 @@ async function dbRender() {
   html += dbCard("Salamon's arrivals", (sal.length ? sal.map(tLine).join('') : dbNone('No airport arrivals for Salamon today.')) + (oth.length ? `<div style="padding:6px 14px;background:#faf8f4;font-size:11px;font-weight:700;color:#8a7e74;text-transform:uppercase">Other drivers</div>` + oth.map(tLine).join('') : ''), arrT.length + ' arrival' + (arrT.length === 1 ? '' : 's'));
   // 4. Departures
   const depT = g.transport.filter(t => t.kind === 'departure');
-  html += dbCard('Departures', (g.departures.length ? g.departures.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${b.pax || '?'} guests · checking out today${dbDepNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#991b1b;font-weight:600">' + dbDepNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat departures today.')) +
+  html += dbCard('Departures', (g.departures.length ? g.departures.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${dbDepCount(b)} · checking out today${dbDepNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#991b1b;font-weight:600">' + dbDepNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat departures today.')) +
     depT.map(t => dbRow(`Airport departure <b>${dbFmtT(t.sub.departureTime) || PENDING}</b> · ${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')} · driver ${dbEsc(t.name)}`)).join(''), g.departures.length + ' retreat' + (g.departures.length === 1 ? '' : 's'));
   // 5. Classes, opening circles, tours, extra activities
   const evCard = (title, list, empty) => dbCard(title, list.length ? list.map(e => dbRow(evLine(e))).join('') : dbNone(empty), list.length);
