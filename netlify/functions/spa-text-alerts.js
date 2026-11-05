@@ -44,7 +44,12 @@ async function run() {
       const sv = services.find(s => s.id === a.serviceId) || {};
       const vars = [esDate(a.date), fmtTime(a.start), `${sv.name || 'Servicio'}${sv.duration || a.duration ? ' (' + (sv.duration || a.duration) + ' min)' : ''}`, a.clientName || 'Cliente', guestYesNo(a), t ? `${t.firstName || ''} ${t.lastName || ''}`.trim() : 'Sin asignar'];
       let okAny = false;
-      for (const d of desk) { const r = await sendWhatsApp(toE164(d.phone), vars, `spa-desk-${a.id}-${String(d.phone).replace(/\D/g, '')}`, 'spa_reserva_ultimo_minuto', 'es_MX'); if (r.ok) okAny = true; else console.error('[spa-text-alerts] desk', d.name, r.reason); }
+      for (const d of desk) {   // _v2 has the line breaks (Jorge 2026-11-05); the old one-line template until Meta approves it
+        const ph = String(d.phone).replace(/\D/g, '');
+        let r = await sendWhatsApp(toE164(d.phone), vars, `spa-desk2-${a.id}-${ph}`, 'spa_reserva_ultimo_minuto_v2', 'es_MX');
+        if (!r.ok) r = await sendWhatsApp(toE164(d.phone), vars, `spa-desk-${a.id}-${ph}`, 'spa_reserva_ultimo_minuto', 'es_MX');
+        if (r.ok) okAny = true; else console.error('[spa-text-alerts] desk', d.name, r.reason);
+      }
       if (okAny) sent['desk|' + a.id] = new Date().toISOString();
     } catch (e) { console.error('[spa-text-alerts] desk alert', a.id, e.message); }
     if (!t || !t.phone) { skipped++; continue; }

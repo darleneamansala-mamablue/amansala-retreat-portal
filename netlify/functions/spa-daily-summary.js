@@ -32,7 +32,11 @@ exports.handler = async () => {
     if (!mine.length) continue;
     const lines = mine.map(a => { const sv = services.find(s => s.id === a.serviceId) || {}; return `${fmtTime(a.start)} · ${sv.name || 'Servicio'}${sv.duration || a.duration ? ' (' + (sv.duration || a.duration) + ' min)' : ''} · ${a.clientName || 'Cliente'} · ${guestLabel(a)}`; });
     const template = process.env.VISITO_SPA_SUMMARY_TEMPLATE_ES || 'spa_resumen_terapeuta';
-    const res = waReady(template)
+    // Jorge 2026-11-05: one service per line. WhatsApp allows no line breaks inside a variable, so there is one template per count
+    // (spa_resumen_terapeuta_uno, _2 ... _5); from the 5th on they share the last line. The old one-line template until Meta approves.
+    const rows = lines.length > 5 ? [...lines.slice(0, 4), lines.slice(4).join('   •   ')] : lines;
+    let res = waReady(template) ? await sendWhatsApp(toE164(t.phone), [t.firstName || 'equipo', pretty, ...rows], `spa-sum2-${day}-${t.id}`, rows.length === 1 ? 'spa_resumen_terapeuta_uno' : `spa_resumen_terapeuta_${rows.length}`, 'es_MX') : { ok: false };
+    if (!res.ok) res = waReady(template)
       ? await sendWhatsApp(toE164(t.phone), [t.firstName || 'equipo', pretty, lines.join('   •   ')], `spa-sum-${day}-${t.id}`, template, 'es_MX')
       : await sendSms(toE164(t.phone), `Hola ${t.firstName || ''}, tus servicios de spa para mañana, ${pretty}:\n${lines.join('\n')}`);
     if (res.ok) { sent[sk] = new Date().toISOString(); texted++; } else if (res.reason !== 'twilio_not_configured') sent[sk] = 'failed: ' + res.reason;
