@@ -63,6 +63,39 @@ async function logAction(key, bookingId, userMessage, toolName, toolInput, toolR
 // Container rt → bed rt (for sub-bed expansion)
 const CONT_TO_BED = { rt6: 'bd1', rt7: 'bd2', rt8: 'bd3', rt9: 'bd4' };
 
+// ─── A request the assistant cannot grant is filed for the team (Darlene 2026-11-05) ───────────────────────────────────────
+// Beachfront King / Beachview Double are never added by the assistant, and a room that is held by another retreat but has nobody named in it cannot be added either. Instead of only refusing, the
+// assistant files a Room Request (the same app_store row the leader's request buttons write: room_prompts_<bookingId>) with an analysis, so it lands in the Room Requests list on the Dashboard:
+// how many rooms of that type are free for the dates, and which other retreats hold rooms of that type with no guest name in them (which staff could release and give to this leader).
+async function fileRoomRequest(key, bookingId, bk, rt, why) {
+  try {
+    const [othersR, rowR] = await Promise.all([
+      supaGet(key, `bookings?id=neq.${encodeURIComponent(bookingId)}&status=neq.cancelled&select=id,leader_name,retreat_name,blocked_rooms,start_date,end_date`),
+      supaGet(key, `app_store?key=eq.room_prompts_${encodeURIComponent(bookingId)}&select=value`),
+    ]);
+    const others = (Array.isArray(othersR.data) ? othersR.data : []).filter(b => b.start_date < bk.end_date && b.end_date > bk.start_date);
+    const roomsOf = new Set((rt.rooms ?? []).map(r => String(r).toLowerCase()));
+    const mine = new Set((bk.blocked_rooms ?? []).map(r => String(r).toLowerCase()));
+    const heldByOthers = new Set(others.flatMap(b => b.blocked_rooms ?? []).map(r => String(r).toLowerCase()));
+    const free = [...roomsOf].filter(r => !mine.has(r) && !heldByOthers.has(r));
+    let regs = [];
+    const heldIds = others.filter(b => (b.blocked_rooms ?? []).some(r => roomsOf.has(String(r).toLowerCase()))).map(b => b.id);
+    if (heldIds.length) { const rr = await supaGet(key, `registrations?select=booking_id,room,guests,cancelled&booking_id=in.(${heldIds.map(encodeURIComponent).join(',')})`); regs = Array.isArray(rr.data) ? rr.data : []; }
+    const heldEmpty = [];
+    others.forEach(b => {
+      const rooms = (b.blocked_rooms ?? []).filter(r => roomsOf.has(String(r).toLowerCase()));
+      const empty = rooms.filter(r => !regs.some(g => g.booking_id === b.id && !g.cancelled && String(g.room || '').toLowerCase() === String(r).toLowerCase() && (g.guests || []).some(x => x && x.name)));
+      if (empty.length) heldEmpty.push(`${b.leader_name || b.retreat_name || 'a retreat'} (${empty.length}: ${empty.join(', ')})`);
+    });
+    const note = `Asked through the assistant. ${why} ${free.length} ${rt.name} room${free.length === 1 ? ' is' : 's are'} free for these dates.` + (heldEmpty.length ? ` Held by other retreats with nobody named in them: ${heldEmpty.join('; ')}.` : ' No other retreat is holding an empty one.');
+    const row = Array.isArray(rowR.data) && rowR.data[0] && rowR.data[0].value && Array.isArray(rowR.data[0].value.requests) ? rowR.data[0].value : { requests: [] };
+    if (row.requests.some(r => r.status === 'pending' && r.kind === 'more_rooms' && r.typeId === rt.id && r.source === 'assistant')) return { filed: true, duplicate: true };
+    row.requests.push({ id: 'rp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), status: 'pending', createdAt: new Date().toISOString(), kind: 'more_rooms', typeId: rt.id, typeName: rt.name, qty: 1, label: (bk.leader_name || '') + (bk.retreat_name ? ' · ' + bk.retreat_name : ''), source: 'assistant', note });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_store?on_conflict=key`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ key: `room_prompts_${bookingId}`, value: row, updated_at: new Date().toISOString() }) });
+    return { filed: res.ok };
+  } catch (e) { return { filed: false }; }
+}
+
 // ─── Shared data loader ───────────────────────────────────────
 async function loadBaseData(key, bookingId) {
   const [bkR, rtR, otherR] = await Promise.all([
@@ -250,12 +283,16 @@ async function executeTool(name, input, bookingId, supaKey) {
       // These types are managed exclusively by the Amansala team — never via bot
       const rtLower = rt.name.toLowerCase();
       if (rtLower.includes('beachfront king') || rtLower.includes('beachview double')) {
+        const f = await fileRoomRequest(supaKey, bookingId, bk, rt, `${rt.name} is assigned by the team.`);
+        if (f.filed) return { success: false, request_sent: true, message: `I have sent your request for a ${rt.name} room to the Amansala team. They assign those rooms themselves and will confirm with you.` };
         return { success: false, reason: `${rt.name} rooms must be requested directly with the Amansala team at +52 55 9225 2190.` };
       }
 
       const blocked   = new Set(bk.blocked_rooms ?? []);
       const available = (rt.rooms ?? []).filter(r => !blocked.has(r) && !conflictSet.has(r));
       if (available.length === 0) {
+        const f = await fileRoomRequest(supaKey, bookingId, bk, rt, `No ${rt.name} room could be added automatically.`);
+        if (f.filed) return { success: false, request_sent: true, message: `No ${rt.name} room is free for your retreat dates right now, so I have sent a request to the Amansala team. They will check whether one can be released for you and will confirm.` };
         return { success: false, reason: `No ${rt.name} rooms are available for your retreat dates.` };
       }
 
@@ -444,7 +481,8 @@ IMPORTANT RULES:
 - If a teacher specifies a type, call add_room_by_type directly.
 
 ROOM LIMITS:
-- UNAVAILABLE VIA CHAT — Beachfront King AND Beachview Double (also called "Bed in Beachview Double"): you may NEVER add these types, even if the teacher asks. Politely explain that these room types must be requested directly with the Amansala team: +52 55 9225 2190 (WhatsApp/phone).
+- UNAVAILABLE VIA CHAT — Beachfront King AND Beachview Double (also called "Bed in Beachview Double"): you may NEVER add these types, and you never offer them. If the teacher asks for one, call add_room_by_type anyway: it does NOT add the room, it files a request for the Amansala team. Then tell the teacher the request has been sent to the team and the team will confirm. Never say it was added.
+- If add_room_by_type returns request_sent, relay its message: say the request was sent to the team, never that the room was added.
 - ALL OTHER TYPES: you may add rooms of those types as long as they are available — 1 room per request (one at a time), up to what is available.
 - When adding/removing rooms, confirm with the type name only (e.g. "I've added a Superior room to your retreat").
 - If a teacher needs many changes, also mention they can contact the team at +52 55 9225 2190.
