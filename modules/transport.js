@@ -1561,12 +1561,16 @@ async function tr2LoadData() {
         const gFn = g.name.trim().split(/\s+/)[0].toLowerCase();
         if (gFn.length >= 3 && firstNameIdx[`${bk.id}|${gFn}`]?.count === 1 && transportedFirstNames.has(`${bk.id}|${gFn}`)) return;
         if (arrivedElsewhere(g.name, reg.checkIn || bk.startDate, reg.checkOut || bk.endDate)) return;
-        tr2AllEntries.push({
-          rowId: `synth-${reg.id}-${tr2NormName(g.name)}`, type: 'arrival', date: bk.startDate, time: '',
+        const synth = {
+          rowId: `synth-${reg.id}-${tr2NormName(g.name)}`, type: 'arrival', date: reg.checkIn || bk.startDate, time: '',
           guest: g.name, email: g.email || '', flight: '', airport: '', ot: true, share: false, notes: '',
           room, retreatId: bk.id, retreatLabel, eta: null, driverConfirmed: false, cost: null, isSynthetic: true,
           regId: reg.id, checkedIn: !!reg.checkedInAt,
-        });
+        };
+        tr2AllEntries.push(synth);
+        // Jorge 2026-11-05 (Jill Lane, Monica 1a): a guest with no form showed as Missing on arrivals only -- the
+        // Departures view had nothing for them. The same Missing row now shows there too, on their check-out day.
+        tr2AllEntries.push({ ...synth, type: 'departure', date: reg.checkOut || bk.endDate, synthDeparture: true });
       });
     });
   });
@@ -1693,6 +1697,7 @@ function tr2FilteredSorted() {
   return tr2AllEntries.filter(e => {
     if (tr2View === 'arrivals' && e.type !== 'arrival') return false;
     if (tr2View === 'departures' && e.type !== 'departure') return false;
+    if (e.synthDeparture && tr2View !== 'departures') return false;   // Missing guests: once per list (arrival), and on Departures
     if (tr2RetreatFilter && e.retreatId !== tr2RetreatFilter) return false;
     if (tr2DateFrom && e.date < tr2DateFrom) return false;
     if (tr2DateTo && e.date > tr2DateTo) return false;
