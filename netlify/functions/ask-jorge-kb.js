@@ -59,7 +59,17 @@ RETREATS / ROOM LIST
 - Retreat payments (deposit, final payment) are recorded in the retreat's Payments (method: wire, cheque, zelle, venmo, card).
 - Locking a room/retreat stops teachers from changing it.
 
+RATES (where to see / change them)
+- Booking Engine > Rates tab: "Base Rates" per room type — Escape rate, Extra Night High (Oct–Apr) and Extra Night Low (May–Sep),
+  plus Pricing Rules (seasonal / weekend adjustments, Escape only). Extra Night defaults to the Escape rate when empty.
+- The assistant can quote a price for given dates and room type (quote_room_rate): rate per night, taxes and total.
+- A retreat's own room rates (what the teacher's bill uses) are in the retreat (Teachers / Room List); Edit Guest can set a
+  custom rate or an extra-night rate for one guest.
+
 EXTRA NIGHTS
+- If the TEACHER pays the extra night for their guests: extend the guest's check-in / check-out in the retreat's Room List (Edit
+  Guest). It is added to the teacher's bill (the guest's per-guest "extra night rate" can be set there).
+- If the GUEST pays: make it a separate reservation (Rooms > New booking, Extra Night rate) or charge it on the guest's folio.
 - A guest of a group retreat who adds nights right before/after the retreat gets the Extra Night rate (page extra-nights, or Lana
   on WhatsApp). A Room Only / Escape guest who extends pays the normal Escape rate.
 - Extra nights paid in Cloudbeds or in the portal show "Extra night paid" in the reservation notes.

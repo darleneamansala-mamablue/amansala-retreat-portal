@@ -57,6 +57,8 @@ const TOOLS = [
     input_schema: { type: 'object', properties: { name: { type: 'string', description: 'Guest name or part of it' }, room: { type: 'string', description: 'Room, e.g. 13b, GV16, CH2' }, date: { type: 'string', description: 'YYYY-MM-DD, default today (Tulum)' } } } },
   { name: 'room_availability', description: 'Free rooms for a date range (optionally only one room type or one room). Read-only.',
     input_schema: { type: 'object', properties: { checkIn: { type: 'string' }, checkOut: { type: 'string' }, roomType: { type: 'string' }, room: { type: 'string' } }, required: ['checkIn', 'checkOut'] } },
+  { name: 'quote_room_rate', description: 'Price of a Room Only stay or extra nights for given dates: each available room type with its rate per night, taxes and total. stayType extra_night = the Extra Night rate (guests of a retreat adding nights before/after it); escape = the normal Escape rate. Read-only.',
+    input_schema: { type: 'object', properties: { checkIn: { type: 'string' }, checkOut: { type: 'string' }, adults: { type: 'number' }, stayType: { type: 'string', enum: ['extra_night', 'escape'] } }, required: ['checkIn', 'checkOut'] } },
   { name: 'spa_services', description: 'List the active spa services (id, name, duration, price). Read-only.', input_schema: { type: 'object', properties: {} } },
   { name: 'spa_availability', description: 'Free times for a spa service on a date (with therapist and spa room ids to book). Read-only.',
     input_schema: { type: 'object', properties: { serviceId: { type: 'string' }, date: { type: 'string' }, therapistPreference: { type: 'string', enum: ['none', 'male', 'female'] }, guestCount: { type: 'number' } }, required: ['serviceId', 'date'] } },
@@ -386,6 +388,7 @@ exports.handler = async (event) => {
         try {
           if (u.name === 'find_guest') out = await findGuest(key, u.input || {});
           else if (u.name === 'room_availability') out = await roomAvailability(key, u.input || {});
+          else if (u.name === 'quote_room_rate') out = await visitoTool('visito-check-availability', { adults: 1, stayType: 'extra_night', ...(u.input || {}) });
           else if (u.name === 'spa_services') {
             const [row] = await (await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_data&select=value`, { headers: H(key) })).json();
             out = (((row && row.value) || {}).services || []).filter(x => x && x.active).map(x => ({ serviceId: x.id, name: x.name, minutes: x.duration, priceUSD: x.price, group: x.sessionType === 'group', category: x.category }));
