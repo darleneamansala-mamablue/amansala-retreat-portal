@@ -428,6 +428,24 @@ exports.handler = async (event) => {
         return ok(h, { success: true, reservations: out });
       }
 
+      case "getReservationPayInfo": {
+        // Read only (2026-11-05): how an OTA reservation is paid -- Expedia Collect (Expedia charges the guest and pays the
+        // hotel) vs Hotel Collect -- source, notes, payments and card info Cloudbeds keeps. Up to 20 ids.
+        const ids = (Array.isArray(body.reservationIds) ? body.reservationIds : []).map(String).slice(0, 20);
+        const out = {};
+        await Promise.all(ids.map(async id => {
+          const res = await cbGet(tok, "/getReservation", { reservationID: id }).catch(() => null);
+          const d = res?.data;
+          if (!d) { out[id] = { error: true }; return; }
+          const pick = {};
+          for (const [k, v] of Object.entries(d)) {
+            if (/source|collect|payment|paid|card|ota|third|channel|origin|note|balance|total|deposit|virtual|vcc|commission|guarantee/i.test(k)) pick[k] = typeof v === "object" ? JSON.stringify(v).slice(0, 400) : v;
+          }
+          out[id] = pick;
+        }));
+        return ok(h, { success: true, reservations: out });
+      }
+
       case "getReservationMoney": {
         // Read only (2026-11-03): contact, source, total, paid and balance of reservations, to import Cloudbeds-only
         // reservations into the portal with their money. Up to 40 ids per call.
