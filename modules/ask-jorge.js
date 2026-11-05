@@ -1,7 +1,7 @@
 // ===== ask-jorge.js — "Ask Jorge" help chat in the corner of every portal screen (Jorge 2026-11-05) =====
 // Staff ask how to do something or a quick fact about a guest; netlify/functions/ask-jorge.js answers (Claude + the staff
-// guide, read-only guest look-ups). When it cannot solve it, the question goes to Jorge by WhatsApp + email. It never
-// changes anything in the portal. Standalone; classic script, shares global scope. Staff logins only (not teachers).
+// guide, guest look-ups). When it cannot solve it, the question goes to Jorge by WhatsApp + email. It can also do things
+// (add a charge, record a payment, check in/out, internal note, A/C 24h) but only after the person presses Confirm on its card. Standalone; classic script, shares global scope. Staff logins only (not teachers).
 (function () {
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // light formatting: **bold**, line breaks, numbered/bulleted lines
@@ -34,7 +34,7 @@
     const inp = document.getElementById('ajIn');
     inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.ajSend(); } });
     render();
-    if (!msgs.length) addBubble('assistant', 'Hola 👋 Pregúntame cómo hacer algo en el portal (mover un cuarto, agregar un cargo, registrar un pago, check-in…) o algo de un huésped (¿en qué cuarto está?, ¿cuánto debe?). Si no lo sé, le mando tu pregunta a Jorge.');
+    if (!msgs.length) addBubble('assistant', 'Hola 👋 Pregúntame cómo hacer algo en el portal o algo de un huésped. También lo puedo hacer por ti: agregar un cargo, registrar un pago, check-in / check-out, una nota interna o el A/C 24h (tú confirmas antes de guardar). Si no lo sé, le mando tu pregunta a Jorge.');
     inp.focus();
   }
   function addBubble(role, text) {
@@ -44,6 +44,28 @@
     d.style.cssText = `margin:6px 0;display:flex;${mine ? 'justify-content:flex-end' : ''}`;
     d.innerHTML = `<div style="max-width:85%;padding:8px 11px;border-radius:12px;${mine ? 'background:#0e7490;color:#fff' : 'background:#fff;border:1px solid #e5e7eb;color:#1f2937'}">${fmt(text)}</div>`;
     log.appendChild(d); log.scrollTop = log.scrollHeight;
+  }
+  // a proposed change: nothing is saved until Confirm
+  function addCard(p) {
+    const log = document.getElementById('ajLog'); if (!log || !p || !p.action) return;
+    const d = document.createElement('div');
+    d.style.cssText = 'margin:8px 0;padding:10px 12px;border:1.5px solid #f59e0b;background:#fffbeb;border-radius:12px';
+    d.innerHTML = `<div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:4px">CONFIRM THIS CHANGE</div><div style="font-size:13px;color:#1f2937">${esc(p.summary)}</div>
+      <div style="display:flex;gap:6px;margin-top:8px"><button class="ajOk" style="background:#0e7490;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer">Confirm</button>
+      <button class="ajNo" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 12px;cursor:pointer">Cancel</button></div>`;
+    log.appendChild(d); log.scrollTop = log.scrollHeight;
+    const done = (txt, color) => { d.querySelectorAll('button').forEach(b => b.remove()); const s = document.createElement('div'); s.style.cssText = `margin-top:6px;font-size:12.5px;font-weight:600;color:${color}`; s.textContent = txt; d.appendChild(s); };
+    d.querySelector('.ajNo').onclick = () => { done('Cancelled — nothing was changed.', '#6b7280'); msgs.push({ role: 'user', content: '(I cancelled: ' + p.summary + ')' }); };
+    d.querySelector('.ajOk').onclick = async () => {
+      d.querySelectorAll('button').forEach(b => b.disabled = true);
+      let token = ''; try { token = sessionStorage.getItem('amansala_staff_token') || ''; } catch (e) {}
+      try {
+        const r = await fetch('/.netlify/functions/ask-jorge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, execute: p.action, page: page() }) });
+        const x = await r.json().catch(() => ({}));
+        if (x.ok) { done(x.message + ' — refresh the screen to see it.', '#047857'); msgs.push({ role: 'assistant', content: 'Done: ' + p.summary }); }
+        else { done('Not saved: ' + (x.message || x.error || 'error'), '#b91c1c'); msgs.push({ role: 'assistant', content: 'Could not do it: ' + (x.message || '') }); }
+      } catch (e) { done('Connection problem — nothing was saved.', '#b91c1c'); }
+    };
   }
   function render() { const log = document.getElementById('ajLog'); if (!log) return; log.innerHTML = ''; msgs.forEach(m => addBubble(m.role, m.content)); }
 
@@ -61,6 +83,7 @@
       const ans = d.answer || d.error || 'No pude responder ahora, intenta otra vez.';
       msgs.push({ role: 'assistant', content: ans }); addBubble('assistant', ans);
       if (d.notified && d.notified.sent) addBubble('assistant', '📨 Le envié tu pregunta a Jorge. Te va a responder directamente.');
+      (d.proposals || []).forEach(addCard);
     } catch (e) { if (thinking) thinking.remove(); addBubble('assistant', 'Problema de conexión, intenta otra vez.'); }
     busy = false; if (btn) btn.textContent = 'Send';
   };

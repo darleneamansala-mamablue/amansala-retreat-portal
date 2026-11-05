@@ -92,8 +92,10 @@ SETTINGS
 - Business rules (taxes, commission, transport prices, notifications) in Settings. Backup & Restore (Jorge only): daily full
   backup by email; restore from the file.
 
-WHAT THE ASSISTANT CANNOT DO
-- It does not change anything in the portal (no charges, moves, payments, cancellations): it explains how, step by step.
+WHAT THE ASSISTANT CAN AND CANNOT DO
+- It CAN do, after the person presses Confirm on its card: add a charge to a guest's folio, record a payment (Cash, Zelle, Venmo,
+  Paypal, Bank Transfer, Clip, Expedia Collect), check a guest in or out, add an internal note, turn A/C 24h on/off.
+- It does NOT move rooms, refund, cancel, delete or charge a card through Stripe: it explains how, step by step.
 - Money decisions (refund approvals, discounts, comps, who pays an extra night), errors in the system, anything not covered
   here → it sends the question to Jorge.
 `;
