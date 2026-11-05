@@ -265,9 +265,23 @@ function rpHeldEmpty(bk,rt){
   AppData.bookings.filter(b=>b.id!==bk.id&&b.status!=='cancelled'&&!(b.flags||[]).includes('archived')&&String(b.endDate||'').slice(0,10)>=String(bk.startDate||'').slice(0,10)&&String(b.startDate||'').slice(0,10)<=String(bk.endDate||'').slice(0,10)).forEach(b=>{
     const rooms=(b.blockedRooms||[]).filter(x=>(rt.rooms||[]).some(y=>String(y).toLowerCase()===String(x).toLowerCase()));
     const empty=rooms.filter(x=>!(AppData.regs||[]).some(g=>g.bookingId===b.id&&String(g.room||'').toLowerCase()===String(x).toLowerCase()&&(g.guests||[]).some(z=>z&&z.name)));
-    if(empty.length)out.push((b.leaderName||b.retreatName||'Retreat')+' ('+empty.length+')');
+    if(empty.length)out.push((b.leaderName||b.retreatName||'Retreat')+' ('+empty.length+': '+empty.join(', ')+')');
   });
   return out;
+}
+// The answer sits on the request itself (Darlene 2026-11-05): what this retreat already has blocked with nobody named, what is free, and which other retreats hold empty rooms of that type,
+// so staff (or the assistant) can see at a glance whether a room can be taken and opened for this leader.
+function rpAnalysis(bkId,r){
+  try{
+    const bk=AppData.bookings.find(b=>b.id===bkId),rt=(AppData.roomTypes||[]).find(t=>t.id===r.typeId);if(!bk||!rt)return '';
+    const named=(b,room)=>(AppData.regs||[]).some(g=>g.bookingId===b.id&&String(g.room||'').toLowerCase()===String(room).toLowerCase()&&(g.guests||[]).some(z=>z&&z.name));
+    const ownEmpty=(bk.blockedRooms||[]).filter(x=>(rt.rooms||[]).some(y=>String(y).toLowerCase()===String(x).toLowerCase())&&!named(bk,x));
+    const free=rpFreeRooms(bk,rt),held=rpHeldEmpty(bk,rt),qty=Math.max(1,parseInt(r.qty,10)||1);
+    const line=(ico,txt,col)=>`<div style="font-size:12px;color:${col};line-height:1.5">${ico} ${txt}</div>`;
+    return line('•',ownEmpty.length?`This retreat already has <b>${ownEmpty.length}</b> ${escHtml(rt.name)} room${ownEmpty.length===1?'':'s'} blocked with nobody named in ${ownEmpty.length===1?'it':'them'} (${escHtml(ownEmpty.join(', '))}).`:`This retreat has no ${escHtml(rt.name)} room blocked without a name.`,ownEmpty.length?'#b45309':'#4b5563')
+      +line('•',free.length>=qty?`<b>${free.length}</b> ${escHtml(rt.name)} room${free.length===1?' is':'s are'} free for its dates (${escHtml(free.slice(0,6).join(', '))}): Approve adds ${qty===1?'it':'them'}.`:`Only <b>${free.length}</b> ${escHtml(rt.name)} free for its dates, ${qty} wanted.`,free.length>=qty?'#166534':'#b91c1c')
+      +line('•',held.length?`Held by other retreats with nobody named in them: ${escHtml(held.join('; '))}. Open that retreat's room block to release one.`:'No other retreat is holding an empty room of this type.','#4b5563');
+  }catch(e){return '';}
 }
 async function rpAutoAdd(bkId,r){
   const bk=AppData.bookings.find(b=>b.id===bkId);if(!bk)return{ok:false,note:'Retreat not found.'};
@@ -348,6 +362,6 @@ if(typeof _actvNotifRowHtml==='function'){
       <span style="cursor:pointer" title="Open this retreat's room block" onclick="if(typeof openBlockModal==='function')openBlockModal('${n.bookingId}');else openBookingFromNotif('${n.bookingId}')"><strong style="text-decoration:underline;color:#2d6a6a">${escHtml(n.label)}</strong> ${what}</span>
       <a href="#" title="Open the retreat's room list" onclick="event.stopPropagation();openBookingFromNotif('${n.bookingId}');return false" style="font-size:11.5px;font-weight:700;color:#2d6a6a">Room list</a>
       ${r.createdAt?`<span style="font-size:11.5px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:99px;padding:1px 9px;white-space:nowrap">Requested ${(()=>{try{return new Date(r.createdAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Cancun'});}catch(e){return '';}})()}</span>`:''}
-      <span style="margin-left:auto;display:flex;gap:6px">${b('Approve','approved','#15803d')}${b('Decline','declined','#b91c1c')}</span>${r.note?`<div style="flex-basis:100%;font-size:12px;font-weight:600;color:#b45309;background:#fffbeb;border:1px dashed #f59e0b;border-radius:8px;padding:5px 10px">${escHtml(r.note)}</div>`:''}</div>`;
+      <span style="margin-left:auto;display:flex;gap:6px">${b('Approve','approved','#15803d')}${b('Decline','declined','#b91c1c')}</span>${r.note?`<div style="flex-basis:100%;font-size:12px;font-weight:600;color:#b45309;background:#fffbeb;border:1px dashed #f59e0b;border-radius:8px;padding:5px 10px">${escHtml(r.note)}</div>`:''}${r.kind==='more_rooms'?`<div style="flex-basis:100%;padding:2px 4px 0 24px">${rpAnalysis(n.bookingId,r)}</div>`:''}</div>`;
   };
 }
