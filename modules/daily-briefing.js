@@ -440,7 +440,8 @@ async function dbRender() {
       const w = ssWorkersOn(dbDate).reception;
       if (!w) autoNote = 'The Reception schedule for this week is not entered on the Staff Schedules page.';
       else {
-        let on = w.filter(x => x.working); const fd = on.filter(x => /FD/i.test(x.tag)); if (fd.length) on = fd;
+        // the host: a row in a Host section (or marked Host); else the front desk post (FD); else everyone working on Reception
+        let on = w.filter(x => x.working); const hostRows = on.filter(x => /host/i.test((x.section || '') + ' ' + (x.tag || ''))), fd = on.filter(x => /FD/i.test(x.tag)); if (hostRows.length) on = hostRows; else if (fd.length) on = fd;
         const t12 = h => ((h % 12) || 12) + (h >= 12 && h < 24 ? ' pm' : ' am');
         const hrs = x => x.start != null ? t12(x.start) + ' – ' + t12(x.end) : (x.half ? x.half + ' shift' : '');
         autoWho = on.map(x => x.name).join(' & ');
@@ -454,7 +455,7 @@ async function dbRender() {
   if (!hostWho) pend.push('Host today'); else if (!hostHours) pend.push('Host hours');
   const hostIn = (path, val, ph, w) => `<input type="text" value="${dbEsc(val)}" placeholder="${ph}" onchange="dbSet('${path}',this.value);dbRender()" style="padding:6px 10px;border:1.5px solid ${val ? '#d6cfc4' : '#fca5a5'};border-radius:7px;min-width:${w}px">`;
   const fromSched = (!savedWho && autoWho) || (!savedHours && autoHours);
-  html += dbCard('Host today', dbRow(`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b style="min-width:70px">Host</b>${hostIn('attendance.Host.present', hostWho, 'Who is the host today', 220)}${hostIn('attendance.Host.hours', hostHours, 'Hours (e.g. 8 am – 4 pm)', 190)}${hostWho && hostHours ? '' : PENDING}</div>` + (fromSched ? '<div style="margin-top:4px;font-size:12px;color:#6b7280">Filled in from the Reception schedule on the Staff Schedules page. Type over it to change today.</div>' : '') + (autoNote && !hostWho ? `<div style="margin-top:4px;font-size:12px;color:#92400e">${dbEsc(autoNote)}</div>` : '')));
+  html += dbCard('Host today', dbRow(`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b style="min-width:70px">Host</b>${hostIn('attendance.Host.present', hostWho, 'Who is the host today', 220)}${hostIn('attendance.Host.hours', hostHours, 'Hours (e.g. 8 am – 4 pm)', 190)}${hostWho && hostHours ? '' : PENDING}</div>` + (fromSched ? '<div style="margin-top:4px;font-size:12px;color:#6b7280">Filled in from the Reception schedule on the Staff Schedules page. Type over it to change today.</div>' : '') + ((savedWho || savedHours) && (autoWho || autoHours) ? `<div style="margin-top:4px;font-size:12px"><a href="#" onclick="dbSet('attendance.Host.present','');dbSet('attendance.Host.hours','');dbRender();return false" style="color:#2d6a6a;font-weight:700">Use the schedule again</a> <span style="color:#6b7280">(the box has typed text that hides it)</span></div>` : '') + (autoNote && !hostWho ? `<div style="margin-top:4px;font-size:12px;color:#92400e">${dbEsc(autoNote)}</div>` : '')));
   // 11. Staff hours (from the Team Pendings staff records; managers and admins only, nothing invented)
   let hours = null;
   if (typeof dbCanSeeHours === 'function' && dbCanSeeHours() && typeof shLoad === 'function') {
