@@ -327,11 +327,11 @@ async function dbRender() {
   }).join('') : dbNone('No teacher arrives today.');
   html += dbCard('Teacher arrival checklist', chk);
   // 10. Attendance
-  html += dbCard('Staff attendance', DB_DEPTS.map(d => {
-    const v = dbGet('attendance.' + d.replace(/\s+/g, '_') + '.present') || '';
-    if (!v) pend.push('Attendance: ' + d);
-    return dbRow(`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b style="min-width:150px">${d}</b><input type="text" value="${dbEsc(v)}" placeholder="Who is working today" onchange="dbSet('attendance.${d.replace(/\s+/g, '_')}.present',this.value);dbRender()" style="padding:6px 10px;border:1.5px solid ${v ? '#d6cfc4' : '#fca5a5'};border-radius:7px;min-width:300px;flex:1">${v ? '' : PENDING}</div>`);
-  }).join(''));
+  // Only the host matters here (Darlene 2026-11-04): who is working as the host today, and their hours. The other departments are no longer asked.
+  const hostWho = dbGet('attendance.Host.present') || '', hostHours = dbGet('attendance.Host.hours') || '';
+  if (!hostWho) pend.push('Host today'); else if (!hostHours) pend.push('Host hours');
+  const hostIn = (path, val, ph, w) => `<input type="text" value="${dbEsc(val)}" placeholder="${ph}" onchange="dbSet('${path}',this.value);dbRender()" style="padding:6px 10px;border:1.5px solid ${val ? '#d6cfc4' : '#fca5a5'};border-radius:7px;min-width:${w}px">`;
+  html += dbCard('Host today', dbRow(`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b style="min-width:70px">Host</b>${hostIn('attendance.Host.present', hostWho, 'Who is the host today', 220)}${hostIn('attendance.Host.hours', hostHours, 'Hours (e.g. 8 am – 4 pm)', 190)}${hostWho && hostHours ? '' : PENDING}</div>`));
   // 11. Staff hours (from the Team Pendings staff records; managers and admins only, nothing invented)
   let hours = null;
   if (typeof dbCanSeeHours === 'function' && dbCanSeeHours() && typeof shLoad === 'function') {
