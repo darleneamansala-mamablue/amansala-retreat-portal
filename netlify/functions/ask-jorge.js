@@ -288,7 +288,22 @@ async function runAction(key, who, a) {
   else if (x.type === 'spa_booking') {
     const { type, ...args } = x; const d = await visitoTool('visito-spa-create-booking', args);
     if (!d || d.success === false || d.error) throw new Error((d && (d.message || d.error)) || 'not booked');
-    chk.summary += d.paymentUrl ? ' — payment link sent to the guest' : (d.folioCharged || d.charged ? ' — charged to the room' : '');
+    if (d.paymentUrl) {
+      // the spa tool (made for Lana, who pastes the link in the chat) only emails it: send it by WhatsApp too (Jorge 2026-11-05,
+      // Hilario got no WhatsApp), with the approved template manual_booking_payment_link
+      const to = String(x.phone || '').replace(/\D/g, '');
+      let waOk = false;
+      if (to.length >= 11 && process.env.VISITO_M2M_KEY && process.env.VISITO_WA_CHANNEL_ID) {
+        try {
+          const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(process.env.VISITO_WA_CHANNEL_ID)}/send`, {
+            method: 'POST', headers: { Authorization: `Bearer ${process.env.VISITO_M2M_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `spa-link-${to}-${x.date}-${x.start}-${Date.now()}` },
+            body: JSON.stringify({ to, template: { name: 'manual_booking_payment_link', language: { code: 'en_US' }, components: [{ type: 'body', parameters: [{ type: 'text', text: x.firstName || 'there' }, { type: 'text', text: d.paymentUrl }] }] } }),
+          });
+          const j = await r.json().catch(() => ({})); waOk = r.ok && j.accepted !== false;
+        } catch (e) {}
+      }
+      chk.summary += ` — payment link sent by email${waOk ? ' and WhatsApp' : ' (WhatsApp could not be sent' + (to.length < 11 ? ': the phone needs its country code' : '') + ')'}`;
+    } else chk.summary += ' — charged to the room';
   }
   else if (x.type === 'check_in') await send('PATCH', `registrations?id=eq.${encodeURIComponent(x.regId)}`, { checked_in_at: now });
   else if (x.type === 'check_out') await send('PATCH', `registrations?id=eq.${encodeURIComponent(x.regId)}`, { checked_out_at: now });
