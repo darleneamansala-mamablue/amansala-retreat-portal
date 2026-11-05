@@ -198,7 +198,11 @@ async function dbRender() {
   const glanceRows = list => list.map(({ e, k }) => dbRow(`<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:${tagOf[k][1]};color:${tagOf[k][2]}">${tagOf[k][0]}</span>` + evLine(e) + roomNeed(e))).join('');
   const dayClasses = dayAll.filter(x => x.k === 'class' || x.k === 'circle'), dayTours = dayAll.filter(x => x.k === 'tour' || x.k === 'extra');
   html += dbCard('Classes', dayClasses.length ? glanceRows(dayClasses) : dbNone('No classes today.'), dayClasses.length);
-  html += dbCard('Tours and activities', dayTours.length ? glanceRows(dayTours) : dbNone('No tours or activities today.'), dayTours.length);
+  // The list of tours and ceremonies is always shown (Darlene 2026-11-04): one with no time today is listed as Optional; once its day and time are filled in on the Activities page it moves up into the timed list.
+  const scheduledAo = new Set(dayTours.map(x => { const m = /_ao_(ao\d+)/.exec(String(x.e.id || '')); return m && m[1]; }).filter(Boolean));
+  const optionalRows = [...DB_TOURS, ...DB_CEREMONIES].filter(id => id !== 'ao3' && !scheduledAo.has(id))
+    .map(id => dbRow(`<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:#f3f4f6;color:#4b5563">Optional</span><span style="color:#4b5563">${dbEsc(dbName(id))}</span> <span style="color:#9ca3af;font-size:12.5px">· not scheduled today</span>`)).join('');
+  html += dbCard('Tours and activities', (dayTours.length ? glanceRows(dayTours) : '') + optionalRows, dayTours.length + ' scheduled');
   // 1. Arrivals
   const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}`)).join('') : dbNone('No retreat arrivals today.');
   html += dbCard('Arrivals', arrBody + (g.hkOk ? dbRow(`${g.rooms.length} room${g.rooms.length === 1 ? '' : 's'} arriving today (all guests)`) : ''), g.arrivals.length + ' retreat' + (g.arrivals.length === 1 ? '' : 's'));
