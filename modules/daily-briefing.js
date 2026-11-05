@@ -148,6 +148,30 @@ function dbRoomOf(sub) {
     || (AppData.regs || []).find(r => !r.cancelled && (r.guests || []).some(g => String(g.name || '').trim().toLowerCase() === nm));
   return hit && hit.room ? 'Room <b>' + dbEsc(hit.room) + '</b> · ' : '';
 }
+// An arriving booking shows its room(s) and, when one can be sold, the upgrade (Darlene 2026-11-05): the same options the Transport tab offers (the room type's upgrade path, a free room of that type
+// for the whole stay, and the nightly price difference). Nothing is sold here.
+function dbRoomUpgrade(b) {
+  try {
+    const regs = (AppData.regs || []).filter(r => r.bookingId === b.id && !r.cancelled && r.room), rooms = [...new Set([...regs.map(r => r.room), ...(regs.length ? [] : (b.blockedRooms || []))])];
+    if (!rooms.length) return '<div style="margin-top:3px;font-size:12.5px;color:#92400e">Room not assigned yet</div>';
+    return rooms.map(room => {
+      const byList = (AppData.roomTypes || []).find(x => (x.rooms || []).includes(room)), rtId = (typeof tr2LookupRtId === 'function' && tr2LookupRtId(room)) || (byList && byList.id) || null, rt = rtId && (AppData.roomTypes || []).find(x => x.id === rtId);
+      const reg = regs.find(r => r.room === room), who = reg ? (reg.guests || []).map(g => g.name).filter(Boolean)[0] : '';
+      let up = '';
+      if (rtId && typeof TR2_UPGRADE_PATH !== 'undefined' && typeof tr2AvailableRoomsOfType === 'function') {
+        const high = typeof tr2IsHighSeason === 'function' ? tr2IsHighSeason(b.startDate) : true, fromP = rt ? (high ? rt.price1 : rt.price1_low) : null, opts = [];
+        (TR2_UPGRADE_PATH[rtId] || []).forEach(toId => {
+          const to = (AppData.roomTypes || []).find(x => x.id === toId); if (!to) return;
+          const avail = tr2AvailableRoomsOfType(toId, b.startDate, b.endDate, b.id); if (!avail.length) return;
+          const toP = high ? to.price1 : to.price1_low, diff = fromP != null && toP != null ? toP - fromP : null;
+          opts.push(`<b style="color:#7c3aed">${dbEsc(to.name)}</b>${diff != null ? ' +$' + Math.round(diff) + '/night' : ''} <span style="color:#6b7280">(${avail.length} free: ${avail.slice(0, 3).map(dbEsc).join(', ')})</span>`);
+        });
+        up = opts.length ? ` · <b style="color:#7c3aed">Upgrade to sell:</b> ${opts.join(' · ')}` : ' · <span style="color:#9ca3af">no upgrade available</span>';
+      }
+      return `<div style="margin-top:3px;font-size:12.5px;color:#374151">Room <b>${dbEsc(room)}</b>${rt ? ' · ' + dbEsc(rt.name) : ''}${who && regs.length > 1 ? ' · ' + dbEsc(who) : ''}${up}</div>`;
+    }).join('');
+  } catch (e) { return ''; }
+}
 function dbArrNote(b) { const sr = b.scheduleRequest || {}; return dbEsc(String(sr.specialRequests || '').trim()); }
 function dbDepNote(b) {
   const out = [];
@@ -358,7 +382,7 @@ async function dbRender() {
   else if (dbTab === 'notes') html += dbCard('Special notes', notesRows || dbNone('No special notes today.'));
   else html += dbCard('Daily flow <span style="font-weight:500;color:#6b7280">— classes, circles, tours and activities together, in time order</span>', dayAll.length ? glanceRows(dayAll) : dbNone('Nothing scheduled today.'), dayAll.length);
   // 1. Arrivals
-  const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`${dbArrivedBox(b)}${dbCircleLeader(b)}<b>${dbEsc(b.leaderName || b.retreatName)}</b>${b.retreatName && b.retreatName !== b.leaderName ? ' <span style="color:#0f766e;font-weight:600">(' + dbEsc(b.retreatName) + ')</span>' : ''} · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}${dbArrNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#374151"><b>Special notes:</b> ' + dbArrNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat arrivals today.');
+  const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`${dbArrivedBox(b)}${dbCircleLeader(b)}<b>${dbEsc(b.leaderName || b.retreatName)}</b>${b.retreatName && b.retreatName !== b.leaderName ? ' <span style="color:#0f766e;font-weight:600">(' + dbEsc(b.retreatName) + ')</span>' : ''} · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}${dbRoomUpgrade(b)}${dbArrNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#374151"><b>Special notes:</b> ' + dbArrNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat arrivals today.');
   html += dbCard('Arrivals', arrBody + (g.hkOk ? dbRow(`${g.rooms.length} room${g.rooms.length === 1 ? '' : 's'} arriving today (all guests)`) : ''), g.arrivals.length + ' retreat' + (g.arrivals.length === 1 ? '' : 's'));
   // 2. Room readiness & A/C
   let rr;
