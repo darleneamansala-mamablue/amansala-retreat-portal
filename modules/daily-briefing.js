@@ -384,18 +384,19 @@ async function dbRender() {
   // 1. Arrivals
   const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`${dbArrivedBox(b)}${dbCircleLeader(b)}<b>${dbEsc(b.leaderName || b.retreatName)}</b>${b.retreatName && b.retreatName !== b.leaderName ? ' <span style="color:#0f766e;font-weight:600">(' + dbEsc(b.retreatName) + ')</span>' : ''} · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}${dbRoomUpgrade(b)}${dbArrNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#374151"><b>Special notes:</b> ' + dbArrNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat arrivals today.');
   html += dbCard('Arrivals', arrBody + (g.hkOk ? dbRow(`${g.rooms.length} room${g.rooms.length === 1 ? '' : 's'} arriving today (all guests)`) : ''), g.arrivals.length + ' retreat' + (g.arrivals.length === 1 ? '' : 's'));
-  // 2. Room readiness & A/C
-  let rr;
+  // 2. A/C sits right under the arrivals (Darlene 2026-11-05); the room readiness (rooms still to clean) goes at the end of the page
+  let rr, acRows = '';
   if (!g.hkOk) { rr = dbRow(PENDING + ' Room readiness comes from Housekeeping and is shown for today only.'); pend.push('Room readiness'); }
   else {
     const ready = g.rooms.filter(r => r.status === 'clean').length, ac = g.rooms.filter(r => r.ac24h);
     rr = dbRow(`<b>${ready}</b> of <b>${g.rooms.length}</b> arriving rooms are clean and ready.`, ready < g.rooms.length) +
-      (g.rooms.filter(r => r.status !== 'clean').map(r => dbRow(`<span style="color:#991b1b;font-weight:600">Room ${dbEsc(r.room)}</span> · ${dbEsc(r.who)} · <b>${dbEsc(r.status)}</b>${r.turnover ? ' (same-day turnover)' : ''}`, true)).join('')) +
-      dbRow(ac.length ? `A/C 24h rooms: ${ac.map(r => dbEsc(r.room)).join(', ')}` : 'No arriving room is flagged A/C 24h.') +
+      (g.rooms.filter(r => r.status !== 'clean').map(r => dbRow(`<span style="color:#991b1b;font-weight:600">Room ${dbEsc(r.room)}</span> · ${dbEsc(r.who)} · <b>${dbEsc(r.status)}</b>${r.turnover ? ' (same-day turnover)' : ''}`, true)).join(''));
+    acRows = dbRow(ac.length ? `A/C 24h rooms: ${ac.map(r => dbEsc(r.room)).join(', ')}` : 'No arriving room is flagged A/C 24h.') +
       dbRow('A/C turned on in the arriving rooms: ' + ((dbGet('tasks.ac:' + dbDate + '.done')) ? '<b style="color:#166534">Done</b>' : PENDING));
     if (!dbGet('tasks.ac:' + dbDate + '.done') && g.arrivals.length) pend.push('A/C in arriving rooms');
   }
-  const roomCard = dbCard('Room readiness and A/C', rr);   // placed last: rooms that still need cleaning go at the end of the page (Darlene 2026-11-04)
+  if (acRows) html += dbCard('A/C for the arriving rooms', acRows);
+  const roomCard = dbCard('Room readiness', rr);   // placed last: rooms that still need cleaning go at the end of the page (Darlene 2026-11-04)
   // 3. Salamon's arrivals
   const arrT = g.transport.filter(t => t.kind === 'arrival').sort((a, b) => String(a.sub.arrivalTime).localeCompare(String(b.sub.arrivalTime)));
   const sal = arrT.filter(t => /salamon/i.test(t.name)), oth = arrT.filter(t => !/salamon/i.test(t.name));
