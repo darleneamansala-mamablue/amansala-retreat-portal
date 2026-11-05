@@ -1,4 +1,5 @@
 'use strict';
+const { stayKindForPhone, phoneOf } = require('./guest-stay-kind');
 const { sendMail } = require('./mail-lib');
 
 // Visito AI "Tool" — lets Lana create a Room Only reservation (Escape / Extra
@@ -54,7 +55,15 @@ exports.handler = async (event) => {
   // pool (be_extra_nights) and its own separately-adjustable rate
   // (be_price_single_extra_night), mirrors check_availability's stayType
   // (Jorge's ask 2026-09-23).
-  const isExtraNight = stayType === 'extra_night';
+  // Extra Night is only for a guest of a group retreat; a Room Only / Escape guest who extends pays the Escape rate --
+  // decided from the conversation's phone, not from what Lana guessed (guest-stay-kind.js, Jorge 2026-11-05)
+  let isExtraNight = stayType === 'extra_night', stayTypeNote = '';
+  if (isExtraNight) {
+    try {
+      const kind = await stayKindForPhone(process.env.SUPABASE_SERVICE_KEY, phoneOf(payload), checkIn, checkOut);
+      if (kind === 'escape') { isExtraNight = false; stayTypeNote = 'This guest is not on a group retreat around these dates (Room Only / Escape stay), so the extension uses stayType=escape and the Escape rate, not Extra Night. Use stayType=escape for create_reservation too.'; }
+    } catch (e) { console.warn('[visito] stay kind check failed:', e.message); }
+  }
   const missing = ['roomTypeId', 'checkIn', 'checkOut', 'firstName', 'lastName', 'email']
     .filter(f => !({ roomTypeId, checkIn, checkOut, firstName, lastName, email }[f]));
   if (missing.length) {
@@ -259,6 +268,8 @@ exports.handler = async (event) => {
     const priceDisplay = taxPct > 0 ? `$${(subtotal - discountAmount).toFixed(2)} USD + ${taxPct}% tax` : `$${totalUSD.toFixed(2)} USD`;
     return ok({
       success: true,
+      stayType: isExtraNight ? 'extra_night' : 'escape',
+      ...(stayTypeNote ? { stayTypeNote } : {}),
       roomTypeName: rt.name,
       checkIn, checkOut, nights, adults: numAdults,
       ratePerNight: rate,

@@ -365,7 +365,7 @@ exports.handler = async (event) => {
         // Both flows already send `source` in the PaymentIntent metadata
         // (see stripe.js line ~140) — Escape is the fallback/default so any
         // other/future source keeps the original template unchanged.
-        const isExtraNight = meta.source === 'Extra Night';
+        const isExtraNight = /Extra Night/.test(String(meta.source || ''));   // the page's 'Extra Night' or Lana's 'Visito AI (Extra Night)' (2026-11-05)
         const guestEnabledKey = isExtraNight ? 'email_extra_night_enabled' : 'email_guest_enabled';
         const guestSubjectKey = isExtraNight ? 'email_extra_night_subject' : 'email_guest_subject';
         const guestBodyKey    = isExtraNight ? 'email_extra_night_body'    : 'email_guest_body';

@@ -67,6 +67,8 @@ exports.handler = async (event) => {
         guestName: g.name, portalReservation: bk.confirmation_number || bk.id, room: r.room || 'not assigned yet', roomType: rtName(r.room_type_id),
         checkIn, checkOut, group: bk.booking_type === 'room_only' ? 'Room only' : (bk.retreat_name || bk.leader_name || 'Retreat'),
         status: r.checked_out_at ? 'checked out' : r.checked_in_at ? 'in house (checked in)' : 'not checked in yet',
+        // extending: a group retreat guest gets the Extra Night rate, a Room Only guest the Escape rate (Jorge 2026-11-05)
+        extendStayType: bk.booking_type === 'room_only' ? 'escape' : 'extra_night',
         balanceDue: await balanceOf('registration_id', r.id),
         // personal spa link: the spa page opens with their name, room, email and phone filled in (Jorge 2026-11-04)
         spaLink: (t => t ? 'https://amansalaportal.com/spa?g=' + t : null)(signGuestLink(r.id, g.name, checkOut)),
@@ -77,11 +79,12 @@ exports.handler = async (event) => {
         guestName: [q.first_name, q.last_name].filter(Boolean).join(' '), portalReservation: q.cb_reservation_id || q.id, room: q.room || 'not assigned yet', roomType: q.room_type_name || '',
         checkIn: q.check_in, checkOut: q.check_out, group: 'Room only (booking engine)',
         status: q.checked_in_at ? 'in house (checked in)' : q.status, balanceDue: await balanceOf('booking_request_id', q.id),
+        extendStayType: 'escape',
       });
     }
     stays.sort((a, b) => String(a.checkIn).localeCompare(String(b.checkIn)));
     return ok({ success: true, phone: '+' + phone, current: stays[0], others: stays.slice(1),
-      instructions: 'To book a spa treatment, send the guest their own spaLink (name and room already filled in) instead of the general https://amansalaportal.com/spa link.' });
+      instructions: 'To book a spa treatment, send the guest their own spaLink (name and room already filled in) instead of the general https://amansalaportal.com/spa link. If the guest wants to extend their stay (more nights), use the stay\'s extendStayType as stayType for check_availability and create_reservation: extra_night only for a group retreat guest, escape (the normal Escape rate) for a Room Only guest.' });
   } catch (err) {
     console.error('[visito-identify-guest]', err.message);
     return jsonErr(500, err.message);

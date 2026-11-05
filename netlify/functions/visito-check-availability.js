@@ -1,4 +1,5 @@
 'use strict';
+const { stayKindForPhone, phoneOf } = require('./guest-stay-kind');
 
 // Visito AI "Tool" — lets Lana check Room Only availability/pricing during a
 // WhatsApp conversation. Registered via Visito's M2M API (POST /m2m/v1/tools)
@@ -137,7 +138,15 @@ exports.handler = async (event) => {
   // separately-adjustable rate (be_price_single_extra_night / _low) — a flat
   // rate, no Escape seasonal/weekend surcharge (Jorge's call 2026-10-08,
   // reverting his own 2026-09-23 ask for parity with Escape's dynamic pricing).
-  const isExtraNight = stayType === 'extra_night';
+  // Extra Night is only for a guest of a group retreat; a Room Only / Escape guest who extends pays the Escape rate --
+  // decided from the conversation's phone, not from what Lana guessed (guest-stay-kind.js, Jorge 2026-11-05)
+  let isExtraNight = stayType === 'extra_night', stayTypeNote = '';
+  if (isExtraNight) {
+    try {
+      const kind = await stayKindForPhone(process.env.SUPABASE_SERVICE_KEY, phoneOf(payload), checkIn, checkOut);
+      if (kind === 'escape') { isExtraNight = false; stayTypeNote = 'This guest is not on a group retreat around these dates (Room Only / Escape stay), so the extension uses stayType=escape and the Escape rate, not Extra Night. Use stayType=escape for create_reservation too.'; }
+    } catch (e) { console.warn('[visito] stay kind check failed:', e.message); }
+  }
   if (isExtraNight && inExtraNightBlackout(checkIn, checkOut)) {
     return ok({ success: false, message: 'Extra Night no está disponible del 20 de diciembre al 15 de enero — la propiedad no reserva noches extra en esa ventana.' });
   }
@@ -266,6 +275,7 @@ exports.handler = async (event) => {
 
     return ok({
       success: true, stayType: isExtraNight ? 'extra_night' : 'escape', checkIn, checkOut, nights, adults: numAdults, options,
+      ...(stayTypeNote ? { stayTypeNote } : {}),
       ...(discountCode ? { discountCodeApplied: !!validatedCode, discountCode: validatedCode || null } : {}),
     });
   } catch (err) {
