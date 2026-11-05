@@ -200,7 +200,19 @@ function dbClassify(ev) {
   if (/_opencircle$/.test(id) || (/_arr$/.test(id) && /opening circle/i.test(ev.subtitle || ''))) return 'circle';
   if (/_prepaid_opt_/.test(id) || /_opt_/.test(id)) return 'skip';              // duplicate "optional" columns of the same activity
   // An activity that is NOT pre-paid reaches the scheduler as one merged "Optional" block (id opt_merged_<name>_<time>_<date>, no ao id in it): it still happens that day, so it is listed too
-  if (/^opt_merged_/.test(id)) { const ao = (typeof ADD_ONS !== 'undefined' ? ADD_ONS : []).find(x => x.name === ev.title); return ao && DB_TOURS.includes(ao.id) ? 'tour' : 'extra'; }
+  if (/^opt_merged_/.test(id)) {
+    const ao = (typeof ADD_ONS !== 'undefined' ? ADD_ONS : []).find(x => x.name === ev.title);
+    // Only the retreats that really have somebody signed up are named; a retreat with nobody signed up is taken out (Darlene 2026-11-05, Heather Kasey), and an activity nobody joined is not listed at all.
+    if (ao) {
+      const groups = [];
+      (AppData.bookings || []).filter(b => b.status !== 'cancelled' && (b.retreatActivities || []).some(x => x.aoId === ao.id && String(x.date).slice(0, 10) === dbDate)).forEach(b => {
+        const n = dbParticipants(b, ao.id).names.length; if (n) groups.push((b.leaderName || b.retreatName || 'Retreat') + ' (' + n + ' signed up)');
+      });
+      if (!groups.length) return 'skip';
+      ev.subtitle = groups.join(' · ') + ' · ' + (String(ev.subtitle || '').match(/Optional.*$/) || ['Optional'])[0];
+    }
+    return ao && DB_TOURS.includes(ao.id) ? 'tour' : 'extra';
+  }
   const m = /_ao_(ao\d+)/.exec(id);
   if (m) return DB_TOURS.includes(m[1]) ? 'tour' : 'extra';
   if (/_(morn|aft|arr|dep|sunrise|workshop|morn_arr|morn_dep)(_|$)/.test(id)) return 'class';
