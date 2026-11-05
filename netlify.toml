@@ -92,6 +92,10 @@
 [functions."spa-daily-summary"]
   schedule = "0 1 * * *"
 
+# 9:00 PM Tulum (02:00 UTC): WhatsApp to Jorge with what Ask Jorge did, could not do, and what people asked (template amansala_ask_jorge_resumen).
+[functions."ask-jorge-daily"]
+  schedule = "0 2 * * *"
+
 # Reading a staff schedule from a photo (Claude) takes 10-20 s: more than the 10 s default
 [functions."staff-schedule-photo"]
   timeout = 26

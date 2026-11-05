@@ -16,6 +16,8 @@
 const { staffAllowed, cors, reply } = require('./portal-auth-lib');
 const { sendMail } = require('./mail-lib');
 const KB = require('./ask-jorge-kb');
+const T = require('./ask-jorge-tools');
+const A = require('./ask-jorge-actions');
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-opus-5-5';
@@ -40,8 +42,18 @@ How to answer:
   created in Cloudbeds), send a folio's payment link to the guest (send_payment_link).
   First find the guest with find_guest (to get regId and folioId); if several folios or guests match, ask which one. Then call
   propose_action with all the details and tell them to press Confirm on the card below. Never say it is done until they confirm.
-- Things you cannot do (refunds, cancelling, deleting, charging a card with Stripe): explain how they do it
-  themselves, step by step.
+- Also with propose_action: remove or correct a folio line (remove_charge / edit_charge: get the folioItemId from
+  stay_folios), refund a Stripe card payment (refund_payment; only Jorge, Hilario and Melissa), cancel or move a spa appointment
+  (spa_cancel / spa_move: get the apptId from spa_agenda; the room charge goes or moves with it), send a therapist the
+  confirmation (therapist_confirm), change a transport's date / time / airport / flight (transport_change: rowId from
+  transports), set a room clean / dirty / maintenance on the Housekeeping board (room_status), and make Cloudbeds match the
+  portal's dates / room (cloudbeds_fix, after cloudbeds_compare; the portal is the truth).
+- Reviews you do on your own (read-only): before a check-out, stay_folios = what is owed, odd lines (duplicates, spa charges
+  without an appointment or after check-out), then offer send_payment_link; extra_nights = are the extra nights paid and who
+  pays; arrivals_departures for today / tomorrow; reservation_problems = same guest twice, stays without a room; spa_agenda for
+  a therapist's day; cloudbeds_compare when something looks different in Cloudbeds. Say clearly what is right and what is not.
+- Things you cannot do (charging a new card with Stripe, deleting a reservation or a payment, discounts or comps): explain how
+  they do it themselves, step by step, or send it to Jorge.
 - If it needs a decision (money, refunds, discounts, comps, who pays) or looks like a system error, call notify_jorge with a
   request (what they asked) and reason (why it could not be done), and tell them you sent it to Jorge and he will reply.
 - Spa: before booking, look the person up with find_guest for the appointment date. If they are a guest staying in the hotel
@@ -59,14 +71,28 @@ const TOOLS = [
     input_schema: { type: 'object', properties: { checkIn: { type: 'string' }, checkOut: { type: 'string' }, roomType: { type: 'string' }, room: { type: 'string' } }, required: ['checkIn', 'checkOut'] } },
   { name: 'quote_room_rate', description: 'Price of a Room Only stay or extra nights for given dates: each available room type with its rate per night, taxes and total. stayType extra_night = the Extra Night rate (guests of a retreat adding nights before/after it); escape = the normal Escape rate. Read-only.',
     input_schema: { type: 'object', properties: { checkIn: { type: 'string' }, checkOut: { type: 'string' }, adults: { type: 'number' }, stayType: { type: 'string', enum: ['extra_night', 'escape'] } }, required: ['checkIn', 'checkOut'] } },
-  { name: 'folio_and_spa', description: 'For one stay (regId from find_guest): every line on its folios (date, description, amount, category, who added it) and every spa appointment booked under that guest\'s name or room during the stay and the week after. Use it to check that spa charges match real appointments, spot duplicate charges, charges with no appointment, appointments with no charge, or services after check-out. Read-only.',
+  { name: 'stay_folios', description: 'For one stay (regId from find_guest): its folios with charges, payments and balance; every line with its folioItemId, date, description, amount, category and who added it (stripe:true = card payment that can be refunded); and the spa appointments under the guest\'s name or room during the stay and the week after. Use it before check-out to review the bill, to find a line to remove / correct / refund, and to check spa charges against real appointments (duplicates, charge without appointment, appointment without charge, after check-out). Read-only.',
+    input_schema: { type: 'object', properties: { regId: { type: 'string' } }, required: ['regId'] } },
+  { name: 'extra_nights', description: 'For one stay (regId): the guest\'s dates vs the retreat dates, which nights are extra, folio lines and retreat charges that look like paying for them, notes. Use it to say if an extra night is paid and who pays it. Read-only.',
+    input_schema: { type: 'object', properties: { regId: { type: 'string' } }, required: ['regId'] } },
+  { name: 'arrivals_departures', description: 'Who arrives and/or leaves on a date (default today): room, reservation, checked-in status, A/C 24h, balance owed, internal notes. Read-only.',
+    input_schema: { type: 'object', properties: { date: { type: 'string', description: 'YYYY-MM-DD; tomorrow = the day after today' }, kind: { type: 'string', enum: ['arrivals', 'departures', 'both'] } } } },
+  { name: 'reservation_problems', description: 'Reservation problems in a date range (default the next 14 days): the same guest on two stays with overlapping dates (possible duplicates) and stays with no room assigned. Read-only.',
+    input_schema: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } } } },
+  { name: 'spa_agenda', description: 'Spa appointments (with apptId) for a day, optionally for one therapist, or for one guest by name (their recent and upcoming ones). Read-only.',
+    input_schema: { type: 'object', properties: { date: { type: 'string' }, therapist: { type: 'string', description: 'First name' }, guest: { type: 'string' } } } },
+  { name: 'transports', description: 'Airport transports (with rowId) for a date (arrivals and departures that day, default today) or for a guest by name: flight, date, time, airport, own transport, whether it was charged. Read-only.',
+    input_schema: { type: 'object', properties: { date: { type: 'string' }, guest: { type: 'string' } } } },
+  { name: 'cloudbeds_compare', description: 'Compare one stay (regId) in the portal with its Cloudbeds reservation: dates, room, guest name, status. The portal is the truth. Read-only.',
     input_schema: { type: 'object', properties: { regId: { type: 'string' } }, required: ['regId'] } },
   { name: 'spa_services', description: 'List the active spa services (id, name, duration, price). Read-only.', input_schema: { type: 'object', properties: {} } },
   { name: 'spa_availability', description: 'Free times for a spa service on a date (with therapist and spa room ids to book). Read-only.',
     input_schema: { type: 'object', properties: { serviceId: { type: 'string' }, date: { type: 'string' }, therapistPreference: { type: 'string', enum: ['none', 'male', 'female'] }, guestCount: { type: 'number' } }, required: ['serviceId', 'date'] } },
-  { name: 'propose_action', description: 'Propose a change for the person to confirm with a button (nothing is saved until they confirm). Types: add_charge (folioId, description, category, qty, unitPrice USD before tax, taxRate %), record_payment (folioId, method, amount USD, reference), check_in (regId), check_out (regId), internal_note (regId, note), ac24 (regId, on true/false), move_room (regId, toRoom), spa_booking (serviceId, date, start HH:MM, therapistId, spaRoomId, firstName, lastName, email, phone, guestType hotel|offsite, roomNumber for hotel guests, guestCount for groups), new_booking (room, checkIn, checkOut, guestName, email, phone, adults, ratePerNight, bookingType, notes), send_payment_link (folioId).',
+  { name: 'propose_action', description: 'Propose a change for the person to confirm with a button (nothing is saved until they confirm). Types: add_charge (folioId, description, category, qty, unitPrice USD before tax, taxRate %), record_payment (folioId, method, amount USD, reference), check_in (regId), check_out (regId), internal_note (regId, note), ac24 (regId, on true/false), move_room (regId, toRoom), spa_booking (serviceId, date, start HH:MM, therapistId, spaRoomId, firstName, lastName, email, phone, guestType hotel|offsite, roomNumber for hotel guests, guestCount for groups), new_booking (room, checkIn, checkOut, guestName, email, phone, adults, ratePerNight, bookingType, notes), send_payment_link (folioId), remove_charge (folioItemId), edit_charge (folioItemId + description/qty/unitPrice/taxRate to change), refund_payment (folioItemId of a Stripe card payment, amount, reason; only Jorge, Hilario, Melissa), spa_cancel (apptId; removes its room charge), spa_move (apptId + new date/start/therapistId; the charge moves too), therapist_confirm (apptId), transport_change (rowId + arrivalDate/arrivalTime/arrivalAirport/departureDate/departureTime/departureAirport/flightNumber), room_status (room, status clean|dirty|maintenance, note), cloudbeds_fix (regId: Cloudbeds dates/room set to the portal\'s).',
     input_schema: { type: 'object', properties: {
-      type: { type: 'string', enum: ['add_charge', 'record_payment', 'check_in', 'check_out', 'internal_note', 'ac24', 'move_room', 'spa_booking', 'new_booking', 'send_payment_link'] },
+      type: { type: 'string', enum: ['add_charge', 'record_payment', 'check_in', 'check_out', 'internal_note', 'ac24', 'move_room', 'spa_booking', 'new_booking', 'send_payment_link', 'remove_charge', 'edit_charge', 'refund_payment', 'spa_cancel', 'spa_move', 'therapist_confirm', 'transport_change', 'room_status', 'cloudbeds_fix'] },
+      folioItemId: { type: 'string' }, apptId: { type: 'string' }, rowId: { type: 'string' }, reason: { type: 'string' }, status: { type: 'string', enum: ['clean', 'dirty', 'maintenance'] },
+      arrivalDate: { type: 'string' }, arrivalTime: { type: 'string' }, arrivalAirport: { type: 'string' }, departureDate: { type: 'string' }, departureTime: { type: 'string' }, departureAirport: { type: 'string' }, flightNumber: { type: 'string' },
       toRoom: { type: 'string' }, room: { type: 'string' }, checkIn: { type: 'string' }, checkOut: { type: 'string' }, guestName: { type: 'string' },
       adults: { type: 'number' }, ratePerNight: { type: 'number' }, bookingType: { type: 'string' },
       serviceId: { type: 'string' }, date: { type: 'string' }, start: { type: 'string' }, therapistId: { type: 'string' }, spaRoomId: { type: 'string' },
@@ -114,24 +140,12 @@ async function findGuest(key, { name = '', room = '', date = '' }) {
   return out.length ? out : { message: `No guest found for ${[name && 'name "' + name + '"', room && 'room ' + room].filter(Boolean).join(' and ')} on ${day}.` };
 }
 
-// Melissa 2026-11-05: check a guest's spa charges against the spa calendar
-async function folioAndSpa(key, regId) {
-  const get = async p => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${p}`, { headers: H(key) }); return r.ok ? r.json() : []; };
-  const [r] = await get(`registrations?id=eq.${encodeURIComponent(String(regId || ''))}&select=id,room,check_in,check_out,guests`);
-  if (!r) return { message: 'Stay not found — use find_guest first.' };
-  const fo = await get(`folios?select=id,name,guest_name&registration_id=eq.${encodeURIComponent(r.id)}`);
-  const items = fo.length ? await get(`folio_items?select=folio_id,description,qty,unit_price,tax_rate,category,staff_name,created_at&folio_id=in.(${fo.map(f => f.id).join(',')})&order=created_at`) : [];
-  const [ap] = await get('app_store?key=eq.spa_appointments&select=value'), [sd] = await get('app_store?key=eq.spa_data&select=value');
-  const th = {}, sv = {}; (((sd && sd.value) || {}).therapists || []).forEach(t => { th[t.id] = t.firstName; }); (((sd && sd.value) || {}).services || []).forEach(x => { sv[x.id] = x; });
-  const names = (r.guests || []).filter(g => g && g.name).map(g => norm(g.name)), room = norm(r.room).replace(/\s/g, '');
-  const until = new Date(new Date(r.check_out + 'T12:00:00Z').getTime() + 7 * 864e5).toISOString().slice(0, 10);
-  const appts = (((ap && ap.value) || [])).filter(a => a && a.date >= r.check_in && a.date <= until && (names.some(n => n && norm(a.clientName).includes(n)) || (room && norm(a.roomNumber || '').replace(/\s/g, '') === room)))
-    .sort((x, y) => (x.date + x.start).localeCompare(y.date + y.start))
-    .map(a => ({ date: a.date, time: a.start, client: a.clientName, service: (sv[a.serviceId] || {}).name, priceUSD: (sv[a.serviceId] || {}).price, therapist: th[a.therapistId], status: a.status, afterCheckOut: a.date >= r.check_out, bookedAt: a.createdAt }));
-  return { room: r.room, checkIn: r.check_in, checkOut: r.check_out, guests: (r.guests || []).map(g => g && g.name).filter(Boolean),
-    folioLines: items.map(i => ({ folio: (fo.find(f => f.id === i.folio_id) || {}).name, date: String(i.created_at).slice(0, 10), description: i.description, qty: i.qty, unitUSD: i.unit_price, taxPct: i.tax_rate, category: i.category, addedBy: i.staff_name })),
-    spaAppointments: appts,
-    note: 'Spa charges made automatically by the calendar are dated on the service day; ones staff typed by hand are dated when typed. A tip line is not a service.' };
+// every question, for Jorge's 9 PM summary (ask-jorge-daily.js)
+async function logQuestion(key, who, page, q, tools, proposed, notified) {
+  const g = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.ask_jorge_log&select=value`, { headers: H(key) });
+  const [row] = g.ok ? await g.json() : [];
+  const list = [{ at: new Date().toISOString(), by: who.name || '', page: page || '', q: String(q || '').slice(0, 300), tools: [...new Set(tools)], proposed, notified }, ...(((row && row.value) || []).slice(0, 799))];
+  await fetch(`${SUPABASE_URL}/rest/v1/app_store?on_conflict=key`, { method: 'POST', headers: { ...H(key), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ key: 'ask_jorge_log', value: list, updated_at: new Date().toISOString() }) });
 }
 
 async function waToJorge(template, params) {
@@ -206,9 +220,10 @@ function mxPhone(p) {
 const PAY_METHODS = ['Cash', 'Zelle', 'Venmo', 'Paypal', 'Bank Transfer', 'Clip', 'Expedia Collect'];
 const money = n => '$' + Number(n).toFixed(2);
 // Checks a proposed action against the database and returns it complete (with a human summary), or {error}
-async function checkAction(key, a) {
+async function checkAction(key, a, who = {}) {
   const get = async p => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${p}`, { headers: H(key) }); return r.ok ? r.json() : []; };
   const t = String(a.type || '');
+  const more = await A.check(key, a, who); if (more) return more;
   const regOf = async id => { const [r] = await get(`registrations?select=id,room,guests,booking_id,checked_in_at,checked_out_at,cancelled,internal_notes,ac_24h&id=eq.${encodeURIComponent(String(id || ''))}`); return r && !r.cancelled ? r : null; };
   const names = r => (r.guests || []).filter(g => g && g.name && !g.cancelled).map(g => g.name).join(' & ') || 'guest';
   if (t === 'add_charge' || t === 'record_payment') {
@@ -305,11 +320,13 @@ async function checkOtherAction(key, a) {
   }
   return null;
 }
-async function runAction(key, who, a) {
-  const chk = await checkAction(key, a);
+async function runAction(key, who, a, token) {
+  const chk = await checkAction(key, a, who);
   if (chk.error) return { ok: false, message: chk.error };
   const x = chk.action, now = new Date().toISOString();
   if (x.client) return { ok: false, message: 'This one runs in the portal screen — press Confirm again after reloading.' };
+  if (A.TYPES.includes(x.type)) chk.summary += await A.run(key, who, x, token);
+  else {
   const send = async (method, path, body) => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method, headers: { ...H(key), Prefer: 'return=minimal' }, body: JSON.stringify(body) }); if (!r.ok) throw new Error((await r.text()).slice(0, 200)); };
   if (x.type === 'add_charge') await send('POST', 'folio_items', { folio_id: x.folioId, description: x.description, qty: x.qty, unit_price: x.unitPrice, tax_rate: x.taxRate, category: x.category, staff_name: who.name || null });
   else if (x.type === 'record_payment') await send('POST', 'folio_items', { folio_id: x.folioId, description: `Payment — ${x.method}${x.reference ? ': ' + x.reference : ''}`, qty: 1, unit_price: -x.amount, tax_rate: 0, category: 'Payment', staff_name: who.name || null });
@@ -356,7 +373,8 @@ async function runAction(key, who, a) {
     const prev = String((r && r.internal_notes) || '').trim();
     await send('PATCH', `registrations?id=eq.${encodeURIComponent(x.regId)}`, { internal_notes: (prev ? prev + '\n' : '') + x.note + ' — ' + (who.name || 'staff') });
   } else if (x.type === 'ac24') await send('PATCH', `registrations?id=eq.${encodeURIComponent(x.regId)}`, { ac_24h: x.on });
-  const label = { add_charge: 'Charge added', record_payment: 'Payment recorded', check_in: 'Checked in', check_out: 'Checked out', internal_note: 'Internal note', ac24: 'A/C 24h', send_payment_link: 'Payment link sent', spa_booking: 'Spa booking' }[x.type];
+  }
+  const label = { add_charge: 'Charge added', record_payment: 'Payment recorded', check_in: 'Checked in', check_out: 'Checked out', internal_note: 'Internal note', ac24: 'A/C 24h', send_payment_link: 'Payment link sent', spa_booking: 'Spa booking', remove_charge: 'Charge removed', edit_charge: 'Charge corrected', refund_payment: 'Payment refunded', spa_cancel: 'Spa appointment cancelled', spa_move: 'Spa appointment moved', therapist_confirm: 'Spa confirmation sent to therapist', transport_change: 'Transport changed', room_status: 'Room status', cloudbeds_fix: 'Cloudbeds fixed' }[x.type];
   await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, { method: 'POST', headers: { ...H(key), Prefer: 'return=minimal' },
     body: JSON.stringify({ id: 'id_' + Date.now() + '_askj', action: label, detail: chk.summary + ' (Ask Jorge)', booking_id: x.bookingId || null, user_name: who.name || 'Staff', user_role: who.role || 'staff', created_at: now }) }).catch(() => {});
   return { ok: true, message: '✓ ' + chk.summary };
@@ -385,7 +403,7 @@ exports.handler = async (event) => {
   }
   if (b.execute) {   // the person pressed Confirm on a proposed action
     let res;
-    try { res = await runAction(key, who, b.execute); }
+    try { res = await runAction(key, who, b.execute, b.token); }
     catch (e) { console.error('[ask-jorge] action', e.message); res = { ok: false, message: 'It could not be saved: ' + e.message }; }
     if (!res.ok) await notifyJorge(key, who, page, `Confirmó una acción: ${String(b.summary || b.execute.type || '')}`, `falló — ${res.message}`).catch(() => {});
     else await tellJorgeDone(who, page, String(res.message || '').replace(/^✓\s*/, '')).catch(() => {});
@@ -396,7 +414,10 @@ exports.handler = async (event) => {
     .map(m => ({ role: m.role, content: m.content.slice(0, 4000) }));
   if (!history.length || history[history.length - 1].role !== 'user') return reply(400, { error: 'Write a question.' });
   const messages = history.slice(); let notified = null; const proposals = [];
-  const system = [{ type: 'text', text: SYSTEM + `\n\nThe person asking: ${who.name || 'staff'}. Screen they are on: ${page || 'unknown'}. Today (Tulum): ${tulumDate()}.`, cache_control: { type: 'ephemeral' } }];
+  const memo = (Array.isArray(b.memo) ? b.memo : []).slice(-8).map(m => String(m).slice(0, 300));
+  const system = [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `The person asking: ${who.name || 'staff'}. Screen they are on: ${page || 'unknown'}. Today (Tulum): ${tulumDate()}.` + (memo.length ? `\nGuests already looked up in this chat (use these ids; "she", "him", "that guest" means the last one): ${memo.join(' | ')}` : '') }];
+  const found = [], used = [];
   try {
     for (let turn = 0; turn < 5; turn++) {
       const r = await fetch(ANTHROPIC_API, {
@@ -411,23 +432,30 @@ exports.handler = async (event) => {
       if (j.stop_reason !== 'tool_use' || !uses.length) {
         const answer = content.filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
         console.log('[ask-jorge]', who.name, page, JSON.stringify(j.usage || {}));
-        return reply(200, { answer: answer || '…', notified, proposals });
+        await logQuestion(key, who, page, history[history.length - 1].content, used, proposals.length, !!notified).catch(() => {});
+        return reply(200, { answer: answer || '…', notified, proposals, memo: found });
       }
       messages.push({ role: 'assistant', content });
       const results = [];
       for (const u of uses) {
-        let out;
+        let out; used.push(u.name);
         try {
-          if (u.name === 'find_guest') out = await findGuest(key, u.input || {});
+          if (u.name === 'find_guest') { out = await findGuest(key, u.input || {}); if (Array.isArray(out)) out.slice(0, 3).forEach(g => found.push(`${g.guests} · room ${g.room} · ${g.checkIn}→${g.checkOut} · regId ${g.regId} · folios ${(g.folios || []).map(f => f.folioId).join(',')}`)); }
           else if (u.name === 'room_availability') out = await roomAvailability(key, u.input || {});
           else if (u.name === 'quote_room_rate') out = await visitoTool('visito-check-availability', { adults: 1, stayType: 'extra_night', ...(u.input || {}) });
-          else if (u.name === 'folio_and_spa') out = await folioAndSpa(key, (u.input || {}).regId);
+          else if (u.name === 'stay_folios') out = await T.stayFolios(key, (u.input || {}).regId);
+          else if (u.name === 'extra_nights') out = await T.extraNights(key, (u.input || {}).regId);
+          else if (u.name === 'arrivals_departures') out = await T.arrivalsDepartures(key, u.input || {});
+          else if (u.name === 'reservation_problems') out = await T.reservationProblems(key, u.input || {});
+          else if (u.name === 'spa_agenda') out = await T.spaAgenda(key, u.input || {});
+          else if (u.name === 'transports') out = await A.transports(key, u.input || {});
+          else if (u.name === 'cloudbeds_compare') out = await A.cloudbedsCompare(key, (u.input || {}).regId);
           else if (u.name === 'spa_services') {
             const [row] = await (await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_data&select=value`, { headers: H(key) })).json();
             out = (((row && row.value) || {}).services || []).filter(x => x && x.active).map(x => ({ serviceId: x.id, name: x.name, minutes: x.duration, priceUSD: x.price, group: x.sessionType === 'group', category: x.category }));
           }
           else if (u.name === 'spa_availability') out = await visitoTool('visito-spa-check-availability', u.input || {});
-          else if (u.name === 'propose_action') { const c = await checkAction(key, u.input || {}); if (c.error) out = { error: c.error }; else { proposals.push(c); out = { proposed: true, waitingForTheirConfirmation: true, summary: c.summary }; } }
+          else if (u.name === 'propose_action') { const c = await checkAction(key, u.input || {}, who); if (c.error) out = { error: c.error }; else { proposals.push(c); out = { proposed: true, waitingForTheirConfirmation: true, summary: c.summary }; } }
           else if (u.name === 'notify_jorge') { if (notified) out = { already: true }; else { notified = await notifyJorge(key, who, page, (u.input || {}).request || (u.input || {}).summary, (u.input || {}).reason); out = { sentToJorge: !!notified.sent }; } }
           else out = { error: 'unknown tool' };
         } catch (e) { out = { error: e.message }; }

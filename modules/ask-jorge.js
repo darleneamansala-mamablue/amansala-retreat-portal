@@ -6,7 +6,7 @@
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // light formatting: **bold**, line breaks, numbered/bulleted lines
   const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
-  let msgs = [], busy = false;
+  let msgs = [], busy = false, memo = [];   // memo: guests looked up in this chat, sent back so it remembers who "she" is
   const staffOn = () => { try { return !!sessionStorage.getItem('amansala_staff_token') && !(typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE); } catch (e) { return false; } };
   const page = () => { try { const p = location.pathname.replace(/^\//, '') || 'dashboard'; return p.charAt(0).toUpperCase() + p.slice(1); } catch (e) { return ''; } };
 
@@ -34,7 +34,7 @@
     const inp = document.getElementById('ajIn');
     inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.ajSend(); } });
     render();
-    if (!msgs.length) addBubble('assistant', 'Hola 👋 Pregúntame cómo hacer algo en el portal o algo de un huésped. También lo hago por ti: cargos, pagos, check-in / check-out, mover de cuarto, reservas nuevas, reservar spa, enviar links de pago, notas internas y A/C 24h (tú confirmas antes de guardar). Si no lo sé, le mando tu pregunta a Jorge.');
+    if (!msgs.length) addBubble('assistant', 'Hola 👋 Pregúntame cómo hacer algo en el portal o algo de un huésped. También lo hago por ti: cargos (agregar, quitar, corregir), pagos y reembolsos, check-in / check-out, mover de cuarto, reservas nuevas, spa (reservar, cancelar, mover, confirmar a la terapeuta), transporte, links de pago, notas internas, A/C 24h, estado de cuartos y Cloudbeds — tú confirmas antes de guardar. También reviso cuentas antes del check-out, noches extra, llegadas y salidas, y reservas repetidas. Si no lo sé, le mando tu pregunta a Jorge.');
     inp.focus();
   }
   function addBubble(role, text) {
@@ -114,9 +114,10 @@
     addBubble('assistant', 'Pensando…'); const log = document.getElementById('ajLog'); const thinking = log && log.lastChild;
     let token = ''; try { token = sessionStorage.getItem('amansala_staff_token') || ''; } catch (e) {}
     try {
-      const r = await fetch('/.netlify/functions/ask-jorge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, messages: msgs.slice(-16), page: page() }) });
+      const r = await fetch('/.netlify/functions/ask-jorge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, messages: msgs.slice(-16), page: page(), memo }) });
       const d = await r.json().catch(() => ({}));
       if (thinking) thinking.remove();
+      (d.memo || []).forEach(m => { memo = memo.filter(x => x !== m); memo.push(m); }); memo = memo.slice(-8);
       const ans = d.answer || d.error || 'No pude responder ahora, intenta otra vez.';
       msgs.push({ role: 'assistant', content: ans }); addBubble('assistant', ans);
       if (d.notified && d.notified.sent) addBubble('assistant', '📨 Le envié tu pregunta a Jorge. Te va a responder directamente.');
