@@ -124,7 +124,7 @@ function _resGroupRows(){
     const _lineage=typeof _bdSplitLineage==='function'?_bdSplitLineage(reg,bk):null;
     const base={
       room:reg.room||'—',roomType:rt?.name||'—',checkIn,checkOut,rate,
-      notes:reg.notes||'',source:bk.leaderName||bk.retreatName||'Group',
+      notes:reg.notes||'',internalNotes:reg.internalNotes||'',source:bk.leaderName||bk.retreatName||'Group',
       type:'group',id:reg.id,checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
       cardOnFile:!!reg.stripePaymentMethodId,balance:null,
       discountCode:null, // no discount-code concept for retreat/Room Only regs
@@ -136,7 +136,7 @@ function _resGroupRows(){
       isSplitMidStay:!!_lineage?.next,      // this segment's checkOut is really just a room change -- not a real departure
     };
     if(named.length>1&&rt&&_RES_ONE_BED_RT_IDS.includes(rt.id)){
-      out.push({...base,name:_joinNames(named.map(g=>g.name)),guestNames:named.map(g=>g.name),notes:reg.notes||named.map(g=>g.notes).filter(Boolean).join(' / ')});
+      out.push({...base,name:_joinNames(named.map(g=>g.name)),guestNames:named.map(g=>g.name),notes:reg.notes||[...new Set(named.map(g=>(g.notes||'').trim()).filter(Boolean))].join(' / ')});
     }else{
       named.forEach(g=>out.push({...base,name:g.name,guestNames:[g.name],notes:reg.notes||g.notes||''}));
     }
@@ -152,7 +152,7 @@ function _resIndivRows(){
       return {
         name:`${r.firstName||''} ${r.lastName||''}`.trim()||'Guest',room:r.room||r.roomTypeName||'—',
         roomType:rt?.name||r.roomTypeName||'—',
-        checkIn:r.checkIn,checkOut:r.checkOut,rate,notes:r.notes||r.dietary||'',
+        checkIn:r.checkIn,checkOut:r.checkOut,rate,notes:r.notes||r.dietary||'',internalNotes:r.internalNotes||'',
         source:r.source||'Booking Engine',type:'individual',id:r.id,status:r.status,
         checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
         cardOnFile:false, // Card on File isn't wired up for Booking Engine reservations yet
@@ -483,7 +483,7 @@ async function _resBuildAc24hView(){
   });
   const th=t=>`<th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)">${t}</th>`;
   const td=(c,st)=>`<td style="padding:11px 16px;font-size:12.5px;border-bottom:1px solid #f1f5f9;vertical-align:top;${st||''}">${c}</td>`;
-  const notes=r=>[r.notes,r.internal].filter(Boolean).map(escHtml).join('<br><span style="color:#9ca3af">—</span><br>');
+  const notes=r=>_resNotesCell({...r,internalNotes:r.internal});
   return `<div style="max-width:1000px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
       <span style="font-size:14px;font-weight:700;color:#0e7490">❄️ A/C 24 Horas — in the hotel today</span>
@@ -518,6 +518,15 @@ function _resEmptyState(emoji,msg){
   </div>`;
 }
 
+// Notes column (Jorge 2026-11-05): the room list's notes (the teacher's Edit Guest -> Room notes, or the guest's own) and
+// the staff-only Internal Notes, each on its own labeled line -- in Arrivals, In House, Departures, Advanced Search, AC 24hrs
+function _resNotesCell(r){
+  const lab=t=>`<span style="font-size:9.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#9ca3af">${t}</span> `;
+  const parts=[];
+  if((r.notes||'').trim())parts.push(`<div>${lab('Notes')}${escHtml(r.notes.trim())}</div>`);
+  if((r.internalNotes||'').trim())parts.push(`<div style="margin-top:4px;color:#92400e">${lab('Internal')}${escHtml(r.internalNotes.trim())}</div>`);
+  return parts.join('')||'<span style="color:#d1d5db">—</span>';
+}
 let _resLastRows=[];
 function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol,discountCol}){
   _resLastRows=rows;
@@ -561,7 +570,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol,di
           ${balanceCol?`<td style="padding:11px 16px;text-align:right;font-size:12px;font-weight:700;color:${r.balance>0?'#dc2626':'#059669'}">${r.balance!=null?fmt$(r.balance):'—'}</td>`:''}
           ${cardCol?`<td style="padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:${r.cardOnFile?'#059669':'#dc2626'}">${r.cardOnFile?'Yes':'No'}</td>`:''}
           ${discountCol?`<td style="padding:11px 16px;font-size:12px;color:#7c3aed;font-family:monospace">${escHtml(r.discountCode||'—')}</td>`:''}
-          <td style="padding:11px 16px;font-size:12px;color:var(--muted);max-width:220px;white-space:pre-wrap">${escHtml(r.notes)}</td>
+          <td style="padding:11px 16px;font-size:12px;color:var(--muted);max-width:240px;white-space:pre-wrap">${_resNotesCell(r)}</td>
           <td style="padding:11px 16px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">${actionCell(r)}</td>
         </tr>`).join('')}
       </tbody>
