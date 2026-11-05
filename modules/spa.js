@@ -87,7 +87,8 @@ async function spaLoad() {
         rooms: SPA_DEFAULT_ROOMS.map(name => ({ id: spaNewId('rm'), name, location: '' })),
         therapists: [],
       };
-      await spaSave();
+      // NOT saved here (Darlene 2026-11-05): an empty read (expired login, dropped connection) used to land here and the defaults, with no therapists, were written over the real
+      // spa settings. The defaults now stay in this tab until somebody really edits something, and spaSave then merges with what is on the server.
     }
   } catch (e) {
     console.warn('[spa] load failed', e);
