@@ -41,6 +41,7 @@ async function _sam_save() {
         const next = merged.map(a => (chg[a.id] ? chg[a.id] : a));
         SpaAppointments.length = 0; next.forEach(a => SpaAppointments.push(a));
         _sam_base = _sam_snap(SpaAppointments);
+        try { fetch('/.netlify/functions/spa-alerts-now-background', { method: 'POST' }).catch(() => {}); } catch (e) {}   // spa WhatsApp alerts at once (Jorge 2026-11-05)
         return true;
       }
       await new Promise(r => setTimeout(r, 80 + Math.random() * 220));   // someone saved at the same moment: re-read and redo

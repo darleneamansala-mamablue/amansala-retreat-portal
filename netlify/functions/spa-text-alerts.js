@@ -14,7 +14,10 @@
 
 const { TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady, esDate, guestLabel, guestYesNo, DESK_DEFAULT } = require('./spa-alert-lib');
 
-exports.handler = async () => {
+// Also run right after an appointment is saved (spa-alerts-now-background.js), so alerts go out at once, not at the next 5-minute run.
+exports.handler = async () => run();
+
+async function run() {
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!key) return { statusCode: 500, body: 'no key' };
   const cfg = await getKey(key, 'spa_text_alerts_config');
@@ -48,8 +51,11 @@ exports.handler = async () => {
     if (only && !only.includes(String(t.firstName || '').toLowerCase())) continue;
     const svc = (services.find(s => s.id === a.serviceId) || {}).name || 'Service';
     const when = new Date(created).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: TZ });
+    // Jorge 2026-11-05: same formal Spanish message as "Send confirmation to therapist" (approved template) unless another one is set
+    const sv2 = services.find(s => s.id === a.serviceId) || {}, mins = sv2.duration || a.duration;
     const useWa = waReady(process.env.VISITO_SPA_ALERT_TEMPLATE);
-    const res = useWa ? await sendWhatsApp(toE164(t.phone), [a.clientName || 'Guest', svc, `${fmtTime(a.start)} on ${a.date}`], `spa-lm-${a.id}`, process.env.VISITO_SPA_ALERT_TEMPLATE) : await sendSms(toE164(t.phone), `Amansala spa: new same-day booking for you. ${a.clientName || 'Guest'}, ${svc} at ${fmtTime(a.start)} on ${a.date} (booked at ${when}).`);
+    const res = !process.env.VISITO_SPA_ALERT_TEMPLATE ? await sendWhatsApp(toE164(t.phone), [t.firstName || 'equipo', esDate(a.date), fmtTime(a.start), svc, mins ? `${mins} minutos` : '-', a.clientName || 'Cliente', guestYesNo(a)], `spa-lm-${a.id}`, 'spa_confirmacion_terapeuta', 'es_MX')
+      : useWa ? await sendWhatsApp(toE164(t.phone), [a.clientName || 'Guest', svc, `${fmtTime(a.start)} on ${a.date}`], `spa-lm-${a.id}`, process.env.VISITO_SPA_ALERT_TEMPLATE) : await sendSms(toE164(t.phone), `Amansala spa: new same-day booking for you. ${a.clientName || 'Guest'}, ${svc} at ${fmtTime(a.start)} on ${a.date} (booked at ${when}).`);
     if (res.ok) { sent[a.id] = new Date().toISOString(); texted++; } else console.error(`[spa-text-alerts] send failed for ${a.id}: ${res.reason}`);
   }
   // A future booking that was on a therapist's page last run and is now cancelled, deleted, or moved to someone else: tell that therapist.
@@ -68,6 +74,10 @@ exports.handler = async () => {
   // keep ones whose removal text failed so they are retried next run
   if (seen) Object.keys(seen).forEach(id => { if (!nowSeen[id] && !sent[`cancel|${id}|${seen[id].t}`] && new Date(`${seen[id].d}T${seen[id].s || '00:00'}:00-05:00`).getTime() >= Date.now()) nowSeen[id] = seen[id]; });
   await supa(key, 'app_store', 'POST', { key: 'spa_text_alerts_seen', value: nowSeen });
-  if (texted || removed || Object.keys(sent).length !== Object.keys(sentRaw || {}).length) await supa(key, 'app_store', 'POST', { key: 'spa_text_alerts_sent', value: sent });
+  if (texted || removed || Object.keys(sent).length !== Object.keys(sentRaw || {}).length) {
+    const sr = await supa(key, 'app_store', 'POST', { key: 'spa_text_alerts_sent', value: sent });
+    if (sr) console.error('[spa-text-alerts] could not save the sent list:', JSON.stringify(sr).slice(0, 300));
+  }
   return { statusCode: 200, body: JSON.stringify({ texted, removed, skipped }) };
-};
+}
+exports.run = run;

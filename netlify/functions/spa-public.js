@@ -48,6 +48,9 @@ async function getAll(key, path) {
     if (rows.length < 1000) return out;
   }
 }
+// therapist + spa front desk WhatsApp alerts right after a save, not at the next 5-minute run (Jorge 2026-11-05)
+const alertsNow = () => fetch(`${process.env.URL || 'https://amansalaportal.com'}/.netlify/functions/spa-alerts-now-background`, { method: 'POST' }).catch(() => {});
+
 // Saves ONE change to spa_appointments: re-read, apply, write only if nobody saved in between (compare-and-swap on
 // updated_at), else redo. fn returns the new list, or {abort: <reason>} to stop without writing.
 async function mutateAppts(key, fn) {
@@ -62,11 +65,11 @@ async function mutateAppts(key, fn) {
       const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_appointments&updated_at=eq.${encodeURIComponent(row.updated_at)}`, {
         method: 'PATCH', headers: { ...hdrs(key), 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify({ value: next, updated_at: now }),
       });
-      if (r.ok && (await r.json()).length) return { list: next };
+      if (r.ok && (await r.json()).length) { await alertsNow(); return { list: next }; }
       lastErr = 'busy ' + r.status;
     } else {
       const r = await fetch(`${SUPABASE_URL}/rest/v1/app_store`, { method: 'POST', headers: { ...hdrs(key), 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ key: 'spa_appointments', value: next, updated_at: now }) });
-      if (r.ok) return { list: next };
+      if (r.ok) { await alertsNow(); return { list: next }; }
       lastErr = 'insert ' + r.status;
     }
     await new Promise(res => setTimeout(res, 80 + Math.random() * 220));

@@ -515,6 +515,8 @@ exports.handler = async (event) => {
       }
     }
     if (!saved) throw new Error('Could not save the appointment: ' + lastErr);
+    // therapist + spa front desk WhatsApp alerts right away, not at the next 5-minute run (Jorge 2026-11-05)
+    try { await fetch(`${process.env.URL || 'https://amansalaportal.com'}/.netlify/functions/spa-alerts-now-background`, { method: 'POST' }); } catch (e) {}
 
     // Confirmation + therapist-notification emails (best-effort, non-fatal).
     const roomLoc = (spaData.rooms || []).find(r => r.id === roomId);
