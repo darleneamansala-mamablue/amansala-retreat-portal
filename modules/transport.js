@@ -2392,7 +2392,11 @@ function tr2EditEntry(rowId) {
   if (!row && !isSynth) return;
   const entry = tr2AllEntries.find(e => e.rowId === rowId) || null;
   const nameParts = isSynth && entry ? entry.guest.trim().split(/\s+/) : [];
-  const d = row?.data || { firstName: nameParts[0]||'', lastName: nameParts.slice(1).join(' ')||'', email: entry?.email||'', arrivalOT:true, departureOT:true };
+  const d0 = row?.data || { firstName: nameParts[0]||'', lastName: nameParts.slice(1).join(' ')||'', email: entry?.email||'', arrivalOT:true, departureOT:true };
+  // Jorge 2026-11-05 (Alissa Rodgers): a "Missing" row edited with a flight and a time but no date was saved without dates
+  // and vanished from every view. Empty dates now start as the guest's own stay dates (room list / reservation).
+  const _stay = tr2StayDates(entry);
+  const d = { ...d0, arrivalDate: d0.arrivalDate || _stay.in, departureDate: d0.departureDate || _stay.out };
 
   const sel = (id, opts, val) => `<select id="${id}" style="${TR2_INPUT_S}">${opts.map(o => `<option value="${o.v}"${o.v===val?' selected':''}>${o.l}</option>`).join('')}</select>`;
   const inp = (id, type, val, placeholder) => `<input id="${id}" type="${type}" value="${escHtml(val==null?'':val)}" placeholder="${placeholder||''}" style="${TR2_INPUT_S}">`;
@@ -2456,6 +2460,13 @@ function tr2EditEntry(rowId) {
     </div>`;
   document.body.appendChild(modal);
 }
+// The guest's own stay dates for a Transport entry: their registration's check-in/out, else the reservation's dates
+function tr2StayDates(entry) {
+  if (!entry) return { in: '', out: '' };
+  const reg = entry.regId ? (AppData.regs || []).find(r => r.id === entry.regId) : null;
+  const bk = (AppData.bookings || []).find(b => b.id === entry.retreatId) || null;
+  return { in: (reg && reg.checkIn) || (bk && bk.startDate) || '', out: (reg && reg.checkOut) || (bk && bk.endDate) || '' };
+}
 async function tr2SaveEdit(rowId) {
   const isSynth = rowId.startsWith('synth-');
   const g = id => document.getElementById(id);
@@ -2473,6 +2484,11 @@ async function tr2SaveEdit(rowId) {
     departureOT: g('tr2-e-dep-ot')?.checked || false, willingToShare: g('tr2-e-share')?.checked || false, notes: g('tr2-e-notes')?.value.trim() || '',
     serviceCost: g('tr2-e-cost')?.value !== '' ? Number(g('tr2-e-cost').value) : null,
   };
+  { // never save a time without its day: the row would be hidden everywhere
+    const st = tr2StayDates(tr2AllEntries.find(e => e.rowId === rowId));
+    if (!updatedData.arrivalDate && (updatedData.arrivalTime || updatedData.flightNumber || updatedData.arrivalOT)) updatedData.arrivalDate = st.in;
+    if (!updatedData.departureDate && (updatedData.departureTime || updatedData.departureOT)) updatedData.departureDate = st.out;
+  }
   // Pick up override: field is read-only for everyone except Hilario/Jorge (see
   // tr2CanEditPickup), so a non-privileged save must never touch the stored
   // override -- it's already carried over unchanged via ...oldData above.
