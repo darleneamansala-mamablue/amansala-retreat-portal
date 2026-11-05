@@ -59,6 +59,8 @@ const TOOLS = [
     input_schema: { type: 'object', properties: { checkIn: { type: 'string' }, checkOut: { type: 'string' }, roomType: { type: 'string' }, room: { type: 'string' } }, required: ['checkIn', 'checkOut'] } },
   { name: 'quote_room_rate', description: 'Price of a Room Only stay or extra nights for given dates: each available room type with its rate per night, taxes and total. stayType extra_night = the Extra Night rate (guests of a retreat adding nights before/after it); escape = the normal Escape rate. Read-only.',
     input_schema: { type: 'object', properties: { checkIn: { type: 'string' }, checkOut: { type: 'string' }, adults: { type: 'number' }, stayType: { type: 'string', enum: ['extra_night', 'escape'] } }, required: ['checkIn', 'checkOut'] } },
+  { name: 'folio_and_spa', description: 'For one stay (regId from find_guest): every line on its folios (date, description, amount, category, who added it) and every spa appointment booked under that guest\'s name or room during the stay and the week after. Use it to check that spa charges match real appointments, spot duplicate charges, charges with no appointment, appointments with no charge, or services after check-out. Read-only.',
+    input_schema: { type: 'object', properties: { regId: { type: 'string' } }, required: ['regId'] } },
   { name: 'spa_services', description: 'List the active spa services (id, name, duration, price). Read-only.', input_schema: { type: 'object', properties: {} } },
   { name: 'spa_availability', description: 'Free times for a spa service on a date (with therapist and spa room ids to book). Read-only.',
     input_schema: { type: 'object', properties: { serviceId: { type: 'string' }, date: { type: 'string' }, therapistPreference: { type: 'string', enum: ['none', 'male', 'female'] }, guestCount: { type: 'number' } }, required: ['serviceId', 'date'] } },
@@ -112,13 +114,33 @@ async function findGuest(key, { name = '', room = '', date = '' }) {
   return out.length ? out : { message: `No guest found for ${[name && 'name "' + name + '"', room && 'room ' + room].filter(Boolean).join(' and ')} on ${day}.` };
 }
 
+// Melissa 2026-11-05: check a guest's spa charges against the spa calendar
+async function folioAndSpa(key, regId) {
+  const get = async p => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${p}`, { headers: H(key) }); return r.ok ? r.json() : []; };
+  const [r] = await get(`registrations?id=eq.${encodeURIComponent(String(regId || ''))}&select=id,room,check_in,check_out,guests`);
+  if (!r) return { message: 'Stay not found — use find_guest first.' };
+  const fo = await get(`folios?select=id,name,guest_name&registration_id=eq.${encodeURIComponent(r.id)}`);
+  const items = fo.length ? await get(`folio_items?select=folio_id,description,qty,unit_price,tax_rate,category,staff_name,created_at&folio_id=in.(${fo.map(f => f.id).join(',')})&order=created_at`) : [];
+  const [ap] = await get('app_store?key=eq.spa_appointments&select=value'), [sd] = await get('app_store?key=eq.spa_data&select=value');
+  const th = {}, sv = {}; (((sd && sd.value) || {}).therapists || []).forEach(t => { th[t.id] = t.firstName; }); (((sd && sd.value) || {}).services || []).forEach(x => { sv[x.id] = x; });
+  const names = (r.guests || []).filter(g => g && g.name).map(g => norm(g.name)), room = norm(r.room).replace(/\s/g, '');
+  const until = new Date(new Date(r.check_out + 'T12:00:00Z').getTime() + 7 * 864e5).toISOString().slice(0, 10);
+  const appts = (((ap && ap.value) || [])).filter(a => a && a.date >= r.check_in && a.date <= until && (names.some(n => n && norm(a.clientName).includes(n)) || (room && norm(a.roomNumber || '').replace(/\s/g, '') === room)))
+    .sort((x, y) => (x.date + x.start).localeCompare(y.date + y.start))
+    .map(a => ({ date: a.date, time: a.start, client: a.clientName, service: (sv[a.serviceId] || {}).name, priceUSD: (sv[a.serviceId] || {}).price, therapist: th[a.therapistId], status: a.status, afterCheckOut: a.date >= r.check_out, bookedAt: a.createdAt }));
+  return { room: r.room, checkIn: r.check_in, checkOut: r.check_out, guests: (r.guests || []).map(g => g && g.name).filter(Boolean),
+    folioLines: items.map(i => ({ folio: (fo.find(f => f.id === i.folio_id) || {}).name, date: String(i.created_at).slice(0, 10), description: i.description, qty: i.qty, unitUSD: i.unit_price, taxPct: i.tax_rate, category: i.category, addedBy: i.staff_name })),
+    spaAppointments: appts,
+    note: 'Spa charges made automatically by the calendar are dated on the service day; ones staff typed by hand are dated when typed. A tip line is not a service.' };
+}
+
 async function waToJorge(template, params) {
   const visitoKey = process.env.VISITO_M2M_KEY, channelId = process.env.VISITO_WA_CHANNEL_ID;
   if (!visitoKey || !channelId) return false;
   try {
     const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
       method: 'POST', headers: { Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `askj-${template}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` },   // Visito refuses a send without it
-      body: JSON.stringify({ to: JORGE_PHONE, template: { name: template, language: { code: 'es_MX' }, components: [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: String(t).replace(/\s*\n\s*/g, ' ').slice(0, 900) })) }] } }),
+      body: JSON.stringify({ to: JORGE_PHONE, template: { name: template, language: { code: 'es_MX' }, components: [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: String(t).replace(/\s*\n\s*/g, ' ').slice(0, 300) })) }] } }),
     });
     const j = await r.json().catch(() => ({}));
     return r.ok && j.accepted !== false;
@@ -399,6 +421,7 @@ exports.handler = async (event) => {
           if (u.name === 'find_guest') out = await findGuest(key, u.input || {});
           else if (u.name === 'room_availability') out = await roomAvailability(key, u.input || {});
           else if (u.name === 'quote_room_rate') out = await visitoTool('visito-check-availability', { adults: 1, stayType: 'extra_night', ...(u.input || {}) });
+          else if (u.name === 'folio_and_spa') out = await folioAndSpa(key, (u.input || {}).regId);
           else if (u.name === 'spa_services') {
             const [row] = await (await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_data&select=value`, { headers: H(key) })).json();
             out = (((row && row.value) || {}).services || []).filter(x => x && x.active).map(x => ({ serviceId: x.id, name: x.name, minutes: x.duration, priceUSD: x.price, group: x.sessionType === 'group', category: x.category }));
