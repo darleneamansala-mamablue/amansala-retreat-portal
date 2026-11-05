@@ -1526,6 +1526,20 @@ function bdStickyAlert(msg,type){
 // separate from this portal registration -- creating a new one would just
 // duplicate her) -- link to it and adopt its real room if found, otherwise
 // create a fresh reservation in Cloudbeds for this room.
+// Jorge 2026-11-05 (De La Sol: Kathryn Stevenson GV16 and Susan & Edward McClelland 23 moved to arrive a day early, and
+// the retreat bill grew $1,235.40): changing a RETREAT guest's dates from a reservation never moves the retreat's totals --
+// the nights billed to the retreat stay what they were (custom_nights_override / custom_tip_nights_override); extra nights
+// are charged on their own. A nights figure an admin already set is left alone. Room Only reservations are not touched.
+function _bdFreezeRetreatNights(reg,bk,prevIn,prevOut){
+  if(!reg||!bk||bk.bookingType==='room_only')return {};
+  const pIn=prevIn||bk.startDate,pOut=prevOut||bk.endDate;
+  if(!pIn||!pOut)return {};
+  const n=Math.max(1,Math.round((pd(pOut)-pd(pIn))/DAY_MS));
+  const out={};
+  if(reg.customNightsOverride==null){reg.customNightsOverride=n;out.custom_nights_override=n;}
+  if(reg.customTipNightsOverride==null){reg.customTipNightsOverride=Number(reg.customNightsOverride);out.custom_tip_nights_override=Number(reg.customNightsOverride);}
+  return out;
+}
 async function bdSyncCloudbeds(){
   const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
   const bk=AppData.bookings.find(b=>b.id===reg.bookingId);if(!bk)return;
@@ -1591,12 +1605,13 @@ async function bdSyncCloudbeds(){
     if(reg.customRateOverride==null&&datesChanged){
       reg.customRateOverride=subj.rate;
     }
+    const _frz=datesChanged?_bdFreezeRetreatNights(reg,bk,reg.checkIn,reg.checkOut):{};
     if(!bk.cbReservationIds)bk.cbReservationIds={};
     bk.cbReservationIds[reg.room]=exactMatch.reservationID;
     reg.checkIn=realCheckIn;reg.checkOut=realCheckOut;
     try{
       await Promise.all([
-        db.from('registrations').update({check_in:reg.checkIn,check_out:reg.checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id),
+        db.from('registrations').update({check_in:reg.checkIn,check_out:reg.checkOut,custom_rate_override:reg.customRateOverride,..._frz}).eq('id',reg.id),
         db.from('bookings').update({cb_reservation_ids:bk.cbReservationIds}).eq('id',bk.id),
       ]);
     }catch(e){bdStickyAlert('Error guardando el enlace: '+e.message,'error');return;}
@@ -1735,7 +1750,8 @@ async function bdSaveDetails(){
       const newRt=AppData.roomTypes.find(rt=>(rt.rooms||[]).includes(room));
       if(newRt)reg.roomTypeId=newRt.id;
     }
-    const {error}=await db.from('registrations').update({guests:reg.guests,room,room_type_id:reg.roomTypeId,check_in:checkIn,check_out:checkOut,custom_rate_override:reg.customRateOverride}).eq('id',reg.id);
+    const _frz=datesChanged?_bdFreezeRetreatNights(reg,AppData.bookings.find(b=>b.id===reg.bookingId),reg.checkIn,reg.checkOut):{};
+    const {error}=await db.from('registrations').update({guests:reg.guests,room,room_type_id:reg.roomTypeId,check_in:checkIn,check_out:checkOut,custom_rate_override:reg.customRateOverride,..._frz}).eq('id',reg.id);
     if(error){showToast('Error: '+error.message);return;}
     reg.room=room;reg.checkIn=checkIn;reg.checkOut=checkOut;
     // Keep the retreat's own blocked_rooms in sync -- the Room Calendar's drag-and-drop
