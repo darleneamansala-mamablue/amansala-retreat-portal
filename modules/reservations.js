@@ -468,16 +468,47 @@ function resSetDepDate(d){_resDepDate=d;_resRender();}
 // modules/booking-detail.js's bdSaveAc24h) -- the same ac_24h flag
 // send-climas-report.js reads to pull these rooms out of its nightly 9pm
 // reminder. booking_requests has no ac_24h column, so group rows only.
+// Jorge 2026-11-05: only the guests IN the hotel today (checked in, not checked out -- the same guests the climas report
+// counts), one row per room, and only Room / Name / Check-in / Check-out / Notes plus a button to take the flag off. It used
+// to list every reservation ever flagged (past October stays, a January 2027 one) with the full reservations columns.
 async function _resBuildAc24hView(){
-  const rows=_resSortRows(_resGroupRows().filter(r=>!r.cancelled&&r.ac24h));
-  await _resAttachFolioBalances(rows);
-  return `<div style="max-width:1300px;margin:0 auto">
+  const today=fmtISO(new Date());
+  const seen=new Set(),rows=[];
+  _resSortRows(_resGroupRows().filter(r=>!r.cancelled&&r.ac24h&&r.checkedInAt&&!r.checkedOutAt&&r.checkIn<=today&&r.checkOut>=today)).forEach(r=>{
+    const prev=rows.find(x=>x.id===r.id);
+    if(prev){prev.names.push(r.name);return;}
+    if(seen.has(r.id))return;seen.add(r.id);
+    const reg=AppData.regs.find(x=>x.id===r.id)||{};
+    rows.push({...r,names:[r.name],internal:reg.internalNotes||''});
+  });
+  const th=t=>`<th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)">${t}</th>`;
+  const td=(c,st)=>`<td style="padding:11px 16px;font-size:12.5px;border-bottom:1px solid #f1f5f9;vertical-align:top;${st||''}">${c}</td>`;
+  const notes=r=>[r.notes,r.internal].filter(Boolean).map(escHtml).join('<br><span style="color:#9ca3af">—</span><br>');
+  return `<div style="max-width:1000px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
-      <span style="font-size:14px;font-weight:700;color:#0e7490">❄️ A/C 24 Horas</span>
+      <span style="font-size:14px;font-weight:700;color:#0e7490">❄️ A/C 24 Horas — in the hotel today</span>
       <span style="background:#e0f2fe;color:#0e7490;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px">${rows.length} room${rows.length!==1?'s':''}</span>
     </div>
-    ${rows.length===0?_resEmptyState('❄️','No rooms marked A/C 24 horas'):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:'checkout',cardCol:true,balanceCol:true})}
+    ${rows.length===0?_resEmptyState('❄️','No guests in the hotel with A/C 24 horas'):`<div style="background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-family:'Jost',sans-serif">
+      <thead><tr>${th('Room')}${th('Name')}${th('Check-in')}${th('Check-out')}${th('Notes')}${th('')}</tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        ${td(escHtml(r.room),'font-weight:700')}
+        ${td(r.names.map(n=>`<a href="#" onclick="event.preventDefault();openBookingDetailForReg('${r.id}',${escHtml(JSON.stringify(n))})" style="color:#1d4ed8;font-weight:600">${escHtml(n)}</a>`).join('<br>'))}
+        ${td(fmtDate(r.checkIn))}${td(fmtDate(r.checkOut))}
+        ${td(notes(r)||'<span style="color:#d1d5db">—</span>','color:#4b5563;max-width:320px')}
+        ${td(`<button onclick="resAc24Off('${r.id}')" title="Take A/C 24 horas off this room" style="background:#f1f5f9;border:1px solid var(--border);border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;white-space:nowrap">❄️ Quitar</button>`,'text-align:right')}
+      </tr>`).join('')}</tbody></table></div>`}
   </div>`;
+}
+async function resAc24Off(regId){
+  const reg=AppData.regs.find(r=>r.id===regId);if(!reg)return;
+  if(!confirm(`Quitar A/C 24 horas del cuarto ${reg.room||''}?`))return;
+  const {error}=await db.from('registrations').update({ac_24h:false}).eq('id',regId);
+  if(error){showToast('Error: '+error.message);return;}
+  reg.ac24h=false;
+  try{logActivity('A/C 24h removed',`Room ${reg.room||''}`,reg.bookingId||null);}catch(e){}
+  showToast('A/C 24 horas quitado');
+  _resRender();
 }
 
 function _resEmptyState(emoji,msg){
