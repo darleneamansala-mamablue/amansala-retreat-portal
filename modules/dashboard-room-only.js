@@ -41,6 +41,19 @@
       : '<div style="font-size:12.5px;color:#4b5563;padding:5px 0;border-top:1px solid #efeae0">No BBC or RNR groups in house or arriving in the next 14 days.</div>';
     return '<div style="margin-top:14px"><div style="font-size:13px;font-weight:800;color:#1f2d2d;margin-bottom:2px">BBC / RNR groups (incl. WeTravel)</div>' + rows + '</div>';
   }
+  // Guests really in the house on a night (Darlene 2026-11-05: "82 guests in house" was the groups' contracted headcounts, most of whom are not here): the named guests on the room list whose own stay covers
+  // that night (their check-in <= night < their check-out) and who have not already checked out. A booking with no room list yet falls back to its guest count.
+  function tonight(b, ds) {
+    const regs = (AppData.regs || []).filter(r => r.bookingId === b.id && !r.cancelled);
+    if (!regs.length) return Number(b.pax) || 0;
+    let n = 0;
+    regs.forEach(r => {
+      const ci = String(r.checkIn || b.startDate || '').slice(0, 10), co = String(r.checkOut || b.endDate || '').slice(0, 10), out = r.checkedOutAt ? String(r.checkedOutAt).slice(0, 10) : '';
+      if (!ci || !co || !(ci <= ds && ds < co) || (out && out <= ds)) return;
+      n += new Set((r.guests || []).filter(g => g && g.name && !g.cancelled).map(g => g.name.trim().toLowerCase())).size;
+    });
+    return n;
+  }
   // Everyone in house tonight: room-only guests plus retreat / BBC / RNR / WeTravel groups (start <= night < end; cancelled, archived and unconfirmed 'requested' bookings left out)
   function everyone(ds, roomOnlyGuests) {
     let grp = 0, n = 0;
@@ -48,7 +61,7 @@
       if (!b || b.status === 'cancelled' || b.status === 'requested' || (b.flags || []).includes('archived')) return;
       if (b.bookingType === 'room_only' && !kind(b)) return;
       const [s, e] = D(b); if (!s || !e || !(s <= ds && ds < e)) return;
-      let g = Number(b.pax) || 0; if (!g) g = regGuests(b);
+      const g = tonight(b, ds);
       grp += g; n++;
     });
     return { grp, n, total: grp + roomOnlyGuests };
