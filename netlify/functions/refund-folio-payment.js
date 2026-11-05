@@ -105,7 +105,7 @@ ${contactHtml()}` }) ? 'sent' : 'failed') : 'no email';
   const to = String(g.phone || '').replace(/\D/g, ''), visitoKey = process.env.VISITO_M2M_KEY, channelId = process.env.VISITO_WA_CHANNEL_ID;
   if (to.length >= 11 && visitoKey && channelId) {
     const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
-      method: 'POST', headers: { Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json' },
+      method: 'POST', headers: { Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `refund-${folioId}-${Math.round(amount * 100)}-${Date.now()}` },   // Visito refuses a send without it
       body: JSON.stringify({ to, template: { name: 'booking_refund_issued', language: { code: 'en_US' }, components: [{ type: 'body', parameters: [first, money(amount), stay].map(t => ({ type: 'text', text: t })) }] } }),
     });
     const body = await r.json().catch(() => ({}));

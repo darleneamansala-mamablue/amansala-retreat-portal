@@ -115,7 +115,7 @@ async function waToJorge(template, params) {
   if (!visitoKey || !channelId) return false;
   try {
     const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
-      method: 'POST', headers: { Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json' },
+      method: 'POST', headers: { Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `askj-${template}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` },   // Visito refuses a send without it
       body: JSON.stringify({ to: JORGE_PHONE, template: { name: template, language: { code: 'es_MX' }, components: [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: String(t).replace(/\s*\n\s*/g, ' ').slice(0, 900) })) }] } }),
     });
     const j = await r.json().catch(() => ({}));
