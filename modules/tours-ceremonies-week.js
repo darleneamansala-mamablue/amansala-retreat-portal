@@ -8,6 +8,20 @@
 const TCW_TOURS = ['ao1', 'ao2', 'ao3', 'ao6', 'ao7', 'ao16'];
 const TCW_CEREMONIES = ['ao4', 'ao5', 'ao9', 'ao10'];
 const TCW_SHAMANS = ['María Luisa', 'Gabby', 'Francisco'];   // every Temazcal needs one shaman and one fire keeper
+// The number shown beside a group is the people really on it, not the retreat's contracted headcount (Darlene 2026-11-05: Wendy Oberg showed 30): a pre-paid / included activity counts the named guests on the
+// room list whose stay covers that day; an optional one counts the guests signed up. A booking with no room list yet falls back to its guest count; nobody signed up shows no number.
+function tcwCount(bk, a) {
+  const d = String(a.date || '').slice(0, 10);
+  if (a.prepaid) {
+    const regs = (AppData.regs || []).filter(r => r.bookingId === bk.id && !r.cancelled);
+    if (!regs.length) return Number(bk.pax) || 0;
+    let n = 0;
+    regs.forEach(r => { const ci = String(r.checkIn || bk.startDate || '').slice(0, 10), co = String(r.checkOut || bk.endDate || '').slice(0, 10); if (ci && co && ci <= d && d <= co) n += new Set((r.guests || []).filter(g => g && g.name && !g.cancelled).map(g => g.name.trim().toLowerCase())).size; });
+    return n;
+  }
+  const sups = (typeof actSheetSignups !== 'undefined' && actSheetSignups[bk.id]) || [];
+  return sups.filter(x => (x.activities || []).includes(a.aoId)).length;
+}
 function tcwFireKeepers() { return typeof TEMAZCAL_FIRE_KEEPER_NAMES !== 'undefined' ? TEMAZCAL_FIRE_KEEPER_NAMES : ['Golloy', 'Francisco']; }
 let tcwWeek = null;          // ISO date of the Sunday of the week on screen
 let tcwFilter = 'all';       // all | tours | ceremonies
@@ -35,7 +49,7 @@ function tcwBuildRows() {
       const k = a.aoId + '|' + d;
       const r = map[k] = map[k] || { key: k, aoId: a.aoId, date: d, times: [], groups: [] };
       if (a.time) r.times.push(a.time);
-      r.groups.push({ id: String(bk.id || bk.leaderName || bk.retreatName || ''), name: bk.leaderName || bk.retreatName || 'Retreat', pax: Number(bk.pax) || 0, prepaid: !!a.prepaid, session: a.session });
+      r.groups.push({ id: String(bk.id || bk.leaderName || bk.retreatName || ''), name: bk.leaderName || bk.retreatName || 'Retreat', pax: tcwCount(bk, a), prepaid: !!a.prepaid, session: a.session });
     });
   });
   return { days, rows: Object.values(map).sort((x, y) => x.date.localeCompare(y.date) || (x.times[0] || '99').localeCompare(y.times[0] || '99')) };
@@ -133,7 +147,7 @@ function tcwReport() {
     (bk.retreatActivities || []).forEach(a => {
       const d = String(a && a.date || '').slice(0, 10); if (!a || !ids.includes(a.aoId) || !d) return;
       const k = a.aoId + '|' + d, r = rows[k] = rows[k] || { key: k, aoId: a.aoId, date: d, times: [], groups: [] };
-      if (a.time) r.times.push(a.time); r.groups.push((bk.leaderName || bk.retreatName || 'Retreat') + (Number(bk.pax) ? ' (' + bk.pax + ')' : '')); (r.gids = r.gids || {})[String(bk.id || bk.leaderName || bk.retreatName || '')] = bk.leaderName || bk.retreatName || 'Retreat';
+      if (a.time) r.times.push(a.time); r.groups.push((bk.leaderName || bk.retreatName || 'Retreat') + (tcwCount(bk, a) ? ' (' + tcwCount(bk, a) + ')' : '')); (r.gids = r.gids || {})[String(bk.id || bk.leaderName || bk.retreatName || '')] = bk.leaderName || bk.retreatName || 'Retreat';
     });
   });
   const nm = id => ((typeof ADD_ONS !== 'undefined' ? ADD_ONS : []).find(a => a.id === id) || {}).name || id;
