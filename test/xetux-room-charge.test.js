@@ -33,6 +33,9 @@ const post = (b, tok = 't') => ch.handler({ httpMethod: 'POST', headers: { autho
   let r = await get({ guestName: 'jane doe' }); assert.ok(r.success); assert.strictEqual(r.data[0].roomNumber, '13b'); assert.strictEqual(r.data[0].folio, 'f1');
   r = await get({ roomNumber: '13B' }); assert.strictEqual(r.data[0].guestName, 'Jane Doe');
   r = await get({ roomNumber: 'GV2' }); assert.strictEqual(r.error, 'NO_ACTIVE_RESERVATION');          // checked out
+  db.registrations.push({ id: 'r3', booking_id: 'b1', room: '14a', guests: [{ name: 'Not Yet' }], check_in: null, check_out: null, checked_in_at: null, checked_out_at: null });
+  r = await get({ checkedIn: 'true' }); assert.ok(r.success); assert.deepStrictEqual(r.data.map(x => x.guestName), ['Jane Doe']);   // checked in only, not checked out
+  r = await get({}); assert.strictEqual(r.success, false);
   assert.strictEqual((await post({ ticketId: '1' }, 'bad')).code, 401);
   r = await post({ ticketId: '174407', folio: 'f1', reservationID: 'r1', subtotal: 48, tip: 7, waiter: 'Ana', items: [{ description: 'Tacos', quantity: 2 }] });
   assert.ok(r.success); assert.strictEqual(r.charged, 61.24); assert.strictEqual(db.folio_items.length, 2); assert.strictEqual(r.balance, 61.24);

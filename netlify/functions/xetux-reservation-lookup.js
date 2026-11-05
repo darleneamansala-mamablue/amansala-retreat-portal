@@ -90,8 +90,21 @@ const sameRoom = (a, b) => String(a || '').toLowerCase().replace(/[\s-]/g, '') =
 // Guests staying TODAY (Tulum date) and not checked out: the guest's own room dates (an extra night or a split stay has
 // its own), not only the retreat's. One row per guest, with their open folio (created when missing). Shared with
 // xetux-room-charge.js, which re-checks the reservation before posting.
-async function findInHouse(supaKey, { guestName = '', roomNumber = '', reservationID = '' } = {}) {
+async function findInHouse(supaKey, { guestName = '', roomNumber = '', reservationID = '', onlyCheckedIn = false } = {}) {
   const today = tulumToday(), results = [];
+  // open folios already there, fetched in one go (the full in-house list would otherwise make one call per guest)
+  const openFolios = new Map();   // 'reg|<id>|<name>' or 'reg|<id>' -> folio id
+  const folioFor = async (kind, id, name) => {
+    if (!openFolios.has(kind + '|' + id + '|*')) {
+      const col = kind === 'reg' ? 'registration_id' : 'booking_request_id';
+      const fs = await supaGet(supaKey, `folios?select=id,guest_name&${col}=eq.${encodeURIComponent(id)}&status=eq.open&order=created_at.asc`);
+      openFolios.set(kind + '|' + id + '|*', fs);
+    }
+    const fs = openFolios.get(kind + '|' + id + '|*');
+    const mine = fs.find(f => norm(f.guest_name) === norm(name));
+    if (mine) return mine.id;
+    return kind === 'reg' ? findOrCreateFolio(supaKey, { registrationId: id, guestName: name }) : findOrCreateFolio(supaKey, { bookingRequestId: id, guestName: name });
+  };
   const bks = await supaGet(supaKey, `bookings?select=id,start_date,end_date,status&status=neq.cancelled&start_date=lte.${today}&end_date=gte.${today}&limit=1000`);
   const byId = new Map(bks.map(b => [b.id, b]));
   const ids = [...byId.keys()];
@@ -99,6 +112,7 @@ async function findInHouse(supaKey, { guestName = '', roomNumber = '', reservati
     const regs = await supaGet(supaKey, `registrations?select=id,room,guests,booking_id,check_in,check_out,cancelled,checked_in_at,checked_out_at&booking_id=in.(${ids.slice(i, i + 80).map(encodeURIComponent).join(',')})`);
     for (const reg of regs) {
       if (reg.cancelled || reg.checked_out_at || !reg.room || !Array.isArray(reg.guests)) continue;
+      if (onlyCheckedIn && !reg.checked_in_at) continue;
       if (reservationID && String(reg.id) !== String(reservationID)) continue;
       const bk = byId.get(reg.booking_id);
       const inD = reg.check_in || bk.start_date, outD = reg.check_out || bk.end_date;
@@ -107,7 +121,7 @@ async function findInHouse(supaKey, { guestName = '', roomNumber = '', reservati
       for (const guest of reg.guests) {
         if (!guest || !guest.name || guest.cancelled) continue;
         if (guestName && !nameMatch(guest.name, guestName)) continue;
-        const folioId = await findOrCreateFolio(supaKey, { registrationId: reg.id, guestName: guest.name });
+        const folioId = await folioFor('reg', reg.id, guest.name);
         results.push({ reservationID: String(reg.id), folio: folioId ? String(folioId) : null, guestName: guest.name, roomNumber: reg.room,
           checkInDate: toDateTime(inD), checkOutDate: toDateTime(outD), status: 'confirmed', checkedIn: !!reg.checked_in_at });
       }
@@ -117,10 +131,11 @@ async function findInHouse(supaKey, { guestName = '', roomNumber = '', reservati
   const reqs = await supaGet(supaKey, `booking_requests?select=id,room,first_name,last_name,check_in,check_out,status,checked_in_at,checked_out_at&check_in=lte.${today}&check_out=gte.${today}&status=not.in.(declined,cancelled)`);
   for (const req of reqs) {
     if (!req.room || req.checked_out_at) continue;
+    if (onlyCheckedIn && !req.checked_in_at) continue;
     if (reservationID && String(req.id) !== String(reservationID)) continue;
     const fullName = [req.first_name, req.last_name].filter(Boolean).join(' ').trim();
     if (!fullName || (guestName && !nameMatch(fullName, guestName)) || (roomNumber && !sameRoom(req.room, roomNumber))) continue;
-    const folioId = await findOrCreateFolio(supaKey, { bookingRequestId: req.id, guestName: fullName });
+    const folioId = await folioFor('req', req.id, fullName);
     results.push({ reservationID: String(req.id), folio: folioId ? String(folioId) : null, guestName: fullName, roomNumber: req.room,
       checkInDate: toDateTime(req.check_in), checkOutDate: toDateTime(req.check_out), status: req.status || 'confirmed', checkedIn: !!req.checked_in_at });
   }
@@ -142,12 +157,16 @@ exports.handler = async (event) => {
   const guestName = String(qs.guestName || '').trim();
   // Jorge 2026-11-05 (Benix / Xetux): the waiter can also search by room number
   const roomNumber = String(qs.roomNumber || qs.room || '').trim();
-  if (!guestName && !roomNumber) return jsonErr(400, 'guestName or roomNumber is required');
+  // Benix 2026-11-05: "todas las reservas activas con check-in" -- ?checkedIn=true (or ?all=true) with no name/room lists
+  // every guest who is checked in and not checked out today
+  const listAll = !guestName && !roomNumber && /^(1|true|yes)$/i.test(String(qs.checkedIn || qs.all || ''));
+  if (!guestName && !roomNumber && !listAll) return jsonErr(400, 'guestName, roomNumber or checkedIn=true is required');
 
   const supaKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supaKey) return jsonErr(500, 'Server config error');
 
-  const results = await findInHouse(supaKey, { guestName, roomNumber });
+  const results = await findInHouse(supaKey, { guestName, roomNumber, onlyCheckedIn: listAll || /^(1|true|yes)$/i.test(String(qs.checkedIn || '')) });
+  results.sort((a, b) => String(a.roomNumber).localeCompare(String(b.roomNumber), 'en', { numeric: true }));
   if (!results.length) {
     return {
       statusCode: 200,
@@ -155,7 +174,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         success: false,
         error: 'NO_ACTIVE_RESERVATION',
-        message: `No se encontró una reserva activa para ${guestName ? 'guestName=' + guestName : 'roomNumber=' + roomNumber}`,
+        message: listAll ? 'No hay huéspedes con check-in en este momento' : `No se encontró una reserva activa para ${guestName ? 'guestName=' + guestName : 'roomNumber=' + roomNumber}`,
       }),
     };
   }
