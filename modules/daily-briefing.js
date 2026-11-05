@@ -421,6 +421,10 @@ async function dbRender() {
   else if (dbTab === 'tours') html += dbCard('Tours and activities', dayTours.length ? glanceRows(dayTours) : dbNone('No tours or activities scheduled today.'), dayTours.length + ' scheduled');
   else if (dbTab === 'notes') html += dbCard('Special notes', notesRows || dbNone('No special notes today.'));
   else html += dbCard('Daily flow <span style="font-weight:500;color:#6b7280">— classes, circles, tours and activities together, in time order</span>', dayAll.length ? glanceRows(dayAll) : dbNone('Nothing scheduled today.'), dayAll.length);
+  // The four lists that say who is doing what (classes, opening circles, tours, activities) come right after the day view, above the arrivals (Darlene 2026-11-05)
+  // 5. Classes, opening circles, tours, extra activities
+  const evCard = (title, list, empty) => dbCard(title, list.length ? list.map(e => dbRow(dbDoneWrap(e, evLine(e)))).join('') : dbNone(empty), list.length);
+  html += evCard('Classes', buckets.class, 'No classes today.') + evCard('Opening circles / orientations', buckets.circle, 'No opening circle today.') + evCard('Tours', buckets.tour, 'No tours today.') + evCard('Extra activities and ceremonies', buckets.extra, 'No extra activities today.');
   // 1. Arrivals
   const arrBody = g.arrivals.length ? g.arrivals.map(b => dbRow(`${dbArrivedBox(b)}${dbCircleLeader(b)}<b>${dbEsc(b.leaderName || b.retreatName)}</b>${b.retreatName && b.retreatName !== b.leaderName ? ' <span style="color:#0f766e;font-weight:600">(' + dbEsc(b.retreatName) + ')</span>' : ''} · ${b.pax || '?'} guests · ${(b.blockedRooms || []).length} rooms · ${dbFmtT((b.scheduleRequest || {}).arrivalSlot) || ''}${dbRoomUpgrade(b)}${dbArrNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#374151"><b>Special notes:</b> ' + dbArrNote(b) + '</div>' : ''}`)).join('') : dbNone('No retreat arrivals today.');
   html += dbCard('Arrivals', arrBody + (g.hkOk ? dbRow(`${g.rooms.length} room${g.rooms.length === 1 ? '' : 's'} arriving today (all guests)`) : ''), g.arrivals.length + ' retreat' + (g.arrivals.length === 1 ? '' : 's'));
@@ -461,9 +465,6 @@ async function dbRender() {
   }).join('');
   html += dbCard('Departures', (g.departures.length ? g.departures.map(b => dbRow(`<b>${dbEsc(b.leaderName || b.retreatName)}</b> · ${dbDepCount(b)} · checking out today <span class="db-bal-total" data-bk="${b.id}"></span>${dbDepNote(b) ? '<div style="margin-top:3px;font-size:12.5px;color:#991b1b;font-weight:600">' + dbDepNote(b) + '</div>' : ''}`)).join('') + depRows + doneNote : dbNone('No retreat departures today.')) +
     depT.filter(t => { const rg = dbRegOf(t.sub); return !(rg && rg.checkedOutAt); }).map(t => dbRow(`Airport departure <b>${dbFmtT(t.sub.departureTime) || PENDING}</b> · ${dbRoomOf(t.sub)}${dbEsc((typeof trTransportFullName === 'function' ? trTransportFullName(t.sub) : '') || 'Guest')}${dbRetreatTag(t.sub)} · driver ${dbEsc(t.name)}`)).join(''), g.departures.length + ' retreat' + (g.departures.length === 1 ? '' : 's'));
-  // 5. Classes, opening circles, tours, extra activities
-  const evCard = (title, list, empty) => dbCard(title, list.length ? list.map(e => dbRow(dbDoneWrap(e, evLine(e)))).join('') : dbNone(empty), list.length);
-  html += evCard('Classes', buckets.class, 'No classes today.') + evCard('Opening circles / orientations', buckets.circle, 'No opening circle today.') + evCard('Tours', buckets.tour, 'No tours today.') + evCard('Extra activities and ceremonies', buckets.extra, 'No extra activities today.');
   // 6. Tour preparation
   let prep = g.tours.length ? g.tours.map(t => {
     if (t.cancelled) return `<div style="padding:10px 14px;border-top:1px solid #f0ebe0;font-weight:700;font-size:14px;color:#6b7280"><span style="text-decoration:line-through">${dbEsc(t.name)} · ${dbFmtT(t.time)}</span>${cancelTag(t.why)}<div style="font-size:12.5px;font-weight:400;margin-top:2px">No driver, guides or snack needed.</div></div>`;
