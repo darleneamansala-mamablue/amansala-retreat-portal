@@ -12,7 +12,7 @@
 // first run only records what exists. WhatsApp template for that: VISITO_SPA_CANCEL_TEMPLATE (same 3 variables).
 //   spa_text_alerts_config: { enabled, notifyAllBookings (true = text every new booking, not only last-minute), enabledAt, onlyTherapists: ['Rubi Test'] (optional test list), lastMinuteHours }
 
-const { TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady, esDate, guestLabel, DESK_DEFAULT } = require('./spa-alert-lib');
+const { TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady, esDate, guestLabel, guestYesNo, DESK_DEFAULT } = require('./spa-alert-lib');
 
 exports.handler = async () => {
   const key = process.env.SUPABASE_SERVICE_KEY;
@@ -38,7 +38,7 @@ exports.handler = async () => {
     if (!sent['desk|' + a.id]) {
       const deskRaw = await getKey(key, 'spa_desk_alert_numbers'), desk = Array.isArray(deskRaw) && deskRaw.length ? deskRaw : DESK_DEFAULT;
       const sv = services.find(s => s.id === a.serviceId) || {};
-      const vars = [esDate(a.date), fmtTime(a.start), `${sv.name || 'Servicio'}${sv.duration || a.duration ? ' (' + (sv.duration || a.duration) + ' min)' : ''}`, a.clientName || 'Cliente', guestLabel(a), t ? `${t.firstName || ''} ${t.lastName || ''}`.trim() : 'Sin asignar'];
+      const vars = [esDate(a.date), fmtTime(a.start), `${sv.name || 'Servicio'}${sv.duration || a.duration ? ' (' + (sv.duration || a.duration) + ' min)' : ''}`, a.clientName || 'Cliente', guestYesNo(a), t ? `${t.firstName || ''} ${t.lastName || ''}`.trim() : 'Sin asignar'];
       let okAny = false;
       for (const d of desk) { const r = await sendWhatsApp(toE164(d.phone), vars, `spa-desk-${a.id}-${String(d.phone).replace(/\D/g, '')}`, 'spa_reserva_ultimo_minuto', 'es_MX'); if (r.ok) okAny = true; else console.error('[spa-text-alerts] desk', d.name, r.reason); }
       if (okAny) sent['desk|' + a.id] = new Date().toISOString();

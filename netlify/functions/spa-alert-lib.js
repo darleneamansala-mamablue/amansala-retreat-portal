@@ -53,8 +53,10 @@ async function sendSms(to, body) {
 // Spanish, for the staff messages (Jorge 2026-11-05): "viernes 6 de noviembre"; and who the client is: hotel guest + room, or Offsite
 const esDate = day => new Date(day + 'T12:00:00Z').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
 const guestLabel = a => a && a.guestType === 'hotel' ? `Huésped, cuarto ${a.roomNumber || a.guestRoom || '?'}` : 'Offsite';
+// the "Huésped:" line of the front-desk / therapist messages: "Sí, cuarto 12a" or "No (Offsite)"
+const guestYesNo = a => a && a.guestType === 'hotel' ? `Sí, cuarto ${a.roomNumber || a.guestRoom || '?'}` : 'No (Offsite)';
 // front desk of the spa: last-minute bookings go to them (app_store 'spa_desk_alert_numbers' can replace this list)
 const DESK_DEFAULT = [{ name: 'Rubi', phone: '+529841168801' }, { name: 'Kike', phone: '+529842391572' }, { name: 'Rosi', phone: '+529841367205' }];
 const waReady = template => !!(template && process.env.VISITO_M2M_KEY && process.env.VISITO_WA_CHANNEL_ID);
 
-module.exports = { SUPABASE_URL, TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady, esDate, guestLabel, DESK_DEFAULT };
+module.exports = { SUPABASE_URL, TZ, supa, getKey, toE164, fmtTime, sendWhatsApp, sendSms, waReady, esDate, guestLabel, guestYesNo, DESK_DEFAULT };

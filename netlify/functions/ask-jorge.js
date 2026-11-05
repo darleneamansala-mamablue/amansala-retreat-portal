@@ -173,6 +173,14 @@ async function roomAvailability(key, { checkIn, checkOut, roomType = '', room = 
   return room ? out : { free: out.filter(x => x.free).map(x => x.room + ' (' + x.type + ')').slice(0, 80), freeCount: out.filter(x => x.free).length };
 }
 
+// a phone written without its country code: 10 digits (984 452 3336, or "+9844523336") is Mexico, +52 (Jorge 2026-11-05)
+function mxPhone(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  if (d.length === 10) return '+52' + d;
+  if (d.length === 12 && d.startsWith('52')) return '+' + d;
+  if (d.length === 13 && d.startsWith('521')) return '+52' + d.slice(3);
+  return d ? '+' + d : '';
+}
 const PAY_METHODS = ['Cash', 'Zelle', 'Venmo', 'Paypal', 'Bank Transfer', 'Clip', 'Expedia Collect'];
 const money = n => '$' + Number(n).toFixed(2);
 // Checks a proposed action against the database and returns it complete (with a human summary), or {error}
@@ -249,6 +257,7 @@ async function checkOtherAction(key, a) {
       if (st) { a.guestType = 'hotel'; a.roomNumber = st.room; }
     } catch (e) {}
     if (a.guestType === 'hotel' && !a.roomNumber) return { error: 'For a hotel guest I need their room number.' };
+    a.phone = mxPhone(a.phone);
     const [row] = await get('app_store?key=eq.spa_data&select=value');
     const svc = (((row && row.value) || {}).services || []).find(x => x && x.id === a.serviceId && x.active);
     if (!svc) return { error: 'That spa service was not found — list the services again.' };
@@ -258,6 +267,7 @@ async function checkOtherAction(key, a) {
   }
   if (t === 'new_booking') {
     const room = String(a.room || '').trim(), ci = String(a.checkIn || ''), co = String(a.checkOut || ''), name = String(a.guestName || '').trim();
+    a.phone = mxPhone(a.phone);
     if (!room || !name) return { error: 'I need the room and the guest name.' };
     const av = await roomAvailability(key, { checkIn: ci, checkOut: co, room });
     if (av.error) return av;
