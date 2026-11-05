@@ -936,15 +936,10 @@ function gSave(){
     guests.push({name:n,email:(document.getElementById('g'+i+'-email')?.value||'').trim(),phone:(document.getElementById('g'+i+'-phone')?.value||'').trim(),notes:(document.getElementById('g'+i+'-note')?.value||'').trim(),checkIn:_gCi||undefined,checkOut:_gCo||undefined,customRateOverride:!isNaN(_gCrParsed)?_gCrParsed:undefined,extraNightRate:!isNaN(_gXrParsed)?_gXrParsed:undefined,cancelled:_gCancelled||undefined,cancellationFee:_gCancelled&&!isNaN(_gFeeParsed)?_gFeeParsed:undefined,cancelledAt:_gCancelled?(_existingReg?.guests?.find(og=>og.name===n)?.cancelledAt||new Date().toISOString()):undefined});
   }}
   const _regTs=new Date().toISOString();
-  // Jorge 2026-11-05: moving a retreat guest's arrival/departure here never moves the retreat's totals -- the nights billed
-  // stay what they were unless someone types a nights figure (extra nights are charged on their own)
-  let _frzN=customNightsOverride,_frzT=customTipNightsOverride;
-  if(_existingReg&&regSelBk&&regSelBk.bookingType!=='room_only'&&(checkIn!==(_existingReg.checkIn||null)||checkOut!==(_existingReg.checkOut||null))){
-    const _pIn=_existingReg.checkIn||regSelBk.startDate,_pOut=_existingReg.checkOut||regSelBk.endDate;
-    const _pN=(_pIn&&_pOut)?Math.max(1,Math.round((pd(_pOut)-pd(_pIn))/DAY_MS)):null;
-    if(_pN&&_frzN==null)_frzN=_existingReg.customNightsOverride!=null?_existingReg.customNightsOverride:_pN;
-    if(_pN&&_frzT==null)_frzT=_existingReg.customTipNightsOverride!=null?_existingReg.customTipNightsOverride:_frzN;
-  }
+  // Jorge 2026-11-05: dates changed HERE, in the retreat's own Room List, are the retreat's -- an extra night added from the
+  // retreat belongs on the teacher's bill, so nothing is frozen here (only a date change made from Rooms / the reservation
+  // keeps the retreat bill as it was, see _bdFreezeRetreatNights in booking-detail.js)
+  const _frzN=customNightsOverride,_frzT=customTipNightsOverride;
   if(gEditRegId){const reg=AppData.regs.find(r=>r.id===gEditRegId);Object.assign(reg,{guests,customPrice,customPkgPrice,customRateOverride,customNightsOverride:_frzN,customTipNightsOverride:_frzT,customTipRateOverride,credit,amountPaid,notes,isTeacherRoom:gIsTeacherRoom||undefined,checkIn:checkIn||undefined,checkOut:checkOut||undefined,updatedAt:_regTs});}
   else{
     // Check room not already assigned in this booking
