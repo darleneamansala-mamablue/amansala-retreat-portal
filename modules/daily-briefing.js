@@ -340,7 +340,7 @@ async function dbRender() {
     if (String(a.date).slice(0, 10) !== dbDate || !DB_TOURS.includes(a.aoId)) return;
     const t = tourMap[a.aoId] = tourMap[a.aoId] || { aoId: a.aoId, name: dbName(a.aoId), time: a.time, groups: [] };
     const p = dbParticipants(bk, a.aoId);
-    t.groups.push({ bk, names: p.names, basis: p.basis });
+    if (p.names.length) t.groups.push({ bk, names: p.names, basis: p.basis });   // a retreat with nobody signed up (and nothing pre-paid) is not listed on the tour (Darlene 2026-11-05)
   }));
   g.tours = Object.values(tourMap).map(t => { const ops = (typeof actOpsData !== 'undefined' && actOpsData[t.aoId + '|' + dbDate]) || {}; t.driver = ops.driver ? String(ops.driver).replace(/^./, c => c.toUpperCase()) : ''; t.guides = [ops.guide1, ops.guide2, ops.guide3].filter(Boolean).map(n => n.replace(/^./, c => c.toUpperCase())); t.cancelled = ops.status === 'cancelled'; t.why = String(ops.cancelReason || '').trim().replace(/^./, c => c.toUpperCase()) || 'No reason given'; return t; }).sort((a, b) => String(a.time).localeCompare(String(b.time)));
   // special instructions from each retreat in house
