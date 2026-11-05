@@ -1498,6 +1498,30 @@ async function tr2LoadData() {
     const key = `${e.retreatId}|${fn}`;
     if (!transportedFirstNames.has(key)) transportedFirstNames.set(key, true);
   });
+  // Jorge 2026-11-05 (Katie Stevenson & Katie McClelland): an Extra Night / Room Only reservation the night before a
+  // retreat showed under "Missing Transport" although both had filled in their form -- filed under the retreat, with the
+  // arrival on the Extra Night's first day. A guest whose real arrival form (any reservation) lands that same day, or a
+  // day either side, is not missing. A room-list name with two people ("A & B") needs both covered.
+  const realArrivalsByDay = new Map();   // date -> [normalized names]
+  const realArrivalsRawByDay = new Map();
+  const rawTok = n => String(n || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\([^)]*\)/g, ' ').replace(/[^a-z\s]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  tr2AllEntries.forEach(e => { if (e.type !== 'arrival' || e.isSynthetic || !e.date) return; const l = realArrivalsByDay.get(e.date) || []; l.push(tr2NormName(e.guest)); realArrivalsByDay.set(e.date, l);
+    const r = realArrivalsRawByDay.get(e.date) || []; r.push(e.guest); realArrivalsRawByDay.set(e.date, r); });
+  const _dayShift = (d, n) => new Date(Date.parse(d + 'T12:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+  const arrivedElsewhere = (name, date) => {
+    if (!date) return false;
+    const near = [-1, 0, 1].flatMap(n => realArrivalsByDay.get(_dayShift(date, n)) || []);
+    const nearRaw = [-1, 0, 1].flatMap(n => realArrivalsRawByDay.get(_dayShift(date, n)) || []);
+    if (!near.length) return false;
+    const parts = String(name).split(/\s*(?:&amp;|&|\band\b|\/|\+)\s*/i).map(x => x.trim()).filter(Boolean);
+    return parts.length > 0 && parts.every(part => {
+      const gk = tr2NormName(part), gt = gk.split(' ');
+      return near.some(k => { if (k === gk) return true; if (gk.length >= 8 && tr2Levenshtein(k, gk) <= 2) return true;
+        const kt = k.split(' '); return gt.length >= 2 && kt.length >= 2 && (gt.every(t => kt.includes(t)) || kt.every(t => gt.includes(t))); })
+        // a nickname of the same person: same last name, first names starting alike ("Katie" / "Katherine" McClelland)
+        || nearRaw.some(r => { const a = rawTok(part), b = rawTok(r); return a.length >= 2 && b.length >= 2 && a[a.length - 1] === b[b.length - 1] && a[a.length - 1].length >= 4 && a[0].slice(0, 3) === b[0].slice(0, 3); });
+    });
+  };
   tr2ActiveBooks.forEach(bk => {
     const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
     // A room removed from the retreat's own room list (bk.blockedRooms) can still
@@ -1531,6 +1555,7 @@ async function tr2LoadData() {
             return kt.length >= 2 && (gt.every(t => kt.includes(t)) || kt.every(t => gt.includes(t))); })) return; }
         const gFn = g.name.trim().split(/\s+/)[0].toLowerCase();
         if (gFn.length >= 3 && firstNameIdx[`${bk.id}|${gFn}`]?.count === 1 && transportedFirstNames.has(`${bk.id}|${gFn}`)) return;
+        if (arrivedElsewhere(g.name, reg.checkIn || bk.startDate)) return;
         tr2AllEntries.push({
           rowId: `synth-${reg.id}-${tr2NormName(g.name)}`, type: 'arrival', date: bk.startDate, time: '',
           guest: g.name, email: g.email || '', flight: '', airport: '', ot: true, share: false, notes: '',
