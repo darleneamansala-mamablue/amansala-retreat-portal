@@ -8,6 +8,13 @@ const MAX_TOOL_LOOPS = 6;
 // Room types that are just individual-bed views of physical rooms — skip in type summaries
 const SKIP_RT_IDS = new Set(['bd1','bd2','bd3','bd4','c4b','c4c']);
 
+// Casa Grande (Casa Master, Casa King Downstairs, Casa Grande Up King) and Casa Shanti (Casa Shanti, Shanti King, Shanti 2 Bed) are booked by one retreat in their entirety (Darlene 2026-11-05),
+// so the assistant never offers, counts or adds them. "Casita" is a different room and is not matched.
+const WHOLE_HOUSE_RE = /\bcasa\b|shanti/i;
+// Beachfront Kings and Beachview Doubles are not offered by the assistant either (Darlene 2026-11-05): the Amansala team assigns them directly.
+const TEAM_ONLY_RE = /beachfront king|beachview double/i;
+const NOT_OFFERED_RE = { test: n => WHOLE_HOUSE_RE.test(n || '') || TEAM_ONLY_RE.test(n || '') };
+
 function cors() {
   return {
     'Access-Control-Allow-Origin':  '*',
@@ -121,7 +128,7 @@ const TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        type_name: { type: 'string', description: 'Room type name as shown to the teacher, e.g. "Superior", "Garden Plus", "Double", "Beachfront King"' },
+        type_name: { type: 'string', description: 'Room type name as shown to the teacher, e.g. "Superior", "Garden Plus", "Double"' },
       },
       required: ['type_name'],
     },
@@ -214,6 +221,7 @@ async function executeTool(name, input, bookingId, supaKey) {
 
       const result = [];
       rts.forEach(rt => {
+        if (NOT_OFFERED_RE.test(rt.name)) return;   // Casa Grande, Casa Shanti, Beachfront King and Beachview Double are never offered
         const rooms = rt.rooms ?? [];
         const available = rooms.filter(r => !blocked.has(r) && !conflictSet.has(r));
         const myCount   = rooms.filter(r => blocked.has(r)).length;
@@ -238,6 +246,7 @@ async function executeTool(name, input, bookingId, supaKey) {
       const rt = matchType(input.type_name, rts);
       if (!rt) return { error: `No room type found matching "${input.type_name}". Available types: ${rts.map(r => r.name).join(', ')}` };
 
+      if (WHOLE_HOUSE_RE.test(rt.name || '')) return { success: false, reason: 'Casa Grande and Casa Shanti are booked by one retreat in their entirety, so their rooms are not added one by one. Please contact the Amansala team.' };
       // These types are managed exclusively by the Amansala team — never via bot
       const rtLower = rt.name.toLowerCase();
       if (rtLower.includes('beachfront king') || rtLower.includes('beachview double')) {
@@ -428,7 +437,7 @@ You help teachers manage their retreat rooms using simple, friendly language.
 
 IMPORTANT RULES:
 - Respond in the same language the teacher uses (Spanish or English).
-- NEVER mention room numbers or internal room codes to the teacher. Only use room TYPE names (e.g. "Superior", "Garden Plus", "Beachfront King").
+- NEVER mention room numbers or internal room codes to the teacher. Only use room TYPE names (e.g. "Superior", "Garden Plus", "Garden").
 - When a teacher asks about available rooms, always call get_available_room_types first and present the results by type name only.
 - When a teacher asks what rooms they have, call get_my_room_types and present by type name.
 - If a teacher asks to add a room WITHOUT specifying a type, ask which type they prefer first. Do not assume.
@@ -462,10 +471,9 @@ INCLUDED ACTIVITIES BY SEASON (contract inclusions — do NOT say other activiti
 - When someone asks about packages or add-ons, call get_pricing_info to get the cost per package and individual activity prices for their retreat, then present both options clearly.
 
 ROOM TYPES at Amansala (use these exact names):
-Beachfront King, Superior, Garden Plus, Garden, Simple n Small,
-Beachview Double, Double, Triple, Quad,
-Casa Master, Casa King Downstairs, Casa Grande Up King,
-Casa Shanti, Shanti King, Shanti 2 Bed, Casita 4
+Superior, Garden Plus, Garden, Simple n Small, Double, Triple, Quad, Casita 4
+NEVER offer or suggest Beachfront King or Beachview Double rooms: the Amansala team assigns those directly. If a teacher asks for one, say the team will arrange it.
+NEVER offer, suggest or add rooms in Casa Grande (Casa Master, Casa King Downstairs, Casa Grande Up King) or Casa Shanti (Casa Shanti, Shanti King, Shanti 2 Bed): a retreat books each of those houses in its entirety, so they are not available room by room. If a teacher asks about them, say the Amansala team arranges those directly.
 
 TRANSPORT:
 - Amansala offers its own airport transport service. Guests book via this link:
