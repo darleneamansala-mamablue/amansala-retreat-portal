@@ -122,6 +122,23 @@ async function dbToggleOut(regId) {
   try { if (typeof _resLogStay === 'function') _resLogStay(now ? 'Checked out' : 'Check-out undone', 'group', regId); } catch (e) {}
   showToast(now ? 'Checked out ✓' : 'Check-out removed'); dbRender();
 }
+// How many people are in an activity today, so the front desk knows what is already booked and what they can still sell (Darlene 2026-11-05).
+// Pre-paid / included for a group = the whole group; otherwise the guests signed up on the activity sheet. Counted across every retreat that has it today.
+function dbActPeople(e) {
+  const id = String(e.id || ''); let aoId = (/_ao_(ao\d+)/.exec(id) || [])[1];
+  if (!aoId) { const ao = (typeof ADD_ONS !== 'undefined' ? ADD_ONS : []).find(x => x.name === e.title); aoId = ao && ao.id; }
+  if (!aoId) return '';
+  let signed = 0, included = 0;
+  (AppData.bookings || []).filter(b => b.status !== 'cancelled').forEach(bk => {
+    const act = (bk.retreatActivities || []).find(a => a.aoId === aoId && String(a.date).slice(0, 10) === dbDate); if (!act) return;
+    const p = dbParticipants(bk, aoId);
+    if (act.prepaid) included += p.names.length; else signed += p.names.length;
+  });
+  const bits = [];
+  if (included) bits.push(`<b style="color:#166534">${included} included</b>`);
+  bits.push(signed ? `<b style="color:#7c3aed">${signed} signed up</b>` : (included ? '' : '<span style="color:#9ca3af">nobody signed up yet</span>'));
+  return ' <span style="margin-left:6px;font-size:12.5px">· ' + bits.filter(Boolean).join(' · ') + '</span>';
+}
 function dbArrNote(b) { const sr = b.scheduleRequest || {}; return dbEsc(String(sr.specialRequests || '').trim()); }
 function dbDepNote(b) {
   const out = [];
@@ -284,7 +301,7 @@ async function dbRender() {
     return t ? `<div style="margin:3px 0 0 120px;font-size:12.5px;color:#374151"><b>Room needs:</b> ${dbEsc(t)}</div>` : '';
   };
   // Two sections, each in time order (Darlene 2026-11-04): Classes (with the opening circles), and Tours and activities (tours, ceremonies, extras)
-  const glanceRows = list => list.map(({ e, k }) => dbRow(`<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:${tagOf[k][1]};color:${tagOf[k][2]}">${tagOf[k][0]}</span>` + (k === 'tour' || k === 'extra' ? `<span style="color:#b91c1c;font-weight:600">${evLine(e)}</span>` : evLine(e)) + roomNeed(e))).join('');   // tours and activities are red (Darlene 2026-11-04)
+  const glanceRows = list => list.map(({ e, k }) => dbRow(`<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:${tagOf[k][1]};color:${tagOf[k][2]}">${tagOf[k][0]}</span>` + (k === 'tour' || k === 'extra' ? `<span style="color:#b91c1c;font-weight:600">${evLine(e)}</span>${dbActPeople(e)}` : evLine(e)) + roomNeed(e))).join('');   // tours and activities are red (Darlene 2026-11-04)
   const dayClasses = dayAll.filter(x => x.k === 'class' || x.k === 'circle'), dayTours = dayAll.filter(x => x.k === 'tour' || x.k === 'extra');
   // The page has four views of the day, picked at the top (Darlene 2026-11-04): Daily flow (everything together in time order), Classes, Tours, Special notes
   // Only what is scheduled today is listed (Darlene 2026-11-04); a tour appears here as soon as its day and time are filled in on the Activities page.
