@@ -1434,8 +1434,10 @@ async function tr2LoadData() {
     // Darlene 2026-10-24: a guest whose NAME matches a registration exactly takes that registration's room, even if an older manual room is still stored on the
     // transport row (Tootsie Olan moved to 3B but the list kept saying 25, Amy Reich 24 vs 29: stale overrides from before the room change). The manual correction
     // still wins when the name matches no registration, which is what it was added for.
-    const exactReg = roomLookup[`${bkId}|${name.toLowerCase()}`];
-    const room = (exactReg && exactReg.room) ? exactReg.room : ((d.roomOverride || '').trim() || (matched ? matched.room : ''));
+    // Jorge 2026-11-05: the room list is the truth -- whenever the guest is matched to a registration (any of the matches
+    // above, not only an exact name), its room is shown; Katie Stevenson ("Kathryn (Katie) Stevenson", GV16 on the list)
+    // still showed a GV18 typed on her transport row. The manual room only counts when no registration matches.
+    const room = (matched && matched.room) ? matched.room : ((d.roomOverride || '').trim() || '');
     const regId = matched ? matched.regId : null;
     const checkedIn = !!(matched && matched.checkedInAt);
     const retreatLabel = bk ? [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ') : 'Sin retiro asignado';
@@ -2461,7 +2463,10 @@ async function tr2SaveEdit(rowId) {
   const updatedData = {
     ...oldData,
     firstName: g('tr2-e-fn')?.value.trim() || '', lastName: g('tr2-e-ln')?.value.trim() || '', email: g('tr2-e-email')?.value.trim() || '',
-    roomOverride: g('tr2-e-room')?.value.trim() || null,
+    // only a room the person actually typed is kept: the field opens with the room shown on the row, and saving a flight
+    // change used to store that room as a manual one, which then stuck after the guest changed rooms (Jorge 2026-11-05)
+    roomOverride: (() => { const v = g('tr2-e-room')?.value.trim() || '', shown = String((tr2AllEntries.find(e => e.rowId === rowId) || {}).room || '').trim();
+      return v && v !== shown ? v : (v ? (oldData.roomOverride || null) : null); })(),
     arrivalDate: g('tr2-e-arr-date')?.value || '', arrivalTime: g('tr2-e-arr-time')?.value || '', arrivalAirport: g('tr2-e-arr-airport')?.value || 'cancun',
     flightNumber: g('tr2-e-flight')?.value.trim() || '', arrivalOT: g('tr2-e-arr-ot')?.checked || false,
     departureDate: g('tr2-e-dep-date')?.value || '', departureTime: g('tr2-e-dep-time')?.value || '', departureAirport: g('tr2-e-dep-airport')?.value || 'cancun',
