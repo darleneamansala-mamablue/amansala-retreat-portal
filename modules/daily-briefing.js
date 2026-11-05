@@ -195,7 +195,7 @@ async function dbRender() {
   const openTasks = tasks.filter(t => !(t.auto ? t.auto.done : dbGet('tasks.' + t.id + '.done')));
   let html = '';
   // 0. The whole day in time order: classes, opening circles, tours, ceremonies and extra activities together
-  const tagOf = { class: ['Class', '#e0f2fe', '#0369a1'], circle: ['Opening circle', '#fef3c7', '#92400e'], tour: ['Tour', '#dbeafe', '#1d4ed8'], extra: ['Ceremony / activity', '#fae8ff', '#86198f'] };
+  const tagOf = { class: ['Class', '#e0f2fe', '#0369a1'], circle: ['Opening circle', '#fef3c7', '#92400e'], tour: ['Tour', '#fee2e2', '#b91c1c'], extra: ['Ceremony / activity', '#fee2e2', '#b91c1c'] };
   const dayAll = ['circle', 'class', 'tour', 'extra'].flatMap(k => buckets[k].map(e => ({ e, k }))).sort((a, b) => String(a.e.startTime).localeCompare(String(b.e.startTime)));
   // Under a class: ONLY what the room needs (Darlene 2026-11-04). The teacher's note is free text, so keep just the sentences about equipment and set-up
   // (straps, pillows, mats, sound system...); anything else in the note (dates, music taste, comments) is not shown.
@@ -207,7 +207,7 @@ async function dbRender() {
     return t ? `<div style="margin:3px 0 0 120px;font-size:12.5px;color:#374151"><b>Room needs:</b> ${dbEsc(t)}</div>` : '';
   };
   // Two sections, each in time order (Darlene 2026-11-04): Classes (with the opening circles), and Tours and activities (tours, ceremonies, extras)
-  const glanceRows = list => list.map(({ e, k }) => dbRow(`<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:${tagOf[k][1]};color:${tagOf[k][2]}">${tagOf[k][0]}</span>` + evLine(e) + roomNeed(e))).join('');
+  const glanceRows = list => list.map(({ e, k }) => dbRow(`<span style="display:inline-block;min-width:112px;margin-right:8px;text-align:center;font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:9px;background:${tagOf[k][1]};color:${tagOf[k][2]}">${tagOf[k][0]}</span>` + (k === 'tour' || k === 'extra' ? `<span style="color:#b91c1c;font-weight:600">${evLine(e)}</span>` : evLine(e)) + roomNeed(e))).join('');   // tours and activities are red (Darlene 2026-11-04)
   const dayClasses = dayAll.filter(x => x.k === 'class' || x.k === 'circle'), dayTours = dayAll.filter(x => x.k === 'tour' || x.k === 'extra');
   // The page has four views of the day, picked at the top (Darlene 2026-11-04): Daily flow (everything together in time order), Classes, Tours, Special notes
   // Only what is scheduled today is listed (Darlene 2026-11-04); a tour appears here as soon as its day and time are filled in on the Activities page.
