@@ -157,6 +157,8 @@ function dbGuestNames(bk) {
 }
 function dbParticipants(bk, aoId) {
   const act = (bk.retreatActivities || []).find(a => a.aoId === aoId);
+  // A pre-paid tour that was added as a REQUEST (requestedTime) and is not part of the group's package is just for that person, the leader: nobody else is added (Darlene 2026-11-05, Jodi's Tulum Ruins).
+  if (act && act.prepaid && act.requestedTime && !(bk.packages || []).includes(aoId)) return { names: [bk.leaderName || bk.retreatName || 'Leader'], basis: 'pre-paid for the leader only' };
   if (act && act.prepaid) return { names: dbGuestNames(bk), basis: 'included for the whole group' };
   const sups = (typeof actSheetSignups !== 'undefined' && actSheetSignups[bk.id]) || [];
   const names = sups.filter(s => (s.activities || []).includes(aoId)).map(s => ((s.firstName || '') + ' ' + (s.lastName || '')).trim()).filter(Boolean);
