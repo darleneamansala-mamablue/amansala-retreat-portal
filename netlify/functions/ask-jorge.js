@@ -110,6 +110,26 @@ async function findGuest(key, { name = '', room = '', date = '' }) {
   return out.length ? out : { message: `No guest found for ${[name && 'name "' + name + '"', room && 'room ' + room].filter(Boolean).join(' and ')} on ${day}.` };
 }
 
+async function waToJorge(template, params) {
+  const visitoKey = process.env.VISITO_M2M_KEY, channelId = process.env.VISITO_WA_CHANNEL_ID;
+  if (!visitoKey || !channelId) return false;
+  try {
+    const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
+      method: 'POST', headers: { Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: JORGE_PHONE, template: { name: template, language: { code: 'es_MX' }, components: [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: String(t).replace(/\s*\n\s*/g, ' ').slice(0, 900) })) }] } }),
+    });
+    const j = await r.json().catch(() => ({}));
+    return r.ok && j.accepted !== false;
+  } catch (e) { return false; }
+}
+// what Ask Jorge DID: WhatsApp (template amansala_ask_jorge_hecho), email while that template is not approved yet
+async function tellJorgeDone(who, page, summary) {
+  const name = who.name || 'Alguien del staff';
+  if (await waToJorge('amansala_ask_jorge_hecho', [name, summary, page || 'Portal'])) return;
+  const e = v => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  await sendMail({ to: 'Jorge@amansala.com', subject: `Ask Jorge — ${name} hizo: ${String(summary).slice(0, 70)}`,
+    html: `<p style="font-size:16px"><b>Ask Jorge</b></p><p><b>${e(name)}</b> hizo en el portal: ${e(summary)}</p><p style="color:#6b7280">Pantalla: ${e(page || 'Portal')}</p>` }).catch(() => {});
+}
 async function notifyJorge(key, who, page, request, reason) {
   const req = String(request || '').replace(/\s+/g, ' ').trim().slice(0, 600), why = String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 400);
   const text = `Pidió: ${req}\nNo se pudo porque: ${why}`;
@@ -120,17 +140,11 @@ async function notifyJorge(key, who, page, request, reason) {
     const list = [{ at: new Date().toISOString(), by: who.name || '', page: page || '', summary: text }, ...(((row && row.value) || []).slice(0, 199))];
     await fetch(`${SUPABASE_URL}/rest/v1/app_store?on_conflict=key`, { method: 'POST', headers: { ...H(key), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ key: 'ask_jorge_questions', value: list, updated_at: new Date().toISOString() }) });
   } catch (e) {}
-  let wa = 'skipped';
-  const visitoKey = process.env.VISITO_M2M_KEY, channelId = process.env.VISITO_WA_CHANNEL_ID;
-  if (visitoKey && channelId) {
-    try {
-      const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
-        method: 'POST', headers: { Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: JORGE_PHONE, template: { name: 'amansala_ask_jorge_v2', language: { code: 'es_MX' }, components: [{ type: 'body', parameters: [who.name || 'Alguien del staff', req || '-', why || '-', page || 'Portal'].map(t => ({ type: 'text', text: String(t).slice(0, 900) })) }] } }),
-      });
-      const j = await r.json().catch(() => ({})); wa = r.ok && j.accepted !== false ? 'sent' : 'failed';
-    } catch (e) { wa = 'failed'; }
-  }
+  // WhatsApp first (Jorge 2026-11-05): the Ask Jorge template, else the first approved one; email only if WhatsApp did not go
+  const name = who.name || 'Alguien del staff';
+  let wa = await waToJorge('amansala_ask_jorge_v2', [name, req || '-', why || '-', page || 'Portal']) ? 'sent' : 'failed';
+  if (wa !== 'sent') wa = await waToJorge('amansala_pregunta_portal', [name, `Ask Jorge — pidió: ${req || '-'} · No se pudo porque: ${why || '-'}`, page || 'Portal']) ? 'sent' : 'failed';
+  if (wa === 'sent') return { sent: true, whatsapp: wa, email: 'not needed' };
   const e = v => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const mail = await sendMail({ to: 'Jorge@amansala.com', subject: `Ask Jorge — ${who.name || 'staff'}: ${req.slice(0, 70)}`,
     html: `<p style="font-size:16px"><b>Ask Jorge</b></p><p><b>${e(who.name || 'Alguien del staff')}</b> pidió: ${e(req)}</p><p><b>No se pudo porque:</b> ${e(why)}</p><p style="color:#6b7280">Pantalla: ${e(page || 'Portal')}</p>` }).catch(() => false);
@@ -307,6 +321,7 @@ exports.handler = async (event) => {
     const x = b.logClient;
     await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, { method: 'POST', headers: { ...H(key), Prefer: 'return=minimal' },
       body: JSON.stringify({ id: 'id_' + Date.now() + '_askj', action: x.type === 'move_room' ? 'Room moved' : 'Room-only booking created', detail: String(x.summary || '').slice(0, 900) + ' (Ask Jorge)', booking_id: x.bookingId || null, user_name: who.name || 'Staff', user_role: who.role || 'staff', created_at: new Date().toISOString() }) }).catch(() => {});
+    await tellJorgeDone(who, page, String(x.summary || '')).catch(() => {});
     return reply(200, { ok: true });
   }
   if (b.execute) {   // the person pressed Confirm on a proposed action
@@ -314,6 +329,7 @@ exports.handler = async (event) => {
     try { res = await runAction(key, who, b.execute); }
     catch (e) { console.error('[ask-jorge] action', e.message); res = { ok: false, message: 'It could not be saved: ' + e.message }; }
     if (!res.ok) await notifyJorge(key, who, page, `Confirmó una acción: ${String(b.summary || b.execute.type || '')}`, `falló — ${res.message}`).catch(() => {});
+    else await tellJorgeDone(who, page, String(res.message || '').replace(/^✓\s*/, '')).catch(() => {});
     return reply(200, { ...res, notifiedJorge: !res.ok });
   }
   const history = (Array.isArray(b.messages) ? b.messages : []).slice(-16)
