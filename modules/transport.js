@@ -2419,7 +2419,7 @@ function tr2EditEntry(rowId) {
   if (!row && !isSynth) return;
   const entry = tr2AllEntries.find(e => e.rowId === rowId) || null;
   const nameParts = isSynth && entry ? entry.guest.trim().split(/\s+/) : [];
-  const d0 = row?.data || { firstName: nameParts[0]||'', lastName: nameParts.slice(1).join(' ')||'', email: entry?.email||'', arrivalOT:true, departureOT:true };
+  const d0 = row?.data || { firstName: nameParts[0]||'', lastName: nameParts.slice(1).join(' ')||'', email: entry?.email||'', arrivalOT:false, departureOT:false };   // Jorge 2026-11-06: a guest with no form opens with Own Transport UNticked -- it looked saved as OT when nothing was saved
   // Jorge 2026-11-05 (Alissa Rodgers): a "Missing" row edited with a flight and a time but no date was saved without dates
   // and vanished from every view. Empty dates now start as the guest's own stay dates (room list / reservation).
   const _stay = tr2StayDates(entry);
