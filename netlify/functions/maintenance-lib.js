@@ -56,24 +56,18 @@ async function createTicket(key, t) {
 
 async function alertMaintenance(key, t) {
   // Jorge 2026-11-06: the people in charge of following up -- app_store 'maintenance_alert_numbers' (Rubi, Melissa, Darlene,
-  // Michelle, Hilario, Max, Jorge and the online team), set in Maintenance > "Maintenance WhatsApp"
-  const row = await readRow(key, 'maintenance_alert_numbers');
+  // Michelle, Hilario, Max, Jorge and the online team), set in Maintenance > "Maintenance WhatsApp". For a test,
+  // app_store 'maintenance_alert_test' = {only: [{name, phone}]} sends ONLY to those.
+  const [row, test] = await Promise.all([readRow(key, 'maintenance_alert_numbers'), readRow(key, 'maintenance_alert_test')]);
+  const list = test && test.value && Array.isArray(test.value.only) && test.value.only.length ? test.value.only : (row && Array.isArray(row.value) ? row.value : []);
   const seen = new Set();
-  const people = (row && Array.isArray(row.value) ? row.value : []).filter(p => p && digits(p.phone).length >= 10 && !seen.has(digits(p.phone).slice(-10)) && seen.add(digits(p.phone).slice(-10)));
-  const sent = [];
-    for (const p of test.value.only) sent.push({ name: p.name, sent: !!(await sendUtility(e164(p.phone), [['mantenimiento_nuevo_reporte', [t.room || 'sin cuarto', t.guestName || '-', String(t.problemStaff || t.problem || '').slice(0, 250), t.priority === 'urgent' ? 'URGENTE' : 'Normal', t.id]]], 'es_MX', 'mt-' + t.id)) });
-    return { people: sent.length, sent, testOnly: true };
-  }
-  const row = await readRow(key, 'maintenance_alert_numbers'), cl = await readRow(key, 'climas_report_numbers');
-  const climas = [...(process.env.CLIMAS_REPORT_NUMBERS || '').split(','), ...((cl && cl.value && Array.isArray(cl.value.numbers)) ? cl.value.numbers : [])].map(p => ({ name: '', phone: p }));
-  const seen = new Set();
-  const people = [...(row && Array.isArray(row.value) ? row.value : []), ...climas].filter(p => p && digits(p.phone).length >= 10 && !seen.has(digits(p.phone).slice(-10)) && seen.add(digits(p.phone).slice(-10)));
+  const people = list.filter(p => p && digits(p.phone).length >= 10 && !seen.has(digits(p.phone).slice(-10)) && seen.add(digits(p.phone).slice(-10)));
   const sent = [];
   for (const p of people) {
     const used = await sendUtility(e164(p.phone), [['mantenimiento_nuevo_reporte', [t.room || 'sin cuarto', t.guestName || '-', String(t.problemStaff || t.problem || '').slice(0, 250), t.priority === 'urgent' ? 'URGENTE' : 'Normal', t.id]]], 'es_MX', 'mt-' + t.id);
     sent.push({ name: p.name || ('…' + digits(p.phone).slice(-4)), sent: !!used });
   }
-  return { people: people.length, sent };
+  return { people: people.length, sent, testOnly: list !== (row && row.value) };
 }
 
 // the guest's WhatsApp (English) when the ticket is resolved; email when there is no phone or WhatsApp fails
