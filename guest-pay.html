@@ -278,6 +278,7 @@
 // ─── STATE ───────────────────────────────────────────────────
 let _folio   = null;
 let _items   = [];
+let _folios  = [];   // ?all=1: every folio of the room (folio-group.js) -- items show whose they are when there is more than one guest
 let _booking = null;
 let _total   = 0;
 let _stripe  = null;
@@ -299,6 +300,7 @@ const _all   = new URLSearchParams(location.search).get('all') === '1';
     if (!res.ok || data.error) throw new Error(data.error ?? 'Could not load folio');
     _folio   = data.folio;
     _items   = data.items  ?? [];
+    _folios  = data.folios ?? [];
     _booking = data.booking;
     _total   = data.total  ?? 0;
     renderFolio(token);
@@ -331,13 +333,16 @@ function renderFolio(token) {
   const grandTotal = subtotal + taxAmt;
   const hasTax   = taxAmt > 0;
 
+  const _whoById = Object.fromEntries(_folios.map(f => [f.id, (f.guest_name || '').trim()]));
+  const _roomNames = [...new Set(Object.values(_whoById).filter(Boolean))];
   const itemRows = _items.map(i => {
     const tax = Number(i.tax_rate) || 0;
+    const who = _roomNames.length > 1 ? _whoById[i.folio_id] : '';
     const lineBase  = Number(i.qty) * Number(i.unit_price);
     const lineTax   = lineBase * tax / 100;
     const lineTotal = (lineBase + lineTax).toFixed(2);
     return `<tr>
-      <td>${esc(i.description ?? '')}</td>
+      <td>${esc(i.description ?? '')}${who ? `<div style="font-size:11px;color:#6b7280">${esc(who)}</div>` : ''}</td>
       <td>${Number(i.qty)} × $${Number(i.unit_price).toFixed(2)}${tax > 0 ? ` <span style="font-size:11px;color:#6b7280">(+${tax}%)</span>` : ''}</td>
       <td>$${lineTotal}</td>
     </tr>`;
@@ -348,6 +353,7 @@ function renderFolio(token) {
       <div style="font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Guest Payment</div>
       <div style="font-size:18px;font-weight:800;color:#111827">${guestName || 'Guest'}</div>
       ${roomLine ? `<div style="font-size:12.5px;color:#6b7280;margin-top:4px">${roomLine}</div>` : ''}
+      ${_roomNames.length > 1 ? `<div style="font-size:12.5px;color:#374151;margin-top:6px;font-weight:600">Whole room: ${esc(_roomNames.join(' & '))}</div>` : ''}
       ${(_booking?.source === 'Escape' || _booking?.source === 'Extra Night' || _booking?.booking_type === 'room_only') ? `<div style="font-size:12.5px;color:#0d9488;margin-top:6px;font-weight:600">Your reservation included breakfast</div>` : ''}
     </div>
 

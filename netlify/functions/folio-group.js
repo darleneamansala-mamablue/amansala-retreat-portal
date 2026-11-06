@@ -3,14 +3,16 @@
 // 'Extras'...). Before this, the link covered one folio only, so a guest with two could leave with the other unpaid.
 // A link staff send for one specific folio (no ?all=1) keeps paying that folio alone.
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
-const norm = s => String(s || '').trim().toLowerCase();
 
 async function folioGroup(hdrs, folio) {
   const col = folio.registration_id ? 'registration_id' : folio.booking_request_id ? 'booking_request_id' : null;
   if (!col) return [folio];
   const res = await fetch(`${SUPABASE_URL}/rest/v1/folios?${col}=eq.${encodeURIComponent(folio[col])}&select=id,name,status,payment_token,booking_request_id,registration_id,guest_name,created_at&order=created_at.asc`, { headers: hdrs });
   const all = res.ok ? await res.json() : [];
-  const same = all.filter(f => f.id !== folio.id && norm(f.guest_name) === norm(folio.guest_name));
+  // Jorge 2026-11-06 (option B): the whole room, not just this guest -- two people sharing a room each have a folio, and
+  // one paying only their own left the other's balance open (Kelleye & Jason Rhein, 1B). Shared beds sold to strangers are
+  // separate registrations (one per bed), so they never land in the same group.
+  const same = all.filter(f => f.id !== folio.id);
   return [folio, ...same];
 }
 async function groupItems(hdrs, folioIds) {

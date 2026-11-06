@@ -85,7 +85,7 @@ exports.handler = async (event) => {
   return {
     statusCode: 200,
     headers: { ...cors(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ folio, folios: group.map(f => ({ id: f.id, name: f.name, status: f.status })), items, booking, total }),
+    body: JSON.stringify({ folio, folios: group.map(f => ({ id: f.id, name: f.name, status: f.status, guest_name: f.guest_name || null })), items, booking, total }),
   };
 };
 
