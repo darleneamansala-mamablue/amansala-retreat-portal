@@ -2559,6 +2559,17 @@ async function tr2SaveEdit(rowId) {
   const btn = document.querySelector('#tr2-edit-modal button[onclick*="tr2SaveEdit"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
 
+  // Jorge 2026-11-06: every staff edit is written in the Activity Log with who did it and what changed (Isabel Fry's dates)
+  const _trLog = (action, bkId) => {
+    try {
+      const L = { arrivalDate: 'arrival date', arrivalTime: 'arrival time', arrivalAirport: 'arrival airport', arrivalOT: 'arrival OT', departureDate: 'departure date', departureTime: 'departure time', departureAirport: 'departure airport', departureOT: 'departure OT', flightNumber: 'flight', roomOverride: 'room', notes: 'notes', serviceCost: 'cost', willingToShare: 'share' };
+      const v = x => x === true ? 'yes' : x === false ? 'no' : (x == null || x === '' ? '—' : String(x));
+      const ch = Object.keys(L).filter(k => v(oldData[k]) !== v(updatedData[k])).map(k => `${L[k]} ${v(oldData[k])} → ${v(updatedData[k])}`);
+      const who = [updatedData.firstName, updatedData.lastName].filter(Boolean).join(' ') || 'guest';
+      if (ch.length || isSynth) logActivity(action, `${who} — ${ch.join(', ') || 'no changes'}`, bkId && bkId !== 'individual' ? bkId : null);
+    } catch (e) {}
+  };
+
   if (isSynth) {
     const entry = tr2AllEntries.find(e => e.rowId === rowId);
     // The `transport` table has no default for `id` — a plain insert() with none
@@ -2570,6 +2581,7 @@ async function tr2SaveEdit(rowId) {
     updatedData.id = newId;
     try {
       await db.from('transport').insert({ id: newId, booking_id: entry?.retreatId || null, data: updatedData });
+      _trLog('Transport created', entry?.retreatId);
       document.getElementById('tr2-edit-modal')?.remove();
       showToast('Transporte creado ✓');
       await tr2LoadData();
@@ -2579,6 +2591,7 @@ async function tr2SaveEdit(rowId) {
 
   try {
     await db.from('transport').update({ data: updatedData }).eq('id', rowId);
+    _trLog('Transport changed', tr2RawRows[rowId]?.booking_id);
     document.getElementById('tr2-edit-modal')?.remove();
     showToast('Transporte actualizado ✓');
     if (arrChanged) {
