@@ -583,6 +583,17 @@ async function blockSave(){
       deletedRegIds.add(removedReg.id);AppData.regs=AppData.regs.filter(reg=>reg.id!==removedReg.id);
     }
   });
+  // A room added back whose old registration is still here cancelled (room freed after
+  // its guests cancelled) starts empty again — otherwise it shows the old cancelled guest
+  // and nobody can be added. Karsyn Morse's CH12 / Erin Kruger, 2026-11-06.
+  selected.filter(r=>!prevRooms.includes(r)).forEach(r=>{
+    const oldReg=AppData.regs.find(reg=>reg.bookingId===bk.id&&reg.room===r);
+    if(!oldReg)return;
+    const named=(oldReg.guests||[]).filter(g=>g.name);
+    if(!oldReg.cancelled&&!(named.length&&named.every(g=>g.cancelled)))return;
+    logActivity('Room re-activated',`Room ${r} added back → old cancelled registration (${named.map(g=>g.name).join(', ')||'no name'}) cleared`,bk.id);
+    Object.assign(oldReg,{cancelled:false,cancelledAt:null,guests:[],updatedAt:new Date().toISOString()});
+  });
 
   // bk.updatedAt (not just blockedRoomsUpdatedAt) MUST be bumped here — syncToSupabase's
   // staleness guard compares THIS field against the server's updated_at to decide whether
