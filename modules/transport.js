@@ -1003,7 +1003,9 @@ function tr2PrintView() {
   // no "pick up before the flight" step) -- drop the column entirely when
   // printing arrivals only, instead of showing an empty "—" on every row.
   const showPickupCol = tr2View !== 'arrivals';
-  const printCols = 6 + (showTypeCol ? 1 : 0) + (showPickupCol ? 1 : 0);   // + Notas (Jorge 2026-11-04)
+  // Notas: not on the Departures print (Jorge 2026-11-06)
+  const showNotesCol = tr2View !== 'departures';
+  const printCols = 5 + (showNotesCol ? 1 : 0) + (showTypeCol ? 1 : 0) + (showPickupCol ? 1 : 0);   // + Notas (Jorge 2026-11-04)
 
   const groups = new Map();
   filtered.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
@@ -1014,7 +1016,7 @@ function tr2PrintView() {
     const m = missingByDate.get(date);
     if (!m || !m.length) return '';
     return `<tr class="ride" style="background:#fef9c3"><td colspan="${printCols}">Sin información de transporte (${m.length})</td></tr>
-      ${_printSortEntries(m).map(e => `<tr style="background:#fefce8"><td>${escHtml(e.room || '—')}</td><td>${escHtml(e.guest || '')}</td>${showTypeCol ? `<td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>` : ''}<td><strong>FALTA INFO</strong></td>${showPickupCol ? '<td>—</td>' : ''}<td>—</td><td>${escHtml(e.retreatLabel || '')}</td><td></td></tr>`).join('')}
+      ${_printSortEntries(m).map(e => `<tr style="background:#fefce8"><td>${escHtml(e.room || '—')}</td><td>${escHtml(e.guest || '')}</td>${showTypeCol ? `<td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>` : ''}<td><strong>FALTA INFO</strong></td>${showPickupCol ? '<td>—</td>' : ''}<td>—</td><td>${escHtml(e.retreatLabel || '')}</td>${showNotesCol ? '<td></td>' : ''}</tr>`).join('')}
       <tr class="ride-end"><td colspan="${printCols}"></td></tr>`;
   };
 
@@ -1030,7 +1032,7 @@ function tr2PrintView() {
         ${showPickupCol ? `<td>${e.ot ? '—' : escHtml(e.type === 'departure' ? ((e.groupPickup || e.pickup) || '—') : '—')}</td>` : ''}
         <td>${e.ot ? '—' : escHtml(e.time || '')}</td>
         <td>${escHtml(e.retreatLabel || '')}</td>
-        <td style="font-size:10.5px;color:#4b5563;max-width:260px">${typeof trNotesPrintHtml === 'function' ? trNotesPrintHtml(e) : escHtml(String(e.notes || '').replace(/\s+/g, ' '))}</td>
+        ${showNotesCol ? `<td style="font-size:10.5px;color:#4b5563;max-width:260px">${typeof trNotesPrintHtml === 'function' ? trNotesPrintHtml(e) : escHtml(String(e.notes || '').replace(/\s+/g, ' '))}</td>` : ''}
       </tr>`;
 
   // Jorge's ask 2026-10-19, then follow-up same day: pure category order within a shared-ride
@@ -1142,7 +1144,7 @@ function tr2PrintView() {
       <div class="sub">${escHtml(retreatLabel)} · ${escHtml(rangeLabel)}</div>
     </div>
     <table>
-      <thead><tr><th>Habitación</th><th>Nombre</th>${showTypeCol ? '<th>Tipo</th>' : ''}<th>Aeropuerto</th>${showPickupCol ? '<th>Pick-up</th>' : ''}<th>Hora Vuelo</th><th>Retiro</th><th>Notas</th></tr></thead>
+      <thead><tr><th>Habitación</th><th>Nombre</th>${showTypeCol ? '<th>Tipo</th>' : ''}<th>Aeropuerto</th>${showPickupCol ? '<th>Pick-up</th>' : ''}<th>Hora Vuelo</th><th>Retiro</th>${showNotesCol ? '<th>Notas</th>' : ''}</tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
   </body></html>`);
@@ -1759,8 +1761,9 @@ function tr2BuildView() {
     if (to > addDays(from, 61)) to = addDays(from, 61);
     const byDay = new Map();
     for (let ds = from; ds <= to; ds = addDays(ds, 1)) byDay.set(ds, { arrivals: 0, departures: 0 });
+    // Jorge 2026-11-06: everyone counts -- forms filled (transfer or OT) AND the guests who never filled one (Missing)
     tr2AllEntries.forEach(e => {
-      if (e.isSynthetic || !byDay.has(e.date)) return;
+      if (!byDay.has(e.date)) return;
       if (tr2RetreatFilter && e.retreatId !== tr2RetreatFilter) return;
       const d = byDay.get(e.date);
       if (e.type === 'arrival') d.arrivals++; else d.departures++;
