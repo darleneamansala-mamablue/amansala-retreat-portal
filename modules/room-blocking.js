@@ -6,6 +6,10 @@
 let blockEditBkId=null;
 
 function datesOverlap(s1,e1,s2,e2){return s1<e2&&e1>s2;}
+// Key for the Block Rooms grid's conflict map: case-folded like before (Cloudbeds reports "5B" for "5b"), except the
+// pairs that are two different rooms ("2B" the King room vs "2b" the bed in room 2, same for 4B/4b) keep their exact
+// spelling -- Jorge 2026-11-06: rooms 2 and 4 showed BOOKED for Karsyn Morse because Emma Howard had 2B and Emma Yusuf 4B.
+function _rbKey(room){const s=String(room||''),l=s.toLowerCase();return _roomCodeCollisionSet().has(l)?s:l;}
 
 function blockUpdateCount(){
   const n=document.querySelectorAll('#blockModalBody .block-room-item input:checked').length;
@@ -154,25 +158,25 @@ function _renderBlockRoomsGrid(bkId){
     // (already case-insensitive) conflict check — confirmed real incident
     // 2026-09-17.
     (other.blockedRooms||[]).forEach(room=>{
-      const lk=room.toLowerCase();
+      const lk=_rbKey(room);
       // a room whose guests (or the whole room) were cancelled does not block anything (Jorge 2026-11-06: GV16 showed
       // "BOOKED · Erin Polley" for Amy Roby, cancelled, while Rooms showed it free)
-      const _regsIn=AppData.regs.filter(r=>r.bookingId===other.id&&String(r.room||'').toLowerCase()===lk);
+      const _regsIn=AppData.regs.filter(r=>r.bookingId===other.id&&roomCodesEqual(r.room,room));
       if(_regsIn.length&&_regsIn.some(r=>r.cancelled||(r.guests||[]).some(g=>g.name&&g.cancelled))&&_regsIn.every(r=>r.cancelled||!(r.guests||[]).some(g=>g.name&&!g.cancelled)))return;
       if(!conflictMap.has(lk))conflictMap.set(lk,entry);
       // Same physical room sold the other way (whole vs. bed) — flag it too,
       // or the same space can be double-booked (real incident: room 4 blocked
       // whole for one retreat while 4a/4b were already blocked for another).
-      getRoomCounterparts(room).forEach(cp=>{const lcp=cp.toLowerCase();if(!conflictMap.has(lcp))conflictMap.set(lcp,entry);});
+      getRoomCounterparts(room).forEach(cp=>{const lcp=_rbKey(cp);if(!conflictMap.has(lcp))conflictMap.set(lcp,entry);});
     });
     // Also cross-check real registrations, not just blockedRooms — a room can
     // have a named guest registered in it whose room was never added to
     // blockedRooms ("orphaned registration"; confirmed real incidents:
     // Katherine McClelland's CH3a/CH3b, Monica's 5B/GV13a/GV13b).
-    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&(r.guests||[]).some(g=>g.name)).forEach(r=>{
-      const lk=r.room.toLowerCase();
+    AppData.regs.filter(r=>r.bookingId===other.id&&r.room&&!r.cancelled&&(r.guests||[]).some(g=>g.name&&!g.cancelled)).forEach(r=>{
+      const lk=_rbKey(r.room);
       if(!conflictMap.has(lk))conflictMap.set(lk,entry);
-      getRoomCounterparts(r.room).forEach(cp=>{const lcp=cp.toLowerCase();if(!conflictMap.has(lcp))conflictMap.set(lcp,entry);});
+      getRoomCounterparts(r.room).forEach(cp=>{const lcp=_rbKey(cp);if(!conflictMap.has(lcp))conflictMap.set(lcp,entry);});
     });
   });
   // Also add external Cloudbeds reservations (walk-ins, OTAs, etc.)
@@ -194,7 +198,7 @@ function _renderBlockRoomsGrid(bkId){
     (r.rooms||[]).forEach(room=>{
       // the room and the ones it blocks (a whole room and its beds), like the portal bookings above
       [room,...roomBlockingCounterparts(room)].forEach(rm=>{
-        const lk=rm.toLowerCase();
+        const lk=_rbKey(rm);
         if(!conflictMap.has(lk))conflictMap.set(lk,{name:`${r.guestName} (${r.sourceName||'Cloudbeds'})`,bookingId:null});
       });
     });
@@ -234,7 +238,7 @@ function _renderBlockRoomsGrid(bkId){
   const rowAllowed=getRowAllowedRooms(bk.row);
   const slRooms=getStraightLineRooms(bk);
   const suggestedRooms=new Set(
-    [...slRooms].filter(r=>!conflictMap.has(r.toLowerCase())&&(!rowAllowed||rowAllowed.has(r))&&!myBlocked.has(r))
+    [...slRooms].filter(r=>!conflictMap.has(_rbKey(r))&&(!rowAllowed||rowAllowed.has(r))&&!myBlocked.has(r))
   );
 
   const body=document.getElementById('blockModalBody');
@@ -270,7 +274,7 @@ function _renderBlockRoomsGrid(bkId){
     // rooms booked and nobody's registered yet" instead of an anonymous BOOKED badge.
     const otherBkStats=new Map(); // bookingId -> {name, rooms:Set, hasGuest}
     rt.rooms.forEach(physRoom=>{
-      const c=conflictMap.get(physRoom.toLowerCase());
+      const c=conflictMap.get(_rbKey(physRoom));
       if(!c||!c.bookingId)return;
       let s=otherBkStats.get(c.bookingId);
       if(!s){s={name:c.name,rooms:new Set(),hasGuest:false};otherBkStats.set(c.bookingId,s);}
@@ -317,10 +321,10 @@ function _renderBlockRoomsGrid(bkId){
     let lastGroup=null;
     uiEntries.forEach(entry=>{
       const room=entry.display;
-      const conflictEntry=entry.physical.map(p=>conflictMap.get(p.toLowerCase())).find(Boolean);
+      const conflictEntry=entry.physical.map(p=>conflictMap.get(_rbKey(p))).find(Boolean);
       const conflict=conflictEntry?.name||'';
       const conflictNoGuestYet=!!(conflictEntry?.bookingId&&otherBkStats.get(conflictEntry.bookingId)&&!otherBkStats.get(conflictEntry.bookingId).hasGuest);
-      const isOther=entry.physical.some(p=>conflictMap.has(p.toLowerCase()));
+      const isOther=entry.physical.some(p=>conflictMap.has(_rbKey(p)));
       const isSuggested=entry.physical.some(p=>suggestedRooms.has(p));
       const isChecked=entry.physical.some(p=>myBlocked.has(p))||(noRoomsYet&&isSuggested);
       // Info-only: this physical unit is the same space as a room THIS retreat already has
@@ -685,7 +689,7 @@ function gOpenAdd(room,rtId){
   // one of several ways the same room ended up with two reg rows for the same booking
   // (confirmed sweep 2026-09-17: 31 booking/room pairs system-wide with a duplicate reg,
   // most a real named guest plus a leftover empty one — e.g. Marcia Hoffheins' "14B -b").
-  if(regSelBk&&AppData.regs.some(r=>r.bookingId===regSelBk.id&&roomCodesEqual(r.room,room)&&!r.isTeacherRoom))return gOpenEdit(room,rtId);
+  if(regSelBk&&AppData.regs.some(r=>r.bookingId===regSelBk.id&&roomCodesEqual(r.room,room)&&!r.isTeacherRoom&&!regIsFreed(r)))return gOpenEdit(room,rtId);
   gEditRegId=null;
   gEditRoom=regSelBk?resolvePhysicalRoomForGuest(regSelBk.id,room,rtId):room;
   gEditRtId=rtId;
@@ -725,7 +729,7 @@ function gOpenAdd(room,rtId){
 }
 function gOpenEdit(room,rtId){
   if(IS_TEACHER_MODE&&regSelBk?.allLocked){showToast('El retiro está bloqueado por el admin.');return;}
-  const reg=getRegForRoom(regSelBk.id,room);if(!reg)return gOpenAdd(room,rtId);
+  const reg=getRegForRoom(regSelBk.id,room);if(!reg||regIsFreed(reg))return gOpenAdd(room,rtId);
   gEditRegId=reg.id;gEditRoom=room;gEditRtId=rtId;
   const rt=AppData.roomTypes.find(t=>t.id===rtId);
   document.getElementById('gModalTitle').textContent='Edit Guest';
@@ -967,13 +971,20 @@ function gSave(){
   else{
     // Check room not already assigned in this booking
     if(!gEditRegId){
-      const taken=AppData.regs.find(r=>r.bookingId===regSelBk.id&&roomCodesEqual(r.room,gEditRoom)&&!r.isTeacherRoom);
+      const taken=AppData.regs.find(r=>r.bookingId===regSelBk.id&&roomCodesEqual(r.room,gEditRoom)&&!r.isTeacherRoom&&!regIsFreed(r));
       if(taken){
         const g=(taken.guests||[]).find(x=>x.name);
         alert(`Room ${gEditRoom} is already assigned to ${g?.name||'another guest'}. Please choose a different room.`);
         return;
       }
     }
+    // the room's old cancelled registration (no fee) is reused for the new guest, not left beside it
+    const _freed=AppData.regs.find(r=>r.bookingId===regSelBk.id&&roomCodesEqual(r.room,gEditRoom)&&!r.isTeacherRoom&&regIsFreed(r));
+    if(_freed){
+      const _oldNames=(_freed.guests||[]).filter(g=>g.name).map(g=>g.name).join(', ')||'no name';
+      Object.assign(_freed,{guests,customPrice,customPkgPrice,customRateOverride,customNightsOverride,customTipNightsOverride,customTipRateOverride,credit,amountPaid,notes,isTeacherRoom:gIsTeacherRoom||undefined,cancelled:false,cancelledAt:null,updatedAt:_regTs});
+      logActivity('Room re-used',`Room ${gEditRoom}: new guest ${guests.filter(g=>g.name).map(g=>g.name).join(', ')} in place of cancelled ${_oldNames}`,regSelBk.id);
+    }else
     AppData.regs.push({id:uid(),bookingId:regSelBk.id,room:gEditRoom,roomTypeId:gEditRtId,guests,customPrice,customPkgPrice,customRateOverride,customNightsOverride,customTipNightsOverride,customTipRateOverride,credit,amountPaid,notes,isTeacherRoom:gIsTeacherRoom||undefined,updatedAt:_regTs});
   }
   gExtraGuestMode=false;saveAll();closeModal('guestModal');regRender();showToast(gEditRegId?'Updated.':'Guest added.');

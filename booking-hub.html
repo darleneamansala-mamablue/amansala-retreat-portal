@@ -5954,7 +5954,7 @@ function resolvePhysicalRoomForGuest(bkId,roomOrDisplay,rtId){
   if(!entry||!entry.merged)return entry?.physical[0]||roomOrDisplay;
   for(const p of entry.physical){
     const reg=getRegForRoom(bkId,p);
-    const named=(reg?.guests||[]).filter(g=>g.name).length;
+    const named=reg&&!regIsFreed(reg)?(reg.guests||[]).filter(g=>g.name).length:0;
     if(named<(rt.maxOcc||2))return p;
   }
   return entry.physical[0];
@@ -6869,6 +6869,15 @@ function statusLabel(s){return{requested:'Soft Hold',contract_sent:'Contract Sen
 // named guests instead of "whichever the array happens to list first" -- matches
 // the same _regByRoom/_billRegByRoom fix used for Bill Total/Guests Registered,
 // so the detailed room list doesn't show "Vacant" for a room that's actually taken.
+// A registration whose whole room (or every named guest) was cancelled, with no cancellation fee to show, no longer
+// holds its room: the Room List shows the room vacant and the next guest added there reuses this registration
+// (Jorge 2026-11-06: "no quiero que salgan registros cancelados ocupando los espacios" -- Karsyn Morse's CH12).
+function regIsFreed(reg){
+  if(!reg)return false;
+  const named=(reg.guests||[]).filter(g=>g&&g.name);
+  if(!(reg.cancelled||(named.length&&named.every(g=>g.cancelled))))return false;
+  return !named.some(g=>Number(g.cancellationFee)>0);
+}
 function getRegForRoom(bkId,room){
   // roomCodesEqual, not === — same collision-aware fold as everywhere else a room
   // code is compared (won't confuse e.g. "2B" with "2b", but will still match a
@@ -7031,7 +7040,7 @@ function switchTab(id,btn){
 <script src="modules/reports.js?v=20261020j"></script>
 <script src="modules/reports-daily-categories.js?v=20261021a"></script>
 <script src="modules/admin-bot-log.js"></script>
-<script src="modules/teacher-portal.js?v=20261106a"></script>
+<script src="modules/teacher-portal.js?v=20261106b"></script>
 <script src="modules/teacher-contacts.js?v=20261104c"></script>
 <script src="modules/room-list-notes.js?v=20261026a"></script>
 <script src="modules/room-list-maint-note.js?v=20261027a"></script>
@@ -7053,7 +7062,7 @@ function switchTab(id,btn){
 // ===== ROOM TYPE HOVER TOOLTIP — moved to modules/pricing.js (loaded above) =====
 // ===== PRICE LIST — moved to modules/pricing.js (loaded above) =====
 </script>
-<script src="modules/room-blocking.js?v=20261106c"></script>
+<script src="modules/room-blocking.js?v=20261106d"></script>
 <script src="modules/guest-date-picker.js?v=20261106a"></script>
 <script>
 // ===== ROOM BLOCKING — moved to modules/room-blocking.js =====

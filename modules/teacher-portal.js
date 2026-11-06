@@ -621,11 +621,14 @@ function regRender(){
     if(uiEntries.length===0)return;
     let occ=0;
     uiEntries.forEach(e=>{
-      if(e.physical.some(p=>{const reg=getRegForRoom(regSelBk.id,p);return reg&&(reg.guests||[]).some(g=>g.name);}))occ++;
+      if(e.physical.some(p=>{const reg=getRegForRoom(regSelBk.id,p);return reg&&!regIsFreed(reg)&&(reg.guests||[]).some(g=>g.name);}))occ++;
     });
     const badge=occ===uiEntries.length?'occ-full':occ>0?'occ-half':'occ-empty';
     const badgeText=occ===uiEntries.length?'Full':occ>0?`${occ}/${uiEntries.length}`:'Vacant';
     const card=document.createElement('div');card.className='rt-card';
+    // admin only: who was cancelled in rooms that now show vacant (teachers don't see cancelled registrations at all)
+    const _freedNames=IS_TEACHER_MODE?[]:withSeq.flatMap(({entry})=>entry.physical.map(p=>getRegForRoom(regSelBk.id,p)).filter(r=>r&&regIsFreed(r)).flatMap(r=>(r.guests||[]).filter(g=>g.name).map(g=>`${g.name} (${r.room})`)));
+    const _freedLine=_freedNames.length?`<div style="padding:6px 18px;font-size:11px;color:#9ca3af;border-bottom:1px solid var(--border)">Cancelled, room free again: ${escHtml(_freedNames.join(', '))}</div>`:'';
     const _ls=isLowSeason(regSelBk?.startDate,nights);const _p1=_ls?(rt.price1_low||rt.price1):rt.price1;const _p2=_ls?(rt.price2_low||rt.price2):rt.price2;
     const _grT=(typeof grPriceTag==='function')?grPriceTag(regSelBk,rt):null;
     const priceTag=_grT?_grT:rt.maxOcc===1
@@ -641,6 +644,7 @@ function regRender(){
         <button class="rt-info-btn" onclick="showPriceTip(event,'${rt.id}')" title="View pricing breakdown">ℹ</button>
       </div>
       ${IS_TEACHER_MODE?rtWebInfoHtml(rt):''}
+      ${_freedLine}
       <table class="reg-table">
         <thead><tr>
           <th style="width:62px">#</th>
@@ -661,7 +665,8 @@ function regRender(){
     const abbr=roomAbbrev(rt);
     withSeq.forEach(({entry,gSeq},roomIdx)=>{
       const room=entry.display;
-      const roomRegs=entry.physical.map(p=>getRegForRoom(regSelBk.id,p)).filter(Boolean);
+      // a room whose cancelled registration no longer holds it shows vacant (regIsFreed)
+      const roomRegs=entry.physical.map(p=>getRegForRoom(regSelBk.id,p)).filter(r=>r&&!regIsFreed(r));
       const guests=roomRegs.flatMap(reg=>(reg.guests||[]).filter(g=>g.name).map(g=>({...g,_reg:reg,_physical:reg.room,_guestIdx:reg.guests.indexOf(g)})));
       const gc=Math.max(1,guests.length);
       const totalPrice=roomRegs.reduce((s,reg)=>{const gcn=(reg.guests||[]).filter(g=>g.name).length||1;return s+(reg.customPrice!=null?reg.customPrice:calcPrice(rt,gcn,nights,regSelBk.startDate,regSelBk,reg));},0);
@@ -670,7 +675,8 @@ function regRender(){
       // Per-bed rendering for merged bd* entries: one row per physical bed
       if(isBedRoomType(rt)&&entry.merged){
         entry.physical.forEach((physRoom,pi)=>{
-          const bedReg=getRegForRoom(regSelBk.id,physRoom);
+          const _bedReg0=getRegForRoom(regSelBk.id,physRoom);
+          const bedReg=regIsFreed(_bedReg0)?null:_bedReg0;
           const bedG=(bedReg?.guests||[]).filter(g=>g.name);
           const g=bedG[0]||null;
           const tr=document.createElement('tr');
@@ -690,7 +696,7 @@ function regRender(){
             if(!IS_TEACHER_MODE){
               entry.physical.forEach(p=>{
                 const _pReg=getRegForRoom(regSelBk.id,p);
-                const _pG=(_pReg?.guests||[]).filter(g=>g.name);
+                const _pG=(_pReg&&!regIsFreed(_pReg)?_pReg.guests||[]:[]).filter(g=>g.name);
                 // Admin-only "squeeze in a 3rd/extra guest" button — was bd1-only
                 // ("Bed in a Beachview Double"); Jorge's ask 2026-09-21 to also allow
                 // it on bd2 ("Bed in a Double Room", Karsyn Morse's case). The rate for
