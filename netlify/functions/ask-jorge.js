@@ -21,7 +21,8 @@ const { sendUtility } = require('./wa-utility-lib');
 const A = require('./ask-jorge-actions');
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-opus-5-5';
+// Sonnet, not Opus (Jorge 2026-11-06, credits): staff questions and the confirmed actions do not need the most expensive model
+const MODEL = 'claude-sonnet-5-5';
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const JORGE_PHONE = '529844523336';
 

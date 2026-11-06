@@ -535,7 +535,7 @@ function _bdRender(){
   })():null;
   const nights=Math.max(1,Math.round((pd(subj.checkOut)-pd(subj.checkIn))/DAY_MS));
   const roomTotal=nights*(subj.rate||0);
-  const balanceDue=_bdBalanceDue();
+  const balanceDue=(b=>Math.abs(b)<0.005?0:b)(_bdBalanceDue());   // never "$-0.00" (a paid folio rounds to a tiny negative)
   const statusBadge=subj.cancelled?{label:'Cancelled',bg:'rgba(239,68,68,.4)'}:subj.checkedOutAt?{label:'Checked Out',bg:'rgba(255,255,255,.15)'}:subj.checkedInAt?{label:'In House',bg:'rgba(34,197,94,.25)'}:{label:'Expected',bg:'rgba(255,255,255,.15)'};
 
   const hBtnS='background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);padding:6px 14px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'Jost\',sans-serif';
@@ -658,7 +658,7 @@ function _bdRender(){
         <div style="margin-top:14px;padding:12px 14px;background:#fef2f2;border-radius:10px">
           <div style="font-size:11px;color:var(--muted);font-weight:600">Balance Due</div>
           <div style="font-size:22px;font-weight:800;color:${balanceDue>0?'#dc2626':'#059669'}">${fmt$(balanceDue)}</div>
-          ${_bdRoomBalances?(()=>{const tot=Object.values(_bdRoomBalances).reduce((a,b)=>a+b,0);return `<div style="margin-top:6px;font-size:12px;color:#374151">Whole room: <b style="color:${tot>0.005?'#dc2626':'#059669'}">${fmt$(tot)}</b> — ${Object.entries(_bdRoomBalances).map(([n,v])=>`${escHtml(n)} ${fmt$(v)}`).join(' · ')}</div>`;})():''}
+          ${_bdRoomBalances?(()=>{const tot=Object.values(_bdRoomBalances).reduce((a,b)=>a+b,0);return `<div style="margin-top:6px;font-size:12px;color:#374151">Whole room: <b style="color:${tot>0.005?'#dc2626':'#059669'}">${fmt$(tot)}</b> — ${Object.entries(_bdRoomBalances).map(([n,v])=>`${escHtml(n)} ${fmt$(Math.abs(v)<0.005?0:v)}`).join(' · ')}</div>`;})():''}
         </div>
         ${subj.rate!=null?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">Room Total &nbsp; ${nights} × ${fmt$(subj.rate)} = ${fmt$(roomTotal)}</div>`:''}
         ${_bdKind==='reg'?`<div style="margin-top:10px">
