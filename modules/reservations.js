@@ -212,10 +212,14 @@ async function _resAttachFolioBalances(rows){
     // (Jorge's report 2026-09-29 -- same bug as booking-detail.js's
     // _bdBalanceDue).
     const folioIds=folios.map(f=>f.id);
-    const {data:items,error:iErr}=await db.from('folio_items').select('folio_id,qty,unit_price,tax_rate').in('folio_id',folioIds);
+    const {data:items,error:iErr}=await db.from('folio_items').select('folio_id,qty,unit_price,tax_rate,description,staff_name,created_at').in('folio_id',folioIds);
     if(iErr)throw iErr;
     const totalByFolio={};
     (items||[]).forEach(i=>{totalByFolio[i.folio_id]=(totalByFolio[i.folio_id]||0)+Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100);});
+    // Online check-out (Jorge 2026-11-06): what the guest paid themselves by card on their payment link (guest-pay, Stripe),
+    // i.e. a Stripe payment line no staff member entered
+    const onlineByFolio={};
+    (items||[]).forEach(i=>{if(Number(i.unit_price)<0&&!i.staff_name&&/Stripe/i.test(i.description||'')){const o=onlineByFolio[i.folio_id]=onlineByFolio[i.folio_id]||{amt:0,at:''};o.amt+=-Number(i.unit_price)*Number(i.qty);if(String(i.created_at)>o.at)o.at=String(i.created_at);}});
     // Every folio of the guest's room counts, not only the one filed under their exact name -- same rule as Booking
     // Detail's folio list: a second folio (renamed, moved with Transfer Folio, a name written another way) is still theirs
     // unless it is filed under ANOTHER guest of that room (Jorge 2026-11-05: Departures showed one folio's balance only).
@@ -231,6 +235,7 @@ async function _resAttachFolioBalances(rows){
         if((isReg?f.registration_id:f.booking_request_id)!==anchorId)return;
         if(others.has(_n(f.guest_name)))return;
         sum=(sum||0)+(totalByFolio[f.id]||0);
+        const o=onlineByFolio[f.id];if(o){r.onlinePaid=(r.onlinePaid||0)+o.amt;if(o.at>(r.onlinePaidAt||''))r.onlinePaidAt=o.at;}
       });
       if(sum!=null)r.balance=+sum.toFixed(2);
     });
@@ -459,7 +464,7 @@ async function _resBuildMovementView(type){
       <button onclick="${setter}('${todayStr}')" style="font-size:11.5px;background:${color}10;color:${color};border:1px solid ${color}30;border-radius:6px;padding:4px 10px;font-weight:600;cursor:pointer">Today</button>
       <span style="font-size:13px;font-weight:700;color:var(--text)">${rows.length} guest${rows.length!==1?'s':''}</span>
     </div>
-    ${rows.length===0?_resEmptyState(isArr?'🛬':'🛫',`No ${title.toLowerCase()} on ${dateLabel}`):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:isArr?'checkin':'checkout',balanceCol:true,cardCol:true})}
+    ${rows.length===0?_resEmptyState(isArr?'🛬':'🛫',`No ${title.toLowerCase()} on ${dateLabel}`):_resTable(rows,{checkInCol:true,checkOutCol:true,actionMode:isArr?'checkin':'checkout',balanceCol:true,cardCol:true,onlineCol:!isArr})}
   </div>`;
 }
 function resSetArrDate(d){_resArrDate=d;_resRender();}
@@ -531,7 +536,7 @@ function _resNotesCell(r){
   return parts.join('')||'<span style="color:#d1d5db">—</span>';
 }
 let _resLastRows=[];
-function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol,discountCol}){
+function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol,discountCol,onlineCol}){
   _resLastRows=rows;
   const actionCell=(r)=>{
     if(actionMode==='checkin'){
@@ -557,6 +562,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol,di
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">SOURCE</th>
         ${balanceCol?'<th style="padding:10px 16px;text-align:right;font-size:10.5px;font-weight:700;color:var(--muted)">BALANCE</th>':''}
         ${cardCol?'<th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">CARD ON FILE</th>':''}
+        ${onlineCol?'<th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">ONLINE CHECK-OUT</th>':''}
         ${discountCol?'<th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">DISCOUNT</th>':''}
         <th style="padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted)">NOTES</th>
         <th style="padding:10px 16px;text-align:center;font-size:10.5px;font-weight:700;color:var(--muted)">ACTION</th>
@@ -572,6 +578,7 @@ function _resTable(rows,{checkInCol,checkOutCol,actionMode,cardCol,balanceCol,di
           <td style="padding:11px 16px"><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;background:${r.type==='group'?'#dbeafe':'#f0fdf4'};color:${r.type==='group'?'#1e3a8a':'#065f46'}">${escHtml(r.source)}</span></td>
           ${balanceCol?`<td style="padding:11px 16px;text-align:right;font-size:12px;font-weight:700;color:${r.balance>0?'#dc2626':'#059669'}">${r.balance!=null?fmt$(r.balance):'—'}</td>`:''}
           ${cardCol?`<td style="padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:${r.cardOnFile?'#059669':'#dc2626'}">${r.cardOnFile?'Yes':'No'}</td>`:''}
+          ${onlineCol?`<td style="padding:11px 16px;text-align:center;font-size:12px;font-weight:700;color:#059669" title="${r.onlinePaid?'Paid online '+fmt$(r.onlinePaid)+' · '+new Date(r.onlinePaidAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}">${r.onlinePaid?`✓<div style="font-size:10.5px;font-weight:600">${fmt$(r.onlinePaid)}</div>`:'<span style="color:#cbd5e1">—</span>'}</td>`:''}
           ${discountCol?`<td style="padding:11px 16px;font-size:12px;color:#7c3aed;font-family:monospace">${escHtml(r.discountCode||'—')}</td>`:''}
           <td style="padding:11px 16px;font-size:12px;color:var(--muted);max-width:240px;white-space:pre-wrap">${_resNotesCell(r)}</td>
           <td style="padding:11px 16px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">${actionCell(r)}</td>

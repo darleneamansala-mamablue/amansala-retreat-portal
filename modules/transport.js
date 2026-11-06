@@ -1618,6 +1618,27 @@ async function tr2LoadData() {
 
   tr2BlendGroupPickups();
   tr2BuildView();
+  tr2LoadOnlinePaid();
+}
+
+// Online check-out (Jorge 2026-11-06): which departing guests paid their bill themselves on their payment link (a Stripe
+// payment line on their folio that no staff member entered). regId -> {amt, at}; Departures shows a ✓ column.
+let tr2OnlinePaid = {};
+async function tr2LoadOnlinePaid() {
+  try {
+    const today = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+    const regIds = [...new Set(tr2AllEntries.filter(e => e.type === 'departure' && e.regId && e.date >= today).map(e => e.regId))];
+    const map = {};
+    for (let i = 0; i < regIds.length; i += 80) {
+      const { data: fo } = await db.from('folios').select('id,registration_id').in('registration_id', regIds.slice(i, i + 80));
+      if (!fo || !fo.length) continue;
+      const regOf = {}; fo.forEach(f => { regOf[f.id] = f.registration_id; });
+      const { data: it } = await db.from('folio_items').select('folio_id,qty,unit_price,description,staff_name,created_at').in('folio_id', fo.map(f => f.id)).lt('unit_price', 0).ilike('description', '%Stripe%');
+      (it || []).filter(x => !x.staff_name).forEach(x => { const r = regOf[x.folio_id], o = map[r] = map[r] || { amt: 0, at: '' }; o.amt += -Number(x.unit_price) * Number(x.qty); if (String(x.created_at) > o.at) o.at = String(x.created_at); });
+    }
+    tr2OnlinePaid = map;
+    if (tr2View === 'departures') tr2BuildView();
+  } catch (e) { console.warn('[transport] online paid', e.message); }
 }
 
 const TR2_PASTEL = ['#eff6ff','#f0fdf4','#faf5ff','#fffbeb','#fdf2f8','#f0fdfa','#fff7ed','#f0f9ff'];
@@ -1827,11 +1848,11 @@ function tr2BuildView() {
   // next to the room number, and in Upgrade mode an Options column (lateral same-category
   // room swaps, see tr2OptionsCell/tr2SwapRooms) sits right before Upgrade. Column count
   // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
-  const totalCols = tr2UpgradeMode ? 13 : 12;   // + Email and Phone (Jorge 2026-11-04)
+  const totalCols = (tr2UpgradeMode ? 13 : 12) + (tr2View === 'departures' ? 1 : 0);   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
   const tableHeader = `<thead><tr>
     ${TH('Habitación','80px')}${TH('Check In','70px')}${TH('Nombre')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
     ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}
-    ${TH('Costo','70px')}${TH('','40px')}
+    ${tr2View === 'departures' ? TH('Online check-out','90px') : ''}${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
 
   let html = `<div style="padding:0 0 20px"><table style="width:100%;border-collapse:collapse;font-family:'Jost',sans-serif">${tableHeader}<tbody>`;
@@ -2007,6 +2028,7 @@ function tr2RenderRow(e, color, groupPax) {
     ${TD(e.retreatLabel ? `<span style="font-size:11px;color:#6b7280">${escHtml(e.retreatLabel)}</span>` : '')}
     ${(() => { const c = tr2Contact(e); return TD(c.email ? `<a href="mailto:${escHtml(c.email)}" onclick="event.stopPropagation()" style="font-size:11px;color:#2563eb;word-break:break-all">${escHtml(c.email)}</a>` : '<span style="color:#d1d5db">—</span>', 'max-width:180px') + TD(c.phone ? `<span style="font-size:11px;white-space:nowrap">${escHtml(c.phone)}</span>` : '<span style="color:#d1d5db">—</span>'); })()}
     ${tr2UpgradeMode ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2OptionsCell(e)}</td><td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2UpgradeCell(e)}</td>` : TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.notes)}</span>` : '')}
+    ${tr2View === 'departures' ? (() => { const o = e.regId && tr2OnlinePaid[e.regId]; return TD(o ? `<span title="Paid online $${o.amt.toFixed(2)}" style="color:#059669;font-weight:700">✓</span><div style="font-size:10px;color:#059669">$${o.amt.toFixed(2)}</div>` : '<span style="color:#d1d5db">—</span>', 'text-align:center'); })() : ''}
     ${TD(costCell)}
     <td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap">
       ${!e.isSynthetic && groupPax > 1 ? `<button onclick="tr2SplitEntry('${e.type}|${e.rowId}')" title="Separar del grupo" style="background:#fef2f2;border:none;border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;color:#dc2626;line-height:1;margin-right:3px">⊗</button>` : ''}
