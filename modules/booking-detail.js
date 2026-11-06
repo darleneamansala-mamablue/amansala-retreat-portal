@@ -837,7 +837,7 @@ function _bdFolioRowHtml(f){
     }
     return `<tr style="${isPayment?'background:#f0fdf4':''}">
       <td style="padding:8px 12px;font-size:12px;white-space:nowrap;color:var(--dark)">${itemDate}</td>
-      <td style="padding:8px 12px;font-size:12.5px">${isPayment?'💳 ':''}${escHtml(i.description||'')}${i.category?`<span style="margin-left:8px;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:#f3f4f6;color:var(--muted)">${escHtml(i.category)}</span>`:''}</td>
+      <td data-no-i18n style="padding:8px 12px;font-size:12.5px">${isPayment?'💳 ':''}${escHtml(i.description||'')}${i.category?`<span style="margin-left:8px;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:#f3f4f6;color:var(--muted)">${escHtml(i.category)}</span>`:''}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${Number(i.qty)}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${fmt$(i.unit_price)}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${i.tax_rate?i.tax_rate+'%':'—'}</td>

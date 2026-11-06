@@ -186,7 +186,7 @@ function initStaffLogin(){
     const _retBk=sessionStorage.getItem('ama_admin_return_bk');
     if(_retBk){
       sessionStorage.removeItem('ama_admin_return_bk');
-      const _retBtn=[...document.querySelectorAll('.tab-btn')].find(b=>b.textContent.trim()==='Teachers');
+      const _retBtn=[...document.querySelectorAll('.tab-btn')].find(b=>/^(Teachers|Maestros)$/.test(b.textContent.trim()));   // 'Maestros' with the ES switch (i18n.js)
       if(_retBtn){switchTab('teacherreg',_retBtn);setTimeout(()=>regSelectRetreat(_retBk),80);}
     } else {
       const _lastTab=localStorage.getItem('ama_last_tab');

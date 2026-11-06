@@ -32,7 +32,7 @@ html[data-hide-c4][data-hide-cs] .al-row{display:none}
   function countOf(el){
     const m=(el.textContent||'').match(/available for (\d+) retreat/);
     if(m)return m[1];
-    return String([...el.querySelectorAll('button')].filter(b=>/dismiss/i.test(b.textContent)).length||'');
+    return String([...el.querySelectorAll('button')].filter(b=>/dismiss|descartar/i.test(b.textContent)).length||'');
   }
   function decorate(){
     KINDS.forEach(k=>{
