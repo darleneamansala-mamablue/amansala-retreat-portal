@@ -1,6 +1,6 @@
 // ===== bbc-workshops-cohosts.js — Bikini Bootcamp schedule: add workshops and co-hosts (Darlene 2026-11-06) =====
 // Loaded as a classic script AFTER bbc-schedule.js; shares global scope. Standalone: bbc-schedule.js is not edited, its render functions are wrapped.
-//   Co-host: every class / event slot gets a "Co-host" box under it (one or several names, comma separated, with the instructor list as suggestions). It is saved on the slot as slot.coHost and shown wherever the
+//   Co-host: every class / event slot gets a "Co-host" list under it (pick a teacher from the list; the slot\'s own instructor is not offered). It is saved on the slot as slot.coHost and shown wherever the
 //            slot is shown: the printed schedule, the copied text and the Calendar read "Instructor & Co-host". The instructor alone is still what duplicate-instructor warnings and staff confirmations use.
 //   Workshop: an "+ Add workshop" button under "+ Add slot" on each day asks for the workshop's name and adds a slot flagged slot.workshop (time, who leads it and the place are filled in like any slot). Any
 //             slot can also be switched to or from a workshop with its "Workshop" tick. Workshops show as "Workshop: name" in the print, the text and the Calendar.
@@ -9,6 +9,15 @@
   if (typeof bbcRenderSlotRow !== 'function' || typeof bbcRenderDayCard !== 'function') return;
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
+  // Jessy Crystal joins the teacher list (Darlene 2026-11-06): she shows in the Instructor suggestions and the Co-host list.
+  if (typeof BBC_INSTRUCTORS_LIST !== 'undefined' && !BBC_INSTRUCTORS_LIST.includes('Jessy Crystal')) BBC_INSTRUCTORS_LIST.push('Jessy Crystal');
+  // The Co-host is picked from the teacher list; the slot's own instructor is left out of it. A name saved earlier that is not on the list stays as its own option.
+  function coHostOptions(slot) {
+    const cur = String(slot.coHost || ''), main = String(slot.instructor || '').trim().toLowerCase();
+    const names = (typeof BBC_INSTRUCTORS_LIST !== 'undefined' ? BBC_INSTRUCTORS_LIST : []).filter(n => n.toLowerCase() !== main);
+    if (cur && !names.includes(cur)) names.unshift(cur);
+    return '<option value="">— none —</option>' + names.map(n => '<option value="' + esc(n) + '"' + (n === cur ? ' selected' : '') + '>' + esc(n) + '</option>').join('');
+  }
   const origRow = window.bbcRenderSlotRow;
   window.bbcRenderSlotRow = function (schedId, di, slot, si) {
     const html = origRow.apply(this, arguments);
@@ -18,7 +27,7 @@
     return html + '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:3px 10px 7px 130px;border-top:1px dashed #eee;background:' + (slot.workshop ? '#fff7ed' : '#fcfbfa') + '">'
       + '<label style="font-size:11.5px;font-weight:700;color:#7c2d12;display:flex;gap:5px;align-items:center;cursor:' + (locked ? 'default' : 'pointer') + '"><input type="checkbox" ' + (slot.workshop ? 'checked ' : '') + (locked ? 'disabled ' : '') + 'onchange="' + f + "'workshop',this.checked);bbcWorkshopRerender('" + schedId + "'," + di + ')"> 🎓 Workshop</label>'
       + '<label style="font-size:11.5px;font-weight:700;color:#6b7280;display:flex;gap:6px;align-items:center">Co-host'
-      + '<input value="' + esc(slot.coHost) + '" ' + (locked ? 'disabled ' : '') + 'list="' + dl + '" placeholder="Add a co-host (names, comma separated)" oninput="' + f + "'coHost',this.value)\" style=\"" + inp + '"></label></div>';
+      + '<select ' + (locked ? 'disabled ' : '') + 'onchange="' + f + "'coHost',this.value)\" style=\"" + inp + '">' + coHostOptions(slot) + '</select></label></div>';
   };
 
   const origDay = window.bbcRenderDayCard;
