@@ -1,10 +1,10 @@
 // ===== bbc-meet-on-beach.js — Bikini Bootcamp schedule: where to meet (Darlene 2026-11-06) =====
-// The Beach Walk and Mayan Clay say "Meet on the beach"; tours say "Meet in reception".
+// The Beach Walk and Mayan Clay say "Meet on the beach"; tours say "Meet in the reception".
 // Loaded as a classic script AFTER bbc-schedule.js and bbc-room-availability.js; shares global scope. bbc-schedule.js is not edited.
 // "Meet on the beach" is added to every Location list. A Morning Beach Walk still saved with the place "Beachfront" is switched to it when the day is shown (not on confirmed slots),
 // so the schedule, the print and the copied text all say where to meet. The Calendar keeps showing the walk in the Beachfront column, exactly as before.
 (function () {
-  const MEET = 'Meet on the beach', RECEPTION = 'Meet in reception';
+  const MEET = 'Meet on the beach', RECEPTION = 'Meet in the reception';
   if (typeof BBC_LOCATIONS_LIST !== 'undefined' && !BBC_LOCATIONS_LIST.includes(MEET)) BBC_LOCATIONS_LIST.push(MEET);
   if (typeof bbcLocToShalaId === 'function') {
     const baseLoc = bbcLocToShalaId;
