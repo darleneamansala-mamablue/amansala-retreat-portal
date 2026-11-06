@@ -74,7 +74,7 @@
     const f = document.getElementById('mtFilters');
     const fb = (k, l, n) => `<button class="btn btn-sm ${filter === k ? 'btn-primary' : 'btn-secondary'}" onclick="mtFilter('${k}')">${l} (${n})</button>`;
     if (f) f.innerHTML = fb('open', 'Pending', open.length) + fb('resolved', 'Resolved', tickets.length - open.length) + fb('all', 'All', tickets.length)
-      + '<span style="margin-left:8px;align-self:center;font-size:12px;color:#6b7280">The WhatsApp goes to everyone on the daily A/C report' + (numbers.length ? ` and ${numbers.length} more number(s)` : '') + '.</span>';
+      + `<span style="margin-left:8px;align-self:center;font-size:12px;color:#6b7280">The WhatsApp goes to: ${numbers.length ? esc(numbers.map(p => p.name || p.phone).filter((v, i, a) => a.indexOf(v) === i).join(', ')) : '<b style="color:#b91c1c">nobody yet</b>'}</span>`;
     const byStatus = tickets.filter(t => filter === 'all' || (filter === 'open' ? t.status !== 'resolved' : t.status === 'resolved'));
     const byRoom = byStatus.filter(t => !roomFilter || String(t.room) === roomFilter);
     // category chips with counts (inside Pending / Resolved / All and the room picked) + the room picker
@@ -146,7 +146,7 @@
   };
   window.mtNumbers = async () => {
     const cur = numbers.map(p => `${p.name}: ${p.phone}`).join(', ');
-    const v = prompt('Extra people who get the maintenance WhatsApp (besides the A/C report list), separated by commas.\nExample: Pedro: +52 984 123 4567, Luis: +52 984 765 4321', cur);
+    const v = prompt('People who get the maintenance WhatsApp, separated by commas.\nExample: Pedro: +52 984 123 4567, Luis: +52 984 765 4321', cur);
     if (v == null) return;
     const list = v.split(',').map(x => x.trim()).filter(Boolean).map(x => { const m = x.split(':'); return m.length > 1 ? { name: m[0].trim(), phone: m.slice(1).join(':').trim() } : { name: '', phone: x }; });
     try { const d = await call('numbers', { numbers: list }); numbers = d.numbers; showToast(`Saved: ${numbers.length} number(s)`); render(); } catch (e) { showToast('Not saved: ' + e.message); }
