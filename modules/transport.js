@@ -1755,7 +1755,7 @@ function tr2BuildView() {
 
   if (tr2ShowWeekSummary) {
     // Always counts both arrivals and departures (ignores the Arrivals/Departures
-    // tab) and lists every day in the range, with 0 when nothing's scheduled.
+    // tab) and lists every day in the range, with 0 when nothing's scheduled -- guests, from the reservations.
     // Missing range ends default to a 7-day window; capped at 62 days.
     const addDays = (ds, n) => { const d = new Date(ds + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
     let from = tr2DateFrom, to = tr2DateTo;
@@ -1766,12 +1766,26 @@ function tr2BuildView() {
     if (to > addDays(from, 61)) to = addDays(from, 61);
     const byDay = new Map();
     for (let ds = from; ds <= to; ds = addDays(ds, 1)) byDay.set(ds, { arrivals: 0, departures: 0 });
-    // Jorge 2026-11-06: everyone counts -- forms filled (transfer or OT) AND the guests who never filled one (Missing)
-    tr2AllEntries.forEach(e => {
-      if (!byDay.has(e.date)) return;
-      if (tr2RetreatFilter && e.retreatId !== tr2RetreatFilter) return;
-      const d = byDay.get(e.date);
-      if (e.type === 'arrival') d.arrivals++; else d.departures++;
+    // Jorge 2026-11-06: counted from the reservations in Rooms (each guest's check-in / check-out), not from the transport
+    // forms -- the forms had wrong dates and missing guests. A guest who is already in the hotel and only continues in another
+    // reservation (an extension, an extra night, a room change) is not an arrival that day, nor a departure the day before.
+    const _nm = x => String(x || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+    const stays = [];
+    AppData.regs.forEach(r => {
+      const b = AppData.bookings.find(x => x.id === r.bookingId);
+      if (!b || b.status === 'cancelled' || r.cancelled) return;
+      if (b.blockedRooms?.length && typeof roomListBlocks === 'function' && r.room && !roomListBlocks(b.blockedRooms, r.room)) return;
+      const ci = r.checkIn || b.startDate, co = r.checkOut || b.endDate;
+      if (!ci || !co) return;
+      (r.guests || []).filter(g => g && g.name && !g.cancelled).forEach(g => stays.push({ n: _nm(g.name), ci, co, bk: b.id }));
+    });
+    (tr2ActiveRequests || []).filter(q => q.status !== 'declined').forEach(q => stays.push({ n: 'req|' + q.room + '|' + q.check_in, ci: q.check_in, co: q.check_out, bk: 'individual' }));
+    stays.forEach(st => {
+      if (tr2RetreatFilter && st.bk !== tr2RetreatFilter) return;
+      const continues = stays.some(o => o !== st && o.n === st.n && o.co === st.ci);   // already here the night before
+      const staysOn = stays.some(o => o !== st && o.n === st.n && o.ci === st.co);     // stays on after this one
+      if (byDay.has(st.ci) && !continues) byDay.get(st.ci).arrivals++;
+      if (byDay.has(st.co) && !staysOn) byDay.get(st.co).departures++;
     });
     const days = [...byDay.keys()];
     const th = 'padding:7px 14px;font-size:10.5px;font-weight:700;text-transform:uppercase;color:#6b7280;text-align:left;border-bottom:2px solid #e5e7eb';
