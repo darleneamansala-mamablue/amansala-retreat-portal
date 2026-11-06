@@ -155,16 +155,20 @@ exports.handler = async (event) => {
 
   try {
     const rtFilter = isExtraNight ? 'be_extra_nights=eq.true' : 'be_enabled=eq.true';
-    const [bkRes, rtRes, settingsRes] = await Promise.all([
+    const [bkRes, rtRes, settingsRes, beRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/room_types?${rtFilter}&select=id,name,rooms,max_occ,be_price_single,be_price_single_extra_night,be_price_single_extra_night_low,be_price_double,price_single_high,price_single_low,be_description`, { headers: hdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: hdrs }),
+      // Revenue Manager / admin Rates tab prices for check-in's date -- the same be_rates row book.html and stripe.js
+      // charge (Jorge 2026-11-06: Lana quoted $393.25 for Simple n Small on Nov 10 while the Revenue Manager had $160)
+      fetch(`${SUPABASE_URL}/rest/v1/be_rates?start_date=lte.${checkIn}&end_date=gte.${checkIn}&select=room_type_id,price_single`, { headers: hdrs }),
     ]);
     if (!bkRes.ok || !rtRes.ok) throw new Error('availability fetch failed');
 
-    const [bookings, roomTypes, settingsArr] = await Promise.all([
-      bkRes.json(), rtRes.json(), settingsRes.ok ? settingsRes.json() : Promise.resolve([{}]),
+    const [bookings, roomTypes, settingsArr, beRates] = await Promise.all([
+      bkRes.json(), rtRes.json(), settingsRes.ok ? settingsRes.json() : Promise.resolve([{}]), beRes.ok ? beRes.json() : Promise.resolve([]),
     ]);
+    const manualRate = rtId => { const row = (beRates || []).find(x => x.room_type_id === rtId); return row && row.price_single != null ? Number(row.price_single) : null; };
     const settings = settingsArr[0] || {};
 
     const blockedRooms = new Set((bookings || []).flatMap(bk => bk.blocked_rooms || []));
@@ -248,7 +252,11 @@ exports.handler = async (event) => {
         // applied to Extra Night too per his 2026-09-23 ask; reverted here —
         // real case: Elizabeth Wirick quoted $470.69 for one Simple n Small
         // night that should've been the plain $295 + tax.)
-        const rate = isExtraNight ? Math.round(baseRate) : Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
+        // a be_rates price wins for Escape, with only the weekend premium on top (same as stripe.js / get-rates.js)
+        const manual = isExtraNight ? null : manualRate(rt.id);
+        const rate = isExtraNight ? Math.round(baseRate)
+          : manual != null ? Math.round(manual * weekendMult)
+          : Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
         const subtotal = rate * nights;
         const discountAmount = dc ? (dc.type === 'pct' ? Math.round(subtotal * dc.value) / 100 : Math.min(dc.value, subtotal)) : 0;
         const tax = Math.round((subtotal - discountAmount) * taxPct) / 100;

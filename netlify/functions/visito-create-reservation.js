@@ -81,10 +81,11 @@ exports.handler = async (event) => {
   try {
     // Re-verify availability server-side right before charging — Lana may be
     // working from a check_availability answer that's a few minutes stale.
-    const [bkRes, rtRes, settRes] = await Promise.all([
+    const [bkRes, rtRes, settRes, beRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,blocked_rooms&status=neq.cancelled&start_date=lt.${checkOut}&end_date=gt.${checkIn}`, { headers: supaHdrs }),
-      fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,rooms,max_occ,be_enabled,be_extra_nights,be_price_single,be_price_single_extra_night,be_price_double,price_single_high,price_single_low`, { headers: supaHdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/room_types?id=eq.${encodeURIComponent(roomTypeId)}&select=id,name,rooms,max_occ,be_enabled,be_extra_nights,be_price_single,be_price_single_extra_night,be_price_single_extra_night_low,be_price_double,price_single_high,price_single_low`, { headers: supaHdrs }),
       fetch(`${SUPABASE_URL}/rest/v1/booking_engine_settings?id=eq.1`, { headers: supaHdrs }),
+      fetch(`${SUPABASE_URL}/rest/v1/be_rates?room_type_id=eq.${encodeURIComponent(roomTypeId)}&start_date=lte.${checkIn}&end_date=gte.${checkIn}&select=price_single`, { headers: supaHdrs }),
     ]);
     if (!rtRes.ok) throw new Error('room_types fetch failed');
     const [rt] = await rtRes.json();
@@ -128,7 +129,10 @@ exports.handler = async (event) => {
     // "amount too small" guard and failing the reservation).
     // Extra Night prefers its own rate (be_price_single_extra_night), falling back
     // to the Escape rate when not explicitly set.
-    const baseRate = (isExtraNight ? rt.be_price_single_extra_night ?? rt.be_price_single : rt.be_price_single)
+    const extraNightRate = isLow(checkIn)
+      ? (rt.be_price_single_extra_night_low ?? rt.be_price_single_extra_night ?? rt.be_price_single)
+      : (rt.be_price_single_extra_night ?? rt.be_price_single);
+    const baseRate = (isExtraNight ? extraNightRate : rt.be_price_single)
       ?? (isLow(checkIn) ? (rt.price_single_low ?? rt.price_single_high) : rt.price_single_high) ?? 0;
     const ciDate = new Date(checkIn + 'T12:00:00');
     const month = ciDate.getMonth() + 1;
@@ -136,7 +140,13 @@ exports.handler = async (event) => {
     const isWeekend = dow === 0 || dow === 5 || dow === 6;
     const seasonalPct = Number(seasonalAdj[String(month)] || 0);
     const weekendMult = (isWeekend && weekendPremium) ? (1 + weekendPremium / 100) : 1;
-    const rate = Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
+    // Revenue Manager / admin Rates price (be_rates) for check-in's date wins for Escape, weekend premium only on top --
+    // same as stripe.js and check_availability, so Lana charges what she quoted (Jorge 2026-11-06)
+    const beRows = beRes && beRes.ok ? await beRes.json() : [];
+    const manualRateSingle = !isExtraNight && beRows[0] && beRows[0].price_single != null ? Number(beRows[0].price_single) : null;
+    const rate = isExtraNight ? Math.round(baseRate)
+      : manualRateSingle != null ? Math.round(manualRateSingle * weekendMult)
+      : Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
     const subtotal = rate * nights;
 
     // Discount code — same validation as stripe.js (book.html's checkout), so a
