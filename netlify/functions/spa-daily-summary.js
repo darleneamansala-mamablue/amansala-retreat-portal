@@ -36,6 +36,7 @@ exports.handler = async () => {
     // (spa_resumen_terapeuta_uno, _2 ... _5); from the 5th on they share the last line. The old one-line template until Meta approves.
     const rows = lines.length > 5 ? [...lines.slice(0, 4), lines.slice(4).join('   •   ')] : lines;
     let res = waReady(template) ? await sendWhatsApp(toE164(t.phone), [t.firstName || 'equipo', pretty, ...rows], `spa-sum2-${day}-${t.id}`, rows.length === 1 ? 'spa_resumen_terapeuta_uno' : `spa_resumen_terapeuta_${rows.length}`, 'es_MX') : { ok: false };
+    if (!res.ok && rows.length === 2 && waReady(template)) res = await sendWhatsApp(toE164(t.phone), [t.firstName || 'equipo', pretty, ...rows], `spa-sum2b-${day}-${t.id}`, 'spa_resumen_terapeuta_dos', 'es_MX');   // _2 stuck in review at Meta
     if (!res.ok) res = waReady(template)
       ? await sendWhatsApp(toE164(t.phone), [t.firstName || 'equipo', pretty, lines.join('   •   ')], `spa-sum-${day}-${t.id}`, template, 'es_MX')
       : await sendSms(toE164(t.phone), `Hola ${t.firstName || ''}, tus servicios de spa para mañana, ${pretty}:\n${lines.join('\n')}`);
