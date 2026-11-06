@@ -91,11 +91,19 @@ function clusterEntries(entries) {
 
 // Fuzzy name match: all tokens of the shorter name appear in the longer name
 function nameMatch(a, b) {
-  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  // hyphens and dots are spaces ("Harrell-McCoy" = "Harrell McCoy": left uncharged as no_registration, 2026-11-06)
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').trim();
   const tokA = norm(a).split(/\s+/).filter(Boolean);
   const tokB = norm(b).split(/\s+/).filter(Boolean);
   const [shorter, longer] = tokA.length <= tokB.length ? [tokA, tokB] : [tokB, tokA];
   return shorter.length > 0 && shorter.every(t => longer.includes(t));
+}
+// same last name, first name one or two letters off -- used only when it picks ONE guest of the retreat (a sister or a
+// husband with a close first name never matches by this alone)
+function nameClose(a, b) {
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  const A = norm(a), B = norm(b);
+  return A.length >= 2 && B.length >= 2 && A.at(-1) === B.at(-1) && A[0].length >= 4 && B[0].length >= 4 && levenshtein(A[0], B[0]) <= 2;
 }
 
 // Looser, for names typed by hand in a charge line: each word may be cut short ("Alexandria Mirzaya" = Alexandria Mirzayan)
@@ -439,6 +447,7 @@ async function runCharges(key, opts) {
     let hit = seats.find(x => !x.reg.is_teacher_room && nameMatch(x.g.name, e.name)) || seats.find(x => nameMatch(x.g.name, e.name));
     const fn = first(e.data.firstName || e.name);
     if (!hit && fn.length >= 3) hit = one(seats.filter(x => first(x.g.name) === fn));
+    if (!hit) hit = one(seats.filter(x => nameClose(x.g.name, e.name)));   // "Brigitte Martin" on the form, "Bridgette Martin" on the room list
     const em = String(e.data.email || '').toLowerCase().trim();
     if (!hit && em) hit = one(seats.filter(x => String(x.g.email || '').toLowerCase().trim() === em));
     const ro = String(e.data.roomOverride || '').trim().toLowerCase();
