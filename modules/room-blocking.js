@@ -923,6 +923,14 @@ function gSave(){
   const checkIn=(document.getElementById('gm-checkin')?.value||'').trim()||null;
   const checkOut=(document.getElementById('gm-checkout')?.value||'').trim()||null;
   const _existingReg=gEditRegId?AppData.regs.find(r=>r.id===gEditRegId):null;
+  // a guest's check-out must be after their check-in (Jorge 2026-11-06: NurrieStearns had "Jan 14, 2027 — Nov 20, 2026"
+  // and their price was wrong); the retreat's dates fill in whichever side is blank
+  for(let i=0;i<4;i++){
+    const n=(document.getElementById('g'+i+'-name')?.value||'').trim();if(!n)continue;
+    const ci=(document.getElementById('g'+i+'-checkin')?.value||'').trim()||regSelBk?.startDate||'';
+    const co=(document.getElementById('g'+i+'-checkout')?.value||'').trim()||regSelBk?.endDate||'';
+    if(ci&&co&&co<=ci){const el=document.getElementById('g'+i+'-checkout');if(el){el.style.borderColor='#dc2626';el.style.background='#fef2f2';}showToast(`${n}: the check-out (${co}) must be after the check-in (${ci}). Check the year.`);return;}
+  }
   const guests=[];for(let i=0;i<4;i++){const n=(document.getElementById('g'+i+'-name')?.value||'').trim();if(n||i===0){
     const _gCi=(document.getElementById('g'+i+'-checkin')?.value||'').trim()||null;
     const _gCo=(document.getElementById('g'+i+'-checkout')?.value||'').trim()||null;
