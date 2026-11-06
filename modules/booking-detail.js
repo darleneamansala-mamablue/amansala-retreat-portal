@@ -14,7 +14,7 @@
 // already subject-agnostic (keyed only by folio id) -- _bdSubject() is the
 // one seam that normalizes the two into a common shape for everything else
 // (header, check-in/out, notes, delete).
-let _bdKind='reg',_bdId=null,_bdReqCache=null,_bdFolios=[],_bdAddOpen={},_bdEditOpen={},_bdCommissionStaffByItem={};
+let _bdRoomBalances=null,_bdKind='reg',_bdId=null,_bdReqCache=null,_bdFolios=[],_bdAddOpen={},_bdEditOpen={},_bdCommissionStaffByItem={};
 // Edit mode for the Booking/Guest panel (name, phone, room, dates) -- Jorge's
 // ask 2026-10-06: "no tenemos un boton editar que nos permita editar nombre,
 // numero de telefono, cuarto, fechas". Separate from _bdEditOpen above (which
@@ -359,6 +359,17 @@ async function _bdLoadFoliosNow(){
       }
     }
     _bdFolios=folios.map(f=>({folio:f,items:(items||[]).filter(i=>i.folio_id===f.id)}));
+    // a room shared by 2+ guests: the whole room's balance too, per guest (Jorge 2026-11-06: Sue Elliot showed $0 here while
+    // Departures showed $698.03 for room 26 -- it was Mary Daigneault's folio)
+    _bdRoomBalances=null;
+    try{
+      if(subj.folioCol==='registration_id'&&(subj.allGuests||[]).filter(g=>g&&g.name).length>1){
+        const {data:rf}=await db.from('folios').select('id,guest_name').eq('registration_id',folioSubjId);
+        const {data:ri}=rf&&rf.length?await db.from('folio_items').select('folio_id,qty,unit_price,tax_rate').in('folio_id',rf.map(f=>f.id)):{data:[]};
+        const per={};(rf||[]).forEach(f=>{per[f.guest_name||'—']=(per[f.guest_name||'—']||0)+(ri||[]).filter(i=>i.folio_id===f.id).reduce((t,i)=>t+Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100),0);});
+        _bdRoomBalances=per;
+      }
+    }catch(e){}
     // Jorge's report 2026-10-01: reopening Edit on a Comisión charge always
     // showed the Staff field blank, even after it had saved correctly --
     // folio_items itself has no staff/commission columns, so look up which
@@ -647,6 +658,7 @@ function _bdRender(){
         <div style="margin-top:14px;padding:12px 14px;background:#fef2f2;border-radius:10px">
           <div style="font-size:11px;color:var(--muted);font-weight:600">Balance Due</div>
           <div style="font-size:22px;font-weight:800;color:${balanceDue>0?'#dc2626':'#059669'}">${fmt$(balanceDue)}</div>
+          ${_bdRoomBalances?(()=>{const tot=Object.values(_bdRoomBalances).reduce((a,b)=>a+b,0);return `<div style="margin-top:6px;font-size:12px;color:#374151">Whole room: <b style="color:${tot>0.005?'#dc2626':'#059669'}">${fmt$(tot)}</b> — ${Object.entries(_bdRoomBalances).map(([n,v])=>`${escHtml(n)} ${fmt$(v)}`).join(' · ')}</div>`;})():''}
         </div>
         ${subj.rate!=null?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">Room Total &nbsp; ${nights} × ${fmt$(subj.rate)} = ${fmt$(roomTotal)}</div>`:''}
         ${_bdKind==='reg'?`<div style="margin-top:10px">
