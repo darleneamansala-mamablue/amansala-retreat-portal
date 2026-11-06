@@ -155,6 +155,10 @@ function _renderBlockRoomsGrid(bkId){
     // 2026-09-17.
     (other.blockedRooms||[]).forEach(room=>{
       const lk=room.toLowerCase();
+      // a room whose guests (or the whole room) were cancelled does not block anything (Jorge 2026-11-06: GV16 showed
+      // "BOOKED · Erin Polley" for Amy Roby, cancelled, while Rooms showed it free)
+      const _regsIn=AppData.regs.filter(r=>r.bookingId===other.id&&String(r.room||'').toLowerCase()===lk);
+      if(_regsIn.length&&_regsIn.some(r=>r.cancelled||(r.guests||[]).some(g=>g.name&&g.cancelled))&&_regsIn.every(r=>r.cancelled||!(r.guests||[]).some(g=>g.name&&!g.cancelled)))return;
       if(!conflictMap.has(lk))conflictMap.set(lk,entry);
       // Same physical room sold the other way (whole vs. bed) — flag it too,
       // or the same space can be double-booked (real incident: room 4 blocked
