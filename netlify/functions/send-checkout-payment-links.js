@@ -174,7 +174,9 @@ ${contactHtml()}` }).catch(() => false);
     if (!to) continue;
 
     try {
-      const r = await fetch(`${VISITO_API}/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
+      // Visito sometimes answers 502 "Failed to queue" (Bedsole Hayden 2026-11-05, right after a send to the same phone):
+      // wait and try once more with the same Idempotency-Key, so a send that did go out is not sent twice
+      const send = () => fetch(`${VISITO_API}/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${m2mKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `checkout-${checkOut}-${dedupeKey}` },
         body: JSON.stringify({
@@ -186,6 +188,8 @@ ${contactHtml()}` }).catch(() => false);
           },
         }),
       });
+      let r = await send();
+      if (r.status >= 500) { await new Promise(res => setTimeout(res, 3000)); r = await send(); }
       const body = await r.json().catch(() => ({}));
       if (!r.ok || body.accepted === false) throw new Error(`${r.status} ${JSON.stringify(body).slice(0, 200)}`);
       results.sent++;
