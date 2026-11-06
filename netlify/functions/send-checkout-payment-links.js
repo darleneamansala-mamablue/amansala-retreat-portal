@@ -1,5 +1,7 @@
 'use strict';
 const { findOrCreateFolioLocked } = require('./folio-lib');
+const { sendMail } = require('./mail-lib');
+const { contactHtml, esc } = require('./message-format');
 
 // Scheduled (netlify.toml: every day 23:00 UTC = 6pm in Tulum) — the evening
 // before check-out, sends every departing guest a WhatsApp thank-you with the
@@ -38,6 +40,7 @@ function localDate(offsetDays = 0) {
 function toE164(raw) {
   const s = String(raw || '').replace(/[‪-‮]/g, '').trim();
   const digits = s.replace(/\D/g, '');
+  if (/^1?0+$/.test(digits) || /^(\d)\1+$/.test(digits.replace(/^1/, ''))) return null;   // a placeholder like +1 000 000 0000
   if (s.startsWith('+')) return digits.length >= 10 && digits.length <= 15 ? '+' + digits : null;
   if (digits.length === 10) return '+1' + digits;
   if (digits.length === 11 && digits.startsWith('1')) return '+' + digits;
@@ -86,8 +89,8 @@ exports.handler = async () => {
   const recipients = [];
 
   // Room Only (booking engine / Cloudbeds) reservations
-  const reqs = await get(`/rest/v1/booking_requests?select=id,first_name,last_name,phone,status&check_out=eq.${checkOut}&status=in.(paid,in_house,confirmed)`);
-  reqs.forEach(r => recipients.push({ kind: 'req', anchorId: r.id, guestName: [r.first_name, r.last_name].filter(Boolean).join(' '), phone: r.phone }));
+  const reqs = await get(`/rest/v1/booking_requests?select=id,first_name,last_name,phone,email,status&check_out=eq.${checkOut}&status=in.(paid,in_house,confirmed)`);
+  reqs.forEach(r => recipients.push({ kind: 'req', anchorId: r.id, guestName: [r.first_name, r.last_name].filter(Boolean).join(' '), phone: r.phone, email: r.email }));
 
   // Retreat registrations — a reg's own check_out, else its booking's end_date.
   // Same guards as the portal/housekeeping: skip rooms no longer in the
@@ -110,7 +113,7 @@ exports.handler = async () => {
       if (reg.cancelled || (reg.check_out || bk.end_date) !== checkOut) return;
       if (bk.blocked_rooms?.length && !bk.blocked_rooms.includes(reg.room)) return;
       (reg.guests || []).filter(g => g.name && !g.cancelled).forEach(g => {
-        recipients.push({ kind: 'reg', anchorId: chainHead(reg).id, guestName: g.name, phone: g.phone });
+        recipients.push({ kind: 'reg', anchorId: chainHead(reg).id, guestName: g.name, phone: g.phone, email: g.email });
       });
     });
   }
@@ -119,13 +122,18 @@ exports.handler = async () => {
   // run, a couple sharing a phone on the same folio only gets one message.
   const seen = new Set();
 
-  const results = { sent: 0, skipped: 0, failed: 0 };
+  // Jorge 2026-11-06: the same message also goes by EMAIL (it was WhatsApp only, and 15 of 41 guests had no phone)
+  const results = { sent: 0, skipped: 0, failed: 0, emailed: 0, emailFailed: 0 };
+  const seenMail = new Set();
   for (const rc of recipients) {
-    const to = toE164(rc.phone);
-    const dedupeKey = `${rc.kind}:${rc.anchorId}:${to}`;
-    if (!to) { console.log(`[checkout-links] skip ${rc.guestName}: no usable phone (${rc.phone || 'none'})`); results.skipped++; continue; }
-    if (seen.has(dedupeKey)) { results.skipped++; continue; }
-    seen.add(dedupeKey);
+    let to = toE164(rc.phone);
+    const email = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(rc.email || '').trim()) ? String(rc.email).trim().toLowerCase() : '';
+    const dedupeKey = `${rc.kind}:${rc.anchorId}:${to}`, mailKey = `${rc.kind}:${rc.anchorId}:${email}`;
+    if (to && seen.has(dedupeKey)) to = null;   // a couple sharing a phone on the same folio: one WhatsApp
+    const doMail = email && !seenMail.has(mailKey);
+    if (!to && !doMail) { console.log(`[checkout-links] skip ${rc.guestName}: no usable phone (${rc.phone || 'none'}) and no email`); results.skipped++; continue; }
+    if (to) seen.add(dedupeKey);
+    if (doMail) seenMail.add(mailKey);
 
     // The guest's folio link — reuse their folio (by guest name if the room
     // has several), or open one so there's always something to pay into.
@@ -149,7 +157,21 @@ exports.handler = async () => {
     const link = folio ? `${PORTAL_URL}/guest-pay.html?token=${folio.payment_token}&all=1` : `${PORTAL_URL}/guest-pay.html?token=(new folio)`;
     const firstName = rc.guestName.split(/\s+/)[0] || 'there';
 
-    if (!enabled) { console.log(`[checkout-links] would send → ${rc.guestName} ${to} ${link}`); continue; }
+    if (!enabled) { console.log(`[checkout-links] would send → ${rc.guestName} ${to || '-'} ${email || '-'} ${link}`); continue; }
+
+    if (doMail) {
+      const ok = await sendMail({ to: email, replyTo: 'amansala.reservations@gmail.com', subject: 'Thank you for staying at Amansala — complete your payment online',
+        html: `<p>Hi ${esc(firstName)},</p>
+<p>Thank you so much for choosing Amansala for your stay!</p>
+<p>Below you will find the link to complete your payment online:</p>
+<p><a href="${link}" style="display:inline-block;background:#2d6a6a;color:#fff;padding:11px 22px;border-radius:8px;text-decoration:none;font-weight:600">View and pay my bill</a></p>
+<p style="font-size:12px;color:#6b7280">Or copy this link: ${esc(link)}</p>
+<p>If you would like to leave a tip for any member of our staff, just let us know who it is for and we will gladly add it for you.</p>
+${contactHtml()}` }).catch(() => false);
+      if (ok) { results.emailed++; console.log(`[checkout-links] emailed → ${rc.guestName} ${email}`); }
+      else { results.emailFailed++; console.error(`[checkout-links] email failed for ${rc.guestName} ${email}`); }
+    }
+    if (!to) continue;
 
     try {
       const r = await fetch(`${VISITO_API}/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
