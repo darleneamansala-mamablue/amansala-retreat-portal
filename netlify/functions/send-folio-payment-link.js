@@ -38,9 +38,26 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body); }
   catch { return jsonErr(400, 'Invalid JSON'); }
 
-  const { token, guestName, email, phone, manual } = body;
+  const { token, guestName, email, phone, manual, force } = body;
   if (!token) return jsonErr(400, 'Missing token');
   if (!email && !phone) return jsonErr(400, 'Need an email or phone to send to');
+
+  // Jorge 2026-11-06: Sue Elliot got the same WhatsApp 6 times in 2 minutes (the button pressed again and again). The same
+  // folio link goes once per 15 minutes: a repeat answers "already sent" unless the person confirms (force); the WhatsApp
+  // Idempotency-Key is per 15-minute window too, so even a double click at the same instant sends one.
+  const SB = 'https://vnttlpqkssihbmcynxvo.supabase.co', sk = process.env.SUPABASE_SERVICE_KEY, H = { apikey: sk, Authorization: `Bearer ${sk}`, 'Content-Type': 'application/json' };
+  const win = Math.floor(Date.now() / (15 * 60e3));
+  let sentLog = {};
+  if (sk) try { const r = await fetch(`${SB}/rest/v1/app_store?key=eq.folio_link_sent&select=value`, { headers: H }); const [row] = r.ok ? await r.json() : []; sentLog = (row && row.value) || {}; } catch (e) {}
+  const last = sentLog[token];
+  if (!force && last && Date.now() - Date.parse(last) < 15 * 60e3) {
+    return { statusCode: 200, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify({ alreadySent: true, sentAt: last }) };
+  }
+  if (sk) try {
+    const keep = Object.fromEntries(Object.entries(sentLog).filter(([, t]) => Date.now() - Date.parse(t) < 864e5));
+    keep[token] = new Date().toISOString();
+    await fetch(`${SB}/rest/v1/app_store?on_conflict=key`, { method: 'POST', headers: { ...H, Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ key: 'folio_link_sent', value: keep, updated_at: new Date().toISOString() }) });
+  } catch (e) {}
 
   const link = `https://amansalaportal.com/guest-pay.html?token=${encodeURIComponent(token)}`;
   const firstName = String(guestName || '').trim().split(/\s+/)[0] || 'there';
@@ -87,7 +104,7 @@ exports.handler = async (event) => {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json',
-            'Idempotency-Key': `folio-pay-${token}-${Date.now()}`,
+            'Idempotency-Key': force ? `folio-pay-${token}-${Date.now()}` : `folio-pay-${token}-${to}-${win}`,
           },
           body: JSON.stringify({
             to,

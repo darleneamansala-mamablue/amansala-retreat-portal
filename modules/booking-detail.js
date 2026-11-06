@@ -1426,7 +1426,9 @@ function bdCopyGuestLink(token){
 // A folio's guest_name doesn't always match the subject's primary guest in a
 // shared room (see _bdSubject()'s allGuests comment) -- matched against
 // allGuests by name first, falling back to the subject's own contact info.
-async function bdSendToGuest(fid){
+let _bdSending=false;
+async function bdSendToGuest(fid,force){
+  if(_bdSending)return;   // a second click while the first is still sending does nothing (Sue Elliot got it 6 times, 2026-11-06)
   const f=_bdFolios.find(x=>x.folio.id===fid);if(!f)return;
   const token=f.folio.payment_token;
   bdCopyGuestLink(token);
@@ -1437,10 +1439,18 @@ async function bdSendToGuest(fid){
   const phone=(match?match.phone:(subj?.allGuests||[])[0]?.phone)||'';
   if(!email&&!phone){showToast('No email or phone on file — link copied to clipboard.');return;}
   const manual=subj&&subj.bookingType==='room_only';
+  _bdSending=true;
   try{
-    const res=await fetch('/.netlify/functions/send-folio-payment-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,guestName,email,phone,manual})});
+    const res=await fetch('/.netlify/functions/send-folio-payment-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,guestName,email,phone,manual,force:!!force})});
     const d=await res.json();
     if(!res.ok)throw new Error(d.error||'Send failed');
+    if(d.alreadySent){
+      _bdSending=false;
+      const mins=Math.max(1,Math.round((Date.now()-Date.parse(d.sentAt))/60000));
+      if(confirm(`This payment link was already sent to ${guestName} ${mins} min ago. Send it again?`))return bdSendToGuest(fid,true);
+      showToast('Not sent again — link copied to clipboard');return;
+    }
+    try{logActivity('Payment link sent',`${guestName}: ${[email&&'email',phone&&'WhatsApp'].filter(Boolean).join(' + ')}`,_bdSubject()?.bookingId||null);}catch(e){}
     const parts=[];
     if(email)parts.push(`Email ${d.results.email}`);
     if(phone)parts.push(`WhatsApp ${d.results.whatsapp}`);
@@ -1448,6 +1458,7 @@ async function bdSendToGuest(fid){
   }catch(e){
     showToast('Could not send ('+(e.message||'error')+') — link copied to clipboard');
   }
+  _bdSending=false;
 }
 
 // Notifies modules/reservations.js (if its Arrivals/In House/Departures/
