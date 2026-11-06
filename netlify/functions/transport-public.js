@@ -156,7 +156,11 @@ exports.handler = async (event) => {
     }
     if (!id) id = 'tr_' + Date.now() + Math.random().toString(36).slice(2, 5);
     const editKey = (prev && prev.data && prev.data.editKey) || crypto.randomBytes(12).toString('hex');
-    const data = { ...((prev && prev.data) || {}), ...guest, id, editKey, submittedAt: new Date().toISOString() };
+    const now = new Date().toISOString();
+    const data = { ...((prev && prev.data) || {}), ...guest, id, editKey, submittedAt: now };
+    // who filled it / changed it last, shown in the staff's Edit window (Jorge 2026-11-06)
+    if (!data.filledBy) data.filledBy = { by: 'guest', at: now };
+    data.lastEditBy = { by: 'guest', name: `${firstName} ${lastName}`.trim(), at: now };
     if (data.isIndividual === undefined) delete data.isIndividual;
     const r = await fetch(`${SUPABASE_URL}/rest/v1/transport?on_conflict=id`, {
       method: 'POST', headers: { ...hdrs(key), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },

@@ -2452,6 +2452,15 @@ function tr2EditEntry(rowId) {
   const inp = (id, type, val, placeholder) => `<input id="${id}" type="${type}" value="${escHtml(val==null?'':val)}" placeholder="${placeholder||''}" style="${TR2_INPUT_S}">`;
   const chk = (id, checked, label) => `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#374151;cursor:pointer"><input id="${id}" type="checkbox" ${checked?'checked':''}> ${label}</label>`;
   const airportOpts = [{v:'cancun',l:'CUN – Cancún'},{v:'tulum',l:'TQO – Tulum'}];
+  // Jorge 2026-11-06: who filled this transport (the guest's form or staff, with the name) and who changed it last
+  const _when = t => { try { return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); } catch (e) { return ''; } };
+  const _fb = d0.filledBy || (isSynth ? null : (d0.editKey || d0.submittedAt || d0.bookingId) ? { by: 'guest' } : { by: 'staff' });
+  const _pill = (txt, bg, fg) => `<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${bg};color:${fg};white-space:nowrap">${escHtml(txt)}</span>`;
+  const filledHtml = !_fb ? _pill('Not filled yet', '#fef9c3', '#92400e')
+    : _fb.by === 'guest' ? _pill('Filled by guest' + (d0.submittedAt ? ' · ' + _when(d0.submittedAt) : ''), '#dcfce7', '#166534')
+    : _pill('Filled by staff' + (_fb.name ? ': ' + _fb.name : '') + (_fb.at ? ' · ' + _when(_fb.at) : ''), '#e0e7ff', '#3730a3');
+  const _le = d0.lastEditBy;
+  const editedHtml = _le && !(_fb && _fb.by === 'staff' && _fb.at === _le.at) ? `<div style="font-size:11px;color:#6b7280;margin-top:4px">Last change: ${escHtml(_le.by === 'guest' ? 'the guest' : (_le.name || 'staff'))} · ${_when(_le.at)}</div>` : '';
 
   const modal = document.createElement('div');
   modal.id = 'tr2-edit-modal';
@@ -2459,7 +2468,7 @@ function tr2EditEntry(rowId) {
   modal.innerHTML = `
     <div style="background:#fff;border-radius:14px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-        <span style="font-size:16px;font-weight:700;color:#111827">Editar transporte</span>
+        <div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:16px;font-weight:700;color:#111827">Editar transporte</span>${filledHtml}</div>${editedHtml}</div>
         <button onclick="document.getElementById('tr2-edit-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280">×</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -2573,6 +2582,9 @@ async function tr2SaveEdit(rowId) {
   const btn = document.querySelector('#tr2-edit-modal button[onclick*="tr2SaveEdit"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
 
+  { const _me = (typeof getCurrentSession === 'function' ? getCurrentSession()?.name : '') || 'Staff', _now = new Date().toISOString();
+    updatedData.lastEditBy = { by: 'staff', name: _me, at: _now };
+    if (isSynth) updatedData.filledBy = { by: 'staff', name: _me, at: _now }; }
   // Jorge 2026-11-06: every staff edit is written in the Activity Log with who did it and what changed (Isabel Fry's dates)
   const _trLog = (action, bkId) => {
     try {
