@@ -2577,7 +2577,19 @@ function _joinNames(names){
   if(names.length===2)return `${names[0]} & ${names[1]}`;
   return `${names.slice(0,-1).join(', ')} & ${names[names.length-1]}`;
 }
+// Booking Engine reservations for the Rooms grid (booking_requests: paid / in house / checked out), loaded once and then
+// every 2 minutes; rcBuild draws them next to the retreat / Room Only bars.
+let rcRequests=null,_rcReqLoadedAt=0;
+async function rcLoadRequests(){
+  try{
+    const since=fmtISO(addDays(new Date(),-60));
+    const {data,error}=await db.from('booking_requests').select('id,first_name,last_name,room,check_in,check_out,status,source').in('status',['paid','in_house','checked_out','confirmed']).gte('check_out',since).not('room','is',null);
+    if(error)throw error;
+    rcRequests=data||[];_rcReqLoadedAt=Date.now();
+  }catch(e){console.warn('[rooms] booking engine reservations',e.message);rcRequests=rcRequests||[];}
+}
 function rcBuild(){
+  if(rcRequests===null||Date.now()-_rcReqLoadedAt>120000){const first=rcRequests===null;_rcReqLoadedAt=Date.now();rcLoadRequests().then(()=>{if(first&&document.getElementById('rcBody'))rcBuild();});if(first)rcRequests=[];}
   const end=addDays(rcStart,rcShowDays-1);
   document.getElementById('rcRangeLbl').textContent=`${fmtShort(rcStart)} — ${fmtShort(end)}`;
   document.getElementById('rcStartInput').value=fmtISO(rcStart);
@@ -2842,6 +2854,32 @@ function rcBuild(){
           // silently jumping into the Teacher Registration roster.
           openBookingFolio(bk.id);
         });
+        track.appendChild(bl);
+        for(let i=Math.max(0,li);i<Math.min(rcShowDays,li+wi);i++)occupied[i]++;
+      });
+
+      // Booking Engine reservations (extra-nights.html, book.html, Lana, Cloudbeds web bookings) live in booking_requests,
+      // not in bookings, so this grid never drew them -- DeAnna Davis' paid Extra Night in 25 was invisible and the room got
+      // given to someone else on top of her (Jorge 2026-11-06: "todas las reservas se muestren en rooms"). Drawn here with a
+      // 🌐 and a blue dashed outline; click opens their Booking Detail. A bar that overlaps another one in the room turns red.
+      (rcRequests||[]).filter(q=>q.room&&entry.physical.some(p=>roomListIncludes([q.room],p))).forEach(q=>{
+        const qS=pd(q.check_in).getTime(),qE=pd(q.check_out).getTime(),winE=startMs+rcShowDays*DAY_MS;
+        if(qS>=winE||qE<=startMs)return;
+        const cs=Math.max(qS,startMs),ce=Math.min(qE,winE);
+        const li=Math.round((cs-startMs)/DAY_MS),wi=Math.round((ce-cs)/DAY_MS);
+        if(wi<=0)return;
+        const clash=_roomBarsRaw.some(x=>x.bkS<qE&&qS<x.bkE&&!(x.regEntry?.cancelled));
+        const halfOut=(ce===qE)?18:0,halfIn=(cs===qS&&_roomCheckoutTimes.has(qS))?18:0;
+        const nm=[q.first_name,q.last_name].filter(Boolean).join(' ')||'Guest';
+        const bl=document.createElement('div');
+        bl.className='bk';
+        bl.style.cssText=`left:${li*36+2+halfIn}px;width:${wi*36-4+halfOut-halfIn}px;top:5px;height:34px;background:${clash?'#fee2e2':'#e0f2fe'};border-color:${clash?'#dc2626':'#0284c7'};color:${clash?'#991b1b':'#075985'};cursor:pointer;border-left:4px solid ${clash?'#dc2626':'#0284c7'};outline:2px dashed ${clash?'#dc2626':'#0284c7'};outline-offset:-2px;`;
+        const _M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],_pd2=d=>{const x=String(d).slice(0,10).split('-');return _M[+x[1]-1]+' '+(+x[2]);};
+        const nights=Math.round((qE-qS)/DAY_MS);
+        bl.dataset.dates=(wi<2)?(_pd2(q.check_in).split(' ')[1]+'→'+_pd2(q.check_out).split(' ')[1]):(_pd2(q.check_in)+' → '+_pd2(q.check_out)+(wi>=3?' · '+nights+' night'+(nights>1?'s':''):''));
+        bl.title=`${nm} · ${q.source||'Booking Engine'} · ${_pd2(q.check_in)} → ${_pd2(q.check_out)} (${nights} night${nights===1?'':'s'}) · ${q.status}${clash?' · ⚠ SAME ROOM AS ANOTHER RESERVATION':''}`;
+        bl.innerHTML=`<span class="bk-n">${clash?'⚠ ':''}🌐 ${escHtml(nm)}</span><span class="bk-s" style="opacity:.75">${escHtml(q.source||'Booking Engine')}</span>`;
+        bl.addEventListener('click',e=>{e.stopPropagation();openBookingDetailForRequest(q.id);});
         track.appendChild(bl);
         for(let i=Math.max(0,li);i<Math.min(rcShowDays,li+wi);i++)occupied[i]++;
       });
