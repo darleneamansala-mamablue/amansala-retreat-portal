@@ -20,11 +20,16 @@ exports.handler = async (event) => {
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!key) return reply(500, { error: 'Server config error' });
 
-  // signed in to the Housekeeping app?
-  const tok = String((event.headers || {}).authorization || (event.headers || {}).Authorization || '').replace(/^Bearer\s+/i, '');
-  if (!tok) return reply(401, { error: 'Sign in again.' });
-  const ur = await fetch(`${HK_URL}/auth/v1/user`, { headers: { apikey: HK_PUBLIC_KEY, Authorization: `Bearer ${tok}` } }).catch(() => null);
-  if (!ur || !ur.ok) return reply(401, { error: 'Sign in again.' });
+  // the Housekeeping app's own server (its every-minute check-out push, hk-checkout-push.js): shared secret HK_PORTAL_SECRET
+  const hdr = event.headers || {}, sec = process.env.HK_PORTAL_SECRET;
+  const bySecret = !!(sec && (hdr['x-hk-secret'] || hdr['X-Hk-Secret']) === sec);
+  // otherwise: signed in to the Housekeeping app?
+  if (!bySecret) {
+    const tok = String(hdr.authorization || hdr.Authorization || '').replace(/^Bearer\s+/i, '');
+    if (!tok) return reply(401, { error: 'Sign in again.' });
+    const ur = await fetch(`${HK_URL}/auth/v1/user`, { headers: { apikey: HK_PUBLIC_KEY, Authorization: `Bearer ${tok}` } }).catch(() => null);
+    if (!ur || !ur.ok) return reply(401, { error: 'Sign in again.' });
+  }
 
   const H = { apikey: key, Authorization: `Bearer ${key}` };
   const get = async p => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${p}`, { headers: H }); if (!r.ok) throw new Error(p.split('?')[0] + ' ' + r.status); return r.json(); };
