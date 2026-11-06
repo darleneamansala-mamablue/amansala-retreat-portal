@@ -1091,7 +1091,8 @@ function tr2PrintView() {
       ${rows.map((e, i, arr) => {
         // Jorge's ask 2026-10-19: a blank row between room categories within the same
         // shared-ride group, so the (now pure-category) order is easy to scan visually.
-        const sep = (i > 0 && _printSpacerGroup(tr2LookupRtId(e.room)) !== _printSpacerGroup(tr2LookupRtId(arr[i - 1].room)))
+        // Jorge 2026-11-06: no blank row between room categories on the Departures print (Arrivals keeps it)
+        const sep = (tr2View !== 'departures' && i > 0 && _printSpacerGroup(tr2LookupRtId(e.room)) !== _printSpacerGroup(tr2LookupRtId(arr[i - 1].room)))
           ? `<tr class="cat-spacer"><td colspan="${printCols}"></td></tr>` : '';
         return sep + entryRow(e, svc.color);
       }).join('')}
