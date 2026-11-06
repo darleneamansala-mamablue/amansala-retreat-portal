@@ -264,7 +264,9 @@ async function existingCharges(key, registrationId, label, date, linkedIds) {
 async function reconcileCharges(key, { registrationId, guestName, label, date, wanted, linkedIds, mode, dryRun }) {
   const have = await existingCharges(key, registrationId, label, date, linkedIds);
   const out = { itemIds: [], updated: [], inserted: [], deleted: [], kept: [] };
-  const pool = [...have];
+  // the nightly run (insertOnly): one line for 2 people (qty 2, e.g. "— Bryan Palmer" 2 × $40 for Bryan and Jamie) covers both
+  // seats -- it used to look like the second guest was missing and the 7am check reported it (2026-11-06)
+  const pool = mode === 'insertOnly' ? have.flatMap(h => Array(Math.max(1, Math.round(Number(h.qty) || 1))).fill(h)) : [...have];
   // Pair each wanted charge with the existing one that is already that guest's (linked on their row, or on their own folio at
   // that price), then any at the same price, so nothing changes needlessly
   const take = (pred) => { const i = pool.findIndex(pred); return i >= 0 ? pool.splice(i, 1)[0] : null; };
@@ -371,8 +373,12 @@ function rideGroups(guests, direction, savedGroups) {
 // Real case 2026-10-22: Carter Foxworth's departure posted by hand, which a system charge would have doubled.
 async function handCharges(key, label, date) {
   const since = new Date(new Date(date + 'T12:00:00Z').getTime() - 45 * 86400000).toISOString();
-  const ir = await fetchAll(key, `folio_items?select=id,folio_id,description,qty&category=ilike.transport*&description=like.${encodeURIComponent(label + '*')}&created_at=gte.${encodeURIComponent(since)}&order=id`);
-  const items = (ir.data || []).filter(i => !new RegExp(`^${label} Transport \\d{4}-\\d{2}-\\d{2}`).test(i.description || ''));
+  // any Transport line typed by hand that names this direction anywhere, in English or Spanish, typos included ("Tranporte
+  // departure", "arrival trnasporte", "Salida Cancun"): before, only lines STARTING with "Departure"/"Arrival" counted, and
+  // Leanne Harrell-McCoy's hand charge kept showing as missing in the 7am check (2026-11-06)
+  const ir = await fetchAll(key, `folio_items?select=id,folio_id,description,qty&category=ilike.transport*&created_at=gte.${encodeURIComponent(since)}&order=id`);
+  const dirWord = label === 'Departure' ? /\b(departure|depart|salida|regreso)\b/i : /\b(arrival|arrive|llegada)\b/i;
+  const items = (ir.data || []).filter(i => dirWord.test(i.description || '') && !new RegExp(`^${label} Transport \\d{4}-\\d{2}-\\d{2}`).test(i.description || ''));
   const named = [], ownByReg = new Map();
   const folioIds = [...new Set(items.map(i => i.folio_id))];
   const regOfFolio = new Map();
