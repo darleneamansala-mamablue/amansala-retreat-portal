@@ -26,12 +26,13 @@ exports.handler = async (event) => {
   try {
     if (b.action === 'list') {
       const [tickets, nums] = await Promise.all([M.listTickets(key), M.readRow(key, 'maintenance_alert_numbers')]);
+      tickets.forEach(t => { if (t && !t.category) t.category = M.categorize(`${t.problem || ''} ${t.problemStaff || ''}`); });   // reports from before categories
       return reply(200, { tickets, numbers: (nums && nums.value) || [] });
     }
     if (b.action === 'create') {
       const room = String(b.room || '').trim().slice(0, 40), problem = String(b.problem || '').trim().slice(0, 500);
       if (!room || !problem) return reply(400, { error: 'Write the room and the problem.' });
-      const r = await M.createTicket(key, { room, problem, priority: b.priority, guestName: String(b.guestName || '').slice(0, 120), guestPhone: String(b.guestPhone || '').slice(0, 40),
+      const r = await M.createTicket(key, { room, problem, priority: b.priority, category: b.category, guestName: String(b.guestName || '').slice(0, 120), guestPhone: String(b.guestPhone || '').slice(0, 40),
         guestEmail: String(b.guestEmail || '').slice(0, 160), regId: b.regId || null, source: 'staff', reportedBy: me });
       await log('Maintenance ticket created', `${r.ticket.id} · room ${room}: ${problem}`);
       return reply(200, { ok: true, ticket: r.ticket, alert: r.alert });
@@ -51,6 +52,7 @@ exports.handler = async (event) => {
           t.notes.push({ at: now, by: me, text: `Status: ${b.status}` });
         }
         if (b.assignedTo != null && String(b.assignedTo).trim() !== String(t.assignedTo || '')) { t.assignedTo = String(b.assignedTo).trim().slice(0, 80); t.notes.push({ at: now, by: me, text: `Assigned to ${t.assignedTo || '—'}` }); }
+        if (b.category && M.CATEGORIES.includes(b.category) && b.category !== t.category) { t.notes.push({ at: now, by: me, text: `Category: ${b.category}` }); t.category = b.category; }
         if (b.note && String(b.note).trim()) t.notes.push({ at: now, by: me, text: String(b.note).trim().slice(0, 500) });
         list[i] = t;
         return { list, ticket: t };

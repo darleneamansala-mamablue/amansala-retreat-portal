@@ -4,7 +4,9 @@
 // Data and sends: netlify/functions/maintenance.js. Standalone; classic script, adds its own tab next to Housekeeping.
 (function () {
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  let tickets = [], numbers = [], filter = 'open', timer = null;
+  let tickets = [], numbers = [], filter = 'open', timer = null, catFilter = 'all', roomFilter = '';
+  // categories (Jorge 2026-11-06): set from what the guest wrote, staff can change them on each report
+  const CAT = { ac: { l: 'Air Conditioning', i: '❄️' }, door: { l: 'Door / Lock', i: '🚪' }, safe: { l: 'Safe', i: '🔒' }, electricity: { l: 'Electricity', i: '💡' }, water: { l: 'Water / Plumbing', i: '🚿' }, other: { l: 'Other', i: '🔧' } };
   const ST = { open: { l: 'Open', bg: '#fef2f2', c: '#b91c1c' }, in_progress: { l: 'In progress', bg: '#fffbeb', c: '#92400e' }, resolved: { l: 'Resolved', bg: '#ecfdf5', c: '#047857' } };
   const tok = () => { try { return sessionStorage.getItem('amansala_staff_token') || ''; } catch (e) { return ''; } };
   const call = async (action, extra) => {
@@ -33,7 +35,9 @@
         <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-secondary btn-sm" onclick="mtNumbers()">📱 Maintenance WhatsApp</button>
           <button class="btn btn-primary btn-sm" onclick="mtNew()">+ New report</button></div></div>
-      <div id="mtFilters" style="display:flex;gap:6px;margin-bottom:14px"></div>
+      <div id="mtFilters" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap"></div>
+      <div id="mtCats" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center"></div>
+      <div id="mtRoomSummary"></div>
       <div id="mtList"></div></div>`;
     const hkPanel = document.getElementById('tab-housekeeping');
     (hkPanel ? hkPanel.parentNode : document.body).insertBefore(panel, hkPanel ? hkPanel.nextSibling : null);
@@ -71,7 +75,27 @@
     const fb = (k, l, n) => `<button class="btn btn-sm ${filter === k ? 'btn-primary' : 'btn-secondary'}" onclick="mtFilter('${k}')">${l} (${n})</button>`;
     if (f) f.innerHTML = fb('open', 'Pending', open.length) + fb('resolved', 'Resolved', tickets.length - open.length) + fb('all', 'All', tickets.length)
       + '<span style="margin-left:8px;align-self:center;font-size:12px;color:#6b7280">The WhatsApp goes to everyone on the daily A/C report' + (numbers.length ? ` and ${numbers.length} more number(s)` : '') + '.</span>';
-    const list = tickets.filter(t => filter === 'all' || (filter === 'open' ? t.status !== 'resolved' : t.status === 'resolved'))
+    const byStatus = tickets.filter(t => filter === 'all' || (filter === 'open' ? t.status !== 'resolved' : t.status === 'resolved'));
+    const byRoom = byStatus.filter(t => !roomFilter || String(t.room) === roomFilter);
+    // category chips with counts (inside Pending / Resolved / All and the room picked) + the room picker
+    const rooms = [...new Set(tickets.map(t => String(t.room || '')).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const cc = k => byRoom.filter(t => (t.category || 'other') === k).length;
+    const cb = (k, l, n) => `<button class="btn btn-sm ${catFilter === k ? 'btn-primary' : 'btn-secondary'}" onclick="mtCat('${k}')" style="font-size:12px">${l} (${n})</button>`;
+    const cats = document.getElementById('mtCats');
+    if (cats) cats.innerHTML = cb('all', 'All categories', byRoom.length) + Object.entries(CAT).map(([k, c]) => cb(k, c.i + ' ' + c.l, cc(k))).join('')
+      + `<select onchange="mtRoom(this.value)" style="margin-left:auto;padding:6px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px"><option value="">All rooms</option>${rooms.map(r => `<option value="${esc(r)}"${r === roomFilter ? ' selected' : ''}>Room ${esc(r)}</option>`).join('')}</select>`;
+    // one room picked: its whole history, every status, by category
+    const sum = document.getElementById('mtRoomSummary');
+    if (sum) {
+      if (!roomFilter) sum.innerHTML = '';
+      else {
+        const all = tickets.filter(t => String(t.room) === roomFilter), byCat = {};
+        all.forEach(t => { const k = t.category || 'other'; byCat[k] = (byCat[k] || 0) + 1; });
+        const last = all.map(t => t.createdAt).sort().pop();
+        sum.innerHTML = `<div style="background:#fff;border-radius:12px;padding:12px 16px;margin-bottom:10px;font-size:13px"><b>Room ${esc(roomFilter)}</b>: ${all.length} report${all.length === 1 ? '' : 's'} in total (${all.filter(t => t.status !== 'resolved').length} pending) — ${Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${(CAT[k] || CAT.other).i} ${(CAT[k] || CAT.other).l} ${n}`).join(' · ')}${last ? ' · last one ' + esc(when(last)) : ''}</div>`;
+      }
+    }
+    const list = byRoom.filter(t => catFilter === 'all' || (t.category || 'other') === catFilter)
       .sort((a, b) => filter === 'open' ? ((a.priority === 'urgent' ? 0 : 1) - (b.priority === 'urgent' ? 0 : 1)) || String(a.createdAt).localeCompare(String(b.createdAt)) : String(b.createdAt).localeCompare(String(a.createdAt)));
     const box = document.getElementById('mtList'); if (!box) return;
     if (!list.length) { box.innerHTML = '<div style="padding:40px;text-align:center;color:#9ca3af;background:#fff;border-radius:12px">No reports here.</div>'; return; }
@@ -83,6 +107,7 @@
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <span style="font-weight:700;font-size:15px">Room ${esc(t.room)}</span>
           <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;background:${s.bg};color:${s.c}">${s.l}</span>
+          <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;background:#f1f5f9;color:#334155">${(CAT[t.category] || CAT.other).i} ${(CAT[t.category] || CAT.other).l}</span>
           ${t.priority === 'urgent' ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;background:#dc2626;color:#fff">URGENT</span>' : ''}
           <span style="font-size:12px;color:#6b7280">${esc(t.id)} · ${esc(when(t.createdAt))}${t.status !== 'resolved' ? ' · ' + ago(t.createdAt) + ' ago' : ''} · ${t.source === 'lana' ? '💬 Guest via WhatsApp' : '👤 ' + esc(t.reportedBy || 'Staff')}</span></div>
         <div style="font-size:14px;margin:8px 0 4px">${esc(t.problem)}</div>
@@ -92,6 +117,7 @@
           ${t.status === 'open' ? `<button class="btn btn-secondary btn-sm" onclick="mtSet('${t.id}','in_progress')">🔧 In progress</button>` : ''}
           <button class="btn btn-secondary btn-sm" onclick="mtAssign('${t.id}')">👤 Assign</button>
           <button class="btn btn-secondary btn-sm" onclick="mtNote('${t.id}')">📝 Note</button>
+          <select onchange="mtSetCat('${t.id}',this.value)" title="Category" style="padding:4px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px">${Object.entries(CAT).map(([k, c]) => `<option value="${k}"${(t.category || 'other') === k ? ' selected' : ''}>${c.i} ${c.l}</option>`).join('')}</select>
           <button class="btn btn-primary btn-sm" onclick="mtSet('${t.id}','resolved')">✓ Resolved</button></div>` : ''}
       </div>`;
     }).join('');
@@ -101,6 +127,9 @@
     catch (e) { showToast('Not saved: ' + e.message); }
   }
   window.mtFilter = k => { filter = k; render(); };
+  window.mtCat = k => { catFilter = k; render(); };
+  window.mtRoom = r => { roomFilter = r; render(); };
+  window.mtSetCat = (id, category) => update(id, { category }, 'Category saved ✓');
   window.mtSet = (id, status) => {
     const t = tickets.find(x => x.id === id); if (!t) return;
     if (status === 'resolved' && !confirm(`Mark room ${t.room} as Resolved?${t.guestPhone || t.guestEmail ? '\n\nThe guest gets the confirmation right now.' : ''}`)) return;

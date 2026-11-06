@@ -47,7 +47,7 @@ const nextNumber = list => 'MT-' + (Math.max(1000, ...list.map(t => Number(Strin
 async function createTicket(key, t) {
   const now = new Date().toISOString();
   const out = await mutate(key, list => {
-    const ticket = { id: nextNumber(list), createdAt: now, status: 'open', notes: [], ...t, priority: t.priority === 'urgent' ? 'urgent' : 'normal' };
+    const ticket = { id: nextNumber(list), createdAt: now, status: 'open', notes: [], ...t, category: CATEGORIES.includes(t.category) ? t.category : categorize(`${t.problem || ''} ${t.problemStaff || ''}`), priority: t.priority === 'urgent' ? 'urgent' : 'normal' };
     return { list: [ticket, ...list].slice(0, 2000), ticket };
   });
   const alert = await alertMaintenance(key, out.ticket).catch(e => ({ error: e.message }));
@@ -92,6 +92,18 @@ async function notifyGuestResolved(t) {
   return { whatsapp: wa ? 'sent' : (digits(t.guestPhone).length >= 10 ? 'failed' : 'no phone'), email: mail ? 'sent' : (t.guestEmail ? (wa ? 'not needed' : 'failed') : 'no email') };
 }
 
+// category from what the guest wrote (Jorge 2026-11-06: tickets by type, and how much each room breaks); staff can change it
+const CATEGORIES = ['ac', 'door', 'safe', 'electricity', 'water', 'other'];
+function categorize(text) {
+  const t = String(text || '').toLowerCase();
+  if (/caja fuerte|\bsafe\b|safety box|strongbox/.test(t)) return 'safe';
+  if (/aire|a\/c|\ba\.?c\b|clima|minisplit|air ?con|cooling|enfr[ií]a|fan\b|ventilador|calor|heat(er)?\b(?! water)/.test(t)) return 'ac';
+  if (/agua|water|regadera|shower|ducha|ba[ñn]o|toilet|inodoro|\bwc\b|leak|fuga|lavabo|sink|drain|drenaje|tuber|plumb|flush|caliente/.test(t)) return 'water';
+  if (/puerta|door|lock|cerradura|chapa|llave|\bkey\b|ventana|window/.test(t)) return 'door';
+  if (/luz|luces|light|power|electric|enchufe|contacto|outlet|foco|bulb|switch|apag[oó]n|corriente/.test(t)) return 'electricity';
+  return 'other';
+}
+
 // the guest's language from what they wrote, and the problem in Spanish for the maintenance team
 const looksSpanish = s => /[áéíóúñ¿¡]|\b(no sirve|no funciona|mi cuarto|mi habitaci|regadera|el aire|agua|luz|puerta|baño|caja fuerte|por favor|hola)\b/i.test(String(s || ''));
 async function toSpanish(text) {
@@ -106,4 +118,4 @@ async function toSpanish(text) {
   } catch (e) { return text; }
 }
 
-module.exports = { looksSpanish, toSpanish, SUPABASE_URL, H, readRow, listTickets, mutate, createTicket, alertMaintenance, notifyGuestResolved };
+module.exports = { CATEGORIES, categorize, looksSpanish, toSpanish, SUPABASE_URL, H, readRow, listTickets, mutate, createTicket, alertMaintenance, notifyGuestResolved };
