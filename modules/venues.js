@@ -2583,7 +2583,7 @@ let rcRequests=null,_rcReqLoadedAt=0;
 async function rcLoadRequests(){
   try{
     const since=fmtISO(addDays(new Date(),-60));
-    const {data,error}=await db.from('booking_requests').select('id,first_name,last_name,room,check_in,check_out,status,source').in('status',['paid','in_house','checked_out','confirmed']).gte('check_out',since).not('room','is',null);
+    const {data,error}=await db.from('booking_requests').select('id,first_name,last_name,room,check_in,check_out,status,source,cb_reservation_id').in('status',['paid','in_house','checked_out','confirmed']).gte('check_out',since).not('room','is',null);
     if(error)throw error;
     rcRequests=data||[];_rcReqLoadedAt=Date.now();
   }catch(e){console.warn('[rooms] booking engine reservations',e.message);rcRequests=rcRequests||[];}
@@ -3082,6 +3082,9 @@ function rcRenderExternalReservations(reservations,startMs){
   const portalResIds=new Set();
   AppData.bookings.forEach(bk=>Object.values(bk.cbReservationIds||{}).forEach(id=>{if(id)portalResIds.add(String(id));}));
   (rcHiddenCbIds||[]).forEach(id=>portalResIds.add(String(id)));
+  // a Cloudbeds reservation that belongs to an online purchase (Extra Night / Book a Stay) already shows as its 🌐 bar --
+  // not again as an outside reservation (Kyla Clarke / Jennifer Hutchinson, 2026-11-06: one was imported twice)
+  (rcRequests||[]).forEach(q=>{if(q.cb_reservation_id)portalResIds.add(String(q.cb_reservation_id));});
   const allTracks=[...document.querySelectorAll('[data-room]')];
   const trackNames=allTracks.map(t=>t.getAttribute('data-room'));
   allTracks.forEach(t=>t.querySelectorAll('.bk[data-ext="1"]').forEach(el=>el.remove()));
