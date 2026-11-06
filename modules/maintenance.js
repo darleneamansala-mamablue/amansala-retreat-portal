@@ -70,7 +70,7 @@
     const f = document.getElementById('mtFilters');
     const fb = (k, l, n) => `<button class="btn btn-sm ${filter === k ? 'btn-primary' : 'btn-secondary'}" onclick="mtFilter('${k}')">${l} (${n})</button>`;
     if (f) f.innerHTML = fb('open', 'Pendientes', open.length) + fb('resolved', 'Resueltos', tickets.length - open.length) + fb('all', 'Todos', tickets.length)
-      + (numbers.length ? '' : '<span style="margin-left:8px;align-self:center;font-size:12px;color:#b91c1c">⚠ Nadie recibe el WhatsApp: agrega los números en "📱 WhatsApp a mantenimiento"</span>');
+      + '<span style="margin-left:8px;align-self:center;font-size:12px;color:#6b7280">El WhatsApp llega a quienes reciben el reporte de climas' + (numbers.length ? ` y a ${numbers.length} número(s) más` : '') + '.</span>';
     const list = tickets.filter(t => filter === 'all' || (filter === 'open' ? t.status !== 'resolved' : t.status === 'resolved'))
       .sort((a, b) => filter === 'open' ? ((a.priority === 'urgent' ? 0 : 1) - (b.priority === 'urgent' ? 0 : 1)) || String(a.createdAt).localeCompare(String(b.createdAt)) : String(b.createdAt).localeCompare(String(a.createdAt)));
     const box = document.getElementById('mtList'); if (!box) return;
