@@ -1012,6 +1012,10 @@ function tr2PrintView() {
   const missingByDate = new Map();
   missing.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); if (!missingByDate.has(e.date)) missingByDate.set(e.date, []); missingByDate.get(e.date).push(e); });
   const sortedGroups = [...groups.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  // Jorge 2026-11-06: Own Transport guests go at the END of their day, in their own block -- not mixed in the rides at the top
+  const otHtml = ot => !ot.length ? '' : `<tr class="ride"><td colspan="${printCols}">Own Transport — OT (${ot.length})</td></tr>
+      ${_printSortEntries(ot).map(e => entryRow(e, '')).join('')}
+      <tr class="ride-end"><td colspan="${printCols}"></td></tr>`;
   const missingHtml = date => {
     const m = missingByDate.get(date);
     if (!m || !m.length) return '';
@@ -1106,8 +1110,9 @@ function tr2PrintView() {
   const rowsHtml = sortedGroups.length ? sortedGroups.map(([date, items], gi) => `
     ${gi > 0 ? `<tr class="spacer"><td colspan="${printCols}"></td></tr>` : ''}
     <tr class="grp"><td colspan="${printCols}">${date === todayStr ? '📍 HOY — ' : ''}${fmtDate(date)}</td></tr>
-    ${items.length ? rideGroupsHtml(items) : ''}
+    ${items.filter(e => !e.ot).length ? rideGroupsHtml(items.filter(e => !e.ot)) : ''}
     ${missingHtml(date)}
+    ${otHtml(items.filter(e => e.ot))}
   `).join('') : `<tr><td colspan="${printCols}" class="none">No hay entradas para estos filtros.</td></tr>`;
 
   const win = window.open('', '_blank');
