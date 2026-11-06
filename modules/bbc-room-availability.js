@@ -2,7 +2,7 @@
 // Loaded as a classic script AFTER bbc-schedule.js and bbc-workshops-cohosts.js; shares global scope. bbc-schedule.js is not edited.
 // 1) The editor read an evening "7:00" Opening Circle as 7 AM, so it clashed with a retreat's morning class in Skye. A slot that comes after an afternoon slot of the same day
 //    (e.g. after 4:45) and starts at 7-11 is now read as PM for the room check.
-// 2) In each class's Location list, a room already used by a retreat at that time is greyed out and says who has it ("Skye — in use: Heather Kasey"), so only free rooms can be picked.
+// 2) In each class's Location list, a room already used by a retreat at that time is marked 🔴 and greyed out with who has it ("Skye — in use: Heather Kasey"), and rooms that are free are marked 🟢 green "open", so only free rooms can be picked.
 (function () {
   // 3) Times can be typed with AM / PM ("7:15 PM", "7:15pm", "715 pm"): the room check, the sort and the Calendar then use exactly that. Without AM/PM the old reading stays (7-11 AM, 12 noon, 1-6 PM).
   if (typeof bbcTimeTo24h === 'function') {
@@ -41,11 +41,11 @@
       let html = baseRow.apply(this, arguments);
       if (!slot || slot.type === 'meal' || slot.type === 'tour' || slot.confirmed) return html;
       (typeof BBC_LOCATIONS_LIST !== 'undefined' ? BBC_LOCATIONS_LIST : []).forEach(l => {
-        if (l === slot.location || /^meet on/i.test(l)) return;
-        const cf = window.bbcGetShalaConflicts(date, l, slot.time);
-        if (!cf.length) return;
-        const who = String(cf[0]).split(' — ')[0];
-        html = html.replace('<option value="' + l + '">' + l + '</option>', '<option value="' + l + '" disabled>' + esc(l + ' — in use: ' + who) + '</option>');
+        if (/^meet on/i.test(l)) return;
+        const cf = window.bbcGetShalaConflicts(date, l, slot.time), mine = l === slot.location;
+        const re = new RegExp('<option value="' + l + '"( selected)?>' + l + '</option>');
+        if (!cf.length) html = html.replace(re, (m0, sel) => '<option value="' + l + '"' + (sel || '') + ' style="color:#15803d;font-weight:700">🟢 ' + l + ' — open</option>');
+        else html = html.replace(re, (m0, sel) => '<option value="' + l + '"' + (sel || '') + (mine ? '' : ' disabled') + ' style="color:#b91c1c">🔴 ' + esc(l + ' — in use: ' + String(cf[0]).split(' — ')[0]) + '</option>');
       });
       return html;
     } finally { ctx = null; }
