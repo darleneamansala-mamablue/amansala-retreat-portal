@@ -979,11 +979,13 @@ function tr2PrintView() {
   // same as before, since there's nothing real to print for them. A real OT
   // entry with no date at all (edge case) is also skipped -- no day section
   // to put it under.
-  const filtered = tr2FilteredSorted().filter(e => !e.isSynthetic && (!e.ot || e.date));
+  // a guest with no form who already checked in arrived on their own: printed as OT with the others (Korina Vaynter, 2026-11-06)
+  const arrivedOT = e => e.isSynthetic && e.type === 'arrival' && e.checkedIn && e.date;
+  const filtered = tr2FilteredSorted().filter(e => (!e.isSynthetic && (!e.ot || e.date)) || arrivedOT(e));
   // Jorge 2026-11-06: a list where nobody has filled the form yet (only "Missing Transport") printed "No hay entradas" --
   // the guests with no transport info now print too, at the end of their day, marked FALTA INFO, so the sheet shows
   // who still has to be asked.
-  const missing = tr2FilteredSorted().filter(e => e.isSynthetic && e.date);
+  const missing = tr2FilteredSorted().filter(e => e.isSynthetic && e.date && !arrivedOT(e));
   const todayStr = new Date().toISOString().slice(0, 10);
 
   let rangeLabel;
@@ -1912,7 +1914,12 @@ function tr2RenderRow(e, color, groupPax) {
   // we have no data from them at all. Those are two different situations and staff
   // need to tell them apart (Jorge's report 2026-09-17): OT means "confirmed, don't
   // arrange a transfer"; Missing means "still needs to be chased down".
-  const airportBadge = e.isSynthetic
+  // Jorge 2026-11-06 (Korina Vaynter): a guest with no form who is already checked in arrived on their own -- their
+  // arrival reads OT, not Missing (their departure is still Missing until someone fills it)
+  const arrivedOT = e.isSynthetic && e.type === 'arrival' && e.checkedIn;
+  const airportBadge = arrivedOT
+    ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fef2f2;color:#dc2626">OT</span>`
+    : e.isSynthetic
     ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fef9c3;color:#92400e">Missing</span>`
     : e.ot
     ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:#fef2f2;color:#dc2626">OT</span>`

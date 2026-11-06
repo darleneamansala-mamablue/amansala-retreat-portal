@@ -1751,6 +1751,7 @@ async function bcPostCharges() {
         if (cErr) throw cErr;
         folio = created;
       }
+      if (folio.status && folio.status !== 'open') throw new Error('folio closed — reopen it to add charges');   // Jorge 2026-11-06
       const { error: fiErr } = await db.from('folio_items').insert({ folio_id: folio.id, description: itemName, qty: itemQuantity, unit_price: itemPrice, tax_rate: itemTax, category: itemCategory, staff_name: getCurrentSession()?.name || null });
       if (fiErr) throw fiErr;
     } catch (e) {
