@@ -34,6 +34,7 @@
         <p style="font-size:12.5px;color:#8a7e74;margin:4px 0 0">Reports from guests (WhatsApp with Lana) and from staff. When it is marked Resolved, the guest gets a confirmation.</p></div>
         <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-secondary btn-sm" onclick="mtNumbers()">📱 Maintenance WhatsApp</button>
+          <button class="btn btn-secondary btn-sm" onclick="mtLinks()">🔗 Team links</button>
           <button class="btn btn-primary btn-sm" onclick="mtNew()">+ New report</button></div></div>
       <div id="mtFilters" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap"></div>
       <div id="mtCats" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center"></div>
@@ -127,6 +128,11 @@
     catch (e) { showToast('Not saved: ' + e.message); }
   }
   window.mtFilter = k => { filter = k; render(); };
+  // each person's own phone page (maintenance-team.html) -- the same link their WhatsApp alerts carry
+  window.mtLinks = () => {
+    const box = document.getElementById('mtList'); if (!box) return;
+    box.innerHTML = `<div style="background:#fff;border-radius:12px;padding:16px"><div style="font-weight:700;margin-bottom:8px">Team links — each person opens theirs on the phone to mark reports On my way / Resolved</div>${numbers.map(p => `<div style="display:flex;gap:8px;align-items:center;margin:6px 0;font-size:13px"><b style="min-width:110px">${esc(p.name || p.phone)}</b><input readonly value="${esc(p.link || '')}" style="flex:1;padding:6px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px" onclick="this.select()"><button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${esc(p.link || '')}');showToast('Copied ✓')">Copy</button></div>`).join('')}<button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="mtFilter(filter)">Back to reports</button></div>`;
+  };
   window.mtCat = k => { catFilter = k; render(); };
   window.mtRoom = r => { roomFilter = r; render(); };
   window.mtSetCat = (id, category) => update(id, { category }, 'Category saved ✓');
@@ -141,7 +147,7 @@
     const room = prompt('Room:'); if (!room || !room.trim()) return;
     const problem = prompt('What is not working?'); if (!problem || !problem.trim()) return;
     const urgent = confirm('Is it URGENT? (OK = urgent, Cancel = normal)');
-    try { const d = await call('create', { room, problem, priority: urgent ? 'urgent' : 'normal' }); showToast(`Report ${d.ticket.id} created — maintenance WhatsApp sent to ${(d.alert && d.alert.sent || []).filter(x => x.sent).length}`); filter = 'open'; await load(true); }
+    try { const d = await call('create', { room, problem, priority: urgent ? 'urgent' : 'normal' }); showToast(`Report ${d.ticket.id} created — the maintenance team is being notified by WhatsApp`); filter = 'open'; await load(true); }
     catch (e) { showToast('Not created: ' + e.message); }
   };
   window.mtNumbers = async () => {

@@ -50,7 +50,11 @@ async function createTicket(key, t) {
     const ticket = { id: nextNumber(list), createdAt: now, status: 'open', notes: [], ...t, category: CATEGORIES.includes(t.category) ? t.category : categorize(`${t.problem || ''} ${t.problemStaff || ''}`), priority: t.priority === 'urgent' ? 'urgent' : 'normal' };
     return { list: [ticket, ...list].slice(0, 2000), ticket };
   });
-  const alert = await alertMaintenance(key, out.ticket).catch(e => ({ error: e.message }));
+  // the WhatsApps go out from a background function: sending 11 of them one by one took more than Visito's 10 s and Lana
+  // reported the action as failed (MT-1004, 2026-11-06) although the report and the alerts were done
+  let alert = { queued: true };
+  try { await fetch(`${process.env.URL || 'https://amansalaportal.com'}/.netlify/functions/maintenance-alert-background`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: out.ticket.id }) }); }
+  catch (e) { alert = await alertMaintenance(key, out.ticket).catch(err => ({ error: err.message })); }
   return { ticket: out.ticket, alert };
 }
 
@@ -62,11 +66,14 @@ async function alertMaintenance(key, t) {
   const list = test && test.value && Array.isArray(test.value.only) && test.value.only.length ? test.value.only : (row && Array.isArray(row.value) ? row.value : []);
   const seen = new Set();
   const people = list.filter(p => p && digits(p.phone).length >= 10 && !seen.has(digits(p.phone).slice(-10)) && seen.add(digits(p.phone).slice(-10)));
-  const sent = [];
-  for (const p of people) {
-    const used = await sendUtility(e164(p.phone), [['mantenimiento_nuevo_reporte', [t.room || 'sin cuarto', t.guestName || '-', String(t.problemStaff || t.problem || '').slice(0, 250), t.priority === 'urgent' ? 'URGENTE' : 'Normal', t.id]]], 'es_MX', 'mt-' + t.id);
-    sent.push({ name: p.name || ('…' + digits(p.phone).slice(-4)), sent: !!used });
-  }
+  const what = String(t.problemStaff || t.problem || '').slice(0, 250), prio = t.priority === 'urgent' ? 'URGENTE' : 'Normal';
+  const sent = await Promise.all(people.map(async p => {
+    const link = teamLink(p);   // their own page to mark it In progress / Resolved (like the therapists' confirmations)
+    const used = await sendUtility(e164(p.phone), [
+      ['mantenimiento_reporte_link', [String(p.name || 'equipo').split(' ')[0], t.room || 'sin cuarto', t.guestName || '-', what, prio, t.id, link]],
+      ['mantenimiento_nuevo_reporte', [t.room || 'sin cuarto', t.guestName || '-', what, prio, t.id]]], 'es_MX', 'mt-' + t.id);
+    return { name: p.name || ('…' + digits(p.phone).slice(-4)), sent: !!used };
+  }));
   return { people: people.length, sent, testOnly: list !== (row && row.value) };
 }
 
@@ -112,4 +119,56 @@ async function toSpanish(text) {
   } catch (e) { return text; }
 }
 
-module.exports = { CATEGORIES, categorize, looksSpanish, toSpanish, SUPABASE_URL, H, readRow, listTickets, mutate, createTicket, alertMaintenance, notifyGuestResolved };
+// ---- the maintenance team's own page (maintenance-team.html): a personal signed link, valid while their number is on the list
+const crypto = require('crypto');
+const b64u = b => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const teamSecret = () => process.env.VISITO_TOOL_SECRET ? 'mt-team:' + process.env.VISITO_TOOL_SECRET : '';
+function teamLink(p) {
+  if (!teamSecret()) return 'https://amansalaportal.com';
+  const body = b64u(JSON.stringify({ n: p.name || '', p: digits(p.phone).slice(-10) }));
+  return `https://amansalaportal.com/maintenance-team.html?k=${body}.${b64u(crypto.createHmac('sha256', teamSecret()).update(body).digest()).slice(0, 22)}`;
+}
+async function verifyTeam(key, k) {
+  const [body, sig] = String(k || '').split('.');
+  if (!teamSecret() || !body || !sig) return null;
+  const want = b64u(crypto.createHmac('sha256', teamSecret()).update(body).digest()).slice(0, 22);
+  if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
+  let c; try { c = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')); } catch (e) { return null; }
+  const row = await readRow(key, 'maintenance_alert_numbers');
+  const still = (row && Array.isArray(row.value) ? row.value : []).some(x => digits(x.phone).slice(-10) === c.p);
+  return still ? { name: c.n || 'Maintenance', phone: c.p } : null;   // taken off the list = the link stops working
+}
+
+// one change to a ticket (status, assignee, category, note) by `me`; Resolved notifies the guest right away
+async function updateTicket(key, id, b, me) {
+  const STATUSES = ['open', 'in_progress', 'resolved'], now = new Date().toISOString();
+  let before = null;
+  const out = await mutate(key, list => {
+    const i = list.findIndex(t => t && t.id === id);
+    if (i < 0) return { abort: true, error: 'Report not found' };
+    before = list[i];
+    const t = { ...list[i], notes: [...(list[i].notes || [])] };
+    if (b.status && STATUSES.includes(b.status) && b.status !== t.status) {
+      t.status = b.status;
+      if (b.status === 'resolved') { t.resolvedAt = now; t.resolvedBy = me; }
+      if (b.status === 'in_progress' && !t.startedAt) { t.startedAt = now; if (!t.assignedTo) t.assignedTo = me; }
+      t.notes.push({ at: now, by: me, text: `Status: ${b.status}` });
+    }
+    if (b.assignedTo != null && String(b.assignedTo).trim() !== String(t.assignedTo || '')) { t.assignedTo = String(b.assignedTo).trim().slice(0, 80); t.notes.push({ at: now, by: me, text: `Assigned to ${t.assignedTo || '—'}` }); }
+    if (b.category && CATEGORIES.includes(b.category) && b.category !== t.category) { t.notes.push({ at: now, by: me, text: `Category: ${b.category}` }); t.category = b.category; }
+    if (b.note && String(b.note).trim()) t.notes.push({ at: now, by: me, text: String(b.note).trim().slice(0, 500) });
+    list[i] = t;
+    return { list, ticket: t };
+  });
+  if (out.abort) return out;
+  let guest = null;
+  if (out.ticket.status === 'resolved' && before.status !== 'resolved') {
+    guest = await notifyGuestResolved(out.ticket).catch(e => ({ error: e.message }));
+    const stamp = { at: new Date().toISOString(), ...guest };
+    await mutate(key, list => ({ list: list.map(t => t && t.id === id ? { ...t, guestNotified: stamp } : t) })).catch(() => {});
+    out.ticket.guestNotified = stamp;
+  }
+  return { ticket: out.ticket, guest };
+}
+
+module.exports = { teamLink, verifyTeam, updateTicket, CATEGORIES, categorize, looksSpanish, toSpanish, SUPABASE_URL, H, readRow, listTickets, mutate, createTicket, alertMaintenance, notifyGuestResolved };

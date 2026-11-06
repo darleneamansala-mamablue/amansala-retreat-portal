@@ -27,7 +27,7 @@ exports.handler = async (event) => {
     if (b.action === 'list') {
       const [tickets, nums] = await Promise.all([M.listTickets(key), M.readRow(key, 'maintenance_alert_numbers')]);
       tickets.forEach(t => { if (t && !t.category) t.category = M.categorize(`${t.problem || ''} ${t.problemStaff || ''}`); });   // reports from before categories
-      return reply(200, { tickets, numbers: (nums && nums.value) || [] });
+      return reply(200, { tickets, numbers: ((nums && nums.value) || []).map(p => ({ ...p, link: M.teamLink(p) })) });
     }
     if (b.action === 'create') {
       const room = String(b.room || '').trim().slice(0, 40), problem = String(b.problem || '').trim().slice(0, 500);
@@ -38,34 +38,10 @@ exports.handler = async (event) => {
       return reply(200, { ok: true, ticket: r.ticket, alert: r.alert });
     }
     if (b.action === 'update') {
-      const now = new Date().toISOString();
-      let before = null;
-      const out = await M.mutate(key, list => {
-        const i = list.findIndex(t => t && t.id === b.id);
-        if (i < 0) return { abort: true, error: 'Ticket not found' };
-        before = list[i];
-        const t = { ...list[i], notes: [...(list[i].notes || [])] };
-        if (b.status && STATUSES.includes(b.status) && b.status !== t.status) {
-          t.status = b.status;
-          if (b.status === 'resolved') { t.resolvedAt = now; t.resolvedBy = me; }
-          if (b.status === 'in_progress' && !t.startedAt) t.startedAt = now;
-          t.notes.push({ at: now, by: me, text: `Status: ${b.status}` });
-        }
-        if (b.assignedTo != null && String(b.assignedTo).trim() !== String(t.assignedTo || '')) { t.assignedTo = String(b.assignedTo).trim().slice(0, 80); t.notes.push({ at: now, by: me, text: `Assigned to ${t.assignedTo || '—'}` }); }
-        if (b.category && M.CATEGORIES.includes(b.category) && b.category !== t.category) { t.notes.push({ at: now, by: me, text: `Category: ${b.category}` }); t.category = b.category; }
-        if (b.note && String(b.note).trim()) t.notes.push({ at: now, by: me, text: String(b.note).trim().slice(0, 500) });
-        list[i] = t;
-        return { list, ticket: t };
-      });
+      const out = await M.updateTicket(key, b.id, b, me);
       if (out.abort) return reply(404, { error: out.error });
-      let guest = null;
-      if (out.ticket.status === 'resolved' && before.status !== 'resolved') {
-        guest = await M.notifyGuestResolved(out.ticket).catch(e => ({ error: e.message }));
-        const stamp = { at: new Date().toISOString(), ...guest };
-        await M.mutate(key, list => ({ list: list.map(t => t && t.id === out.ticket.id ? { ...t, guestNotified: stamp } : t) })).catch(() => {});
-        out.ticket.guestNotified = stamp;
-      }
-      await log('Maintenance ticket updated', `${out.ticket.id} · room ${out.ticket.room}: ${b.status ? 'status ' + b.status : ''}${b.assignedTo != null ? ' assigned ' + b.assignedTo : ''}${b.note ? ' note' : ''}${guest ? ` · guest WhatsApp ${guest.whatsapp}, email ${guest.email}` : ''}`);
+      const guest = out.guest;
+      await log('Maintenance ticket updated', `${out.ticket.id} · room ${out.ticket.room}: ${b.status ? 'status ' + b.status : ''}${b.assignedTo != null ? ' assigned ' + b.assignedTo : ''}${b.category ? ' category ' + b.category : ''}${b.note ? ' note' : ''}${guest ? ` · guest WhatsApp ${guest.whatsapp}, email ${guest.email}` : ''}`);
       return reply(200, { ok: true, ticket: out.ticket, guest });
     }
     if (b.action === 'numbers') {
