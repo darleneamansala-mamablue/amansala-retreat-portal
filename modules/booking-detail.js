@@ -327,9 +327,11 @@ async function _bdLoadFoliosNow(){
     try{
       const {data:allF}=await db.from('folios').select('*').eq(subj.folioCol,folioSubjId);
       const _n=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
-      const others=new Set((subj.allGuests||[]).map(g=>_n(g.name)).filter(x=>x&&x!==_n(guestName)));
-      (allF||[]).forEach(f=>{if(!folios.some(x=>x.id===f.id)&&!others.has(_n(f.guest_name)))folios.push(f);});
-      folios.sort((x,y)=>new Date(x.created_at||0)-new Date(y.created_at||0));
+      // Jorge 2026-11-06: EVERY folio of the room, the other guests' too -- Kelleye Rhein's Booking Detail showed only hers,
+      // nobody saw Jason Rhein's $573.78 and they left without paying it. This guest's own folios first, then the others'.
+      (allF||[]).forEach(f=>{if(!folios.some(x=>x.id===f.id))folios.push(f);});
+      const _mine=f=>_n(f.guest_name)===_n(guestName)?0:1;
+      folios.sort((x,y)=>_mine(x)-_mine(y)||new Date(x.created_at||0)-new Date(y.created_at||0));
     }catch(e){}
     const folioIds=folios.map(f=>f.id);
     let {data:items,error:iErr}=await db.from('folio_items').select('*').in('folio_id',folioIds).order('created_at',{ascending:true});
@@ -656,9 +658,9 @@ function _bdRender(){
           <button class="btn btn-secondary btn-sm" onclick="bdToggleDetailEdit()">Cancel</button>
         </div>`:''}
         <div style="margin-top:14px;padding:12px 14px;background:#fef2f2;border-radius:10px">
-          <div style="font-size:11px;color:var(--muted);font-weight:600">Balance Due</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:600">Balance Due${_bdRoomBalances?' — whole room':''}</div>
           <div style="font-size:22px;font-weight:800;color:${balanceDue>0?'#dc2626':'#059669'}">${fmt$(balanceDue)}</div>
-          ${_bdRoomBalances?(()=>{const tot=Object.values(_bdRoomBalances).reduce((a,b)=>a+b,0);return `<div style="margin-top:6px;font-size:12px;color:#374151">Whole room: <b style="color:${tot>0.005?'#dc2626':'#059669'}">${fmt$(tot)}</b> — ${Object.entries(_bdRoomBalances).map(([n,v])=>`${escHtml(n)} ${fmt$(Math.abs(v)<0.005?0:v)}`).join(' · ')}</div>`;})():''}
+          ${_bdRoomBalances?(()=>{return `<div style="margin-top:6px;font-size:12px;color:#374151">By guest: ${Object.entries(_bdRoomBalances).map(([n,v])=>`${escHtml(n)} ${fmt$(Math.abs(v)<0.005?0:v)}`).join(' · ')}</div>`;})():''}
         </div>
         ${subj.rate!=null?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">Room Total &nbsp; ${nights} × ${fmt$(subj.rate)} = ${fmt$(roomTotal)}</div>`:''}
         ${_bdKind==='reg'?`<div style="margin-top:10px">
