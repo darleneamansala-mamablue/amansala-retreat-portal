@@ -41,7 +41,7 @@
       let html = baseRow.apply(this, arguments);
       if (!slot || slot.type === 'meal' || slot.type === 'tour' || slot.confirmed) return html;
       (typeof BBC_LOCATIONS_LIST !== 'undefined' ? BBC_LOCATIONS_LIST : []).forEach(l => {
-        if (l === slot.location) return;
+        if (l === slot.location || /^meet on/i.test(l)) return;
         const cf = window.bbcGetShalaConflicts(date, l, slot.time);
         if (!cf.length) return;
         const who = String(cf[0]).split(' — ')[0];
