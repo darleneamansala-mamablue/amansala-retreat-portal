@@ -20,11 +20,12 @@
   let ctx = null;
   const h24 = t => { const m = String(t || '').trim().match(/^(\d{1,2}):(\d{2})/); return m ? +m[1] : null; };
   function pmTime(timeStr, slots, si) {
+    const flagged = !!(slots && slots[si] && slots[si].pm);
     if (!timeStr || !slots || /[ap]\.?\s*m/i.test(timeStr)) return timeStr;
     const first = String(timeStr).split('–')[0], h = h24(first);
     if (h == null || h < 7 || h > 11) return timeStr;
     const afternoonBefore = slots.slice(0, si).some(s => { const p = h24(String(s.time || '').split('–')[0]); return p != null && (p >= 12 || p <= 6); });
-    if (!afternoonBefore) return timeStr;
+    if (!afternoonBefore && !flagged) return timeStr;
     return String(timeStr).split('–').map(p => { p = p.trim(); const m = p.match(/^(\d{1,2}):(\d{2})$/); return m && +m[1] < 12 ? (+m[1] + 12) + ':' + m[2] : p; }).join('–');
   }
   const baseCfl = bbcGetShalaConflicts;
