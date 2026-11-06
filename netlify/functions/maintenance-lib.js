@@ -57,6 +57,13 @@ async function createTicket(key, t) {
 async function alertMaintenance(key, t) {
   // Jorge 2026-11-06: the same people who get the daily A/C (climas) report -- Netlify CLIMAS_REPORT_NUMBERS + app_store
   // 'climas_report_numbers' -- plus anyone added in Mantenimiento > "WhatsApp a mantenimiento"
+  // testing (Jorge 2026-11-06): app_store 'maintenance_alert_test' = {only: [{name, phone}]} sends ONLY to those, no one else
+  const test = await readRow(key, 'maintenance_alert_test');
+  if (test && test.value && Array.isArray(test.value.only) && test.value.only.length) {
+    const sent = [];
+    for (const p of test.value.only) sent.push({ name: p.name, sent: !!(await sendUtility(e164(p.phone), [['mantenimiento_nuevo_reporte', [t.room || 'sin cuarto', t.guestName || '-', String(t.problem || '').slice(0, 250), t.priority === 'urgent' ? 'URGENTE' : 'Normal', t.id]]], 'es_MX', 'mt-' + t.id)) });
+    return { people: sent.length, sent, testOnly: true };
+  }
   const row = await readRow(key, 'maintenance_alert_numbers'), cl = await readRow(key, 'climas_report_numbers');
   const climas = [...(process.env.CLIMAS_REPORT_NUMBERS || '').split(','), ...((cl && cl.value && Array.isArray(cl.value.numbers)) ? cl.value.numbers : [])].map(p => ({ name: '', phone: p }));
   const seen = new Set();
