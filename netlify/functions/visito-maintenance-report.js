@@ -6,7 +6,7 @@
 // module and sends the maintenance team a WhatsApp. When staff mark it Resolved, the guest gets a WhatsApp confirmation.
 // Visito POSTs {arguments: {problem, urgent?, room?, guestName?}, meta: {conversationKey}} with Bearer VISITO_TOOL_SECRET.
 const identify = require('./visito-identify-guest');
-const { createTicket } = require('./maintenance-lib');
+const { createTicket, looksSpanish, toSpanish } = require('./maintenance-lib');
 
 const digits = s => String(s || '').replace(/\D/g, '');
 const ok = body => ({ statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -35,9 +35,11 @@ exports.handler = async (event) => {
   const room = String(a.room || (stay && stay.room) || '').trim();
   if (!room || /not assigned/i.test(room)) return ok({ success: false, message: 'I could not find the guest\'s room from their phone number. Ask the guest for their room number and call this again with room.' });
 
+  const lang = /^es/i.test(String(a.language || '')) ? 'es' : /^en/i.test(String(a.language || '')) ? 'en' : (looksSpanish(problem) ? 'es' : 'en');
+  const problemStaff = lang === 'es' ? problem : await toSpanish(problem);
   const urgent = a.urgent === true || /urgent|urgente|no hot water|no water|sin agua|leak|fuga|flood|inund|no power|sin luz|locked|cerrad/i.test(problem);
   const { ticket, alert } = await createTicket(key, {
-    room, problem, priority: urgent ? 'urgent' : 'normal', source: 'lana', reportedBy: 'Lana (WhatsApp)',
+    room, problem, problemStaff, lang, priority: urgent ? 'urgent' : 'normal', source: 'lana', reportedBy: 'Lana (WhatsApp)',
     guestName: String(a.guestName || (stay && stay.guestName) || '').slice(0, 120), guestPhone: phone ? '+' + phone : '',
     reservation: stay ? stay.portalReservation : null,
   });

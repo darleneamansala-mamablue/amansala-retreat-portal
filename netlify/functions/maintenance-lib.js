@@ -61,7 +61,7 @@ async function alertMaintenance(key, t) {
   const test = await readRow(key, 'maintenance_alert_test');
   if (test && test.value && Array.isArray(test.value.only) && test.value.only.length) {
     const sent = [];
-    for (const p of test.value.only) sent.push({ name: p.name, sent: !!(await sendUtility(e164(p.phone), [['mantenimiento_nuevo_reporte', [t.room || 'sin cuarto', t.guestName || '-', String(t.problem || '').slice(0, 250), t.priority === 'urgent' ? 'URGENTE' : 'Normal', t.id]]], 'es_MX', 'mt-' + t.id)) });
+    for (const p of test.value.only) sent.push({ name: p.name, sent: !!(await sendUtility(e164(p.phone), [['mantenimiento_nuevo_reporte', [t.room || 'sin cuarto', t.guestName || '-', String(t.problemStaff || t.problem || '').slice(0, 250), t.priority === 'urgent' ? 'URGENTE' : 'Normal', t.id]]], 'es_MX', 'mt-' + t.id)) });
     return { people: sent.length, sent, testOnly: true };
   }
   const row = await readRow(key, 'maintenance_alert_numbers'), cl = await readRow(key, 'climas_report_numbers');
@@ -70,7 +70,7 @@ async function alertMaintenance(key, t) {
   const people = [...(row && Array.isArray(row.value) ? row.value : []), ...climas].filter(p => p && digits(p.phone).length >= 10 && !seen.has(digits(p.phone).slice(-10)) && seen.add(digits(p.phone).slice(-10)));
   const sent = [];
   for (const p of people) {
-    const used = await sendUtility(e164(p.phone), [['mantenimiento_nuevo_reporte', [t.room || 'sin cuarto', t.guestName || '-', String(t.problem || '').slice(0, 250), t.priority === 'urgent' ? 'URGENTE' : 'Normal', t.id]]], 'es_MX', 'mt-' + t.id);
+    const used = await sendUtility(e164(p.phone), [['mantenimiento_nuevo_reporte', [t.room || 'sin cuarto', t.guestName || '-', String(t.problemStaff || t.problem || '').slice(0, 250), t.priority === 'urgent' ? 'URGENTE' : 'Normal', t.id]]], 'es_MX', 'mt-' + t.id);
     sent.push({ name: p.name || ('…' + digits(p.phone).slice(-4)), sent: !!used });
   }
   return { people: people.length, sent };
@@ -78,10 +78,13 @@ async function alertMaintenance(key, t) {
 
 // the guest's WhatsApp (English) when the ticket is resolved; email when there is no phone or WhatsApp fails
 async function notifyGuestResolved(t) {
-  const first = String(t.guestName || '').trim().split(/\s+/)[0] || 'there';
-  const what = String(t.problem || 'the issue').replace(/\s+/g, ' ').slice(0, 120);
+  const es = t.lang === 'es';   // the guest's language (Jorge 2026-11-06: Lana answered in Spanish, the confirmation came in English)
+  const first = String(t.guestName || '').trim().split(/\s+/)[0] || (es ? 'hola' : 'there');
+  const what = String(t.problem || (es ? 'el problema' : 'the issue')).replace(/\s+/g, ' ').replace(/[.\s]+$/, '').slice(0, 120);
   let wa = null, mail = null;
-  if (digits(t.guestPhone).length >= 10) wa = await sendUtility(e164(t.guestPhone), [['maintenance_issue_resolved', [first, t.room || '-', what]]], 'en_US', 'mt-done-' + t.id);
+  if (digits(t.guestPhone).length >= 10) wa = await sendUtility(e164(t.guestPhone), es
+    ? [['mantenimiento_resuelto_huesped', [first, t.room || '-', what]], ['maintenance_issue_resolved', [first, t.room || '-', what]]]
+    : [['maintenance_issue_resolved', [first, t.room || '-', what]]], es ? 'es_MX' : 'en_US', 'mt-done-' + t.id);
   if (!wa && t.guestEmail) {
     mail = await sendMail({ to: t.guestEmail, replyTo: 'amansala.reservations@gmail.com', subject: 'The issue in your room has been taken care of',
       html: `<p>Hi ${first},</p><p>The issue you reported in room <b>${t.room || ''}</b> (${what}) has been taken care of by our maintenance team.</p><p>If anything still is not working, just reply to this email and we will help you right away.</p><p>Warm regards,<br>The Amansala Team</p>` }).catch(() => false);
@@ -89,4 +92,18 @@ async function notifyGuestResolved(t) {
   return { whatsapp: wa ? 'sent' : (digits(t.guestPhone).length >= 10 ? 'failed' : 'no phone'), email: mail ? 'sent' : (t.guestEmail ? (wa ? 'not needed' : 'failed') : 'no email') };
 }
 
-module.exports = { SUPABASE_URL, H, readRow, listTickets, mutate, createTicket, alertMaintenance, notifyGuestResolved };
+// the guest's language from what they wrote, and the problem in Spanish for the maintenance team
+const looksSpanish = s => /[áéíóúñ¿¡]|\b(no sirve|no funciona|mi cuarto|mi habitaci|regadera|el aire|agua|luz|puerta|baño|caja fuerte|por favor|hola)\b/i.test(String(s || ''));
+async function toSpanish(text) {
+  const k = process.env.ANTHROPIC_API_KEY;
+  if (!k || !text) return text;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': k, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 200, messages: [{ role: 'user', content: `Translate this hotel maintenance problem into short, plain Mexican Spanish. Reply with the translation only.\n\n${String(text).slice(0, 500)}` }] }) });
+    const j = await r.json();
+    const out = ((j.content || []).find(c => c.type === 'text') || {}).text;
+    return out ? out.trim().slice(0, 500) : text;
+  } catch (e) { return text; }
+}
+
+module.exports = { looksSpanish, toSpanish, SUPABASE_URL, H, readRow, listTickets, mutate, createTicket, alertMaintenance, notifyGuestResolved };
