@@ -10,6 +10,32 @@
 // rule, matching how staging does it.
 const ADMIN_EXTRA_GUEST_RT_IDS=new Set(['bd1','bd2']);
 
+// Room descriptions from amansala.com/rooms, shown on each room-type card in the
+// teacher view (Jorge 2026-11-06). Keyed by portal room-type id; the "Bed in a ..."
+// types reuse the description of their whole room (Beachview Double, Double, Triple).
+const RT_WEB_INFO=(()=>{
+  const bv={title:'Beachview Double',text:'A comfortable room with two beds and a private terrace — ideal for friends or sisters sharing a room. Bright, well-appointed, with sea breezes and steps from the beach.',feats:['2 Queen Beds','Private Terrace','Beach View','Private Bathroom','Closet','Safety Deposit Box']};
+  const gd={title:'Garden Double',text:'A comfortable room with two beds — ideal for friends or sisters sharing a room. Bright, well-appointed, and steps from the beach.',feats:['2 Queen Beds','Private Bathroom','Closet','Safety Deposit Box']};
+  const fam={title:'Family Room',text:'A large open room with three queen beds — perfect for friends or family traveling together. Bright, airy, and steps to the sea.',feats:['3 Queen Beds','3 Closets','Large Private Bathroom','Open Floor Plan','Safety Deposit Box']};
+  return{
+    rt1:{title:'Beachfront Deluxe',text:'Our finest rooms, facing directly to the sea with a large private terrace and unobstructed ocean views. Wake up to the sound of waves.',feats:['King Bed','Large Terrace','Direct Sea View','Private Bathroom','Closet']},
+    rt2:{title:'Superior',text:'Not right on the beach but just steps to the sea. Lovely, extra-nice rooms — bright, airy, and beautifully appointed.',feats:['King Bed','Private Bathroom','Closet','Safety Deposit Box']},
+    rt3:{title:'Garden Plus',text:'A lovely large room with king bed — bright, airy, and comfortable. A great base for your Tulum adventure.',feats:['King Bed','Garden View','Private Bathroom','Closet','Safety Deposit Box']},
+    rt4:{title:'Garden King',text:"A charming room with a king bed, facing the lush garden at the back of the property. Bright, airy, and comfortable — a tranquil escape that's still just steps from the beach.",feats:['King Bed','Garden View','Private Bathroom','Closet','Safety Deposit Box']},
+    rt5:{title:'Super Simple',text:"Simple and cozy, located at the back of the property. The smart choice if you're on a budget but still want to be at the beach.",feats:['Queen Bed','Private Bathroom','Closet','Safety Deposit Box']},
+    rt6:bv,bd1:bv,rt7:gd,bd2:gd,rt8:fam,bd3:fam,
+  };
+})();
+function rtWebInfoHtml(rt){
+  const w=RT_WEB_INFO[rt&&rt.id];if(!w)return'';
+  const shared=/^Bed in a /i.test(rt.name||'');
+  return`<div class="rt-card-desc" style="padding:10px 18px 12px;border-bottom:1px solid var(--border);font-size:12.5px;line-height:1.5;color:#444">
+    ${shared?`<div style="font-size:11px;color:var(--muted);margin-bottom:3px">Your own bed in a shared ${escHtml(w.title)} room</div>`:''}
+    <div>${escHtml(w.text)}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:7px">${w.feats.map(f=>`<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--sand);border:1px solid var(--border);color:#555">${escHtml(f)}</span>`).join('')}</div>
+  </div>`;
+}
+
 // ===== TEACHER REGISTRATION =====
 // Transport rows for the currently-selected retreat, fetched once on retreat select
 // (matches Staging's own selectBooking() — not on every regRender(), just when the
@@ -614,6 +640,7 @@ function regRender(){
         <span class="rt-card-price">${priceTag} &nbsp;<span style="color:#aaa;font-size:10.5px">${_grT?'all-inclusive package price':`+${Math.round(portalRoomsTaxRate()*100)}% tax +$${getTip(regSelBk)}/night tip`}</span></span>
         <button class="rt-info-btn" onclick="showPriceTip(event,'${rt.id}')" title="View pricing breakdown">ℹ</button>
       </div>
+      ${IS_TEACHER_MODE?rtWebInfoHtml(rt):''}
       <table class="reg-table">
         <thead><tr>
           <th style="width:62px">#</th>
