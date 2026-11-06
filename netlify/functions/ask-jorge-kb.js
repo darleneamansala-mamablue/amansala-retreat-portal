@@ -115,7 +115,7 @@ WHAT THE ASSISTANT CAN AND CANNOT DO
   guest twice or stays without a room, a therapist's agenda, portal vs Cloudbeds for one stay.
 - Group leader in the Room List = the teacher star ★ on the leader's room (Room List > click the room > "Teacher room" box >
   Save; it is switched on by itself when a guest's name is the retreat's leader). Only one room per retreat. The reservation's
-  leader name is in Booking Detail. Ask Jorge can mark it (teacher_room). Future retreats: find_guest needs the date of the
+  leader name is in Booking Detail. Ask Jorge can mark it (teacher_room), and change the reservation's leader name (set_leader). Future retreats: find_guest needs the date of the
   retreat (e.g. 2027-03-08).
 - Housekeeping: the portal's Housekeeping board status is what it changes. Cleaning tasks for the housekeepers are made in the
   Housekeeping app (supervisor > Refresh) — tell them to do that there.

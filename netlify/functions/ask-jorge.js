@@ -85,12 +85,15 @@ const TOOLS = [
     input_schema: { type: 'object', properties: { date: { type: 'string' }, guest: { type: 'string' } } } },
   { name: 'cloudbeds_compare', description: 'Compare one stay (regId) in the portal with its Cloudbeds reservation: dates, room, guest name, status. The portal is the truth. Read-only.',
     input_schema: { type: 'object', properties: { regId: { type: 'string' } }, required: ['regId'] } },
+  { name: 'find_reservation', description: 'Find a retreat / group / Room Only reservation by leader or retreat name (any date, past or future): bookingId, leader, dates, status, rooms with their guests (regId) and which room is the teacher room. Use it for future retreats, where find_guest needs the exact date. Read-only.',
+    input_schema: { type: 'object', properties: { name: { type: 'string' }, date: { type: 'string', description: 'optional YYYY-MM-DD inside the stay' } }, required: ['name'] } },
   { name: 'spa_services', description: 'List the active spa services (id, name, duration, price). Read-only.', input_schema: { type: 'object', properties: {} } },
   { name: 'spa_availability', description: 'Free times for a spa service on a date (with therapist and spa room ids to book). Read-only.',
     input_schema: { type: 'object', properties: { serviceId: { type: 'string' }, date: { type: 'string' }, therapistPreference: { type: 'string', enum: ['none', 'male', 'female'] }, guestCount: { type: 'number' } }, required: ['serviceId', 'date'] } },
-  { name: 'propose_action', description: 'Propose a change for the person to confirm with a button (nothing is saved until they confirm). Types: add_charge (folioId, description, category, qty, unitPrice USD before tax, taxRate %), record_payment (folioId, method, amount USD, reference), check_in (regId), check_out (regId), internal_note (regId, note), ac24 (regId, on true/false), move_room (regId, toRoom), spa_booking (serviceId, date, start HH:MM, therapistId, spaRoomId, firstName, lastName, email, phone, guestType hotel|offsite, roomNumber for hotel guests, guestCount for groups), new_booking (room, checkIn, checkOut, guestName, email, phone, adults, ratePerNight, bookingType, notes), send_payment_link (folioId), remove_charge (folioItemId), edit_charge (folioItemId + description/qty/unitPrice/taxRate to change), refund_payment (folioItemId of a Stripe card payment, amount, reason; only Jorge, Hilario, Melissa), spa_cancel (apptId; removes its room charge), spa_move (apptId + new date/start/therapistId; the charge moves too), therapist_confirm (apptId), transport_change (rowId + arrivalDate/arrivalTime/arrivalAirport/departureDate/departureTime/departureAirport/flightNumber), room_status (room, status clean|dirty|maintenance, note), teacher_room (regId: mark the group leader / teacher room ★ in the Room List), cloudbeds_fix (regId: Cloudbeds dates/room set to the portal\'s).',
+  { name: 'propose_action', description: 'Propose a change for the person to confirm with a button (nothing is saved until they confirm). Types: add_charge (folioId, description, category, qty, unitPrice USD before tax, taxRate %), record_payment (folioId, method, amount USD, reference), check_in (regId), check_out (regId), internal_note (regId, note), ac24 (regId, on true/false), move_room (regId, toRoom), spa_booking (serviceId, date, start HH:MM, therapistId, spaRoomId, firstName, lastName, email, phone, guestType hotel|offsite, roomNumber for hotel guests, guestCount for groups), new_booking (room, checkIn, checkOut, guestName, email, phone, adults, ratePerNight, bookingType, notes), send_payment_link (folioId), remove_charge (folioItemId), edit_charge (folioItemId + description/qty/unitPrice/taxRate to change), refund_payment (folioItemId of a Stripe card payment, amount, reason; only Jorge, Hilario, Melissa), spa_cancel (apptId; removes its room charge), spa_move (apptId + new date/start/therapistId; the charge moves too), therapist_confirm (apptId), transport_change (rowId + arrivalDate/arrivalTime/arrivalAirport/departureDate/departureTime/departureAirport/flightNumber), room_status (room, status clean|dirty|maintenance, note), teacher_room (regId: mark the group leader / teacher room ★ in the Room List), set_leader (bookingId from find_reservation, leaderName: the reservation\'s leader name), cloudbeds_fix (regId: Cloudbeds dates/room set to the portal\'s).',
     input_schema: { type: 'object', properties: {
-      type: { type: 'string', enum: ['add_charge', 'record_payment', 'check_in', 'check_out', 'internal_note', 'ac24', 'move_room', 'spa_booking', 'new_booking', 'send_payment_link', 'remove_charge', 'edit_charge', 'refund_payment', 'spa_cancel', 'spa_move', 'therapist_confirm', 'transport_change', 'room_status', 'cloudbeds_fix', 'teacher_room'] },
+      type: { type: 'string', enum: ['add_charge', 'record_payment', 'check_in', 'check_out', 'internal_note', 'ac24', 'move_room', 'spa_booking', 'new_booking', 'send_payment_link', 'remove_charge', 'edit_charge', 'refund_payment', 'spa_cancel', 'spa_move', 'therapist_confirm', 'transport_change', 'room_status', 'cloudbeds_fix', 'teacher_room', 'set_leader'] },
+      bookingId: { type: 'string' }, leaderName: { type: 'string' },
       folioItemId: { type: 'string' }, apptId: { type: 'string' }, rowId: { type: 'string' }, reason: { type: 'string' }, status: { type: 'string', enum: ['clean', 'dirty', 'maintenance'] },
       arrivalDate: { type: 'string' }, arrivalTime: { type: 'string' }, arrivalAirport: { type: 'string' }, departureDate: { type: 'string' }, departureTime: { type: 'string' }, departureAirport: { type: 'string' }, flightNumber: { type: 'string' },
       toRoom: { type: 'string' }, room: { type: 'string' }, checkIn: { type: 'string' }, checkOut: { type: 'string' }, guestName: { type: 'string' },
@@ -164,7 +167,8 @@ async function waToJorge(template, params) {
 // what Ask Jorge DID: WhatsApp (template amansala_ask_jorge_hecho), email while that template is not approved yet
 async function tellJorgeDone(who, page, summary) {
   const name = who.name || 'Alguien del staff';
-  if (await waToJorge('amansala_ask_jorge_hecho', [name, summary, page || 'Portal'])) return;
+  // Utility templates only (Jorge 2026-11-06): Meta filed the amansala_ask_jorge_* ones as Marketing and did not deliver them
+  if (await waToJorge('amansala_portal_accion', [name, summary, page || 'Portal'])) return;
   const e = v => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   await sendMail({ to: 'Jorge@amansala.com', subject: `Ask Jorge — ${name} hizo: ${String(summary).slice(0, 70)}`,
     html: `<p style="font-size:16px"><b>Ask Jorge</b></p><p><b>${e(name)}</b> hizo en el portal: ${e(summary)}</p><p style="color:#6b7280">Pantalla: ${e(page || 'Portal')}</p>` }).catch(() => {});
@@ -181,7 +185,8 @@ async function notifyJorge(key, who, page, request, reason) {
   } catch (e) {}
   // WhatsApp first (Jorge 2026-11-05): the Ask Jorge template, else the first approved one; email only if WhatsApp did not go
   const name = who.name || 'Alguien del staff';
-  let wa = await waToJorge('amansala_ask_jorge_v2', [name, req || '-', why || '-', page || 'Portal']) ? 'sent' : 'failed';
+  // Utility templates only (Jorge 2026-11-06): Meta filed amansala_ask_jorge_v2 as Marketing and did not deliver it
+  let wa = await waToJorge('amansala_portal_pendiente', [name, req || '-', why || '-', page || 'Portal']) ? 'sent' : 'failed';
   if (wa !== 'sent') wa = await waToJorge('amansala_pregunta_portal', [name, `Ask Jorge — pidió: ${req || '-'} · No se pudo porque: ${why || '-'}`, page || 'Portal']) ? 'sent' : 'failed';
   if (wa === 'sent') return { sent: true, whatsapp: wa, email: 'not needed' };
   const e = v => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -375,7 +380,7 @@ async function runAction(key, who, a, token) {
     await send('PATCH', `registrations?id=eq.${encodeURIComponent(x.regId)}`, { internal_notes: (prev ? prev + '\n' : '') + x.note + ' — ' + (who.name || 'staff') });
   } else if (x.type === 'ac24') await send('PATCH', `registrations?id=eq.${encodeURIComponent(x.regId)}`, { ac_24h: x.on });
   }
-  const label = { add_charge: 'Charge added', record_payment: 'Payment recorded', check_in: 'Checked in', check_out: 'Checked out', internal_note: 'Internal note', ac24: 'A/C 24h', send_payment_link: 'Payment link sent', spa_booking: 'Spa booking', remove_charge: 'Charge removed', edit_charge: 'Charge corrected', refund_payment: 'Payment refunded', spa_cancel: 'Spa appointment cancelled', spa_move: 'Spa appointment moved', therapist_confirm: 'Spa confirmation sent to therapist', transport_change: 'Transport changed', room_status: 'Room status', cloudbeds_fix: 'Cloudbeds fixed', teacher_room: 'Group leader marked' }[x.type];
+  const label = { add_charge: 'Charge added', record_payment: 'Payment recorded', check_in: 'Checked in', check_out: 'Checked out', internal_note: 'Internal note', ac24: 'A/C 24h', send_payment_link: 'Payment link sent', spa_booking: 'Spa booking', remove_charge: 'Charge removed', edit_charge: 'Charge corrected', refund_payment: 'Payment refunded', spa_cancel: 'Spa appointment cancelled', spa_move: 'Spa appointment moved', therapist_confirm: 'Spa confirmation sent to therapist', transport_change: 'Transport changed', room_status: 'Room status', cloudbeds_fix: 'Cloudbeds fixed', teacher_room: 'Group leader marked', set_leader: 'Reservation leader changed' }[x.type];
   await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, { method: 'POST', headers: { ...H(key), Prefer: 'return=minimal' },
     body: JSON.stringify({ id: 'id_' + Date.now() + '_askj', action: label, detail: chk.summary + ' (Ask Jorge)', booking_id: x.bookingId || null, user_name: who.name || 'Staff', user_role: who.role || 'staff', created_at: now }) }).catch(() => {});
   return { ok: true, message: '✓ ' + chk.summary };
@@ -449,6 +454,7 @@ exports.handler = async (event) => {
           else if (u.name === 'arrivals_departures') out = await T.arrivalsDepartures(key, u.input || {});
           else if (u.name === 'reservation_problems') out = await T.reservationProblems(key, u.input || {});
           else if (u.name === 'spa_agenda') out = await T.spaAgenda(key, u.input || {});
+          else if (u.name === 'find_reservation') out = await T.findReservation(key, u.input || {});
           else if (u.name === 'transports') out = await A.transports(key, u.input || {});
           else if (u.name === 'cloudbeds_compare') out = await A.cloudbedsCompare(key, (u.input || {}).regId);
           else if (u.name === 'spa_services') {

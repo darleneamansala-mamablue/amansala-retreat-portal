@@ -127,4 +127,22 @@ async function spaAgenda(key, { therapist = '', date = '', guest = '' }) {
   return { date: day || 'last 30 days and later', therapist: t ? t.firstName : 'all', appointments: list };
 }
 
-module.exports = { arrivalsDepartures, reservationProblems, stayFolios, extraNights, spaAgenda, appStore, getter, tulumDate, addDays, norm, H, SUPABASE_URL, lineTotal, r2 };
+// a reservation by leader / retreat name, any date (future retreats included)
+async function findReservation(key, { name = '', date = '' }) {
+  const get = getter(key), w = String(name).trim().replace(/[*,()]/g, ' ').split(/\s+/).filter(x => x.length > 1);
+  if (!w.length) return { message: 'Give a name.' };
+  const q = w.map(x => `leader_name.ilike.*${encodeURIComponent(x)}*,retreat_name.ilike.*${encodeURIComponent(x)}*`).join(',');
+  let bks = await get(`bookings?select=id,leader_name,retreat_name,start_date,end_date,status,booking_type&or=(${q})&order=start_date.desc&limit=40`);
+  if (isDay(date)) bks = bks.filter(b => b.start_date <= date && b.end_date >= date);
+  bks = bks.filter(b => w.every(x => norm(`${b.leader_name} ${b.retreat_name}`).includes(norm(x)))).slice(0, 6);
+  if (!bks.length) return { message: `No reservation found for "${name}".` };
+  const out = [];
+  for (const b of bks) {
+    const regs = await get(`registrations?select=id,room,guests,is_teacher_room,cancelled&booking_id=eq.${encodeURIComponent(b.id)}`);
+    out.push({ bookingId: b.id, leader: b.leader_name, retreat: b.retreat_name, dates: `${b.start_date} → ${b.end_date}`, status: b.status, type: b.booking_type,
+      rooms: regs.filter(r => !r.cancelled).map(r => ({ regId: r.id, room: r.room, guests: guestNames(r).join(' & ') || '(empty)', teacherRoom: !!r.is_teacher_room })) });
+  }
+  return out;
+}
+
+module.exports = { findReservation, arrivalsDepartures, reservationProblems, stayFolios, extraNights, spaAgenda, appStore, getter, tulumDate, addDays, norm, H, SUPABASE_URL, lineTotal, r2 };
