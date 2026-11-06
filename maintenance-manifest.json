@@ -1,0 +1,12 @@
+{
+  "name": "Amansala Maintenance",
+  "short_name": "Maintenance",
+  "description": "Amansala — maintenance reports from guests and staff",
+  "start_url": "/maintenance-team.html",
+  "scope": "/maintenance-team",
+  "display": "standalone",
+  "background_color": "#1a2332",
+  "theme_color": "#1a2332",
+  "orientation": "portrait-primary",
+  "icons": [{ "src": "https://images.squarespace-cdn.com/content/v1/5a4da1e790bade09791c37c6/7c9523d9-1fc0-4df2-a01e-7b171732ac45/amansala.logo.png?format=500w", "sizes": "any", "type": "image/png", "purpose": "any maskable" }]
+}

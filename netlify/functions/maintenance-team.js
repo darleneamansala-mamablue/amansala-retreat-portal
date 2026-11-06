@@ -19,8 +19,13 @@ exports.handler = async (event) => {
       const since = Date.now() - 3 * 864e5;
       const tickets = (await M.listTickets(key)).filter(t => t && (t.status !== 'resolved' || Date.parse(t.resolvedAt || t.createdAt) > since))
         .map(t => ({ id: t.id, room: t.room, problem: t.problemStaff || t.problem, guestName: t.guestName, priority: t.priority, category: t.category || M.categorize(t.problem), status: t.status,
-          createdAt: t.createdAt, assignedTo: t.assignedTo || '', resolvedAt: t.resolvedAt || null, resolvedBy: t.resolvedBy || '', notes: (t.notes || []).slice(-3) }));
+          createdAt: t.createdAt, alertedAt: t.alertedAt || null, startedAt: t.startedAt || null, assignedTo: t.assignedTo || '', resolvedAt: t.resolvedAt || null, resolvedBy: t.resolvedBy || '', notes: (t.notes || []).slice(-8) }));
       return reply(200, { me: me.name, tickets });
+    }
+    if (event.httpMethod === 'POST' && b.action === 'subscribe') {   // this phone wants push notifications (maintenance-sw.js)
+      const r = await M.hkPush('subscribe', { who: 'mt-' + me.phone, subscription: b.subscription });
+      if (b.test) await M.hkPush('send', { who: ['mt-' + me.phone], payload: { title: '🔔 Notifications on', body: 'You will get new maintenance reports here.', tag: 'mt-test', url: '/maintenance-team.html' } });
+      return reply(r.ok ? 200 : 500, r.ok ? { ok: true } : { error: 'Could not save the notifications' });
     }
     if (event.httpMethod === 'POST') {
       const out = await M.updateTicket(key, String(b.id || ''), { status: b.status, note: b.note }, me.name);

@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Maintenance · Amansala</title>
 <link rel="icon" type="image/png" href="/favicon.png">
+<link rel="manifest" href="/maintenance-manifest.json">
+<meta name="theme-color" content="#1a2332">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box}
@@ -27,18 +29,26 @@
   .go{background:#fef3c7;color:#92400e}.done{background:#16a34a;color:#fff}.note{background:#f1f5f9;color:#334155;flex:0 0 64px!important}
   .empty{text-align:center;color:#9ca3af;padding:40px 10px;background:#fff;border-radius:14px}
   .err{background:#fef2f2;color:#b91c1c;padding:16px;border-radius:12px}
+  .bar{background:#1a2332;color:#fff;border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:center;margin-bottom:12px;font-size:14px}
+  .bar button{background:#22c55e;color:#fff;border:none;border-radius:8px;padding:9px 12px;font:700 14px Jost,sans-serif}
+  .tl{margin-top:8px;border-left:2px solid #e5e7eb;padding-left:10px}
+  .tl div{font-size:12px;color:#4b5563;margin:2px 0}
 </style>
 </head>
 <body>
 <header><h1>Maintenance</h1><p id="who">Loading…</p></header>
 <main>
+  <div id="pushbar"></div>
   <div class="tabs"><button id="t-open" class="on" onclick="tab('open')">Pending</button><button id="t-done" onclick="tab('done')">Resolved (3 days)</button></div>
   <div id="list"></div>
 </main>
 <script>
 // The maintenance team's page (Jorge 2026-11-06): each person opens it from the link in their WhatsApp; they mark a report
 // "On my way" (In progress) and "Resolved" -- at Resolved the guest gets the confirmation right away. netlify/functions/maintenance-team.js
-const K = new URLSearchParams(location.search).get('k') || '';
+// the personal link's key: from the URL, else the one saved when the person first opened their link (the installed app
+// opens /maintenance-team.html without it)
+let K = new URLSearchParams(location.search).get('k') || '';
+try { if (K) localStorage.setItem('mt_k', K); else K = localStorage.getItem('mt_k') || ''; } catch (e) {}
 const CAT = { ac: '❄️ Air Conditioning', door: '🚪 Door / Lock', safe: '🔒 Safe', electricity: '💡 Electricity', water: '🚿 Water / Plumbing', other: '🔧 Other' };
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const when = t => { try { return new Date(t).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } };
@@ -52,6 +62,16 @@ async function load() {
     render();
   } catch (e) { document.getElementById('who').textContent = ''; document.getElementById('list').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 }
+// every step with its time and how long it took (Jorge 2026-11-06: "un time stamp de cada tarea")
+const dur = (a, b) => { const m = Math.round((Date.parse(b) - Date.parse(a)) / 60000); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+function timeline(t) {
+  const rows = [`🕑 Reported ${when(t.createdAt)}`];
+  if (t.alertedAt) rows.push(`📲 Team notified ${when(t.alertedAt)}`);
+  if (t.startedAt) rows.push(`🔧 On the way ${when(t.startedAt)}${t.assignedTo ? ' · ' + esc(t.assignedTo) : ''} (${dur(t.createdAt, t.startedAt)} after the report)`);
+  (t.notes || []).filter(n => !/^Status:|^Assigned|^Category/.test(n.text)).forEach(n => rows.push(`📝 ${when(n.at)} · ${esc(n.by)}: ${esc(n.text)}`));
+  if (t.resolvedAt) rows.push(`✅ Resolved ${when(t.resolvedAt)}${t.resolvedBy ? ' · ' + esc(t.resolvedBy) : ''} (${dur(t.createdAt, t.resolvedAt)} in total)`);
+  return rows.map(r => `<div>${r}</div>`).join('');
+}
 function tab(v) { view = v; document.getElementById('t-open').classList.toggle('on', v === 'open'); document.getElementById('t-done').classList.toggle('on', v === 'done'); render(); }
 function render() {
   const list = data.tickets.filter(t => view === 'open' ? t.status !== 'resolved' : t.status === 'resolved')
@@ -62,7 +82,7 @@ function render() {
     <div><span class="room">Room ${esc(t.room)}</span>${t.priority === 'urgent' ? '<span class="tag" style="background:#dc2626;color:#fff">URGENT</span>' : ''}<span class="tag" style="background:#f1f5f9;color:#334155">${CAT[t.category] || CAT.other}</span>${t.status === 'in_progress' ? '<span class="tag" style="background:#fef3c7;color:#92400e">On the way</span>' : ''}</div>
     <div class="prob">${esc(t.problem)}</div>
     <div class="meta">${esc(t.id)} · ${when(t.createdAt)}${t.guestName ? ' · ' + esc(t.guestName) : ''}${t.assignedTo ? ' · 👤 ' + esc(t.assignedTo) : ''}${t.resolvedAt ? ' · ✓ ' + when(t.resolvedAt) + ' by ' + esc(t.resolvedBy) : ''}</div>
-    ${(t.notes || []).filter(n => !/^Status:|^Assigned|^Category/.test(n.text)).map(n => `<div class="meta">📝 ${esc(n.by)}: ${esc(n.text)}</div>`).join('')}
+    <div class="tl">${timeline(t)}</div>
     ${t.status !== 'resolved' ? `<div class="btns">${t.status === 'open' ? `<button class="go" onclick="act('${t.id}','in_progress')">🔧 On my way</button>` : ''}<button class="done" onclick="act('${t.id}','resolved')">✓ Resolved</button><button class="note" onclick="note('${t.id}')">📝</button></div>` : ''}
   </div>`).join('');
 }
@@ -76,7 +96,30 @@ async function act(id, status) {
   try { await post({ id, status }); await load(); } catch (e) { alert(e.message); }
 }
 async function note(id) { const v = prompt('Note (what you did, parts needed…):'); if (!v || !v.trim()) return; try { await post({ id, note: v }); await load(); } catch (e) { alert(e.message); } }
-load(); setInterval(load, 60000);
+// install + push: the phone gets "New report — Room X" with sound even with the app closed (same push service as the
+// housekeeping app; its public key below)
+const VAPID = 'BLGOBBkKJiEvj03KlHKo0gW0MjvTaxGE-ZvvM1by-O-FrZM14J5Hp-5-3RF_2-ScrFYw_9LWvQw0lct-M1xbor8';
+const u8 = b => { const p = '='.repeat((4 - b.length % 4) % 4), x = atob((b + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...x].map(c => c.charCodeAt(0))); };
+async function subscribe(test) {
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(VAPID) });
+  await post({ action: 'subscribe', subscription: sub.toJSON(), test: !!test });
+}
+function pushSetup() {
+  if (!K || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  navigator.serviceWorker.register('/maintenance-sw.js', { scope: '/maintenance-team' }).catch(() => {});
+  navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.type === 'mt-refresh') load(); });
+  if (Notification.permission === 'granted') { subscribe(false).catch(() => {}); return; }
+  if (Notification.permission === 'denied') return;
+  const bar = document.getElementById('pushbar');
+  bar.innerHTML = '<div class="bar"><div style="flex:1">🔔 Turn on notifications to hear about new reports right away, even with the app closed.</div><button>Turn on</button></div>';
+  bar.querySelector('button').onclick = async () => {
+    const perm = await Notification.requestPermission(); bar.innerHTML = '';
+    if (perm === 'granted') { try { await subscribe(true); } catch (e) { alert('Could not turn on notifications: ' + e.message); } }
+  };
+}
+load(); pushSetup(); setInterval(load, 60000);
 </script>
 </body>
 </html>

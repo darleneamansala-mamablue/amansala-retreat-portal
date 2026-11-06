@@ -74,6 +74,9 @@ async function alertMaintenance(key, t) {
       ['mantenimiento_nuevo_reporte', [t.room || 'sin cuarto', t.guestName || '-', what, prio, t.id]]], 'es_MX', 'mt-' + t.id);
     return { name: p.name || ('…' + digits(p.phone).slice(-4)), sent: !!used };
   }));
+  // and a push notification on the phones that installed the maintenance app (maintenance-team.html)
+  const push = await hkPush('send', { who: people.map(p => 'mt-' + digits(p.phone).slice(-10)), payload: { title: `${t.priority === 'urgent' ? '🚨 URGENT — ' : '🔧 '}Room ${t.room || '?'}`, body: `${what}${t.guestName ? ' · ' + t.guestName : ''} (${t.id})`, tag: 'mt-' + t.id, url: '/maintenance-team.html' } }).catch(() => ({}));
+  sent.push({ name: 'push', sent: !!(push.data && push.data.sent), count: (push.data && push.data.sent) || 0 });
   return { people: people.length, sent, testOnly: list !== (row && row.value) };
 }
 
@@ -171,4 +174,12 @@ async function updateTicket(key, id, b, me) {
   return { ticket: out.ticket, guest };
 }
 
-module.exports = { teamLink, verifyTeam, updateTicket, CATEGORIES, categorize, looksSpanish, toSpanish, SUPABASE_URL, H, readRow, listTickets, mutate, createTicket, alertMaintenance, notifyGuestResolved };
+// push goes through the housekeeping app's push service (its keys, netlify/functions/hk-push-external.js), shared secret
+async function hkPush(action, body) {
+  const sec = process.env.HK_PORTAL_SECRET;
+  if (!sec) return { ok: false };
+  const r = await fetch('https://amansala-housekeeping.netlify.app/.netlify/functions/hk-push-external', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-hk-secret': sec }, body: JSON.stringify({ action, ...body }) });
+  return { ok: r.ok, data: await r.json().catch(() => ({})) };
+}
+
+module.exports = { hkPush, teamLink, verifyTeam, updateTicket, CATEGORIES, categorize, looksSpanish, toSpanish, SUPABASE_URL, H, readRow, listTickets, mutate, createTicket, alertMaintenance, notifyGuestResolved };

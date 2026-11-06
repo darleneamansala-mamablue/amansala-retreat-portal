@@ -16,6 +16,7 @@
     return d;
   };
   const when = t => { try { return new Date(t).toLocaleString('en-US', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } };
+  const dur = (a, b) => { const m = Math.round((Date.parse(b) - Date.parse(a)) / 60000); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
   const ago = t => { const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${Math.floor(m / 1440)} d`; };
 
   function mount() {
@@ -113,6 +114,7 @@
           <span style="font-size:12px;color:#6b7280">${esc(t.id)} · ${esc(when(t.createdAt))}${t.status !== 'resolved' ? ' · ' + ago(t.createdAt) + ' ago' : ''} · ${t.source === 'lana' ? '💬 Guest via WhatsApp' : '👤 ' + esc(t.reportedBy || 'Staff')}</span></div>
         <div style="font-size:14px;margin:8px 0 4px">${esc(t.problem)}</div>
         <div style="font-size:12px;color:#6b7280">${t.guestName ? 'Guest: ' + esc(t.guestName) : ''}${t.guestPhone ? ' · ' + esc(t.guestPhone) : ''}${t.assignedTo ? ' · Assigned to <b>' + esc(t.assignedTo) + '</b>' : ''}${t.resolvedAt ? ' · Resolved ' + esc(when(t.resolvedAt)) + ' by ' + esc(t.resolvedBy || '') : ''}</div>
+        <div style="font-size:11.5px;color:#4b5563;margin-top:6px">${[`🕑 Reported ${esc(when(t.createdAt))}`, t.alertedAt ? `📲 Team notified ${esc(when(t.alertedAt))}` : '', t.startedAt ? `🔧 On the way ${esc(when(t.startedAt))} (${dur(t.createdAt, t.startedAt)})` : '', t.resolvedAt ? `✅ Resolved ${esc(when(t.resolvedAt))} (${dur(t.createdAt, t.resolvedAt)} in total)` : ''].filter(Boolean).join(' &nbsp;→&nbsp; ')}</div>
         ${notes ? `<div style="margin-top:6px">${notes}</div>` : ''}${gn}
         ${t.status !== 'resolved' ? `<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
           ${t.status === 'open' ? `<button class="btn btn-secondary btn-sm" onclick="mtSet('${t.id}','in_progress')">🔧 In progress</button>` : ''}
