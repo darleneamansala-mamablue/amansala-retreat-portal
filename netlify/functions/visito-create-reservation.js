@@ -287,16 +287,16 @@ exports.handler = async (event) => {
       discountAmount,
       subtotal: subtotal - discountAmount,
       taxRatePct: taxPct,
-      taxAmount: taxAmt,
-      total: totalUSD,
       priceDisplay,
+      // Jorge 2026-11-06: Lana states the price ONLY as priceDisplay ("$160 + 21% tax"), never a tax-included total
+      priceInstructions: 'Tell the guest the price exactly as priceDisplay (amount + tax %). Never give a total that includes tax; the payment link shows the final amount.',
       paymentUrl,
       // Lana once rewrote amansalaportal.com/pay/... as amansala.com/pay/... (404) -- Jorge 2026-11-04
       paymentUrlNote: 'Send paymentUrl to the guest exactly as given, character for character. Its domain is amansalaportal.com -- never change it to amansala.com.',
       emailedToGuest: emailed,
       message: emailed
-        ? `Reserva pre-creada (precio: ${priceDisplay} = $${totalUSD.toFixed(2)} USD total) — comparte este link de pago con el huésped para confirmarla (también se le mandó por correo a ${email}): ${paymentUrl}`
-        : `Reserva pre-creada (precio: ${priceDisplay} = $${totalUSD.toFixed(2)} USD total) — comparte este link de pago con el huésped para confirmarla: ${paymentUrl} (no se pudo mandar el correo automático, avísale que revise spam o mándaselo tú por WhatsApp)`,
+        ? `Reserva pre-creada (precio: ${priceDisplay}) — comparte este link de pago con el huésped para confirmarla (también se le mandó por correo a ${email}): ${paymentUrl}`
+        : `Reserva pre-creada (precio: ${priceDisplay}) — comparte este link de pago con el huésped para confirmarla: ${paymentUrl} (no se pudo mandar el correo automático, avísale que revise spam o mándaselo tú por WhatsApp)`,
     });
   } catch (err) {
     console.error('[visito-create-reservation]', err.message);

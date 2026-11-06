@@ -259,7 +259,6 @@ exports.handler = async (event) => {
           : Math.round(baseRate * (1 + seasonalPct / 100) * weekendMult);
         const subtotal = rate * nights;
         const discountAmount = dc ? (dc.type === 'pct' ? Math.round(subtotal * dc.value) / 100 : Math.min(dc.value, subtotal)) : 0;
-        const tax = Math.round((subtotal - discountAmount) * taxPct) / 100;
         return {
           roomTypeId: rt.id,
           roomTypeName: rt.name,
@@ -271,8 +270,10 @@ exports.handler = async (event) => {
           subtotal,
           discountCode: validatedCode,
           discountAmount,
-          taxes: tax,
-          total: +(subtotal - discountAmount + tax).toFixed(2),
+          taxPct,
+          // Jorge 2026-11-06: quote "$160 + 21% tax", never a tax-included total (no total/taxes given to Lana any more)
+          priceDisplay: (() => { const net = subtotal - discountAmount, t = taxPct ? ` + ${taxPct}% tax` : '';
+            return nights > 1 ? `$${rate} per night × ${nights} nights = $${+net.toFixed(2)}${t}` : `$${+net.toFixed(2)}${t}`; })(),
         };
       })
       .filter(Boolean);
@@ -283,6 +284,7 @@ exports.handler = async (event) => {
 
     return ok({
       success: true, stayType: isExtraNight ? 'extra_night' : 'escape', checkIn, checkOut, nights, adults: numAdults, options,
+      priceInstructions: 'Quote each option exactly as its priceDisplay: the amount plus the tax percentage (e.g. "$160 + 21% tax"). Never add the tax yourself and never say a total "including taxes".',
       ...(stayTypeNote ? { stayTypeNote } : {}),
       ...(discountCode ? { discountCodeApplied: !!validatedCode, discountCode: validatedCode || null } : {}),
     });
