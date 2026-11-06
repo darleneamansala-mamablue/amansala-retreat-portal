@@ -218,8 +218,8 @@ async function _resAttachFolioBalances(rows){
     (items||[]).forEach(i=>{totalByFolio[i.folio_id]=(totalByFolio[i.folio_id]||0)+Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100);});
     // Online check-out (Jorge 2026-11-06): what the guest paid themselves by card on their payment link (guest-pay, Stripe),
     // i.e. a Stripe payment line no staff member entered
-    const onlineByFolio={};
-    (items||[]).forEach(i=>{if(Number(i.unit_price)<0&&!i.staff_name&&/Stripe/i.test(i.description||'')){const o=onlineByFolio[i.folio_id]=onlineByFolio[i.folio_id]||{amt:0,at:''};o.amt+=-Number(i.unit_price)*Number(i.qty);if(String(i.created_at)>o.at)o.at=String(i.created_at);}});
+    const onlineList={};
+    (items||[]).forEach(i=>{if(Number(i.unit_price)<0&&!i.staff_name&&/Stripe/i.test(i.description||''))(onlineList[i.folio_id]=onlineList[i.folio_id]||[]).push({amt:-Number(i.unit_price)*Number(i.qty),at:String(i.created_at)});});
     // Every folio of the guest's room counts, not only the one filed under their exact name -- same rule as Booking
     // Detail's folio list: a second folio (renamed, moved with Transfer Folio, a name written another way) is still theirs
     // unless it is filed under ANOTHER guest of that room (Jorge 2026-11-05: Departures showed one folio's balance only).
@@ -235,7 +235,7 @@ async function _resAttachFolioBalances(rows){
         if((isReg?f.registration_id:f.booking_request_id)!==anchorId)return;
         if(others.has(_n(f.guest_name)))return;
         sum=(sum||0)+(totalByFolio[f.id]||0);
-        const o=onlineByFolio[f.id];if(o){r.onlinePaid=(r.onlinePaid||0)+o.amt;if(o.at>(r.onlinePaidAt||''))r.onlinePaidAt=o.at;}
+        (onlineList[f.id]||[]).forEach(x=>{if(String(x.at).slice(0,10)<String(r.checkIn||''))return;r.onlinePaid=(r.onlinePaid||0)+x.amt;if(x.at>(r.onlinePaidAt||''))r.onlinePaidAt=x.at;});   // only what was paid during the stay, not a deposit before it
       });
       if(sum!=null)r.balance=+sum.toFixed(2);
     });

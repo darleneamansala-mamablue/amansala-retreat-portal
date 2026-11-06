@@ -1634,7 +1634,9 @@ async function tr2LoadOnlinePaid() {
       if (!fo || !fo.length) continue;
       const regOf = {}; fo.forEach(f => { regOf[f.id] = f.registration_id; });
       const { data: it } = await db.from('folio_items').select('folio_id,qty,unit_price,description,staff_name,created_at').in('folio_id', fo.map(f => f.id)).lt('unit_price', 0).ilike('description', '%Stripe%');
-      (it || []).filter(x => !x.staff_name).forEach(x => { const r = regOf[x.folio_id], o = map[r] = map[r] || { amt: 0, at: '' }; o.amt += -Number(x.unit_price) * Number(x.qty); if (String(x.created_at) > o.at) o.at = String(x.created_at); });
+      // during the stay only, not a deposit paid before arrival
+      const ciOf = id => { const rg = AppData.regs.find(x => x.id === id), bk = rg && AppData.bookings.find(b => b.id === rg.bookingId); return (rg && rg.checkIn) || (bk && bk.startDate) || ''; };
+      (it || []).filter(x => !x.staff_name && String(x.created_at).slice(0, 10) >= ciOf(regOf[x.folio_id])).forEach(x => { const r = regOf[x.folio_id], o = map[r] = map[r] || { amt: 0, at: '' }; o.amt += -Number(x.unit_price) * Number(x.qty); if (String(x.created_at) > o.at) o.at = String(x.created_at); });
     }
     tr2OnlinePaid = map;
     if (tr2View === 'departures') tr2BuildView();
