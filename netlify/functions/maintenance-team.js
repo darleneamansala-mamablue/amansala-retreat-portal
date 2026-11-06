@@ -17,9 +17,9 @@ exports.handler = async (event) => {
   try {
     if (event.httpMethod === 'GET') {
       const since = Date.now() - 3 * 864e5;
-      const tickets = (await M.listTickets(key)).filter(t => t && (t.status !== 'resolved' || Date.parse(t.resolvedAt || t.createdAt) > since))
+      const tickets = (await M.listTickets(key)).filter(t => t && M.visibleTo(t, me) && (t.status !== 'resolved' || Date.parse(t.resolvedAt || t.createdAt) > since))
         .map(t => ({ id: t.id, room: t.room, problem: t.problemStaff || t.problem, guestName: t.guestName, priority: t.priority, category: t.category || M.categorize(t.problem), status: t.status,
-          createdAt: t.createdAt, alertedAt: t.alertedAt || null, startedAt: t.startedAt || null, assignedTo: t.assignedTo || '', resolvedAt: t.resolvedAt || null, resolvedBy: t.resolvedBy || '', notes: (t.notes || []).slice(-8) }));
+          createdAt: t.createdAt, alertedAt: t.alertedAt || null, startedAt: t.startedAt || null, startedBy: t.startedBy || '', assignedTo: t.assignedTo || '', assignedAt: t.assignedAt || null, mine: !!t.assignedPhone && t.assignedPhone === me.phone, resolvedAt: t.resolvedAt || null, resolvedBy: t.resolvedBy || '', notes: (t.notes || []).slice(-8) }));
       return reply(200, { me: me.name, tickets });
     }
     if (event.httpMethod === 'POST' && b.action === 'subscribe') {   // this phone wants push notifications (maintenance-sw.js)
@@ -28,7 +28,9 @@ exports.handler = async (event) => {
       return reply(r.ok ? 200 : 500, r.ok ? { ok: true } : { error: 'Could not save the notifications' });
     }
     if (event.httpMethod === 'POST') {
-      const out = await M.updateTicket(key, String(b.id || ''), { status: b.status, note: b.note }, me.name);
+      const cur = (await M.listTickets(key)).find(t => t && t.id === String(b.id || ''));
+      if (!cur || !M.visibleTo(cur, me)) return reply(403, { error: 'This report is assigned to someone else.' });
+      const out = await M.updateTicket(key, String(b.id || ''), { status: b.status, note: b.note }, me.name, me.phone);
       if (out.abort) return reply(404, { error: out.error });
       await fetch(`${M.SUPABASE_URL}/rest/v1/activity_log`, { method: 'POST', headers: { ...M.H(key), Prefer: 'return=minimal' },
         body: JSON.stringify({ id: 'id_' + Date.now() + '_mtt', action: 'Maintenance ticket updated', detail: `${out.ticket.id} · room ${out.ticket.room}: ${b.status || 'note'} (maintenance phone page)${out.guest ? ` · guest WhatsApp ${out.guest.whatsapp}` : ''}`, booking_id: null, user_name: me.name, user_role: 'maintenance', created_at: new Date().toISOString() }) }).catch(() => {});

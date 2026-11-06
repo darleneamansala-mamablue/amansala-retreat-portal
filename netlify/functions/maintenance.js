@@ -38,11 +38,11 @@ exports.handler = async (event) => {
       return reply(200, { ok: true, ticket: r.ticket, alert: r.alert });
     }
     if (b.action === 'update') {
-      const out = await M.updateTicket(key, b.id, b, me);
+      const out = await M.updateTicket(key, b.id, b, me);   // b.assignedPhone = assign to that person (only they see it on their page)
       if (out.abort) return reply(404, { error: out.error });
       const guest = out.guest;
-      await log('Maintenance ticket updated', `${out.ticket.id} · room ${out.ticket.room}: ${b.status ? 'status ' + b.status : ''}${b.assignedTo != null ? ' assigned ' + b.assignedTo : ''}${b.category ? ' category ' + b.category : ''}${b.note ? ' note' : ''}${guest ? ` · guest WhatsApp ${guest.whatsapp}, email ${guest.email}` : ''}`);
-      return reply(200, { ok: true, ticket: out.ticket, guest });
+      await log('Maintenance ticket updated', `${out.ticket.id} · room ${out.ticket.room}: ${b.status ? 'status ' + b.status : ''}${b.assignedTo != null || b.assignedPhone != null ? ' assigned ' + (out.ticket.assignedTo || 'nobody') : ''}${b.category ? ' category ' + b.category : ''}${b.note ? ' note' : ''}${guest ? ` · guest WhatsApp ${guest.whatsapp}, email ${guest.email}` : ''}`);
+      return reply(200, { ok: true, ticket: out.ticket, guest, assigneeAlert: out.assigneeAlert || null });
     }
     if (b.action === 'numbers') {
       const list = (Array.isArray(b.numbers) ? b.numbers : []).map(p => ({ name: String(p.name || '').trim().slice(0, 60), phone: String(p.phone || '').trim().slice(0, 30) })).filter(p => p.phone.replace(/\D/g, '').length >= 10).slice(0, 20);

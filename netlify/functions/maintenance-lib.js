@@ -58,15 +58,17 @@ async function createTicket(key, t) {
   return { ticket: out.ticket, alert };
 }
 
-async function alertMaintenance(key, t) {
+// onlyPeople: [{name, phone}] -- just them (the person a report was assigned to), with "asignado a ti" in the message
+async function alertMaintenance(key, t, onlyPeople) {
   // Jorge 2026-11-06: the people in charge of following up -- app_store 'maintenance_alert_numbers' (Rubi, Melissa, Darlene,
   // Michelle, Hilario, Max, Jorge and the online team), set in Maintenance > "Maintenance WhatsApp". For a test,
   // app_store 'maintenance_alert_test' = {only: [{name, phone}]} sends ONLY to those.
   const [row, test] = await Promise.all([readRow(key, 'maintenance_alert_numbers'), readRow(key, 'maintenance_alert_test')]);
-  const list = test && test.value && Array.isArray(test.value.only) && test.value.only.length ? test.value.only : (row && Array.isArray(row.value) ? row.value : []);
+  const list = Array.isArray(onlyPeople) && onlyPeople.length ? onlyPeople
+    : test && test.value && Array.isArray(test.value.only) && test.value.only.length ? test.value.only : (row && Array.isArray(row.value) ? row.value : []);
   const seen = new Set();
   const people = list.filter(p => p && digits(p.phone).length >= 10 && !seen.has(digits(p.phone).slice(-10)) && seen.add(digits(p.phone).slice(-10)));
-  const what = String(t.problemStaff || t.problem || '').slice(0, 250), prio = t.priority === 'urgent' ? 'URGENTE' : 'Normal';
+  const what = String(t.problemStaff || t.problem || '').slice(0, 250), prio = (t.priority === 'urgent' ? 'URGENTE' : 'Normal') + (onlyPeople ? ' · asignado a ti' : '');
   const sent = await Promise.all(people.map(async p => {
     const link = teamLink(p);   // their own page to mark it In progress / Resolved (like the therapists' confirmations)
     const used = await sendUtility(e164(p.phone), [
@@ -75,9 +77,9 @@ async function alertMaintenance(key, t) {
     return { name: p.name || ('…' + digits(p.phone).slice(-4)), sent: !!used };
   }));
   // and a push notification on the phones that installed the maintenance app (maintenance-team.html)
-  const push = await hkPush('send', { who: people.map(p => 'mt-' + digits(p.phone).slice(-10)), payload: { title: `${t.priority === 'urgent' ? '🚨 URGENT — ' : '🔧 '}Room ${t.room || '?'}`, body: `${what}${t.guestName ? ' · ' + t.guestName : ''} (${t.id})`, tag: 'mt-' + t.id, url: '/maintenance-team.html' } }).catch(() => ({}));
+  const push = await hkPush('send', { who: people.map(p => 'mt-' + digits(p.phone).slice(-10)), payload: { title: `${t.priority === 'urgent' ? '🚨 URGENTE — ' : '🔧 '}${onlyPeople ? 'Asignado a ti · ' : ''}Cuarto ${t.room || '?'}`, body: `${what}${t.guestName ? ' · ' + t.guestName : ''} (${t.id})`, tag: 'mt-' + t.id, url: '/maintenance-team.html' } }).catch(() => ({}));
   sent.push({ name: 'push', sent: !!(push.data && push.data.sent), count: (push.data && push.data.sent) || 0 });
-  return { people: people.length, sent, testOnly: list !== (row && row.value) };
+  return { people: people.length, sent, testOnly: !onlyPeople && list !== (row && row.value) };
 }
 
 // the guest's WhatsApp (English) when the ticket is resolved; email when there is no phone or WhatsApp fails
@@ -143,9 +145,20 @@ async function verifyTeam(key, k) {
 }
 
 // one change to a ticket (status, assignee, category, note) by `me`; Resolved notifies the guest right away
-async function updateTicket(key, id, b, me) {
+// me = who made the change (name); mePhone = their last 10 digits when it comes from their own phone page (maintenance-team.js)
+// b.assignedPhone: assign to that person of maintenance_alert_numbers ('' = nobody) -- Jorge 2026-11-06: only the person a
+// report is assigned to sees it on their page, and gets a WhatsApp + push when it is given to them.
+async function updateTicket(key, id, b, me, mePhone) {
   const STATUSES = ['open', 'in_progress', 'resolved'], now = new Date().toISOString();
-  let before = null;
+  let before = null, assignee = null;
+  if (b.assignedPhone != null) {
+    const want = digits(b.assignedPhone).slice(-10);
+    if (want) {
+      const row = await readRow(key, 'maintenance_alert_numbers');
+      assignee = (row && Array.isArray(row.value) ? row.value : []).find(x => digits(x.phone).slice(-10) === want) || null;
+      if (!assignee) return { abort: true, error: 'That person is not on the maintenance list' };
+    }
+  }
   const out = await mutate(key, list => {
     const i = list.findIndex(t => t && t.id === id);
     if (i < 0) return { abort: true, error: 'Report not found' };
@@ -154,24 +167,37 @@ async function updateTicket(key, id, b, me) {
     if (b.status && STATUSES.includes(b.status) && b.status !== t.status) {
       t.status = b.status;
       if (b.status === 'resolved') { t.resolvedAt = now; t.resolvedBy = me; }
-      if (b.status === 'in_progress' && !t.startedAt) { t.startedAt = now; if (!t.assignedTo) t.assignedTo = me; }
+      // Start on a report nobody has: it becomes theirs (and stops showing on the others' pages)
+      if (b.status === 'in_progress' && !t.startedAt) { t.startedAt = now; t.startedBy = me; if (!t.assignedTo && !t.assignedPhone) { t.assignedTo = me; t.assignedPhone = mePhone || ''; t.assignedAt = now; } }
       t.notes.push({ at: now, by: me, text: `Status: ${b.status}` });
     }
-    if (b.assignedTo != null && String(b.assignedTo).trim() !== String(t.assignedTo || '')) { t.assignedTo = String(b.assignedTo).trim().slice(0, 80); t.notes.push({ at: now, by: me, text: `Assigned to ${t.assignedTo || '—'}` }); }
+    if (b.assignedPhone != null) {
+      const ph = assignee ? digits(assignee.phone).slice(-10) : '';
+      if (ph !== String(t.assignedPhone || '')) {
+        t.assignedPhone = ph; t.assignedTo = assignee ? String(assignee.name || ph) : ''; t.assignedAt = assignee ? now : null; t.assignedBy = me;
+        t.notes.push({ at: now, by: me, text: `Assigned to ${t.assignedTo || '—'}` });
+        if (assignee) t._notifyAssignee = true;
+      }
+    } else if (b.assignedTo != null && String(b.assignedTo).trim() !== String(t.assignedTo || '')) { t.assignedTo = String(b.assignedTo).trim().slice(0, 80); t.assignedPhone = ''; t.notes.push({ at: now, by: me, text: `Assigned to ${t.assignedTo || '—'}` }); }
     if (b.category && CATEGORIES.includes(b.category) && b.category !== t.category) { t.notes.push({ at: now, by: me, text: `Category: ${b.category}` }); t.category = b.category; }
     if (b.note && String(b.note).trim()) t.notes.push({ at: now, by: me, text: String(b.note).trim().slice(0, 500) });
     list[i] = t;
     return { list, ticket: t };
   });
   if (out.abort) return out;
-  let guest = null;
+  let guest = null, assigneeAlert = null;
+  if (out.ticket._notifyAssignee) {
+    delete out.ticket._notifyAssignee;
+    await mutate(key, list => ({ list: list.map(t => { if (t && t.id === id) { const c = { ...t }; delete c._notifyAssignee; return c; } return t; }) })).catch(() => {});
+    if (out.ticket.status !== 'resolved') assigneeAlert = await alertMaintenance(key, out.ticket, [assignee]).catch(e => ({ error: e.message }));
+  }
   if (out.ticket.status === 'resolved' && before.status !== 'resolved') {
     guest = await notifyGuestResolved(out.ticket).catch(e => ({ error: e.message }));
     const stamp = { at: new Date().toISOString(), ...guest };
     await mutate(key, list => ({ list: list.map(t => t && t.id === id ? { ...t, guestNotified: stamp } : t) })).catch(() => {});
     out.ticket.guestNotified = stamp;
   }
-  return { ticket: out.ticket, guest };
+  return { ticket: out.ticket, guest, assigneeAlert };
 }
 
 // push goes through the housekeeping app's push service (its keys, netlify/functions/hk-push-external.js), shared secret
@@ -182,4 +208,12 @@ async function hkPush(action, body) {
   return { ok: r.ok, data: await r.json().catch(() => ({})) };
 }
 
-module.exports = { hkPush, teamLink, verifyTeam, updateTicket, CATEGORIES, categorize, looksSpanish, toSpanish, SUPABASE_URL, H, readRow, listTickets, mutate, createTicket, alertMaintenance, notifyGuestResolved };
+// the team page shows a report to everyone while nobody has it, and only to its person once assigned
+function visibleTo(t, me) {
+  if (!t) return false;
+  if (t.assignedPhone) return t.assignedPhone === me.phone;
+  if (t.assignedTo) return String(t.assignedTo).trim().toLowerCase() === String(me.name || '').trim().toLowerCase();   // reports assigned before 2026-11-06 (name only)
+  return true;
+}
+
+module.exports = { visibleTo, hkPush, teamLink, verifyTeam, updateTicket, CATEGORIES, categorize, looksSpanish, toSpanish, SUPABASE_URL, H, readRow, listTickets, mutate, createTicket, alertMaintenance, notifyGuestResolved };

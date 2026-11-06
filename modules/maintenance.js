@@ -32,7 +32,7 @@
     panel.innerHTML = `<div style="flex:1;overflow-y:auto;padding:28px 36px;background:#f5f1eb">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
         <div><h2 style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:#2d2520;margin:0">Maintenance</h2>
-        <p style="font-size:12.5px;color:#8a7e74;margin:4px 0 0">Reports from guests (WhatsApp with Lana) and from staff. When it is marked Resolved, the guest gets a confirmation.</p></div>
+        <p style="font-size:12.5px;color:#8a7e74;margin:4px 0 0">Reports from guests (WhatsApp with Lana) and from staff. Unassigned reports show to the whole team; once assigned, only that person sees it on their phone. When it is finished, the guest gets a confirmation.</p></div>
         <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-secondary btn-sm" onclick="mtNumbers()">📱 Maintenance WhatsApp</button>
           <button class="btn btn-secondary btn-sm" onclick="mtLinks()">🔗 Team links</button>
@@ -114,11 +114,11 @@
           <span style="font-size:12px;color:#6b7280">${esc(t.id)} · ${esc(when(t.createdAt))}${t.status !== 'resolved' ? ' · ' + ago(t.createdAt) + ' ago' : ''} · ${t.source === 'lana' ? '💬 Guest via WhatsApp' : '👤 ' + esc(t.reportedBy || 'Staff')}</span></div>
         <div style="font-size:14px;margin:8px 0 4px">${esc(t.problem)}</div>
         <div style="font-size:12px;color:#6b7280">${t.guestName ? 'Guest: ' + esc(t.guestName) : ''}${t.guestPhone ? ' · ' + esc(t.guestPhone) : ''}${t.assignedTo ? ' · Assigned to <b>' + esc(t.assignedTo) + '</b>' : ''}${t.resolvedAt ? ' · Resolved ' + esc(when(t.resolvedAt)) + ' by ' + esc(t.resolvedBy || '') : ''}</div>
-        <div style="font-size:11.5px;color:#4b5563;margin-top:6px">${[`🕑 Reported ${esc(when(t.createdAt))}`, t.alertedAt ? `📲 Team notified ${esc(when(t.alertedAt))}` : '', t.startedAt ? `🔧 On the way ${esc(when(t.startedAt))} (${dur(t.createdAt, t.startedAt)})` : '', t.resolvedAt ? `✅ Resolved ${esc(when(t.resolvedAt))} (${dur(t.createdAt, t.resolvedAt)} in total)` : ''].filter(Boolean).join(' &nbsp;→&nbsp; ')}</div>
+        <div style="font-size:11.5px;color:#4b5563;margin-top:6px">${[`🕑 Reported ${esc(when(t.createdAt))}`, t.alertedAt ? `📲 Team notified ${esc(when(t.alertedAt))}` : '', t.assignedAt ? `👤 Assigned to ${esc(t.assignedTo)} ${esc(when(t.assignedAt))}` : '', t.startedAt ? `🔧 Started ${esc(when(t.startedAt))}${t.startedBy ? ' · ' + esc(t.startedBy) : ''} (${dur(t.createdAt, t.startedAt)} after the report)` : '', t.resolvedAt ? `✅ Finished ${esc(when(t.resolvedAt))}${t.startedAt ? ` (work time ${dur(t.startedAt, t.resolvedAt)})` : ''} · ${dur(t.createdAt, t.resolvedAt)} in total` : ''].filter(Boolean).join(' &nbsp;→&nbsp; ')}</div>
         ${notes ? `<div style="margin-top:6px">${notes}</div>` : ''}${gn}
         ${t.status !== 'resolved' ? `<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
           ${t.status === 'open' ? `<button class="btn btn-secondary btn-sm" onclick="mtSet('${t.id}','in_progress')">🔧 In progress</button>` : ''}
-          <button class="btn btn-secondary btn-sm" onclick="mtAssign('${t.id}')">👤 Assign</button>
+          <select onchange="mtAssignTo('${t.id}',this.value)" title="Only this person sees the report on their phone page, and gets a WhatsApp" style="padding:4px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px"><option value="">👤 ${t.assignedTo ? 'Unassign' : 'Assign to…'}</option>${people().map(p => `<option value="${esc(p.key)}"${t.assignedPhone === p.key ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
           <button class="btn btn-secondary btn-sm" onclick="mtNote('${t.id}')">📝 Note</button>
           <select onchange="mtSetCat('${t.id}',this.value)" title="Category" style="padding:4px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12px">${Object.entries(CAT).map(([k, c]) => `<option value="${k}"${(t.category || 'other') === k ? ' selected' : ''}>${c.i} ${c.l}</option>`).join('')}</select>
           <button class="btn btn-primary btn-sm" onclick="mtSet('${t.id}','resolved')">✓ Resolved</button></div>` : ''}
@@ -143,7 +143,12 @@
     if (status === 'resolved' && !confirm(`Mark room ${t.room} as Resolved?${t.guestPhone || t.guestEmail ? '\n\nThe guest gets the confirmation right now.' : ''}`)) return;
     update(id, { status });
   };
-  window.mtAssign = id => { const t = tickets.find(x => x.id === id); const v = prompt('Assign to:', (t && t.assignedTo) || ''); if (v != null) update(id, { assignedTo: v }); };
+  // the maintenance list, one entry per person (last 10 digits = who they are on their phone page)
+  function people() { const seen = new Set(); return numbers.map(p => ({ key: String(p.phone || '').replace(/\D/g, '').slice(-10), name: p.name || p.phone })).filter(p => p.key && !seen.has(p.key) && seen.add(p.key)); }
+  window.mtAssignTo = (id, key) => {
+    const p = people().find(x => x.key === key);
+    update(id, { assignedPhone: key || '' }, p ? `Assigned to ${p.name} ✓ — only they see it, WhatsApp sent` : 'Unassigned ✓ — the whole team sees it again');
+  };
   window.mtNote = id => { const v = prompt('Note:'); if (v && v.trim()) update(id, { note: v }); };
   window.mtNew = async () => {
     const room = prompt('Room:'); if (!room || !room.trim()) return;
