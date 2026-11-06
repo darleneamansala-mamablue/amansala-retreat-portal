@@ -36,15 +36,8 @@ exports.handler = async () => {
   const pretty = new Date(day + 'T12:00:00Z').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
   const params = [pretty, cut(done, 300), cut(nope, 250), cut(most, 250)];
 
-  let sent = false;
-  if (process.env.VISITO_M2M_KEY && process.env.VISITO_WA_CHANNEL_ID) {
-    const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(process.env.VISITO_WA_CHANNEL_ID)}/send`, {
-      method: 'POST', headers: { Authorization: `Bearer ${process.env.VISITO_M2M_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': `askj-daily-${day}` },
-      body: JSON.stringify({ to: JORGE_PHONE, template: { name: 'amansala_portal_resumen_dia', language: { code: 'es_MX' }, components: [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: t })) }] } }),
-    });
-    const j = await r.json().catch(() => ({})); sent = r.ok && j.accepted !== false;
-    if (!sent) console.error('[ask-jorge-daily] WhatsApp', r.status, JSON.stringify(j).slice(0, 200));
-  }
+  // Utility templates only (Meta filed amansala_portal_resumen_dia as Marketing and did not deliver it)
+  const sent = !!(await require('./wa-utility-lib').sendUtility(JORGE_PHONE, [['portal_reporte_diario', params], ['amansala_portal_resumen_dia', params]], 'es_MX', `askj-daily-${day}`));
   if (!sent) {
     const e = v => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
     await sendMail({ to: 'Jorge@amansala.com', subject: `Ask Jorge — resumen del ${pretty}`,

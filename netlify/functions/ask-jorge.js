@@ -17,6 +17,7 @@ const { staffAllowed, cors, reply } = require('./portal-auth-lib');
 const { sendMail } = require('./mail-lib');
 const KB = require('./ask-jorge-kb');
 const T = require('./ask-jorge-tools');
+const { sendUtility } = require('./wa-utility-lib');
 const A = require('./ask-jorge-actions');
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
@@ -151,24 +152,12 @@ async function logQuestion(key, who, page, q, tools, proposed, notified) {
   await fetch(`${SUPABASE_URL}/rest/v1/app_store?on_conflict=key`, { method: 'POST', headers: { ...H(key), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ key: 'ask_jorge_log', value: list, updated_at: new Date().toISOString() }) });
 }
 
-async function waToJorge(template, params) {
-  const visitoKey = process.env.VISITO_M2M_KEY, channelId = process.env.VISITO_WA_CHANNEL_ID;
-  if (!visitoKey || !channelId) return false;
-  try {
-    const r = await fetch(`https://platform-api.visitoai.com/m2m/v1/whatsapp-templates/${encodeURIComponent(channelId)}/send`, {
-      method: 'POST', headers: { Authorization: `Bearer ${visitoKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `askj-${template}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` },   // Visito refuses a send without it
-      body: JSON.stringify({ to: JORGE_PHONE, template: { name: template, language: { code: 'es_MX' }, components: [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: String(t).replace(/\s*\n\s*/g, ' ').slice(0, 300) })) }] } }),
-    });
-    const j = await r.json().catch(() => ({}));
-    console.log('[ask-jorge] WhatsApp to Jorge', template, r.status, j.status || '', j.replyId || '', j.error ? JSON.stringify(j.error).slice(0, 200) : '');   // to trace one that did not arrive
-    return r.ok && j.accepted !== false;
-  } catch (e) { console.error('[ask-jorge] WhatsApp to Jorge failed', e.message); return false; }
-}
-// what Ask Jorge DID: WhatsApp (template amansala_ask_jorge_hecho), email while that template is not approved yet
+// what Ask Jorge DID: WhatsApp (a Utility template), email when none is approved
 async function tellJorgeDone(who, page, summary) {
   const name = who.name || 'Alguien del staff';
-  // Utility templates only (Jorge 2026-11-06): Meta filed the amansala_ask_jorge_* ones as Marketing and did not deliver them
-  if (await waToJorge('amansala_portal_accion', [name, summary, page || 'Portal'])) return;
+  // Utility templates only (Jorge 2026-11-06): Meta filed the amansala_ask_jorge_* / amansala_portal_* ones as Marketing and did
+  // not deliver them -- wa-utility-lib skips any template that is not APPROVED + UTILITY
+  if (await sendUtility(JORGE_PHONE, [['portal_cambio_registrado', [name, summary, page || 'Portal']], ['amansala_portal_accion', [name, summary, page || 'Portal']]], 'es_MX', 'askj')) return;
   const e = v => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   await sendMail({ to: 'Jorge@amansala.com', subject: `Ask Jorge — ${name} hizo: ${String(summary).slice(0, 70)}`,
     html: `<p style="font-size:16px"><b>Ask Jorge</b></p><p><b>${e(name)}</b> hizo en el portal: ${e(summary)}</p><p style="color:#6b7280">Pantalla: ${e(page || 'Portal')}</p>` }).catch(() => {});
@@ -186,8 +175,8 @@ async function notifyJorge(key, who, page, request, reason) {
   // WhatsApp first (Jorge 2026-11-05): the Ask Jorge template, else the first approved one; email only if WhatsApp did not go
   const name = who.name || 'Alguien del staff';
   // Utility templates only (Jorge 2026-11-06): Meta filed amansala_ask_jorge_v2 as Marketing and did not deliver it
-  let wa = await waToJorge('amansala_portal_pendiente', [name, req || '-', why || '-', page || 'Portal']) ? 'sent' : 'failed';
-  if (wa !== 'sent') wa = await waToJorge('amansala_pregunta_portal', [name, `Ask Jorge — pidió: ${req || '-'} · No se pudo porque: ${why || '-'}`, page || 'Portal']) ? 'sent' : 'failed';
+  const wa = await sendUtility(JORGE_PHONE, [['portal_solicitud_pendiente', [name, req || '-', why || '-', page || 'Portal']], ['amansala_portal_pendiente', [name, req || '-', why || '-', page || 'Portal']],
+    ['amansala_pregunta_portal', [name, `Ask Jorge — pidió: ${req || '-'} · No se pudo porque: ${why || '-'}`, page || 'Portal']]], 'es_MX', 'askj') ? 'sent' : 'failed';
   if (wa === 'sent') return { sent: true, whatsapp: wa, email: 'not needed' };
   const e = v => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const mail = await sendMail({ to: 'Jorge@amansala.com', subject: `Ask Jorge — ${who.name || 'staff'}: ${req.slice(0, 70)}`,
