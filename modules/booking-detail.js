@@ -164,7 +164,10 @@ function _bdDateRangeEs(start,end){
   const a=new Date(start+'T00:00:00'),b=new Date(end+'T00:00:00');
   return`${a.toLocaleDateString('es-MX',opts)} – ${b.toLocaleDateString('es-MX',{...opts,year:'numeric'})}`;
 }
+// Jorge 2026-11-06: no WhatsApp to Jorge for a payment staff record by hand (cash, Zelle, Clip...) -- only online
+// payments (Stripe / card on file / WeTravel) still alert him, from their own server functions.
 function _bdNotifyPayment(amount){
+  return;
   const subj=_bdSubject();if(!subj)return;
   fetch('/.netlify/functions/notify-payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     status:'recibido',

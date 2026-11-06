@@ -401,7 +401,7 @@ exports.handler = async (event) => {
     try { res = await runAction(key, who, b.execute, b.token); }
     catch (e) { console.error('[ask-jorge] action', e.message); res = { ok: false, message: 'It could not be saved: ' + e.message }; }
     if (!res.ok) await notifyJorge(key, who, page, `Confirmó una acción: ${String(b.summary || b.execute.type || '')}`, `falló — ${res.message}`).catch(() => {});
-    else await tellJorgeDone(who, page, String(res.message || '').replace(/^✓\s*/, '')).catch(() => {});
+    else if (b.execute.type !== 'record_payment') await tellJorgeDone(who, page, String(res.message || '').replace(/^✓\s*/, '')).catch(() => {});   // staff-recorded payments: no alert (Jorge 2026-11-06)
     return reply(200, { ...res, notifiedJorge: !res.ok });
   }
   const history = (Array.isArray(b.messages) ? b.messages : []).slice(-16)
