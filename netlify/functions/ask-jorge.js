@@ -157,8 +157,9 @@ async function waToJorge(template, params) {
       body: JSON.stringify({ to: JORGE_PHONE, template: { name: template, language: { code: 'es_MX' }, components: [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: String(t).replace(/\s*\n\s*/g, ' ').slice(0, 300) })) }] } }),
     });
     const j = await r.json().catch(() => ({}));
+    console.log('[ask-jorge] WhatsApp to Jorge', template, r.status, j.status || '', j.replyId || '', j.error ? JSON.stringify(j.error).slice(0, 200) : '');   // to trace one that did not arrive
     return r.ok && j.accepted !== false;
-  } catch (e) { return false; }
+  } catch (e) { console.error('[ask-jorge] WhatsApp to Jorge failed', e.message); return false; }
 }
 // what Ask Jorge DID: WhatsApp (template amansala_ask_jorge_hecho), email while that template is not approved yet
 async function tellJorgeDone(who, page, summary) {
