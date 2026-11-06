@@ -11,7 +11,7 @@ const { appStore, getter, H, SUPABASE_URL, lineTotal, r2, norm, tulumDate, addDa
 const SITE = process.env.URL || 'https://amansalaportal.com';
 const money = n => '$' + Number(n).toFixed(2);
 const REFUNDERS = ['jorge', 'hilario', 'melissa'];
-const TYPES = ['remove_charge', 'edit_charge', 'refund_payment', 'spa_cancel', 'spa_move', 'therapist_confirm', 'transport_change', 'room_status', 'cloudbeds_fix'];
+const TYPES = ['remove_charge', 'edit_charge', 'refund_payment', 'spa_cancel', 'spa_move', 'therapist_confirm', 'transport_change', 'room_status', 'cloudbeds_fix', 'teacher_room'];
 const send = async (key, method, path, body) => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method, headers: { ...H(key), Prefer: 'return=minimal' }, body: body ? JSON.stringify(body) : undefined }); if (!r.ok) throw new Error((await r.text()).slice(0, 200)); };
 // static requires (not require('./' + name)): a dynamic one makes Netlify pack the whole folder, so this file's bundle came out
 // identical to ask-jorge.js's and ask-jorge was left without its function (500 on every call, 2026-11-05)
@@ -162,6 +162,15 @@ async function check(key, a, who) {
     if (!room || !['clean', 'dirty', 'maintenance'].includes(status)) return { error: 'Give the room and a status: clean, dirty or maintenance.' };
     return { action: { type: t, room, status, note: String(a.note || '').slice(0, 300) }, summary: `Mark room ${room} as ${status}${a.note ? ': "' + String(a.note).slice(0, 120) + '"' : ''} on the Housekeeping board` };
   }
+  if (t === 'teacher_room') {   // Melissa 2026-11-05: mark the group leader in the Room List (the teacher star)
+    const get = getter(key);
+    const [r] = await get(`registrations?id=eq.${encodeURIComponent(String(a.regId || ''))}&select=id,booking_id,room,guests,is_teacher_room,cancelled`);
+    if (!r || r.cancelled) return { error: 'That room was not found — look the guest up again (find_guest works for any date).' };
+    const others = await get(`registrations?booking_id=eq.${encodeURIComponent(r.booking_id)}&is_teacher_room=eq.true&select=id,room,guests`);
+    const prev = others.filter(o => o.id !== r.id);
+    if (r.is_teacher_room && !prev.length) return { error: `Room ${r.room} (${(r.guests || []).map(g => g && g.name).filter(Boolean).join(' & ')}) is already the leader / teacher room ★.` };
+    return { action: { type: t, regId: r.id, bookingId: r.booking_id, unset: prev.map(o => o.id) }, summary: `Mark ${(r.guests || []).map(g => g && g.name).filter(Boolean).join(' & ') || 'room ' + r.room} (room ${r.room}) as the group leader / teacher room ★${prev.length ? ` (instead of room ${prev.map(o => o.room).join(', ')})` : ''}. The teacher room counts as the leader's room on the retreat bill.` };
+  }
   if (t === 'cloudbeds_fix') {
     const c = await cloudbedsCompare(key, a.regId);
     if (c.error) return c;
@@ -247,6 +256,11 @@ async function run(key, who, x, token) {
     const map = { ...((row && row.value) || {}), [x.room]: { status: x.status, notes: x.note || null, updated_at: new Date().toISOString() } };
     await fetch(`${SUPABASE_URL}/rest/v1/app_store?on_conflict=key`, { method: 'POST', headers: { ...H(key), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ key: 'roomStatus', value: map, updated_at: new Date().toISOString() }) });
     return '';
+  }
+  if (x.type === 'teacher_room') {
+    for (const id of x.unset || []) await send(key, 'PATCH', `registrations?id=eq.${encodeURIComponent(id)}`, { is_teacher_room: false });
+    await send(key, 'PATCH', `registrations?id=eq.${encodeURIComponent(x.regId)}`, { is_teacher_room: true });
+    return ' — reload the Room List to see the star';
   }
   if (x.type === 'cloudbeds_fix') {
     const out = [];

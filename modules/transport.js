@@ -980,6 +980,10 @@ function tr2PrintView() {
   // entry with no date at all (edge case) is also skipped -- no day section
   // to put it under.
   const filtered = tr2FilteredSorted().filter(e => !e.isSynthetic && (!e.ot || e.date));
+  // Jorge 2026-11-06: a list where nobody has filled the form yet (only "Missing Transport") printed "No hay entradas" --
+  // the guests with no transport info now print too, at the end of their day, marked FALTA INFO, so the sheet shows
+  // who still has to be asked.
+  const missing = tr2FilteredSorted().filter(e => e.isSynthetic && e.date);
   const todayStr = new Date().toISOString().slice(0, 10);
 
   let rangeLabel;
@@ -1001,6 +1005,16 @@ function tr2PrintView() {
 
   const groups = new Map();
   filtered.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
+  const missingByDate = new Map();
+  missing.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); if (!missingByDate.has(e.date)) missingByDate.set(e.date, []); missingByDate.get(e.date).push(e); });
+  const sortedGroups = [...groups.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  const missingHtml = date => {
+    const m = missingByDate.get(date);
+    if (!m || !m.length) return '';
+    return `<tr class="ride" style="background:#fef9c3"><td colspan="${printCols}">Sin información de transporte (${m.length})</td></tr>
+      ${_printSortEntries(m).map(e => `<tr style="background:#fefce8"><td>${escHtml(e.room || '—')}</td><td>${escHtml(e.guest || '')}</td>${showTypeCol ? `<td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>` : ''}<td><strong>FALTA INFO</strong></td>${showPickupCol ? '<td>—</td>' : ''}<td>—</td><td>${escHtml(e.retreatLabel || '')}</td><td></td></tr>`).join('')}
+      <tr class="ride-end"><td colspan="${printCols}"></td></tr>`;
+  };
 
   // Jorge's ask 2026-10-20: Pick-up and Flight time are their own columns now,
   // not crammed into one "08:30 → 12:15" cell. Tipo only shows up when the
@@ -1084,10 +1098,11 @@ function tr2PrintView() {
     }).join('');
   };
 
-  const rowsHtml = filtered.length ? [...groups.entries()].map(([date, items], gi) => `
+  const rowsHtml = sortedGroups.length ? sortedGroups.map(([date, items], gi) => `
     ${gi > 0 ? `<tr class="spacer"><td colspan="${printCols}"></td></tr>` : ''}
     <tr class="grp"><td colspan="${printCols}">${date === todayStr ? '📍 HOY — ' : ''}${fmtDate(date)}</td></tr>
-    ${rideGroupsHtml(items)}
+    ${items.length ? rideGroupsHtml(items) : ''}
+    ${missingHtml(date)}
   `).join('') : `<tr><td colspan="${printCols}" class="none">No hay entradas para estos filtros.</td></tr>`;
 
   const win = window.open('', '_blank');

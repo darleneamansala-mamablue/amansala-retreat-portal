@@ -113,6 +113,10 @@ WHAT THE ASSISTANT CAN AND CANNOT DO
   dirty / maintenance on the portal's Housekeeping board, and make a Cloudbeds reservation match the portal (dates, room).
   And it reviews: a stay's bill before check-out, extra nights (paid? who pays?), arrivals / departures of a day, the same
   guest twice or stays without a room, a therapist's agenda, portal vs Cloudbeds for one stay.
+- Group leader in the Room List = the teacher star ★ on the leader's room (Room List > click the room > "Teacher room" box >
+  Save; it is switched on by itself when a guest's name is the retreat's leader). Only one room per retreat. The reservation's
+  leader name is in Booking Detail. Ask Jorge can mark it (teacher_room). Future retreats: find_guest needs the date of the
+  retreat (e.g. 2027-03-08).
 - Housekeeping: the portal's Housekeeping board status is what it changes. Cleaning tasks for the housekeepers are made in the
   Housekeeping app (supervisor > Refresh) — tell them to do that there.
 - It CAN check a guest's folio against the spa calendar (stay_folios): every spa charge vs every spa appointment, and say which

@@ -135,7 +135,10 @@ function _resGroupRows(){
       isSplitContinuation:!!_lineage?.prev, // this segment's checkIn is really just a room change -- not a new arrival
       isSplitMidStay:!!_lineage?.next,      // this segment's checkOut is really just a room change -- not a real departure
     };
-    if(named.length>1&&rt&&_RES_ONE_BED_RT_IDS.includes(rt.id)){
+    // Jorge 2026-11-06: every room shared by 2+ guests is ONE row (room 4 showed Lauren and Annette Heymann as two
+    // reservations with two balances) -- one stay, one Check In / Check Out, the balance of all their folios together.
+    // Only shared-dorm "Bed in a ___" rooms keep one row per guest (each bed is its own booking).
+    if(named.length>1&&(!rt||_RES_ONE_BED_RT_IDS.includes(rt.id)||!/bed in/i.test(rt.name||''))){
       out.push({...base,name:_joinNames(named.map(g=>g.name)),guestNames:named.map(g=>g.name),notes:reg.notes||[...new Set(named.map(g=>(g.notes||'').trim()).filter(Boolean))].join(' / ')});
     }else{
       named.forEach(g=>out.push({...base,name:g.name,guestNames:[g.name],notes:reg.notes||g.notes||''}));
