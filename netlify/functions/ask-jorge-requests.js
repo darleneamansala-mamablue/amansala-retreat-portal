@@ -9,6 +9,7 @@
 //                                    and a notice in their portal session
 //   mine                          -> the signed-in person's answered requests they have not seen yet (the in-session notice)
 //   seen {ids}                    -> they closed the notice
+//   delete {ids}                  -> Jorge only; removes requests
 //   phones / setPhone {name, phone} -> Jorge: who gets the WhatsApp (staff accounts have no phone; falls back to the maintenance list)
 const { staffAllowed, cors, reply } = require('./portal-auth-lib');
 const { sendUtility } = require('./wa-utility-lib');
@@ -102,6 +103,11 @@ exports.handler = async (event) => {
       await mutate(key, list => ({ list: withIds(list).map(y => y.id === x.id ? { ...y, notified: { at: new Date().toISOString(), whatsapp } } : y) })).catch(() => {});
       await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, { method: 'POST', headers: { ...H(key), Prefer: 'return=minimal' }, body: JSON.stringify({ id: 'id_' + Date.now() + '_ajr', action: 'Ask Jorge request ' + status, detail: `${x.id} · ${x.by}: ${String(x.request || x.summary || '').slice(0, 160)}${note ? ' — ' + note : ''} · WhatsApp ${whatsapp}`, booking_id: null, user_name: who.name || 'Jorge', user_role: who.role || 'admin', created_at: new Date().toISOString() }) }).catch(() => {});
       return reply(200, { ok: true, item: { ...x, notified: { whatsapp } } });
+    }
+    if (b.action === 'delete') {   // Jorge 2026-11-07: remove requests he does not need (numbers of the others stay as they are)
+      const ids = new Set((Array.isArray(b.ids) ? b.ids : [b.id]).map(String));
+      const out = await mutate(key, list => { const all = withIds(list); return { list: all.filter(x => !ids.has(x.id)), removed: all.filter(x => ids.has(x.id)).length }; });
+      return reply(200, { ok: true, removed: out.removed });
     }
     if (b.action === 'phones') {
       const row = await readRow(key, 'staff_phones');

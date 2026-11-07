@@ -137,17 +137,25 @@
     const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || 'Error'); return d;
   };
   const when = t => { try { return new Date(t).toLocaleString('en-US', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } };
-  let reqs = [], reqView = 'open';
+  let reqs = [], reqView = 'open', reqJorge = false, reqStarted = false;
+  const isJorgeMe = () => /jorge/i.test(me().name || '');
+  // Jorge: "📋 Requests" (everyone's, to do). Anyone else: "📋 My requests" once they have one (what is pending with Jorge / answered)
   function reqMount() {
-    if (document.getElementById('ajReqBtn') || !staffOn() || !/jorge/i.test(me().name || '')) return;
-    const b = document.createElement('button'); b.id = 'ajReqBtn'; b.type = 'button';
+    if (!staffOn() || reqStarted) return;
+    reqStarted = true; reqLoad(); setInterval(reqLoad, 120000);
+  }
+  function reqButton() {
+    let b = document.getElementById('ajReqBtn');
+    if (!reqJorge && !reqs.length) { if (b) b.remove(); return; }
+    if (b) return;
+    b = document.createElement('button'); b.id = 'ajReqBtn'; b.type = 'button';
     b.style.cssText = 'position:fixed;right:150px;bottom:74px;z-index:8500;background:#fff;color:#0e7490;border:1.5px solid #0e7490;border-radius:22px;padding:9px 14px;font:700 13px Jost,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.15);cursor:pointer';
-    b.innerHTML = '📋 Requests <span id="ajReqN" style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:2px"></span>';
+    b.innerHTML = `📋 ${reqJorge ? 'Requests' : 'My requests'} <span id="ajReqN" style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:2px"></span>`;
     b.onclick = reqOpen; document.body.appendChild(b);
-    reqLoad(); setInterval(reqLoad, 120000);
   }
   async function reqLoad() {
-    try { const d = await reqCall('list'); reqs = d.requests || []; } catch (e) { return; }
+    try { const d = await reqCall('list'); reqs = (d.requests || []).filter(x => x.status !== 'old'); reqJorge = !!d.jorge; } catch (e) { return; }
+    reqButton();
     const n = reqs.filter(x => x.status === 'open').length, el = document.getElementById('ajReqN');
     if (el) { el.textContent = n; el.style.display = n ? 'inline-block' : 'none'; }
     if (document.getElementById('ajReqPanel')) reqRender();
@@ -163,17 +171,21 @@
     const open = reqs.filter(x => x.status === 'open'), done = reqs.filter(x => x.status === 'fixed' || x.status === 'declined');
     const list = reqView === 'open' ? open : done;
     const tab = (k, l, n) => `<button onclick="ajReqView('${k}')" style="flex:1;padding:7px;border:none;border-radius:8px;font:700 12.5px Jost,sans-serif;cursor:pointer;${reqView === k ? 'background:#0e7490;color:#fff' : 'background:#f1f5f9;color:#334155'}">${l} (${n})</button>`;
-    p.innerHTML = `<div style="background:#0e7490;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:700;font-size:14.5px">Requests for Jorge</div><div style="font-size:11px;opacity:.85">What staff asked Ask Jorge that it could not do</div></div><button onclick="document.getElementById('ajReqPanel').remove()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer">✕</button></div>
+    p.innerHTML = `<div style="background:#0e7490;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:700;font-size:14.5px">${reqJorge ? 'Requests for Jorge' : 'My requests to Jorge'}</div><div style="font-size:11px;opacity:.85">${reqJorge ? 'What staff asked Ask Jorge that it could not do' : 'What Ask Jorge sent to Jorge for you, and his answer'}</div></div><button onclick="document.getElementById('ajReqPanel').remove()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer">✕</button></div>
       <div style="display:flex;gap:6px;padding:10px 12px 0">${tab('open', 'Pending', open.length)}${tab('done', 'Done', done.length)}</div>
       <div style="flex:1;overflow:auto;padding:10px 12px 14px">${list.length ? list.map(x => `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12.5px">
         <div style="display:flex;justify-content:space-between;gap:8px;color:#6b7280;font-size:11.5px"><span><b style="color:#1f2937">${esc(x.by || 'Staff')}</b> · ${esc(x.page || '')}</span><span>${esc(x.id)} · ${esc(when(x.at))}</span></div>
         <div style="margin-top:4px;color:#1f2937">${esc(x.request || String(x.summary || '').split('\n')[0].replace(/^Pidió:\s*/, ''))}</div>
         ${x.reason || /No se pudo porque/.test(x.summary || '') ? `<div style="margin-top:3px;color:#92400e;font-size:11.5px">Why it could not: ${esc(x.reason || String(x.summary).split('No se pudo porque:')[1] || '')}</div>` : ''}
-        ${x.status === 'open' ? `<div style="display:flex;gap:6px;margin-top:8px"><button onclick="ajReqResolve('${x.id}','fixed')" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">✓ Fixed</button><button onclick="ajReqResolve('${x.id}','declined')" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 12px;cursor:pointer">✕ Won't do</button></div>`
+        ${x.status === 'open' ? (reqJorge ? `<div style="display:flex;gap:6px;margin-top:8px"><button onclick="ajReqResolve('${x.id}','fixed')" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">✓ Fixed</button><button onclick="ajReqResolve('${x.id}','declined')" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 12px;cursor:pointer">✕ Won't do</button><button onclick="ajReqDelete('${x.id}')" title="Delete" style="margin-left:auto;background:#fff;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:6px 10px;cursor:pointer">🗑</button></div>` : `<div style="margin-top:6px;font-size:11.5px;color:#92400e;font-weight:600">⏳ Pending with Jorge</div>`)
           : `<div style="margin-top:6px;font-size:11.5px;color:${x.status === 'fixed' ? '#047857' : '#6b7280'}">${x.status === 'fixed' ? '✓ Fixed' : '✕ Won\'t do'} · ${esc(when(x.resolvedAt))}${x.reply ? ' — ' + esc(x.reply) : ''}${x.notified ? ` · WhatsApp ${esc(x.notified.whatsapp)}` : ''}${x.seenAt ? ' · seen ✓' : ''}</div>`}
       </div>`).join('') : `<div style="padding:30px;text-align:center;color:#9ca3af">${reqView === 'open' ? 'Nothing pending 🎉' : 'Nothing marked yet.'}</div>`}</div>`;
   }
   window.ajReqView = k => { reqView = k; reqRender(); };
+  window.ajReqDelete = async id => {
+    if (!confirm(`Delete ${id}? It is removed for good and nobody is told.`)) return;
+    try { await reqCall('delete', { ids: [id] }); showToast(`${id} deleted`); await reqLoad(); } catch (e) { showToast('Not deleted: ' + e.message); }
+  };
   window.ajReqResolve = async (id, status) => {
     const note = prompt(status === 'fixed' ? 'Reply to the person (optional) — e.g. "Done, moved to room 14":' : "Why it won't be done (optional):", '');
     if (note === null) return;
@@ -185,14 +197,20 @@
     if (!staffOn() || document.getElementById('ajNotice')) return;
     let d; try { d = await reqCall('mine'); } catch (e) { return; }
     const a = d.answered || []; if (!a.length) return;
+    // a pop-up in the middle of the screen with a chime (Jorge 2026-11-07) -- the sound plays once the person has clicked
+    // anywhere on the page since it opened (browser rule); the pop-up shows either way
+    const veil = document.createElement('div'); veil.id = 'ajNoticeVeil';
+    veil.style.cssText = 'position:fixed;inset:0;z-index:8690;background:rgba(15,23,42,.35)';
+    document.body.appendChild(veil);
     const box = document.createElement('div'); box.id = 'ajNotice';
-    box.style.cssText = 'position:fixed;right:18px;bottom:122px;z-index:8700;width:min(380px,calc(100vw - 36px));background:#ecfdf5;border:1.5px solid #10b981;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.2);padding:12px 14px;font-family:Jost,sans-serif;font-size:13px;color:#064e3b';
-    box.innerHTML = `<div style="font-weight:700;margin-bottom:6px">${a.length === 1 ? 'Jorge answered your request' : `Jorge answered ${a.length} of your requests`}</div>${a.map(x => `<div style="margin:6px 0;padding-top:6px;border-top:1px solid #a7f3d0"><b>${x.status === 'fixed' ? '✅ Fixed' : "✕ Won't do"}</b> · ${esc(x.request || String(x.summary || '').split('\n')[0].replace(/^Pidió:\s*/, ''))}${x.reply ? `<div style="margin-top:2px;color:#065f46">“${esc(x.reply)}”</div>` : ''}</div>`).join('')}
+    box.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:8700;width:min(420px,calc(100vw - 36px));background:#ecfdf5;border:2px solid #10b981;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.3);padding:16px 18px;font-family:Jost,sans-serif;font-size:14px;color:#064e3b';
+    try { const C = new (window.AudioContext || window.webkitAudioContext)(); [[880, 0], [1175, .18], [1568, .36]].forEach(([f, t]) => { const o = C.createOscillator(), g = C.createGain(); o.frequency.value = f; o.type = 'sine'; g.gain.setValueAtTime(.0001, C.currentTime + t); g.gain.exponentialRampToValueAtTime(.25, C.currentTime + t + .03); g.gain.exponentialRampToValueAtTime(.0001, C.currentTime + t + .5); o.connect(g).connect(C.destination); o.start(C.currentTime + t); o.stop(C.currentTime + t + .55); }); } catch (e) {}
+    box.innerHTML = `<div style="font-weight:800;font-size:16px;margin-bottom:6px">🔔 ${a.length === 1 ? 'Jorge answered your request' : `Jorge answered ${a.length} of your requests`}</div>${a.map(x => `<div style="margin:6px 0;padding-top:6px;border-top:1px solid #a7f3d0"><b>${x.status === 'fixed' ? '✅ Fixed' : "✕ Won't do"}</b> · ${esc(x.request || String(x.summary || '').split('\n')[0].replace(/^Pidió:\s*/, ''))}${x.reply ? `<div style="margin-top:2px;color:#065f46">“${esc(x.reply)}”</div>` : ''}</div>`).join('')}
       <div style="text-align:right;margin-top:6px"><button id="ajNoticeOk" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;cursor:pointer">OK</button></div>`;
     document.body.appendChild(box);
-    document.getElementById('ajNoticeOk').onclick = async () => { box.remove(); try { await reqCall('seen', { ids: a.map(x => x.id) }); } catch (e) {} };
+    document.getElementById('ajNoticeOk').onclick = async () => { box.remove(); veil.remove(); try { await reqCall('seen', { ids: a.map(x => x.id) }); } catch (e) {} reqLoad(); };
   }
-  setInterval(() => { reqMount(); reqNotice(); }, 180000); setTimeout(() => { reqMount(); reqNotice(); }, 4000);
+  setInterval(() => { reqMount(); reqNotice(); }, 60000); setTimeout(() => { reqMount(); reqNotice(); }, 4000);
 
   // the staff login happens after this script loads: check again a few times, and on every sign-in
   mount(); let tries = 0; const t = setInterval(() => { mount(); if (document.getElementById('ajBtn') || ++tries > 120) clearInterval(t); }, 1500);
