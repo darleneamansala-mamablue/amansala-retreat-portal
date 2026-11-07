@@ -19,6 +19,7 @@ const KB = require('./ask-jorge-kb');
 const T = require('./ask-jorge-tools');
 const { sendUtility } = require('./wa-utility-lib');
 const A = require('./ask-jorge-actions');
+const X = require('./ask-jorge-more');   // maintenance reports, the day summary, who leaves owing + payment links to all (2026-11-07)
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 // Sonnet, not Opus (Jorge 2026-11-06, credits): staff questions and the confirmed actions do not need the most expensive model
@@ -92,9 +93,13 @@ const TOOLS = [
   { name: 'spa_services', description: 'List the active spa services (id, name, duration, price). Read-only.', input_schema: { type: 'object', properties: {} } },
   { name: 'spa_availability', description: 'Free times for a spa service on a date (with therapist and spa room ids to book). Read-only.',
     input_schema: { type: 'object', properties: { serviceId: { type: 'string' }, date: { type: 'string' }, therapistPreference: { type: 'string', enum: ['none', 'male', 'female'] }, guestCount: { type: 'number' } }, required: ['serviceId', 'date'] } },
-  { name: 'propose_action', description: 'Propose a change for the person to confirm with a button (nothing is saved until they confirm). Types: add_charge (folioId, description, category, qty, unitPrice USD before tax, taxRate %), record_payment (folioId, method, amount USD, reference), check_in (regId), check_out (regId), internal_note (regId, note), ac24 (regId, on true/false), move_room (regId, toRoom), spa_booking (serviceId, date, start HH:MM, therapistId, spaRoomId, firstName, lastName, email and/or phone -- for a hotel guest leave them out, they come from the reservation; an outside guest needs one of the two, guestType hotel|offsite, roomNumber for hotel guests, guestCount for groups), new_booking (room, checkIn, checkOut, guestName, email, phone, adults, ratePerNight, bookingType, notes), send_payment_link (folioId), remove_charge (folioItemId), edit_charge (folioItemId + description/qty/unitPrice/taxRate to change), refund_payment (folioItemId of a Stripe card payment, amount, reason; only Jorge, Hilario, Melissa), spa_cancel (apptId; removes its room charge), spa_move (apptId + new date/start/therapistId; the charge moves too), therapist_confirm (apptId), transport_change (rowId + arrivalDate/arrivalTime/arrivalAirport/departureDate/departureTime/departureAirport/flightNumber), room_status (room, status clean|dirty|maintenance, note), teacher_room (regId: mark the group leader / teacher room ★ in the Room List), set_leader (bookingId from find_reservation, leaderName: the reservation\'s leader name), cloudbeds_fix (regId: Cloudbeds dates/room set to the portal\'s).',
+  { name: 'day_summary', description: 'The day at a glance (default today): arrivals, departures and what they still owe, spa appointments, airport transports, housekeeping room status counts, open maintenance reports and requests waiting for Jorge. Use it for "what is happening today / tomorrow", "resumen del día". Read-only.',
+    input_schema: { type: 'object', properties: { date: { type: 'string', description: 'YYYY-MM-DD; tomorrow = the day after today' } } } },
+  { name: 'balances_due', description: 'Guests leaving on a date (default today) who still owe money, with the folios that have a balance (folioId, amount). Use it for "who owes", "quién debe", "salidas con saldo"; to send them all their payment link propose send_payment_links with those folioIds. Read-only.',
+    input_schema: { type: 'object', properties: { date: { type: 'string', description: 'YYYY-MM-DD; tomorrow = the day after today' } } } },
+  { name: 'propose_action', description: 'Propose a change for the person to confirm with a button (nothing is saved until they confirm). Types: maintenance_report (room, problem, priority normal|urgent, assignTo = a person of the maintenance team, optional), send_payment_links (folioIds from balances_due: one Confirm sends each guest their link by email + WhatsApp), add_charge (folioId, description, category, qty, unitPrice USD before tax, taxRate %), record_payment (folioId, method, amount USD, reference), check_in (regId), check_out (regId), internal_note (regId, note), ac24 (regId, on true/false), move_room (regId, toRoom), spa_booking (serviceId, date, start HH:MM, therapistId, spaRoomId, firstName, lastName, email and/or phone -- for a hotel guest leave them out, they come from the reservation; an outside guest needs one of the two, guestType hotel|offsite, roomNumber for hotel guests, guestCount for groups), new_booking (room, checkIn, checkOut, guestName, email, phone, adults, ratePerNight, bookingType, notes), send_payment_link (folioId), remove_charge (folioItemId), edit_charge (folioItemId + description/qty/unitPrice/taxRate to change), refund_payment (folioItemId of a Stripe card payment, amount, reason; only Jorge, Hilario, Melissa), spa_cancel (apptId; removes its room charge), spa_move (apptId + new date/start/therapistId; the charge moves too), therapist_confirm (apptId), transport_change (rowId + arrivalDate/arrivalTime/arrivalAirport/departureDate/departureTime/departureAirport/flightNumber), room_status (room, status clean|dirty|maintenance, note), teacher_room (regId: mark the group leader / teacher room ★ in the Room List), set_leader (bookingId from find_reservation, leaderName: the reservation\'s leader name), cloudbeds_fix (regId: Cloudbeds dates/room set to the portal\'s).',
     input_schema: { type: 'object', properties: {
-      type: { type: 'string', enum: ['add_charge', 'record_payment', 'check_in', 'check_out', 'internal_note', 'ac24', 'move_room', 'spa_booking', 'new_booking', 'send_payment_link', 'remove_charge', 'edit_charge', 'refund_payment', 'spa_cancel', 'spa_move', 'therapist_confirm', 'transport_change', 'room_status', 'cloudbeds_fix', 'teacher_room', 'set_leader'] },
+      type: { type: 'string', enum: ['maintenance_report', 'send_payment_links', 'add_charge', 'record_payment', 'check_in', 'check_out', 'internal_note', 'ac24', 'move_room', 'spa_booking', 'new_booking', 'send_payment_link', 'remove_charge', 'edit_charge', 'refund_payment', 'spa_cancel', 'spa_move', 'therapist_confirm', 'transport_change', 'room_status', 'cloudbeds_fix', 'teacher_room', 'set_leader'] },
       bookingId: { type: 'string' }, leaderName: { type: 'string' },
       folioItemId: { type: 'string' }, apptId: { type: 'string' }, rowId: { type: 'string' }, reason: { type: 'string' }, status: { type: 'string', enum: ['clean', 'dirty', 'maintenance'] },
       arrivalDate: { type: 'string' }, arrivalTime: { type: 'string' }, arrivalAirport: { type: 'string' }, departureDate: { type: 'string' }, departureTime: { type: 'string' }, departureAirport: { type: 'string' }, flightNumber: { type: 'string' },
@@ -107,7 +112,8 @@ const TOOLS = [
       description: { type: 'string' }, category: { type: 'string', enum: ['Restaurant', 'Transport', 'Spa', 'Tour', 'Boutique', 'Gym', 'Room', 'Upgrade', 'Tip', 'Other'] },
       qty: { type: 'number' }, unitPrice: { type: 'number' }, taxRate: { type: 'number' },
       method: { type: 'string', enum: ['Cash', 'Zelle', 'Venmo', 'Paypal', 'Whistle', 'Bank Transfer', 'Clip', 'Expedia Collect'] }, amount: { type: 'number' }, reference: { type: 'string' },
-      note: { type: 'string' }, on: { type: 'boolean' } }, required: ['type'] } },
+      note: { type: 'string' }, on: { type: 'boolean' },
+      problem: { type: 'string' }, priority: { type: 'string', enum: ['normal', 'urgent'] }, assignTo: { type: 'string' }, folioIds: { type: 'array', items: { type: 'string' } } }, required: ['type'] } },
   { name: 'notify_jorge', description: 'Send this to Jorge by WhatsApp and email when you cannot solve it or it needs his decision.',
     input_schema: { type: 'object', properties: {
       request: { type: 'string', description: 'What the staff member asked for, in Spanish, with names / rooms / amounts' },
@@ -244,6 +250,7 @@ async function checkAction(key, a, who = {}) {
   const get = async p => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${p}`, { headers: H(key) }); return r.ok ? r.json() : []; };
   const t = String(a.type || '');
   const more = await A.check(key, a, who); if (more) return more;
+  const more2 = await X.check(key, a, who); if (more2) return more2;
   const regOf = async id => { const [r] = await get(`registrations?select=id,room,guests,booking_id,checked_in_at,checked_out_at,cancelled,internal_notes,ac_24h&id=eq.${encodeURIComponent(String(id || ''))}`); return r && !r.cancelled ? r : null; };
   const names = r => (r.guests || []).filter(g => g && g.name && !g.cancelled).map(g => g.name).join(' & ') || 'guest';
   if (t === 'add_charge' || t === 'record_payment') {
@@ -355,6 +362,7 @@ async function runAction(key, who, a, token) {
   const x = chk.action, now = new Date().toISOString();
   if (x.client) return { ok: false, message: 'This one runs in the portal screen — press Confirm again after reloading.' };
   if (A.TYPES.includes(x.type)) chk.summary += await A.run(key, who, x, token);
+  else if (X.TYPES.includes(x.type)) chk.summary += await X.run(key, who, x);
   else {
   const send = async (method, path, body) => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method, headers: { ...H(key), Prefer: 'return=minimal' }, body: JSON.stringify(body) }); if (!r.ok) throw new Error((await r.text()).slice(0, 200)); };
   if (x.type === 'add_charge') await send('POST', 'folio_items', { folio_id: x.folioId, description: x.description, qty: x.qty, unit_price: x.unitPrice, tax_rate: x.taxRate, category: x.category, staff_name: who.name || null });
@@ -404,7 +412,7 @@ async function runAction(key, who, a, token) {
     await send('PATCH', `registrations?id=eq.${encodeURIComponent(x.regId)}`, { internal_notes: (prev ? prev + '\n' : '') + x.note + ' — ' + (who.name || 'staff') });
   } else if (x.type === 'ac24') await send('PATCH', `registrations?id=eq.${encodeURIComponent(x.regId)}`, { ac_24h: x.on });
   }
-  const label = { add_charge: 'Charge added', record_payment: 'Payment recorded', check_in: 'Checked in', check_out: 'Checked out', internal_note: 'Internal note', ac24: 'A/C 24h', send_payment_link: 'Payment link sent', spa_booking: 'Spa booking', remove_charge: 'Charge removed', edit_charge: 'Charge corrected', refund_payment: 'Payment refunded', spa_cancel: 'Spa appointment cancelled', spa_move: 'Spa appointment moved', therapist_confirm: 'Spa confirmation sent to therapist', transport_change: 'Transport changed', room_status: 'Room status', cloudbeds_fix: 'Cloudbeds fixed', teacher_room: 'Group leader marked', set_leader: 'Reservation leader changed' }[x.type];
+  const label = { maintenance_report: 'Maintenance report', send_payment_links: 'Payment links sent', add_charge: 'Charge added', record_payment: 'Payment recorded', check_in: 'Checked in', check_out: 'Checked out', internal_note: 'Internal note', ac24: 'A/C 24h', send_payment_link: 'Payment link sent', spa_booking: 'Spa booking', remove_charge: 'Charge removed', edit_charge: 'Charge corrected', refund_payment: 'Payment refunded', spa_cancel: 'Spa appointment cancelled', spa_move: 'Spa appointment moved', therapist_confirm: 'Spa confirmation sent to therapist', transport_change: 'Transport changed', room_status: 'Room status', cloudbeds_fix: 'Cloudbeds fixed', teacher_room: 'Group leader marked', set_leader: 'Reservation leader changed' }[x.type];
   await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, { method: 'POST', headers: { ...H(key), Prefer: 'return=minimal' },
     body: JSON.stringify({ id: 'id_' + Date.now() + '_askj', action: label, detail: chk.summary + ' (Ask Jorge)', booking_id: x.bookingId || null, user_name: who.name || 'Staff', user_role: who.role || 'staff', created_at: now }) }).catch(() => {});
   return { ok: true, message: '✓ ' + chk.summary };
@@ -480,6 +488,8 @@ exports.handler = async (event) => {
           else if (u.name === 'spa_agenda') out = await T.spaAgenda(key, u.input || {});
           else if (u.name === 'find_reservation') out = await T.findReservation(key, u.input || {});
           else if (u.name === 'transports') out = await A.transports(key, u.input || {});
+          else if (u.name === 'day_summary') out = await X.daySummary(key, u.input || {});
+          else if (u.name === 'balances_due') out = await X.balancesDue(key, u.input || {});
           else if (u.name === 'cloudbeds_compare') out = await A.cloudbedsCompare(key, (u.input || {}).regId);
           else if (u.name === 'spa_services') {
             const [row] = await (await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.spa_data&select=value`, { headers: H(key) })).json();
