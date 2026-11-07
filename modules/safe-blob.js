@@ -109,8 +109,15 @@
   // safeBlobSave reads/writes with the raw client, so its own reads never move a screen's starting point
   const rawSave = (key, local, b) => window.safeBlobSave(key, local, b, RAW);
   // the portal's first full read happens before this file loads: start from the copy it left (booking-hub.html loadFromSupabase)
-  window.safeBlobSeed = function () { try { if (window._sbLastStore) { record([], JSON.parse(window._sbLastStore)); window._sbLastStore = null; } } catch (e) {} };
+  // a save made before that first read lands is built on an empty screen (the Menu rebuilt on reload before its data loaded and
+  // wrote the current week only, wiping the other weeks -- 2026-11-07): it waits for the read; if the key already exists it is
+  // dropped (nothing a person typed can be in it yet), a brand-new key is written as usual
+  let seeded = false, seedWaiters = [];
+  const seedDone = () => { seeded = true; seedWaiters.forEach(f => f()); seedWaiters = []; };
+  const waitSeed = () => seeded ? Promise.resolve() : new Promise(res => { seedWaiters.push(res); setTimeout(() => { seeded = true; res(); }, 30000); });   // no full read (teacher page…): go on after 30 s
+  window.safeBlobSeed = function () { try { if (window._sbLastStore) { record([], JSON.parse(window._sbLastStore)); window._sbLastStore = null; seedDone(); } } catch (e) {} };
   window.safeBlobSeed();
+  window._sbDropped = window._sbDropped || {};
   const prevFrom = db.from;
   db.from = function (table) {
     const qb = prevFrom.apply(db, arguments);
@@ -127,6 +134,15 @@
     qb.upsert = function (values, opts) {
       const rows = Array.isArray(values) ? values : [values];
       const row = rows.length === 1 ? rows[0] : null;
+      if (row && row.key != null && 'value' in row && !SKIP.test(String(row.key)) && !(row.key in base) && !seeded) {
+        let run = null;
+        const exec = () => run || (run = waitSeed().then(() => {
+          if (row.key in base) { window._sbDropped[row.key] = (window._sbDropped[row.key] || 0) + 1; console.warn('[safe-blob] dropped a save made before the data loaded:', row.key); return { data: null, error: null, status: 200 }; }
+          return ups(values, opts).then(r => { try { if (r && !r.error) base[row.key] = clone(row.value); } catch (e) {} return r; });   // a new key: written as usual
+        }));
+        const t = { then: (a, b) => exec().then(a, b), catch: b => exec().catch(b), finally: f => exec().finally(f), select() { return t; }, single() { return t; }, maybeSingle() { return t; } };
+        return t;
+      }
       if (!row || row.key == null || !('value' in row) || SKIP.test(String(row.key)) || !(row.key in base)) {
         rows.forEach(r => { if (r && r.key != null && !SKIP.test(String(r.key)) && !(r.key in base)) window._sbUnprotected[r.key] = (window._sbUnprotected[r.key] || 0) + 1; });
         const fb = ups(values, opts), th = fb.then.bind(fb);
