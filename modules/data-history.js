@@ -62,7 +62,7 @@
     box.innerHTML = items.map(h => `<div style="background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;border-left:4px solid ${h.op === 'DELETE' ? '#dc2626' : '#94a3b8'}">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px">
         <span style="color:#6b7280;min-width:150px">${esc(when(h.at))}</span>
-        <b style="color:#1f2937">${esc(h.who || '?')}</b>
+        <b style="color:#1f2937">${esc(/^(postgres|service_role|authenticator|supabase_admin)$/.test(h.who || '') ? 'System' : (h.who || '?'))}</b>
         <span style="font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;${h.op === 'DELETE' ? 'background:#fef2f2;color:#b91c1c' : 'background:#f1f5f9;color:#334155'}">${h.op === 'DELETE' ? 'Deleted' : 'Changed'}</span>
         <span style="color:#6b7280">${esc(TBL[h.tbl] || h.tbl)}</span>
         <span style="color:#1f2937">${esc(h.label)}</span>
