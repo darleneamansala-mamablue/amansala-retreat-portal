@@ -39,7 +39,7 @@ exports.handler = async (event) => {
   if (folio.registration_id) {
     // Registration folio — fetch registration joined with booking
     const regRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/registrations?id=eq.${encodeURIComponent(folio.registration_id)}&select=id,room,check_in,check_out,guests,booking_id,bookings(retreat_name,start_date,end_date,booking_type,source)&limit=1`,
+      `${SUPABASE_URL}/rest/v1/registrations?id=eq.${encodeURIComponent(folio.registration_id)}&select=id,room,check_in,check_out,guests,booking_id,bookings(retreat_name,start_date,end_date,booking_type,source,pax)&limit=1`,
       { headers: supaHdrs }
     );
     if (regRes.ok) {
@@ -53,7 +53,11 @@ exports.handler = async (event) => {
           check_in:       reg.check_in  || regBk.start_date || null,
           check_out:      reg.check_out || regBk.end_date   || null,
           room_type_name: reg.room      || null,
-          adults:         1,
+          // the stay's real guest count (Jorge 2026-11-07: the pay page always said "1 adult"): a Room Only booking keeps its own
+          // number of guests (pax, editable in Booking Detail); a retreat room counts its named guests
+          adults:         regBk.booking_type === 'room_only'
+            ? Math.max(Number(regBk.pax) || 0, (reg.guests || []).filter(g => g && g.name && !g.cancelled).length, 1)
+            : Math.max((reg.guests || []).filter(g => g && g.name && !g.cancelled).length, 1),
           retreat_name:   regBk.retreat_name || null,
           // A manually-created admin "Walk-in" booking (venues.js's
           // rmSaveNewBooking) is the same Escape/Extra Night-style individual
