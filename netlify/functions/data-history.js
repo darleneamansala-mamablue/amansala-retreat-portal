@@ -10,7 +10,7 @@ const { staffAllowed, cors, reply } = require('./portal-auth-lib');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const H = key => ({ apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' });
-const TABLES = ['bookings', 'registrations', 'folios', 'folio_items', 'payments', 'transport', 'booking_requests', 'commissions', 'app_store'];
+const TABLES = ['bookings', 'registrations', 'folios', 'folio_items', 'payments', 'transport', 'booking_requests', 'commissions', 'app_store', 'room_types', 'be_rates', 'booking_engine_settings', 'be_discount_codes', 'restaurant_layouts', 'payment_shortlinks'];
 
 // what the row is, in words
 function label(tbl, d) {
@@ -26,6 +26,12 @@ function label(tbl, d) {
     case 'booking_requests': return `Online stay · ${[d.first_name, d.last_name].filter(Boolean).join(' ')} · ${d.room || ''} ${d.check_in || ''}`;
     case 'commissions': return `Commission ${d.type || ''} ${d.commission_amount != null ? '$' + d.commission_amount : ''}`;
     case 'app_store': return `Data: ${d.key || ''}`;
+    case 'room_types': return `Room type ${d.name || d.id || ''}`;
+    case 'be_rates': return `Price ${d.room_type_id || ''} ${d.start_date || ''}${d.end_date && d.end_date !== d.start_date ? '→' + d.end_date : ''}${d.price_single != null ? ' · $' + d.price_single : ''}`;
+    case 'booking_engine_settings': return 'Booking Engine settings';
+    case 'be_discount_codes': return `Discount code ${d.code || ''}`;
+    case 'restaurant_layouts': return `Restaurant layout ${d.name || d.id || ''}`;
+    case 'payment_shortlinks': return `Payment link ${d.code || d.id || ''}`;
     default: return tbl;
   }
 }

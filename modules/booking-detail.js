@@ -37,7 +37,7 @@ function _bdSubject(){
       room:r.room||r.roomTypeName||'—',
       checkIn:r.checkIn,checkOut:r.checkOut,notes:r.notes||r.dietary||'',internalNotes:r.internalNotes||'',
       checkedInAt:r.checkedInAt||null,checkedOutAt:r.checkedOutAt||null,
-      rate:r.dailyRate!=null?Number(r.dailyRate):null,adults:r.adults||1,
+      rate:r.dailyRate!=null?Number(r.dailyRate):null,adults:r.adults||1,paxEditable:true,
       sourceLabel:r.source||null,retreatLabel:null,retreatBkId:null,
       folioCol:'booking_request_id',bookingType:'room_only',
       stripeCustomerId:null,stripePaymentMethodId:null,stripeCardBrand:null,stripeCardLast4:null,
@@ -63,7 +63,8 @@ function _bdSubject(){
     room:reg.room||'—',
     checkIn,checkOut,notes:reg.notes||'',
     checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
-    rate,adults:gc,sourceLabel:bk.source?_bdSourceLabel(bk.source):null,
+    // a Room Only stay keeps its own guest count (bk.pax) -- it used to show only how many names were typed (Jorge 2026-11-07)
+    rate,adults:bk.bookingType==='room_only'?Math.max(Number(bk.pax)||0,gc):gc,paxEditable:bk.bookingType==='room_only',sourceLabel:bk.source?_bdSourceLabel(bk.source):null,
     retreatLabel:bk.leaderName||bk.retreatName||'',retreatBkId:bk.id,
     folioCol:'registration_id',bookingType:bk.bookingType,
     stripeCustomerId:reg.stripeCustomerId,stripePaymentMethodId:reg.stripePaymentMethodId,
@@ -642,7 +643,7 @@ function _bdRender(){
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">👤 Guest${subj.allGuests.length>1?'s':''}</div>
         <table style="width:100%;font-size:13px">
-          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Adults</td><td style="padding:5px 0">${subj.adults}</td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Adults</td><td style="padding:5px 0">${_bdDetailEditMode&&subj.paxEditable?`<input id="bdEditAdults" type="number" min="1" max="20" value="${subj.adults}" style="width:70px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">`:subj.adults}${_bdDetailEditMode&&!subj.paxEditable?`<div style="font-size:11px;color:var(--muted);margin-top:2px">For a retreat guest this is the number of names in the room — add or remove names in the retreat's Room List.</div>`:''}</td></tr>
         </table>
         ${_bdDetailEditMode&&_bdKind==='req'?`<table style="width:100%;font-size:13px">
           <tr><td style="color:var(--muted);padding:5px 0;width:110px">First Name</td><td style="padding:5px 0"><input id="bdEditFirstName" type="text" value="${escHtml(_bdReqCache.firstName||'')}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;width:100%"></td></tr>
@@ -1713,9 +1714,10 @@ async function bdSaveDetails(){
     const checkIn=document.getElementById('bdEditCheckIn')?.value||null;
     const checkOut=document.getElementById('bdEditCheckOut')?.value||null;
     if(!firstName){showToast('El nombre no puede quedar vacío');return;}
-    const {error}=await db.from('booking_requests').update({first_name:firstName,last_name:lastName,phone,room,check_in:checkIn,check_out:checkOut}).eq('id',_bdId);
+    const adults=Math.max(1,parseInt(document.getElementById('bdEditAdults')?.value,10)||(_bdReqCache&&_bdReqCache.adults)||1);
+    const {error}=await db.from('booking_requests').update({first_name:firstName,last_name:lastName,phone,room,check_in:checkIn,check_out:checkOut,adults}).eq('id',_bdId);
     if(error){showToast('Error: '+error.message);return;}
-    if(_bdReqCache)Object.assign(_bdReqCache,{firstName,lastName,phone,room,checkIn,checkOut});
+    if(_bdReqCache)Object.assign(_bdReqCache,{firstName,lastName,phone,room,checkIn,checkOut,adults});
     _bdNotifyReqChanged();
   }else{
     const reg=AppData.regs.find(r=>r.id===_bdId);if(!reg)return;
@@ -1788,6 +1790,16 @@ async function bdSaveDetails(){
     const {error}=await db.from('registrations').update({guests:reg.guests,room,room_type_id:reg.roomTypeId,check_in:checkIn,check_out:checkOut,custom_rate_override:reg.customRateOverride,..._frz}).eq('id',reg.id);
     if(error){showToast('Error: '+error.message);return;}
     reg.room=room;reg.checkIn=checkIn;reg.checkOut=checkOut;
+    // Room Only: the number of guests of the reservation (the rate does not change with it)
+    const _paxEl=document.getElementById('bdEditAdults');
+    if(_paxEl&&subjBefore.paxEditable){
+      const pax=Math.max(1,parseInt(_paxEl.value,10)||1), pbk=AppData.bookings.find(b=>b.id===reg.bookingId);
+      if(pbk&&Number(pbk.pax)!==pax){
+        pbk.pax=pax;pbk.updatedAt=new Date().toISOString();
+        try{await db.from('bookings').update({pax}).eq('id',pbk.id);}catch(err){showToast('Guests not saved: '+err.message);}
+        try{logActivity('Guests changed',`${subjBefore.guestName} · room ${room}: ${subjBefore.adults} → ${pax} guest(s)`,pbk.id);}catch(e){}
+      }
+    }
     // Keep the retreat's own blocked_rooms in sync -- the Room Calendar's drag-and-drop
     // (rcMoveRoom, modules/venues.js) already does this swap, but THIS edit form never did.
     // Real incidents 2026-10-18: Jennifer Marvel (moved into room 24) and Chelsea Hylton
