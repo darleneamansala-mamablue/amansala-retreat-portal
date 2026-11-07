@@ -91,6 +91,9 @@ async function run(opts = {}) {
   const today = localDate(0);
   const occupied = new Set();
   const ac24hRooms = new Set();
+  // Jorge 2026-11-07: also the rooms of guests arriving today who have not checked in yet, so the room is cold when they
+  // get here -- listed as "21 (llega)". In-house rooms stay as before.
+  const arriving = new Set();
 
   // Jorge's ask 2026-10-08: "solo in house" -- a reservation whose dates
   // merely cover tonight isn't enough, staff has to have actually clicked
@@ -140,13 +143,35 @@ async function run(opts = {}) {
     });
     const extData = await extRes.json();
     (extData.reservations || []).forEach(r => {
-      if ((r.status || '').toLowerCase() !== 'checked_in') return;
+      const st = (r.status || '').toLowerCase();
+      if (st === 'confirmed' && r.startDate === today && r.endDate > today) { (r.rooms || []).forEach(room => arriving.add(room)); return; }
+      if (st !== 'checked_in') return;
       if (!(r.startDate <= today && r.endDate > today)) return;
       (r.rooms || []).forEach(room => occupied.add(room));
     });
   } catch (e) {
     console.warn('[climas-report] Cloudbeds fetch failed (non-fatal):', e.message);
   }
+
+  // today's arrivals not checked in yet: online stays and retreat / room-only registrations
+  try {
+    const arrReqs = await get(`/rest/v1/booking_requests?select=room,status&room=not.is.null&check_in=eq.${today}&checked_in_at=is.null`);
+    arrReqs.forEach(r => { if (r.room && !['cancelled', 'pending', 'checked_out', 'requested'].includes(r.status)) arriving.add(r.room); });
+    const arrBks = await get(`/rest/v1/bookings?select=id,start_date,end_date,status&start_date=lte.${today}&end_date=gt.${today}&status=neq.cancelled`);
+    const byId = Object.fromEntries(arrBks.map(b => [b.id, b])), ids = Object.keys(byId);
+    for (let i = 0; i < ids.length; i += 60) {
+      const rs = await get(`/rest/v1/registrations?select=room,cancelled,guests,check_in,check_out,booking_id,ac_24h&checked_in_at=is.null&booking_id=in.(${ids.slice(i, i + 60).join(',')})`);
+      rs.forEach(r => {
+        if (r.cancelled || !r.room || !(r.guests || []).some(g => g.name && !g.cancelled)) return;
+        const bk = byId[r.booking_id], ci = r.check_in || bk.start_date, co = r.check_out || bk.end_date;
+        if (ci !== today || !(co > today)) return;
+        arriving.add(r.room);
+        if (r.ac_24h) ac24hRooms.add(r.room);
+      });
+    }
+  } catch (e) { console.warn('[climas-report] arrivals (non-fatal):', e.message); }
+  occupied.forEach(r => arriving.delete(r));
+  arriving.forEach(r => occupied.add(r));
 
   const allRooms = [...occupied].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
   let sentBefore = [];
@@ -179,11 +204,12 @@ async function run(opts = {}) {
   const propertyByRoom = {};
   roomTypes.forEach(rt => (rt.rooms || []).forEach(r => { propertyByRoom[r] = rt.property || 'AMANSALA'; }));
   const groups = { AMANSALA: [], SHANTI: [] };
+  const label = room => arriving.has(room) ? `${room} (llega)` : room;
   roomList.forEach(room => {
     if (ac24hRooms.has(room)) return;
-    groups[climasGroupFor(propertyByRoom[room])].push(room);
+    groups[climasGroupFor(propertyByRoom[room])].push(label(room));
   });
-  const ac24hList = roomList.filter(r => ac24hRooms.has(r));
+  const ac24hList = roomList.filter(r => ac24hRooms.has(r)).map(label);
 
   // Neither a real "\n" (U+000A, rejected by Meta with a bare 500) nor the
   // Unicode LINE SEPARATOR (U+2028, accepted by Meta but rendered as a
