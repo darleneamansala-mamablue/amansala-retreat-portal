@@ -11,7 +11,7 @@
     const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || 'Error'); return d;
   };
   const when = t => { try { return new Date(t).toLocaleString('en-US', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', second: '2-digit' }); } catch (e) { return ''; } };
-  const TBL = { '': 'Everything', bookings: 'Reservations', registrations: 'Guests / rooms', folios: 'Folios', folio_items: 'Charges & payments (folio lines)', payments: 'Retreat payments', transport: 'Transport', booking_requests: 'Online stays', commissions: 'Commissions', app_store: 'Saved data (spa, menu, settings…)', room_types: 'Room types & rates', be_rates: 'Revenue Manager prices', booking_engine_settings: 'Booking Engine settings', be_discount_codes: 'Discount codes', restaurant_layouts: 'Restaurant layouts', payment_shortlinks: 'Payment links' };
+  const TBL = { '': 'Everything', bookings: 'Reservations', registrations: 'Guests / rooms', folios: 'Folios', folio_items: 'Charges & payments (folio lines)', payments: 'Retreat payments', transport: 'Transport', booking_requests: 'Online stays', commissions: 'Commissions', app_store: 'Saved data (spa, menu, settings…)', room_types: 'Room types & rates', be_rates: 'Revenue Manager prices', booking_engine_settings: 'Booking Engine settings', be_discount_codes: 'Discount codes', restaurant_layouts: 'Restaurant layouts', payment_shortlinks: 'Payment links', room_status: 'Room status (housekeeping)' };
   let items = [], f = { tbl: '', q: '' }, openId = null, detail = null;
 
   function mount() {

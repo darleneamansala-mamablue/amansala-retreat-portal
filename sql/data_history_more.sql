@@ -4,7 +4,7 @@
 do $$
 declare t text;
 begin
-  foreach t in array array['room_types', 'be_rates', 'booking_engine_settings', 'be_discount_codes', 'restaurant_layouts', 'payment_shortlinks'] loop
+  foreach t in array array['room_types', 'be_rates', 'booking_engine_settings', 'be_discount_codes', 'restaurant_layouts', 'payment_shortlinks', 'room_status'] loop
     if to_regclass('public.' || t) is not null then
       execute format('drop trigger if exists dh_capture on public.%I', t);
       execute format('create trigger dh_capture after update or delete on public.%I for each row execute function public.dh_capture()', t);

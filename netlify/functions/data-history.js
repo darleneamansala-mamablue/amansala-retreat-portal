@@ -10,7 +10,7 @@ const { staffAllowed, cors, reply } = require('./portal-auth-lib');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const H = key => ({ apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' });
-const TABLES = ['bookings', 'registrations', 'folios', 'folio_items', 'payments', 'transport', 'booking_requests', 'commissions', 'app_store', 'room_types', 'be_rates', 'booking_engine_settings', 'be_discount_codes', 'restaurant_layouts', 'payment_shortlinks'];
+const TABLES = ['bookings', 'registrations', 'folios', 'folio_items', 'payments', 'transport', 'booking_requests', 'commissions', 'app_store', 'room_types', 'be_rates', 'booking_engine_settings', 'be_discount_codes', 'restaurant_layouts', 'payment_shortlinks', 'room_status'];
 
 // what the row is, in words
 function label(tbl, d) {
@@ -32,6 +32,7 @@ function label(tbl, d) {
     case 'be_discount_codes': return `Discount code ${d.code || ''}`;
     case 'restaurant_layouts': return `Restaurant layout ${d.name || d.id || ''}`;
     case 'payment_shortlinks': return `Payment link ${d.code || d.id || ''}`;
+    case 'room_status': return `Room status ${d.room_name || ''}${d.status ? ' · ' + d.status : ''}`;
     default: return tbl;
   }
 }
