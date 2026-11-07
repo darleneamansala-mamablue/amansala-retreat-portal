@@ -5386,6 +5386,8 @@ async function loadFromSupabase(){
     // made this one query exceed Supabase's statement timeout (500) so the portal loaded slowly or not at all (2026-10-28).
     const {data,error}=_tp?{data:_tp.store,error:null}:await db.from('app_store').select('key,value,updated_at').not('key','like','spa_appts_bk_%');
     if(error||!data||(!data.length&&!_tp))return false;
+    // a frozen copy of what was read, for modules/safe-blob.js (it loads after this first read and needs each key's starting value)
+    if(!_tp){try{window._sbLastStore=JSON.stringify(data.map(r=>({key:r.key,value:r.value})));if(typeof safeBlobSeed==='function')safeBlobSeed();}catch(e){}}
     const store={};
     data.forEach(r=>{store[r.key]=r.value;_appStoreUpdatedAt[r.key]=r.updated_at;});
     // Clear signal: if Supabase has a clear_signal newer than what this device last acknowledged,
@@ -7022,7 +7024,7 @@ function switchTab(id,btn){
 </script>
 <!-- EN / ES switch (Jorge 2026-11-06): engine + one Spanish dictionary per screen -->
 <!-- safe saves of whole app_store blobs (Jorge 2026-11-07) -->
-<script src="modules/safe-blob.js?v=20261107b"></script>
+<script src="modules/safe-blob.js?v=20261107c"></script>
 <script src="modules/i18n.js?v=20261106a"></script>
 <script src="modules/i18n-es-transport.js?v=20261106a"></script>
 <script src="modules/i18n-es-reservations.js?v=20261106a"></script>

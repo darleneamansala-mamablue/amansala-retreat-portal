@@ -108,6 +108,9 @@
   }
   // safeBlobSave reads/writes with the raw client, so its own reads never move a screen's starting point
   const rawSave = (key, local, b) => window.safeBlobSave(key, local, b, RAW);
+  // the portal's first full read happens before this file loads: start from the copy it left (booking-hub.html loadFromSupabase)
+  window.safeBlobSeed = function () { try { if (window._sbLastStore) { record([], JSON.parse(window._sbLastStore)); window._sbLastStore = null; } } catch (e) {} };
+  window.safeBlobSeed();
   const prevFrom = db.from;
   db.from = function (table) {
     const qb = prevFrom.apply(db, arguments);
