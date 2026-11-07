@@ -92,7 +92,7 @@ const TOOLS = [
   { name: 'spa_services', description: 'List the active spa services (id, name, duration, price). Read-only.', input_schema: { type: 'object', properties: {} } },
   { name: 'spa_availability', description: 'Free times for a spa service on a date (with therapist and spa room ids to book). Read-only.',
     input_schema: { type: 'object', properties: { serviceId: { type: 'string' }, date: { type: 'string' }, therapistPreference: { type: 'string', enum: ['none', 'male', 'female'] }, guestCount: { type: 'number' } }, required: ['serviceId', 'date'] } },
-  { name: 'propose_action', description: 'Propose a change for the person to confirm with a button (nothing is saved until they confirm). Types: add_charge (folioId, description, category, qty, unitPrice USD before tax, taxRate %), record_payment (folioId, method, amount USD, reference), check_in (regId), check_out (regId), internal_note (regId, note), ac24 (regId, on true/false), move_room (regId, toRoom), spa_booking (serviceId, date, start HH:MM, therapistId, spaRoomId, firstName, lastName, email, phone, guestType hotel|offsite, roomNumber for hotel guests, guestCount for groups), new_booking (room, checkIn, checkOut, guestName, email, phone, adults, ratePerNight, bookingType, notes), send_payment_link (folioId), remove_charge (folioItemId), edit_charge (folioItemId + description/qty/unitPrice/taxRate to change), refund_payment (folioItemId of a Stripe card payment, amount, reason; only Jorge, Hilario, Melissa), spa_cancel (apptId; removes its room charge), spa_move (apptId + new date/start/therapistId; the charge moves too), therapist_confirm (apptId), transport_change (rowId + arrivalDate/arrivalTime/arrivalAirport/departureDate/departureTime/departureAirport/flightNumber), room_status (room, status clean|dirty|maintenance, note), teacher_room (regId: mark the group leader / teacher room ★ in the Room List), set_leader (bookingId from find_reservation, leaderName: the reservation\'s leader name), cloudbeds_fix (regId: Cloudbeds dates/room set to the portal\'s).',
+  { name: 'propose_action', description: 'Propose a change for the person to confirm with a button (nothing is saved until they confirm). Types: add_charge (folioId, description, category, qty, unitPrice USD before tax, taxRate %), record_payment (folioId, method, amount USD, reference), check_in (regId), check_out (regId), internal_note (regId, note), ac24 (regId, on true/false), move_room (regId, toRoom), spa_booking (serviceId, date, start HH:MM, therapistId, spaRoomId, firstName, lastName, email and/or phone -- one of the two is enough, guestType hotel|offsite, roomNumber for hotel guests, guestCount for groups), new_booking (room, checkIn, checkOut, guestName, email, phone, adults, ratePerNight, bookingType, notes), send_payment_link (folioId), remove_charge (folioItemId), edit_charge (folioItemId + description/qty/unitPrice/taxRate to change), refund_payment (folioItemId of a Stripe card payment, amount, reason; only Jorge, Hilario, Melissa), spa_cancel (apptId; removes its room charge), spa_move (apptId + new date/start/therapistId; the charge moves too), therapist_confirm (apptId), transport_change (rowId + arrivalDate/arrivalTime/arrivalAirport/departureDate/departureTime/departureAirport/flightNumber), room_status (room, status clean|dirty|maintenance, note), teacher_room (regId: mark the group leader / teacher room ★ in the Room List), set_leader (bookingId from find_reservation, leaderName: the reservation\'s leader name), cloudbeds_fix (regId: Cloudbeds dates/room set to the portal\'s).',
     input_schema: { type: 'object', properties: {
       type: { type: 'string', enum: ['add_charge', 'record_payment', 'check_in', 'check_out', 'internal_note', 'ac24', 'move_room', 'spa_booking', 'new_booking', 'send_payment_link', 'remove_charge', 'edit_charge', 'refund_payment', 'spa_cancel', 'spa_move', 'therapist_confirm', 'transport_change', 'room_status', 'cloudbeds_fix', 'teacher_room', 'set_leader'] },
       bookingId: { type: 'string' }, leaderName: { type: 'string' },
@@ -284,7 +284,9 @@ async function checkOtherAction(key, a) {
     return { action: { type: t, folioId: f.id, token: f.payment_token, guestName: f.guest_name || f.name, email, phone, manual, bookingId }, summary: `Send the payment link of folio "${f.name || f.guest_name}" to ${[email, phone].filter(Boolean).join(' and ')}` };
   }
   if (t === 'spa_booking') {
-    const need = ['serviceId', 'date', 'start', 'therapistId', 'firstName', 'lastName', 'email', 'phone', 'guestType'].filter(k => !a[k]);
+    // phone OR email is enough (Jorge 2026-11-07)
+    const need = ['serviceId', 'date', 'start', 'therapistId', 'firstName', 'lastName', 'guestType'].filter(k => !a[k]);
+    if (!a.email && !a.phone) need.push('email or phone');
     if (need.length) return { error: 'Missing: ' + need.join(', ') };
     // a guest staying in the hotel that day is always charged to the room (no payment link), whatever was asked
     try {
@@ -293,7 +295,7 @@ async function checkOtherAction(key, a) {
       if (st) { a.guestType = 'hotel'; a.roomNumber = st.room; }
     } catch (e) {}
     if (a.guestType === 'hotel' && !a.roomNumber) return { error: 'For a hotel guest I need their room number.' };
-    a.phone = mxPhone(a.phone);
+    a.phone = a.phone ? mxPhone(a.phone) : '';
     const [row] = await get('app_store?key=eq.spa_data&select=value');
     const svc = (((row && row.value) || {}).services || []).find(x => x && x.id === a.serviceId && x.active);
     if (!svc) return { error: 'That spa service was not found — list the services again.' };
@@ -362,7 +364,8 @@ async function runAction(key, who, a, token) {
             || await send('manual_booking_payment_link', [x.firstName || 'there', d.paymentUrl]);
         } catch (e) {}
       }
-      chk.summary += ` — payment link sent by email${waOk ? ' and WhatsApp' : ' (WhatsApp could not be sent' + (to.length < 11 ? ': the phone needs its country code' : '') + ')'}`;
+      const byMail = !!x.email;
+      chk.summary += ` — payment link sent${byMail ? ' by email' : ''}${waOk ? (byMail ? ' and' : ' by') + ' WhatsApp' : (to ? ' (WhatsApp could not be sent' + (to.length < 11 ? ': the phone needs its country code' : '') + ')' : '')}${!byMail && !waOk ? ' — nothing could be sent, share this link: ' + d.paymentUrl : ''}`;
     } else chk.summary += ' — charged to the room';
   }
   else if (x.type === 'check_in') await send('PATCH', `registrations?id=eq.${encodeURIComponent(x.regId)}`, { checked_in_at: now });

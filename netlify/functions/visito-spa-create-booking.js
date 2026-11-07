@@ -278,10 +278,13 @@ exports.handler = async (event) => {
     serviceId, date, start, therapistId, roomId, guestCount, genderPreference,
   } = payload.arguments || {};
 
-  const missing = ['firstName', 'lastName', 'email', 'phone', 'guestType', 'serviceId', 'date', 'start']
-    .filter(f => !({ firstName, lastName, email, phone, guestType, serviceId, date, start }[f]));
+  // a phone OR an email is enough (Jorge 2026-11-07: staff booking through Ask Jorge often has only one); without email no
+  // confirmation email goes out, without phone no WhatsApp
+  const missing = ['firstName', 'lastName', 'guestType', 'serviceId', 'date', 'start']
+    .filter(f => !({ firstName, lastName, guestType, serviceId, date, start }[f]));
+  if (!email && !phone) missing.push('email o teléfono');
   if (missing.length) return ok({ success: false, message: `Me faltan estos datos: ${missing.join(', ')}.` });
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return ok({ success: false, message: 'El correo no parece válido.' });
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return ok({ success: false, message: 'El correo no parece válido.' });
   if (guestType !== 'hotel' && guestType !== 'offsite') return ok({ success: false, message: 'guestType debe ser "hotel" u "offsite".' });
 
   const hdrs = { apikey: supaKey, Authorization: `Bearer ${supaKey}` };
@@ -459,7 +462,7 @@ exports.handler = async (event) => {
           mode: 'payment',
           success_url: `${siteUrl}/?visito_spa=success`,
           cancel_url: `${siteUrl}/?visito_spa=cancelled`,
-          customer_email: email,
+          ...(email ? { customer_email: email } : {}),
           'line_items[0][price_data][currency]': 'usd',
           'line_items[0][price_data][product_data][name]': `Amansala Spa · ${svc.name} · ${date} ${start}`.slice(0, 250),
           'line_items[0][price_data][unit_amount]': String(amountCents),
@@ -548,7 +551,7 @@ exports.handler = async (event) => {
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px">${rows}</table>
         ${payBlock}
         ${cancelBlock}`;
-      await sendMail({ to: email, subject: 'Spa Appointment Confirmed — Amansala', html: emailShell('Your Spa Appointment is Confirmed', body) });
+      if (email) await sendMail({ to: email, subject: 'Spa Appointment Confirmed — Amansala', html: emailShell('Your Spa Appointment is Confirmed', body) });
       if (ther.email) {
         const therBody = `<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(ther.firstName)}, a new appointment was just booked with you:</p>
           <table width="100%" cellpadding="0" cellspacing="0">${emailRow('Client', esc(clientName))}${emailRow('Service', esc(svc.name))}${emailRow('Date', fmtDateLong(date))}${emailRow('Time', fmtT(start))}</table>
