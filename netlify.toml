@@ -53,6 +53,10 @@
 [functions."data-history-cleanup"]
   schedule = "15 9 * * *"
 
+# Morning data check (cuartos dobles, folios huérfanos, spa/menú vacíos, borrados masivos…): 11:00 UTC = 6am Tulum; WhatsApp only if something is found.
+[functions."integrity-check"]
+  schedule = "0 11 * * *"
+
 # Portal -> Cloudbeds room sync (Jorge 2026-11-03: the portal is the truth): linked Cloudbeds reservations of the next
 # 30 days that sit in another room are moved to the portal's room. 11:30 UTC = 6:30am Tulum, before the 7am room check.
 [functions."cb-room-sync"]
