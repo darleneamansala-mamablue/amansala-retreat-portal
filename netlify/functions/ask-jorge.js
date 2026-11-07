@@ -67,8 +67,8 @@ STAFF GUIDE
 ${KB}`;
 
 const TOOLS = [
-  { name: 'find_guest', description: 'Find guests staying in the hotel (or arriving/leaving) on a date, by name and/or room. Read-only. Returns room, dates, reservation/retreat, checked-in status and the balance still owed on their folios.',
-    input_schema: { type: 'object', properties: { name: { type: 'string', description: 'Guest name or part of it' }, room: { type: 'string', description: 'Room, e.g. 13b, GV16, CH2' }, date: { type: 'string', description: 'YYYY-MM-DD, default today (Tulum)' } } } },
+  { name: 'find_guest', description: 'Find guests staying in the hotel (or arriving/leaving) on a date, by name, room, phone or email (names may be misspelled by one letter). Read-only. Returns room, dates, reservation/retreat, checked-in status and the balance still owed on their folios. When you are given a phone or email, pass it too.',
+    input_schema: { type: 'object', properties: { name: { type: 'string', description: 'Guest name or part of it' }, room: { type: 'string', description: 'Room, e.g. 13b, GV16, CH2' }, phone: { type: 'string', description: 'Guest phone, any format' }, email: { type: 'string' }, date: { type: 'string', description: 'YYYY-MM-DD, default today (Tulum)' } } } },
   { name: 'room_availability', description: 'Free rooms for a date range (optionally only one room type or one room). Read-only.',
     input_schema: { type: 'object', properties: { checkIn: { type: 'string' }, checkOut: { type: 'string' }, roomType: { type: 'string' }, room: { type: 'string' } }, required: ['checkIn', 'checkOut'] } },
   { name: 'quote_room_rate', description: 'Price of a Room Only stay or extra nights for given dates: each available room type with its rate per night, taxes and total. stayType extra_night = the Extra Night rate (guests of a retreat adding nights before/after it); escape = the normal Escape rate. Read-only.',
@@ -118,7 +118,22 @@ const H = key => ({ apikey: key, Authorization: `Bearer ${key}`, 'Content-Type':
 const tulumDate = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Cancun' });
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/&amp;/g, '&').trim();
 
-async function findGuest(key, { name = '', room = '', date = '' }) {
+// one word of the name typed vs a word of the guest's name: contained, or one letter off for words of 4+ letters
+// (Jorge 2026-11-07: Melissa's "Dianne Russel" for Dianne Russell, room 30, was booked as an outside guest)
+function nameWordMatch(t, w) {
+  if (!t || !w) return false;
+  if (w.includes(t) || (t.length >= 4 && t.includes(w) && w.length >= 4)) return true;
+  if (t.length < 4 || Math.abs(t.length - w.length) > 1) return false;
+  let i = 0, j = 0, diff = 0;
+  while (i < t.length && j < w.length) {
+    if (t[i] === w[j]) { i++; j++; continue; }
+    if (++diff > 1) return false;
+    if (t.length > w.length) i++; else if (w.length > t.length) j++; else { i++; j++; }
+  }
+  return diff + (t.length - i) + (w.length - j) <= 1;
+}
+const nameMatches = (typed, full) => { const tw = norm(typed).split(/\s+/).filter(Boolean), gw = norm(full).split(/\s+/).filter(Boolean); return tw.length && tw.every(t => gw.some(w => nameWordMatch(t, w))); };
+async function findGuest(key, { name = '', room = '', date = '', phone = '', email = '' }) {
   const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : tulumDate();
   const get = async p => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${p}`, { headers: H(key) }); return r.ok ? r.json() : []; };
   const bks = await get(`bookings?select=id,retreat_name,leader_name,start_date,end_date,status,booking_type&status=neq.cancelled&start_date=lte.${day}&end_date=gte.${day}&limit=1000`);
@@ -132,7 +147,11 @@ async function findGuest(key, { name = '', room = '', date = '' }) {
       if (!(s <= day && e >= day)) continue;
       if (rm && norm(r.room).replace(/\s/g, '') !== rm) continue;
       const guests = (r.guests || []).filter(g => g && g.name && !g.cancelled);
-      if (n && !guests.some(g => norm(g.name).includes(n) || n.split(/\s+/).every(t => norm(g.name).includes(t)))) continue;
+      // phone (last 10 digits) or email identify the guest on their own; else the name, allowing a one-letter slip
+      const ph = String(phone || '').replace(/\D/g, '').slice(-10), em = String(email || '').trim().toLowerCase();
+      const byContact = (ph.length >= 7 && guests.some(g => String(g.phone || '').replace(/\D/g, '').slice(-10) === ph)) || (em && guests.some(g => String(g.email || '').trim().toLowerCase() === em));
+      if ((ph.length >= 7 || em) && !n && !byContact) continue;
+      if (n && !byContact && !guests.some(g => norm(g.name).includes(n) || nameMatches(n, g.name))) continue;
       const fo = await get(`folios?select=id&registration_id=eq.${encodeURIComponent(r.id)}`);   // all folios (balance)
       const items = fo.length ? await get(`folio_items?select=qty,unit_price,tax_rate&folio_id=in.(${fo.map(f => f.id).join(',')})`) : [];
       const bal = items.reduce((t, x) => t + Number(x.qty) * Number(x.unit_price) * (1 + (Number(x.tax_rate) || 0) / 100), 0);
@@ -142,7 +161,7 @@ async function findGuest(key, { name = '', room = '', date = '' }) {
         folios: fs.map(f => ({ folioId: f.id, name: f.name || f.guest_name, status: f.status })) });
     }
   }
-  return out.length ? out : { message: `No guest found for ${[name && 'name "' + name + '"', room && 'room ' + room].filter(Boolean).join(' and ')} on ${day}.` };
+  return out.length ? out : { message: `No guest found for ${[name && 'name "' + name + '"', room && 'room ' + room, phone && 'phone ' + phone, email && 'email ' + email].filter(Boolean).join(' and ')} on ${day}.` };
 }
 
 // every question, for Jorge's 9 PM summary (ask-jorge-daily.js)
@@ -290,7 +309,8 @@ async function checkOtherAction(key, a) {
     if (need.length) return { error: 'Missing: ' + need.join(', ') };
     // a guest staying in the hotel that day is always charged to the room (no payment link), whatever was asked
     try {
-      const stays = await findGuest(key, { name: `${a.firstName} ${a.lastName}`, date: a.date });
+      let stays = await findGuest(key, { name: `${a.firstName} ${a.lastName}`, date: a.date });
+      if (!Array.isArray(stays) && (a.phone || a.email)) stays = await findGuest(key, { phone: a.phone || '', email: a.email || '', date: a.date });
       const st = Array.isArray(stays) ? stays.find(x => x.status !== 'checked out') : null;
       if (st) { a.guestType = 'hotel'; a.roomNumber = st.room; }
     } catch (e) {}
