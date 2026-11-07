@@ -70,11 +70,13 @@ const SPA_DEFAULT_ROOMS = [
   'Maria Luisa Room — Grande',
 ];
 
+let _spaBase;   // spa settings as loaded / last saved
 async function spaLoad() {
   try {
     const { data } = await db.from('app_store').select('value').eq('key', 'spa_data').maybeSingle();
     if (data && data.value && (data.value.services || []).length) {
       SpaData = data.value;
+      _spaBase = safeBlobClone(SpaData);   // what this tab started from (safe-blob.js saves only what it changed)
     } else {
       // First run — seed defaults so the tab isn't empty, matching prices/durations from spec.
       // Duration/price left blank where the spec marked them TBD — admin fills in via Edit.
@@ -123,21 +125,15 @@ async function spaSave(opts) {
       }
       delete SpaData._seededDefaults;   // the server really is empty: a first setup, save as usual
     }
-    const mergeById = (serverList, clientList) => {
-      const byId = {};
-      (serverList || []).forEach(x => { byId[x.id] = x; });
-      (clientList || []).forEach(x => { byId[x.id] = x; });
-      return Object.values(byId);
-    };
-    SpaData.services = mergeById(serverVal.services, SpaData.services);
-    SpaData.therapists = mergeById(serverVal.therapists, SpaData.therapists);
-    // Rooms are the one collection that's ever actually removed from the
-    // array (spaDeleteRoom), not just flagged inactive — a plain id-union
-    // merge would resurrect a room deleted here if the server still has it.
-    // deletedRoomIds lets a delete win regardless of merge timing.
+    // Jorge 2026-11-07: only what THIS tab changed is saved, field by field, on top of the latest saved settings, and only if
+    // nobody saved in between (safe-blob.js). The old id-merge let this tab's copy of EVERY service / therapist win, so a stale tab
+    // undid others' edits it never touched, and two saves a moment apart could still overwrite each other.
     const deletedRoomIds = new Set((opts && opts.deletedRoomIds) || []);
-    SpaData.rooms = mergeById(serverVal.rooms, SpaData.rooms).filter(r => !deletedRoomIds.has(r.id));
-    await db.from('app_store').upsert({ key: 'spa_data', value: SpaData, updated_at: new Date().toISOString() });
+    if (deletedRoomIds.size) SpaData.rooms = (SpaData.rooms || []).filter(r => !deletedRoomIds.has(r.id));
+    const res = await safeBlobSave('spa_data', SpaData, _spaBase);
+    if (!res.ok) { if (typeof showToast === 'function') showToast('Spa settings could NOT be saved — check the connection and try again. Your change is still on screen.'); return; }
+    SpaData = res.value; _spaBase = safeBlobClone(res.value);
+    if (res.conflicts.length && typeof showToast === 'function') showToast('Saved ✓ — someone else had also changed: ' + res.conflicts.slice(0, 3).join(', ') + '. Your version was kept (the other one is in History).');
   } catch (e) {
     console.warn('[spa] save failed', e);
   }

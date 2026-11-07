@@ -25,7 +25,14 @@ async function _sam_save() {
       const server = row && Array.isArray(row.value) ? row.value : [];
       const del = new Set(deleted), chg = {}; changed.forEach(a => { chg[a.id] = a; });
       const seen = new Set();
-      const merged = server.filter(a => a && !del.has(a.id)).map(a => { seen.add(a.id); return chg[a.id] || a; });
+      // an appointment changed here AND by someone else: merged field by field (Jorge 2026-11-07), not this tab's copy over theirs
+      const conflicts = [];
+      const merged = server.filter(a => a && !del.has(a.id)).map(a => {
+        seen.add(a.id);
+        if (!chg[a.id]) return a;
+        if (typeof safeBlobMerge !== 'function' || !_sam_base[a.id]) return chg[a.id];
+        const m = safeBlobMerge(JSON.parse(_sam_base[a.id]), chg[a.id], a); conflicts.push(...m.conflicts); return m.value;
+      });
       changed.forEach(a => { if (!seen.has(a.id)) merged.push(a); });
       let ok = false;
       if (row) {
@@ -38,7 +45,8 @@ async function _sam_save() {
       }
       if (ok) {   // refresh this tab with what is now saved, keeping the objects other code is holding wherever this tab changed them
         const byId = {}; merged.forEach(a => { byId[a.id] = a; });
-        const next = merged.map(a => (chg[a.id] ? chg[a.id] : a));
+        const next = merged.map(a => (chg[a.id] && JSON.stringify(chg[a.id]) === JSON.stringify(a) ? chg[a.id] : a));
+        if (conflicts.length) { try { showToast('Saved ✓ — someone else was editing the same appointment; both changes were combined (' + conflicts.slice(0, 2).join(', ') + ' kept as yours).'); } catch (e) {} }
         SpaAppointments.length = 0; next.forEach(a => SpaAppointments.push(a));
         _sam_base = _sam_snap(SpaAppointments);
         try { fetch('/.netlify/functions/spa-alerts-now-background', { method: 'POST' }).catch(() => {}); } catch (e) {}   // spa WhatsApp alerts at once (Jorge 2026-11-05)
