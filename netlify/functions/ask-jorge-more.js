@@ -84,6 +84,24 @@ async function linkTarget(key, folioId) {
   return { folioId: f.id, token: f.payment_token, guestName: f.guest_name || f.name, email, phone, manual, balanceUSD: Math.round(items.reduce((s, i) => s + lineTotal(i), 0) * 100) / 100 };
 }
 
+// every folio of a person, on any stay, with its lines (one call instead of find_guest + stay_folios per stay) -- Maddi Herzfeld's
+// duplicate departure charge sat on her FIRST retreat's folio under "Madison Herzfeld" and the search ran out of steps
+async function findCharges(key, { name = '', text = '' } = {}) {
+  const get = getter(key);
+  const words = norm(name).split(/\s+/).filter(w => w.length > 1);
+  if (!words.length) return { message: 'Give the guest name.' };
+  const last = words[words.length - 1];
+  const fo = await get(`folios?select=id,name,guest_name,status,registration_id,booking_request_id,created_at&or=(guest_name.ilike.*${encodeURIComponent(last)}*,name.ilike.*${encodeURIComponent(last)}*)&limit=40`);
+  const out = [];
+  for (const f of fo) {
+    const fi = await folioInfo(key, f.id);
+    const t = norm(text);
+    const lines = fi.items.filter(i => !t || norm(i.description).includes(t)).map(i => ({ folioItemId: i.id, description: i.description, amountUSD: Math.round(lineTotal(i) * 100) / 100, category: i.category }));
+    out.push({ folioId: f.id, folio: f.name || f.guest_name, where: fi.where, status: f.status, balanceUSD: fi.total, lines: lines.slice(0, 40) });
+  }
+  return { name, folios: out };
+}
+
 // the stay a folio belongs to, in words
 async function folioInfo(key, folioId) {
   const get = getter(key);
@@ -243,4 +261,4 @@ async function run(key, who, x) {
   return '';
 }
 
-module.exports = { TYPES, check, run, daySummary, balancesDue };
+module.exports = { TYPES, check, run, daySummary, balancesDue, findCharges };

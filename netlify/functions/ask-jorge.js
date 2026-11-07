@@ -57,6 +57,7 @@ How to answer:
   a therapist's day; cloudbeds_compare when something looks different in Cloudbeds. Say clearly what is right and what is not.
 - Things you cannot do (charging a new card with Stripe, deleting a reservation or a payment, discounts or comps): explain how
   they do it themselves, step by step, or send it to Jorge.
+- After propose_action NOTHING is saved yet: write "Te preparé…" / "I prepared…" and ask them to press Confirm. Never write that you already changed, created or sent it ("cambié", "listo") before they confirm.
 - If it needs a decision (money, refunds, discounts, comps, who pays) or looks like a system error, call notify_jorge with a
   request (what they asked) and reason (why it could not be done), and tell them you sent it to Jorge and he will reply.
 - Spa: before booking, look the person up with find_guest for the appointment date. If they are a guest staying in the hotel
@@ -95,6 +96,8 @@ const TOOLS = [
     input_schema: { type: 'object', properties: { serviceId: { type: 'string' }, date: { type: 'string' }, therapistPreference: { type: 'string', enum: ['none', 'male', 'female'] }, guestCount: { type: 'number' } }, required: ['serviceId', 'date'] } },
   { name: 'day_summary', description: 'The day at a glance (default today): arrivals, departures and what they still owe, spa appointments, airport transports, housekeeping room status counts, open maintenance reports and requests waiting for Jorge. Use it for "what is happening today / tomorrow", "resumen del día". Read-only.',
     input_schema: { type: 'object', properties: { date: { type: 'string', description: 'YYYY-MM-DD; tomorrow = the day after today' } } } },
+  { name: 'find_charges', description: 'Every folio of a guest on ANY stay (retreat, extra night, room only), with each line (folioItemId, description, amount) and balance; optional text to keep only matching lines (e.g. "Departure Transport"). Use it first for duplicate charges, voids, transfers between stays. Read-only.',
+    input_schema: { type: 'object', properties: { name: { type: 'string' }, text: { type: 'string' } }, required: ['name'] } },
   { name: 'transport_price', description: 'Price of an airport ride from the transport rates: airport cancun|tulum and number of passengers (shared van price per person / private). Read-only.',
     input_schema: { type: 'object', properties: { airport: { type: 'string', enum: ['cancun', 'tulum'] }, pax: { type: 'number' } }, required: ['airport', 'pax'] } },
   { name: 'balances_due', description: 'Guests leaving on a date (default today) who still owe money, with the folios that have a balance (folioId, amount). Use it for "who owes", "quién debe", "salidas con saldo"; to send them all their payment link propose send_payment_links with those folioIds. Read-only.',
@@ -459,7 +462,8 @@ exports.handler = async (event) => {
     { type: 'text', text: `The person asking: ${who.name || 'staff'}. Screen they are on: ${page || 'unknown'}. Today (Tulum): ${tulumDate()}.` + (memo.length ? `\nGuests already looked up in this chat (use these ids; "she", "him", "that guest" means the last one): ${memo.join(' | ')}` : '') }];
   const found = [], used = [];
   try {
-    for (let turn = 0; turn < 5; turn++) {
+    const t0 = Date.now();
+    for (let turn = 0; turn < 7 && Date.now() - t0 < 19000; turn++) {   // 7 steps, but stop in time for Netlify's 26 s
       const r = await fetch(ANTHROPIC_API, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({ model: MODEL, max_tokens: 1500, output_config: { effort: 'low' }, system, tools: TOOLS, messages }),
@@ -491,6 +495,7 @@ exports.handler = async (event) => {
           else if (u.name === 'find_reservation') out = await T.findReservation(key, u.input || {});
           else if (u.name === 'transports') out = await A.transports(key, u.input || {});
           else if (u.name === 'day_summary') out = await X.daySummary(key, u.input || {});
+          else if (u.name === 'find_charges') out = await X.findCharges(key, u.input || {});
           else if (u.name === 'transport_price') out = await visitoTool('visito-transport-check-price', u.input || {});
           else if (u.name === 'balances_due') out = await X.balancesDue(key, u.input || {});
           else if (u.name === 'cloudbeds_compare') out = await A.cloudbedsCompare(key, (u.input || {}).regId);
