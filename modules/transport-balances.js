@@ -74,7 +74,10 @@ const trbSameName = (a, b) => { if (!a || !b) return false; if (a === b) return 
 function trbLaterStays(e) {
   if (!e || e.type !== 'departure' || !e.date) return [];
   const g = trbNorm(e.guest), em = String(e.email || '').trim().toLowerCase(), out = [];
-  trbReq.forEach(q => { if (q.checkOut === e.date && ((em && q.email === em) || trbSameName(q.norm, g))) out.push({ label: 'Extra night / online stay', total: q.total }); });
+  // by name first; the email only when no stay that day has their name and just one has their email (one person often books for
+  // friends with her own email -- Jennifer Hutchinson paid Kyla Clarke's night)
+  const day = trbReq.filter(q => q.checkOut === e.date), byName = day.filter(q => trbSameName(q.norm, g)), byMail = em ? day.filter(q => q.email === em) : [];
+  (byName.length ? byName : byMail.length === 1 ? byMail : []).forEach(q => out.push({ label: 'Extra night / online stay', total: q.total }));
   Object.keys(trbBalance).forEach(rid => {
     if (rid === e.regId || trbRegOut[rid] !== e.date) return;
     const hit = trbFind(rid, e.guest); if (hit) out.push({ label: 'Other stay', total: hit.total });
