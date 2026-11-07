@@ -13,7 +13,10 @@ const { getter, H, SUPABASE_URL, lineTotal, norm, tulumDate, addDays } = T;
 const isDay = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 const money = n => '$' + Number(n).toFixed(2);
 const first = s => norm(String(s || '').trim().split(/\s+/)[0]);
-const TYPES = ['maintenance_report', 'send_payment_links'];
+const TYPES = ['maintenance_report', 'send_payment_links', 'void_charge', 'transfer_folio', 'folio_status', 'transport_create'];
+// 4. folios (Jorge 2026-11-07): VOID a duplicate charge with a negative line (never deleted — the way the office does it), move a whole
+//    folio to another stay (as Booking Detail's Transfer Folio), close / reopen a folio.
+// 5. transport: create a new one (arrival and/or departure) for a guest who has none on that stay; transport_price quotes a ride.
 
 // ---------- 2. the day at a glance ----------
 async function daySummary(key, { date = '' } = {}) {
@@ -81,6 +84,18 @@ async function linkTarget(key, folioId) {
   return { folioId: f.id, token: f.payment_token, guestName: f.guest_name || f.name, email, phone, manual, balanceUSD: Math.round(items.reduce((s, i) => s + lineTotal(i), 0) * 100) / 100 };
 }
 
+// the stay a folio belongs to, in words
+async function folioInfo(key, folioId) {
+  const get = getter(key);
+  const [f] = await get(`folios?select=id,name,guest_name,status,registration_id,booking_request_id&id=eq.${encodeURIComponent(String(folioId || ''))}`);
+  if (!f) return null;
+  const items = await get(`folio_items?select=id,description,qty,unit_price,tax_rate,category&folio_id=eq.${encodeURIComponent(f.id)}`);
+  let where = '', bookingId = null;
+  if (f.registration_id) { const [r] = await get(`registrations?select=room,booking_id&id=eq.${encodeURIComponent(f.registration_id)}`); where = r ? `room ${r.room}` : ''; bookingId = r && r.booking_id; }
+  else if (f.booking_request_id) { const [q] = await get(`booking_requests?select=room,first_name,last_name&id=eq.${encodeURIComponent(f.booking_request_id)}`); where = q ? `online stay, room ${q.room || '?'}` : ''; }
+  return { f, items, where, bookingId, total: Math.round(items.reduce((s, i) => s + lineTotal(i), 0) * 100) / 100 };
+}
+
 // ---------- check: {action, summary} | {error} | null ----------
 async function check(key, a, who) {
   const t = String(a.type || '');
@@ -117,6 +132,63 @@ async function check(key, a, who) {
     return { action: { type: t, targets },
       summary: `Send the payment link to ${targets.length} guest${targets.length === 1 ? '' : 's'}: ${targets.map(x => `${x.guestName} ${money(x.balanceUSD)}`).join(', ')}${skipped.length ? ` · skipped: ${skipped.join(', ')}` : ''}` };
   }
+  if (t === 'void_charge') {
+    const get = getter(key);
+    const [i] = await get(`folio_items?select=id,folio_id,description,qty,unit_price,tax_rate,category&id=eq.${encodeURIComponent(String(a.folioItemId || ''))}`);
+    if (!i) return { error: 'That charge was not found — use stay_folios to get its folioItemId.' };
+    if (Number(i.unit_price) <= 0 || /^VOID/i.test(i.description || '')) return { error: 'That line is a payment or already a VOID line.' };
+    const fi = await folioInfo(key, i.folio_id);
+    const already = fi.items.some(x => /^VOID/i.test(x.description || '') && Math.abs(Number(x.qty) * Number(x.unit_price) + Number(i.qty) * Number(i.unit_price)) < 0.01 && String(x.description).includes(String(i.description).slice(0, 30)));
+    if (already) return { error: `"${i.description}" already has a VOID line in that folio.` };
+    return { action: { type: t, folioId: i.folio_id, folioItemId: i.id, description: i.description, qty: i.qty, unitPrice: i.unit_price, taxRate: i.tax_rate, category: i.category, why: String(a.reason || 'duplicate').slice(0, 60), bookingId: fi.bookingId },
+      summary: `VOID "${i.description}" ${money(lineTotal(i))} in folio "${fi.f.name || fi.f.guest_name}" (${fi.where}) — a negative line "VOID ${String(a.reason || 'duplicate').slice(0, 60)}" is added, nothing is deleted` };
+  }
+  if (t === 'transfer_folio') {
+    const fi = await folioInfo(key, a.folioId);
+    if (!fi) return { error: 'That folio was not found — use stay_folios.' };
+    const get = getter(key);
+    let target = null;
+    if (a.toRegId) {
+      const [r] = await get(`registrations?select=id,room,guests,booking_id,cancelled&id=eq.${encodeURIComponent(a.toRegId)}`);
+      if (r && !r.cancelled) { const g = (r.guests || []).filter(x => x && x.name && !x.cancelled); target = { col: { registration_id: r.id, booking_request_id: null }, name: (g[0] || {}).name || 'Guest', where: `room ${r.room}`, bookingId: r.booking_id }; }
+    } else if (a.toRequestId) {
+      const [q] = await get(`booking_requests?select=id,first_name,last_name,room&id=eq.${encodeURIComponent(a.toRequestId)}`);
+      if (q) target = { col: { booking_request_id: q.id, registration_id: null }, name: `${q.first_name || ''} ${q.last_name || ''}`.trim(), where: `online stay, room ${q.room || '?'}`, bookingId: null };
+    }
+    if (!target) return { error: 'Where to? Give the other stay (regId from find_guest, or an online stay id).' };
+    if ((target.col.registration_id && target.col.registration_id === fi.f.registration_id) || (target.col.booking_request_id && target.col.booking_request_id === fi.f.booking_request_id)) return { error: 'That folio is already on that stay.' };
+    return { action: { type: t, folioId: fi.f.id, col: target.col, toName: target.name, fromName: fi.f.name || fi.f.guest_name, fromWhere: fi.where, toWhere: target.where, fromBookingId: fi.bookingId, toBookingId: target.bookingId, items: fi.items.length, total: fi.total },
+      summary: `Move folio "${fi.f.name || fi.f.guest_name}" (${fi.items.length} lines, ${money(fi.total)}) from ${fi.where} to ${target.name} (${target.where}) — every charge and payment goes with it` };
+  }
+  if (t === 'folio_status') {
+    const fi = await folioInfo(key, a.folioId);
+    if (!fi) return { error: 'That folio was not found — use stay_folios.' };
+    const to = a.status === 'closed' || a.status === 'close' ? 'closed' : 'open';
+    if ((fi.f.status || 'open') === to) return { error: `That folio is already ${to}.` };
+    return { action: { type: t, folioId: fi.f.id, to, name: fi.f.name || fi.f.guest_name, bookingId: fi.bookingId },
+      summary: `${to === 'closed' ? 'Close' : 'Reopen'} folio "${fi.f.name || fi.f.guest_name}" (${fi.where}, balance ${money(fi.total)})${to === 'closed' ? ' — no new charges can be added until it is reopened' : ''}` };
+  }
+  if (t === 'transport_create') {
+    const get = getter(key);
+    const [r] = await get(`registrations?select=id,room,guests,booking_id&id=eq.${encodeURIComponent(String(a.regId || ''))}`);
+    if (!r) return { error: 'Which guest? Use find_guest first and pass the regId.' };
+    const gs = (r.guests || []).filter(x => x && x.name && !x.cancelled);
+    const g = (a.guestName ? gs.find(x => norm(x.name).includes(norm(a.guestName))) : null) || gs[0];
+    if (!g) return { error: 'That stay has no guest name.' };
+    const arr = isDay(a.arrivalDate), dep = isDay(a.departureDate);
+    if (!arr && !dep) return { error: 'Give the arrival and/or the departure date (and time, airport, flight if known).' };
+    const parts = String(g.name).trim().split(/\s+/);
+    const existing = await get(`transport?select=id,data&booking_id=eq.${encodeURIComponent(r.booking_id)}`);
+    const mine = existing.find(x => { const d = x.data || {}; return norm(`${d.firstName || ''} ${d.lastName || ''}`) === norm(g.name) || (g.email && norm(d.email) === norm(g.email)); });
+    if (mine) return { error: `${g.name} already has a transport on this stay (rowId ${mine.id}) — use transport_change to change it.` };
+    const ap = v => (/tulum/i.test(String(v || '')) ? 'tulum' : 'cancun');
+    const data = { firstName: parts[0] || '', lastName: parts.slice(1).join(' '), email: g.email || '', bookingId: r.booking_id, notes: String(a.note || '').slice(0, 300), willingToShare: true };
+    if (arr) Object.assign(data, { arrivalDate: a.arrivalDate, arrivalTime: a.arrivalTime || '', arrivalAirport: ap(a.arrivalAirport), flightNumber: a.flightNumber || '', arrivalOT: false });
+    if (dep) Object.assign(data, { departureDate: a.departureDate, departureTime: a.departureTime || '', departureAirport: ap(a.departureAirport), departureOT: false });
+    const fmt = (d, tm, apx) => `${d}${tm ? ' ' + tm : ''} ${apx === 'tulum' ? 'Tulum' : 'Cancún'}`;
+    return { action: { type: t, bookingId: r.booking_id, data },
+      summary: `New transport for ${g.name} (room ${r.room}):${arr ? ` arrival ${fmt(data.arrivalDate, data.arrivalTime, data.arrivalAirport)}${data.flightNumber ? ' flight ' + data.flightNumber : ''}` : ''}${arr && dep ? ' ·' : ''}${dep ? ` departure ${fmt(data.departureDate, data.departureTime, data.departureAirport)}` : ''} — charged to the folio the usual way` };
+  }
   return null;
 }
 
@@ -141,6 +213,32 @@ async function run(key, who, x) {
     }
     await fetch(`${SUPABASE_URL}/rest/v1/activity_log`, { method: 'POST', headers: { ...H(key), Prefer: 'return=minimal' }, body: JSON.stringify({ id: 'id_' + Date.now() + '_ajl', action: 'Payment links sent (Ask Jorge)', detail: `${done.length} sent${failed.length ? ', ' + failed.length + ' failed' : ''}: ${[...done, ...failed].join('; ')}`.slice(0, 1500), booking_id: null, user_name: who.name || 'Staff', user_role: who.role || 'staff', created_at: new Date().toISOString() }) }).catch(() => {});
     return ` — sent: ${done.join('; ') || 'none'}${failed.length ? ' · NOT sent: ' + failed.join('; ') : ''}`;
+  }
+  const log = (action, detail, bookingId) => fetch(`${SUPABASE_URL}/rest/v1/activity_log`, { method: 'POST', headers: { ...H(key), Prefer: 'return=minimal' }, body: JSON.stringify({ id: 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), action, detail: detail + ' (Ask Jorge)', booking_id: bookingId || null, user_name: who.name || 'Staff', user_role: who.role || 'staff', created_at: new Date().toISOString() }) }).catch(() => {});
+  const req = async (method, path, body) => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method, headers: { ...H(key), Prefer: 'return=minimal' }, body: body ? JSON.stringify(body) : undefined }); if (!r.ok) throw new Error((await r.text()).slice(0, 200)); };
+  if (x.type === 'void_charge') {
+    await req('POST', 'folio_items', { folio_id: x.folioId, description: `VOID ${x.why} — ${x.description}`.slice(0, 200), qty: x.qty, unit_price: -Number(x.unitPrice), tax_rate: x.taxRate, category: x.category, staff_name: who.name || null });
+    await log('Charge voided', `"${x.description}" ${money(Number(x.qty) * Number(x.unitPrice) * (1 + (Number(x.taxRate) || 0) / 100))} — VOID ${x.why}`, x.bookingId);
+    return ' — VOID line added';
+  }
+  if (x.type === 'transfer_folio') {
+    await req('PATCH', `folios?id=eq.${encodeURIComponent(x.folioId)}`, { ...x.col, guest_name: x.toName, name: x.toName });
+    const detail = `Folio "${x.fromName}" (${x.items} items, ${money(x.total)}): ${x.fromWhere} → ${x.toName} · ${x.toWhere}`;
+    await log('Folio transferred', detail, x.fromBookingId);
+    if (x.toBookingId && x.toBookingId !== x.fromBookingId) await log('Folio transferred', detail, x.toBookingId);
+    return ' — folio moved';
+  }
+  if (x.type === 'folio_status') {
+    await req('PATCH', `folios?id=eq.${encodeURIComponent(x.folioId)}`, { status: x.to });
+    await log(x.to === 'closed' ? 'Folio closed' : 'Folio reopened', `"${x.name}"`, x.bookingId);
+    return x.to === 'closed' ? ' — folio closed' : ' — folio reopened';
+  }
+  if (x.type === 'transport_create') {
+    const id = 'tr_' + Date.now(), now = new Date().toISOString();
+    const data = { ...x.data, id, submittedAt: now, source: 'ask_jorge', filledBy: { by: 'staff', name: who.name || 'Staff', at: now }, lastEditBy: { by: 'staff', name: who.name || 'Staff', at: now } };
+    await req('POST', 'transport', { id, booking_id: x.bookingId, data, submitted_at: now });
+    await log('Transport created', `${data.firstName} ${data.lastName}${data.arrivalDate ? ' · arrival ' + data.arrivalDate + ' ' + (data.arrivalTime || '') : ''}${data.departureDate ? ' · departure ' + data.departureDate + ' ' + (data.departureTime || '') : ''}`, x.bookingId);
+    return ` — transport ${id} created`;
   }
   return '';
 }
