@@ -36,7 +36,7 @@ async function missingTransport(key, { days = 3 } = {}) {
       const [r] = await get(`registrations?select=id,booking_id,guests&id=eq.${encodeURIComponent(a.regId)}`);
       if (!r) continue;
       const [bk] = await get(`bookings?select=booking_type,retreat_name&id=eq.${encodeURIComponent(r.booking_id)}`);
-      if (bk && bk.booking_type === 'room_only') continue;   // walk-ins / online stays arrange their own rides
+      if (bk && (bk.booking_type === 'room_only' || bk.retreat_name === 'Extra Night')) continue;   // walk-ins / extra nights arrange their own rides
       (r.guests || []).filter(g => g && g.name && !g.cancelled).forEach(g => {
         const mine = allTr.filter(t => t.booking_id === r.booking_id && (norm(`${(t.data || {}).firstName || ''} ${(t.data || {}).lastName || ''}`) === norm(g.name) || (g.email && norm((t.data || {}).email) === norm(g.email))));
         const d = mine.length ? mine[0].data || {} : null;
@@ -56,7 +56,7 @@ async function roomListGaps(key, { days = 45 } = {}) {
   const until = addDays(tulumDate(), Math.min(Math.max(parseInt(days, 10) || 45, 1), 180));
   const bks = await get(`bookings?select=id,leader_name,retreat_name,leader_email,leader_phone,start_date,end_date,status,blocked_rooms,booking_type&status=neq.cancelled&start_date=gte.${tulumDate()}&start_date=lte.${until}&order=start_date`);
   const out = [];
-  for (const b of bks.filter(x => x.booking_type !== 'room_only' && (x.blocked_rooms || []).length)) {
+  for (const b of bks.filter(x => x.booking_type !== 'room_only' && x.retreat_name !== 'Extra Night' && (x.blocked_rooms || []).length)) {   // an Extra Night booking is one guest, not a retreat
     const regs = await get(`registrations?select=room,guests,cancelled&booking_id=eq.${encodeURIComponent(b.id)}`);
     const named = new Set(regs.filter(r => !r.cancelled && (r.guests || []).some(g => g && g.name && !g.cancelled)).map(r => r.room));
     const empty = (b.blocked_rooms || []).filter(r => !named.has(r));
