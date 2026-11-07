@@ -282,7 +282,7 @@ exports.handler = async (event) => {
   // confirmation email goes out, without phone no WhatsApp
   const missing = ['firstName', 'lastName', 'guestType', 'serviceId', 'date', 'start']
     .filter(f => !({ firstName, lastName, guestType, serviceId, date, start }[f]));
-  if (!email && !phone) missing.push('email o teléfono');
+  if (!email && !phone && guestType !== 'hotel') missing.push('email o teléfono');   // a hotel guest is charged to the room
   if (missing.length) return ok({ success: false, message: `Me faltan estos datos: ${missing.join(', ')}.` });
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return ok({ success: false, message: 'El correo no parece válido.' });
   if (guestType !== 'hotel' && guestType !== 'offsite') return ok({ success: false, message: 'guestType debe ser "hotel" u "offsite".' });

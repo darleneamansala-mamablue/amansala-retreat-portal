@@ -38,7 +38,7 @@ How to answer:
 - You CAN do these for them with propose_action (they confirm with a button before anything is saved): add a charge to a
   guest's folio, record a payment on a folio, check a guest in, check a guest out, add an internal note, turn A/C 24h on/off,
   move a guest to another room (move_room; check the room is free with room_availability first), book a spa service
-  (spa_booking; use spa_services and spa_availability first, hotel guests are charged to their room, outside guests get a
+  (spa_booking; use spa_services and spa_availability first, hotel guests are charged to their room -- never ask a hotel guest's phone or email, find_guest already returns them -- outside guests get a
   payment link), create a Room Only reservation (new_booking: room, dates, guest name, email/phone, number of guests, rate per
   night, type Walk-in/Direct/Booking.com/Expedia/Air BnB; check room_availability first; the guest gets a payment link and it is
   created in Cloudbeds), send a folio's payment link to the guest (send_payment_link).
@@ -92,7 +92,7 @@ const TOOLS = [
   { name: 'spa_services', description: 'List the active spa services (id, name, duration, price). Read-only.', input_schema: { type: 'object', properties: {} } },
   { name: 'spa_availability', description: 'Free times for a spa service on a date (with therapist and spa room ids to book). Read-only.',
     input_schema: { type: 'object', properties: { serviceId: { type: 'string' }, date: { type: 'string' }, therapistPreference: { type: 'string', enum: ['none', 'male', 'female'] }, guestCount: { type: 'number' } }, required: ['serviceId', 'date'] } },
-  { name: 'propose_action', description: 'Propose a change for the person to confirm with a button (nothing is saved until they confirm). Types: add_charge (folioId, description, category, qty, unitPrice USD before tax, taxRate %), record_payment (folioId, method, amount USD, reference), check_in (regId), check_out (regId), internal_note (regId, note), ac24 (regId, on true/false), move_room (regId, toRoom), spa_booking (serviceId, date, start HH:MM, therapistId, spaRoomId, firstName, lastName, email and/or phone -- one of the two is enough, guestType hotel|offsite, roomNumber for hotel guests, guestCount for groups), new_booking (room, checkIn, checkOut, guestName, email, phone, adults, ratePerNight, bookingType, notes), send_payment_link (folioId), remove_charge (folioItemId), edit_charge (folioItemId + description/qty/unitPrice/taxRate to change), refund_payment (folioItemId of a Stripe card payment, amount, reason; only Jorge, Hilario, Melissa), spa_cancel (apptId; removes its room charge), spa_move (apptId + new date/start/therapistId; the charge moves too), therapist_confirm (apptId), transport_change (rowId + arrivalDate/arrivalTime/arrivalAirport/departureDate/departureTime/departureAirport/flightNumber), room_status (room, status clean|dirty|maintenance, note), teacher_room (regId: mark the group leader / teacher room ★ in the Room List), set_leader (bookingId from find_reservation, leaderName: the reservation\'s leader name), cloudbeds_fix (regId: Cloudbeds dates/room set to the portal\'s).',
+  { name: 'propose_action', description: 'Propose a change for the person to confirm with a button (nothing is saved until they confirm). Types: add_charge (folioId, description, category, qty, unitPrice USD before tax, taxRate %), record_payment (folioId, method, amount USD, reference), check_in (regId), check_out (regId), internal_note (regId, note), ac24 (regId, on true/false), move_room (regId, toRoom), spa_booking (serviceId, date, start HH:MM, therapistId, spaRoomId, firstName, lastName, email and/or phone -- for a hotel guest leave them out, they come from the reservation; an outside guest needs one of the two, guestType hotel|offsite, roomNumber for hotel guests, guestCount for groups), new_booking (room, checkIn, checkOut, guestName, email, phone, adults, ratePerNight, bookingType, notes), send_payment_link (folioId), remove_charge (folioItemId), edit_charge (folioItemId + description/qty/unitPrice/taxRate to change), refund_payment (folioItemId of a Stripe card payment, amount, reason; only Jorge, Hilario, Melissa), spa_cancel (apptId; removes its room charge), spa_move (apptId + new date/start/therapistId; the charge moves too), therapist_confirm (apptId), transport_change (rowId + arrivalDate/arrivalTime/arrivalAirport/departureDate/departureTime/departureAirport/flightNumber), room_status (room, status clean|dirty|maintenance, note), teacher_room (regId: mark the group leader / teacher room ★ in the Room List), set_leader (bookingId from find_reservation, leaderName: the reservation\'s leader name), cloudbeds_fix (regId: Cloudbeds dates/room set to the portal\'s).',
     input_schema: { type: 'object', properties: {
       type: { type: 'string', enum: ['add_charge', 'record_payment', 'check_in', 'check_out', 'internal_note', 'ac24', 'move_room', 'spa_booking', 'new_booking', 'send_payment_link', 'remove_charge', 'edit_charge', 'refund_payment', 'spa_cancel', 'spa_move', 'therapist_confirm', 'transport_change', 'room_status', 'cloudbeds_fix', 'teacher_room', 'set_leader'] },
       bookingId: { type: 'string' }, leaderName: { type: 'string' },
@@ -156,7 +156,9 @@ async function findGuest(key, { name = '', room = '', date = '', phone = '', ema
       const items = fo.length ? await get(`folio_items?select=qty,unit_price,tax_rate&folio_id=in.(${fo.map(f => f.id).join(',')})`) : [];
       const bal = items.reduce((t, x) => t + Number(x.qty) * Number(x.unit_price) * (1 + (Number(x.tax_rate) || 0) / 100), 0);
       const fs = fo.length ? await get(`folios?select=id,name,guest_name,status&registration_id=eq.${encodeURIComponent(r.id)}`) : [];
-      out.push({ regId: r.id, guests: guests.map(g => g.name).join(' & '), room: r.room, checkIn: s, checkOut: e, reservation: bk.booking_type === 'room_only' ? 'Room Only (' + (bk.retreat_name || '') + ')' : 'Retreat: ' + (bk.retreat_name || bk.leader_name),
+      out.push({ regId: r.id, guests: guests.map(g => g.name).join(' & '), room: r.room,
+        // their contact from the reservation, so nobody is asked for what is already there (Melissa 2026-11-07)
+        contacts: guests.map(g => ({ name: g.name, phone: g.phone || '', email: g.email || '' })), checkIn: s, checkOut: e, reservation: bk.booking_type === 'room_only' ? 'Room Only (' + (bk.retreat_name || '') + ')' : 'Retreat: ' + (bk.retreat_name || bk.leader_name),
         status: r.checked_out_at ? 'checked out' : r.checked_in_at ? 'checked in' : 'not checked in yet', folioBalanceUSD: Math.round(bal * 100) / 100,
         folios: fs.map(f => ({ folioId: f.id, name: f.name || f.guest_name, status: f.status })) });
     }
@@ -303,17 +305,23 @@ async function checkOtherAction(key, a) {
     return { action: { type: t, folioId: f.id, token: f.payment_token, guestName: f.guest_name || f.name, email, phone, manual, bookingId }, summary: `Send the payment link of folio "${f.name || f.guest_name}" to ${[email, phone].filter(Boolean).join(' and ')}` };
   }
   if (t === 'spa_booking') {
-    // phone OR email is enough (Jorge 2026-11-07)
-    const need = ['serviceId', 'date', 'start', 'therapistId', 'firstName', 'lastName', 'guestType'].filter(k => !a[k]);
-    if (!a.email && !a.phone) need.push('email or phone');
-    if (need.length) return { error: 'Missing: ' + need.join(', ') };
-    // a guest staying in the hotel that day is always charged to the room (no payment link), whatever was asked
+    // a guest staying in the hotel that day is always charged to the room (no payment link), whatever was asked -- and their
+    // phone/email come from the reservation; only an outside guest needs a phone OR an email (Jorge / Melissa 2026-11-07)
     try {
-      let stays = await findGuest(key, { name: `${a.firstName} ${a.lastName}`, date: a.date });
+      let stays = (a.firstName || a.lastName) ? await findGuest(key, { name: `${a.firstName || ''} ${a.lastName || ''}`.trim(), date: a.date }) : null;
       if (!Array.isArray(stays) && (a.phone || a.email)) stays = await findGuest(key, { phone: a.phone || '', email: a.email || '', date: a.date });
+      if (!Array.isArray(stays) && a.roomNumber) stays = await findGuest(key, { room: a.roomNumber, date: a.date });
       const st = Array.isArray(stays) ? stays.find(x => x.status !== 'checked out') : null;
-      if (st) { a.guestType = 'hotel'; a.roomNumber = st.room; }
+      if (st) {
+        a.guestType = 'hotel'; a.roomNumber = st.room;
+        const c = (st.contacts || []).find(x => nameMatches(`${a.firstName || ''} ${a.lastName || ''}`.trim(), x.name)) || (st.contacts || [])[0] || {};
+        if (!a.phone) a.phone = c.phone || ''; if (!a.email) a.email = c.email || '';
+        if (!a.firstName && c.name) { const p = c.name.trim().split(/\s+/); a.firstName = p[0]; a.lastName = p.slice(1).join(' ') || a.lastName; }
+      }
     } catch (e) {}
+    const need = ['serviceId', 'date', 'start', 'therapistId', 'firstName', 'lastName', 'guestType'].filter(k => !a[k]);
+    if (a.guestType !== 'hotel' && !a.email && !a.phone) need.push('email or phone');
+    if (need.length) return { error: 'Missing: ' + need.join(', ') };
     if (a.guestType === 'hotel' && !a.roomNumber) return { error: 'For a hotel guest I need their room number.' };
     a.phone = a.phone ? mxPhone(a.phone) : '';
     const [row] = await get('app_store?key=eq.spa_data&select=value');
