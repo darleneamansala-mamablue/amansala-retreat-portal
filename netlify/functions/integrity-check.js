@@ -87,8 +87,9 @@ async function run(key) {
   const tr = await getAll(key, 'transport?select=id,booking_id,data');
   const legs = {};
   tr.forEach(row => {
-    const d = row.data || {}, who = String(d.email || `${d.firstName || ''} ${d.lastName || ''}`).trim().toLowerCase();
-    if (!who) return;
+    // name AND email: one person often fills the forms of friends with her own email (McClelland family, Rachel Nolan)
+    const d = row.data || {}, who = `${d.firstName || ''} ${d.lastName || ''}|${d.email || ''}`.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (who === '|') return;
     [['arrival', d.arrivalDate, d.arrivalOT], ['departure', d.departureDate, d.departureOT]].forEach(([leg, date, ot]) => {
       if (!date || ot || date < t0 || date > t14) return;
       const k = `${leg}|${date}|${who}`; (legs[k] = legs[k] || []).push(`${d.firstName || ''} ${d.lastName || ''}`.trim());
