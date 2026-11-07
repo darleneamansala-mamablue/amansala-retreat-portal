@@ -74,7 +74,11 @@ exports.handler = async (event) => {
       const now = new Date().toISOString();
       let done = '';
       if (h.tbl !== 'app_store') {
-        const idCol = 'id';
+        // room_status has no id: its rows are the room name
+        const idCol = h.tbl === 'room_status' ? 'room_name' : 'id';
+        const rowKey = h.row_id != null ? h.row_id : (h.old_data || {})[idCol];
+        if (rowKey == null) return reply(409, { error: 'This change has no row id — cannot restore it automatically.' });
+        h.row_id = rowKey;
         const [cur] = await get(`${h.tbl}?${idCol}=eq.${encodeURIComponent(h.row_id)}&select=*`);
         if (h.op === 'DELETE') {
           if (cur) return reply(409, { error: 'That row exists again — nothing to bring back.' });
