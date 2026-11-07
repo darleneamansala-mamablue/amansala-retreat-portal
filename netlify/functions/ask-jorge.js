@@ -170,7 +170,10 @@ async function notifyJorge(key, who, page, request, reason) {
   try {
     const g = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.ask_jorge_questions&select=value`, { headers: H(key) });
     const [row] = g.ok ? await g.json() : [];
-    const list = [{ at: new Date().toISOString(), by: who.name || '', page: page || '', summary: text }, ...(((row && row.value) || []).slice(0, 199))];
+    const old = (row && row.value) || [];
+    // a numbered request with a status, so Jorge marks it Fixed in the portal and the person is told (ask-jorge-requests.js)
+    const n = 1 + Math.max(1000, ...old.map(x => Number(String(x.id || '').replace(/\D/g, '')) || 0));
+    const list = [{ id: 'AJ-' + n, status: 'open', at: new Date().toISOString(), by: who.name || '', byId: who.sub || who.id || '', page: page || '', request: req, reason: why, summary: text }, ...old.slice(0, 299)];
     await fetch(`${SUPABASE_URL}/rest/v1/app_store?on_conflict=key`, { method: 'POST', headers: { ...H(key), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ key: 'ask_jorge_questions', value: list, updated_at: new Date().toISOString() }) });
   } catch (e) {}
   // WhatsApp first (Jorge 2026-11-05): the Ask Jorge template, else the first approved one; email only if WhatsApp did not go
