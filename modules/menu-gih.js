@@ -27,7 +27,8 @@
     try {
       const prev = new Date(ds + 'T12:00:00'); prev.setDate(prev.getDate() - 1); const night = prev.toISOString().slice(0, 10);
       (AppData.bookings || []).forEach(b => {
-        if (!b || b.bookingType !== 'room_only' || isGroup(b) || b.status === 'cancelled' || b.status === 'requested' || (b.flags || []).includes('archived')) return;
+        // individual stays: room-only bookings and "Extra Night" ones (a guest staying on after the retreat -- Hilario 2026-11-07)
+        if (!b || (b.bookingType !== 'room_only' && b.retreatName !== 'Extra Night') || isGroup(b) || b.status === 'cancelled' || b.status === 'requested' || (b.flags || []).includes('archived')) return;
         const s = (b.startDate || '').slice(0, 10), e = (b.endDate || '').slice(0, 10);
         if (s && e && s <= night && night < e) n += Number(b.pax) || 0;
       });

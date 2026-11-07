@@ -461,7 +461,10 @@ function menuPopulateFromRetreats(silent=false){
   // happens to carry (Darlene's rule 2026-10-01, after Cloudbeds-imported
   // walk-ins with no mealPlan set were silently defaulting to the full
   // Standard plan and showing up as kitchen group rows).
-  const isMenuEligible=b=>b.bookingType!=='room_only'||b.retreatName==='Bikini Bootcamp'||b.mealPlan==='weTravel';
+  // An "Extra Night" booking is one guest staying on after their retreat, not a dining group (Hilario 2026-11-07: Katie Stevenson,
+  // Melissa Melnyk... showed as group rows) -- they count in GIH (menu-gih.js) like the other individual guests.
+  const isExtraNightBk=b=>b.retreatName==='Extra Night';
+  const isMenuEligible=b=>!isExtraNightBk(b)&&(b.bookingType!=='room_only'||b.retreatName==='Bikini Bootcamp'||b.mealPlan==='weTravel');
   const allActive=AppData.bookings.filter(b=>b.status!=='cancelled'&&isMenuEligible(b));
   const hits=allActive.filter(b=>{
     const s=(b.startDate||'').slice(0,10), e=(b.endDate||'').slice(0,10);
@@ -503,6 +506,9 @@ function menuPopulateFromRetreats(silent=false){
   // (Loco Luxury, 2026-09-26) doesn't leave stale rows in weeks nobody re-populates.
   const noMealGrps=new Set(allActive.filter(b=>b.mealPlan==='none').map(b=>b.leaderName||b.retreatName||'Group'));
   if(noMealGrps.size)Object.values(menuSchedule).forEach(day=>allMeals.forEach(meal=>{if(day?.[meal])day[meal]=day[meal].filter(r=>!noMealGrps.has(r.group));}));
+  // "Extra Night" bookings: the group rows they already got come off every date (unless a real group has the same name)
+  const extraGrps=new Set(AppData.bookings.filter(b=>isExtraNightBk(b)&&!allActive.some(x=>(x.leaderName||x.retreatName)===(b.leaderName||b.retreatName))).map(b=>b.leaderName||b.retreatName||'Group'));
+  if(extraGrps.size)Object.values(menuSchedule).forEach(day=>allMeals.forEach(meal=>{if(day?.[meal])day[meal]=day[meal].filter(r=>!extraGrps.has(r.group));}));
 
   // Clear ALL existing rows for these retreat groups across this week first,
   // so re-running always refreshes with the current meal plan rules
