@@ -58,11 +58,12 @@
 
   window.safeBlobMerge = function (base, local, server) { const conflicts = []; return { value: merge3(base, local, server, '', conflicts), conflicts }; };
 
-  window.safeBlobSave = async function (key, local, base) {
+  window.safeBlobSave = async function (key, local, base, client) {
+    const c = client || db;
     let lastErr = null;
     for (let attempt = 0; attempt < 12; attempt++) {
       try {
-        const { data: row, error: re } = await db.from('app_store').select('value,updated_at').eq('key', key).maybeSingle();
+        const { data: row, error: re } = await c.from('app_store').select('value,updated_at').eq('key', key).maybeSingle();
         if (re) throw re;
         const server = row ? row.value : undefined;
         const conflicts = [];
@@ -71,10 +72,10 @@
         const now = new Date().toISOString();
         let ok;
         if (row) {
-          const { data: upd, error: ue } = await db.from('app_store').update({ value, updated_at: now }).eq('key', key).eq('updated_at', row.updated_at).select('key');
+          const { data: upd, error: ue } = await c.from('app_store').update({ value, updated_at: now }).eq('key', key).eq('updated_at', row.updated_at).select('key');
           if (ue) throw ue; ok = !!(upd && upd.length);
         } else {
-          const { error: ie } = await db.from('app_store').insert({ key, value, updated_at: now });
+          const { error: ie } = await c.from('app_store').insert({ key, value, updated_at: now });
           if (ie) throw ie; ok = true;
         }
         if (ok) return { ok: true, value, conflicts };
@@ -85,4 +86,60 @@
     return { ok: false, error: lastErr };
   };
   window.safeBlobClone = clone;
+
+  // ---- every screen at once (Jorge 2026-11-07): ~60 places save their whole list with db.from('app_store').upsert({key, value}).
+  // Reads of app_store remember each key's value as this tab got it; a later one-row upsert of that key then goes through
+  // safeBlobSave (only this tab's changes, compare-and-swap) instead of writing the whole copy. Left as before: keys never read
+  // in this tab, several rows in one upsert (saveAll has its own guard), and keys that are meant to be overwritten (edit locks,
+  // session signals, backups, logs). Off switch for one browser: localStorage 'safe_blob_off' = '1'.
+  if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return;
+  const RAW = { from: db.from.bind(db) };
+  const SKIP = /(^retreat_lock_|^session_revocations$|^clear_signal$|^cas_sync$|_bk_|backup|_log$|^cas_log|_before_|^menu_archive_|^deleted(Booking|Reg|Payment)Ids$)/;
+  const base = {};
+  window._sbUnprotected = window._sbUnprotected || {};
+  const off = () => { try { return localStorage.getItem('safe_blob_off') === '1'; } catch (e) { return false; } };
+  function record(keys, data) {
+    const rows = Array.isArray(data) ? data : (data ? [data] : []);
+    rows.forEach(r => {
+      if (!r || !('value' in r)) return;
+      const k = r.key != null ? r.key : (keys.length === 1 ? keys[0] : null);
+      if (k != null) base[k] = clone(r.value);
+    });
+  }
+  // safeBlobSave reads/writes with the raw client, so its own reads never move a screen's starting point
+  const rawSave = (key, local, b) => window.safeBlobSave(key, local, b, RAW);
+  const prevFrom = db.from;
+  db.from = function (table) {
+    const qb = prevFrom.apply(db, arguments);
+    if (table !== 'app_store' || off()) return qb;
+    const sel = qb.select.bind(qb);
+    qb.select = function () {
+      const fb = sel.apply(qb, arguments), keys = [];
+      ['eq', 'in'].forEach(f => { const o = fb[f].bind(fb); fb[f] = function (c, v) { if (c === 'key') keys.push(...(Array.isArray(v) ? v : [v])); return o(c, v); }; });
+      const th = fb.then.bind(fb);
+      fb.then = (res, rej) => th(r => { try { if (r && !r.error) record(keys, r.data); } catch (e) {} return res ? res(r) : r; }, rej);
+      return fb;
+    };
+    const ups = qb.upsert.bind(qb);
+    qb.upsert = function (values, opts) {
+      const rows = Array.isArray(values) ? values : [values];
+      const row = rows.length === 1 ? rows[0] : null;
+      if (!row || row.key == null || !('value' in row) || SKIP.test(String(row.key)) || !(row.key in base)) {
+        rows.forEach(r => { if (r && r.key != null && !SKIP.test(String(r.key)) && !(r.key in base)) window._sbUnprotected[r.key] = (window._sbUnprotected[r.key] || 0) + 1; });
+        const fb = ups(values, opts), th = fb.then.bind(fb);
+        fb.then = (res, rej) => th(r => { try { if (r && !r.error) rows.forEach(x => { if (x && x.key != null && 'value' in x) base[x.key] = clone(x.value); }); } catch (e) {} return res ? res(r) : r; }, rej);
+        return fb;
+      }
+      let run = null;
+      const exec = () => run || (run = rawSave(row.key, row.value, base[row.key]).then(res => {
+        if (!res.ok) return { data: null, error: res.error || { message: 'could not save ' + row.key } };
+        base[row.key] = clone(row.value);   // this tab's copy is its new starting point
+        if (res.conflicts && res.conflicts.length) { try { console.warn('[safe-blob]', row.key, 'also changed elsewhere:', res.conflicts); } catch (e) {} }
+        return { data: null, error: null, status: 200 };
+      }));
+      const t = { then: (a, b) => exec().then(a, b), catch: b => exec().catch(b), finally: f => exec().finally(f), select() { return t; }, single() { return t; }, maybeSingle() { return t; } };
+      return t;
+    };
+    return qb;
+  };
 })();
