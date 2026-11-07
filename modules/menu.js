@@ -95,6 +95,7 @@ function menuJumpToDate(val){
   // exactly that date as the first day — not snap back to that week's Sunday.
   menuCurrentMonday=val;
   menuRenderWeek();
+  menuAutoFill();
 }
 
 function menuJumpToMonth(){
@@ -104,6 +105,7 @@ function menuJumpToMonth(){
   const d=new Date(y,m,1);
   menuCurrentMonday=menuGetSunday(d);
   menuRenderWeek();
+  menuAutoFill();
 }
 
 function menuGetSunday(date){
@@ -125,16 +127,24 @@ function menuBuild(){
   menuPopulateFromRetreats(true);
 }
 
+// the retreat rows are filled for the week shown -- before, only the week the Menu opened on was, so next week came up without
+// its groups (Melissa 2026-11-07: De la Sol, Nov 6–11, missing from Nov 8–14). Past weeks are left as they were saved.
+function menuAutoFill(){
+  const end=new Date(menuCurrentMonday+'T12:00:00');end.setDate(end.getDate()+6);
+  if(end.toISOString().split('T')[0]>=menuGetSunday(new Date()))menuPopulateFromRetreats(true);
+}
 function menuNavWeek(dir){
   const d=new Date(menuCurrentMonday+'T12:00:00');
   d.setDate(d.getDate()+dir*7);
   menuCurrentMonday=d.toISOString().split('T')[0];
   menuRenderWeek();
+  menuAutoFill();
 }
 
 function menuGoToday(){
   menuCurrentMonday=menuGetSunday(new Date());
   menuRenderWeek();
+  menuAutoFill();
 }
 
 function menuRenderWeek(){
