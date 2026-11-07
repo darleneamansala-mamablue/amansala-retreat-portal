@@ -1229,7 +1229,7 @@ function buildDashboard(){
 
 
   // ── BANK TOTALS ──
-  const methodLabel={wire:'Wire Transfer',cheque:'Cheque',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',check:'Cheque',cash:'Cash',other:'Other'};
+  const methodLabel={wire:'Wire Transfer',cheque:'Cheque',zelle:'Zelle',venmo:'Venmo',whistle:'Whistle',card:'Credit Card',check:'Cheque',cash:'Cash',other:'Other'};
   const bankTotals={wire:0,cheque:0,zelle:0,venmo:0,card:0,other:0};
   let grandTotalReceived=0,grandTotalOutstanding=0;
   AppData.bookings.filter(b=>b.status!=='cancelled').forEach(bk=>{

@@ -50,7 +50,11 @@ function climasGroupFor(property) {
   return property === 'CASA SHANTI' ? 'SHANTI' : 'AMANSALA';
 }
 
-async function run() {
+// opts.late (send-climas-late.js, every 30 min 7:30–11:30 pm): only the rooms checked in AFTER the 7 pm list, headed
+// "LLEGADA TARDE" (Jorge 2026-11-07: someone arriving later never showed up anywhere). The 7 pm run keeps what it sent in
+// app_store 'climas_sent' {date, rooms}; each late run adds its rooms there, so a room is announced once.
+async function run(opts = {}) {
+  const late = !!opts.late;
   const supaKey = process.env.SUPABASE_SERVICE_KEY;
   if (!supaKey) { console.error('[climas-report] SUPABASE_SERVICE_KEY missing'); return { statusCode: 500 }; }
   // Staff-editable in Admin > Settings (Jorge's ask 2026-10-15) instead of the
@@ -144,11 +148,28 @@ async function run() {
     console.warn('[climas-report] Cloudbeds fetch failed (non-fatal):', e.message);
   }
 
-  const roomList = [...occupied].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  const allRooms = [...occupied].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+  let sentBefore = [];
+  if (late) {
+    const nowLocal = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Cancun', hour12: false });
+    if (nowLocal < '19:20') return { statusCode: 200, body: JSON.stringify({ late: true, skipped: 'before the 7 pm list' }) };
+    const [srow] = await get('/rest/v1/app_store?key=eq.climas_sent&select=value');
+    const sv = srow && srow.value;
+    if (!sv || sv.date !== today) return { statusCode: 200, body: JSON.stringify({ late: true, skipped: 'no 7 pm list today' }) };
+    sentBefore = sv.rooms || [];
+  }
+  const roomList = late ? allRooms.filter(r => !sentBefore.includes(r)) : allRooms;
+  const saveSent = async () => {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/app_store?on_conflict=key`, { method: 'POST', headers: { ...hdrs, Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ key: 'climas_sent', value: { date: today, rooms: [...new Set([...sentBefore, ...roomList])] }, updated_at: new Date().toISOString() }) });
+    } catch (e) { console.warn('[climas-report] could not save the sent list', e.message); }
+  };
   console.log(`[climas-report] ${enabled ? 'SENDING' : 'DRY RUN'} for ${today} -- ${roomList.length} rooms: ${roomList.join(', ')}`);
 
   if (!roomList.length) {
-    console.log('[climas-report] no occupied rooms tonight, skipping send');
+    if (!late && enabled) await saveSent();   // an empty 7 pm list still lets later arrivals be announced
+    console.log(`[climas-report] ${late ? 'late: no new check-ins' : 'no occupied rooms tonight'}, skipping send`);
     return { statusCode: 200, body: JSON.stringify({ date: today, rooms: 0 }) };
   }
 
@@ -172,7 +193,7 @@ async function run() {
   // confirmed to render correctly everywhere (it still wraps naturally on a
   // phone screen, just not at a hard-coded line break). A section with no
   // rooms still needs some text -- Meta rejects an empty parameter value.
-  const dateStr    = fmtDateEsWeekday(today);
+  const dateStr    = (late ? 'LLEGADA TARDE · ' : '') + fmtDateEsWeekday(today);
   const amansalaStr = groups.AMANSALA.length ? groups.AMANSALA.join(' · ') : '—';
   const shantiStr   = groups.SHANTI.length ? groups.SHANTI.join(' · ') : '—';
   const ac24hStr    = ac24hList.length ? ac24hList.join(' · ') : '—';
@@ -187,7 +208,7 @@ async function run() {
     try {
       const r = await fetch(`${VISITO_API}/whatsapp-templates/${CHANNEL_ID}/send`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${m2mKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': `climas-${today}-${to}` },
+        headers: { Authorization: `Bearer ${m2mKey}`, 'Content-Type': 'application/json', 'Idempotency-Key': late ? `climas-late-${today}-${roomList.join('_').slice(0, 60)}-${to}` : `climas-${today}-${to}` },
         body: JSON.stringify({
           to,
           template: {
@@ -211,7 +232,8 @@ async function run() {
     }
   }
 
-  console.log(`[climas-report] ${today} -- ${JSON.stringify(results)}`);
+  if (results.sent) await saveSent();
+  console.log(`[climas-report] ${late ? 'late ' : ''}${today} -- ${JSON.stringify(results)}`);
   return { statusCode: 200, body: JSON.stringify({ date: today, rooms: roomList.length, ...results }) };
 }
 

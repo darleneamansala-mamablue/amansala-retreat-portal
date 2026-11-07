@@ -545,7 +545,7 @@ function renderPayHistory(bk){
   const payments=(bk.payments||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
   const el=document.getElementById('payHistoryList');
   if(!payments.length){el.innerHTML='<div style="font-size:13px;color:var(--muted);text-align:center;padding:20px;border:1px dashed var(--border);border-radius:8px">No payments recorded yet for this booking.</div>';return;}
-  const methodLabel={wire:'Wire Transfer',cheque:'Cheque',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',check:'Cheque',cash:'Cash',other:'Other'};
+  const methodLabel={wire:'Wire Transfer',cheque:'Cheque',zelle:'Zelle',venmo:'Venmo',whistle:'Whistle',card:'Credit Card',check:'Cheque',cash:'Cash',other:'Other'};
   el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12.5px">
     <tr style="background:#f8fafc"><th style="padding:7px 10px;text-align:left;color:var(--muted);font-size:11px;font-weight:700;border-bottom:2px solid var(--border)">Date</th><th style="padding:7px 10px;text-align:left;color:var(--muted);font-size:11px;font-weight:700;border-bottom:2px solid var(--border)">Amount</th><th style="padding:7px 10px;text-align:left;color:var(--muted);font-size:11px;font-weight:700;border-bottom:2px solid var(--border)">Method</th><th style="padding:7px 10px;text-align:left;color:var(--muted);font-size:11px;font-weight:700;border-bottom:2px solid var(--border)">Reference #</th><th style="padding:7px 10px;text-align:left;color:var(--muted);font-size:11px;font-weight:700;border-bottom:2px solid var(--border)">Note</th><th style="border-bottom:2px solid var(--border)"></th></tr>
     ${payments.map(p=>`<tr style="border-bottom:1px solid #f1f5f9">
@@ -653,7 +653,7 @@ function renderVmPaymentWidget(bk){
   const {charged,totalPaid,balance}=calcBkBalance(bk);
   const payments=(bk.payments||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
   const clr=balance<=0?'#16a34a':balance>0?'#dc2626':'#374151';
-  const methodLabel={wire:'Wire',cheque:'Cheque',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',check:'Cheque',cash:'Cash',other:'Other'};
+  const methodLabel={wire:'Wire',cheque:'Cheque',zelle:'Zelle',venmo:'Venmo',whistle:'Whistle',card:'Credit Card',check:'Cheque',cash:'Cash',other:'Other'};
   el.style.display='block';
   el.innerHTML=`
     <div style="display:flex;background:#f8fafc;border-bottom:1px solid var(--border)">

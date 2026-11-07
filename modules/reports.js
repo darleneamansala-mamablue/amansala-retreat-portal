@@ -212,7 +212,7 @@ function _gsDeptPanelHtml(monthKey,mTotalCobrado){
   </div>`;
 }
 
-const _RPT_METHOD_LABELS={wire:'Wire Transfer',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',cash:'Cash',cheque:'Cheque',paypal:'Paypal',clip:'Clip',other:'Other'};
+const _RPT_METHOD_LABELS={wire:'Wire Transfer',zelle:'Zelle',venmo:'Venmo',whistle:'Whistle',card:'Credit Card',cash:'Cash',cheque:'Cheque',paypal:'Paypal',clip:'Clip',other:'Other'};
 const _RPT_METHOD_COLORS={wire:'#dbeafe:#1d4ed8',zelle:'#fce7f3:#9d174d',venmo:'#ede9fe:#5b21b6',card:'#dcfce7:#15803d',cash:'#fef9c3:#854d0e',cheque:'#f3f4f6:#374151',paypal:'#e0f2fe:#0369a1',clip:'#fdf4ff:#7e22ce',other:'#f3f4f6:#374151'};
 // Pulls the method back out of a folio_items Payment description -- see the
 // "Payments by User" comment above for why there's no method column to read

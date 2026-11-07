@@ -106,7 +106,7 @@ const TOOLS = [
       regId: { type: 'string' }, folioId: { type: 'string' },
       description: { type: 'string' }, category: { type: 'string', enum: ['Restaurant', 'Transport', 'Spa', 'Tour', 'Boutique', 'Gym', 'Room', 'Upgrade', 'Tip', 'Other'] },
       qty: { type: 'number' }, unitPrice: { type: 'number' }, taxRate: { type: 'number' },
-      method: { type: 'string', enum: ['Cash', 'Zelle', 'Venmo', 'Paypal', 'Bank Transfer', 'Clip', 'Expedia Collect'] }, amount: { type: 'number' }, reference: { type: 'string' },
+      method: { type: 'string', enum: ['Cash', 'Zelle', 'Venmo', 'Paypal', 'Whistle', 'Bank Transfer', 'Clip', 'Expedia Collect'] }, amount: { type: 'number' }, reference: { type: 'string' },
       note: { type: 'string' }, on: { type: 'boolean' } }, required: ['type'] } },
   { name: 'notify_jorge', description: 'Send this to Jorge by WhatsApp and email when you cannot solve it or it needs his decision.',
     input_schema: { type: 'object', properties: {
@@ -237,7 +237,7 @@ function mxPhone(p) {
   if (d.length === 13 && d.startsWith('521')) return '+52' + d.slice(3);
   return d ? '+' + d : '';
 }
-const PAY_METHODS = ['Cash', 'Zelle', 'Venmo', 'Paypal', 'Bank Transfer', 'Clip', 'Expedia Collect'];
+const PAY_METHODS = ['Cash', 'Zelle', 'Venmo', 'Paypal', 'Whistle', 'Bank Transfer', 'Clip', 'Expedia Collect'];
 const money = n => '$' + Number(n).toFixed(2);
 // Checks a proposed action against the database and returns it complete (with a human summary), or {error}
 async function checkAction(key, a, who = {}) {

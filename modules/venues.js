@@ -2433,7 +2433,7 @@ function openVenFinancials(){
     ${(()=>{
       const pays=(bk.payments||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
       if(!pays.length)return '';
-      const methodLabel={wire:'Wire',cheque:'Cheque',zelle:'Zelle',venmo:'Venmo',card:'Credit Card',check:'Cheque',cash:'Cash',other:'Other'};
+      const methodLabel={wire:'Wire',cheque:'Cheque',zelle:'Zelle',venmo:'Venmo',whistle:'Whistle',card:'Credit Card',check:'Cheque',cash:'Cash',other:'Other'};
       const totalRec=pays.reduce((s,p)=>s+p.amount,0);
       const rows=pays.map(p=>`<tr style="border-bottom:1px solid var(--border)">
         <td style="padding:7px 12px">${fmtDate(p.date)}</td>

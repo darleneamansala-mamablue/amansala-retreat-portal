@@ -45,6 +45,10 @@
 [functions."send-climas-report"]
   schedule = "0 0 * * *"
 
+# Late check-ins after the 7pm A/C list: every 30 min 7:30–11:30pm Tulum (00:30–04:30 UTC; the 00:00 run skips itself).
+[functions."send-climas-late"]
+  schedule = "*/30 0-4 * * *"
+
 # Portal -> Cloudbeds room sync (Jorge 2026-11-03: the portal is the truth): linked Cloudbeds reservations of the next
 # 30 days that sit in another room are moved to the portal's room. 11:30 UTC = 6:30am Tulum, before the 7am room check.
 [functions."cb-room-sync"]

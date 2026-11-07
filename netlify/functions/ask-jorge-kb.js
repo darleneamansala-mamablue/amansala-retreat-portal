@@ -34,7 +34,7 @@ BOOKING DETAIL (open any guest's name)
   - Add a charge: "+ Add manually" (pick from the item list or type description, category, qty, price, tax %) → "+ Add".
   - Edit / ✕ on each line (open folios only). "Move to…" moves a line to another folio of the same reservation.
   - Pencil next to the folio name renames it.
-  - Record a payment: in the Payment row choose the method (Cash, Zelle, Venmo, Paypal, Bank Transfer, Clip, Credit Card (Stripe),
+  - Record a payment: in the Payment row choose the method (Cash, Zelle, Venmo, Paypal, Whistle, Bank Transfer, Clip, Credit Card (Stripe),
     Card on File, Expedia Collect), amount, optional reference → Record.
   - Credit Card (Stripe) opens a card form to charge the card now. "Save Card" keeps a card on file for later charges.
   - "Send to Guest" sends the guest a payment link for that folio (email + WhatsApp).
@@ -104,7 +104,7 @@ SETTINGS
 
 WHAT THE ASSISTANT CAN AND CANNOT DO
 - It CAN do, after the person presses Confirm on its card: add a charge to a guest's folio, record a payment (Cash, Zelle, Venmo,
-  Paypal, Bank Transfer, Clip, Expedia Collect), check a guest in or out, add an internal note, turn A/C 24h on/off, move a guest
+  Paypal, Whistle, Bank Transfer, Clip, Expedia Collect), check a guest in or out, add an internal note, turn A/C 24h on/off, move a guest
   to another room (rate kept, Cloudbeds moved), book a spa service, create a Room Only reservation (created in Cloudbeds, the guest
   gets a payment link), send a folio's payment link to the guest.
 - Since 2026-11-05 it ALSO does (after Confirm): remove or correct a charge, refund a Stripe card payment (only Jorge, Hilario,
