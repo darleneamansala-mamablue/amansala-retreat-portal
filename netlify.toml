@@ -49,6 +49,10 @@
 [functions."send-climas-late"]
   schedule = "*/30 0-4 * * *"
 
+# Change history (sql/data_history.sql) keeps 120 days: older rows deleted nightly, 09:15 UTC = 4:15am Tulum.
+[functions."data-history-cleanup"]
+  schedule = "15 9 * * *"
+
 # Portal -> Cloudbeds room sync (Jorge 2026-11-03: the portal is the truth): linked Cloudbeds reservations of the next
 # 30 days that sit in another room are moved to the portal's room. 11:30 UTC = 6:30am Tulum, before the 7am room check.
 [functions."cb-room-sync"]
