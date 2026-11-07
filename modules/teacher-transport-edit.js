@@ -119,9 +119,39 @@
     const entry = Object.assign({}, base || {
       id: 'tr_' + Date.now(), bookingId: teBk.id, firstName: parts[0] || '', lastName: parts.slice(1).join(' '), email: g.email || '', submittedAt: new Date().toISOString(), source: 'teacher_edit'
     });
+    // Back-to-back retreats (Jorge 2026-11-07, Wendy Oberg Oct 31–Nov 4 + Nov 4–8): the guest's form lives in the first
+    // retreat with the Nov 8 departure, so this retreat showed them with no transport and Edit made a second entry that got
+    // charged and listed again. A leg of the same guest that falls inside THIS retreat moves here, with its "already charged"
+    // mark, and is cleared on the other entry.
+    const moved = [], took = {};
+    if (!base) {
+      const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const em = norm(g.email), nm = norm(g.name);
+      const bkOf = id => AppData.bookings.find(b => b.id === id);
+      list.filter(s => s && s.bookingId !== teBk.id && ((em && norm(s.email) === em) || norm((s.firstName || '') + ' ' + (s.lastName || '')) === nm)).forEach(s => {
+        const ob = bkOf(s.bookingId); if (!ob || ob.status === 'cancelled') return;
+        const take = (dir) => {
+          took[dir] = true;
+          const D = dir === 'dep' ? 'departure' : 'arrival';
+          if (dir === 'dep') { entry.departureDate = s.departureDate; entry.departureTime = s.departureTime; entry.departureAirport = s.departureAirport; entry.departureOT = s.departureOT; }
+          else { entry.arrivalDate = s.arrivalDate; entry.arrivalTime = s.arrivalTime; entry.arrivalAirport = s.arrivalAirport; entry.arrivalOT = s.arrivalOT; entry.flightNumber = s.flightNumber; }
+          const fc = s.folioCharged || {}, keep = {}, rest = {};
+          Object.keys(fc).forEach(k => (k.startsWith(D) ? keep : rest)[k] = fc[k]);
+          if (Object.keys(keep).length) { entry.folioCharged = Object.assign({}, entry.folioCharged || {}, keep); }
+          const upd = Object.assign({}, s, { [D + 'Moved']: { to: entry.id, at: new Date().toISOString(), was: { date: s[D + 'Date'], time: s[D + 'Time'] } }, [D + 'Date']: '', [D + 'Time']: '', [D + 'Airport']: '' });
+          if (Object.keys(keep).length) { if (Object.keys(rest).length) upd.folioCharged = rest; else delete upd.folioCharged; }
+          moved.push(upd);
+        };
+        // their departure falls inside this retreat, from the retreat right before it
+        if (s.departureDate && ob.endDate <= teBk.startDate && s.departureDate > teBk.startDate && s.departureDate <= teBk.endDate) take('dep');
+        // their arrival falls inside this retreat, from the retreat right after it
+        else if (s.arrivalDate && ob.startDate >= teBk.endDate && s.arrivalDate >= teBk.startDate && s.arrivalDate < teBk.endDate) take('arr');
+      });
+    }
     const aLock = lockedFor(old, 'arr'), dLock = lockedFor(old, 'dep');
-    if (!aLock) { entry.arrivalDate = v('te-ad'); entry.arrivalTime = v('te-at'); entry.arrivalAirport = v('te-aa') || 'cancun'; entry.flightNumber = v('te-fn').trim(); entry.arrivalOT = ck('te-aot'); }
-    if (!dLock) { entry.departureDate = v('te-dd'); entry.departureTime = v('te-dt'); entry.departureAirport = v('te-da') || 'cancun'; entry.departureOT = ck('te-dot'); }
+    // a leg just moved here keeps its values unless the form has its own date typed in
+    if (!aLock && !(took.arr && !v('te-ad'))) { entry.arrivalDate = v('te-ad'); entry.arrivalTime = v('te-at'); entry.arrivalAirport = v('te-aa') || 'cancun'; entry.flightNumber = v('te-fn').trim(); entry.arrivalOT = ck('te-aot'); }
+    if (!dLock && !(took.dep && !v('te-dd'))) { entry.departureDate = v('te-dd'); entry.departureTime = v('te-dt'); entry.departureAirport = v('te-da') || 'cancun'; entry.departureOT = ck('te-dot'); }
     entry.willingToShare = ck('te-sh'); entry.notes = v('te-nt').trim();
     if (!isAdmin()) {
       // a leg can't be moved INTO the closed window either (unless it was left exactly as it was)
@@ -134,8 +164,10 @@
     try {
       const i = list.findIndex(s => s.id === entry.id);
       if (i >= 0) list[i] = entry; else list.push(entry);
+      moved.forEach(u => { const j = list.findIndex(s => s.id === u.id); if (j >= 0) list[j] = u; });
       localStorage.setItem(TRANSPORT_KEY, JSON.stringify(list));
       await saveTransportToSupabase(entry);
+      for (const u of moved) { await saveTransportToSupabase(u); try { logActivity('Transport leg moved', `${g.name}: ${u.departureMoved && u.departureMoved.to === entry.id ? 'departure' : 'arrival'} moved here from the back-to-back retreat's entry (no second charge)`, teBk.id); } catch (e) {} }
       // an already-assigned leg whose key details changed must be reconfirmed with the driver (same trigger as a guest re-submitting the form)
       try {
         if (old && typeof driverConfirmations !== 'undefined' && typeof trDrvCheckReconfirm === 'function') {
