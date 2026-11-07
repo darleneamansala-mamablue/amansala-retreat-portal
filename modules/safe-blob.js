@@ -118,9 +118,64 @@
   window.safeBlobSeed = function () { try { if (window._sbLastStore) { record([], JSON.parse(window._sbLastStore)); window._sbLastStore = null; seedDone(); } } catch (e) {} };
   window.safeBlobSeed();
   window._sbDropped = window._sbDropped || {};
+  // ---- transport rows (Jorge 2026-11-07): each edit wrote the WHOLE `data` of the row, so a screen opened earlier undid what someone
+  // else changed in the same transport (flight, pickup, notes, charge marks). Reads remember each row's data; an update/upsert of
+  // one row's data then saves only this screen's changes on top of the current row, and only if it did not change in between.
+  const trBase = {};
+  const trRecord = data => (Array.isArray(data) ? data : (data ? [data] : [])).forEach(r => { if (r && r.id != null && r.data && typeof r.data === 'object') trBase[r.id] = clone(r.data); });
+  async function trSave(id, local, extra) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const { data: cur, error: re } = await RAW.from('transport').select('id,data').eq('id', id).maybeSingle();
+      if (re) return { data: null, error: re };
+      if (!cur) { const r = await RAW.from('transport').insert({ id, data: local, ...(extra || {}) }); if (!r.error) trBase[id] = clone(local); return r; }
+      const conflicts = [];
+      const merged = merge3(trBase[id], local, cur.data, '', conflicts);
+      if (same(merged, cur.data) && !extra) { trBase[id] = clone(local); return { data: null, error: null }; }
+      const { data: upd, error: ue } = await RAW.from('transport').update({ data: merged, ...(extra || {}) }).eq('id', id).eq('data', J(cur.data)).select('id');
+      if (ue) return { data: null, error: ue };
+      if (upd && upd.length) {
+        trBase[id] = clone(local);
+        if (conflicts.length) { try { console.warn('[safe-blob] transport', id, 'also changed elsewhere:', conflicts); } catch (e) {} }
+        return { data: null, error: null, merged };
+      }
+      await new Promise(r => setTimeout(r, 80 + Math.random() * 220));
+    }
+    return { data: null, error: { message: 'The transport changed while saving — try again.' } };
+  }
+  const thenable = exec => { let run = null; const go = () => run || (run = exec()); const t = { then: (a, b) => go().then(a, b), catch: b => go().catch(b), finally: f => go().finally(f), select() { return t; }, single() { return t; }, maybeSingle() { return t; } }; return t; };
+
   const prevFrom = db.from;
   db.from = function (table) {
     const qb = prevFrom.apply(db, arguments);
+    if (table === 'transport' && !off()) {
+      const tsel = qb.select.bind(qb);
+      qb.select = function () { const fb = tsel.apply(qb, arguments), th = fb.then.bind(fb); fb.then = (res, rej) => th(r => { try { if (r && !r.error) trRecord(r.data); } catch (e) {} return res ? res(r) : r; }, rej); return fb; };
+      const tupd = qb.update.bind(qb);
+      qb.update = function (payload, opts) {
+        const onlyData = payload && typeof payload === 'object' && 'data' in payload && Object.keys(payload).every(k => k === 'data' || k === 'booking_id' || k === 'submitted_at');
+        if (!onlyData) return tupd(payload, opts);
+        let id = null, other = false;
+        const fb = tupd(payload, opts);
+        // learn the filter: only `.eq('id', x)` takes the safe path
+        const t = thenable(() => (id != null && !other && trBase[id] !== undefined)
+          ? trSave(id, payload.data, Object.fromEntries(Object.entries(payload).filter(([k]) => k !== 'data')))
+          : new Promise((ok, no) => fb.then(ok, no)));
+        t.eq = (c, v) => { if (c === 'id' && id == null) id = v; else other = true; fb.eq(c, v); return t; };
+        ['in', 'neq', 'match', 'filter', 'is', 'or'].forEach(f => { t[f] = (...a) => { other = true; fb[f](...a); return t; }; });
+        return t;
+      };
+      const tups = qb.upsert.bind(qb);
+      qb.upsert = function (values, opts) {
+        const row = !Array.isArray(values) ? values : (values.length === 1 ? values[0] : null);
+        if (!row || row.id == null || !row.data || trBase[row.id] === undefined) {
+          const fb = tups(values, opts), th = fb.then.bind(fb);
+          fb.then = (res, rej) => th(r => { try { if (r && !r.error) (Array.isArray(values) ? values : [values]).forEach(x => { if (x && x.id != null && x.data) trBase[x.id] = clone(x.data); }); } catch (e) {} return res ? res(r) : r; }, rej);
+          return fb;
+        }
+        return thenable(() => trSave(row.id, row.data, Object.fromEntries(Object.entries(row).filter(([k]) => k !== 'data' && k !== 'id'))));
+      };
+      return qb;
+    }
     if (table !== 'app_store' || off()) return qb;
     const sel = qb.select.bind(qb);
     qb.select = function () {
