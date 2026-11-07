@@ -1193,6 +1193,17 @@ async function tr2LoadData() {
   // button, for a room that isn't split per-guest, e.g. CH16), which cancels
   // every guest in it the same way one guest's own g.cancelled would.
   const cancelledKeys = new Set();
+  // A cancelled guest whose room was then freed (taken off the retreat's room list) still has to stay hidden -- Jessica Tyler,
+  // We Travel BBC GV1, kept showing as tomorrow's arrival after her room was released (Hilario 2026-11-07). Every reg of the
+  // booking counts here, unless the same person is active in another room of it.
+  tr2ActiveBooks.forEach(bk => {
+    const active = new Set(), gone = new Set();
+    AppData.regs.filter(r => r.bookingId === bk.id).forEach(reg => (reg.guests || []).forEach(g => {
+      if (!g.name) return;
+      ((reg.cancelled || g.cancelled) ? gone : (roomListIncludes(bk.blockedRooms, reg.room) ? active : null) || new Set()).add(tr2NormName(g.name));
+    }));
+    gone.forEach(n => { if (!active.has(n)) cancelledKeys.add(`${bk.id}|${n}`); });
+  });
   tr2ActiveBooks.forEach(bk => {
     const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
     // Same guard as the synthetic "Missing Transport" loop below -- a room
