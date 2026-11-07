@@ -121,12 +121,16 @@ exports.handler = async (event) => {
       // date doesn't need to fall within (a transfer is usually booked for check-in/out day,
       // which this guest's stay naturally brackets) -- but we DO need their booking_id so the
       // transport row joins the same registration the nightly cron already matches by name.
-      const [regRes, bkRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/registrations?select=id,booking_id,room,guests,cancelled`, { headers: hdrs }),
-        fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,leader_name,booking_type,blocked_rooms,status`, { headers: hdrs }),
-      ]);
-      const regsAll = (regRes.ok ? await regRes.json() : []).filter(r => !r.cancelled);
+      // Stays within a week of the transfer date, then only their registrations: reading every registration hit Supabase's
+      // 1,000-row cap (1,905 rows, 2026-11-07) and real guests came back "not found" (same fix as visito-spa-create-booking.js)
+      const shift = n => new Date(Date.parse(date + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+      const bkRes = await fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,leader_name,booking_type,blocked_rooms,status&start_date=lte.${shift(7)}&end_date=gte.${shift(-7)}&status=neq.cancelled&limit=1000`, { headers: hdrs });
       const bookingsAll = (bkRes.ok ? await bkRes.json() : []).filter(b => b.status !== 'cancelled');
+      const regsAll = [];
+      for (let i = 0; i < bookingsAll.length; i += 60) {
+        const regRes = await fetch(`${SUPABASE_URL}/rest/v1/registrations?select=id,booking_id,room,guests,cancelled&booking_id=in.(${bookingsAll.slice(i, i + 60).map(b => encodeURIComponent(b.id)).join(',')})&limit=1000`, { headers: hdrs });
+        if (regRes.ok) regsAll.push(...(await regRes.json()).filter(r => !r.cancelled));
+      }
 
       let regMatch = null, bkMatch = null;
       if (roomNumber) {

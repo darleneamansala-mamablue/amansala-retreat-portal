@@ -79,6 +79,18 @@ function spaGroupPrice(s, n) {
   return null;
 }
 function normName(s) { return (s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+// every word typed is in the guest's name, the same or one letter off (4+ letter words)
+function nearName(typed, full) {
+  const off1 = (t, w) => {
+    if (w.includes(t)) return true;
+    if (t.length < 4 || Math.abs(t.length - w.length) > 1) return false;
+    let i = 0, j = 0, d = 0;
+    while (i < t.length && j < w.length) { if (t[i] === w[j]) { i++; j++; continue; } if (++d > 1) return false; if (t.length > w.length) i++; else if (w.length > t.length) j++; else { i++; j++; } }
+    return d + (t.length - i) + (w.length - j) <= 1;
+  };
+  const tw = normName(typed).split(' ').filter(Boolean), gw = normName(full).split(' ').filter(Boolean);
+  return tw.length > 0 && tw.every(t => gw.some(w => off1(t, w)));
+}
 function findGuestReg(regs, clientName, roomNumber) {
   const key = (clientName || '').toLowerCase().replace(/\s+/g, ' ').trim();
   if (!key) return null;
@@ -342,12 +354,17 @@ exports.handler = async (event) => {
     const isHotel = guestType === 'hotel';
     let stayStart = null, stayEnd = null, regMatch = null, bkMatch = null, matchedRoomNumber = roomNumber || null;
     if (isHotel) {
-      const [regRes, bkRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/registrations?select=id,booking_id,room,guests,charges`, { headers: hdrs }),
-        fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,leader_name,booking_type,blocked_rooms,charges,start_date,end_date`, { headers: hdrs }),
-      ]);
-      const regsAll = regRes.ok ? await regRes.json() : [];
+      // Only the bookings around the appointment date, then their registrations: reading every registration hit
+      // Supabase's 1,000-row cap (1,905 rows on 2026-11-07) and a real in-house guest came back "not found" --
+      // Dianne Russell, room 30, De la Sol (Melissa through Ask Jorge).
+      const bkRes = await fetch(`${SUPABASE_URL}/rest/v1/bookings?select=id,leader_name,booking_type,blocked_rooms,charges,start_date,end_date,status&start_date=lte.${date}&end_date=gte.${date}&status=neq.cancelled&limit=1000`, { headers: hdrs });
       const bookingsAll = bkRes.ok ? await bkRes.json() : [];
+      const regsAll = [];
+      const bkIds = bookingsAll.map(b => b.id);
+      for (let i = 0; i < bkIds.length; i += 60) {
+        const regRes = await fetch(`${SUPABASE_URL}/rest/v1/registrations?select=id,booking_id,room,guests,charges,cancelled&booking_id=in.(${bkIds.slice(i, i + 60).map(encodeURIComponent).join(',')})&limit=1000`, { headers: hdrs });
+        if (regRes.ok) regsAll.push(...(await regRes.json()).filter(r => !r.cancelled));
+      }
 
       // Only ever match against a stay that actually covers the appointment
       // date -- matching a name against a past or future stay is how you'd
@@ -360,6 +377,15 @@ exports.handler = async (event) => {
       if (roomNumber) {
         regMatch = findGuestReg(activeRegs, clientName, roomNumber);
         bkMatch = !regMatch ? findGuestBooking(activeRoomOnlyBookings, clientName, roomNumber) : null;
+        // the room is given: a guest of that room whose name is the same give or take one letter per word ("Russel" / "Russell")
+        if (!regMatch && !bkMatch) {
+          const rn = normName(roomNumber);
+          const inRoom = activeRegs.filter(r => normName(r.room) === rn);
+          for (const reg of inRoom) {
+            const g = (reg.guests || []).find(x => x && x.name && !x.cancelled && nearName(clientName, x.name));
+            if (g) { regMatch = { reg, guest: g }; break; }
+          }
+        }
       } else {
         // Name-only: auto-match the room if there's exactly one guest with
         // this name staying right now; otherwise ask instead of guessing.
