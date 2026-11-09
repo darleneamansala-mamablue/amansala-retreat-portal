@@ -47,5 +47,14 @@ const post = (b, tok = 't') => ch.handler({ httpMethod: 'POST', headers: { autho
   r = await post({ ticketId: '9', folio: 'f1', reservationID: 'r1', subtotal: -1 }); assert.strictEqual(r.error, 'INVALID_AMOUNT');
   r = await post({ action: 'void', ticketId: '174407', reason: 'wrong room' }); assert.ok(r.voided); assert.strictEqual(r.balance, 11.3);
   r = await post({ action: 'void', ticketId: '174407' }); assert.ok(r.alreadyVoided);
+  // items with prices -> one folio line per item (+ a discount line for the gap); void takes every line back
+  const before = db.folio_items.length;
+  r = await post({ ticketId: '124707', folio: 'f1', reservationID: 'r1', subtotal: 40, tip: 5, items: [{ description: 'Margarita Clasica', quantity: 2, price: 14 }, { description: 'Guacamole', quantity: 1, total: 14 }] });
+  assert.ok(r.success); assert.strictEqual(db.folio_items.length - before, 4);   // 2 items + discount -2 + tip
+  assert.ok(db.folio_items.some(i => i.description === 'Margarita Clasica (Xetux #124707)' && i.qty === 2 && i.unit_price === 14 && i.tax_rate === 13));
+  assert.ok(db.folio_items.some(i => i.description === 'Discount (Xetux #124707)' && i.unit_price === -2));
+  assert.strictEqual(r.charged, 50.2);
+  r = await post({ ticketId: '124707', folio: 'f1', reservationID: 'r1', subtotal: 40 }); assert.ok(r.alreadyPosted);
+  r = await post({ action: 'void', ticketId: '124707' }); assert.ok(r.voided); assert.strictEqual(r.balance, 11.3);
   console.log('xetux room charge: ok');
 })().catch(e => { console.error(e); process.exit(1); });

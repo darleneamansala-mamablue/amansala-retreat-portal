@@ -812,7 +812,7 @@ function _bdFolioRowHtml(f){
   const fid=f.folio.id;
   // the other open folios of this reservation a charge can be moved to (Jorge 2026-11-04)
   const _moveTargets=_bdFolios.filter(x=>x.folio.id!==fid&&x.folio.status==='open');
-  const itemRows=f.items.map(i=>{
+  const _rowHtml=(i,xv)=>{
     const isPayment=Number(i.unit_price)<0;
     const lineTotal=_bdItemTotal(i);
     // Date column, like Cloudbeds' folio (Darlene 2026-09-28). Spa charges set
@@ -836,13 +836,16 @@ function _bdFolioRowHtml(f){
         </td>
       </tr>`;
     }
-    return `<tr style="${isPayment?'background:#f0fdf4':''}">
+    // xv: a Xetux ticket line, shown like the old PMS (Jorge 2026-11-09): the item alone, its tax on the ticket's own Tax line
+    if(xv&&xv.hidden)return '';
+    const descShown=xv?xv.desc:(i.description||''), catShown=xv?xv.cat:i.category;
+    return `<tr style="${isPayment?'background:#f0fdf4':''}${xv?';background:#fcfbf8':''}">
       <td style="padding:8px 12px;font-size:12px;white-space:nowrap;color:var(--dark)">${itemDate}</td>
-      <td data-no-i18n style="padding:8px 12px;font-size:12.5px">${isPayment?'💳 ':''}${escHtml(i.description||'')}${i.category?`<span style="margin-left:8px;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:#f3f4f6;color:var(--muted)">${escHtml(i.category)}</span>`:''}</td>
+      <td data-no-i18n style="padding:8px 12px 8px ${xv?'28px':'12px'};font-size:12.5px">${isPayment?'💳 ':''}${escHtml(descShown)}${catShown?`<span style="margin-left:8px;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:#f3f4f6;color:var(--muted)">${escHtml(catShown)}</span>`:''}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${Number(i.qty)}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${fmt$(i.unit_price)}</td>
-      <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${i.tax_rate?i.tax_rate+'%':'—'}</td>
-      <td style="padding:8px 12px;font-size:12.5px;text-align:right;font-weight:700;color:${isPayment?'#059669':'inherit'}">${fmt$(lineTotal)}</td>
+      <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${xv?'—':(i.tax_rate?i.tax_rate+'%':'—')}</td>
+      <td style="padding:8px 12px;font-size:12.5px;text-align:right;font-weight:700;color:${isPayment?'#059669':'inherit'}">${fmt$(xv?Number(i.qty)*Number(i.unit_price):lineTotal)}</td>
       <td style="padding:8px 12px;text-align:right;white-space:nowrap">
         ${isOpen&&_moveTargets.length?`<select onchange="bdMoveItem('${fid}','${i.id}',this.value);this.value=''" title="Move this charge to another folio of this reservation" style="padding:2px 4px;font-size:11px;border:1px solid var(--border);border-radius:6px;max-width:110px"><option value="">Move to…</option>${_moveTargets.map(t=>`<option value="${t.folio.id}">${escHtml(t.folio.name)}</option>`).join('')}</select>`:''}
         ${isPayment&&_bdCanRefund()&&/\bpi_[A-Za-z0-9]+/.test(i.description||'')&&!/^Refund/.test(i.description||'')?`<button class="btn btn-secondary btn-sm" onclick="bdOpenRefund('${fid}','${i.id}')" title="Refund this card payment through Stripe (full or partial)" style="padding:2px 8px;font-size:11px;color:#b45309">↩ Refund</button>`:''}
@@ -850,7 +853,37 @@ function _bdFolioRowHtml(f){
         <button class="btn btn-danger btn-sm" onclick="bdDeleteItem('${fid}','${i.id}')" style="padding:2px 8px;font-size:11px">✕</button>`:''}
       </td>
     </tr>`;
-  }).join('');
+  };
+  // Xetux (restaurant POS) tickets are grouped under "Amansala Restaurante / #bill_<ticket>": each item, one Tax line, the tip.
+  // Display only -- what is saved, the totals and the ticket tag (used to avoid double charges and to void) stay the same.
+  const _xtId=i=>{const m=/\(Xetux #([^)]+)\)/.exec(i.description||'');return m?m[1]:null;};
+  const _xtDone=new Set(),_rows=[];
+  f.items.forEach(i=>{
+    const tid=_xtId(i);
+    if(!tid){_rows.push(_rowHtml(i));return;}
+    if(_xtDone.has(tid))return;
+    _xtDone.add(tid);
+    const grp=f.items.filter(x=>_xtId(x)===tid);
+    const isTip=x=>x.category==='Tip'||/^(VOID )?Tip\b/.test(x.description||'');
+    const food=grp.filter(x=>!isTip(x)),tips=grp.filter(isTip);
+    const clean=x=>String(x.description||'').replace(/\s*\(Xetux #[^)]+\)/,'').replace(/^\s*·\s*/,'').trim();
+    const open=!(_bdXetuxClosed&&_bdXetuxClosed[tid]);
+    const day=grp[0].created_at?new Date(grp[0].created_at).toLocaleDateString('en-CA'):'';
+    const tax=food.reduce((s,x)=>s+Number(x.qty)*Number(x.unit_price)*(Number(x.tax_rate)||0)/100,0);
+    const rate=(food.find(x=>Number(x.tax_rate))||{}).tax_rate;
+    const sum=grp.reduce((s,x)=>s+_bdItemTotal(x),0);
+    _rows.push(`<tr style="background:#f1efe9;cursor:pointer" onclick="_bdXetuxToggle('${String(tid).replace(/'/g,'')}')">
+      <td style="padding:7px 12px;font-size:12px;color:var(--dark)">${day}</td>
+      <td data-no-i18n colspan="4" style="padding:7px 12px;font-size:12.5px;font-style:italic;color:#4b5563">${open?'▾':'▸'} Amansala Restaurante / #bill_${escHtml(tid)}</td>
+      <td style="padding:7px 12px;font-size:12.5px;text-align:right;font-weight:700">${fmt$(sum)}</td><td></td></tr>`);
+    if(!open)return;
+    food.forEach(x=>_rows.push(_rowHtml(x,{desc:clean(x),cat:'f&b / Restaurant'})));
+    if(Math.abs(tax)>0.004)_rows.push(`<tr style="background:#fcfbf8"><td style="padding:8px 12px;font-size:12px;color:var(--dark)">${day}</td>
+      <td data-no-i18n style="padding:8px 12px 8px 28px;font-size:12.5px">Tax${rate!=null?Number(rate):''}%<span style="margin-left:8px;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:#f3f4f6;color:var(--muted)">other / Tax ${rate!=null?Number(rate):''}% Restaurant</span></td>
+      <td></td><td></td><td></td><td style="padding:8px 12px;font-size:12.5px;text-align:right;font-weight:700">${fmt$(tax)}</td><td></td></tr>`);
+    tips.forEach(x=>_rows.push(_rowHtml(x,{desc:/^VOID/.test(x.description||'')?'VOID Tip':'Tip',cat:'surcharge'})));
+  });
+  const itemRows=_rows.join('');
   const addFormHtml=_bdAddOpen[fid]?`
     <tr>
       <td></td>
@@ -2373,3 +2406,7 @@ function _bdPaxNameFields(){
   let h='';for(let k=have;k<want;k++)h+=`<input id="bdPaxNewName-${k}" placeholder="Name of guest ${k+1}" value="${String(kept['bdPaxNewName-'+k]||'').replace(/"/g,'&quot;')}" style="display:block;margin-top:5px;width:100%;max-width:260px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">`;
   box.innerHTML=h;
 }
+
+// Xetux ticket groups in the folio: open by default, click the header to fold one (Jorge 2026-11-09)
+let _bdXetuxClosed={};
+function _bdXetuxToggle(tid){_bdXetuxClosed[tid]=!_bdXetuxClosed[tid];_bdRender();}

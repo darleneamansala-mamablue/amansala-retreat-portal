@@ -26,6 +26,13 @@ exports.handler = async (event) => {
   if (!auth || auth !== expected) return reply(401, { success: false, error: 'UNAUTHORIZED' });
   let b;
   try { b = JSON.parse(event.body || '{}'); } catch (e) { return reply(200, { success: false, error: 'INVALID_JSON' }); }
+  // keep the last 20 tickets as Xetux sent them (no token) -- to see which item fields they really send
+  try {
+    const r0 = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.xetux_last_tickets&select=value`, { headers: H(key) });
+    const prev = r0.ok ? (((await r0.json())[0] || {}).value || []) : [];
+    await fetch(`${SUPABASE_URL}/rest/v1/app_store?on_conflict=key`, { method: 'POST', headers: { ...H(key), Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ key: 'xetux_last_tickets', value: [{ at: new Date().toISOString(), body: b }, ...(Array.isArray(prev) ? prev : [])].slice(0, 20), updated_at: new Date().toISOString() }) });
+  } catch (e) {}
   const ticketId = String(b.ticketId || '').trim().slice(0, 60);
   if (!ticketId) return reply(200, { success: false, error: 'TICKET_ID_REQUIRED', message: 'ticketId is required' });
   const get = async p => { const r = await fetch(`${SUPABASE_URL}/rest/v1/${p}`, { headers: H(key) }); return r.ok ? r.json() : []; };
@@ -37,7 +44,7 @@ exports.handler = async (event) => {
       if (!posted.length) return reply(200, { success: false, error: 'TICKET_NOT_FOUND', message: `Ticket ${ticketId} was never posted` });
       if (voided) return reply(200, { success: true, alreadyVoided: true, ticketId });
       const reason = String(b.reason || '').trim().slice(0, 120);
-      const lines = posted.map(i => ({ folio_id: i.folio_id, description: `VOID ${i.description}${reason ? ' · ' + reason : ''}`, qty: 1, unit_price: -round2(Number(i.qty) * Number(i.unit_price)), tax_rate: Number(i.tax_rate) || 0, category: i.category, staff_name: 'Xetux' }));
+      const lines = posted.map(i => ({ folio_id: i.folio_id, description: `VOID ${i.description}${reason ? ' · ' + reason : ''}`.slice(0, 480), qty: 1, unit_price: -round2(Number(i.qty) * Number(i.unit_price)), tax_rate: Number(i.tax_rate) || 0, category: i.category, staff_name: 'Xetux' }));
       const r = await fetch(`${SUPABASE_URL}/rest/v1/folio_items`, { method: 'POST', headers: { ...H(key), Prefer: 'return=minimal' }, body: JSON.stringify(lines) });
       if (!r.ok) return reply(200, { success: false, error: 'SAVE_FAILED', message: (await r.text()).slice(0, 200) });
       return reply(200, { success: true, voided: true, ticketId, folio: posted[0].folio_id, balance: await balanceOf(get, posted[0].folio_id) });
@@ -63,7 +70,23 @@ exports.handler = async (event) => {
     const itemsText = Array.isArray(b.items) ? b.items.slice(0, 30).map(i => `${Number(i.quantity) || 1}× ${String(i.description || '').slice(0, 40)}`).join(', ') : '';
     const desc = `${outlet} ${tag(ticketId)}${waiter ? ' · ' + waiter : ''}${itemsText ? ' · ' + itemsText : ''}`.slice(0, 480);
     const day = new Date().toISOString();
-    const lines = [{ folio_id: folioId, description: desc, qty: 1, unit_price: subtotal, tax_rate: taxRate, category: 'Restaurant', staff_name: 'Xetux', created_at: day }];
+    // One folio line per item when every item has its price (Jorge 2026-11-09: "cada cargo dentro del folio", like the old PMS) --
+    // each keeps the ticket tag, so duplicate protection and void work the same. A discount / rounding gap gets its own line so
+    // the lines always add up to the subtotal. Without item prices: one line for the ticket, as before.
+    const priced = Array.isArray(b.items) && b.items.length ? b.items.slice(0, 60).map(i => {
+      const qty = Number(i.quantity ?? i.qty) || 1;
+      const each = i.price ?? i.unitPrice ?? i.unit_price, line = i.total ?? i.amount ?? i.lineTotal;
+      const unit = each != null && each !== '' ? round2(Number(each)) : line != null && line !== '' ? round2(Number(line) / qty) : null;
+      return { name: String(i.description || i.name || 'Item').trim().slice(0, 80), qty, unit };
+    }) : null;
+    let lines;
+    if (priced && priced.every(p => p.unit != null && isFinite(p.unit))) {
+      lines = priced.map(p => ({ folio_id: folioId, description: `${p.name} ${tag(ticketId)}`, qty: p.qty, unit_price: p.unit, tax_rate: taxRate, category: 'Restaurant', staff_name: 'Xetux', created_at: day }));
+      const gap = round2(subtotal - priced.reduce((t, p) => t + p.qty * p.unit, 0));
+      if (Math.abs(gap) >= 0.01) lines.push({ folio_id: folioId, description: `${gap < 0 ? 'Discount' : 'Adjustment'} ${tag(ticketId)}`, qty: 1, unit_price: gap, tax_rate: taxRate, category: 'Restaurant', staff_name: 'Xetux', created_at: day });
+    } else {
+      lines = [{ folio_id: folioId, description: desc, qty: 1, unit_price: subtotal, tax_rate: taxRate, category: 'Restaurant', staff_name: 'Xetux', created_at: day }];
+    }
     if (tip > 0) lines.push({ folio_id: folioId, description: `Tip ${outlet} ${tag(ticketId)}${waiter ? ' · ' + waiter : ''}`, qty: 1, unit_price: tip, tax_rate: 0, category: 'Tip', staff_name: 'Xetux', created_at: day });
     const r = await fetch(`${SUPABASE_URL}/rest/v1/folio_items`, { method: 'POST', headers: { ...H(key), Prefer: 'return=representation' }, body: JSON.stringify(lines) });
     if (!r.ok) return reply(200, { success: false, error: 'SAVE_FAILED', message: (await r.text()).slice(0, 200) });
