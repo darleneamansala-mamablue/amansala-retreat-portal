@@ -173,6 +173,29 @@ async function run(opts = {}) {
   occupied.forEach(r => arriving.delete(r));
   arriving.forEach(r => occupied.add(r));
 
+  // Physical rooms, not beds (Jorge 2026-11-09): a bed sold on its own ("4a", "4b", "19B -a") is listed as its room ("4", "19B"),
+  // once -- the A/C is per room. Only rooms of the bed room types count as beds, so "4B" (a room) never becomes "4".
+  const roomTypes = await get('/rest/v1/room_types?select=id,property,rooms');
+  const BED_TO_PARENT = { bd1: 'rt6', bd2: 'rt7', bd3: 'rt8', bd4: 'rt9' };
+  const bedParent = {};
+  roomTypes.forEach(rt => {
+    const parentRooms = ((roomTypes.find(p => p.id === BED_TO_PARENT[rt.id]) || {}).rooms) || [];
+    if (!BED_TO_PARENT[rt.id]) return;
+    (rt.rooms || []).forEach(bed => {
+      const m = String(bed).trim().match(/^(.+?)\s*-?\s*([a-d])$/i);
+      const parent = m && parentRooms.find(p => p.toLowerCase() === m[1].trim().toLowerCase());
+      if (parent) bedParent[bed] = parent;
+    });
+  });
+  const phys = r => bedParent[r] || r;
+  const toPhys = set => new Set([...set].map(phys));
+  const occPhys = toPhys(occupied), arrOnly = toPhys(arriving), ac24Phys = toPhys(ac24hRooms);
+  // a room is "(llega)" only when nobody is in it yet -- one bed in-house makes it in-house
+  [...occupied].filter(r => !arriving.has(r)).forEach(r => arrOnly.delete(phys(r)));
+  occupied.clear(); occPhys.forEach(r => occupied.add(r));
+  arriving.clear(); arrOnly.forEach(r => arriving.add(r));
+  ac24hRooms.clear(); ac24Phys.forEach(r => ac24hRooms.add(r));
+
   const allRooms = [...occupied].sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
   let sentBefore = [];
   if (late) {
@@ -200,7 +223,6 @@ async function run(opts = {}) {
 
   // Property lookup for the AMANSALA/SHANTI split -- ac_24h rooms are pulled out
   // of both lists first (they get their own section, not the 9pm reminder).
-  const roomTypes = await get('/rest/v1/room_types?select=property,rooms');
   const propertyByRoom = {};
   roomTypes.forEach(rt => (rt.rooms || []).forEach(r => { propertyByRoom[r] = rt.property || 'AMANSALA'; }));
   const groups = { AMANSALA: [], SHANTI: [] };
