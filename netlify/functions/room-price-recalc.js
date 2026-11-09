@@ -53,6 +53,15 @@ async function doRecalc(key) {
 
   const byRoomType = {};
   let datesProcessed = 0;
+  // Whole-hotel occupancy per date (every room of the Escape room types), shown next to each type's own -- Room Price Genie shows
+  // "Total Rooms Sold" for the whole property (Jorge 2026-11-09)
+  const hotelRooms = [...new Set(roomTypes.flatMap(rt => rt.rooms || []))];
+  const hotelByDate = {};
+  for (let d = new Date(today + 'T12:00:00'); d <= endD; d.setDate(d.getDate() + 1)) {
+    const dateStr = d.toISOString().slice(0, 10);
+    const occ = L.occupancyFor(dateStr, hotelRooms, blocks);
+    hotelByDate[dateStr] = { sold: Math.round(occ * hotelRooms.length), occPct: Math.round(occ * 100) };
+  }
 
   for (const rt of roomTypes) {
     const byDate = {};
@@ -71,13 +80,15 @@ async function doRecalc(key) {
       // type's rooms correctly drives that type to its max that night; `groupTaken` stays a
       // separate DISPLAY-only figure (how much of today's occupancy came from a group) and is
       // never subtracted out of what actually feeds the price.
+      const detail = {};
       const recommended = L.recommendPrice({
         settings, roomType: rt, dateStr, today,
         actualOcc: occPct / 100,
         referenceBasePrice: reference ? reference.be_price_single : rt.be_price_single,
-        seasonalAdjustments,
+        seasonalAdjustments, detail,
       });
-      byDate[dateStr] = { occPct, groupTaken, totalRooms: rt.rooms.length, current, recommended };
+      const sold = Math.round(occPct / 100 * rt.rooms.length);
+      byDate[dateStr] = { occPct, groupTaken, totalRooms: rt.rooms.length, sold, current, previous: current, recommended, detail };
       datesProcessed++;
     }
     byRoomType[rt.id] = { name: rt.name, byDate };
@@ -105,7 +116,7 @@ async function doRecalc(key) {
         seasonalAdjustments,
       });
       for (const rt of members) {
-        if (byRoomType[rt.id] && byRoomType[rt.id].byDate[dateStr]) byRoomType[rt.id].byDate[dateStr].recommended = sharedPrice;
+        if (byRoomType[rt.id] && byRoomType[rt.id].byDate[dateStr]) { byRoomType[rt.id].byDate[dateStr].recommended = sharedPrice; byRoomType[rt.id].byDate[dateStr].detail = { ...(byRoomType[rt.id].byDate[dateStr].detail || {}), linkedGroup: group.join('+') }; }
       }
     }
   }
@@ -143,7 +154,7 @@ async function doRecalc(key) {
         if (ceilPrice == null) continue;
         let cap = L.round(ceilPrice * (1 - ceilMarginPct / 100), settings.roundTo || 5);
         if (ownMin != null) cap = Math.max(cap, ownMin);
-        if (byDate[dateStr].recommended > cap) { byDate[dateStr].recommended = cap; changed = true; }
+        if (byDate[dateStr].recommended > cap) { byDate[dateStr].recommended = cap; byDate[dateStr].detail = { ...(byDate[dateStr].detail || {}), cappedBy: ceilId, cappedAt: cap }; changed = true; }
       }
     }
     if (!changed) break;
@@ -166,7 +177,7 @@ async function doRecalc(key) {
     for (const c of changes) byRoomType[c.room_type_id].byDate[c.date].current = c.price_single;
   }
 
-  const result = { generatedAt: new Date().toISOString(), windowDays: WINDOW_DAYS, referenceRoomTypeId: settings.referenceRoomTypeId, autoApplied: applied, byRoomType };
+  const result = { generatedAt: new Date().toISOString(), windowDays: WINDOW_DAYS, referenceRoomTypeId: settings.referenceRoomTypeId, autoApplied: applied, byRoomType, hotel: { rooms: hotelRooms.length, byDate: hotelByDate } };
   await L.appStoreSet(key, L.RECS_KEY, result);
   return { roomTypes: roomTypes.length, datesProcessed, autoApplied: applied };
 };

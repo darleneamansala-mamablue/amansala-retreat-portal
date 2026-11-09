@@ -211,19 +211,26 @@ function recommendPrice(opts) {
   const refBase = opts.referenceBasePrice ?? roomType.be_price_single;
   const derivationPct = isReference ? 0 : (settings.derivationPct[roomType.id] || 0);
   let price = refBase * (1 + derivationPct / 100);
+  // opts.detail (optional object) receives each step, for the Calendar's hover breakdown (Jorge 2026-11-09, "like Room Price Genie")
+  const det = opts.detail || {};
+  det.base = Math.round(price);
 
   const { month, weekdayKey } = dateToParts(dateStr);
   const monthlyPct = Number(opts.seasonalAdjustments?.[String(month)] ?? 0);
   price *= (1 + monthlyPct / 100);
+  det.monthlyPct = monthlyPct;
 
   if (settings.dayOfWeekOwnedByTool) {
     const weekdayPct = Number(settings.weekdayPct[weekdayKey] || 0);
     price *= (1 + weekdayPct / 100);
+    det.weekdayPct = weekdayPct;
   }
 
   const daysOut = Math.max(0, daysBetween(today, dateStr));
   const leadPct = Number(settings.leadTimePct[leadTimeBucket(daysOut)] || 0);
   price *= (1 + leadPct / 100);
+  det.leadPct = leadPct;
+  det.beforeOcc = Math.round(price);
 
   const expectedOcc = expectedOccupancy(settings.targetOccupancyPctByMonth[String(month)] ?? 80, settings.medianBookingWindowDays, daysOut);
   // A smaller-inventory room type swings much harder in occupancy % for the same number of
@@ -240,9 +247,14 @@ function recommendPrice(opts) {
   const gap = (actualOcc - expectedOcc) * invDamping; // >0: fuller than expected -> raise; <0: emptier -> lower
   const factor = AGGRESSIVENESS_FACTOR[settings.aggressiveness] ?? 1;
   price *= (1 + gap * factor);
+  det.expectedOccPct = Math.round(expectedOcc * 100);
+  det.occFactorPct = Math.round(gap * factor * 1000) / 10;
+  det.afterOcc = Math.round(price);
 
   const min = settings.minPrice[roomType.id] ?? Math.round(refBase * 0.6);
   const max = settings.maxPrice[roomType.id] ?? Math.round(refBase * 1.7);
+  det.clamp = price < min ? 'min' : price > max ? 'max' : null;
+  det.min = min; det.max = max;
   price = Math.max(min, Math.min(max, price));
 
   return round(price, settings.roundTo || 5);

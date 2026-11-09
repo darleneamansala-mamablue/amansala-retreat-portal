@@ -67,6 +67,25 @@ h2{font-family:'Jost',sans-serif;font-weight:700;font-size:21px;margin-bottom:4p
 .cal-day .rec{font-weight:800;font-size:13px}
 .cal-day.diff{border:1.5px solid var(--teal)}
 .cal-dow{font-size:10.5px;font-weight:700;color:var(--muted);text-align:center;padding-bottom:4px}
+/* RPG-style month (Jorge 2026-11-09): Monday first, week numbers, PMS price over recommendation, hover breakdown */
+.cal-grid.wk{grid-template-columns:34px repeat(7,1fr)}
+.cal-wk{display:flex;align-items:center;justify-content:center}
+.cal-wk span{width:28px;height:28px;border-radius:50%;background:var(--sand);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted)}
+.cal-day{position:relative;cursor:default}
+.cal-day.out{opacity:.45}
+.cal-day .top{display:flex;justify-content:space-between;gap:6px}
+.cal-day .ev{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%}
+.cal-day .pms{text-align:right;color:var(--muted);font-size:11.5px;margin-top:10px}
+.cal-day .bot{display:flex;justify-content:space-between;align-items:flex-end}
+.cal-day .rec{font-size:15px}
+.cal-day .chg{font-size:12px;font-weight:800;padding:1px 6px;border-radius:7px}
+.cal-day .chg.up{color:#15803d;background:#dcfce7}.cal-day .chg.dn{color:#b91c1c;background:#fee2e2}
+.cal-tip{position:fixed;z-index:50;background:#fff;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);width:300px;font-size:12px;display:none;overflow:hidden}
+.cal-tip .h{background:var(--sand);padding:8px 12px;font-weight:700}
+.cal-tip .sec{padding:6px 12px 2px;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+.cal-tip .r{display:flex;justify-content:space-between;padding:3px 12px}
+.cal-tip .r b{font-weight:700}
+.cal-tip .note{padding:4px 12px 10px;color:var(--muted);font-size:11px}
 /* ---- Tables / forms ---- */
 table{width:100%;border-collapse:collapse;font-size:12.5px}
 th{text-align:left;padding:8px 10px;color:var(--muted);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border)}
@@ -128,12 +147,16 @@ svg text{font-family:'Jost',sans-serif}
         <span id="autoApplyBadge" class="chip" style="margin-left:4px"></span>
       </div>
       <div class="cal-stats">
-        <div class="cal-stat"><div class="lbl">Recommendations this month</div><div class="val" id="calRecCount">0</div></div>
-        <div class="cal-stat"><div class="lbl">Avg occupancy (visible dates)</div><div class="val" id="calAvgOcc">—</div></div>
-        <div class="cal-stat"><div class="lbl">Recommendations generated</div><div class="val" id="calGeneratedAt" style="font-size:12.5px;font-weight:600">—</div></div>
+        <div class="cal-stat"><div class="lbl">Occupancy (this room type)</div><div class="val" id="calAvgOcc">—</div></div>
+        <div class="cal-stat"><div class="lbl">Occupancy (whole hotel)</div><div class="val" id="calHotelOcc">—</div></div>
+        <div class="cal-stat"><div class="lbl">Expected by today</div><div class="val" id="calExpOcc">—</div></div>
+        <div class="cal-stat"><div class="lbl">Monthly target</div><div class="val" id="calTarget">—</div></div>
+        <div class="cal-stat"><div class="lbl">Recommendations</div><div class="val" id="calRecCount">0</div></div>
+        <div class="cal-stat"><div class="lbl">Generated</div><div class="val" id="calGeneratedAt" style="font-size:12.5px;font-weight:600">—</div></div>
       </div>
       <div class="cal-grid" id="calDow"></div>
       <div class="cal-grid" id="calGrid" style="margin-top:4px"></div>
+      <div class="cal-tip" id="calTip"></div>
     </div>
 
     <!-- Rooms Setup -->
@@ -514,6 +537,56 @@ function rmRenderLeadTime(){
 
 // ---- Calendar ----
 function rmCalShiftMonth(delta){CAL_MONTH.setMonth(CAL_MONTH.getMonth()+delta);rmRenderCalendar();}
+// Holidays shown on the calendar (labels only -- they do not move the price)
+function rmEasterSunday(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;return new Date(y,mo-1,da);}
+function rmNthDow(y,m,dow,n){const d=new Date(y,m,1);let c=0;while(true){if(d.getDay()===dow&&++c===n)return d.getDate();d.setDate(d.getDate()+1);}}
+function rmLastDow(y,m,dow){const d=new Date(y,m+1,0);while(d.getDay()!==dow)d.setDate(d.getDate()-1);return d.getDate();}
+function rmHolidays(y){
+  const k=(m,d)=>`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`, H={};
+  H[k(1,1)]="New Year's Day";H[k(2,14)]="Valentine's Day";H[k(3,17)]="St. Patrick's Day";H[k(7,4)]='Independence Day (US)';
+  H[k(9,16)]='Independencia (MX)';H[k(10,31)]='Halloween';H[k(11,1)]='Día de Muertos';H[k(11,2)]='Día de Muertos';
+  H[k(12,24)]='Christmas Eve';H[k(12,25)]='Christmas Day';H[k(12,31)]="New Year's Eve";
+  H[k(1,rmNthDow(y,0,1,3))]='MLK Day (US)';H[k(2,rmNthDow(y,1,1,3))]="Presidents' Day (US)";H[k(5,rmLastDow(y,4,1))]='Memorial Day (US)';
+  H[k(9,rmNthDow(y,8,1,1))]='Labor Day (US)';H[k(11,rmNthDow(y,10,4,4))]='Thanksgiving (US)';
+  const e=rmEasterSunday(y),add=(n,l)=>{const d=new Date(e);d.setDate(d.getDate()+n);H[k(d.getMonth()+1,d.getDate())]=l;};
+  add(-7,'Semana Santa');add(-3,'Holy Thursday');add(-2,'Good Friday');add(0,'Easter');
+  return H;
+}
+function rmIsoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const day=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-day);const y0=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y0)/864e5+1)/7);}
+function rmPct(n){return (n>0?'+':'')+n+'%';}
+function rmCalTip(ev,dateStr){
+  const tip=document.getElementById('calTip');
+  if(!ev){tip.style.display='none';return;}
+  const rtId=document.getElementById('calRoomType').value;
+  const v=RM_RECS&&RM_RECS.byRoomType[rtId]&&RM_RECS.byRoomType[rtId].byDate[dateStr];if(!v)return;
+  const d=v.detail||{}, h=(RM_RECS.hotel&&RM_RECS.hotel.byDate[dateStr])||null, rtName=(RM_ROOM_TYPES.find(r=>r.id===rtId)||{}).name||'';
+  const money=n=>n==null?'—':'$'+Math.round(n).toLocaleString('en-US');
+  const row=(l,val,sub)=>`<div class="r"><span>${l}</span><b>${sub?`<span style="color:var(--muted);font-weight:500;margin-right:8px">${sub}</span>`:''}${val}</b></div>`;
+  const step=(pct,from)=>from!=null&&pct?money(from*pct/100):'$0';
+  let html=`<div class="h">${new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${esc(rtName)}</div><div class="sec">Prices</div>`;
+  if(d.base!=null){
+    html+=row('Base price',money(d.base));
+    if(d.monthlyPct)html+=row('Monthly adjustment',rmPct(d.monthlyPct));
+    if(d.weekdayPct)html+=row('Day of the week',rmPct(d.weekdayPct));
+    if(d.leadPct)html+=row('Lead time',rmPct(d.leadPct));
+    html+=row('Occupancy factor',money((d.afterOcc||0)-(d.beforeOcc||0)),rmPct(d.occFactorPct||0));
+    if(d.clamp)html+=row(d.clamp==='min'?'Raised to min price':'Lowered to max price',money(d.clamp==='min'?d.min:d.max));
+    if(d.cappedBy)html+=row(`Capped under ${esc((RM_ROOM_TYPES.find(r=>r.id===d.cappedBy)||{}).name||d.cappedBy)}`,money(d.cappedAt));
+    if(d.linkedGroup)html+=row('Same price as linked villa','=');
+  }
+  html+=row('Recommended price',money(v.recommended))+row('Price live (Escape)',money(v.current));
+  if(v.previous!=null&&v.previous!==v.current)html+=row('Before the last run',money(v.previous));
+  html+=`<div class="sec">Occupancy</div>`+row('This room type',`${v.occPct}%`,`${v.sold!=null?v.sold:'?'} of ${v.totalRooms} sold`);
+  if(h)html+=row('Whole hotel',`${h.occPct}%`,`${h.sold} of ${RM_RECS.hotel.rooms} sold`);
+  if(d.expectedOccPct!=null)html+=row('Expected by today',`${d.expectedOccPct}%`);
+  if(v.groupTaken)html+=row('Rooms from retreats/groups',v.groupTaken);
+  html+=`<div class="note">Occupancy factor: fuller than expected raises the price, emptier lowers it (Occupancy Strategy).</div>`;
+  tip.innerHTML=html;tip.style.display='block';
+  const r=ev.currentTarget.getBoundingClientRect(),tw=300,th=tip.offsetHeight;
+  let x=r.right+8;if(x+tw>window.innerWidth-8)x=r.left-tw-8;if(x<8)x=8;
+  let y=r.top;if(y+th>window.innerHeight-8)y=window.innerHeight-th-8;if(y<8)y=8;
+  tip.style.left=x+'px';tip.style.top=y+'px';
+}
 function rmRenderCalendar(){
   const rtId=document.getElementById('calRoomType').value||(RM_ROOM_TYPES[0]&&RM_ROOM_TYPES[0].id);
   document.getElementById('calMonthLbl').textContent=CAL_MONTH.toLocaleDateString('en-US',{month:'long',year:'numeric'});
@@ -522,44 +595,45 @@ function rmRenderCalendar(){
   if(autoOn){autoBadge.textContent='Automatic pricing: ON';autoBadge.className='chip chip-up';}
   else{autoBadge.textContent='Automatic pricing: OFF (suggestion only)';autoBadge.className='chip chip-down';}
   document.getElementById('calSubtitle').textContent=autoOn
-    ?'Occupancy-driven price suggestions for Escape (the direct booking page). Automatic pricing is ON — these prices already went live on the bot\'s last run; Upload Prices is only for a manual override.'
-    :'Occupancy-driven price suggestions for Escape (the direct booking page). Nothing here is live until you click Upload Prices.';
-  const dow=['Su','Mo','Tu','We','Th','Fr','Sa'];
-  document.getElementById('calDow').innerHTML=dow.map(d=>`<div class="cal-dow">${d}</div>`).join('');
-  const grid=document.getElementById('calGrid');
+    ?'Occupancy-driven price suggestions for Escape (the direct booking page). Automatic pricing is ON — these prices already went live on the bot\'s last run; Upload Prices is only for a manual override. Hover a day to see how its price was built.'
+    :'Occupancy-driven price suggestions for Escape (the direct booking page). Nothing here is live until you click Upload Prices. Hover a day to see how its price was built.';
+  const dow=['Mo','Tu','We','Th','Fr','Sa','Su'];
+  const dowEl=document.getElementById('calDow'),grid=document.getElementById('calGrid');
+  dowEl.className='cal-grid wk';grid.className='cal-grid wk';
+  dowEl.innerHTML='<div></div>'+dow.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  ['calRecCount','calAvgOcc','calHotelOcc','calExpOcc','calTarget','calGeneratedAt'].forEach(id=>document.getElementById(id).textContent='—');
   if(!RM_RECS||!RM_RECS.byRoomType[rtId]){
     grid.innerHTML='<div style="grid-column:1/-1;color:var(--muted);padding:20px 0">No recommendations yet — click "Refresh recommendations" above.</div>';
-    document.getElementById('calRecCount').textContent='0'; document.getElementById('calAvgOcc').textContent='—';
-    document.getElementById('calGeneratedAt').textContent='—';
     return;
   }
   document.getElementById('calGeneratedAt').textContent=new Date(RM_RECS.generatedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
-  const byDate=RM_RECS.byRoomType[rtId].byDate;
+  const byDate=RM_RECS.byRoomType[rtId].byDate, hotel=(RM_RECS.hotel&&RM_RECS.hotel.byDate)||{};
   const y=CAL_MONTH.getFullYear(),m=CAL_MONTH.getMonth();
-  const firstDow=new Date(y,m,1).getDay();
-  const daysInMonth=new Date(y,m+1,0).getDate();
-  let html='';
-  for(let i=0;i<firstDow;i++) html+='<div class="cal-day empty"></div>';
-  let recCount=0,occSum=0,occN=0;
-  for(let day=1;day<=daysInMonth;day++){
-    const dateStr=`${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const v=byDate[dateStr];
-    if(!v){html+=`<div class="cal-day"><div class="dnum">${day}</div></div>`;continue;}
-    const diff=v.recommended!==v.current;
-    if(diff)recCount++;
-    occSum+=v.occPct; occN++;
-    html+=`<div class="cal-day ${diff?'diff':''}" data-date="${dateStr}">
-      <div class="dnum">${day}</div>
-      <div class="occ">${v.occPct}% occ</div>
-      ${diff?`<div class="cur">$${v.current}</div>`:''}
-      <div class="rec">$${v.recommended}</div>
+  const hol={...rmHolidays(y-1),...rmHolidays(y),...rmHolidays(y+1)};
+  const first=new Date(y,m,1),start=new Date(first);start.setDate(1-((first.getDay()+6)%7));
+  const last=new Date(y,m+1,0),endD=new Date(last);endD.setDate(last.getDate()+(7-((last.getDay()+6)%7)-1));
+  const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  let html='',recCount=0,occSum=0,occN=0,hSum=0,hN=0,eSum=0,eN=0;
+  for(const d=new Date(start);d<=endD;d.setDate(d.getDate()+1)){
+    if(((d.getDay()+6)%7)===0)html+=`<div class="cal-wk"><span>${rmIsoWeek(d)}</span></div>`;
+    const dateStr=iso(d),inMonth=d.getMonth()===m,v=byDate[dateStr],ev=hol[dateStr]||'';
+    if(!v){html+=`<div class="cal-day ${inMonth?'':'out'}"><div class="top"><span class="dnum">${String(d.getDate()).padStart(2,'0')}</span><span class="ev" title="${esc(ev)}">${esc(ev)}</span></div></div>`;continue;}
+    const live=v.current,diff=v.recommended!==live;
+    if(inMonth){if(diff)recCount++;occSum+=v.occPct;occN++;if(hotel[dateStr]){hSum+=hotel[dateStr].occPct;hN++;}if(v.detail&&v.detail.expectedOccPct!=null){eSum+=v.detail.expectedOccPct;eN++;}}
+    html+=`<div class="cal-day ${inMonth?'':'out'} ${diff?'diff':''}" data-date="${dateStr}" onmouseenter="rmCalTip(event,'${dateStr}')" onmouseleave="rmCalTip(null)">
+      <div class="top"><span class="dnum">${String(d.getDate()).padStart(2,'0')}</span><span class="ev" title="${esc(ev)}">${esc(ev)}</span></div>
+      <div class="pms">$${Math.round(live)}</div>
+      <div class="bot"><span class="occ">${v.occPct}%</span>${diff?`<span class="chg ${v.recommended>live?'up':'dn'}">${v.recommended>live?'↗':'↘'} $${v.recommended}</span>`:`<span class="rec">$${v.recommended}</span>`}</div>
     </div>`;
   }
   grid.innerHTML=html;
   document.getElementById('calRecCount').textContent=recCount;
   document.getElementById('calAvgOcc').textContent=occN?Math.round(occSum/occN)+'%':'—';
+  document.getElementById('calHotelOcc').textContent=hN?Math.round(hSum/hN)+'%':'—';
+  document.getElementById('calExpOcc').textContent=eN?Math.round(eSum/eN)+'%':'—';
+  const tgt=RM_SETTINGS&&RM_SETTINGS.targetOccupancyPctByMonth&&RM_SETTINGS.targetOccupancyPctByMonth[String(m+1)];
+  document.getElementById('calTarget').textContent=tgt!=null?tgt+'%':'—';
 }
-
 async function rmUploadVisible(){
   const rtId=document.getElementById('calRoomType').value;
   if(!RM_RECS||!RM_RECS.byRoomType[rtId])return;
