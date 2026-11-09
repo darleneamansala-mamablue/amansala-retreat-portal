@@ -189,6 +189,13 @@
     'Duration must be in 15-minute increments.': 'La duración debe ir en bloques de 15 minutos.',
     'Start time must be on a 15-minute boundary.': 'La hora de inicio debe caer en bloques de 15 minutos (:00, :15, :30, :45).',
     'Delete this appointment? This cannot be undone.': '¿Eliminar esta cita? No se puede deshacer.',
+    'Payment': 'Pago', 'Paid how?': '¿Cómo pagó?', 'Refunded': 'Reembolsado', 'Cash': 'Efectivo', 'Card terminal': 'Terminal (tarjeta)',
+    'Bank transfer': 'Transferencia', 'Charged to a retreat / group': 'Cargado al retiro / grupo', 'Other': 'Otro',
+    'Open the payment in Stripe ↗': 'Ver el pago en Stripe ↗', 'Choose how the guest paid (Paid how?).': 'Elige cómo pagó el huésped (¿Cómo pagó?).',
+    '✦ Pre-paid package': '✦ Incluido en el paquete', '⏳ Held · awaiting payment': '⏳ Apartada · esperando pago', '🔴 NOT PAID': '🔴 SIN PAGAR',
+    '💳 Paid · Stripe': '💳 Pagado · Stripe', '💵 Paid · Cash': '💵 Pagado · Efectivo', '💳 Paid (how not recorded)': '💳 Pagado (no se registró cómo)',
+    '↩ Refunded': '↩ Reembolsado', '❔ Guest type not set': '❔ Sin tipo de huésped', 'Paid · Stripe': 'Pagado · Stripe', 'NOT PAID': 'SIN PAGAR',
+    'Held · awaiting payment': 'Apartada · esperando pago', 'Pre-paid package': 'Incluido en el paquete', 'Paid (how not recorded)': 'Pagado (no se registró cómo)',
     'Requested': 'Solicitado', 'No request': 'Sin solicitud', '😊 Requested this therapist': '😊 Pidió a este terapeuta',
     '🤠 Requested a male therapist': '🤠 Pidió terapeuta hombre', '👗 Requested a female therapist': '👗 Pidió terapeuta mujer',
     'Requested this therapist': 'Pidió a este terapeuta', 'Requested a male therapist': 'Pidió terapeuta hombre', 'Requested a female therapist': 'Pidió terapeuta mujer',
@@ -297,6 +304,9 @@
     // dates on their own
     [/^(Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday), (January|February|March|April|May|June|July|August|September|October|November|December) (\d{1,2})$/, m => esDate(m)],
     [/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat), (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2})$/, m => esDate(m)],
+    [/^🏨 Room · charged to folio$/, '🏨 Cargado al folio'], [/^🏨 Room · not charged yet$/, '🏨 Sin cargar al cuarto aún'],
+    [/^🏨 Room (.+) · charged to folio$/, '🏨 Cuarto $1 · cargado al folio'], [/^🏨 Room (.+) · not charged yet$/, '🏨 Cuarto $1 · sin cargar aún'],
+    [/^(💵|💳) Paid · (.+)$/, (m, i, w) => `${i} Pagado · ${({ Cash: 'Efectivo', 'Card terminal': 'Terminal', 'Bank transfer': 'Transferencia', Other: 'Otro' })[w] || w}`],
     [/^Day Report · (.+)$/, (m, d) => `Reporte del día · ${esDate(d)}`],
 
     // dashboard / confirmations

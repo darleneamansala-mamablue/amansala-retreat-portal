@@ -203,7 +203,7 @@ function spaCalPanelHtml(cols, isTher, dateStr) {
       html += `<div draggable="true" ondragstart="spaCalDragStart(event,'${a.id}')" onclick="event.stopPropagation();spaApptShowForm('${a.id}')" style="position:absolute;top:${top}px;left:3px;right:3px;height:${height}px;background:${statusColor}18;border-left:3px solid ${statusColor};border-radius:6px;padding:4px 7px;overflow:hidden;cursor:grab;font-family:'Jost',sans-serif">
         ${isTher ? `<span onclick="event.stopPropagation();spaCalToggleApptConfirm('${a.id}')" title="${a.confirmed ? 'Confirmed by ' + (a.confirmedBy || 'staff') + ' — click to unconfirm' : 'Not yet confirmed by the therapist — click to confirm on their behalf'}" style="position:absolute;top:3px;right:5px;font-size:12px;cursor:pointer;line-height:1;z-index:2">${a.confirmed ? '✅' : '⏳'}</span>` : ''}
         <div style="font-size:11px;font-weight:700;color:#1a2332;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:${isTher ? '16px' : '0'}">${a.clientName}</div>
-        <div style="font-size:10px;color:#4b5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.status === 'PAYMENT_PENDING' ? `<b style="color:#d97706">${a.holdExpiresAt ? 'Held — awaiting payment' : 'Awaiting payment'}</b> · ` : ''}${svc ? svc.name : ''}</div>
+        <div style="font-size:10px;color:#4b5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${svc ? svc.name : ''}</div>
         ${height > 44 ? `<div style="font-size:9.5px;color:#9ca3af">${spaCalFmtT(a.start)}${otherLabel ? ' · ' + otherLabel : ''}</div>` : ''}
       </div>`;
     });
@@ -353,7 +353,7 @@ function spaApptShowForm(id, prefill) {
   if (prepaidEl) prepaidEl.checked = !!a?.prepaid;
   document.getElementById('spaApptNotes').value = a?.notes || '';
   document.getElementById('spaApptStatus').value = a?.status || 'CONFIRMED';
-  document.getElementById('spaApptPaymentStatus').value = a?.paymentStatus && ['PENDING', 'PAID', 'CONFIRMED'].includes(a.paymentStatus) ? a.paymentStatus : 'PENDING';
+  document.getElementById('spaApptPaymentStatus').value = a?.paymentStatus && ['PENDING', 'PAID', 'CONFIRMED', 'REFUNDED'].includes(a.paymentStatus) ? a.paymentStatus : 'PENDING';
   document.getElementById('spaApptDate').value = a?.date || spaCalFmtDateStr(spaCalDate);
   spaApptOnGuestTypeChange();
 
