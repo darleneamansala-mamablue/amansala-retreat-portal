@@ -875,7 +875,8 @@ function _bdFolioRowHtml(f){
     _rows.push(`<tr style="background:#f1efe9;cursor:pointer" onclick="_bdXetuxToggle('${String(tid).replace(/'/g,'')}')">
       <td style="padding:7px 12px;font-size:12px;color:var(--dark)">${day}</td>
       <td data-no-i18n colspan="4" style="padding:7px 12px;font-size:12.5px;font-style:italic;color:#4b5563">${open?'▾':'▸'} Amansala Restaurante / #bill_${escHtml(tid)}</td>
-      <td style="padding:7px 12px;font-size:12.5px;text-align:right;font-weight:700">${fmt$(sum)}</td><td></td></tr>`);
+      <td style="padding:7px 12px;font-size:12.5px;text-align:right;font-weight:700">${fmt$(sum)}</td>
+      <td style="padding:7px 12px;text-align:right">${isOpen?`<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();bdDeleteXetuxTicket('${fid}','${String(tid).replace(/'/g,'')}')" title="Remove the whole ticket (all its lines)" style="padding:2px 8px;font-size:11px">✕</button>`:''}</td></tr>`);
     if(!open)return;
     food.forEach(x=>_rows.push(_rowHtml(x,{desc:clean(x),cat:'f&b / Restaurant'})));
     if(Math.abs(tax)>0.004)_rows.push(`<tr style="background:#fcfbf8"><td></td>
@@ -1283,6 +1284,20 @@ async function bdDeleteItem(fid,itemId){
   // A commission linked to this charge (commissions.folio_item_id) has
   // nothing left to commission once the charge itself is gone.
   db.from('commissions').delete().eq('folio_item_id',itemId).then(({error})=>{if(error)console.warn('[commission] delete-linked failed:',error.message);});
+  await _bdLoadFolios();
+}
+
+// The whole Xetux ticket at once, from its "Amansala Restaurante / #bill_" header (Jorge 2026-11-09)
+async function bdDeleteXetuxTicket(fid,tid){
+  const f=_bdFolios.find(x=>x.folio.id===fid);if(!f)return;
+  const tag=`(Xetux #${tid})`,ids=f.items.filter(i=>String(i.description||'').includes(tag)).map(i=>i.id);
+  if(!ids.length)return;
+  if(!confirm(`Remove ticket #${tid} (${ids.length} line${ids.length>1?'s':''}) from this folio?`))return;
+  const {error}=await db.from('folio_items').delete().in('id',ids);
+  if(error){showToast('Error: '+error.message);return;}
+  db.from('commissions').delete().in('folio_item_id',ids).then(({error})=>{if(error)console.warn('[commission] delete-linked failed:',error.message);});
+  try{logActivity('Restaurant ticket removed',`Xetux ticket #${tid} removed from folio "${f.folio.name||f.folio.guest_name||''}" (${ids.length} lines) · ${(_bdSubject()||{}).room||''}`,_bdKind==='reg'?(AppData.regs.find(r=>r.id===_bdId)||{}).bookingId||null:null);}catch(e){}
+  showToast(`Ticket #${tid} removed ✓`);
   await _bdLoadFolios();
 }
 
