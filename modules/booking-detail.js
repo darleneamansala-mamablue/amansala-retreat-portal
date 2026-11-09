@@ -840,7 +840,7 @@ function _bdFolioRowHtml(f){
     if(xv&&xv.hidden)return '';
     const descShown=xv?xv.desc:(i.description||''), catShown=xv?xv.cat:i.category;
     return `<tr style="${isPayment?'background:#f0fdf4':''}${xv?';background:#fcfbf8':''}">
-      <td style="padding:8px 12px;font-size:12px;white-space:nowrap;color:var(--dark)">${itemDate}</td>
+      <td style="padding:8px 12px;font-size:12px;white-space:nowrap;color:var(--dark)">${xv?'':itemDate}</td>
       <td data-no-i18n style="padding:8px 12px 8px ${xv?'28px':'12px'};font-size:12.5px">${isPayment?'💳 ':''}${escHtml(descShown)}${catShown?`<span style="margin-left:8px;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:#f3f4f6;color:var(--muted)">${escHtml(catShown)}</span>`:''}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${Number(i.qty)}</td>
       <td style="padding:8px 12px;font-size:12px;text-align:right;color:var(--muted)">${fmt$(i.unit_price)}</td>
@@ -878,7 +878,7 @@ function _bdFolioRowHtml(f){
       <td style="padding:7px 12px;font-size:12.5px;text-align:right;font-weight:700">${fmt$(sum)}</td><td></td></tr>`);
     if(!open)return;
     food.forEach(x=>_rows.push(_rowHtml(x,{desc:clean(x),cat:'f&b / Restaurant'})));
-    if(Math.abs(tax)>0.004)_rows.push(`<tr style="background:#fcfbf8"><td style="padding:8px 12px;font-size:12px;color:var(--dark)">${day}</td>
+    if(Math.abs(tax)>0.004)_rows.push(`<tr style="background:#fcfbf8"><td></td>
       <td data-no-i18n style="padding:8px 12px 8px 28px;font-size:12.5px">Tax${rate!=null?Number(rate):''}%<span style="margin-left:8px;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:#f3f4f6;color:var(--muted)">other / Tax ${rate!=null?Number(rate):''}% Restaurant</span></td>
       <td></td><td></td><td></td><td style="padding:8px 12px;font-size:12.5px;text-align:right;font-weight:700">${fmt$(tax)}</td><td></td></tr>`);
     tips.forEach(x=>_rows.push(_rowHtml(x,{desc:/^VOID/.test(x.description||'')?'VOID Tip':'Tip',cat:'surcharge'})));
