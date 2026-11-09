@@ -21,6 +21,9 @@ function spbInfo(a) {
   if (!a) return null;
   const room = a.roomNumber || a.guestRoom || '';
   if (a.guestType === 'hotel' || (!a.guestType && (room || a.folioStatus === 'POSTED'))) {
+    // Tricia books outside guests as Hotel Guest with "OS-" before the name (Jorge 2026-11-09: that is how it is done, keep it) --
+    // there is no room to charge, so it is not a missing room charge
+    if (/^\s*os\b/i.test(a.clientName || '') && a.folioStatus !== 'POSTED') return { icon: '🧾', text: 'OS · outside guest', color: '#6b7280', detail: 'Outside guest booked with "OS" before the name — no room folio; paid at the spa.' };
     if (a.prepaid) return { icon: '✦', text: 'Pre-paid package', color: '#15803d', detail: 'Hotel guest — included in the guest\'s retreat package, not charged to the room.' };
     if (a.folioStatus === 'POSTED') return { icon: '🏨', text: `${room ? 'Room ' + room : 'Room'} · charged to folio`, color: '#15803d', detail: `Hotel guest — charged to the room folio${room ? ' (room ' + room + ')' : ''}. The guest pays it with the rest of the folio; see Booking Detail → Folios.` };
     if (a.folioStatus === 'REVERSED') return { icon: '🏨', text: 'Room charge removed', color: '#6b7280', detail: 'Hotel guest — the charge was taken off the folio (cancelled).' };

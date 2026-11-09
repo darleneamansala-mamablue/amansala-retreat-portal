@@ -195,7 +195,7 @@
     '✦ Pre-paid package': '✦ Incluido en el paquete', '⏳ Held · awaiting payment': '⏳ Apartada · esperando pago', '🔴 NOT PAID': '🔴 SIN PAGAR',
     '💳 Paid · Stripe': '💳 Pagado · Stripe', '💵 Paid · Cash': '💵 Pagado · Efectivo', '💳 Paid (how not recorded)': '💳 Pagado (no se registró cómo)',
     '↩ Refunded': '↩ Reembolsado', '❔ Guest type not set': '❔ Sin tipo de huésped', 'Paid · Stripe': 'Pagado · Stripe', 'NOT PAID': 'SIN PAGAR',
-    'Held · awaiting payment': 'Apartada · esperando pago', 'Pre-paid package': 'Incluido en el paquete', 'Paid (how not recorded)': 'Pagado (no se registró cómo)',
+    'Held · awaiting payment': 'Apartada · esperando pago', '🧾 OS · outside guest': '🧾 OS · huésped de fuera', 'Pre-paid package': 'Incluido en el paquete', 'Paid (how not recorded)': 'Pagado (no se registró cómo)',
     'Requested': 'Solicitado', 'No request': 'Sin solicitud', '😊 Requested this therapist': '😊 Pidió a este terapeuta',
     '🤠 Requested a male therapist': '🤠 Pidió terapeuta hombre', '👗 Requested a female therapist': '👗 Pidió terapeuta mujer',
     'Requested this therapist': 'Pidió a este terapeuta', 'Requested a male therapist': 'Pidió terapeuta hombre', 'Requested a female therapist': 'Pidió terapeuta mujer',
