@@ -55,7 +55,7 @@ async function doRecalc(key) {
   let datesProcessed = 0;
   // Whole-hotel occupancy per date (every room of the Escape room types), shown next to each type's own -- Room Price Genie shows
   // "Total Rooms Sold" for the whole property (Jorge 2026-11-09)
-  const hotelRooms = [...new Set(roomTypes.flatMap(rt => rt.rooms || []))];
+  const hotelRooms = [...new Set(roomTypes.filter(rt => !/^bd\d/.test(rt.id)).flatMap(rt => rt.rooms || []))];   // beds (bd*) are part of a room, not more rooms
   const hotelByDate = {};
   for (let d = new Date(today + 'T12:00:00'); d <= endD; d.setDate(d.getDate() + 1)) {
     const dateStr = d.toISOString().slice(0, 10);
