@@ -8,6 +8,7 @@
 // checks for services that require a treatment room — so a slot Lana offers
 // a guest is always actually bookable.
 
+const { liveAppts } = require('./spa-hold-lib');
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const SB_START_H = 10, SB_END_H = 19;
 
@@ -109,7 +110,7 @@ exports.handler = async (event) => {
     const [apRow] = apRes.ok ? await apRes.json() : [];
     const [scRow] = scRes.ok ? await scRes.json() : [];
     const spaData = sdRow?.value || {};
-    const appts = apRow?.value || [];
+    const appts = liveAppts(apRow?.value || []);   // unpaid holds older than 10 min take no slot (spa-hold-lib.js)
     const staffAccounts = Array.isArray(scRow?.value) ? scRow.value : [];
 
     const svc = (spaData.services || []).find(s => s.id === serviceId && s.active);

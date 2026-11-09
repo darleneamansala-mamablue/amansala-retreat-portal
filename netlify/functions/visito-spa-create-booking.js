@@ -1,6 +1,7 @@
 'use strict';
 const { sendMail } = require('./mail-lib');
 const { findOrCreateFolioLocked } = require('./folio-lib');
+const { liveAppts, holdExpiresAt, HOLD_MINUTES } = require('./spa-hold-lib');
 
 // Visito AI "Tool" — lets Lana book a spa appointment end to end, with ZERO
 // staff involvement: determines whether the guest is currently staying at
@@ -315,7 +316,7 @@ exports.handler = async (event) => {
     if (!svc) return ok({ success: false, message: 'No encontré ese servicio — vuelve a llamar a spa_list_services.' });
 
     const [apRow] = apRes.ok ? await apRes.json() : [];
-    const appts = apRow?.value || [];
+    const appts = liveAppts(apRow?.value || []);   // unpaid holds older than 10 min take no slot (spa-hold-lib.js)
     const [scRow] = scRes.ok ? await scRes.json() : [];
     const staffAccounts = scRow?.value || [];
     const [rotRow] = rotRes.ok ? await rotRes.json() : [];
@@ -424,6 +425,8 @@ exports.handler = async (event) => {
       date, start, duration: svc.duration,
       status: isHotel ? 'CONFIRMED' : 'PAYMENT_PENDING',
       paymentStatus: isHotel ? 'NOT_REQUIRED' : 'PENDING',
+      // offsite: the slot is held 10 minutes for payment, then freed (spa-hold-lib.js, Jorge 2026-11-09)
+      holdExpiresAt: isHotel ? null : holdExpiresAt(),
       folioStatus: isHotel ? 'PENDING' : 'NOT_REQUIRED',
       therapistPreference: therapistId ? { type: 'specific', requestedTherapistId: therapistId } : { type: genderPreference === 'female' || genderPreference === 'male' ? genderPreference : 'none', requestedTherapistId: null },
       // Set only when auto-picked via the named rotation (not a guest's "specific therapist"
@@ -486,6 +489,8 @@ exports.handler = async (event) => {
       if (amountCents >= 50) {
         const params = new URLSearchParams({
           mode: 'payment',
+          // Stripe's shortest link life is 30 min; a payment after the 10-minute hold is restored or refunded by stripe-webhook
+          expires_at: String(Math.floor(Date.now() / 1000) + 31 * 60),
           success_url: `${siteUrl}/?visito_spa=success`,
           cancel_url: `${siteUrl}/?visito_spa=cancelled`,
           ...(email ? { customer_email: email } : {}),
@@ -573,12 +578,13 @@ exports.handler = async (event) => {
         Cancelling 12 hours or more in advance will remove the charge from your room folio.
         Cancelling less than 12 hours in advance will not remove the charge.
       </p>`;
-      const body = `<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(firstName)}, you're booked! Here are your appointment details:</p>
+      const body = `<p style="font-size:15px;color:#374151;margin:0 0 24px">${isHotel ? `Hi ${esc(firstName)}, you're booked! Here are your appointment details:` : `Hi ${esc(firstName)}, we're holding this time for you for ${HOLD_MINUTES} minutes. Pay with the button below to confirm it — after that the time is released.`}</p>
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px">${rows}</table>
         ${payBlock}
         ${cancelBlock}`;
-      if (email) await sendMail({ to: email, subject: 'Spa Appointment Confirmed — Amansala', html: emailShell('Your Spa Appointment is Confirmed', body) });
-      if (ther.email) {
+      if (email) await sendMail({ to: email, subject: isHotel ? 'Spa Appointment Confirmed — Amansala' : 'Complete Your Spa Payment — Amansala', html: emailShell(isHotel ? 'Your Spa Appointment is Confirmed' : 'Your Spa Time is Held', body) });
+      // offsite: the therapist hears about it only once it is paid (spa-hold-lib.js onPaid)
+      if (ther.email && isHotel) {
         const therBody = `<p style="font-size:15px;color:#374151;margin:0 0 24px">Hi ${esc(ther.firstName)}, a new appointment was just booked with you:</p>
           <table width="100%" cellpadding="0" cellspacing="0">${emailRow('Client', esc(clientName))}${emailRow('Service', esc(svc.name))}${emailRow('Date', fmtDateLong(date))}${emailRow('Time', fmtT(start))}</table>
           <p style="font-size:13.5px;color:#6b7280;margin:20px 0 0">It's on your schedule.</p>`;
@@ -605,8 +611,9 @@ exports.handler = async (event) => {
       message: isHotel
         ? `Cita creada y cargada al cuarto ${matchedRoomNumber || ''} (${clientName}). Correo de confirmación enviado.`
         : (paymentUrl
-          ? `Cita creada — comparte este link de pago con el huésped para confirmarla (precio: ${priceDisplay}, también se le mandó por correo): ${paymentUrl}`
-          : `Cita creada, pero no se pudo generar el link de pago automático — avísale al equipo que necesita cobrarle a ${clientName} (precio: ${priceDisplay}) manualmente.`),
+          ? `Horario apartado por ${HOLD_MINUTES} minutos — comparte este link de pago con el huésped y dile que la cita se confirma solo al pagar; si no paga en ${HOLD_MINUTES} minutos el horario se libera (precio: ${priceDisplay}, también se le mandó por correo): ${paymentUrl}`
+          : `Horario apartado por ${HOLD_MINUTES} minutos, pero no se pudo generar el link de pago automático — avísale al equipo que necesita cobrarle a ${clientName} (precio: ${priceDisplay}) ya; si no paga en ${HOLD_MINUTES} minutos el horario se libera.`),
+      holdMinutes: isHotel ? undefined : HOLD_MINUTES,
     });
   } catch (err) {
     console.error('[visito-spa-create-booking]', err.message);

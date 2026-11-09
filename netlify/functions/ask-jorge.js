@@ -41,7 +41,7 @@ How to answer:
   guest's folio, record a payment on a folio, check a guest in, check a guest out, add an internal note, turn A/C 24h on/off,
   move a guest to another room (move_room; check the room is free with room_availability first), book a spa service
   (spa_booking; use spa_services and spa_availability first, hotel guests are charged to their room -- never ask a hotel guest's phone or email, find_guest already returns them -- outside guests get a
-  payment link), create a Room Only reservation (new_booking: room, dates, guest name, email/phone, number of guests, rate per
+  payment link and the time is held only 10 minutes until they pay -- tell the person that), create a Room Only reservation (new_booking: room, dates, guest name, email/phone, number of guests, rate per
   night, type Walk-in/Direct/Booking.com/Expedia/Air BnB; check room_availability first; the guest gets a payment link and it is
   created in Cloudbeds), send a folio's payment link to the guest (send_payment_link).
   First find the guest with find_guest (to get regId and folioId); if several folios or guests match, ask which one. Then call
@@ -418,6 +418,7 @@ async function runAction(key, who, a, token) {
         } catch (e) {}
       }
       const byMail = !!x.email;
+      chk.summary += ` — time held ${d.holdMinutes || 10} min until paid (unpaid, it is released)`;
       chk.summary += ` — payment link sent${byMail ? ' by email' : ''}${waOk ? (byMail ? ' and' : ' by') + ' WhatsApp' : (to ? ' (WhatsApp could not be sent' + (to.length < 11 ? ': the phone needs its country code' : '') + ')' : '')}${!byMail && !waOk ? ' — nothing could be sent, share this link: ' + d.paymentUrl : ''}`;
     } else chk.summary += ' — charged to the room';
   }

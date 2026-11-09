@@ -100,6 +100,10 @@
 [functions."spa-text-alerts"]
   schedule = "*/5 * * * *"
 
+# Cancels Lana / Ask Jorge offsite spa holds not paid within 10 minutes (spa-hold-lib.js), freeing the slot.
+[functions."spa-expire-holds"]
+  schedule = "*/5 * * * *"
+
 # 8:00 PM Tulum (01:00 UTC): each therapist gets tomorrow's services (WhatsApp spa_resumen_terapeuta). Same on/off setting as spa-text-alerts.
 [functions."spa-daily-summary"]
   schedule = "0 1 * * *"

@@ -7,6 +7,9 @@
 // Guest self-service booking, Stripe, and Cloudbeds folio posting are later
 // phases — appointments here are created/edited by staff.
 
+// Lana / Ask Jorge offsite holds unpaid after 10 minutes free the slot (netlify/functions/spa-hold-lib.js); spa-expire-holds cancels them
+function spaHoldExpired(a) { return !!(a && a.status === 'PAYMENT_PENDING' && a.holdExpiresAt && Date.parse(a.holdExpiresAt) < Date.now()); }
+
 const SPA_CAL_START_H = 7;
 const SPA_CAL_END_H = 21;
 const SPA_CAL_PX_HR = 88;   // was 72: taller cells so the card text is easier to read (Darlene 2026-10-24)
@@ -184,7 +187,7 @@ function spaCalPanelHtml(cols, isTher, dateStr) {
   html += `</div></div>`;
 
   cols.forEach(col => {
-    const dayAppts = SpaAppointments.filter(a => a.date === dateStr && a.status !== 'CANCELLED' && (isTher ? a.therapistId === col.id : a.roomId === col.id));
+    const dayAppts = SpaAppointments.filter(a => a.date === dateStr && a.status !== 'CANCELLED' && !spaHoldExpired(a) && (isTher ? a.therapistId === col.id : a.roomId === col.id));
     html += `<div style="width:${SPA_CAL_COL_W}px;min-width:${SPA_CAL_COL_W}px;border-right:1px solid #e8e8e8">`;
     html += `<div style="height:40px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:12px;font-weight:700;color:#374151;border-bottom:1px solid #e8dfd4;background:#f9f7f4;text-align:center;padding:0 6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;position:sticky;top:-28px;z-index:6">
       <span style="overflow:hidden;text-overflow:ellipsis">${isTher ? col.firstName + ' ' + (col.lastName || '') : col.name}</span>
@@ -195,12 +198,12 @@ function spaCalPanelHtml(cols, isTher, dateStr) {
       const svc = SpaData.services.find(s => s.id === a.serviceId);
       const top = (spaCalHHMMToMin(a.start) - spaCalViewStartH * 60) * (SPA_CAL_PX_HR / 60);
       const height = Math.max(20, a.duration * (SPA_CAL_PX_HR / 60));
-      const statusColor = a.status === 'COMPLETED' ? '#059669' : a.status === 'NO_SHOW' ? '#dc2626' : '#2d6a6a';
+      const statusColor = a.status === 'COMPLETED' ? '#059669' : a.status === 'NO_SHOW' ? '#dc2626' : a.status === 'PAYMENT_PENDING' ? '#d97706' : '#2d6a6a';
       const otherLabel = isTher ? (SpaData.rooms.find(r => r.id === a.roomId)?.name || '') : (SpaData.therapists.find(t => t.id === a.therapistId)?.firstName || '');
       html += `<div draggable="true" ondragstart="spaCalDragStart(event,'${a.id}')" onclick="event.stopPropagation();spaApptShowForm('${a.id}')" style="position:absolute;top:${top}px;left:3px;right:3px;height:${height}px;background:${statusColor}18;border-left:3px solid ${statusColor};border-radius:6px;padding:4px 7px;overflow:hidden;cursor:grab;font-family:'Jost',sans-serif">
         ${isTher ? `<span onclick="event.stopPropagation();spaCalToggleApptConfirm('${a.id}')" title="${a.confirmed ? 'Confirmed by ' + (a.confirmedBy || 'staff') + ' — click to unconfirm' : 'Not yet confirmed by the therapist — click to confirm on their behalf'}" style="position:absolute;top:3px;right:5px;font-size:12px;cursor:pointer;line-height:1;z-index:2">${a.confirmed ? '✅' : '⏳'}</span>` : ''}
         <div style="font-size:11px;font-weight:700;color:#1a2332;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:${isTher ? '16px' : '0'}">${a.clientName}</div>
-        <div style="font-size:10px;color:#4b5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${svc ? svc.name : ''}</div>
+        <div style="font-size:10px;color:#4b5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.status === 'PAYMENT_PENDING' ? `<b style="color:#d97706">${a.holdExpiresAt ? 'Held — awaiting payment' : 'Awaiting payment'}</b> · ` : ''}${svc ? svc.name : ''}</div>
         ${height > 44 ? `<div style="font-size:9.5px;color:#9ca3af">${spaCalFmtT(a.start)}${otherLabel ? ' · ' + otherLabel : ''}</div>` : ''}
       </div>`;
     });
@@ -265,7 +268,7 @@ function spaCalCheckConflict(appt, excludeId) {
   return SpaAppointments.find(a => {
     if (a.id === excludeId) return false;
     if (a.date !== appt.date) return false;
-    if (a.status === 'CANCELLED') return false;
+    if (a.status === 'CANCELLED' || spaHoldExpired(a)) return false;
     const sameTherapist = a.therapistId && appt.therapistId && a.therapistId === appt.therapistId;
     const sameRoom = a.roomId && appt.roomId && a.roomId === appt.roomId;
     if (!sameTherapist && !sameRoom) return false;

@@ -29,7 +29,8 @@ async function run() {
   const only = Array.isArray(cfg.onlyTherapists) && cfg.onlyTherapists.length ? cfg.onlyTherapists.map(s => s.toLowerCase()) : null;
   let texted = 0, skipped = 0;
   for (const a of (appts || [])) {
-    if (!a || a.status === 'CANCELLED' || a.status === 'NO_SHOW' || sent[a.id] || !a.createdAt) continue;
+    // an unpaid offsite hold (spa-hold-lib.js) is not a booking yet: it is texted once paid (status CONFIRMED)
+    if (!a || a.status === 'CANCELLED' || a.status === 'NO_SHOW' || a.status === 'PAYMENT_PENDING' || sent[a.id] || !a.createdAt) continue;
     const created = new Date(a.createdAt).getTime();
     if (isNaN(created) || created < since) continue;
     const start = new Date(`${a.date}T${a.start || '00:00'}:00-05:00`).getTime();
@@ -65,7 +66,7 @@ async function run() {
   }
   // A future booking that was on a therapist's page last run and is now cancelled, deleted, or moved to someone else: tell that therapist.
   const seenRaw = await getKey(key, 'spa_text_alerts_seen'), seen = seenRaw && typeof seenRaw === 'object' ? seenRaw : null, nowSeen = {}, today = new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10);
-  (appts || []).forEach(a => { if (a && a.id && a.status !== 'CANCELLED' && a.status !== 'NO_SHOW' && (a.date || '') >= today) nowSeen[a.id] = { t: a.therapistId, d: a.date, s: a.start, v: a.serviceId, c: a.clientName }; });
+  (appts || []).forEach(a => { if (a && a.id && a.status !== 'CANCELLED' && a.status !== 'NO_SHOW' && a.status !== 'PAYMENT_PENDING' && (a.date || '') >= today) nowSeen[a.id] = { t: a.therapistId, d: a.date, s: a.start, v: a.serviceId, c: a.clientName }; });
   let removed = 0;
   if (seen) for (const id of Object.keys(seen)) {
     const was = seen[id], now = nowSeen[id], nk = `cancel|${id}|${was.t}`;

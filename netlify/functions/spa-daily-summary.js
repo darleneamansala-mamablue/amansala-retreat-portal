@@ -28,7 +28,7 @@ exports.handler = async () => {
     const sk = `summary|${day}|${t.id}`;
     if (!t.phone || sent[sk]) continue;
     if (only && !only.includes(String(t.firstName || '').toLowerCase())) continue;
-    const mine = (appts || []).filter(a => a && a.therapistId === t.id && a.date === day && a.status !== 'CANCELLED' && a.status !== 'NO_SHOW').sort((x, y) => String(x.start).localeCompare(String(y.start)));
+    const mine = (appts || []).filter(a => a && a.therapistId === t.id && a.date === day && a.status !== 'CANCELLED' && a.status !== 'NO_SHOW' && a.status !== 'PAYMENT_PENDING').sort((x, y) => String(x.start).localeCompare(String(y.start)));
     if (!mine.length) continue;
     const lines = mine.map(a => { const sv = services.find(s => s.id === a.serviceId) || {}; return `${fmtTime(a.start)} · ${sv.name || 'Servicio'}${sv.duration || a.duration ? ' (' + (sv.duration || a.duration) + ' min)' : ''} · ${a.clientName || 'Cliente'} · ${guestLabel(a)}`; });
     const template = process.env.VISITO_SPA_SUMMARY_TEMPLATE_ES || 'spa_resumen_terapeuta';

@@ -121,6 +121,7 @@ const SPA_STAFF_I18N={
   opt_confirmed:{en:'Confirmed',es:'Confirmado'},
   opt_completed:{en:'Completed',es:'Completado'},
   opt_no_show:{en:'No Show',es:'No Asistió'},
+  opt_awaiting_payment:{en:'Awaiting payment (held)',es:'Esperando pago (apartada)'},
   opt_cancelled:{en:'Cancelled',es:'Cancelado'},
   lbl_payment_status:{en:'Payment Status',es:'Estado de Pago'},
   opt_pending:{en:'Pending',es:'Pendiente'},

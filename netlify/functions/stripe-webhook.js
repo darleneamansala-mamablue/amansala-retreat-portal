@@ -182,6 +182,14 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ received: true, retreatBookingHouse: true }) };
     }
 
+    // Lana / Ask Jorge spa payment links (visito-spa-create-booking.js): the paid appointment becomes CONFIRMED / PAID -- before 2026-11-09
+    // nothing here handled them, so a paid one stayed "pending" and an unpaid one held the slot for ever (Jorge, Melissa's question).
+    if (meta.source === 'visito_spa') {
+      try { await require('./spa-hold-lib').onPaid(process.env.SUPABASE_SERVICE_KEY, pi); }
+      catch (err) { console.error('[stripe-webhook] visito spa payment error:', err.message); }
+      return { statusCode: 200, body: JSON.stringify({ received: true, visitoSpa: true }) };
+    }
+
     if (!meta.email || !meta.checkIn || !meta.checkOut) {
       console.warn('[stripe-webhook] Missing metadata on PI:', pi.id);
       return { statusCode: 200, body: JSON.stringify({ received: true }) };

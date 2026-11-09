@@ -16,6 +16,7 @@
 const { findOrCreateFolioLocked } = require('./folio-lib');
 const { sendMail } = require('./mail-lib');
 const { verifyGuestLink } = require('./guest-link-lib');
+const { liveAppts, holdExpired } = require('./spa-hold-lib');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const STRIPE_API = 'https://api.stripe.com/v1';
@@ -251,7 +252,7 @@ async function init(key) {
   const today = new Date(Date.now() - 86400e3).toISOString().slice(0, 10);
   return {
     spaData: publicSpaData((sd && sd.value) || {}),
-    busy: ((ap && ap.value) || []).filter(a => a && a.date >= today).map(busyView),
+    busy: liveAppts((ap && ap.value) || []).filter(a => a && a.date >= today).map(busyView),   // expired unpaid holds take no slot
     staff: ((sc && sc.value) || []).map(a => ({ name: a.name, unavailableDates: a.unavailableDates || [], dayOfWeekRules: a.dayOfWeekRules || [] })),
     rotation: (rot && rot.value) || null,
     blocks: Array.isArray(blk && blk.value) ? blk.value.map(b => ({ therapistId: b.therapistId, date: b.date, start: b.start, end: b.end, allDay: b.allDay })) : [],
@@ -271,7 +272,7 @@ async function deleteItem(key, id) {
   try { const r = await fetch(`${SUPABASE_URL}/rest/v1/folio_items?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: { ...hdrs(key), Prefer: 'return=representation' } }); return r.ok ? (await r.json()).length > 0 : false; } catch (e) { return false; }
 }
 const overlaps = (a, date, start, dur, therapistId, roomId) => {
-  if (!a || a.date !== date || a.status === 'CANCELLED') return false;
+  if (!a || a.date !== date || a.status === 'CANCELLED' || holdExpired(a)) return false;
   if (a.therapistId !== therapistId && !(roomId && a.roomId === roomId)) return false;
   const s = hhmmToMin(a.start), e = s + (a.duration || 60), my = hhmmToMin(start);
   return my < e && my + dur > s;
