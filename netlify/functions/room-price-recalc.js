@@ -51,6 +51,33 @@ async function doRecalc(key) {
   const weekendPremiumPct = bes.weekend_premium ?? 0;
   const reference = roomTypes.find(rt => rt.id === settings.referenceRoomTypeId) || roomTypes[0];
 
+  // rpgModel: reservations that live only in Cloudbeds (OTAs, groups held there -- e.g. CHICA RETREAT Dec 2-10) count too, as
+  // RoomPriceGenie reads Cloudbeds. A bed ("CH26a", "4b") also takes its room. Non-fatal: without Cloudbeds, portal data only.
+  let cbAdded = 0, cbError = null;
+  if (settings.rpgModel && settings.includeCloudbeds !== false) {
+    try {
+      const allTypes = await L.sget(key, 'room_types?select=id,rooms');
+      const BED_TO_PARENT = { bd1: 'rt6', bd2: 'rt7', bd3: 'rt8', bd4: 'rt9' }, bedParent = {};
+      allTypes.forEach(rt => {
+        const parentRooms = ((allTypes.find(p => p.id === BED_TO_PARENT[rt.id]) || {}).rooms) || [];
+        if (BED_TO_PARENT[rt.id]) (rt.rooms || []).forEach(bed => {
+          const m = String(bed).trim().match(/^(.+?)\s*-?\s*([a-d])$/i);
+          const p = m && parentRooms.find(x => x.toLowerCase() === m[1].trim().toLowerCase());
+          if (p) bedParent[bed] = p;
+        });
+      });
+      const r = await fetch(`${process.env.URL || 'https://amansalaportal.com'}/.netlify/functions/cloudbeds?action=getExternalReservations`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startDate: today, endDate: end }),
+      });
+      const d = await r.json();
+      for (const x of (d.reservations || [])) {
+        if (/cancel|no_show|no-show/i.test(x.status || '') || !x.startDate || !x.endDate) continue;
+        const rooms = [...new Set((x.rooms || []).flatMap(rm => bedParent[rm] ? [rm, bedParent[rm]] : [rm]))];
+        if (rooms.length) { blocks.push({ id: 'cb_' + x.reservationID, start_date: x.startDate, end_date: x.endDate, blocked_rooms: rooms, cloudbeds: true }); cbAdded++; }
+      }
+    } catch (e) { cbError = e.message; console.warn('[room-price-recalc] Cloudbeds reservations not counted:', e.message); }
+  }
+
   const byRoomType = {};
   let datesProcessed = 0;
   // Whole-hotel occupancy per date (every room of the Escape room types), shown next to each type's own -- Room Price Genie shows
@@ -81,9 +108,11 @@ async function doRecalc(key) {
       // separate DISPLAY-only figure (how much of today's occupancy came from a group) and is
       // never subtracted out of what actually feeds the price.
       const detail = {};
+      const hotelBasis = settings.rpgModel && settings.occupancyBasis !== 'roomType';
       const recommended = L.recommendPrice({
         settings, roomType: rt, dateStr, today,
-        actualOcc: occPct / 100,
+        actualOcc: hotelBasis ? hotelByDate[dateStr].occPct / 100 : occPct / 100,
+        invRooms: hotelBasis ? hotelRooms.length : undefined,
         referenceBasePrice: reference ? reference.be_price_single : rt.be_price_single,
         seasonalAdjustments, detail,
       });
@@ -177,7 +206,7 @@ async function doRecalc(key) {
     for (const c of changes) byRoomType[c.room_type_id].byDate[c.date].current = c.price_single;
   }
 
-  const result = { generatedAt: new Date().toISOString(), windowDays: WINDOW_DAYS, referenceRoomTypeId: settings.referenceRoomTypeId, autoApplied: applied, byRoomType, hotel: { rooms: hotelRooms.length, byDate: hotelByDate } };
+  const result = { generatedAt: new Date().toISOString(), windowDays: WINDOW_DAYS, referenceRoomTypeId: settings.referenceRoomTypeId, autoApplied: applied, byRoomType, hotel: { rooms: hotelRooms.length, byDate: hotelByDate }, rpgModel: !!settings.rpgModel, cloudbeds: { reservations: cbAdded, error: cbError } };
   await L.appStoreSet(key, L.RECS_KEY, result);
   return { roomTypes: roomTypes.length, datesProcessed, autoApplied: applied };
 };

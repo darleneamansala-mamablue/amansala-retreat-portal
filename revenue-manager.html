@@ -184,7 +184,10 @@ svg text{font-family:'Jost',sans-serif}
           <input type="checkbox" id="wkOwned" style="width:16px;height:16px" onchange="rmRenderWeekday()">
           Let this tool control day-of-week pricing (turns off Escape's flat weekend premium so it isn't applied twice)
         </label>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Adjust price by (%)</div>
         <div class="grid12" id="weekdayGrid" oninput="rmRenderWeekdayChart()"></div>
+        <div style="font-size:12px;color:var(--muted);margin:14px 0 4px">Local market level (%) — only while "Price like Room Price Genie" is on</div>
+        <div class="grid12" id="marketWeekdayGrid" oninput="rmRenderWeekdayChart()"></div>
         <div style="margin-top:14px;font-size:12px;color:var(--muted)">Base price for the day</div>
         <div class="grid12" id="weekdayBaseRow" style="margin-top:4px"></div>
       </div>
@@ -199,9 +202,18 @@ svg text{font-family:'Jost',sans-serif}
         <svg id="monthlyChartSvg" width="100%" height="280" viewBox="0 0 1000 280" preserveAspectRatio="none"></svg>
       </div>
       <div class="card">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Adjust price by (%)</div>
         <div class="grid12" id="monthlyGrid" oninput="rmRenderMonthlyChart()"></div>
+        <div style="font-size:12px;color:var(--muted);margin:14px 0 4px">Local market level (%) — stands in for Room Price Genie's market, only while "Price like Room Price Genie" is on</div>
+        <div class="grid12" id="marketMonthGrid" oninput="rmRenderMonthlyChart()"></div>
         <div style="margin-top:14px;font-size:12px;color:var(--muted)">Base price for the month</div>
         <div class="grid12" id="monthlyBaseRow" style="margin-top:4px"></div>
+      </div>
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:4px;font-size:13px">Market dates (holidays and peaks)</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">A date range here replaces that month's and weekday's local market level — e.g. Christmas to New Year. Seeded from what Room Price Genie's December 2026 prices imply.</div>
+        <table><thead><tr><th>From</th><th>To</th><th>Market %</th><th>Label</th><th></th></tr></thead><tbody id="marketDatesBody"></tbody></table>
+        <button class="btn" style="margin-top:8px" onclick="rmMarketDateAdd()">+ Add dates</button>
       </div>
       <button class="btn btn-primary" onclick="rmSaveSettings()">Save</button>
     </div>
@@ -221,13 +233,34 @@ svg text{font-family:'Jost',sans-serif}
             <input id="occMedian" type="number" style="width:100px;padding:8px;border:1px solid var(--border);border-radius:8px">
           </div>
           <div>
-            <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px">Aggressiveness</label>
+            <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px">Aggressiveness (weekdays)</label>
             <select id="occAggr" style="padding:8px;border:1px solid var(--border);border-radius:8px">
               <option value="very_low">Very low</option>
               <option value="low">Low</option>
-              <option value="standard">Standard (recommended)</option>
+              <option value="standard">Standard</option>
+              <option value="high">High</option>
             </select>
           </div>
+          <div>
+            <label style="display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px">Aggressiveness (weekends: Fri + Sat)</label>
+            <select id="occAggrWk" style="padding:8px;border:1px solid var(--border);border-radius:8px">
+              <option value="very_low">Very low</option>
+              <option value="low">Low</option>
+              <option value="standard">Standard</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="border:1.5px solid var(--teal)">
+        <div style="font-weight:700;margin-bottom:6px;font-size:13px">Room Price Genie model</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">
+          <input type="checkbox" id="rpgModel" style="width:16px;height:16px"> Price like Room Price Genie
+        </label>
+        <div style="font-size:12px;color:var(--muted);line-height:1.5">When on: occupancy is the <b>whole hotel's</b>, counting Cloudbeds-only reservations too (as RPG does); expected occupancy follows the booking pace (empty dates far out come down); weekday and weekend aggressiveness apply separately; and the <b>local market</b> level (Monthly Adjustments / Day-of-the-Week / Market dates) stands in for RPG's Market Factor. Weekend aggressiveness and the market level only count while this is on.</div>
+        <div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:10px;font-size:13px">
+          <label>Occupancy based on <select id="occBasis" style="padding:6px;border:1px solid var(--border);border-radius:8px;margin-left:6px"><option value="hotel">Whole hotel</option><option value="roomType">Each room type</option></select></label>
+          <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="occCb" style="width:16px;height:16px"> Count Cloudbeds-only reservations</label>
         </div>
       </div>
       <div class="card">
@@ -388,6 +421,14 @@ async function rmSaveSettings(){
   for(let m=1;m<=12;m++){const el=document.getElementById('tgt_'+m);if(el)RM_SETTINGS.targetOccupancyPctByMonth[String(m)]=parseFloat(el.value)||0;}
   const med=document.getElementById('occMedian'); if(med) RM_SETTINGS.medianBookingWindowDays=parseInt(med.value)||21;
   const aggr=document.getElementById('occAggr'); if(aggr) RM_SETTINGS.aggressiveness=aggr.value;
+  const aggrWk=document.getElementById('occAggrWk'); if(aggrWk) RM_SETTINGS.aggressivenessWeekend=aggrWk.value;
+  const rpg=document.getElementById('rpgModel'); if(rpg) RM_SETTINGS.rpgModel=rpg.checked;
+  const basis=document.getElementById('occBasis'); if(basis) RM_SETTINGS.occupancyBasis=basis.value;
+  const occCb=document.getElementById('occCb'); if(occCb) RM_SETTINGS.includeCloudbeds=occCb.checked;
+  RM_SETTINGS.marketPctByMonth=RM_SETTINGS.marketPctByMonth||{};RM_SETTINGS.marketPctByWeekday=RM_SETTINGS.marketPctByWeekday||{};
+  for(let m=1;m<=12;m++){const el=document.getElementById('mkmo_'+m);if(el)RM_SETTINGS.marketPctByMonth[String(m)]=parseFloat(el.value)||0;}
+  ['mon','tue','wed','thu','fri','sat','sun'].forEach(k=>{const el=document.getElementById('mkwd_'+k);if(el)RM_SETTINGS.marketPctByWeekday[k]=parseFloat(el.value)||0;});
+  if(document.getElementById('marketDatesBody'))RM_SETTINGS.marketDates=rmMarketDatesFromDom();
   const autoApply=document.getElementById('autoApply'); if(autoApply) RM_SETTINGS.autoApplyEnabled=autoApply.checked;
   ['6mo','3mo','6w','4w','2w','1w','7d','3d','0d'].forEach(k=>{const el=document.getElementById('lt_'+k);if(el)RM_SETTINGS.leadTimePct[k]=parseFloat(el.value)||0;});
 
@@ -458,6 +499,8 @@ function rmRenderWeekday(){
   const labels={mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',sun:'Sun'};
   document.getElementById('weekdayGrid').innerHTML=Object.keys(labels).map(k=>
     `<div class="cell"><label>${labels[k]}</label><input id="wd_${k}" type="number" value="${RM_SETTINGS.weekdayPct[k]||0}"></div>`).join('');
+  document.getElementById('marketWeekdayGrid').innerHTML=Object.keys(labels).map(k=>
+    `<div class="cell"><label>${labels[k]}</label><input id="mkwd_${k}" type="number" value="${(RM_SETTINGS.marketPctByWeekday||{})[k]||0}"></div>`).join('');
   const ref=rmRefRoom();
   document.getElementById('wkRefName').textContent=ref?ref.name:'';
   rmRenderWeekdayChart();
@@ -488,6 +531,9 @@ const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
 function rmRenderMonthly(){
   document.getElementById('monthlyGrid').innerHTML=MONTH_NAMES.map((name,i)=>
     `<div class="cell"><label>${name}</label><input id="seas_${i+1}" type="number" value="${RM_SEASONAL[String(i+1)]||0}"></div>`).join('');
+  document.getElementById('marketMonthGrid').innerHTML=MONTH_NAMES.map((name,i)=>
+    `<div class="cell"><label>${name}</label><input id="mkmo_${i+1}" type="number" value="${(RM_SETTINGS.marketPctByMonth||{})[String(i+1)]||0}"></div>`).join('');
+  rmRenderMarketDates();
   const ref=rmRefRoom();
   document.getElementById('moRefName').textContent=ref?ref.name:'';
   rmRenderMonthlyChart();
@@ -511,12 +557,33 @@ function rmRenderMonthlyChart(){
     `<div class="cell" style="font-weight:700">$${baseVals[i]}</div>`).join('');
 }
 
+function rmRenderMarketDates(){
+  const rows=RM_SETTINGS.marketDates||[];
+  document.getElementById('marketDatesBody').innerHTML=rows.map((r,i)=>`<tr>
+    <td><input type="date" id="mkd_from_${i}" value="${esc(r.from||'')}"></td><td><input type="date" id="mkd_to_${i}" value="${esc(r.to||r.from||'')}"></td>
+    <td><input type="number" id="mkd_pct_${i}" value="${Number(r.pct)||0}" style="width:80px"></td><td><input id="mkd_lbl_${i}" value="${esc(r.label||'')}"></td>
+    <td><button class="btn" onclick="rmMarketDateDel(${i})">✕</button></td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--muted)">No dates yet.</td></tr>';
+}
+function rmMarketDatesFromDom(){
+  const rows=[];
+  (RM_SETTINGS.marketDates||[]).forEach((r,i)=>{const f=document.getElementById('mkd_from_'+i);if(!f)return rows.push(r);
+    const from=f.value,to=document.getElementById('mkd_to_'+i).value||from;if(!from)return;
+    rows.push({from,to,pct:parseFloat(document.getElementById('mkd_pct_'+i).value)||0,label:document.getElementById('mkd_lbl_'+i).value.trim()});});
+  return rows.sort((a,b)=>a.from.localeCompare(b.from));
+}
+function rmMarketDateAdd(){RM_SETTINGS.marketDates=rmMarketDatesFromDom();RM_SETTINGS.marketDates.push({from:'',to:'',pct:0,label:''});rmRenderMarketDates();}
+function rmMarketDateDel(i){RM_SETTINGS.marketDates=rmMarketDatesFromDom().filter((_,j)=>j!==i);rmRenderMarketDates();}
+
 // ---- Occupancy strategy ----
 function rmRenderOccupancy(){
   document.getElementById('occTargetGrid').innerHTML=MONTH_NAMES.map((name,i)=>
     `<div class="cell"><label>${name}</label><input id="tgt_${i+1}" type="number" value="${RM_SETTINGS.targetOccupancyPctByMonth[String(i+1)]??80}"></div>`).join('');
   document.getElementById('occMedian').value=RM_SETTINGS.medianBookingWindowDays||21;
   document.getElementById('occAggr').value=RM_SETTINGS.aggressiveness||'standard';
+  document.getElementById('occAggrWk').value=RM_SETTINGS.aggressivenessWeekend||RM_SETTINGS.aggressiveness||'standard';
+  document.getElementById('rpgModel').checked=!!RM_SETTINGS.rpgModel;
+  document.getElementById('occBasis').value=RM_SETTINGS.occupancyBasis||'hotel';
+  document.getElementById('occCb').checked=RM_SETTINGS.includeCloudbeds!==false;
   document.getElementById('autoApply').checked=!!RM_SETTINGS.autoApplyEnabled;
   if(RM_RECS){
     const monthKey=new Date().toISOString().slice(0,7);
@@ -566,6 +633,7 @@ function rmCalTip(ev,dateStr){
   let html=`<div class="h">${new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${esc(rtName)}</div><div class="sec">Prices</div>`;
   if(d.base!=null){
     html+=row('Base price',money(d.base));
+    if(d.marketPct!=null&&d.marketPct!==0)html+=row('Local market'+(d.marketLabel?` (${esc(d.marketLabel)})`:''),rmPct(d.marketPct));
     if(d.monthlyPct)html+=row('Monthly adjustment',rmPct(d.monthlyPct));
     if(d.weekdayPct)html+=row('Day of the week',rmPct(d.weekdayPct));
     if(d.leadPct)html+=row('Lead time',rmPct(d.leadPct));

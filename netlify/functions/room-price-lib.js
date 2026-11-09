@@ -106,9 +106,31 @@ const DEFAULT_SETTINGS = {
   aggressiveness: 'standard',  // 'very_low' | 'low' | 'standard' -- RoomPriceGenie's own 3 levels
   dayOfWeekOwnedByTool: false, // once true, room-price-settings.js zeroes booking_engine_settings.weekend_premium so it's never double-applied
   roundTo: 5,
+  // ---- RoomPriceGenie-matched model (Jorge 2026-11-09: "a pesar de que tenemos la misma información no es igual") ----
+  // OFF until Jorge approves the comparison. When on: occupancy is the whole hotel's and also counts Cloudbeds-only
+  // reservations (RPG reads Cloudbeds -- the CHICA RETREAT holds of Dec 2-10 were invisible to us); expected occupancy follows
+  // a booking-pace curve (half the bookings inside the median window, never zero far out, so empty far dates come down);
+  // weekdays and weekends have their own aggressiveness; and a "local market" level stands in for RPG's Market Factor,
+  // which comes from competitor prices we do not have -- by month and weekday from RPG's own charts, and by date for peaks.
+  rpgModel: false,
+  occupancyBasis: 'hotel',          // 'hotel' | 'roomType'
+  includeCloudbeds: true,
+  aggressivenessWeekend: 'high',    // Fri + Sat nights
+  marketPctByMonth: { 1: 36, 2: 9, 3: 5, 4: -2, 5: -13, 6: -12, 7: -7, 8: -7, 9: -10, 10: 10, 11: -27, 12: 9 },
+  marketPctByWeekday: { mon: -3, tue: -4, wed: -3, thu: 1, fri: 4, sat: 5, sun: 0 },
+  // A date range here replaces that month's and weekday's market level. Seeded from what RPG's own December prices imply.
+  marketDates: [
+    { from: '2026-12-01', to: '2026-12-17', pct: -15, label: 'Early December' },
+    { from: '2026-12-18', to: '2026-12-19', pct: -5, label: 'Pre-holidays' },
+    { from: '2026-12-20', to: '2026-12-23', pct: 10, label: 'Holiday week' },
+    { from: '2026-12-24', to: '2026-12-25', pct: 22, label: 'Christmas' },
+    { from: '2026-12-26', to: '2026-12-29', pct: 34, label: 'Between holidays' },
+    { from: '2026-12-30', to: '2026-12-30', pct: 48, label: "New Year's" },
+    { from: '2026-12-31', to: '2026-12-31', pct: 57, label: "New Year's Eve" },
+  ],
   autoApplyEnabled: false, // Jorge's ask 2026-10-17: once true, room-price-recalc.js pushes every recommendation straight into be_rates on each of its 3x/day runs -- no human review. Guardrails are min/max only (explicitly no rate-of-change cap, Jorge's call).
 };
-const AGGRESSIVENESS_FACTOR = { very_low: 0.25, low: 0.5, standard: 1 };
+const AGGRESSIVENESS_FACTOR = { very_low: 0.25, low: 0.5, standard: 1, high: 1 };
 // See recommendPrice()'s invDamping -- full occupancy-swing effect at this many rooms or more.
 const INVENTORY_DAMPENING_FULL_AT = 20;
 
@@ -118,7 +140,7 @@ async function loadSettings(key) {
 }
 function deepMerge(base, over) {
   const out = { ...base, ...over };
-  for (const k of ['derivationPct', 'minPrice', 'maxPrice', 'weekdayPct', 'leadTimePct', 'targetOccupancyPctByMonth', 'priceCeilingRoomTypeId']) {
+  for (const k of ['derivationPct', 'minPrice', 'maxPrice', 'weekdayPct', 'leadTimePct', 'targetOccupancyPctByMonth', 'priceCeilingRoomTypeId', 'marketPctByMonth', 'marketPctByWeekday']) {
     out[k] = { ...(base[k] || {}), ...(over[k] || {}) };
   }
   return out;
@@ -192,9 +214,17 @@ function groupTakenFor(dateStr, roomTypeRooms, blocks) {
 
 // The core algorithm -- see plan's "The pricing algorithm" section for the worked example this
 // reproduces (14-day median + 80% target => 40% expected occupancy at exactly 14 days out).
-function expectedOccupancy(targetPct, medianWindowDays, daysOut) {
-  const ratio = Math.max(0, Math.min(1, 1 - daysOut / (2 * medianWindowDays)));
+function expectedOccupancy(targetPct, medianWindowDays, daysOut, pace) {
+  // pace (rpgModel): half of the bookings land inside the median window, a quarter inside twice that, ... -- never zero
+  const ratio = pace ? Math.pow(0.5, Math.max(0, daysOut) / Math.max(1, medianWindowDays))
+    : Math.max(0, Math.min(1, 1 - daysOut / (2 * medianWindowDays)));
   return (targetPct / 100) * ratio;
+}
+// Local market level for a date (rpgModel): a marketDates range wins, else month + weekday
+function marketPctFor(settings, dateStr, month, weekdayKey) {
+  const r = (settings.marketDates || []).find(x => x && x.from <= dateStr && dateStr <= (x.to || x.from));
+  if (r) return { pct: Number(r.pct) || 0, label: r.label || '' };
+  return { pct: Number((settings.marketPctByMonth || {})[String(month)] || 0) + Number((settings.marketPctByWeekday || {})[weekdayKey] || 0), label: '' };
 }
 
 function round(n, to) { return Math.round(n / to) * to; }
@@ -219,6 +249,11 @@ function recommendPrice(opts) {
   const monthlyPct = Number(opts.seasonalAdjustments?.[String(month)] ?? 0);
   price *= (1 + monthlyPct / 100);
   det.monthlyPct = monthlyPct;
+  if (settings.rpgModel) {
+    const mk = marketPctFor(settings, dateStr, month, weekdayKey);
+    price *= (1 + mk.pct / 100);
+    det.marketPct = mk.pct; if (mk.label) det.marketLabel = mk.label;
+  }
 
   if (settings.dayOfWeekOwnedByTool) {
     const weekdayPct = Number(settings.weekdayPct[weekdayKey] || 0);
@@ -232,7 +267,7 @@ function recommendPrice(opts) {
   det.leadPct = leadPct;
   det.beforeOcc = Math.round(price);
 
-  const expectedOcc = expectedOccupancy(settings.targetOccupancyPctByMonth[String(month)] ?? 80, settings.medianBookingWindowDays, daysOut);
+  const expectedOcc = expectedOccupancy(settings.targetOccupancyPctByMonth[String(month)] ?? 80, settings.medianBookingWindowDays, daysOut, !!settings.rpgModel);
   // A smaller-inventory room type swings much harder in occupancy % for the same number of
   // bookings -- one retreat room taken in an 8-room category (Simple n Small) moves its
   // occupancy 12.5 points; the same one room in a 26-room category (Garden) moves it 3.8
@@ -243,9 +278,13 @@ function recommendPrice(opts) {
   // room count, full effect at INVENTORY_DAMPENING_FULL_AT or more (Garden's own 26 clears it
   // comfortably) -- same intuition as a small sample size needing a wider confidence interval
   // before you trust it as a signal.
-  const invDamping = Math.min(1, (roomType.rooms ? roomType.rooms.length : INVENTORY_DAMPENING_FULL_AT) / INVENTORY_DAMPENING_FULL_AT);
+  const invRooms = opts.invRooms != null ? opts.invRooms : (roomType.rooms ? roomType.rooms.length : INVENTORY_DAMPENING_FULL_AT);   // whole hotel when occupancy is the hotel's
+  const invDamping = Math.min(1, invRooms / INVENTORY_DAMPENING_FULL_AT);
   const gap = (actualOcc - expectedOcc) * invDamping; // >0: fuller than expected -> raise; <0: emptier -> lower
-  const factor = AGGRESSIVENESS_FACTOR[settings.aggressiveness] ?? 1;
+  const weekendNight = weekdayKey === 'fri' || weekdayKey === 'sat';
+  const aggr = settings.rpgModel && weekendNight ? (settings.aggressivenessWeekend || settings.aggressiveness) : settings.aggressiveness;
+  const factor = AGGRESSIVENESS_FACTOR[aggr] ?? 1;
+  det.aggressiveness = aggr;
   price *= (1 + gap * factor);
   det.expectedOccPct = Math.round(expectedOcc * 100);
   det.occFactorPct = Math.round(gap * factor * 1000) / 10;
@@ -333,5 +372,5 @@ module.exports = {
   loadSettings, saveSettings, loadRoomTypes,
   dateToParts, daysBetween, leadTimeBucket, WEEKDAY_KEYS,
   loadBlocksInRange, occupancyFor, groupTakenFor,
-  expectedOccupancy, recommendPrice, round,
+  expectedOccupancy, marketPctFor, recommendPrice, round,
 };
