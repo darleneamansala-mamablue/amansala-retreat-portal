@@ -238,17 +238,45 @@ function logActivity(action,detail,bkId){
   }
 }
 
-function buildActivityLog(){
-  const log=loadActivityLog();
+// The Activity Log screen shows EVERYONE's changes from the database (activity_log), not only what this browser did -- it used
+// to read this browser's localStorage, so Jorge mostly saw his own actions. Jorge's own changes are left out (Jorge 2026-11-09:
+// "solo mis cambios no deben de salir ahí"); they stay saved in activity_log and History.
+let _actRows=null,_actLoadedAt=0,_actLoading=null;
+const _actIsJorge=n=>/\bjorge\b/i.test(String(n||''));
+async function _actLoad(){
+  if(_actLoading)return _actLoading;
+  _actLoading=(async()=>{
+    try{
+      const out=[];
+      for(let from=0;from<2000;from+=1000){
+        const {data,error}=await db.from('activity_log').select('id,created_at,user_name,user_role,action,detail,booking_id').order('created_at',{ascending:false}).range(from,from+999);
+        if(error)throw error;
+        out.push(...(data||[]));
+        if(!data||data.length<1000)break;
+      }
+      _actRows=out.map(r=>({id:r.id,ts:r.created_at,userName:r.user_name||'System',userRole:r.user_role||'staff',action:r.action||'',detail:r.detail||'',bkId:r.booking_id||null}));
+      _actLoadedAt=Date.now();
+    }catch(e){console.warn('[activity log] load failed, showing this browser only',e);_actRows=null;}
+    finally{_actLoading=null;}
+  })();
+  return _actLoading;
+}
+async function buildActivityLog(){
+  const feed=document.getElementById('actFeed');if(!feed)return;
+  if(!_actRows||Date.now()-_actLoadedAt>30000){
+    if(!_actRows)feed.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>';
+    await _actLoad();
+  }
+  const log=(_actRows||loadActivityLog()).filter(e=>!_actIsJorge(e.userName));
   const filterUser=(document.getElementById('actFilterUser')||{}).value||'';
   const filterRole=(document.getElementById('actFilterRole')||{}).value||'';
-  const feed=document.getElementById('actFeed');if(!feed)return;
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
   const userSel=document.getElementById('actFilterUser');
   if(userSel){
     const names=[...new Set(log.map(e=>e.userName))].filter(Boolean).sort();
     const cur=userSel.value;
-    userSel.innerHTML='<option value="">All Staff</option>'+names.map(n=>`<option value="${n}"${n===cur?' selected':''}>${n}</option>`).join('');
+    userSel.innerHTML='<option value="">All Staff</option>'+names.map(n=>`<option value="${esc(n)}"${n===cur?' selected':''}>${esc(n)}</option>`).join('');
   }
 
   let filtered=log;
@@ -257,10 +285,11 @@ function buildActivityLog(){
 
   if(!filtered.length){feed.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;font-style:italic">No activity recorded yet.</div>';return;}
 
-  const today=new Date().toISOString().slice(0,10);
-  const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const dayOf=ts=>new Date(ts).toLocaleDateString('en-CA',{timeZone:'America/Cancun'});
+  const today=dayOf(Date.now());
+  const yesterday=dayOf(Date.now()-86400000);
   const groups={};
-  filtered.forEach(e=>{const d=e.ts.slice(0,10);if(!groups[d])groups[d]=[];groups[d].push(e);});
+  filtered.forEach(e=>{const d=dayOf(e.ts);if(!groups[d])groups[d]=[];groups[d].push(e);});
 
   feed.innerHTML=Object.entries(groups).map(([date,entries])=>{
     let label=date;
@@ -271,13 +300,13 @@ function buildActivityLog(){
       const role=e.userRole||'staff';
       const initials=(e.userName||'?').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
       const t=new Date(e.ts);
-      const timeStr=t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+      const timeStr=t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Cancun'});
       return `<div class="act-entry">
-        <div class="act-avatar role-${role}">${initials}</div>
+        <div class="act-avatar role-${esc(role)}">${esc(initials)}</div>
         <div class="act-body">
-          <div><span class="act-who">${e.userName}</span><span class="act-who-role">${role}</span></div>
-          <div class="act-action">${e.action}</div>
-          ${e.detail?`<div class="act-detail">${e.detail}</div>`:''}
+          <div><span class="act-who">${esc(e.userName)}</span><span class="act-who-role">${esc(role)}</span></div>
+          <div class="act-action">${esc(e.action)}</div>
+          ${e.detail?`<div class="act-detail">${esc(e.detail)}</div>`:''}
           <div class="act-time">${timeStr}</div>
         </div>
       </div>`;

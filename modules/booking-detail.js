@@ -731,6 +731,7 @@ async function bdRecordTotalPayment(){
   const description=`Payment — ${method}${ref?': '+ref:''}`;
   const {error}=await db.from('folio_items').insert({folio_id:target.folio.id,description,qty:1,unit_price:-amount,tax_rate:0,category:'Payment',staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error recording payment: '+error.message);return;}
+  _bdFolioLog('Payment recorded',target.folio.id,`${description} (${_bdMoney(amount)})`);
   showToast('Payment recorded ✓');
   _bdNotifyPayment(amount);
   // a staff-made reservation waiting for its first payment gets its booking confirmation now (booking-payment-lib.js)
@@ -1212,6 +1213,7 @@ async function bdAddItem(fid){
   const {data:newItem,error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty,unit_price:price,tax_rate:tax,category,staff_name:getCurrentSession()?.name||null}).select().single();
   if(error){showToast('Error: '+error.message);return;}
   if(isComm&&staffId){const pretax=+(qty*price).toFixed(2);await _bdUpsertCommission(fid,newItem.id,staffId,pretax,tax,+(pretax*portalCommissionRate()).toFixed(2),desc);}
+  _bdFolioLog('Charge added',fid,`${qty>1?qty+'× ':''}${desc} (${_bdMoney(_bdItemTotal(newItem))})`);
   _bdAddOpen[fid]=false;
   await _bdLoadFolios();
 }
@@ -1243,6 +1245,7 @@ async function bdSaveEditItem(fid,itemId){
   if(error){showToast('Error: '+error.message);return;}
   if(isComm&&staffId){const pretax=+(qty*price).toFixed(2);await _bdUpsertCommission(fid,itemId,staffId,pretax,tax,+(pretax*portalCommissionRate()).toFixed(2),desc);}
   else await _bdSyncLinkedCommission(itemId,qty,price,tax);
+  _bdFolioLog('Charge edited',fid,origItem?`${origItem.description} (${_bdMoney(_bdItemTotal(origItem))}) → ${desc} (${_bdMoney(_bdItemTotal({qty,unit_price:price,tax_rate:tax}))})`:desc);
   delete _bdEditOpen[itemId];
   await _bdLoadFolios();
 }
@@ -1276,11 +1279,22 @@ async function bdMoveItem(fid,itemId,toFid){
   showToast('Charge moved ✓');
   await _bdLoadFolios();
 }
+// Every folio change goes to the Activity Log (Jorge 2026-11-09: "quiero que todo quede en el activity log"): what, how much,
+// which folio and room. The Activity Log screen leaves Jorge's own changes out (activity-log view).
+const _bdMoney=n=>(Number(n)<0?'-$':'$')+Math.abs(Number(n)||0).toFixed(2);
+function _bdFolioLog(action,fid,what){
+  try{
+    const f=_bdFolios.find(x=>x.folio.id===fid),reg=_bdKind==='reg'?AppData.regs.find(r=>r.id===_bdId):null;
+    logActivity(action,`${what}${f?` · folio "${f.folio.name||f.folio.guest_name||''}"`:''} · ${(_bdSubject()||{}).room||''}`,reg?reg.bookingId:null);
+  }catch(e){}
+}
 async function bdDeleteItem(fid,itemId){
   if(!confirm('Remove this charge?'))return;
   const f=_bdFolios.find(x=>x.folio.id===fid);
+  const it=f&&f.items.find(x=>x.id===itemId);
   const {error}=await db.from('folio_items').delete().eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
+  _bdFolioLog(it&&Number(it.unit_price)<0?'Payment removed':'Charge removed',fid,it?`${it.description} (${_bdMoney(_bdItemTotal(it))})`:'line');
   // A commission linked to this charge (commissions.folio_item_id) has
   // nothing left to commission once the charge itself is gone.
   db.from('commissions').delete().eq('folio_item_id',itemId).then(({error})=>{if(error)console.warn('[commission] delete-linked failed:',error.message);});
@@ -1309,6 +1323,7 @@ async function bdRecordPayment(fid){
   const description=`Payment — ${method}${ref?': '+ref:''}`;
   const {error}=await db.from('folio_items').insert({folio_id:fid,description,qty:1,unit_price:-amount,tax_rate:0,category:'Payment',staff_name:getCurrentSession()?.name||null});
   if(error){showToast('Error recording payment: '+error.message);return;}
+  _bdFolioLog('Payment recorded',fid,`${description} (${_bdMoney(amount)})`);
   showToast('Payment recorded ✓');
   _bdNotifyPayment(amount);
   const f=_bdFolios.find(x=>x.folio.id===fid);
@@ -1318,6 +1333,7 @@ async function bdRecordPayment(fid){
 async function bdCloseFolio(fid){
   const {error}=await db.from('folios').update({status:'closed'}).eq('id',fid);
   if(error){showToast('Error: '+error.message);return;}
+  _bdFolioLog('Folio closed',fid,'Closed');
   const f=_bdFolios.find(x=>x.folio.id===fid);
   await _bdLoadFolios();
 }
@@ -1326,6 +1342,7 @@ async function bdCloseFolio(fid){
 async function bdReopenFolio(fid){
   const {error}=await db.from('folios').update({status:'open'}).eq('id',fid);
   if(error){showToast('Error: '+error.message);return;}
+  _bdFolioLog('Folio reopened',fid,'Reopened');
   showToast('Folio reopened ✓');
   await _bdLoadFolios();
 }
@@ -1365,6 +1382,7 @@ async function _bdDeleteFoliosForReg(regId){
 async function bdDeleteFolioRow(fid){
   if(!confirm('Delete this folio and all its charges?'))return;
   const f=_bdFolios.find(x=>x.folio.id===fid);
+  _bdFolioLog('Folio deleted',fid,f?`${f.items.length} line${f.items.length===1?'':'s'}, balance ${_bdMoney(f.items.reduce((t,i)=>t+_bdItemTotal(i),0))}${f.items.length?': '+f.items.slice(0,12).map(i=>i.description).join(', ').slice(0,500):''}`:'');
   await db.from('folio_items').delete().eq('folio_id',fid);
   const {error}=await db.from('folios').delete().eq('id',fid);
   if(error){showToast('Error: '+error.message);return;}
@@ -1378,6 +1396,7 @@ async function bdAddFolio(){
   const token=uid().replace(/[^a-z0-9]/gi,'');
   const {error}=await db.from('folios').insert({[subj.folioCol]:_bdFolioAnchorId(subj),guest_name:guestName,name,payment_token:token,status:'open'});
   if(error){showToast('Error: '+error.message);return;}
+  _bdFolioLog('Folio added',null,`New folio "${name}"`);
   await _bdLoadFolios();
 }
 
