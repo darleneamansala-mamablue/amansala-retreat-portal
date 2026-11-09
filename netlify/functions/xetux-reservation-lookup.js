@@ -167,6 +167,16 @@ exports.handler = async (event) => {
 
   const results = await findInHouse(supaKey, { guestName, roomNumber, onlyCheckedIn: listAll || /^(1|true|yes)$/i.test(String(qs.checkedIn || '')) });
   results.sort((a, b) => String(a.roomNumber).localeCompare(String(b.roomNumber), 'en', { numeric: true }));
+  // keep the last 30 look-ups Xetux made (what it asked, how many came back) -- to tell whether a guest missing on the POS
+  // was never asked for (Xetux side) or not found here (Jorge 2026-11-09: his test reservation did not show in Xetux)
+  try {
+    const H = { apikey: supaKey, Authorization: `Bearer ${supaKey}`, 'Content-Type': 'application/json' };
+    const r0 = await fetch(`${SUPABASE_URL}/rest/v1/app_store?key=eq.xetux_last_lookups&select=value`, { headers: H });
+    const prev = r0.ok ? (((await r0.json())[0] || {}).value || []) : [];
+    const entry = { at: new Date().toISOString(), q: { guestName, roomNumber, checkedIn: qs.checkedIn || qs.all || '' }, n: results.length, rooms: results.slice(0, 60).map(x => x.roomNumber) };
+    await fetch(`${SUPABASE_URL}/rest/v1/app_store?on_conflict=key`, { method: 'POST', headers: { ...H, Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ key: 'xetux_last_lookups', value: [entry, ...(Array.isArray(prev) ? prev : [])].slice(0, 30), updated_at: entry.at }) });
+  } catch (e) {}
   if (!results.length) {
     return {
       statusCode: 200,
