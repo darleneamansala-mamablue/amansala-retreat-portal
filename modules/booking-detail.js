@@ -64,7 +64,7 @@ function _bdSubject(){
     checkIn,checkOut,notes:reg.notes||'',
     checkedInAt:reg.checkedInAt||null,checkedOutAt:reg.checkedOutAt||null,
     // a Room Only stay keeps its own guest count (bk.pax) -- it used to show only how many names were typed (Jorge 2026-11-07)
-    rate,adults:bk.bookingType==='room_only'?Math.max(Number(bk.pax)||0,gc):gc,paxEditable:bk.bookingType==='room_only',sourceLabel:bk.source?_bdSourceLabel(bk.source):null,
+    rate,adults:bk.bookingType==='room_only'?Math.max(Number(bk.pax)||0,gc):gc,paxEditable:true,paxByNames:bk.bookingType!=='room_only',sourceLabel:bk.source?_bdSourceLabel(bk.source):null,
     retreatLabel:bk.leaderName||bk.retreatName||'',retreatBkId:bk.id,
     folioCol:'registration_id',bookingType:bk.bookingType,
     stripeCustomerId:reg.stripeCustomerId,stripePaymentMethodId:reg.stripePaymentMethodId,
@@ -643,7 +643,7 @@ function _bdRender(){
       <div>
         <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">👤 Guest${subj.allGuests.length>1?'s':''}</div>
         <table style="width:100%;font-size:13px">
-          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Adults</td><td style="padding:5px 0">${_bdDetailEditMode&&subj.paxEditable?`<input id="bdEditAdults" type="number" min="1" max="20" value="${subj.adults}" style="width:70px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">`:subj.adults}${_bdDetailEditMode&&!subj.paxEditable?`<div style="font-size:11px;color:var(--muted);margin-top:2px">For a retreat guest this is the number of names in the room — add or remove names in the retreat's Room List.</div>`:''}</td></tr>
+          <tr><td style="color:var(--muted);padding:5px 0;width:110px">Adults</td><td style="padding:5px 0">${_bdDetailEditMode&&subj.paxEditable?`<input id="bdEditAdults" type="number" min="1" max="20" value="${subj.adults}" ${subj.paxByNames?`data-names="${subj.adults}" oninput="_bdPaxNameFields()"`:''} style="width:70px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">`:subj.adults}${_bdDetailEditMode&&subj.paxByNames?`<div id="bdPaxNewNames"></div><div style="font-size:11px;color:var(--muted);margin-top:2px">Retreat room: each guest is a name in the Room List. More guests adds their names; fewer removes the last names (only if their folio has no charges). The rate stays as it is.</div>`:''}</td></tr>
         </table>
         ${_bdDetailEditMode&&_bdKind==='req'?`<table style="width:100%;font-size:13px">
           <tr><td style="color:var(--muted);padding:5px 0;width:110px">First Name</td><td style="padding:5px 0"><input id="bdEditFirstName" type="text" value="${escHtml(_bdReqCache.firstName||'')}" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;width:100%"></td></tr>
@@ -1774,6 +1774,37 @@ async function bdSaveDetails(){
       return;
     }
 
+    // Retreat room: Adults = the names in the room (Jorge 2026-11-09: "en todo tipo de reserva yo pueda cambiar para tener 1 o 2
+    // huéspedes"). More adds the typed names; fewer marks the last ones cancelled (never the first, never one with folio charges).
+    // The rate is frozen first, so adding / removing a person never moves the price.
+    let paxNamesChanged=false;
+    const _paxNEl=document.getElementById('bdEditAdults');
+    if(_paxNEl&&subjBefore.paxByNames){
+      const want=Math.max(1,parseInt(_paxNEl.value,10)||1);
+      const named=(reg.guests||[]).filter(g=>g.name&&!g.cancelled);
+      if(want>named.length){
+        const add=[];
+        for(let k=named.length;k<want;k++){
+          const nm=(document.getElementById(`bdPaxNewName-${k}`)?.value||'').trim();
+          if(!nm){alert(`Type the name of guest ${k+1}.`);return;}
+          add.push({name:nm,email:'',phone:'',notes:''});
+        }
+        reg.guests=[...(reg.guests||[]),...add];paxNamesChanged=true;
+      }else if(want<named.length){
+        const drop=named.slice(want);
+        for(const g of drop){
+          const {data:fs}=await db.from('folios').select('id').eq('registration_id',reg.id).eq('guest_name',g.name);
+          const ids=(fs||[]).map(x=>x.id);
+          const {count}=ids.length?await db.from('folio_items').select('id',{count:'exact',head:true}).in('folio_id',ids):{count:0};
+          if(count){alert(`${g.name} has charges on their folio — move or remove them first (Transfer on the folio), then lower the guests.`);return;}
+        }
+        if(!confirm(`Remove ${drop.map(g=>g.name).join(', ')} from room ${subjBefore.room}?`))return;
+        const at=new Date().toISOString();
+        drop.forEach(g=>{g.cancelled=true;g.cancelledAt=at;});paxNamesChanged=true;
+      }
+      if(paxNamesChanged&&reg.customRateOverride==null&&subjBefore.rate)reg.customRateOverride=subjBefore.rate;
+    }
+
     const datesChanged=checkIn!==(subjBefore.checkIn||null)||checkOut!==(subjBefore.checkOut||null);
     if(reg.customRateOverride==null&&(roomChanged||datesChanged)){
       reg.customRateOverride=subjBefore.rate;
@@ -1791,8 +1822,9 @@ async function bdSaveDetails(){
     if(error){showToast('Error: '+error.message);return;}
     reg.room=room;reg.checkIn=checkIn;reg.checkOut=checkOut;
     // Room Only: the number of guests of the reservation (the rate does not change with it)
+    if(paxNamesChanged){try{logActivity('Guests changed',`${subjBefore.guestName} · room ${room}: ${subjBefore.adults} → ${(reg.guests||[]).filter(g=>g.name&&!g.cancelled).length} guest(s)`,reg.bookingId);}catch(e){}}
     const _paxEl=document.getElementById('bdEditAdults');
-    if(_paxEl&&subjBefore.paxEditable){
+    if(_paxEl&&subjBefore.paxEditable&&!subjBefore.paxByNames){
       const pax=Math.max(1,parseInt(_paxEl.value,10)||1), pbk=AppData.bookings.find(b=>b.id===reg.bookingId);
       if(pbk&&Number(pbk.pax)!==pax){
         pbk.pax=pax;pbk.updatedAt=new Date().toISOString();
@@ -2331,4 +2363,13 @@ async function bdConfirmStripe(){
     errEl.textContent=e.message||'Payment error';
     payBtn.disabled=false;payBtn.textContent=`Pay ${fmt$(_bdStripeAmt)}`;
   }
+}
+
+// Retreat room in Booking Detail: one name box per guest added with the Adults number (see the save in bdSaveDetails)
+function _bdPaxNameFields(){
+  const el=document.getElementById('bdEditAdults'),box=document.getElementById('bdPaxNewNames');if(!el||!box)return;
+  const have=parseInt(el.dataset.names,10)||1,want=Math.min(20,Math.max(1,parseInt(el.value,10)||1));
+  const kept={};box.querySelectorAll('input').forEach(i=>{kept[i.id]=i.value;});
+  let h='';for(let k=have;k<want;k++)h+=`<input id="bdPaxNewName-${k}" placeholder="Name of guest ${k+1}" value="${String(kept['bdPaxNewName-'+k]||'').replace(/"/g,'&quot;')}" style="display:block;margin-top:5px;width:100%;max-width:260px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-family:'Jost',sans-serif;font-size:12.5px">`;
+  box.innerHTML=h;
 }
