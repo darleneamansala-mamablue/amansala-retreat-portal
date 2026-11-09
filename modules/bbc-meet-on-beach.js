@@ -6,6 +6,8 @@
 (function () {
   const MEET = 'Meet on the beach', RECEPTION = 'Meet in the reception';
   if (typeof BBC_LOCATIONS_LIST !== 'undefined' && !BBC_LOCATIONS_LIST.includes(MEET)) BBC_LOCATIONS_LIST.push(MEET);
+  // Fire Pit is a place to pick for a class or event too (Darlene 2026-11-06). It is not a shala, so it is never checked for room clashes and is not drawn on the Calendar's shala columns.
+  if (typeof BBC_LOCATIONS_LIST !== 'undefined' && !BBC_LOCATIONS_LIST.includes('Fire Pit')) BBC_LOCATIONS_LIST.push('Fire Pit');
   if (typeof bbcLocToShalaId === 'function') {
     const baseLoc = bbcLocToShalaId;
     window.bbcLocToShalaId = function (loc) { return String(loc || '').trim().toLowerCase() === MEET.toLowerCase() ? 'beachfront' : baseLoc.apply(this, arguments); };
