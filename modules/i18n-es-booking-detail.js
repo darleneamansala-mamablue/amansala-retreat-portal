@@ -7,6 +7,7 @@
 i18nAdd({
   // ----- loading / header -----
   'Loading folio…': 'Cargando folio…',
+  'Retreat room: each guest is a name in the Room List. More guests adds their names; fewer removes the last names (only if their folio has no charges). The rate stays as it is.': 'Cuarto de retiro: cada huésped es un nombre en el Room List. Subir el número agrega sus nombres; bajarlo quita los últimos nombres (solo si su folio no tiene cargos). La tarifa no cambia.',
   'Reservation not found': 'No se encontró la reservación',
   '← Back': '← Atrás',
   'Booking': 'Reservación',
@@ -166,6 +167,9 @@ i18nAdd({
 
 i18nAddRx([
   // ----- loading errors -----
+  [/^Name of guest (\d+)$/, 'Nombre del huésped $1'], [/^Type the name of guest (\d+)\.$/, 'Escribe el nombre del huésped $1.'],
+  [/^Remove (.+) from room (.+)\?$/, '¿Quitar a $1 del cuarto $2?'],
+  [/^(.+) has charges on their folio — move or remove them first \(Transfer on the folio\), then lower the guests\.$/, '$1 tiene cargos en su folio — muévelos o quítalos primero (Transfer en el folio) y luego baja los huéspedes.'],
   [/^Could not load reservation: (.*)$/, 'No se pudo cargar la reservación: $1'],
   [/^Could not load folio: (.*)$/, 'No se pudo cargar el folio: $1'],
 
