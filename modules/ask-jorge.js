@@ -56,6 +56,17 @@
       const moved = AppData.regs.find(r => r.id === x.regId);
       return moved && String(moved.room) === String(x.toRoom) ? { ok: true, bookingId: bk.id } : { ok: false, message: 'The move could not be done (the room may be taken).' };
     }
+    if (x.type === 'share_room') {   // two guests of one reservation into the two beds of one room (28 -> 28a + 28b)
+      const r1 = AppData.regs.find(r => r.id === x.regId), r2 = AppData.regs.find(r => r.id === x.regId2);
+      if (!r1 || !r2) return { ok: false, message: 'Guest not found in this screen — reload and try again.' };
+      const bk = AppData.bookings.find(b => b.id === r1.bookingId); if (!bk) return { ok: false, message: 'Reservation not found.' };
+      for (const [reg, to] of [[r1, x.toRoom], [r2, x.toRoom2]]) {
+        if (String(reg.room) === String(to)) continue;
+        try { rcMoveRoom(bk.id, reg.room, to); } catch (e) { console.warn('[ask-jorge] share', e); }
+      }
+      const ok = String(r1.room) === String(x.toRoom) && String(r2.room) === String(x.toRoom2);
+      return ok ? { ok: true, bookingId: bk.id } : { ok: false, message: 'The move could not be done (a bed may be taken).' };
+    }
     if (x.type === 'new_booking') {
       const conflict = AppData.bookings.some(b => b.status !== 'cancelled' && roomListBlocks(b.blockedRooms, x.room) && datesOverlap(x.checkIn, x.checkOut, b.startDate, b.endDate));
       if (conflict) return { ok: false, message: `Room ${x.room} is already booked for part of these dates.` };
