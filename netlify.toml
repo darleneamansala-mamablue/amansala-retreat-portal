@@ -125,3 +125,12 @@
 [functions."booking-payment-reminders"]
   schedule = "0 15 * * *"
   timeout = 26
+
+# Shala schedule + tours/activities by WhatsApp (shala-briefing-lib.js, Jorge 2026-11-10). Who gets it: app_store
+# 'shala_briefing_numbers' = {enabled, people:[{name, phone}]}. 1:00 PM Tulum (18:00 UTC): today from 4 PM on.
+[functions."shala-briefing-pm"]
+  schedule = "0 18 * * *"
+
+# 9:00 PM Tulum (02:00 UTC): tomorrow before 4 PM.
+[functions."shala-briefing-am"]
+  schedule = "0 2 * * *"
