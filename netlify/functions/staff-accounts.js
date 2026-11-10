@@ -7,6 +7,7 @@
 //   {token, action:'save', id?, name, username, role, password?}   creates (password required) or updates
 //   {token, action:'setActive', id, active}
 //   {token, action:'delete', id}
+//   {token, action:'signOut', id}       signs the person out everywhere
 const crypto = require('crypto');
 const { staffAllowed, revokeSessions } = require('./portal-auth-lib');
 
@@ -27,6 +28,9 @@ exports.handler = async (event) => {
   try { b = JSON.parse(event.body || '{}'); } catch (e) { return reply(400, { error: 'Invalid JSON' }); }
   try {
     const id = String(b.id || '').slice(0, 80);
+    // sign one person out of every open tab (Jorge 2026-11-10: the sessions showing "Sin pase" in the Sync Log); the next pass
+    // renewal of each tab is refused, the tab goes to the login and loads the current portal
+    if (b.action === 'signOut') { if (!id) return reply(400, { error: 'Missing account' }); return reply(200, { ok: await revokeSessions(key, 'staff', id) }); }
     if (b.action === 'save') {
       const name = String(b.name || '').trim().slice(0, 80), username = String(b.username || '').trim().toLowerCase().slice(0, 60);
       const role = ['admin', 'staff'].includes(b.role) ? b.role : 'staff', password = String(b.password || '');
