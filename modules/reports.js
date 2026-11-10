@@ -603,27 +603,28 @@ async function _rptLoadDaily(){
     // A "day" here is a Tulum day (UTC-5, no daylight saving). Using UTC midnight cut the day at 7pm local, so evening charges
     // from the 20th showed up under the 21st (Darlene 2026-10-21: picked 21-21 and still saw the 20th).
     const fromTs=_dailyFrom+'T00:00:00.000-05:00',toTs=_dailyTo+'T23:59:59.999-05:00';
-    const[itemsRes,staffRes]=await Promise.all([
-      db.from('folio_items').select('id,folio_id,description,qty,unit_price,tax_rate,staff_name,category,created_at').gte('created_at',fromTs).lte('created_at',toTs).order('created_at',{ascending:false}),
+    // The database hands back at most 1000 rows per request: a month has more folio lines than that, so it is read in pages
+    // (Jorge 2026-11-10: October's Category Report showed $95k of Room when the folios held $238k).
+    const pages=async(q,size=1000)=>{const out=[];for(let from=0;from<100000;from+=size){const{data,error}=await q().range(from,from+size-1);if(error)throw error;out.push(...(data||[]));if(!data||data.length<size)break;}return out;};
+    const inChunks=async(ids,q,n=150)=>{const out=[];for(let k=0;k<ids.length;k+=n){const{data,error}=await q(ids.slice(k,k+n));if(error)throw error;out.push(...(data||[]));}return out;};
+    const[items,staffRes]=await Promise.all([
+      pages(()=>db.from('folio_items').select('id,folio_id,description,qty,unit_price,tax_rate,staff_name,category,created_at').gte('created_at',fromTs).lte('created_at',toTs).order('created_at',{ascending:false}).order('id')),
       db.from('staff').select('name,active').order('name',{ascending:true}),
     ]);
-    if(itemsRes.error)throw itemsRes.error;
     if(staffRes.error)throw staffRes.error;
     _dailyStaffNames=(staffRes.data||[]).filter(s=>s.active).map(s=>s.name);
-    const items=itemsRes.data||[];
     const folioIds=[...new Set(items.map(i=>i.folio_id))];
     let foliosById={};
     if(folioIds.length){
-      const{data:folios,error:fErr}=await db.from('folios').select('id,registration_id,booking_request_id,guest_name').in('id',folioIds);
-      if(fErr)throw fErr;
-      (folios||[]).forEach(f=>{foliosById[f.id]=f;});
+      const folios=await inChunks(folioIds,ids=>db.from('folios').select('id,registration_id,booking_request_id,guest_name').in('id',ids));
+      folios.forEach(f=>{foliosById[f.id]=f;});
     }
     // where a Booking Engine stay came from (Escape, Extra Night...) -- the Category Report splits Room by it
     const reqIds=[...new Set(Object.values(foliosById).map(f=>f.booking_request_id).filter(Boolean))];
     const reqSource={};
     if(reqIds.length){
-      const{data:reqs}=await db.from('booking_requests').select('id,source').in('id',reqIds);
-      (reqs||[]).forEach(r=>{reqSource[r.id]=r.source||'';});
+      const reqs=await inChunks(reqIds,ids=>db.from('booking_requests').select('id,source').in('id',ids));
+      reqs.forEach(r=>{reqSource[r.id]=r.source||'';});
     }
     _dailyFolioItems=items.map(i=>{
       const folio=foliosById[i.folio_id]||{};
