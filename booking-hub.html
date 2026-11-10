@@ -4284,6 +4284,7 @@ function portalLoadAfterSignIn(){if(typeof _casBaseReady!=='undefined'&&!_casBas
 // signed in, switch on, but no pass (signed in before the pass existed, or it ran out): logged once per page
 let _dbPassMissLogged=false;
 function _dbPassMiss(){
+  if(window._portalSigningOut)return;
   if(_dbPassMissLogged||(typeof IS_TEACHER_MODE!=='undefined'&&IS_TEACHER_MODE))return;
   let who=null;try{who=['amansala_staff_session','amansala_spa_staff_session','amansala_driver_session','amansala_staff_confirm_session'].map(k=>sessionStorage.getItem(k)).find(Boolean);}catch(e){}
   if(!who)return;
@@ -4297,7 +4298,13 @@ let _dbRenewP=null;
 async function dbAuthTokenFresh(){
   if(_dbPassOn()&&!dbPassGet()){
     let had=null;try{had=sessionStorage.getItem('amansala_db_pass')||sessionStorage.getItem('amansala_staff_token');}catch(e){}
-    if(had&&typeof portalRenewPasses==='function'){_dbRenewP=_dbRenewP||portalRenewPasses().finally(()=>{_dbRenewP=null;});await _dbRenewP;}
+    // right after the computer wakes up the network is often not back yet and the first renewal fails (Sync Log 'Sin pase' at
+    // 3:57 / 6:47 a.m., 2026-11-10): try a few more times, a little apart, before giving up
+    for(let i=0;had&&typeof portalRenewPasses==='function'&&i<4&&!dbPassGet();i++){
+      if(i)await new Promise(r=>setTimeout(r,1500*i));
+      _dbRenewP=_dbRenewP||portalRenewPasses().finally(()=>{_dbRenewP=null;});await _dbRenewP;
+      if(window._portalSigningOut)return SUPA_KEY;   // the account was signed out: the page is reloading to the login
+    }
   }
   return dbAuthToken();
 }
@@ -4342,6 +4349,7 @@ const db=supabase.createClient(SUPA_URL,SUPA_KEY,{accessToken:()=>dbAuthTokenFre
 // renew them once the account was signed out everywhere (password changed, switched off, removed) or 14 days after the
 // sign-in: then this page signs out and shows the login.
 function portalSignOutEverywhere(){
+  window._portalSigningOut=true;
   try{['amansala_staff_session','amansala_staff_token','amansala_db_pass','amansala_spa_staff_session','amansala_driver_session','amansala_staff_confirm_session'].forEach(k=>sessionStorage.removeItem(k));sessionStorage.setItem('ama_signin_again','1');}catch(e){}
   location.reload();
 }
@@ -4786,6 +4794,7 @@ function casLogEvent(kind,table,items){
     const now=new Date().toISOString();
     db.from('app_store').insert({key:'cas_log:'+now+'_'+Math.random().toString(36).slice(2,7),updated_at:now,value:{
       at:now,kind,table,user:session?.name||'',mode:_casRemoteMode,page:location.pathname+location.search,ua:navigator.userAgent.slice(0,160),
+      v:document.lastModified||'',   // when this tab's portal was published: an old tab (not reloaded since a fix) shows an older date
       items:fresh.slice(0,20).map(it=>({id:it.id,reason:it.reason||'',room:it.row?.room||'',bookingId:it.row?.bookingId||'',leader:it.row?.leaderName||''})),
     }}).then(()=>{},()=>{});
   }catch(e){}
@@ -7400,7 +7409,7 @@ if(location.protocol!=='file:'){
 <script src="modules/menu-cost-edit.js?v=20261025a"></script>
 <script src="modules/menu-kitchen-costing.js?v=20261021a"></script>
 <script src="modules/double-charges.js?v=20261023a"></script>
-<script src="modules/sync-log.js?v=20261102b"></script>
+<script src="modules/sync-log.js?v=20261110a"></script>
 <script src="modules/checkout-balances.js?v=20261101a"></script>
 <script src="modules/host-checklist.js?v=20261102c"></script>
 <script src="modules/host-checklist-all.js?v=20261029d"></script>
