@@ -136,8 +136,10 @@ function bbcTime(t) {
   let h = parseInt(m[1], 10); if (m[3] === 'pm' && h < 12) h += 12; else if (m[3] === 'am' && h === 12) h = 0; else if (!m[3] && h < 7) h += 12;
   return String(h).padStart(2, '0') + ':' + m[2];
 }
-function bbcRange(s) {
-  const parts = String(s || '').split(/\s*[–-]\s*/).filter(Boolean); const start = bbcTime(parts[0]); if (!start) return null;
+// slot.pm: an evening line typed with "pm" and stored as a plain time ("7:15 – 8:30", bbc-auto-sort.js bbcPlainTime)
+function bbcRange(s, pm) {
+  const parts = String(s || '').split(/\s*[–-]\s*/).filter(Boolean); let start = bbcTime(parts[0]); if (!start) return null;
+  if (pm && toMin(start) >= 7 * 60 && toMin(start) < 12 * 60) start = toTime(toMin(start) + 12 * 60);
   let end = parts[1] ? bbcTime(parts[1]) : null;
   // "7:15 pm-8:30" style: an end without am/pm after a pm start is pm too
   if (end && end < start && !/am|pm/i.test(parts[1] || '')) { const e = toMin(end) + 12 * 60; if (e > toMin(start)) end = toTime(e); }
@@ -149,7 +151,7 @@ function bbcEvents(d, ds) {
     const day = (s.days || []).find(x => x.date === ds); if (!day) return;
     (day.slots || []).forEach(x => {
       if (x.type === 'meal') return;
-      const r = bbcRange(x.time); if (!r) return;
+      const r = bbcRange(x.time, x.pm); if (!r) return;
       let what = String(x.activity || '').trim(); if (!what) return;
       if (x.workshop && !/^workshop/i.test(what)) what = 'Workshop: ' + what;
       const inst = x.instructor ? ' w/ ' + x.instructor + (x.coHost ? ' & ' + x.coHost : '') : '', loc = String(x.location || '').trim();
@@ -167,7 +169,8 @@ function buildBriefing(d, ds, part) {
   const evs = [...retreatEvents(d, ds), ...bbcEvents(d, ds)].filter(e => e.start && inPart(e.start));
   const sort = a => a.sort((x, y) => x.start.localeCompare(y.start) || x.end.localeCompare(y.end));
   const t = e => fmt(e.start) + '–' + fmt(e.end);
-  const classes = sort(evs.filter(e => e.type === 'class')).map(e => `${t(e)} · ${ICON[e.shala] || '📍 ' + String(SHALAS[e.shala] || e.shala).toUpperCase()} · ${e.what} (${e.who})${e.note ? ' | ' + e.note : ''}`);
+  const what = e => String(e.what).replace(/\s*🎵/g, '').replace(/\s+/g, ' ').trim();
+  const classes = sort(evs.filter(e => e.type === 'class')).map(e => `${t(e)} · ${ICON[e.shala] || '📍 ' + String(SHALAS[e.shala] || e.shala).toUpperCase()} · ${what(e)} (${e.who})${e.note ? ' | ' + e.note : ''}`);
   const acts = sort(evs.filter(e => e.type === 'act')).map(e => `${t(e)} · ${kindOf(e.what)} · ${e.what} (${e.groups.join(', ')})${e.guide ? ' ' + e.guide : ''}${e.place ? ' | ' + e.place : ''}`);
   const head = new Date(ds + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).toUpperCase() + ' - ' + part;
   return { head, classes, acts };
