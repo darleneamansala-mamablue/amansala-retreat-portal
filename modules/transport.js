@@ -1863,7 +1863,7 @@ function tr2BuildView() {
   // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
   const totalCols = (tr2UpgradeMode ? 13 : 12) + (tr2View === 'departures' ? 1 : 0);   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
   const tableHeader = `<thead><tr>
-    ${TH('Habitación','80px')}${TH('Check In','70px')}${TH('Nombre')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
+    ${TH('Habitación','80px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','70px')}${TH('Nombre')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
     ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}
     ${tr2View === 'departures' ? TH('Online check-out','90px') : ''}${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
@@ -2025,7 +2025,12 @@ function tr2RenderRow(e, color, groupPax) {
 
   // Check In moved into its own column (Jorge's ask 2026-10-18: it was sitting right next
   // to the room number, he wants it separated out).
-  const checkInCell = e.regId
+  // Departures show Check Out instead, same green checkmark (Jorge 2026-11-10)
+  const _outReg = tr2View === 'departures' && e.regId ? AppData.regs.find(r => r.id === e.regId) : null;
+  const checkInCell = _outReg
+    ? `<button onclick="event.stopPropagation();tr2ToggleCheckOut('${e.regId}',${!_outReg.checkedOutAt})" title="${_outReg.checkedOutAt ? 'Checked out -- click to undo' : 'Click to check out'}" style="border:none;border-radius:50%;width:20px;height:20px;line-height:1;font-size:12px;cursor:pointer;flex-shrink:0;background:${_outReg.checkedOutAt ? '#16a34a' : '#f1f5f9'};color:${_outReg.checkedOutAt ? '#fff' : '#9ca3af'}">✓</button>`
+    : tr2View === 'departures' ? ''
+    : e.regId
     ? `<button onclick="event.stopPropagation();tr2ToggleCheckIn('${e.regId}',${!e.checkedIn})" title="${e.checkedIn ? 'Checked in -- click to undo' : 'Click to check in'}" style="border:none;border-radius:50%;width:20px;height:20px;line-height:1;font-size:12px;cursor:pointer;flex-shrink:0;background:${e.checkedIn ? '#16a34a' : '#f1f5f9'};color:${e.checkedIn ? '#fff' : '#9ca3af'}">✓</button>`
     : '';
 
@@ -2317,6 +2322,21 @@ async function tr2ToggleCheckIn(regId, checkIn) {
   if (error) { showToast('Error: ' + error.message); return; }
   reg.checkedInAt = now;
   showToast(checkIn ? 'Checked in ✓' : 'Check-in removed');
+  tr2BuildView();
+}
+
+// Check Out from the Departures list (Jorge 2026-11-10) -- same registrations.checked_out_at the Reservations tab's
+// resCheckOut() uses; asks first, like every other check-out button.
+async function tr2ToggleCheckOut(regId, checkOut) {
+  const reg = AppData.regs.find(r => r.id === regId); if (!reg) return;
+  const names = (reg.guests || []).filter(g => g.name && !g.cancelled).map(g => g.name).join(' & ') || 'this guest';
+  if (!confirm(checkOut ? `Check out ${names} from room ${reg.room}?` : `Undo the check-out of ${names} (room ${reg.room})?`)) return;
+  const now = checkOut ? new Date().toISOString() : null;
+  const { error } = await db.from('registrations').update({ checked_out_at: now }).eq('id', regId);
+  if (error) { showToast('Error: ' + error.message); return; }
+  reg.checkedOutAt = now;
+  try { logActivity(checkOut ? 'Checked out' : 'Check-out undone', `${names} · ${reg.room || ''} (Transport)`, reg.bookingId || null); } catch (e) {}
+  showToast(checkOut ? 'Checked out ✓' : 'Check-out removed');
   tr2BuildView();
 }
 
