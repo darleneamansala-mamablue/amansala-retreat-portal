@@ -21,6 +21,7 @@ const NUMBERS_KEY = 'shala_briefing_numbers';
 const SHALAS = { grande: 'Grande', casa_grande_living: 'Casa Grande Living Room', chica: 'Chica', chica_rooftop: 'Chica Rooftop', chica_lobby: 'Chica Lobby',
   beachfront: 'Beachfront', heaven: 'Heaven Shala', skye: 'Skye', shanti_living: 'Shanti Living Room' };
 const ICON = { grande: '🧘 GRANDE', chica: '🧘 CHICA', beachfront: '🌊 BEACHFRONT', heaven: '☁️ HEAVEN', skye: '🌿 SKYE' };
+const SUNRISE_LOC = { chica_beach: 'Chica Beach', grande_beach: 'Grande Beach', chica_rooftop: 'Chica Rooftop' };
 const BBC_LOC = { beachfront: 'beachfront', grande: 'grande', heaven: 'heaven', chica: 'chica', skye: 'skye', 'meet on the beach': 'beachfront' };
 const BBC_TOURS = new Set(['Tulum Ruins', 'Grande Cenote Tour', 'Mangroves Tour', 'Atik Cenote Tour', 'Muyil Float Tour', 'Excursion']);
 
@@ -95,6 +96,10 @@ function retreatEvents(d, ds) {
         cls((o && o.shala1) || mShala, st, toTime(toMin(st) + ((o && o.dur) || mDur)), effLabel(sr, 'departure', 'Morning Class') + music);
       }
     } else {
+      if (sr.hasSunrise && sr.sunriseStart && (sr.sunriseDates || []).includes(ds)) {
+        const loc = SUNRISE_LOC[sr.sunriseLocation] || sr.sunriseLocation || '';
+        out.push({ type: 'act', start: sr.sunriseStart, end: toTime(toMin(sr.sunriseStart) + (sr.sunriseDur || 45)), what: 'Sunrise Activity' + (loc ? ' — ' + loc : '') + ' (no music)', groups: [title], guide: '' });
+      }
       const aftSkipped = skips.some(s => s.date === ds && s.period === 'aft');
       const mo = ovs.find(o => o.date === ds && o.period === 'morn'), ao = ovs.find(o => o.date === ds && o.period === 'aft');
       const dmStart = (mo && mo.start) || mStart, dmDur = mo ? (mo.dur || mDur) : mDur, dmShala = (mo && mo.shala1) || mShala;
