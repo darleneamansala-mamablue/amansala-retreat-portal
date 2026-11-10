@@ -618,11 +618,18 @@ async function _rptLoadDaily(){
       if(fErr)throw fErr;
       (folios||[]).forEach(f=>{foliosById[f.id]=f;});
     }
+    // where a Booking Engine stay came from (Escape, Extra Night...) -- the Category Report splits Room by it
+    const reqIds=[...new Set(Object.values(foliosById).map(f=>f.booking_request_id).filter(Boolean))];
+    const reqSource={};
+    if(reqIds.length){
+      const{data:reqs}=await db.from('booking_requests').select('id,source').in('id',reqIds);
+      (reqs||[]).forEach(r=>{reqSource[r.id]=r.source||'';});
+    }
     _dailyFolioItems=items.map(i=>{
       const folio=foliosById[i.folio_id]||{};
       const reg=folio.registration_id?AppData.regs.find(r=>r.id===folio.registration_id):null;
       const bk=reg?AppData.bookings.find(b=>b.id===reg.bookingId):null;
-      return{...i,guestName:folio.guest_name||null,bk,reqId:folio.booking_request_id||null,
+      return{...i,guestName:folio.guest_name||null,bk,reqId:folio.booking_request_id||null,reqSource:folio.booking_request_id?(reqSource[folio.booking_request_id]||''):null,
         amount:+(Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100)).toFixed(2)};
     });
     _dailyLoaded=true;_dailyError=null;
@@ -935,16 +942,40 @@ function _rptToggleCategory(cat){
   else _rptCategoryExpanded.add(cat);
   _rptRenderCategoryView();
 }
+// Room split by where the stay came from (Jorge 2026-11-10: "rooms escape, rooms extra night, rooms yoga, rooms OTA"):
+// Booking Engine stays by their source, Room Only bookings by their type, retreats as Yoga Retreats or BBC / RNR,
+// and the A/C 24h lines filed under Room on their own.
+function _rptRoomSub(i){
+  if(/\bA\/?C\b|aire/i.test(i.description||''))return'A/C 24h';
+  if(i.reqId){const s=String(i.reqSource||'');return/extra/i.test(s)?'Extra Night':/escape|^$|booking engine|website/i.test(s)?'Escape':s;}
+  const bk=i.bk;if(!bk)return'Other';
+  const name=String(bk.retreatName||'');
+  if(/bikini|bbc|restore|rnr/i.test(name))return'BBC / RNR';
+  if(bk.bookingType==='room_only'){
+    if(/escape/i.test(name))return'Escape';
+    if(/extra/i.test(name))return'Extra Night';
+    if(/walk/i.test(name))return'Walk-in';
+    if(/ota|cloudbeds|booking\.com|expedia|air ?bnb|hostel/i.test(name))return'OTA';
+    if(/direct/i.test(name))return'Direct';
+    return name||'Room Only';
+  }
+  return'Yoga Retreats';
+}
 function _rptCategoryGroups(){
   const charges=_rptDailyFolioCharges();
   const groups=new Map();
   charges.forEach(i=>{
     const cat=i.category||'Sin categoría';
-    const g=groups.get(cat)||{category:cat,count:0,total:0};
+    const g=groups.get(cat)||{category:cat,count:0,total:0,subs:null};
     g.count++;g.total+=i.amount;
+    if(cat==='Room'){
+      g.subs=g.subs||new Map();const sub=_rptRoomSub(i);
+      const sg=g.subs.get(sub)||{category:'Room · '+sub,count:0,total:0};
+      sg.count++;sg.total+=i.amount;g.subs.set(sub,sg);
+    }
     groups.set(cat,g);
   });
-  return[...groups.values()].sort((a,b)=>b.total-a.total);
+  return[...groups.values()].map(g=>({...g,subs:g.subs?[...g.subs.values()].sort((a,b)=>b.total-a.total):null})).sort((a,b)=>b.total-a.total);
 }
 function _rptRenderCategoryView(){
   const el=document.getElementById('reportsContent');
@@ -1013,7 +1044,15 @@ function _rptRenderCategoryView(){
               <td style="${_rptTd('center')};font-size:13px;color:#6b7280">${g.count}</td>
               <td style="${_rptTd('right')};font-size:13px;font-weight:700;color:#7e22ce">${fmt$(g.total)}</td>
               <td style="${_rptTd('right')};font-size:12px;color:#9ca3af">${grandTotal>0?(g.total/grandTotal*100).toFixed(1):'0.0'}%</td>
-            </tr>${open?_rptCategoryDetailHtml(g.category):''}`;
+            </tr>${g.subs?g.subs.map(sg=>{
+              const sOpen=_rptCategoryExpanded.has(sg.category);
+              const sJs=sg.category.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+              return`<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer;background:#fcfbff" onclick="_rptToggleCategory('${sJs}')">
+              <td style="${_rptTd()};font-size:12.5px;color:#374151;padding-left:38px"><span style="display:inline-block;width:14px;color:#9ca3af">${sOpen?'▾':'▸'}</span>${escHtml(sg.category.replace(/^Room · /,''))}</td>
+              <td style="${_rptTd('center')};font-size:12.5px;color:#6b7280">${sg.count}</td>
+              <td style="${_rptTd('right')};font-size:12.5px;font-weight:600;color:#7e22ce">${fmt$(sg.total)}</td>
+              <td style="${_rptTd('right')};font-size:11.5px;color:#9ca3af">${grandTotal>0?(sg.total/grandTotal*100).toFixed(1):'0.0'}%</td>
+            </tr>${sOpen?_rptCategoryDetailHtml(sg.category):''}`;}).join(''):(open?_rptCategoryDetailHtml(g.category):'')}`;
             }).join('')}
         </tbody>
         ${groups.length>0?`<tfoot>
@@ -1029,7 +1068,7 @@ function _rptRenderCategoryView(){
   </div>`;
 }
 function _rptCategoryDetailHtml(cat){
-  const rows=_rptDailyFolioCharges().filter(i=>(i.category||'Sin categoría')===cat);
+  const rows=_rptDailyFolioCharges().filter(i=>/^Room · /.test(cat)?(i.category==='Room'&&'Room · '+_rptRoomSub(i)===cat):(i.category||'Sin categoría')===cat);
   return`<tr>
     <td colspan="4" style="padding:0;background:#fafafa;border-bottom:1px solid #f3f4f6">
       <table style="width:100%;border-collapse:collapse">
@@ -1060,10 +1099,8 @@ function _rptExportCategoryCsv(){
   const groups=_rptCategoryGroups();
   const grandTotal=groups.reduce((s,g)=>s+g.total,0);
   const header=['Category','Charges','Total','% of Total'];
-  const lines=[header,...groups.map(g=>[
-    g.category,g.count,g.total.toFixed(2),
-    grandTotal>0?(g.total/grandTotal*100).toFixed(1):'0.0',
-  ])].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const row=g=>[g.category,g.count,g.total.toFixed(2),grandTotal>0?(g.total/grandTotal*100).toFixed(1):'0.0'];
+  const lines=[header,...groups.flatMap(g=>[row(g),...(g.subs||[]).map(row)])].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([lines],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
   const a=Object.assign(document.createElement('a'),{href:url,download:`category-report-${_dailyFrom}${_dailyFrom!==_dailyTo?'_to_'+_dailyTo:''}.csv`});
