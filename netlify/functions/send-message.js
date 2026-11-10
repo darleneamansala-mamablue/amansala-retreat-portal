@@ -4,6 +4,7 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
+  if (!(await require('./portal-auth-lib').portalAllowed(event))) return { statusCode: 401, body: 'Sign in again' };   // signed-in portal users only (security review 2026-11-10)
 
   const supaKey      = process.env.SUPABASE_SERVICE_KEY;
   const TWILIO_SID   = process.env.TWILIO_ACCOUNT_SID;

@@ -4316,12 +4316,15 @@ const db=supabase.createClient(SUPA_URL,SUPA_KEY,{accessToken:()=>dbAuthTokenFre
   const _f=window.fetch.bind(window);
   window.fetch=function(input,init){
     const url=typeof input==='string'?input:(input&&input.url)||'';
-    if(!/\/\.netlify\/functions\/send-email(\?|$)/.test(url))return _f(input,init);
-    const h=new Headers((init&&init.headers)||{});
-    try{const t=sessionStorage.getItem('amansala_staff_token');if(t)h.set('X-Portal-Token',t);}catch(e){}
-    try{const p=sessionStorage.getItem('amansala_db_pass');if(p)h.set('Authorization','Bearer '+p);}catch(e){}
+    // every call to this site's own functions carries the session's passes (security review 2026-11-10: functions that
+    // charge cards, post folio lines, send messages or talk to Cloudbeds now answer signed-in users only)
+    if(!/^(\/|https:\/\/amansalaportal\.com\/)\.netlify\/functions\//.test(url))return _f(input,init);
+    const h=new Headers((init&&init.headers)||(typeof input!=='string'&&input&&input.headers)||{});
+    try{const t=sessionStorage.getItem('amansala_staff_token');if(t&&!h.has('X-Portal-Token'))h.set('X-Portal-Token',t);}catch(e){}
+    try{const p=sessionStorage.getItem('amansala_db_pass');if(p&&!h.has('Authorization'))h.set('Authorization','Bearer '+p);}catch(e){}
+    const isEmail=/\/\.netlify\/functions\/send-email(\?|$)/.test(url);
     return _f(input,{...(init||{}),headers:h}).then(r=>{
-      if(r.status===401){try{showToast('⚠ Email not sent: sign out of the portal and sign in again, then retry.');}catch(e){}}
+      if(r.status===401&&isEmail){try{showToast('⚠ Email not sent: sign out of the portal and sign in again, then retry.');}catch(e){}}
       return r;
     });
   };

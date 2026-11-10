@@ -406,7 +406,7 @@ async function runAction(key, who, a, token) {
   else if (x.type === 'record_payment') await send('POST', 'folio_items', { folio_id: x.folioId, description: `Payment — ${x.method}${x.reference ? ': ' + x.reference : ''}`, qty: 1, unit_price: -x.amount, tax_rate: 0, category: 'Payment', staff_name: who.name || null });
   else if (x.type === 'send_payment_link') {
     const fn = require('./send-folio-payment-link');
-    const r = await fn.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ token: x.token, guestName: x.guestName, email: x.email, phone: x.phone, manual: x.manual }) });
+    const r = await fn.handler({ httpMethod: 'POST', internal: true, headers: {}, body: JSON.stringify({ token: x.token, guestName: x.guestName, email: x.email, phone: x.phone, manual: x.manual }) });
     const d = JSON.parse(r.body || '{}'); if (r.statusCode >= 300 || d.error) throw new Error(d.error || 'not sent');
     chk.summary += ` (email: ${(d.results || {}).email || '-'}, WhatsApp: ${(d.results || {}).whatsapp || '-'})`; x.bookingId = x.bookingId || null;
   }

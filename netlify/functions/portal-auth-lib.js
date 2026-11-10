@@ -229,7 +229,25 @@ function staffFromEvent(event, opts = {}) {
   return c;
 }
 
-const cors = () => ({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token' });
+// For functions the portal's own screens call (security review 2026-11-10: several answered anyone): a staff pass in the
+// X-Portal-Token header (the portal's fetch wrapper adds it), or -- when roles are given -- a database pass of one of those roles
+// (Authorization: Bearer), or a call from another function of this site through require() (event.internal: true, which an HTTP
+// request cannot set). Returns who it is, or null.
+async function portalAllowed(event, opts = {}) {
+  if (event && event.internal === true) return { internal: true };
+  const h = (event && event.headers) || {};
+  const st = await staffAllowed({ headers: h, body: '' }, opts);   // header only: some of these bodies carry a folio "token"
+  if (st) return st;
+  const roles = opts.roles || [];
+  if (!roles.length) return null;
+  const c = verifyDbPass(String(h.authorization || h.Authorization || '').replace(/^Bearer\s+/i, ''));
+  if (!c || !roles.includes(c.app_role)) return null;
+  const key = process.env.SUPABASE_SERVICE_KEY, kind = passKind(c);
+  if (key && kind && c.sub) { const t = await revokedAt(key, kind, String(c.sub)); if (t && t >= (c.auth_time || c.iat) * 1000) return null; }
+  return c;
+}
+
+const cors = () => ({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token, Authorization' });
 const reply = (code, data) => ({ statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
 
-module.exports = { staffAllowed, passKind, revokedAt, revokeSessions, staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };
+module.exports = { portalAllowed, staffAllowed, passKind, revokedAt, revokeSessions, staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };

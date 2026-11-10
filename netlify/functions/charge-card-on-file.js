@@ -14,6 +14,7 @@ const STRIPE_API = 'https://api.stripe.com/v1';
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: '' };
   if (event.httpMethod !== 'POST') return jsonErr(405, 'Method Not Allowed');
+  if (!(await require('./portal-auth-lib').portalAllowed(event))) return jsonErr(401, 'Sign in again');   // signed-in portal users only (security review 2026-11-10)
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   const supaKey = process.env.SUPABASE_SERVICE_KEY;

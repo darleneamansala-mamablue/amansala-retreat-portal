@@ -223,7 +223,7 @@ async function run(key, who, x) {
     const done = [], failed = [];
     for (const t of x.targets || []) {
       try {
-        const r = await fn.handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify({ token: t.token, guestName: t.guestName, email: t.email, phone: t.phone, manual: t.manual }) });
+        const r = await fn.handler({ httpMethod: 'POST', internal: true, headers: {}, body: JSON.stringify({ token: t.token, guestName: t.guestName, email: t.email, phone: t.phone, manual: t.manual }) });
         const d = JSON.parse(r.body || '{}');
         if (r.statusCode >= 300 || d.error) failed.push(`${t.guestName} (${d.error || 'not sent'})`);
         else done.push(`${t.guestName} (email ${(d.results || {}).email || '-'}, WhatsApp ${(d.results || {}).whatsapp || '-'})`);

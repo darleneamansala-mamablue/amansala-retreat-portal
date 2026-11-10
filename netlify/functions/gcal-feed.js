@@ -65,6 +65,7 @@ async function fetchEvents(url, filter) {
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return ok({});
+  if (!(await require('./portal-auth-lib').portalAllowed(event, { roles: ['spa'] }))) return ok({ error: 'Sign in again' }, 401);   // signed-in portal users only (security review 2026-11-10)
   const k = process.env.SUPABASE_SERVICE_KEY; if (!k) return ok({ error: 'Server config error' }, 500);
   try {
     if (event.httpMethod === 'POST') {
