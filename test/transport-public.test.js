@@ -2,7 +2,7 @@
 // (driver-data.js, transport-public.js): only that company's rides and no guest emails/phones for drivers, a driver's
 // "confirmed" never overwrites office edits, a guest update keeps the office's fields, the edit link needs its key.
 const assert = require('assert');
-process.env.SUPABASE_SERVICE_KEY = 'svc'; process.env.RESEND_API_KEY = 're';
+process.env.SUPABASE_SERVICE_KEY = 'svc'; process.env.RESEND_API_KEY = 're'; process.env.SUPABASE_JWT_SECRET = 'jwt-test';
 let T, mails;
 const day = n => new Date(Date.now() + n * 86400e3).toISOString().slice(0, 10);
 function reset() {
@@ -34,7 +34,9 @@ global.fetch = async (url, opts = {}) => {
   return json(T[table].filter(filt));
 };
 const drv = require('../netlify/functions/driver-data'), tp = require('../netlify/functions/transport-public');
-const call = async (fn, ev) => { const r = await fn.handler(ev); return { code: r.statusCode, ...JSON.parse(r.body) }; };
+const A = require('../netlify/functions/portal-auth-lib');
+const asDriver = n => ({ authorization: 'Bearer ' + A.signDbPass({ sub: 'drv_' + n, app_role: 'driver', name: n }) });
+const call = async (fn, ev) => { if (fn === drv && !(ev.headers && ev.headers.authorization)) ev = { ...ev, headers: asDriver(((ev.queryStringParameters || {}).co || JSON.parse(ev.body || '{}').co) === 'salomon' ? 'Salamon' : 'Irving') }; const r = await fn.handler(ev); return { code: r.statusCode, ...JSON.parse(r.body) }; };
 
 (async () => {
   reset();
@@ -47,7 +49,10 @@ const call = async (fn, ev) => { const r = await fn.handler(ev); return { code: 
   for (const secret of ['ana@x.com', 'bea@x.com', '111', '222', 'folioCharged']) assert.ok(!blob.includes(secret), 'driver data leaks ' + secret);
   assert.strictEqual(irv.rows.find(r => r.id === 'tr_1').room, '12', 'room matched on the server');
   assert.ok(irv.rows[0].emailKey && irv.rows[0].emailKey.length === 16);
-  assert.strictEqual((await call(drv, { httpMethod: 'GET', queryStringParameters: { co: 'x' } })).code, 400);
+  // a driver always gets their own company, whatever the link says; an account with no company and no sign-in are refused
+  assert.deepStrictEqual((await call(drv, { httpMethod: 'GET', queryStringParameters: { co: 'x' }, headers: asDriver('Salamon') })).rows.map(r => r.id), ['tr_1']);
+  assert.strictEqual((await call(drv, { httpMethod: 'GET', queryStringParameters: { co: 'irving' }, headers: asDriver('Pedro') })).code, 403);
+  assert.strictEqual((await drv.handler({ httpMethod: 'GET', queryStringParameters: { co: 'irving' }, headers: {} })).statusCode, 401);
   console.log("ok   - drivers see only their company's rides, with rooms, without emails/phones/office fields");
 
   // confirming: only driver_confirmed changes, on the row as it is now; another company's row is refused

@@ -195,6 +195,7 @@ body { font-family: 'Jost', sans-serif; background: #f0f4f8; min-height: 100vh; 
   <div style="text-align:right">
     <div class="header-driver" id="hdr-driver">Driver View</div>
     <div class="header-co" id="hdr-co"></div>
+    <a href="#" id="drv-logout" onclick="drvLogout();return false" style="display:none;font-size:11px;color:inherit;opacity:.8">Salir</a>
   </div>
 </div>
 
@@ -222,7 +223,52 @@ const TR_ETA  = { cancun: 90,  tulum: 45  };
 
 // Parse URL param
 const params = new URLSearchParams(location.search);
-const CO = (params.get('co') || '').toLowerCase();
+let CO = (params.get('co') || '').toLowerCase();
+
+// Sign in (Jorge 2026-11-10, security review: the link alone used to show every ride to anyone who had it). Each company signs
+// in with its driver account; the rides shown are that account's company, whatever the link says. The pass is kept on this
+// phone and renewed every few minutes while the page is open (session-refresh), so the driver does not sign in every day.
+const DRV_PASS = 'amansala_driver_pass';
+const drvGet = () => { try { return localStorage.getItem(DRV_PASS); } catch (e) { return null; } };
+const drvSet = v => { try { v ? localStorage.setItem(DRV_PASS, v) : localStorage.removeItem(DRV_PASS); } catch (e) {} };
+const drvAuth = (h = {}) => { const p = drvGet(); return p ? { ...h, Authorization: 'Bearer ' + p } : h; };
+function drvLoginScreen(msg) {
+  document.getElementById('drv-logout').style.display = 'none';
+  document.getElementById('main-body').innerHTML = `<div class="empty" style="max-width:320px;margin:0 auto">
+    <div class="empty-icon">🔒</div><div class="empty-title">Iniciar sesión</div>
+    <input id="drv-u" placeholder="Usuario" autocomplete="username" style="width:100%;padding:10px;margin:10px 0 6px;border:1.5px solid #d6cfc4;border-radius:8px;font-size:15px;box-sizing:border-box">
+    <input id="drv-p" type="password" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')drvLogin()" style="width:100%;padding:10px;margin-bottom:10px;border:1.5px solid #d6cfc4;border-radius:8px;font-size:15px;box-sizing:border-box">
+    <button onclick="drvLogin()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#0f766e;color:#fff;font-size:15px;font-weight:700">Entrar</button>
+    <div id="drv-msg" style="margin-top:8px;color:#b91c1c;font-size:13px">${msg || ''}</div></div>`;
+}
+async function drvLogin() {
+  const u = document.getElementById('drv-u').value.trim(), pw = document.getElementById('drv-p').value;
+  if (!u || !pw) return;
+  try {
+    const r = await fetch('/.netlify/functions/portal-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'driver', username: u, password: pw }) });
+    const d = await r.json();
+    if (!d.success || !d.dbPass) { document.getElementById('drv-msg').textContent = 'Usuario o contraseña incorrectos'; return; }
+    drvSet(d.dbPass); drvStart();
+  } catch (e) { document.getElementById('drv-msg').textContent = 'Sin conexión, intenta de nuevo'; }
+}
+function drvLogout() { drvSet(null); drvLoginScreen(); }
+async function drvRenew() {
+  const p = drvGet(); if (!p) return;
+  try {
+    const r = await fetch('/.netlify/functions/session-refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dbPass: p }) });
+    if (r.status === 401) { drvLogout(); return; }
+    if (r.ok) { const d = await r.json(); if (d.dbPass) drvSet(d.dbPass); }
+  } catch (e) {}
+}
+setInterval(drvRenew, 3 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) drvRenew(); });
+async function drvStart() {
+  if (!drvGet()) { drvLoginScreen(); return; }
+  await drvRenew();
+  if (!drvGet()) return;
+  document.getElementById('drv-logout').style.display = '';
+  loadData();
+}
 
 // Company config
 const COMPANIES = {
@@ -231,17 +277,9 @@ const COMPANIES = {
 };
 
 const co = COMPANIES[CO];
-if (!co) {
-  document.getElementById('main-body').innerHTML = `<div class="empty">
-    <div class="empty-icon">🚫</div>
-    <div class="empty-title">Link inválido</div>
-    <div>Usa ?co=irving o ?co=salomon</div>
-  </div>`;
-} else {
-  document.getElementById('hdr-driver').textContent = co.name;
-  document.getElementById('hdr-co').textContent = co.label;
-  loadData();
-}
+function drvShowCompany(c) { const x = COMPANIES[c]; if (!x) return; CO = c; document.getElementById('hdr-driver').textContent = x.name; document.getElementById('hdr-co').textContent = x.label; }
+if (co) drvShowCompany(CO);
+drvStart();
 
 function matchesCo(airport, type) {
   if (CO === 'irving') {
@@ -263,8 +301,10 @@ let _filterDate = '';
 async function loadData() {
   let rows = [], bookings = [];
   try {
-    const r = await fetch(DRIVER_FN + '?co=' + encodeURIComponent(CO));
+    const r = await fetch(DRIVER_FN + '?co=' + encodeURIComponent(CO || 'irving'), { headers: drvAuth() });
+    if (r.status === 401 || r.status === 403) { drvSet(null); drvLoginScreen(r.status === 403 ? 'Esta cuenta no tiene compañía de transporte' : 'Inicia sesión'); return; }
     const d = await r.json();
+    if (d.co) drvShowCompany(d.co);
     rows = d.rows || []; bookings = d.bookings || [];
     _userGroupMap = new Map(d.groups || []);
   } catch (e) { console.error('Could not load rides', e); }
@@ -392,7 +432,7 @@ async function confirmGroup(idsStr, confirmed) {
   //    loaded are kept -- the page used to write back its whole old copy of the ride)
   let failed = rowIds;
   try {
-    const resp = await fetch(DRIVER_FN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ co: CO, rowIds, confirmed }) });
+    const resp = await fetch(DRIVER_FN, { method: 'POST', headers: drvAuth({ 'Content-Type': 'application/json' }), body: JSON.stringify({ co: CO, rowIds, confirmed }) });
     const d = await resp.json();
     failed = resp.ok ? (d.failed || []) : rowIds;
   } catch (err) { console.error('Confirm error:', err); }

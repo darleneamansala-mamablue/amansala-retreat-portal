@@ -9,7 +9,11 @@ const crypto = require('crypto');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
 const hdrs = key => ({ apikey: key, Authorization: `Bearer ${key}` });
-const reply = (code, data) => ({ statusCode: code, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+const reply = (code, data) => ({ statusCode: code, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Portal-Token', 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+// Drivers sign in (Jorge 2026-11-10, security review: ?co=irving answered anyone with every ride, guest names and flights):
+// a driver's database pass (portal-login, kind driver) or a staff pass. A driver only ever gets their own company's rides --
+// the company comes from the account, not from the link.
+const coOfAccount = n => /irving/i.test(n || '') ? 'irving' : /sal[oa]m[oó]n/i.test(n || '') ? 'salomon' : '';
 const DATA_KEYS = ['firstName', 'lastName', 'arrivalDate', 'arrivalTime', 'arrivalAirport', 'arrivalOT', 'departureDate', 'departureTime', 'departureAirport', 'departureOT',
   'flightNumber', 'willingToShare', 'notes', 'driver_confirmed', 'departurePickupOverride', 'flightLabel'];
 
@@ -34,12 +38,16 @@ async function getAll(key, path) {
 }
 
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' }, body: '' };
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Portal-Token' }, body: '' };
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!key) return reply(500, { error: 'Server config error' });
+  const who = await require('./portal-auth-lib').portalAllowed(event, { roles: ['driver'] });
+  if (!who) return reply(401, { error: 'Sign in' });
+  const accountCo = who.app_role === 'driver' ? coOfAccount(who.name) : null;
+  if (who.app_role === 'driver' && !accountCo) return reply(403, { error: 'This account is not linked to a transport company' });
   try {
     if (event.httpMethod === 'GET') {
-      const co = String((event.queryStringParameters || {}).co || '').toLowerCase();
+      const co = accountCo || String((event.queryStringParameters || {}).co || '').toLowerCase();
       if (co !== 'irving' && co !== 'salomon') return reply(400, { error: 'Unknown company' });
       const [rows, bookings, groupsRow] = await Promise.all([
         getAll(key, 'transport?select=id,booking_id,data,submitted_at'),
@@ -70,6 +78,7 @@ exports.handler = async (event) => {
       };
       const used = new Set(mine.map(r => r.booking_id));
       return reply(200, {
+        co, name: who.name || '',
         rows: mine.map(r => {
           const d = r.data || {}, data = {};
           DATA_KEYS.forEach(k => { if (d[k] !== undefined) data[k] = d[k]; });
@@ -84,7 +93,7 @@ exports.handler = async (event) => {
     if (event.httpMethod !== 'POST') return reply(405, { error: 'Method Not Allowed' });
     let b;
     try { b = JSON.parse(event.body || '{}'); } catch (e) { return reply(400, { error: 'Invalid JSON' }); }
-    const co = String(b.co || '').toLowerCase();
+    const co = accountCo || String(b.co || '').toLowerCase();
     if (co !== 'irving' && co !== 'salomon') return reply(400, { error: 'Unknown company' });
     const ids = (Array.isArray(b.rowIds) ? b.rowIds : []).map(String).slice(0, 50);
     const failed = [];
