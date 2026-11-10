@@ -1043,8 +1043,8 @@ function _rptCategoryGroups(){
   }
   return[...groups.values()].map(g=>({...g,subs:g.subs?[...g.subs.values()].sort((a,b)=>b.total-a.total):null})).sort((a,b)=>b.total-a.total);
 }
-// The group retreats staying in the range: Financial Summary's room / package revenue (_calcRoomRevenue), split by night when
-// the retreat crosses the range. Not BBC / RNR (WeTravel orders) and not a "We take payment" retreat -- their rooms are on the
+// The group retreats that START in the range, each with its whole room / package revenue (Financial Summary's _calcRoomRevenue)
+// -- a retreat is never split between two months (Jorge 2026-11-10: Wendy Oberg, Oct 31 – Nov 4, all in October). Not BBC / RNR (WeTravel orders) and not a "We take payment" retreat -- their rooms are on the
 // guests' folios and are already under Room.
 function _rptYogaGroups(){
   const from=_rptD(_dailyFrom),to=_rptD(_dailyTo)+_rptDayMs,out=[];
@@ -1052,13 +1052,12 @@ function _rptYogaGroups(){
     if(bk.bookingType==='room_only'||bk.status==='cancelled'||!bk.startDate||!bk.endDate)return;
     if(_rptWtp.has(bk.id)||/bikini|bbc|restore|rnr|we ?travel/i.test((bk.retreatName||'')+' '+(bk.leaderName||'')))return;
     const s0=_rptD(bk.startDate),e0=_rptD(bk.endDate),nights=Math.max(1,Math.round((e0-s0)/_rptDayMs));
-    const inN=Math.max(0,Math.round((Math.min(e0,to)-Math.max(s0,from))/_rptDayMs));
-    if(inN<=0)return;
+    if(s0<from||s0>=to)return;
+    const inN=nights;
     let rev=0;try{rev=typeof _calcRoomRevenue==='function'?_calcRoomRevenue(bk):0;}catch(e){}
     if(!(rev>0))return;
     const paid=(bk.payments||[]).reduce((t,p)=>t+(p.amount||0),0);
-    const part=Math.min(inN,nights)/nights;
-    out.push({category:'Yoga Retreats · '+(bk.leaderName||bk.retreatName||'Retreat'),count:1,total:+(rev*part).toFixed(2),bk,rev,paid,nightsIn:Math.min(inN,nights),nights});
+    out.push({category:'Yoga Retreats · '+(bk.leaderName||bk.retreatName||'Retreat'),count:1,total:+rev.toFixed(2),bk,rev,paid,nightsIn:inN,nights});
   });
   return out;
 }
@@ -1106,7 +1105,7 @@ function _rptRenderCategoryView(){
     <div style="display:flex;align-items:center;gap:8px;margin:-8px 0 16px;font-size:12.5px;color:#6b7280;flex-wrap:wrap">
       <span style="font-weight:700;color:#374151">Room by:</span>
       ${[['posted','Charge date'],['stay','Stay date']].map(([m,l])=>`<button onclick="_rptSetCatMode('${m}')" style="padding:4px 12px;border-radius:999px;border:1.5px solid ${_catMode===m?'#0e5a5a':'var(--border)'};background:${_catMode===m?'#0e5a5a':'#fff'};color:${_catMode===m?'#fff':'#374151'};font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">${l}</button>`).join('')}
-      <span>${_catMode==='stay'?'Room = the nights stayed in these dates (a stay that crosses the range is split by night). Everything else is by the date it was charged.':'Every category by the date the charge was put on the folio.'}</span>
+      <span>${_catMode==='stay'?'Room = the nights stayed in these dates (a stay that crosses the range is split by night). Yoga Retreats = the groups that start in these dates, whole. Everything else is by the date it was charged.':'Every category by the date the charge was put on the folio.'}</span>
     </div>
 
     ${_dailyError?`<div style="font-size:12px;color:#dc2626;margin-bottom:14px;padding:8px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">⚠ ${escHtml(_dailyError)}</div>`:''}
@@ -1167,7 +1166,7 @@ function _rptCategoryDetailHtml(cat){
     const y=_rptYogaGroups().find(x=>x.category===cat);if(!y)return'';
     const bk=y.bk,bal=y.rev-y.paid;
     return`<tr><td colspan="4" style="padding:10px 14px 12px 56px;background:#fafafa;border-bottom:1px solid #f3f4f6;font-size:12px;color:#374151">
-      ${escHtml(bk.retreatName&&bk.retreatName!==bk.leaderName?bk.retreatName+' · ':'')}${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)} · ${y.nightsIn} of ${y.nights} night${y.nights===1?'':'s'} in range
+      ${escHtml(bk.retreatName&&bk.retreatName!==bk.leaderName?bk.retreatName+' · ':'')}${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)} · ${y.nights} night${y.nights===1?'':'s'} (counted whole in the month it starts)
       <div style="margin-top:4px;color:#6b7280">Group total (room / package) ${fmt$(y.rev)} · Paid ${fmt$(y.paid)} · <b style="color:${bal>0.005?'#c2410c':'#15803d'}">Balance ${fmt$(bal)}</b></div></td></tr>`;
   }
   const rows=_rptCatCharges().filter(i=>/^Room · /.test(cat)?(_rptCat(i)==='Room'&&'Room · '+_rptRoomSub(i)===cat):_rptCat(i)===cat);
