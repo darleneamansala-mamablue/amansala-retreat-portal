@@ -30,7 +30,16 @@ exports.handler = async (event) => {
     const id = String(b.id || '').slice(0, 80);
     // sign one person out of every open tab (Jorge 2026-11-10: the sessions showing "Sin pase" in the Sync Log); the next pass
     // renewal of each tab is refused, the tab goes to the login and loads the current portal
-    if (b.action === 'signOut') { if (!id) return reply(400, { error: 'Missing account' }); return reply(200, { ok: await revokeSessions(key, 'staff', id) }); }
+    if (b.action === 'signOut') {
+      let ids = id ? [id] : [];
+      if (!ids.length && b.name) {   // by name, for an account the Manage Staff list on that screen does not have
+        const rows = await (await fetch(`${SUPABASE_URL}/rest/v1/staff?name=ilike.${encodeURIComponent(String(b.name).trim())}&select=id`, { headers: h })).json();
+        ids = (Array.isArray(rows) ? rows : []).map(r => String(r.id));
+      }
+      if (!ids.length) return reply(404, { error: 'Account not found' });
+      for (const x of ids) await revokeSessions(key, 'staff', x);
+      return reply(200, { ok: true, signedOut: ids.length });
+    }
     if (b.action === 'save') {
       const name = String(b.name || '').trim().slice(0, 80), username = String(b.username || '').trim().toLowerCase().slice(0, 60);
       const role = ['admin', 'staff'].includes(b.role) ? b.role : 'staff', password = String(b.password || '');
