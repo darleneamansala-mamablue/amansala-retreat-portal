@@ -1208,6 +1208,8 @@ async function bdAddItem(fid){
     if(!staffId){showToast('Selecciona el staff de la comisión');return;}
   }
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
+  // every charge needs a category, or it lands in the Category Report's "Sin categoría" (Jorge 2026-11-10)
+  if(!category){showToast('Choose a category for this charge');return;}
   // a closed folio takes no new charges (Jorge 2026-11-06; sql/folio_closed_guard.sql enforces it for every screen and job)
   {const {data:fs}=await db.from('folios').select('status').eq('id',fid).maybeSingle();if(fs&&fs.status!=='open'&&!(price<0)){showToast('This folio is closed — reopen it to add charges.');return;}}
   const {data:newItem,error}=await db.from('folio_items').insert({folio_id:fid,description:desc,qty,unit_price:price,tax_rate:tax,category,staff_name:getCurrentSession()?.name||null}).select().single();
@@ -1240,6 +1242,7 @@ async function bdSaveEditItem(fid,itemId){
     if(!staffId){showToast('Selecciona el staff de la comisión');return;}
   }
   if(!desc||isNaN(price)){showToast('Enter a description and price');return;}
+  if(!category){showToast('Choose a category for this charge');return;}
   const origItem=_bdFolios.find(x=>x.folio.id===fid)?.items.find(x=>x.id===itemId);
   const {error}=await db.from('folio_items').update({description:desc,qty,unit_price:price,tax_rate:tax,category}).eq('id',itemId);
   if(error){showToast('Error: '+error.message);return;}
