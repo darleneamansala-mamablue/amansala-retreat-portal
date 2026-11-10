@@ -1861,9 +1861,9 @@ function tr2BuildView() {
   // next to the room number, and in Upgrade mode an Options column (lateral same-category
   // room swaps, see tr2OptionsCell/tr2SwapRooms) sits right before Upgrade. Column count
   // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
-  const totalCols = (tr2UpgradeMode ? 13 : 12) + (tr2View === 'departures' ? 1 : 0);   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
+  const totalCols = (tr2UpgradeMode ? 14 : 13) + (tr2View === 'departures' ? 1 : 0);   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
   const tableHeader = `<thead><tr>
-    ${TH('Habitación','80px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','70px')}${TH('Nombre')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
+    ${TH('Habitación','80px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','70px')}${TH('Nombre')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
     ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}
     ${tr2View === 'departures' ? TH('Online check-out','90px') : ''}${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
@@ -2040,6 +2040,7 @@ function tr2RenderRow(e, color, groupPax) {
     ${TD(e.room ? escHtml(e.room) : `<span style="color:#d1d5db">—</span>`, 'font-weight:600')}
     ${TD(checkInCell, 'text-align:center')}
     ${TD(nameCell)}
+    ${TD(typeof trbBadge === 'function' ? trbBadge(e.regId, e.guest, e) : '')}
     ${TD(typeBadge)}
     ${TD(airportBadge, 'text-align:center')}
     ${TD(timeCell)}

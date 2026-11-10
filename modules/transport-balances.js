@@ -1,6 +1,6 @@
 // ===== transport-balances.js — Transport log: show what each guest still owes =====
 // Loaded as a classic script AFTER transport.js; shares global scope. Standalone: wraps tr2LoadData (to read the guests' bills once the log has
-// loaded, then redraw) and tr2RenderRow (to add a small badge under the guest's name). Badge: red "$761.80 due" when the bill is open, green
+// loaded, then redraw) and tr2RenderRow; the badge is drawn by transport.js in the Balance column next to the name. Badge: red "$761.80 due" when the bill is open, green
 // "Paid ✓" when it is $0.00, grey "Credit $x" when overpaid; nothing when the guest has no bill. A bill is every folio on the guest's registration:
 // qty x price plus the line's tax rate, payments being negative lines (the same sum as Reservations > Departures and guest-pay.html).
 // Read-only. Only guests matched to a registration (row.regId) get a badge; guests staying in the next 30 days or checked out in the last 3 are read.
@@ -103,8 +103,8 @@ function trbBadge(regId, guest, e) {
   if (typeof tr2RenderRow !== 'function' || typeof tr2LoadData !== 'function') return;
   const origRow = window.tr2RenderRow, origLoad = window.tr2LoadData;
   window.tr2RenderRow = function (e) {
-    const html = origRow.apply(this, arguments);
-    try { const badge = trbBadge(e && e.regId, e && e.guest, e); return badge ? html.replace(/(<div style="font-weight:700;color:#111827">[^<]*<\/div>)/, '$1' + badge) : html; } catch (err) { return html; }
+    // the badge now has its own Balance column next to the name (transport.js, Jorge 2026-11-10)
+    return origRow.apply(this, arguments);
   };
   window.tr2LoadData = async function () {
     const out = await origLoad.apply(this, arguments);
