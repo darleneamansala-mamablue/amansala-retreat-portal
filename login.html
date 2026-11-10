@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Amansala — Sign in</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Jost',-apple-system,Helvetica,Arial,sans-serif;background:#f1ece6;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+  .card{background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.08);padding:34px 30px;width:100%;max-width:360px;text-align:center}
+  h1{font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;color:#1a4a4a;font-size:30px}
+  .sub{font-size:11px;letter-spacing:3px;color:#8a7e74;margin:4px 0 22px;text-transform:uppercase}
+  input{width:100%;padding:11px 13px;border:1.5px solid #d4cdc5;border-radius:9px;font-size:14px;margin-bottom:10px;background:#faf8f5}
+  button{width:100%;padding:12px;border:none;border-radius:9px;background:#2d6a6a;color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px}
+  .err{color:#b91c1c;font-size:13px;min-height:18px;margin-top:10px}
+  .help{font-size:12px;color:#8a7e74;margin-top:14px}
+  .help a{color:#2d6a6a}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Amansala</h1>
+  <div class="sub" id="sub">Staff portal</div>
+  <form id="f" onsubmit="go(event)">
+    <input id="u" placeholder="Username" autocomplete="username" autocapitalize="off">
+    <input id="p" type="password" placeholder="Password" autocomplete="current-password">
+    <button type="submit">Sign in</button>
+  </form>
+  <div class="err" id="err"></div>
+  <div class="help">Need access? Contact <a href="mailto:darlene@amansala.com">darlene@amansala.com</a></div>
+</div>
+<script>
+// The sign-in page the portal-gate edge function shows in place of the portal until this browser signs in (2026-11-10).
+// It signs in exactly like the portal's own login screens (same functions, same session keys), then reloads the same address,
+// which now loads the portal.
+const q = new URLSearchParams(location.search), mode = q.get('mode') || (location.pathname === '/spa-staff' ? 'spa-staff' : '');
+const KIND = { 'spa-staff': 'spa', driver: 'driver', confirm: 'confirm' }[mode] || 'staff';
+document.getElementById('sub').textContent = { staff: 'Staff portal', spa: 'Spa staff', driver: 'Drivers', confirm: 'Staff confirmation' }[KIND];
+if (mode === 'teacher') document.getElementById('err').textContent = 'This retreat link is not valid. Please ask Amansala for your link.';
+async function go(ev) {
+  ev.preventDefault();
+  const username = document.getElementById('u').value.trim().toLowerCase(), password = document.getElementById('p').value, err = document.getElementById('err');
+  if (!username || !password) { err.textContent = 'Please enter your username and password.'; return; }
+  err.textContent = 'Checking…';
+  let d;
+  try {
+    const r = await fetch(KIND === 'staff' ? '/.netlify/functions/staff-login' : '/.netlify/functions/portal-login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(KIND === 'staff' ? { username, password } : { kind: KIND, username, password }) });
+    d = await r.json();
+  } catch (e) { err.textContent = 'Network error — please try again.'; return; }
+  if (!d || !d.success) { err.textContent = 'Incorrect username or password.'; return; }
+  try {
+    const ss = sessionStorage, s = d.session || {};
+    if (d.dbPass) { ss.setItem('amansala_db_pass', d.dbPass); ss.removeItem('amansala_pass_unavailable'); } else ss.setItem('amansala_pass_unavailable', '1');
+    if (KIND === 'staff') {
+      if (d.token) ss.setItem('amansala_staff_token', d.token);
+      ss.setItem('amansala_staff_session', JSON.stringify(s));
+      localStorage.setItem('ama_admin_device', '1'); localStorage.removeItem('ama_teacher_persist'); localStorage.removeItem('teacher_bk_id');
+    } else {
+      const sess = JSON.stringify({ id: s.id, name: s.name, username: String(s.username || username).toLowerCase() });
+      if (KIND === 'spa') { ss.setItem('amansala_spa_staff_session', sess); ss.setItem('ama_spa_staff_mode', '1'); localStorage.setItem('ama_spa_staff_persist', '1'); }
+      if (KIND === 'driver') { ss.setItem('amansala_driver_session', sess); ss.setItem('ama_driver_mode', '1'); localStorage.setItem('ama_driver_persist', '1'); }
+      if (KIND === 'confirm') { ss.setItem('amansala_staff_confirm_session', sess); ss.setItem('ama_confirm_mode', '1'); localStorage.setItem('ama_confirm_persist', '1'); }
+    }
+  } catch (e) {}
+  location.reload();
+}
+</script>
+</body>
+</html>

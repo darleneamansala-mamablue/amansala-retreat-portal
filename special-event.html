@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Special Event Inquiry — Amansala</title>
+</head>
+<body>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@300;400;500;600;700&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Jost',sans-serif;background:#f8f4f0;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px}
+    .ef-wrap{background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.1);max-width:560px;width:100%;overflow:hidden}
+    .ef-hero{background:linear-gradient(135deg,#1a3333 0%,#2d6a6a 100%);padding:36px 32px 28px;text-align:center}
+    .ef-hero h1{font-family:'Cormorant Garamond',serif;color:#fff;font-size:28px;font-weight:600;margin-bottom:6px}
+    .ef-hero p{color:rgba(255,255,255,.75);font-size:14px;line-height:1.6}
+    .ef-body{padding:28px 32px 32px}
+    .ef-field{margin-bottom:16px}
+    .ef-label{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#8a7e74;margin-bottom:5px}
+    .ef-input{width:100%;padding:10px 14px;border:1.5px solid #d4cdc5;border-radius:10px;font-family:'Jost',sans-serif;font-size:14px;color:#2d2520;background:#fff;transition:border-color .15s}
+    .ef-input:focus{outline:none;border-color:#a855f7}
+    .ef-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .ef-submit{width:100%;padding:14px;background:linear-gradient(135deg,#9333ea,#a855f7);color:#fff;border:none;border-radius:12px;font-family:'Jost',sans-serif;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.3px;margin-top:8px;transition:opacity .15s}
+    .ef-submit:hover{opacity:.9}
+    .ef-thanks{display:none;text-align:center;padding:40px 32px}
+    .ef-thanks h2{font-family:'Cormorant Garamond',serif;font-size:24px;color:#1a3333;margin-bottom:10px}
+    .ef-thanks p{font-size:14px;color:#8a7e74;line-height:1.7}
+    select.ef-input{cursor:pointer}
+    textarea.ef-input{resize:vertical;min-height:90px}
+  </style>
+  <div class="ef-wrap">
+    <div class="ef-hero">
+      <h1>Special Event Inquiry</h1>
+      <p>Weddings · Bachelorette Parties · Corporate Retreats<br>Birthday Celebrations · Private Groups & More</p>
+    </div>
+    <div class="ef-body">
+      <form id="efForm">
+        <div class="ef-field">
+          <label class="ef-label">Event Type *</label>
+          <select id="efType" class="ef-input" required>
+            <option value="">Select your event type…</option>
+            <option value="wedding">Wedding</option>
+            <option value="bachelorette">Bachelorette / Bach Party</option>
+            <option value="corporate">Corporate Retreat</option>
+            <option value="birthday">Birthday Celebration</option>
+            <option value="anniversary">Anniversary</option>
+            <option value="family">Family Reunion</option>
+            <option value="group">Private Group</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="ef-row">
+          <div class="ef-field">
+            <label class="ef-label">Your Name *</label>
+            <input id="efContact" class="ef-input" type="text" placeholder="Full name" required>
+          </div>
+          <div class="ef-field">
+            <label class="ef-label">Email *</label>
+            <input id="efEmail" class="ef-input" type="email" placeholder="email@example.com" required>
+          </div>
+        </div>
+        <div class="ef-row">
+          <div class="ef-field">
+            <label class="ef-label">Phone</label>
+            <input id="efPhone" class="ef-input" type="tel" placeholder="+1 (555) 000-0000">
+          </div>
+          <div class="ef-field">
+            <label class="ef-label">Estimated Guests</label>
+            <input id="efPax" class="ef-input" type="number" min="1" placeholder="How many people?">
+          </div>
+        </div>
+        <div class="ef-row">
+          <div class="ef-field">
+            <label class="ef-label">Preferred Start Date *</label>
+            <input id="efStart" class="ef-input" type="date" required>
+          </div>
+          <div class="ef-field">
+            <label class="ef-label">Preferred End Date *</label>
+            <input id="efEnd" class="ef-input" type="date" required>
+          </div>
+        </div>
+        <div class="ef-field">
+          <label class="ef-label">Tell Us About Your Event</label>
+          <textarea id="efNotes" class="ef-input" placeholder="Share any special requests, ideas, or questions…"></textarea>
+        </div>
+        <button type="submit" class="ef-submit">Send Inquiry</button>
+      </form>
+      <div class="ef-thanks" id="efThanks">
+        <div style="width:56px;height:56px;background:#f3e8ff;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:26px">✨</div>
+        <h2>We received your inquiry!</h2>
+        <p>Thank you for your interest in hosting your event at Amansala. Our team will be in touch within 1–2 business days to discuss the details and explore how we can make your vision come to life.</p>
+        <p style="margin-top:14px;font-size:13px;color:#a89e94">amansala.com</p>
+      </div>
+    </div>
+  </div>
+<script>
+// The public special-event inquiry form, on its own page (2026-11-10): it used to be the portal itself opened with ?mode=event,
+// which handed the whole portal program to anyone. Same form, same saving (inquiry-submit + the Netlify form notification).
+document.getElementById('efForm').addEventListener('submit',async function(ev){
+    ev.preventDefault();
+    const type=document.getElementById('efType').value;
+    const contact=document.getElementById('efContact').value.trim();
+    const email=document.getElementById('efEmail').value.trim();
+    const startDate=document.getElementById('efStart').value;
+    const endDate=document.getElementById('efEnd').value;
+    if(!type||!contact||!email||!startDate||!endDate)return;
+    // saved by netlify/functions/inquiry-submit.js (2026-11-02): this form used to rewrite the whole event list with the
+    // public database key (two inquiries at once lost one)
+    try{
+      await fetch('/.netlify/functions/inquiry-submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'special',type,name:contact,email,
+        phone:document.getElementById('efPhone').value.trim(),pax:document.getElementById('efPax').value,startDate,endDate,notes:document.getElementById('efNotes').value.trim()})});
+    }catch(e){console.warn('Event submission error:',e);}
+    // Email notification via Netlify Forms
+    try{
+      const fd=new URLSearchParams();
+      fd.append('form-name','special-event-inquiry');
+      fd.append('event_type',type);
+      fd.append('name',contact);
+      fd.append('email',email);
+      fd.append('phone',document.getElementById('efPhone').value.trim());
+      fd.append('guests',document.getElementById('efPax').value||'');
+      fd.append('start_date',startDate);
+      fd.append('end_date',endDate);
+      fd.append('notes',document.getElementById('efNotes').value.trim());
+      await fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:fd.toString()});
+    }catch(e){console.warn('Netlify form notify failed',e);}
+    document.getElementById('efForm').style.display='none';
+    document.getElementById('efThanks').style.display='block';
+  });
+</script>
+</body>
+</html>

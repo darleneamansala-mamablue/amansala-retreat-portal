@@ -19,7 +19,9 @@ exports.handler = async (event) => {
   try {
     const acct = await checkLogin(key, kind, body.username, String(body.password || ''));
     if (!acct) return reply(200, { success: false });
-    return reply(200, { success: true, session: { id: acct.id, name: acct.name, username: acct.username }, token: signToken({ kind, sub: acct.id, name: acct.name }), dbPass: signDbPass({ sub: acct.id, app_role: kind, name: acct.name }) });
+    const r = reply(200, { success: true, session: { id: acct.id, name: acct.name, username: acct.username }, token: signToken({ kind, sub: acct.id, name: acct.name }), dbPass: signDbPass({ sub: acct.id, app_role: kind, name: acct.name }) });
+    r.headers['Set-Cookie'] = require('./portal-auth-lib').gateCookie({ kind, sub: String(acct.id) });   // lets this browser load the portal
+    return r;
   } catch (e) {
     console.error('[portal-login]', e);
     return reply(500, { error: 'Login failed' });

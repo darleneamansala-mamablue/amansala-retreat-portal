@@ -256,7 +256,7 @@ function staffConfirmLogout(){
   sessionStorage.removeItem('ama_confirm_mode');
   localStorage.removeItem('ama_confirm_persist');
   currentStaffConfirmSession=null;
-  location.href=location.pathname;
+  (typeof portalGateClear==='function'?portalGateClear():Promise.resolve()).then(()=>{location.href=location.pathname;});
 }
 
 // ===== BOOTSTRAP =====

@@ -247,6 +247,18 @@ async function portalAllowed(event, opts = {}) {
   return c;
 }
 
+// The portal program itself is only served to a browser that signed in (2026-11-10, the accountant saw the whole portal's code
+// without an account). Signing in sets this cookie; netlify/edge-functions/portal-gate.js checks it before handing out
+// booking-hub.html and modules/*. Same signature on both sides: HMAC-SHA256, key = sha256('amansala-gate|' + service key).
+const GATE_DAYS = 14;
+const gateKey = () => crypto.createHash('sha256').update('amansala-gate|' + (process.env.SUPABASE_SERVICE_KEY || '')).digest();
+function gateCookie(claims) {
+  const body = b64u(JSON.stringify({ ...claims, exp: Date.now() + GATE_DAYS * 86400e3 }));
+  const tok = body + '.' + b64u(crypto.createHmac('sha256', gateKey()).update(body).digest());
+  return `ama_gate=${tok}; Path=/; Max-Age=${GATE_DAYS * 86400}; HttpOnly; Secure; SameSite=Lax`;
+}
+const clearGateCookie = () => 'ama_gate=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax';
+
 // Server-to-server calls between this site's functions over HTTP (cloudbeds.js is called with fetch by stripe-webhook, rb-lib,
 // cb-room-sync, ...): a header derived from the service key, which only the server has.
 const internalKey = () => { const k = process.env.SUPABASE_SERVICE_KEY; return k ? crypto.createHash('sha256').update('amansala-internal:' + k).digest('hex') : ''; };
@@ -259,4 +271,4 @@ function isInternal(event) {
 const cors = () => ({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token, Authorization' });
 const reply = (code, data) => ({ statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
 
-module.exports = { internalHeaders, isInternal, portalAllowed, staffAllowed, passKind, revokedAt, revokeSessions, staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };
+module.exports = { gateCookie, clearGateCookie, internalHeaders, isInternal, portalAllowed, staffAllowed, passKind, revokedAt, revokeSessions, staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };

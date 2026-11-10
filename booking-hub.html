@@ -4351,10 +4351,12 @@ const db=supabase.createClient(SUPA_URL,SUPA_KEY,{accessToken:()=>dbAuthTokenFre
 // Passes last 1 hour and are renewed every 3 minutes while the page is open (session-refresh). The server refuses to
 // renew them once the account was signed out everywhere (password changed, switched off, removed) or 14 days after the
 // sign-in: then this page signs out and shows the login.
+// Signing out also removes the cookie that lets this browser load the portal (netlify/edge-functions/portal-gate.js)
+function portalGateClear(){return Promise.race([fetch('/.netlify/functions/portal-logout',{method:'POST',keepalive:true}).catch(()=>{}),new Promise(r=>setTimeout(r,1500))]);}
 function portalSignOutEverywhere(){
   window._portalSigningOut=true;
   try{['amansala_staff_session','amansala_staff_token','amansala_db_pass','amansala_spa_staff_session','amansala_driver_session','amansala_staff_confirm_session'].forEach(k=>sessionStorage.removeItem(k));sessionStorage.setItem('ama_signin_again','1');}catch(e){}
-  location.reload();
+  portalGateClear().then(()=>location.reload());
 }
 async function portalRenewPasses(){
   let pass=null,tok=null;try{pass=sessionStorage.getItem('amansala_db_pass');tok=sessionStorage.getItem('amansala_staff_token');}catch(e){}
@@ -7151,7 +7153,7 @@ function switchTab(id,btn){
 // ===== PAYMENT RECORDING — moved to modules/payments.js =====
 // ===== PIPELINE STEPS — moved to modules/payments.js (loaded above) =====
 </script>
-<script src="modules/admin-staff.js?v=20261109a"></script>
+<script src="modules/admin-staff.js?v=20261110g"></script>
 <script>
 // ===== ADMIN DONE TASKS — moved to modules/admin-staff.js =====
 </script>
@@ -7195,8 +7197,8 @@ function switchTab(id,btn){
 <script>
 // ===== TRANSPORTATION — moved to modules/transport.js =====
 </script>
-<script src="modules/driver-portal.js?v=20261102c"></script>
-<script src="modules/spa-staff-portal.js?v=20261109a"></script>
+<script src="modules/driver-portal.js?v=20261110g"></script>
+<script src="modules/spa-staff-portal.js?v=20261110g"></script>
 <script src="modules/other-logins.js?v=20261103a"></script>
 <script src="modules/housekeeping.js?v=20260930c"></script>
 <script src="modules/teacher-profiles.js"></script>
@@ -7382,7 +7384,7 @@ if(location.protocol!=='file:'){
 // ===== TEACHER MODE — moved to modules/teacher-portal.js (loaded above) =====
 // ===== TEACHER FAQ — moved to modules/teacher-portal.js (loaded above) =====
 </script>
-<script src="modules/special-events.js?v=20261102b"></script>
+<script src="modules/special-events.js?v=20261110g"></script>
 <script>
 // ===== SPECIAL EVENTS — moved to modules/special-events.js =====
 // ===== TEACHER DASHBOARD — moved to modules/teacher-portal.js (loaded above) =====
@@ -7980,7 +7982,7 @@ if(location.protocol!=='file:'){
 <script src="modules/bbc-short-stays.js?v=20261025b"></script>
 <script src="modules/bbc-sort-slots.js?v=20261025a"></script>
 <script src="modules/bbc-auto-sort.js?v=20261106b"></script>
-<script src="modules/staff-confirm-portal.js?v=20261102d"></script>
+<script src="modules/staff-confirm-portal.js?v=20261110g"></script>
 <script src="modules/spa-confirm-label.js?v=20261014a"></script>
 <script src="modules/spa-therapist-done.js?v=20261023a"></script>
 <script src="modules/spa-reports.js?v=20261025a"></script>

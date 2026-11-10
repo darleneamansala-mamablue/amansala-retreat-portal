@@ -129,7 +129,7 @@ function evtDelete(id){
 }
 
 function evtCopyLink(){
-  const url=location.origin+location.pathname+'?mode=event';
+  const url=location.origin+'/special-event.html';   // its own public page (the portal no longer opens without signing in)
   if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>alert('Inquiry link copied!\n\n'+url)).catch(()=>{prompt('Copy this link:',url);});}
   else{prompt('Copy this link:',url);}
 }

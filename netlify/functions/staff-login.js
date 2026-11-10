@@ -72,8 +72,10 @@ exports.handler = async (event) => {
 };
 
 function done(session) {
-  return ok({ success: true, session, token: signToken({ kind: 'staff', sub: session.id, name: session.name, role: session.role }),
+  const r = ok({ success: true, session, token: signToken({ kind: 'staff', sub: session.id, name: session.name, role: session.role }),
     dbPass: signDbPass({ sub: String(session.id), app_role: session.role === 'admin' ? 'admin' : 'staff', name: session.name }) });
+  r.headers['Set-Cookie'] = require('./portal-auth-lib').gateCookie({ kind: 'staff', sub: String(session.id) });   // lets this browser load the portal
+  return r;
 }
 function ok(data) {
   return { statusCode: 200, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) };

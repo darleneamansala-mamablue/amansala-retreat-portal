@@ -96,7 +96,7 @@ function driverLogout(){
   sessionStorage.removeItem('ama_driver_mode');
   localStorage.removeItem('ama_driver_persist');
   currentDriverSession=null;
-  location.href=location.pathname;
+  (typeof portalGateClear==='function'?portalGateClear():Promise.resolve()).then(()=>{location.href=location.pathname;});
 }
 
 // ===== BOOTSTRAP =====

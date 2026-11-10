@@ -79,7 +79,7 @@ function spaStaffLogout(){
   sessionStorage.removeItem('ama_spa_staff_mode');
   localStorage.removeItem('ama_spa_staff_persist');
   currentSpaStaffSession=null;
-  location.href=location.pathname;
+  (typeof portalGateClear==='function'?portalGateClear():Promise.resolve()).then(()=>{location.href=location.pathname;});
 }
 
 // ===== BOOTSTRAP =====

@@ -159,7 +159,7 @@ function staffLogout(){
   sessionStorage.removeItem('amansala_staff_token');
   sessionStorage.removeItem('amansala_db_pass');
   currentSession=null;
-  location.reload();
+  (typeof portalGateClear==='function'?portalGateClear():Promise.resolve()).then(()=>location.reload());
 }
 
 function initStaffLogin(){
