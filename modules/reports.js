@@ -954,6 +954,10 @@ function _rptCat(i){const c=i.category||'Sin categoría';return c==='Room'&&/\bA
 let _rptWtp=new Set();
 async function _rptLoadWtp(){try{const{data}=await db.from('app_store').select('value').eq('key','retreat_booking_config').maybeSingle();_rptWtp=new Set(Object.keys((data&&data.value)||{}));}catch(e){}}
 function _rptRoomSub(i){
+  // by what the line itself says first (Jorge 2026-11-10): an extra night is Extra Night and a WeTravel order is We Travel,
+  // whatever reservation it sits on
+  if(/extra ?night/i.test(i.description||''))return'Extra Night';
+  if(/\(order #|we ?travel/i.test(i.description||'')||/we ?travel/i.test((i.bk&&i.bk.retreatName)||''))return'We Travel';
   if(i.reqId){const s=String(i.reqSource||'');return/extra/i.test(s)?'Extra Night':/escape|^$|booking engine|website/i.test(s)?'Escape':s;}
   const bk=i.bk;if(!bk)return'Other';
   const name=String(bk.retreatName||'');

@@ -572,7 +572,7 @@ exports.handler = async (event) => {
           const exFolio = folioByToken.get(extrasTokenOf.get(key));
           if (exFolio) {
             for (let n = 1; n <= 2; n++) {
-              items.push({ folio_id: exFolio.id, description: `Spa Credit (included – WeTravel)`, qty: 1, unit_price: -95, tax_rate: 13, category: 'Spa' });
+              items.push({ folio_id: exFolio.id, description: `Spa Credit (included – WeTravel)`, qty: 1, unit_price: -95, tax_rate: 13, category: 'Spa Credit' });   // its own category in the reports (Jorge 2026-11-10)
             }
           }
         });
