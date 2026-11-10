@@ -138,7 +138,7 @@ async function run(opts = {}) {
   try {
     const extRes = await fetch(`${PORTAL_URL}/.netlify/functions/cloudbeds?action=getExternalReservations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...require('./portal-auth-lib').internalHeaders() },
       body: JSON.stringify({ startDate: today, endDate: localDate(1) }),
     });
     const extData = await extRes.json();

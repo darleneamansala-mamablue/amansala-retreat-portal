@@ -67,7 +67,7 @@ async function doRecalc(key) {
         });
       });
       const r = await fetch(`${process.env.URL || 'https://amansalaportal.com'}/.netlify/functions/cloudbeds?action=getExternalReservations`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startDate: today, endDate: end }),
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...require('./portal-auth-lib').internalHeaders() }, body: JSON.stringify({ startDate: today, endDate: end }),
       });
       const d = await r.json();
       for (const x of (d.reservations || [])) {

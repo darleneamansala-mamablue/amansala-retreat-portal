@@ -17,7 +17,7 @@ const send = async (key, method, path, body) => { const r = await fetch(`${SUPAB
 // identical to ask-jorge.js's and ask-jorge was left without its function (500 on every call, 2026-11-05)
 const FNS = { 'refund-folio-payment': require('./refund-folio-payment'), 'spa-therapist-confirm': require('./spa-therapist-confirm') };
 const fnCall = async (file, body, headers = {}) => { const r = await FNS[file].handler({ httpMethod: 'POST', headers, body: JSON.stringify(body) }); let d = {}; try { d = JSON.parse(r.body || '{}'); } catch (e) {} return { status: r.statusCode, d }; };
-const cb = async (action, body) => { const r = await fetch(`${SITE}/.netlify/functions/cloudbeds?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r.json().catch(() => ({})); };
+const cb = async (action, body) => { const r = await fetch(`${SITE}/.netlify/functions/cloudbeds?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...require('./portal-auth-lib').internalHeaders() }, body: JSON.stringify(body) }); return r.json().catch(() => ({})); };
 const fmt12 = hm => { const [h, m] = String(hm || '').split(':').map(Number); return isNaN(h) ? hm : `${(h % 12) || 12}:${String(m || 0).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
 
 async function lineOf(key, id) {

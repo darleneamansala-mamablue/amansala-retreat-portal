@@ -51,6 +51,24 @@ exports.handler = async (event) => {
   const action = qs.action;
   const body   = event.body ? safeJSON(event.body) : {};
 
+  // Who may use Cloudbeds through here (security review 2026-11-10: it answered anyone -- guest names, contacts, balances,
+  // and could create / cancel / move reservations and post charges): the portal's signed-in staff, this site's own functions
+  // (X-Internal-Key), and a retreat's teacher page only to rename the guests of its own reservations.
+  {
+    const A = require("./portal-auth-lib");
+    let allowed = A.isInternal(event) || !!(await A.staffAllowed({ headers: event.headers || {}, body: "" }));
+    if (!allowed && action === "updateReservationGuest") {
+      const t = await A.portalAllowed(event, { roles: ["teacher"] });
+      if (t && t.booking_id && body.reservationId) {
+        const key = process.env.SUPABASE_SERVICE_KEY;
+        const r = await fetch(`${A.SUPABASE_URL}/rest/v1/bookings?id=eq.${encodeURIComponent(t.booking_id)}&select=cb_reservation_ids`, { headers: A.hdrs(key) });
+        const [row] = r.ok ? await r.json() : [];
+        allowed = !!(row && Object.values(row.cb_reservation_ids || {}).map(String).includes(String(body.reservationId)));
+      }
+    }
+    if (!allowed) return { statusCode: 401, headers: h, body: JSON.stringify({ success: false, error: "Sign in again" }) };
+  }
+
   try {
     const tok = await getToken();
 
@@ -1956,7 +1974,7 @@ function deriveProperty(roomTypeName) {
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin":  "*",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-Portal-Token, Authorization, X-Internal-Key",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Content-Type":                 "application/json",
   };

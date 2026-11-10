@@ -322,7 +322,7 @@ async function cbCall(action, body, ms) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms || 12000);
   try {
-    const r = await fetch(`${base}/.netlify/functions/cloudbeds?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), signal: ctrl.signal });
+    const r = await fetch(`${base}/.netlify/functions/cloudbeds?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...require('./portal-auth-lib').internalHeaders() }, body: JSON.stringify(body || {}), signal: ctrl.signal });
     return await r.json();
   } finally { clearTimeout(t); }
 }

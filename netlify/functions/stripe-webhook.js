@@ -506,7 +506,7 @@ exports.handler = async (event) => {
         const siteUrl = process.env.URL || 'https://amansala-staging.netlify.app';
         const cbRes = await fetch(`${siteUrl}/.netlify/functions/cloudbeds?action=createReservationByType`, {
           method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...require('./portal-auth-lib').internalHeaders() },
           body:    JSON.stringify({
             roomTypeName: meta.roomTypeName,
             startDate:    meta.checkIn,
@@ -543,7 +543,7 @@ exports.handler = async (event) => {
             ].filter(Boolean).join(' | ');
             await fetch(`${siteUrl}/.netlify/functions/cloudbeds?action=updateReservationNotes`, {
               method:  'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...require('./portal-auth-lib').internalHeaders() },
               body:    JSON.stringify({ reservationId: cbReservationId, notes: noteLines }),
             });
           } catch (noteErr) {

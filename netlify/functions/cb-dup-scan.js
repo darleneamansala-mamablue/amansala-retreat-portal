@@ -15,7 +15,7 @@ const norm = s => String(s || '').replace(/&amp;/g, '&').toLowerCase().normalize
 const isHold = g => /group$/.test(norm(g));   // "Todd Zinda Group": a room held for the retreat, not a guest
 
 async function cb(action, body) {
-  const r = await fetch(`${SITE}/.netlify/functions/cloudbeds?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(`${SITE}/.netlify/functions/cloudbeds?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...require('./portal-auth-lib').internalHeaders() }, body: JSON.stringify(body) });
   return r.json().catch(() => ({}));
 }
 

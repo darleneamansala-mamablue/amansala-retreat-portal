@@ -16,7 +16,7 @@ const rk = s => String(s || '').toLowerCase().replace(/\s+/g, '');
 const sameRoom = (a, b) => a === b || (rk(a) === rk(b) && !/^\d+[ab]$/i.test(String(a).trim()));   // "1b" (bed) is not "1B" (room)
 
 async function cb(action, body) {
-  const r = await fetch(`${SITE}/.netlify/functions/cloudbeds?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(`${SITE}/.netlify/functions/cloudbeds?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...require('./portal-auth-lib').internalHeaders() }, body: JSON.stringify(body) });
   return r.json().catch(() => ({}));
 }
 async function getAll(key, path) {

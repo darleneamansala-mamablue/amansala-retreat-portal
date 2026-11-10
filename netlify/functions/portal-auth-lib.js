@@ -247,7 +247,16 @@ async function portalAllowed(event, opts = {}) {
   return c;
 }
 
+// Server-to-server calls between this site's functions over HTTP (cloudbeds.js is called with fetch by stripe-webhook, rb-lib,
+// cb-room-sync, ...): a header derived from the service key, which only the server has.
+const internalKey = () => { const k = process.env.SUPABASE_SERVICE_KEY; return k ? crypto.createHash('sha256').update('amansala-internal:' + k).digest('hex') : ''; };
+const internalHeaders = () => { const k = internalKey(); return k ? { 'X-Internal-Key': k } : {}; };
+function isInternal(event) {
+  const h = (event && event.headers) || {}, got = String(h['x-internal-key'] || h['X-Internal-Key'] || ''), want = internalKey();
+  return !!want && got.length === want.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
+}
+
 const cors = () => ({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Portal-Token, Authorization' });
 const reply = (code, data) => ({ statusCode: code, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
 
-module.exports = { portalAllowed, staffAllowed, passKind, revokedAt, revokeSessions, staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };
+module.exports = { internalHeaders, isInternal, portalAllowed, staffAllowed, passKind, revokedAt, revokeSessions, staffFromEvent, signDbPass, verifyDbPass, DB_PASS_MAX_DAYS, SUPABASE_URL, BLOB_KEY, hdrs, norm, hashPassword, checkPassword, signToken, verifyToken, readBlob, readLogins, upsertLogin, deleteLogin, migrateKind, checkLogin, cors, reply };
