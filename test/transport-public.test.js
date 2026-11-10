@@ -67,9 +67,10 @@ const call = async (fn, ev) => { if (fn === drv && !(ev.headers && ev.headers.au
 
   // the form: upcoming retreats only
   const rl = await call(tp, { httpMethod: 'GET', queryStringParameters: { action: 'retreats' } });
-  assert.deepStrictEqual(rl.retreats.map(b => b.id), ['b1']);
+  // the list carries a form-only code, not the booking id; sending the code back saves the booking id
+  assert.strictEqual(rl.retreats.length, 1); assert.ok(/^r_[0-9a-f]{16}$/.test(rl.retreats[0].id) && rl.retreats[0].id !== 'b1');
   // a new submission: saved with a private key, emailed with a link that carries it
-  const form = { action: 'submit', bookingId: 'b1', firstName: 'Cleo', lastName: 'Diaz', email: 'cleo@x.com', flightNumber: 'UA1', arrivalDate: day(2), arrivalTime: '09:30', arrivalAirport: 'cancun', departureDate: day(6), departureTime: '18:00', departureAirport: 'cancun' };
+  const form = { action: 'submit', bookingId: rl.retreats[0].id, firstName: 'Cleo', lastName: 'Diaz', email: 'cleo@x.com', flightNumber: 'UA1', arrivalDate: day(2), arrivalTime: '09:30', arrivalAirport: 'cancun', departureDate: day(6), departureTime: '18:00', departureAirport: 'cancun' };
   r = await call(tp, { httpMethod: 'POST', body: JSON.stringify(form) });
   assert.ok(r.ok && r.k && r.id.startsWith('tr_'));
   assert.ok(mails[0].html.includes(`tr=${r.id}&amp;k=${r.k}`) || mails[0].html.includes(`tr=${r.id}&k=${r.k}`), 'email link has the key');
@@ -78,6 +79,7 @@ const call = async (fn, ev) => { if (fn === drv && !(ev.headers && ev.headers.au
   assert.strictEqual((await call(tp, { httpMethod: 'GET', queryStringParameters: { action: 'entry', tr: id, k: 'wrong' } })).code, 404);
   const got = await call(tp, { httpMethod: 'GET', queryStringParameters: { action: 'entry', tr: id, k } });
   assert.strictEqual(got.entry.firstName, 'Cleo'); assert.ok(!('editKey' in got.entry));
+  assert.strictEqual(T.transport.find(x => x.id === id).booking_id, 'b1', 'saved under the real booking'); assert.strictEqual(got.entry.bookingId, rl.retreats[0].id, 'the entry carries the code');
   console.log('ok   - new submission: saved, emailed, its edit link needs the private key');
 
   // the office marks it charged; the guest updates the flight: the office field stays

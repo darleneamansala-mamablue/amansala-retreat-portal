@@ -10,6 +10,16 @@
 //         notes, willingToShare}         merges ONLY the guest fields into the row, matches an individual guest to a
 //                                        retreat on the server, emails the confirmation; returns {id, k}
 const crypto = require('crypto');
+// The retreat list of the public form carries a form-only code, not the booking id (Jorge 2026-11-10, security review: the id is
+// also what opens a teacher's link, and the list handed out every one of them). The form sends the code back; the server turns
+// it into the booking. A booking id still works (old ?bk= links, entries saved before this).
+const pubId = id => 'r_' + crypto.createHmac('sha256', process.env.SUPABASE_SERVICE_KEY || '').update('transport-form:' + id).digest('hex').slice(0, 16);
+async function realBookingId(key, v) {
+  if (!/^r_[0-9a-f]{16}$/.test(v)) return v;
+  const since = new Date(Date.now() - 400 * 86400e3).toISOString().slice(0, 10);
+  const bks = await getAll(key, `bookings?end_date=gte.${since}&select=id`);
+  return (bks.find(b => pubId(b.id) === v) || {}).id || '';
+}
 const { sendMail } = require('./mail-lib');
 
 const SUPABASE_URL = 'https://vnttlpqkssihbmcynxvo.supabase.co';
@@ -99,8 +109,9 @@ exports.handler = async (event) => {
       const q = event.queryStringParameters || {};
       if (q.action === 'retreats') {
         const since = new Date(Date.now() - 86400e3).toISOString().slice(0, 10);
-        const bks = await getAll(key, `bookings?end_date=gte.${since}&status=neq.cancelled&select=id,leader_name,retreat_name,start_date,end_date,status`);
-        return reply(200, { retreats: bks.map(b => ({ id: b.id, leaderName: b.leader_name, retreatName: b.retreat_name, startDate: b.start_date, endDate: b.end_date, status: b.status })) });
+        const bks = await getAll(key, `bookings?end_date=gte.${since}&status=neq.cancelled&select=id,leader_name,retreat_name,start_date,end_date,status,booking_type`);
+        // retreats only: a Room Only booking's "leader" is the guest's own name (those guests choose "Individual")
+        return reply(200, { retreats: bks.filter(b => b.booking_type !== 'room_only').map(b => ({ id: pubId(b.id), leaderName: b.leader_name, retreatName: b.retreat_name, startDate: b.start_date, endDate: b.end_date, status: b.status })) });
       }
       if (q.action === 'retreat') {   // a direct ?bk= link to a retreat that may have ended already
         const [b] = await getAll(key, `bookings?id=eq.${encodeURIComponent(String(q.bk || ''))}&select=id,leader_name,retreat_name,start_date,end_date,status`);
@@ -111,6 +122,7 @@ exports.handler = async (event) => {
         if (!row || !row.data || !keyOk(row.data, q.k)) return reply(404, { error: 'not found' });
         const e = { id: row.id };
         GUEST_KEYS.forEach(k => { if (row.data[k] !== undefined) e[k] = row.data[k]; });
+        if (e.bookingId && e.bookingId !== 'individual') e.bookingId = pubId(e.bookingId);   // same code as the retreat list
         return reply(200, { entry: e, k: row.data.editKey || null });
       }
       return reply(400, { error: 'Unknown action' });
@@ -124,6 +136,7 @@ exports.handler = async (event) => {
     if (!firstName || !lastName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply(400, { error: 'Please fill in your name and a valid email.' });
     const date = v => /^\d{4}-\d{2}-\d{2}$/.test(s(v)) ? s(v) : '', time = v => /^\d{2}:\d{2}$/.test(s(v)) ? s(v) : '', ap = v => ['cancun', 'tulum'].includes(s(v)) ? s(v) : '';
     let bookingId = s(b.bookingId) || 'individual';
+    if (bookingId !== 'individual') bookingId = (await realBookingId(key, bookingId)) || 'individual';
     if (bookingId !== 'individual') {
       const [bk] = await getAll(key, `bookings?id=eq.${encodeURIComponent(bookingId)}&select=id`);
       if (!bk) bookingId = 'individual';
