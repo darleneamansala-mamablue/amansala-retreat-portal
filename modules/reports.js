@@ -945,9 +945,9 @@ function _rptToggleCategory(cat){
 }
 // Room split by where the stay came from (Jorge 2026-11-10: "rooms escape, rooms extra night, rooms yoga, rooms OTA"):
 // Booking Engine stays by their source, Room Only bookings by their type, retreats as Yoga Retreats or BBC / RNR,
-// and the A/C 24h lines filed under Room on their own.
+// A/C is its own category, never Room (Jorge 2026-11-10) -- also an "AC all day" line still filed under Room.
+function _rptCat(i){const c=i.category||'Sin categoría';return c==='Room'&&/\bA\/?C\b|aire/i.test(i.description||'')?'A/C':c;}
 function _rptRoomSub(i){
-  if(/\bA\/?C\b|aire/i.test(i.description||''))return'A/C 24h';
   if(i.reqId){const s=String(i.reqSource||'');return/extra/i.test(s)?'Extra Night':/escape|^$|booking engine|website/i.test(s)?'Escape':s;}
   const bk=i.bk;if(!bk)return'Other';
   const name=String(bk.retreatName||'');
@@ -966,7 +966,7 @@ function _rptCategoryGroups(){
   const charges=_rptDailyFolioCharges();
   const groups=new Map();
   charges.forEach(i=>{
-    const cat=i.category||'Sin categoría';
+    const cat=_rptCat(i);
     const g=groups.get(cat)||{category:cat,count:0,total:0,subs:null};
     g.count++;g.total+=i.amount;
     if(cat==='Room'){
@@ -1069,7 +1069,7 @@ function _rptRenderCategoryView(){
   </div>`;
 }
 function _rptCategoryDetailHtml(cat){
-  const rows=_rptDailyFolioCharges().filter(i=>/^Room · /.test(cat)?(i.category==='Room'&&'Room · '+_rptRoomSub(i)===cat):(i.category||'Sin categoría')===cat);
+  const rows=_rptDailyFolioCharges().filter(i=>/^Room · /.test(cat)?(_rptCat(i)==='Room'&&'Room · '+_rptRoomSub(i)===cat):_rptCat(i)===cat);
   return`<tr>
     <td colspan="4" style="padding:0;background:#fafafa;border-bottom:1px solid #f3f4f6">
       <table style="width:100%;border-collapse:collapse">
