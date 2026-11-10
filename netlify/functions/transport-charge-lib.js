@@ -286,7 +286,7 @@ async function reconcileCharges(key, { registrationId, guestName, label, date, w
       const same = Number(h.unit_price) === Number(w.unitPrice) && base(h.description) === base(w.description);
       if (same || insertOnly) { out.kept.push(h.id); continue; }
       if (!dryRun) {
-        const r = await supaFetch(key, `folio_items?id=eq.${h.id}`, 'PATCH', { description: w.description, unit_price: w.unitPrice, qty: 1 });
+        const r = await supaFetch(key, `folio_items?id=eq.${h.id}`, 'PATCH', { description: w.description, unit_price: w.unitPrice, qty: 1, category: 'Transport' });   // an old line saved without a category gets one (Category Report 'Sin categoría', 2026-11-10)
         if (!r.ok) return { error: `folio_item_update_failed: ${JSON.stringify(r.data)}` };
       }
       out.updated.push({ id: h.id, from: Number(h.unit_price), to: w.unitPrice });
