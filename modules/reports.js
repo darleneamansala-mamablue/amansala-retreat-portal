@@ -633,6 +633,7 @@ async function _rptLoadDaily(){
       return{...i,guestName:folio.guest_name||null,bk,reqId:folio.booking_request_id||null,reqSource:folio.booking_request_id?(reqSource[folio.booking_request_id]||''):null,
         amount:+(Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100)).toFixed(2)};
     });
+    if(!_rptWtp.size)await _rptLoadWtp();
     _dailyLoaded=true;_dailyError=null;
   }catch(e){
     _dailyError=e.message||String(e);
@@ -915,7 +916,7 @@ function _rptRenderDailyOrCategoryView(){
 function _rptSetDailyFrom(v){_dailyFrom=v;if(_dailyFrom>_dailyTo)_dailyTo=_dailyFrom;_rptLoadDaily().then(_rptRenderDailyOrCategoryView);}
 function _rptSetDailyTo(v){_dailyTo=v;if(_dailyTo<_dailyFrom)_dailyFrom=_dailyTo;_rptLoadDaily().then(_rptRenderDailyOrCategoryView);}
 function _rptSetDailyUser(u){_dailyUser=u;_rptRenderDailyOrCategoryView();}
-async function _rptRefreshDaily(){_dailyLoaded=false;if(_rptActiveTab==='category')await _rptRenderCategory();else await _rptRenderDaily();}
+async function _rptRefreshDaily(){_dailyLoaded=false;_rptStayRoom=null;if(_rptActiveTab==='category')await _rptRenderCategory();else await _rptRenderDaily();}
 
 // ─── CATEGORY REPORT ──────────────────────────────────────────────
 // Jorge's ask 2026-10-05: a report grouping folio charges by category
@@ -943,10 +944,15 @@ function _rptToggleCategory(cat){
   else _rptCategoryExpanded.add(cat);
   _rptRenderCategoryView();
 }
-// Room split by where the stay came from (Jorge 2026-11-10: "rooms escape, rooms extra night, rooms yoga, rooms OTA"):
-// Booking Engine stays by their source, Room Only bookings by their type, retreats as Yoga Retreats or BBC / RNR,
 // A/C is its own category, never Room (Jorge 2026-11-10) -- also an "AC all day" line still filed under Room.
 function _rptCat(i){const c=i.category||'Sin categoría';return c==='Room'&&/\bA\/?C\b|aire/i.test(i.description||'')?'A/C':c;}
+// Room split by where the stay came from (Jorge 2026-11-10: "rooms escape, rooms extra night, rooms yoga, rooms OTA"):
+// Booking Engine stays by their source, Room Only bookings by their type, BBC / RNR, and retreats. In a retreat the teacher
+// pays the group's rooms, so a Room line on a guest's folio is an extra night the guest pays (Carter Foxworth, Amy Reich,
+// Vanessa Di Pietro in Oct 2026) -- except a "We take payment" retreat (Retreat Booking page, app_store retreat_booking_config),
+// where every guest pays us their own room (Shane Carling).
+let _rptWtp=new Set();
+async function _rptLoadWtp(){try{const{data}=await db.from('app_store').select('value').eq('key','retreat_booking_config').maybeSingle();_rptWtp=new Set(Object.keys((data&&data.value)||{}));}catch(e){}}
 function _rptRoomSub(i){
   if(i.reqId){const s=String(i.reqSource||'');return/extra/i.test(s)?'Extra Night':/escape|^$|booking engine|website/i.test(s)?'Escape':s;}
   const bk=i.bk;if(!bk)return'Other';
@@ -960,10 +966,63 @@ function _rptRoomSub(i){
     if(/direct/i.test(name))return'Direct';
     return name||'Room Only';
   }
-  return'Yoga Retreats';
+  return _rptWtp.has(bk.id)?'Yoga Retreats (guests pay us)':'Extra Night';
+}
+
+// "Room by stay date" (Jorge 2026-11-10: the October report showed Shane Carling's March 2027 rooms because they were charged
+// in October): every Room line of any date, spread evenly over its nights, and only the nights inside the range are counted.
+// Other categories stay by the date they were charged.
+let _catMode=(()=>{try{return localStorage.getItem('rpt_cat_mode')==='stay'?'stay':'posted';}catch(e){return'posted';}})();
+let _rptStayRoom=null,_rptStayKey='',_rptStayLoading=false;
+async function _rptPages(q,size=1000){const out=[];for(let from=0;from<200000;from+=size){const{data,error}=await q().range(from,from+size-1);if(error)throw error;out.push(...(data||[]));if(!data||data.length<size)break;}return out;}
+async function _rptInChunks(ids,q,n=150){const out=[];for(let k=0;k<ids.length;k+=n){const{data,error}=await q(ids.slice(k,k+n));if(error)throw error;out.push(...(data||[]));}return out;}
+const _rptDayMs=86400000,_rptD=s=>Date.parse(String(s).slice(0,10)+'T12:00:00Z');
+function _rptStayRange(i){
+  if(i.req)return[i.req.check_in,i.req.check_out];
+  const reg=i.reg,bk=i.bk;if(!bk)return[null,null];
+  const rs=(reg&&reg.checkIn)||bk.startDate,re=(reg&&reg.checkOut)||bk.endDate;
+  if(_rptRoomSub(i)==='Extra Night'&&bk.bookingType!=='room_only'){   // the nights outside the retreat's own dates
+    if(rs<bk.startDate)return[rs,bk.startDate];
+    if(re>bk.endDate)return[bk.endDate,re];
+    const m=/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})/i.exec(i.description||'');   // "Extra night Oct 17"
+    if(m){const d=new Date(Date.UTC(+String(bk.startDate).slice(0,4),'janfebmaraprmayjunjulaugsepoctnovdec'.indexOf(m[1].toLowerCase().slice(0,3))/3,+m[2],12));const ds=d.toISOString().slice(0,10);return[ds,new Date(d.getTime()+_rptDayMs).toISOString().slice(0,10)];}
+  }
+  return[rs,re];
+}
+async function _rptLoadStayRoom(){
+  const key=_dailyFrom+'|'+_dailyTo;
+  if(_rptStayLoading||(_rptStayRoom&&_rptStayKey===key))return;
+  _rptStayLoading=true;
+  try{
+    if(!_rptWtp.size)await _rptLoadWtp();
+    const items=await _rptPages(()=>db.from('folio_items').select('id,folio_id,description,qty,unit_price,tax_rate,staff_name,category,created_at').eq('category','Room').order('id'));
+    const folios=await _rptInChunks([...new Set(items.map(i=>i.folio_id))],ids=>db.from('folios').select('id,registration_id,booking_request_id,guest_name').in('id',ids));
+    const fb={};folios.forEach(f=>{fb[f.id]=f;});
+    const reqs=await _rptInChunks([...new Set(folios.map(f=>f.booking_request_id).filter(Boolean))],ids=>db.from('booking_requests').select('id,source,check_in,check_out').in('id',ids));
+    const rq={};reqs.forEach(r=>{rq[r.id]=r;});
+    const from=_rptD(_dailyFrom),to=_rptD(_dailyTo)+_rptDayMs,out=[];
+    items.forEach(i=>{
+      const f=fb[i.folio_id]||{},reg=f.registration_id?AppData.regs.find(r=>r.id===f.registration_id):null,bk=reg?AppData.bookings.find(b=>b.id===reg.bookingId):null,req=f.booking_request_id?rq[f.booking_request_id]:null;
+      const it={...i,guestName:f.guest_name||null,bk,reg,req,reqId:f.booking_request_id||null,reqSource:req?(req.source||''):null,amount:+(Number(i.qty)*Number(i.unit_price)*(1+(Number(i.tax_rate)||0)/100)).toFixed(2)};
+      if(_rptCat(it)!=='Room')return;
+      const[s,e]=_rptStayRange(it);if(!s||!e)return;
+      const s0=_rptD(s),e0=_rptD(e),nights=Math.max(1,Math.round((e0-s0)/_rptDayMs));
+      const inN=Math.max(0,Math.round((Math.min(e0,to)-Math.max(s0,from))/_rptDayMs));
+      if(inN<=0)return;
+      out.push({...it,amount:+(it.amount*Math.min(inN,nights)/nights).toFixed(2),stay:`${s} → ${e}`,nightsIn:Math.min(inN,nights),nights});
+    });
+    _rptStayRoom=out;_rptStayKey=key;
+  }catch(e){_dailyError='Room by stay date: '+(e.message||e);}
+  _rptStayLoading=false;
+}
+function _rptSetCatMode(m){_catMode=m;try{localStorage.setItem('rpt_cat_mode',m);}catch(e){}_rptRenderCategoryView();}
+function _rptCatCharges(){
+  if(_catMode!=='stay')return _rptDailyFolioCharges();
+  const mine=i=>_dailyUser==='all'||i.staff_name==null||i.staff_name===_dailyUser;
+  return[..._rptDailyFolioCharges().filter(i=>_rptCat(i)!=='Room'),...(_rptStayRoom||[]).filter(mine)];
 }
 function _rptCategoryGroups(){
-  const charges=_rptDailyFolioCharges();
+  const charges=_rptCatCharges();
   const groups=new Map();
   charges.forEach(i=>{
     const cat=_rptCat(i);
@@ -981,6 +1040,11 @@ function _rptCategoryGroups(){
 function _rptRenderCategoryView(){
   const el=document.getElementById('reportsContent');
   if(!el)return;
+  if(_catMode==='stay'&&(!_rptStayRoom||_rptStayKey!==_dailyFrom+'|'+_dailyTo)){
+    if(!_rptStayLoading){_rptLoadStayRoom().then(_rptRenderCategoryView);}
+    el.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#9ca3af;font-size:13px">Loading rooms by stay date…</div>`;
+    return;
+  }
   const groups=_rptCategoryGroups();
   const grandTotal=groups.reduce((s,g)=>s+g.total,0);
   const grandCount=groups.reduce((s,g)=>s+g.count,0);
@@ -1013,6 +1077,11 @@ function _rptRenderCategoryView(){
       </select>
       <button onclick="_rptRefreshDaily()" style="padding:6px 10px;background:#f3f4f6;color:#374151;border:1.5px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-family:'Jost',sans-serif" title="Reload data">↺</button>
       <button onclick="_rptExportCategoryCsv()" style="padding:6px 14px;background:#0e5a5a;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">↓ Export CSV</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:-8px 0 16px;font-size:12.5px;color:#6b7280;flex-wrap:wrap">
+      <span style="font-weight:700;color:#374151">Room by:</span>
+      ${[['posted','Charge date'],['stay','Stay date']].map(([m,l])=>`<button onclick="_rptSetCatMode('${m}')" style="padding:4px 12px;border-radius:999px;border:1.5px solid ${_catMode===m?'#0e5a5a':'var(--border)'};background:${_catMode===m?'#0e5a5a':'#fff'};color:${_catMode===m?'#fff':'#374151'};font-size:12px;font-weight:600;cursor:pointer;font-family:'Jost',sans-serif">${l}</button>`).join('')}
+      <span>${_catMode==='stay'?'Room = the nights stayed in these dates (a stay that crosses the range is split by night). Everything else is by the date it was charged.':'Every category by the date the charge was put on the folio.'}</span>
     </div>
 
     ${_dailyError?`<div style="font-size:12px;color:#dc2626;margin-bottom:14px;padding:8px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">⚠ ${escHtml(_dailyError)}</div>`:''}
@@ -1069,7 +1138,7 @@ function _rptRenderCategoryView(){
   </div>`;
 }
 function _rptCategoryDetailHtml(cat){
-  const rows=_rptDailyFolioCharges().filter(i=>/^Room · /.test(cat)?(_rptCat(i)==='Room'&&'Room · '+_rptRoomSub(i)===cat):_rptCat(i)===cat);
+  const rows=_rptCatCharges().filter(i=>/^Room · /.test(cat)?(_rptCat(i)==='Room'&&'Room · '+_rptRoomSub(i)===cat):_rptCat(i)===cat);
   return`<tr>
     <td colspan="4" style="padding:0;background:#fafafa;border-bottom:1px solid #f3f4f6">
       <table style="width:100%;border-collapse:collapse">
@@ -1087,7 +1156,7 @@ function _rptCategoryDetailHtml(cat){
               <td style="${_rptTd()};padding-left:40px;white-space:nowrap;font-size:12px"><div style="font-weight:600;color:#111827">${ds}</div><div style="color:#9ca3af">${ts}</div></td>
               <td style="${_rptTd()};font-size:12px;color:${r.staff_name?'#374151':'#d1d5db'}">${r.staff_name?escHtml(r.staff_name):'—'}</td>
               <td style="${_rptTd()};font-size:12px;color:#374151;max-width:200px">${escHtml(guestLine)}</td>
-              <td style="${_rptTd()};font-size:12px;color:#374151;max-width:260px">${escHtml(r.description||'—')}</td>
+              <td style="${_rptTd()};font-size:12px;color:#374151;max-width:260px">${escHtml(r.description||'—')}${r.stay?`<div style="color:#9ca3af;font-size:11px">Stay ${escHtml(r.stay)} · ${r.nightsIn} of ${r.nights} night${r.nights===1?'':'s'} in range</div>`:''}</td>
               <td style="${_rptTd('right')};font-size:12.5px;font-weight:700;color:#7e22ce">${fmt$(r.amount)}</td>
             </tr>`;
           }).join('')}
