@@ -83,13 +83,6 @@ async function sendPaymentNotification({ status, guestName, source, dates, amoun
 
 exports.sendPaymentNotification = sendPaymentNotification;
 
-// Direct-HTTP entrypoint, mainly for manual testing once the template is approved:
-//   curl -X POST .../notify-payment -d '{"status":"recibido","guestName":"...","source":"We Travel","dates":"...","amount":"$1.00"}'
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
-  let body;
-  try { body = JSON.parse(event.body || '{}'); }
-  catch { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
-  const result = await sendPaymentNotification(body);
-  return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result) };
-};
+// No HTTP entrypoint on purpose (security review 2026-11-10: anyone could send Jorge a fake "payment received" WhatsApp).
+// The server functions call sendPaymentNotification through require().
+exports.handler = async () => ({ statusCode: 404, body: 'Not found' });

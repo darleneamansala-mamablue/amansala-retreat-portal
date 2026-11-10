@@ -86,28 +86,9 @@ function cors() {
 }
 function ok(body, status) { return { statusCode: status || 200, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) }; }
 
-exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors() };
-  try {
-    const qs = event.queryStringParameters || {};
-    const action = qs.action;
-    switch (action) {
-      case 'listTrips':
-        return ok({ trips: await listAllTrips() });
-      case 'listPackages':
-        if (!qs.tripUuid) return ok({ error: 'tripUuid required' }, 400);
-        return ok({ packages: await listPackages(qs.tripUuid) });
-      case 'listOrders':
-        if (!qs.tripUuid) return ok({ error: 'tripUuid required' }, 400);
-        return ok({ orders: await listOrders(qs.tripUuid) });
-      default:
-        return ok({ error: `Unknown action: ${action}` }, 400);
-    }
-  } catch (e) {
-    console.error('[wetravel]', e.message);
-    return ok({ error: e.message }, 502);
-  }
-};
+// No HTTP entrypoint (security review 2026-11-10: listTrips / listOrders handed WeTravel participants, contacts and amounts
+// to anyone). The helpers below are still exported for server code.
+exports.handler = async () => ({ statusCode: 404, body: 'Not found' });
 
 module.exports.getToken = getToken;
 module.exports.wtGet = wtGet;
