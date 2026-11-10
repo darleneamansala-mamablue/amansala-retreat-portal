@@ -1035,7 +1035,32 @@ function _rptCategoryGroups(){
     }
     groups.set(cat,g);
   });
+  // By stay date, the retreats the teacher pays as a group are shown too (Jorge 2026-11-10): each group's room / package
+  // total (the same figure as Financial Summary), for its nights inside the range
+  if(_catMode==='stay'){
+    const yr=_rptYogaGroups();
+    if(yr.length)groups.set('Yoga Retreats',{category:'Yoga Retreats',count:yr.length,total:yr.reduce((t,x)=>t+x.total,0),subs:new Map(yr.map(x=>[x.category,x]))});
+  }
   return[...groups.values()].map(g=>({...g,subs:g.subs?[...g.subs.values()].sort((a,b)=>b.total-a.total):null})).sort((a,b)=>b.total-a.total);
+}
+// The group retreats staying in the range: Financial Summary's room / package revenue (_calcRoomRevenue), split by night when
+// the retreat crosses the range. Not BBC / RNR (WeTravel orders) and not a "We take payment" retreat -- their rooms are on the
+// guests' folios and are already under Room.
+function _rptYogaGroups(){
+  const from=_rptD(_dailyFrom),to=_rptD(_dailyTo)+_rptDayMs,out=[];
+  (AppData.bookings||[]).forEach(bk=>{
+    if(bk.bookingType==='room_only'||bk.status==='cancelled'||!bk.startDate||!bk.endDate)return;
+    if(_rptWtp.has(bk.id)||/bikini|bbc|restore|rnr|we ?travel/i.test((bk.retreatName||'')+' '+(bk.leaderName||'')))return;
+    const s0=_rptD(bk.startDate),e0=_rptD(bk.endDate),nights=Math.max(1,Math.round((e0-s0)/_rptDayMs));
+    const inN=Math.max(0,Math.round((Math.min(e0,to)-Math.max(s0,from))/_rptDayMs));
+    if(inN<=0)return;
+    let rev=0;try{rev=typeof _calcRoomRevenue==='function'?_calcRoomRevenue(bk):0;}catch(e){}
+    if(!(rev>0))return;
+    const paid=(bk.payments||[]).reduce((t,p)=>t+(p.amount||0),0);
+    const part=Math.min(inN,nights)/nights;
+    out.push({category:'Yoga Retreats · '+(bk.leaderName||bk.retreatName||'Retreat'),count:1,total:+(rev*part).toFixed(2),bk,rev,paid,nightsIn:Math.min(inN,nights),nights});
+  });
+  return out;
 }
 function _rptRenderCategoryView(){
   const el=document.getElementById('reportsContent');
@@ -1118,7 +1143,7 @@ function _rptRenderCategoryView(){
               const sOpen=_rptCategoryExpanded.has(sg.category);
               const sJs=sg.category.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
               return`<tr style="border-bottom:1px solid #f3f4f6;cursor:pointer;background:#fcfbff" onclick="_rptToggleCategory('${sJs}')">
-              <td style="${_rptTd()};font-size:12.5px;color:#374151;padding-left:38px"><span style="display:inline-block;width:14px;color:#9ca3af">${sOpen?'▾':'▸'}</span>${escHtml(sg.category.replace(/^Room · /,''))}</td>
+              <td style="${_rptTd()};font-size:12.5px;color:#374151;padding-left:38px"><span style="display:inline-block;width:14px;color:#9ca3af">${sOpen?'▾':'▸'}</span>${escHtml(sg.category.replace(/^(Room|Yoga Retreats) · /,''))}</td>
               <td style="${_rptTd('center')};font-size:12.5px;color:#6b7280">${sg.count}</td>
               <td style="${_rptTd('right')};font-size:12.5px;font-weight:600;color:#7e22ce">${fmt$(sg.total)}</td>
               <td style="${_rptTd('right')};font-size:11.5px;color:#9ca3af">${grandTotal>0?(sg.total/grandTotal*100).toFixed(1):'0.0'}%</td>
@@ -1138,6 +1163,13 @@ function _rptRenderCategoryView(){
   </div>`;
 }
 function _rptCategoryDetailHtml(cat){
+  if(/^Yoga Retreats · /.test(cat)){
+    const y=_rptYogaGroups().find(x=>x.category===cat);if(!y)return'';
+    const bk=y.bk,bal=y.rev-y.paid;
+    return`<tr><td colspan="4" style="padding:10px 14px 12px 56px;background:#fafafa;border-bottom:1px solid #f3f4f6;font-size:12px;color:#374151">
+      ${escHtml(bk.retreatName&&bk.retreatName!==bk.leaderName?bk.retreatName+' · ':'')}${fmtDate(bk.startDate)} – ${fmtDate(bk.endDate)} · ${y.nightsIn} of ${y.nights} night${y.nights===1?'':'s'} in range
+      <div style="margin-top:4px;color:#6b7280">Group total (room / package) ${fmt$(y.rev)} · Paid ${fmt$(y.paid)} · <b style="color:${bal>0.005?'#c2410c':'#15803d'}">Balance ${fmt$(bal)}</b></div></td></tr>`;
+  }
   const rows=_rptCatCharges().filter(i=>/^Room · /.test(cat)?(_rptCat(i)==='Room'&&'Room · '+_rptRoomSub(i)===cat):_rptCat(i)===cat);
   return`<tr>
     <td colspan="4" style="padding:0;background:#fafafa;border-bottom:1px solid #f3f4f6">
