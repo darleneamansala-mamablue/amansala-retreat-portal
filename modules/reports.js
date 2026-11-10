@@ -1015,11 +1015,26 @@ async function _rptLoadStayRoom(){
   }catch(e){_dailyError='Room by stay date: '+(e.message||e);}
   _rptStayLoading=false;
 }
+// A booking saved as a retreat whose group name is "Extra Night" (Beth Laws, Oct 17 2026) is an extra night, not a retreat:
+// by stay date it goes under Room · Extra Night, by night, with its room / package total (Jorge 2026-11-10).
+function _rptIsExtraNightBk(bk){return bk&&bk.bookingType!=='room_only'&&/extra\s*night/i.test(bk.retreatName||'');}
+function _rptExtraNightBkItems(){
+  const from=_rptD(_dailyFrom),to=_rptD(_dailyTo)+_rptDayMs,out=[];
+  (AppData.bookings||[]).filter(bk=>_rptIsExtraNightBk(bk)&&bk.status!=='cancelled'&&bk.startDate&&bk.endDate).forEach(bk=>{
+    let rev=0;try{rev=typeof _calcRoomRevenue==='function'?_calcRoomRevenue(bk):0;}catch(e){}
+    if(!(rev>0))return;
+    const s0=_rptD(bk.startDate),e0=_rptD(bk.endDate),nights=Math.max(1,Math.round((e0-s0)/_rptDayMs));
+    const inN=Math.max(0,Math.round((Math.min(e0,to)-Math.max(s0,from))/_rptDayMs));if(inN<=0)return;
+    out.push({id:'bk_'+bk.id,category:'Room',description:'Extra Night booking (room / package total)',amount:+(rev*Math.min(inN,nights)/nights).toFixed(2),bk,guestName:bk.leaderName||null,
+      staff_name:null,created_at:bk.startDate+'T12:00:00',stay:`${bk.startDate} → ${bk.endDate}`,nightsIn:Math.min(inN,nights),nights});
+  });
+  return out;
+}
 function _rptSetCatMode(m){_catMode=m;try{localStorage.setItem('rpt_cat_mode',m);}catch(e){}_rptRenderCategoryView();}
 function _rptCatCharges(){
   if(_catMode!=='stay')return _rptDailyFolioCharges();
   const mine=i=>_dailyUser==='all'||i.staff_name==null||i.staff_name===_dailyUser;
-  return[..._rptDailyFolioCharges().filter(i=>_rptCat(i)!=='Room'),...(_rptStayRoom||[]).filter(mine)];
+  return[..._rptDailyFolioCharges().filter(i=>_rptCat(i)!=='Room'),...(_rptStayRoom||[]).filter(mine),...(_dailyUser==='all'?_rptExtraNightBkItems():[])];
 }
 function _rptCategoryGroups(){
   const charges=_rptCatCharges();
@@ -1050,7 +1065,7 @@ function _rptYogaGroups(){
   const from=_rptD(_dailyFrom),to=_rptD(_dailyTo)+_rptDayMs,out=[];
   (AppData.bookings||[]).forEach(bk=>{
     if(bk.bookingType==='room_only'||bk.status==='cancelled'||!bk.startDate||!bk.endDate)return;
-    if(_rptWtp.has(bk.id)||/bikini|bbc|restore|rnr|we ?travel/i.test((bk.retreatName||'')+' '+(bk.leaderName||'')))return;
+    if(_rptWtp.has(bk.id)||_rptIsExtraNightBk(bk)||/bikini|bbc|restore|rnr|we ?travel/i.test((bk.retreatName||'')+' '+(bk.leaderName||'')))return;
     const s0=_rptD(bk.startDate),e0=_rptD(bk.endDate),nights=Math.max(1,Math.round((e0-s0)/_rptDayMs));
     if(s0<from||s0>=to)return;
     const inN=nights;
