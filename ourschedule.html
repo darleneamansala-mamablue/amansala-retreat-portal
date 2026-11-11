@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Our Schedule | Amansala Tulum</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Jost',Helvetica,Arial,sans-serif;margin:0;padding:36px 16px;color:#2d2520;background:#f5f1eb}
+  .sheet{max-width:700px;margin:0 auto}
+  .head{text-align:center;margin-bottom:32px;padding-bottom:22px;border-bottom:2px solid #2d6a6a}
+  .eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;color:#2d6a6a;margin-bottom:10px}
+  h1{margin:0;font-size:32px;font-family:'Cormorant Garamond',serif;font-weight:700}
+  .dates{font-size:13.5px;color:#6b5f55;margin-top:8px}
+  .card{margin-bottom:26px;padding:22px 26px;background:#fff;border:1.5px solid #ede7db;border-radius:14px}
+  .dayhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  .dayhead h2{margin:0;font-size:21px;font-family:'Cormorant Garamond',serif}
+  .tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-radius:20px;padding:3px 11px}
+  .note{font-size:16px;font-weight:700;color:#2d6a6a;margin-bottom:14px;font-family:'Cormorant Garamond',serif}
+  .prompt{font-size:13.5px;font-style:italic;color:#5a5048;margin-bottom:20px;line-height:1.7;background:#faf7f2;border-radius:8px;padding:12px 16px;border-left:3px solid #b2d8d8}
+  .row{display:flex;align-items:baseline;gap:10px;padding:9px 0;border-bottom:1px solid #f0ece4}
+  .row.meal{color:#8a7e74;font-style:italic;font-size:12.5px;border-bottom:0;padding:7px 0}
+  .time{width:92px;flex-shrink:0;white-space:nowrap;font-size:12px;font-weight:700;color:#2d6a6a;font-variant-numeric:tabular-nums}
+  .meal .time{font-weight:400;color:inherit}
+  .what{flex:1;display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 10px}
+  .act{font-size:15px;font-weight:700;font-family:'Cormorant Garamond',serif}
+  .event .act{color:#7c3aed}
+  .who{font-size:12px;color:#6b5f55}
+  .pill{font-size:10.5px;font-weight:700;color:#2d6a6a;background:#eaf4f2;border-radius:20px;padding:2px 9px;white-space:nowrap;margin-left:auto}
+  .foot,.empty{text-align:center;padding:26px 0 10px;color:#8a7e74;font-size:14px;font-style:italic;font-family:'Cormorant Garamond',serif}
+</style>
+</head>
+<body>
+<div class="sheet" id="sheet"><div class="empty">Loading the schedule…</div></div>
+<script>
+(function () {
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  function fmt(iso) { var d = new Date(iso + 'T12:00:00'); return DAYS[d.getDay()] + ', ' + MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear(); }
+  function render(s) {
+    var total = s.days.length;
+    var days = s.days.map(function (day, di) {
+      var first = di === 0, last = di === total - 1;
+      var col = first ? '#0e9494' : last ? '#8b5cf6' : '#6b7280';
+      var tag = first ? 'Arrival Day' : last ? 'Departure Day' : 'Day ' + (di + 1) + ' of ' + total;
+      var rows = day.slots.map(function (l) {
+        if (l.type === 'meal') return '<div class="row meal"><span class="time">' + esc(l.time) + '</span><span>' + esc(l.activity) + '</span></div>';
+        var name = l.workshop && !/^workshop/i.test(l.activity) ? 'Workshop: ' + l.activity : l.activity;
+        var who = [l.instructor, l.coHost].filter(Boolean).join(' & ');
+        return '<div class="row' + (l.type === 'event' ? ' event' : '') + '"><span class="time">' + esc(l.time) + '</span><div class="what"><span class="act">' + esc(name) + '</span>' +
+          (who ? '<span class="who">w/ ' + esc(who) + '</span>' : '') + (l.location ? '<span class="pill">' + esc(l.location) + '</span>' : '') + '</div></div>';
+      }).join('');
+      return '<div class="card"><div class="dayhead"><h2>' + esc(fmt(day.date)) + '</h2><span class="tag" style="color:' + col + ';background:' + col + '18">' + tag + '</span></div>' +
+        (day.note ? '<div class="note">' + esc(day.note) + '</div>' : '') + (day.prompt ? '<div class="prompt">' + esc(day.prompt) + '</div>' : '') + rows + '</div>';
+    }).join('');
+    document.title = s.name + ' | Amansala Tulum';
+    document.getElementById('sheet').innerHTML = '<div class="head"><div class="eyebrow">Amansala · Tulum</div><h1>' + esc(s.name) + '</h1><div class="dates">' +
+      esc(fmt(s.startDate)) + ' – ' + esc(fmt(s.endDate)) + ' · ' + total + ' Days</div></div>' + days + '<div class="foot">With Love, Team Amansala 💙</div>';
+  }
+  function load() {
+    fetch('/.netlify/functions/bbc-public-schedule').then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.schedule && d.schedule.days) render(d.schedule);
+      else document.getElementById('sheet').innerHTML = '<div class="empty">The next schedule will be posted soon.</div>';
+    }).catch(function () { /* keep what is on screen */ });
+  }
+  load(); setInterval(load, 60000);
+})();
+</script>
+</body>
+</html>

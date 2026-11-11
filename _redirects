@@ -85,6 +85,7 @@ https://amansala-portal.netlify.app/*  https://amansalaportal.com/:splat  301!
 
 # Staffing view (no login) — must stay above the /:slug catch-all.
 /staffing  /staffing.html  200
+/ourschedule  /ourschedule.html  200
 /:slug  /.netlify/functions/shortlink/:slug  200
 
 # Section links for a teacher -- /nombredellider/dashboard, /schedule, /roomlist,
