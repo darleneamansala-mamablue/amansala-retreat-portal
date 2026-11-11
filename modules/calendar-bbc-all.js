@@ -31,4 +31,22 @@
       list.forEach(s => { if (s) delete s.__draftCal; });
     }
   };
+
+  // The Bikini Bootcamp schedules were only loaded when the BBC Schedule tab was opened, so the Calendar saw an empty list
+  // until then. Load them when the Calendar is built (at most once a minute) and redraw when they arrive.
+  if (typeof bbcLoadData === 'function' && typeof skedBuild === 'function') {
+    const build = window.skedBuild;
+    let last = 0, busy = false;
+    window.skedBuild = function () {
+      const r = build.apply(this, arguments);
+      if (!busy && Date.now() - last > 60000) {
+        busy = true; last = Date.now();
+        Promise.resolve(bbcLoadData()).catch(() => {}).then(() => {
+          busy = false;
+          if (document.getElementById('skedWrap')) window.skedBuild();
+        });
+      }
+      return r;
+    };
+  }
 })();
