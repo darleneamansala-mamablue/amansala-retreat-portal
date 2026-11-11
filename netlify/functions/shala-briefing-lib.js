@@ -116,8 +116,10 @@ function retreatEvents(d, ds) {
     (bk.retreat_activities || []).filter(a => String(a.date || '').slice(0, 10) === ds && ds !== bk.start_date && a.aoId !== 'ao21').forEach(a => {
       const ao = (d.addOns || {})[a.aoId]; if (!ao) return;
       const st = a.time || '09:00', key = ao.name + '|' + st;
-      if (!opt[key]) opt[key] = { type: 'act', start: st, end: toTime(toMin(st) + 90), what: ao.name, groups: [], guide: guideOf(a.aoId, ds) };
+      if (!opt[key]) opt[key] = { type: 'act', start: st, end: toTime(toMin(st) + 90), what: ao.name, groups: [], guide: guideOf(a.aoId, ds), signups: {} };
       if (!opt[key].groups.includes(title)) opt[key].groups.push(title);
+      // an optional activity counts who signed up for it (app_store act_signups_<booking>); a pre-paid one is the whole group
+      if (!a.prepaid) opt[key].signups[title] = ((d.signups || {})[bk.id] || []).filter(x => (x.activities || []).includes(a.aoId)).length;
       // ice bath: the 30-minute breathwork part holds a shala (ice-bath-shala.js)
       if (a.aoId === 'ao10' && a.shala && a.time) cls(a.shala, a.time, toTime(toMin(a.time) + 30), 'Breathwork — Ice Bath & Breathwork');
     });
@@ -191,7 +193,10 @@ function buildBriefing(d, ds, part) {
   const what = e => String(e.what).replace(/\s*🎵/g, '').replace(/\s+/g, ' ').trim();
   const pax = paxByGroup(d, ds), withPax = g => pax[g] ? `${g} · ${pax[g]} pax` : g;
   const classes = sort(evs.filter(e => e.type === 'class')).map(e => `${t(e)} · ${ICON[e.shala] || '📍 ' + String(SHALAS[e.shala] || e.shala).toUpperCase()} · ${what(e)} (${withPax(e.who)})${e.note ? ' | ' + e.note : ''}`);
-  const acts = sort(evs.filter(e => e.type === 'act')).map(e => `${t(e)} · ${kindOf(e.what)} · ${e.what} (${e.groups.map(withPax).join(', ')})${e.guide ? ' ' + e.guide : ''}${e.place ? ' | ' + e.place : ''}`);
+  // activities: an optional one shows how many signed up; a pre-paid one (or Fire Pit / sunrise) the group; a BBC optional
+  // one has no sign-up list, so no number
+  const actGroup = (e, g) => e.signups && g in e.signups ? `${g} · ${e.signups[g]} signed up` : g === 'BBC' && /optional/i.test(e.what) ? g : withPax(g);
+  const acts = sort(evs.filter(e => e.type === 'act')).map(e => `${t(e)} · ${kindOf(e.what)} · ${e.what} (${e.groups.map(g => actGroup(e, g)).join(', ')})${e.guide ? ' ' + e.guide : ''}${e.place ? ' | ' + e.place : ''}`);
   const head = new Date(ds + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).toUpperCase() + ' - ' + part;
   return { head, classes, acts };
 }
@@ -212,12 +217,15 @@ async function loadData(key) {
     get('app_store?select=key,value&key=in.(bbc_schedules,act_ops,opening_circle_leaders,' + NUMBERS_KEY + ')'),
   ]);
   const st = k => ((store.find(r => r.key === k) || {}).value);
+  // who signed up for the optional activities (activity-signup.html / the Activities page), per booking
+  const signups = {};
+  try { (await get('app_store?select=key,value&key=like.act_signups_*')).forEach(r => { signups[r.key.replace('act_signups_', '')] = Array.isArray(r.value) ? r.value : []; }); } catch (e) {}
   // the guests of the groups staying in the next days, for "(Korina Vaynter · 14 pax)" (Jorge 2026-11-11)
   const soon = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10), near = bookings.filter(b => b.start_date <= soon).map(b => b.id), regs = [];
   for (let i = 0; i < near.length; i += 60) regs.push(...await get(`registrations?select=booking_id,guests,check_in,check_out,cancelled&booking_id=in.(${near.slice(i, i + 60).map(encodeURIComponent).join(',')})`));
   const ao = {}; addOns.forEach(a => { ao[a.id] = a; });
   if (!ao.ao12) ao.ao12 = { id: 'ao12', name: 'Group Salsa Class' };
-  return { bookings, regs, addOns: ao, bbc: st('bbc_schedules') || [], actOps: st('act_ops') || {}, ocLeaders: st('opening_circle_leaders') || {}, numbers: st(NUMBERS_KEY) };
+  return { bookings, regs, signups, addOns: ao, bbc: st('bbc_schedules') || [], actOps: st('act_ops') || {}, ocLeaders: st('opening_circle_leaders') || {}, numbers: st(NUMBERS_KEY) };
 }
 
 async function sendTo(phone, tpl, params, idem) {
