@@ -4,7 +4,14 @@
 (function(){
   var TABS=['tab-dashboard','tab-venues','tab-roomcal','tab-skedda','tab-housekeeping','tab-transport','tab-events','tab-menu','tab-actsheet','tab-activity','tab-bbcsched','tab-confirmations','tab-wetravel'];
   var SKIP={INPUT:1,TEXTAREA:1,SELECT:1,OPTION:1,SCRIPT:1,STYLE:1};
-  var map=[],queued=false,busy=false;
+  var map=[],guests={},queued=false,busy=false;
+  // names of people who are guests themselves (a leader who also stays): a text that is just that name is the guest, not the
+  // retreat, and keeps the person's name (Jorge 2026-11-11: Katherine McClelland showed as "De La Sol Retreat" in Transport)
+  function buildGuests(){
+    var g={};
+    ((typeof AppData!=='undefined'&&AppData.regs)||[]).forEach(function(r){(r.guests||[]).forEach(function(x){if(x&&x.name)g[String(x.name).trim().toLowerCase()]=1;});});
+    return g;
+  }
 
   function buildMap(){
     var seen={},out=[];
@@ -38,13 +45,14 @@
   function run(){
     queued=false;if(busy)return;busy=true;
     try{
-      map=buildMap();if(!map.length)return;
+      map=buildMap();if(!map.length)return;guests=buildGuests();
       TABS.forEach(function(id){
         var root=document.getElementById(id);if(!root||!root.offsetParent&&root.style.display==='none')return;
         var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null),n,list=[];
         while((n=w.nextNode()))list.push(n);
         list.forEach(function(t){
           var v=t.nodeValue;if(!v||v.length<4||skipNode(t))return;
+          if(guests[v.trim().toLowerCase()])return;
           var nv=v;
           map.forEach(function(p){if(nv.indexOf(p[0])>=0)nv=nv.split(p[0]).join(p[1]);});
           if(nv!==v)t.nodeValue=nv;
