@@ -10,7 +10,11 @@
     var seen={},out=[];
     var types=(typeof RM_TYPE_COLORS!=='undefined')?RM_TYPE_COLORS:{};
     ((typeof AppData!=='undefined'&&AppData.bookings)||[]).forEach(function(b){
+      // retreats only: a Room Only / Extra Night booking's "leader" is the guest and its "retreat name" is the kind of stay
+      // ("Extra Night", "Walk-in"...) -- swapping those turned guests' names into "Extra Night" on Rooms (Jorge 2026-11-11, GV18)
+      if(b.bookingType==='room_only'||b.status==='cancelled')return;
       var l=(b.leaderName||'').trim(),r=(b.retreatName||'').trim();
+      if(/extra\s*night|walk-?in|direct|ota\b|cloudbeds|escape|booking\.com|expedia|air\s*bnb/i.test(r))return;
       if(!l||!r||l.length<4||l.toLowerCase()===r.toLowerCase())return;
       if(types[r]||/^🚧/.test(l))return;
       if(seen[l]&&seen[l]!==r){seen[l]=null;return;}
@@ -24,6 +28,9 @@
   function skipNode(n){
     for(var e=n.parentNode;e&&e.nodeType===1;e=e.parentNode){
       if(SKIP[e.tagName]||e.isContentEditable)return true;
+      // a room bar with a guest in it shows that guest's own name (the leader in her own room stays "Molly Morgan");
+      // only a blocked room without a guest shows the retreat
+      if(e.classList&&e.classList.contains('bk')&&!/blocked/.test(e.textContent||''))return true;
     }
     return false;
   }
