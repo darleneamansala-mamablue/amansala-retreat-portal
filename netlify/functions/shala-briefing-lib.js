@@ -221,13 +221,19 @@ async function runBriefing(part, opts = {}) {
   if (!opts.only && cfg.enabled === false) return { ds, part, skipped: 'switched off' };
   const people = opts.only ? [{ name: 'test', phone: opts.only }] : (cfg.people || []);
   const sh = toParams(b.head, b.classes, SHALA_LINES, 'No classes in the shalas'), ac = toParams(b.head, b.acts, ACT_LINES, 'No tours or activities');
-  const results = [];
-  for (const p of people) {
+  // everyone at once, then the ones Visito could not queue ("Failed to queue", Rosi and Tricia 2026-11-10) once more, same
+  // idempotency key so nobody gets it twice -- all inside the scheduled function's 30 s
+  const jobs = [];
+  people.forEach(p => {
     const idem = `shala-${ds}-${part}-${String(p.phone).replace(/\D/g, '')}${opts.only ? '-' + Date.now() : ''}`;
-    const r1 = await sendTo(p.phone, TPL_SHALA, sh, idem + '-s');
-    const r2 = await sendTo(p.phone, TPL_ACTS, ac, idem + '-a');
-    results.push({ name: p.name, shala: r1, acts: r2 });
+    jobs.push({ p, kind: 'shala', tpl: TPL_SHALA, params: sh, key: idem + '-s' }, { p, kind: 'acts', tpl: TPL_ACTS, params: ac, key: idem + '-a' });
+  });
+  await Promise.all(jobs.map(async j => { j.r = await sendTo(j.p.phone, j.tpl, j.params, j.key); }));
+  for (let round = 0; round < 2 && jobs.some(j => j.r !== 'sent'); round++) {
+    await new Promise(x => setTimeout(x, 4000));
+    await Promise.all(jobs.filter(j => j.r !== 'sent').map(async j => { j.r = await sendTo(j.p.phone, j.tpl, j.params, j.key); if (j.r === 'sent') j.retried = true; }));
   }
+  const results = people.map(p => { const mine = jobs.filter(j => j.p === p), r = k => { const j = mine.find(x => x.kind === k); return j.r + (j.retried ? ' (retry)' : ''); }; return { name: p.name, shala: r('shala'), acts: r('acts') }; });
   return { ds, part, classes: b.classes.length, acts: b.acts.length, results };
 }
 
