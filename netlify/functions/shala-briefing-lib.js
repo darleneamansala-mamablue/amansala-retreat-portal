@@ -168,6 +168,20 @@ function bbcEvents(d, ds) {
   return out;
 }
 
+// How many registered guests each group has staying that day: retreats by their name on the schedule, BBC / RNR together as 'BBC'
+function paxByGroup(d, ds) {
+  const out = {}, bks = {}; (d.bookings || []).forEach(b => { bks[b.id] = b; });
+  (d.regs || []).forEach(r => {
+    const b = bks[r.booking_id]; if (!b || r.cancelled) return;
+    const ci = r.check_in || b.start_date, co = r.check_out || b.end_date; if (!(ci <= ds && co > ds)) return;
+    const n = (r.guests || []).filter(g => g && g.name && !g.cancelled).length; if (!n) return;
+    const isBbc = /bikini|bbc|restore|rnr/i.test(`${b.retreat_name || ''} ${b.leader_name || ''}`);
+    const k = isBbc ? 'BBC' : (b.leader_name || b.retreat_name || 'Retreat');
+    out[k] = (out[k] || 0) + n;
+  });
+  return out;
+}
+
 // { head: 'NOV 10 - AM', classes: [...lines], acts: [...lines] } — part 'AM' = starts before 4:00 PM, 'PM' = from 4:00 PM
 function buildBriefing(d, ds, part) {
   const inPart = t => part === 'AM' ? t < '16:00' : t >= '16:00';
@@ -175,8 +189,9 @@ function buildBriefing(d, ds, part) {
   const sort = a => a.sort((x, y) => x.start.localeCompare(y.start) || x.end.localeCompare(y.end));
   const t = e => fmt(e.start) + '–' + fmt(e.end);
   const what = e => String(e.what).replace(/\s*🎵/g, '').replace(/\s+/g, ' ').trim();
-  const classes = sort(evs.filter(e => e.type === 'class')).map(e => `${t(e)} · ${ICON[e.shala] || '📍 ' + String(SHALAS[e.shala] || e.shala).toUpperCase()} · ${what(e)} (${e.who})${e.note ? ' | ' + e.note : ''}`);
-  const acts = sort(evs.filter(e => e.type === 'act')).map(e => `${t(e)} · ${kindOf(e.what)} · ${e.what} (${e.groups.join(', ')})${e.guide ? ' ' + e.guide : ''}${e.place ? ' | ' + e.place : ''}`);
+  const pax = paxByGroup(d, ds), withPax = g => pax[g] ? `${g} · ${pax[g]} pax` : g;
+  const classes = sort(evs.filter(e => e.type === 'class')).map(e => `${t(e)} · ${ICON[e.shala] || '📍 ' + String(SHALAS[e.shala] || e.shala).toUpperCase()} · ${what(e)} (${withPax(e.who)})${e.note ? ' | ' + e.note : ''}`);
+  const acts = sort(evs.filter(e => e.type === 'act')).map(e => `${t(e)} · ${kindOf(e.what)} · ${e.what} (${e.groups.map(withPax).join(', ')})${e.guide ? ' ' + e.guide : ''}${e.place ? ' | ' + e.place : ''}`);
   const head = new Date(ds + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).toUpperCase() + ' - ' + part;
   return { head, classes, acts };
 }
@@ -197,9 +212,12 @@ async function loadData(key) {
     get('app_store?select=key,value&key=in.(bbc_schedules,act_ops,opening_circle_leaders,' + NUMBERS_KEY + ')'),
   ]);
   const st = k => ((store.find(r => r.key === k) || {}).value);
+  // the guests of the groups staying in the next days, for "(Korina Vaynter · 14 pax)" (Jorge 2026-11-11)
+  const soon = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10), near = bookings.filter(b => b.start_date <= soon).map(b => b.id), regs = [];
+  for (let i = 0; i < near.length; i += 60) regs.push(...await get(`registrations?select=booking_id,guests,check_in,check_out,cancelled&booking_id=in.(${near.slice(i, i + 60).map(encodeURIComponent).join(',')})`));
   const ao = {}; addOns.forEach(a => { ao[a.id] = a; });
   if (!ao.ao12) ao.ao12 = { id: 'ao12', name: 'Group Salsa Class' };
-  return { bookings, addOns: ao, bbc: st('bbc_schedules') || [], actOps: st('act_ops') || {}, ocLeaders: st('opening_circle_leaders') || {}, numbers: st(NUMBERS_KEY) };
+  return { bookings, regs, addOns: ao, bbc: st('bbc_schedules') || [], actOps: st('act_ops') || {}, ocLeaders: st('opening_circle_leaders') || {}, numbers: st(NUMBERS_KEY) };
 }
 
 async function sendTo(phone, tpl, params, idem) {
