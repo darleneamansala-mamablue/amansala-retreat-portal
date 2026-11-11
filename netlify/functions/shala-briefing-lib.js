@@ -219,7 +219,8 @@ async function runBriefing(part, opts = {}) {
   const cfg = d.numbers || {};
   if (opts.dryRun) return { ds, part, ...b };
   if (!opts.only && cfg.enabled === false) return { ds, part, skipped: 'switched off' };
-  const people = opts.only ? [{ name: 'test', phone: opts.only }] : (cfg.people || []);
+  // a person with parts ['PM'] gets only the 1 PM messages, ['AM'] only the 9 PM ones; no parts = both (Jorge 2026-11-11: Noe, afternoons)
+  const people = opts.only ? [{ name: 'test', phone: opts.only }] : (cfg.people || []).filter(p => !Array.isArray(p.parts) || !p.parts.length || p.parts.includes(part));
   const sh = toParams(b.head, b.classes, SHALA_LINES, 'No classes in the shalas'), ac = toParams(b.head, b.acts, ACT_LINES, 'No tours or activities');
   // everyone at once, then the ones Visito could not queue ("Failed to queue", Rosi and Tricia 2026-11-10) once more, same
   // idempotency key so nobody gets it twice -- all inside the scheduled function's 30 s
