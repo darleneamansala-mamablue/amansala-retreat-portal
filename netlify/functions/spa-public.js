@@ -283,6 +283,7 @@ async function book(key, b) {
   const sd = (sdRow && sdRow.value) || {}, rot = (rotRow && rotRow.value) || {};
   const svc = (sd.services || []).find(s => s.id === b.serviceId && s.active);
   if (!svc) return reply(400, { error: 'That service is not available.' });
+  if (/tarot/i.test(svc.name || '')) return reply(400, { error: 'Tarot readings are booked with a person. Please contact us directly.' });
   const date = String(b.date || ''), start = String(b.start || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(start)) return reply(400, { error: 'Please pick a date and time.' });
   if (apptTime({ date, start }) < Date.now() + 2 * 3600e3 - 60e3) return reply(400, { error: "Online bookings need at least 2 hours' notice." });
