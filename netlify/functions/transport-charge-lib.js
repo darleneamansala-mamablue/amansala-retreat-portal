@@ -531,6 +531,8 @@ async function runCharges(key, opts) {
   // Each guest pays their own seat: one reconcile per registration (two guests in a king room share one)
   const byReg = new Map();
   for (const e of guestPays) {
+    // a visitor who already paid online (Stripe, via Lana) rides in the van but is never charged to a folio
+    if (e.data.paidOnline) { res.skipped.push({ rowId: e.rowId, name: e.name, reason: 'paid_online' }); continue; }
     const reg = findReg(e);
     // A row with no room is only reported when that person was not found through another row (same email or name)
     const em = String(e.data.email || '').toLowerCase().trim();
@@ -586,4 +588,26 @@ async function runCharges(key, opts) {
   return res;
 }
 
-module.exports = { runCharges, SUPABASE_URL, supaFetch, fetchAll, loadRates, autoRate, nameMatch, dedupeGuests, reconcileCharges, existingCharges, linkRows, fields, rideGroups };
+// A ride added or completed AFTER the nightly run already went over its date (arrivals are charged the night before, departures
+// two nights before) was never charged (Jorge 2026-11-11: Sheela Mahdavi's 3 pm departure asked on the day). Called right after
+// a transport row is saved by Lana, the guest form or staff: for each direction whose date the nightly run has passed (today or
+// later), charge it now the same way -- same rates, same shared-van price, nothing twice. Never throws.
+async function chargeIfLate(key, rowId) {
+  const out = [];
+  try {
+    const r = await supaFetch(key, `transport?select=id,booking_id,data&id=eq.${encodeURIComponent(rowId)}&limit=1`);
+    const row = Array.isArray(r.data) ? r.data[0] : null;
+    if (!row || !row.data || row.data.paidOnline) return out;
+    const today = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+    const plus = n => new Date(Date.parse(today + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+    for (const [direction, ahead] of [['arrival', 1], ['departure', 2]]) {
+      const f = fields(direction), date = row.data[f.date];
+      if (!date || row.data[f.ot] || date < today || date > plus(ahead)) continue;   // the nightly run will still do it
+      const res = await runCharges(key, { direction, date, mode: 'sync', bookingId: row.booking_id || null, triggerRowId: rowId });
+      out.push({ direction, date, charged: res.charged.length, updated: res.updated.length, errors: res.errors });
+    }
+  } catch (e) { console.warn('[transport chargeIfLate]', rowId, e.message); }
+  return out;
+}
+
+module.exports = { chargeIfLate, runCharges, SUPABASE_URL, supaFetch, fetchAll, loadRates, autoRate, nameMatch, dedupeGuests, reconcileCharges, existingCharges, linkRows, fields, rideGroups };

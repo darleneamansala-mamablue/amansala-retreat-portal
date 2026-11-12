@@ -177,12 +177,29 @@ exports.handler = async (event) => {
         body: JSON.stringify({ id: rowId, booking_id: bookingId, data, submitted_at: data.submittedAt }),
       });
       if (!saveRes.ok) throw new Error('No se pudo guardar el transporte: ' + await saveRes.text());
+      // the nightly charge already went over this date (a same-day or next-day ride): charge it now (Jorge 2026-11-11)
+      const late = await require('./transport-charge-lib').chargeIfLate(supaKey, rowId);
+      const chargedNow = late.some(x => x.charged || x.updated);
 
       return ok({
         success: true, guestType: 'hotel', direction: dir, bookingId,
-        priceDisplay, totalUSD,
-        message: `Información de transporte guardada (${dir === 'arrival' ? 'llegada' : 'salida'}, ${date}${time ? ' ' + time : ''}, ${ap === 'cancun' ? 'Cancún' : 'Tulum'}). Se cobrará automáticamente a tu cuarto la noche antes (${priceDisplay} = $${totalUSD.toFixed(2)} USD total).`,
+        priceDisplay, totalUSD, chargedNow,
+        message: `Información de transporte guardada (${dir === 'arrival' ? 'llegada' : 'salida'}, ${date}${time ? ' ' + time : ''}, ${ap === 'cancun' ? 'Cancún' : 'Tulum'}). ${chargedNow ? 'Ya se cargó a su cuarto' : 'Se cobrará automáticamente a su cuarto la noche antes'} (${priceDisplay} = $${totalUSD.toFixed(2)} USD total; si alguien más comparte la van el precio por persona baja).`,
       });
+    }
+
+    // Offsite guest who ALREADY paid this ride (stripe-webhook created it, paidOnline): Lana is adding the flight number / time
+    // they sent afterwards -- update that ride, never a second payment link (Jorge 2026-11-11)
+    {
+      const paidRows = await (await fetch(`${SUPABASE_URL}/rest/v1/transport?select=id,data&data->>paidOnline=eq.true&data->>email=ilike.${encodeURIComponent(email)}`, { headers: hdrs })).json().catch(() => []);
+      const f = dir === 'arrival' ? { date: 'arrivalDate', time: 'arrivalTime', airport: 'arrivalAirport' } : { date: 'departureDate', time: 'departureTime', airport: 'departureAirport' };
+      const paid = (Array.isArray(paidRows) ? paidRows : []).find(r => r.data && r.data[f.date] === date);
+      if (paid) {
+        const data = { ...paid.data, [f.time]: time || paid.data[f.time] || '', [f.airport]: ap, flightNumber: flightNumber || paid.data.flightNumber || '', lastEditBy: { by: 'lana', at: new Date().toISOString() } };
+        const up = await fetch(`${SUPABASE_URL}/rest/v1/transport?id=eq.${encodeURIComponent(paid.id)}`, { method: 'PATCH', headers: { ...hdrs, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ data }) });
+        if (!up.ok) throw new Error('No se pudo actualizar el transporte: ' + await up.text());
+        return ok({ success: true, guestType: 'offsite', alreadyPaid: true, direction: dir, message: `Ya estaba pagado. Actualicé su traslado (${dir === 'arrival' ? 'llegada' : 'salida'} ${date}${data[f.time] ? ' ' + data[f.time] : ''}${data.flightNumber ? ', vuelo ' + data.flightNumber : ''}). No hay que pagar nada más.` });
+      }
     }
 
     // Offsite: real Stripe Checkout Session, base + tax as two line items (same pattern as

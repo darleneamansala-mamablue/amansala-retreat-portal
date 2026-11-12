@@ -180,6 +180,8 @@ exports.handler = async (event) => {
       body: JSON.stringify({ id, booking_id: data.bookingId, data, submitted_at: data.submittedAt }),
     });
     if (!r.ok) throw new Error('save ' + r.status + ' ' + (await r.text()).slice(0, 120));
+    // a ride whose date the nightly charge already went over is charged now (Jorge 2026-11-11)
+    await require('./transport-charge-lib').chargeIfLate(key, id);
     const editUrl = `${SITE}/transport-form.html?tr=${encodeURIComponent(id)}&k=${editKey}`;
     try { await sendMail({ to: email, subject: prev ? 'Transport Info Updated — Amansala' : 'Transport Info Received — Amansala', html: emailHtml(data, !!prev, editUrl) }); } catch (e) {}
     const entry = { id }; GUEST_KEYS.forEach(k => { if (data[k] !== undefined) entry[k] = data[k]; });

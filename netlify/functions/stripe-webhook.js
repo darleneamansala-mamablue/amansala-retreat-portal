@@ -190,6 +190,14 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ received: true, visitoSpa: true }) };
     }
 
+    // Lana's airport transfer payment links for visitors (visito-transport-create-booking.js): until 2026-11-11 nothing happened after
+    // the payment. Now the ride goes on Transport (paid online) and the guest is sent the transport form (transport-paid-lib.js).
+    if (meta.source === 'visito_transport') {
+      try { const r = await require('./transport-paid-lib').onTransportPaid(process.env.SUPABASE_SERVICE_KEY, pi); console.log('[stripe-webhook] visito transport', pi.id, r.result); }
+      catch (err) { console.error('[stripe-webhook] visito transport payment error:', err.message); }
+      return { statusCode: 200, body: JSON.stringify({ received: true, visitoTransport: true }) };
+    }
+
     if (!meta.email || !meta.checkIn || !meta.checkOut) {
       console.warn('[stripe-webhook] Missing metadata on PI:', pi.id);
       return { statusCode: 200, body: JSON.stringify({ received: true }) };

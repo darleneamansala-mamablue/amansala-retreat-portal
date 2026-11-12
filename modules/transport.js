@@ -2664,6 +2664,8 @@ async function tr2SaveEdit(rowId) {
     try {
       await db.from('transport').insert({ id: newId, booking_id: entry?.retreatId || null, data: updatedData });
       _trLog('Transport created', entry?.retreatId);
+      // a ride whose date the nightly charge already went over is charged now (Jorge 2026-11-11)
+      try { await fetch('/.netlify/functions/transport-charge-late', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rowId: newId }) }); } catch (e) {}
       document.getElementById('tr2-edit-modal')?.remove();
       showToast('Transporte creado ✓');
       await tr2LoadData();

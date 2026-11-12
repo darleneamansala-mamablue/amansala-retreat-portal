@@ -50,5 +50,7 @@ exports.handler = async (event) => {
     let d; try { d = JSON.parse(text); } catch { d = text; }
     return jsonErr(res.status, typeof d === 'object' ? (d[0]?.message ?? JSON.stringify(d)) : text);
   }
+  // a ride whose date the nightly charge already went over is charged now (Jorge 2026-11-11)
+  await require('./transport-charge-lib').chargeIfLate(supaKey, String(id));
   return ok({ ok: true });
 };
