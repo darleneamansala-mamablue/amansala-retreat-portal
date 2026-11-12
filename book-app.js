@@ -472,7 +472,13 @@ function getDefaultDesc(rt) {
   return rt.be_description ?? '';
 }
 
+// Every room card ends with the breakfast line (Darlene 2026-11-12).
+const BREAKFAST_LINE = 'Full breakfast served beachfront';
 function getFeatures(rt) {
+  const list = getBaseFeatures(rt);
+  return list.length && !list.some(f => /breakfast/i.test(f)) ? [...list, BREAKFAST_LINE] : list;
+}
+function getBaseFeatures(rt) {
   if (rt.be_amenities && rt.be_amenities.length) return rt.be_amenities;
   const n = rt.name.toLowerCase();
   if (n.includes('beachfront')) return ['King bed','Large terrace','Direct sea view','Private bathroom','Closet'];
