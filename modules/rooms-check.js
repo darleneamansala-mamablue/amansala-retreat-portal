@@ -61,8 +61,18 @@
     if (document.getElementById('rcheckChip')) return;
     if (typeof tnrAdmin === 'function' && !tnrAdmin()) return;
     const b = document.createElement('button'); b.id = 'rcheckChip'; b.textContent = '🔎 Rooms check'; b.onclick = show;
-    b.style.cssText = 'position:fixed;right:14px;bottom:268px;z-index:99986;padding:8px 14px;border-radius:99px;border:2px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;font-family:Jost,sans-serif;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12)';
+    b.style.cssText = 'position:fixed;right:14px;bottom:330px;z-index:99992;padding:8px 14px;border-radius:99px;border:2px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;font-family:Jost,sans-serif;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12)';
     document.body.appendChild(b);
   }
+  // also a button in the Rooms grid toolbar (next to the "show N days" list), where it is easy to find
+  function toolbarBtn() {
+    const sel = document.getElementById('rcShowSel');
+    if (!sel || document.getElementById('rcheckBtn')) return;
+    if (typeof tnrAdmin === 'function' && !tnrAdmin()) return;
+    const b = document.createElement('button'); b.id = 'rcheckBtn'; b.type = 'button'; b.textContent = '🔎 Rooms check'; b.onclick = show;
+    b.style.cssText = 'margin-left:8px;padding:6px 12px;border-radius:8px;border:1.5px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;font-family:Jost,sans-serif;font-size:12.5px;font-weight:700;cursor:pointer';
+    sel.insertAdjacentElement('afterend', b);
+  }
   setTimeout(chip, 9500); setInterval(chip, 60000);
+  setTimeout(toolbarBtn, 3000); setInterval(toolbarBtn, 5000);
 })();
