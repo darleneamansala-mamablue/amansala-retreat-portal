@@ -4967,10 +4967,18 @@ async function _casRoomClashes(added){
   added.forEach(({id,room})=>{
     const bk=mine.find(b=>b.id===id);
     if(!bk||bk.status==='cancelled'||!roomListIncludes(bk.blocked_rooms,room))return;
-    const other=data.find(o=>o.id!==id&&o.status!=='cancelled'&&!deletedBookingIds.has(o.id)&&roomListIncludes(o.blocked_rooms,room)&&o.start_date<bk.end_date&&o.end_date>bk.start_date);
-    if(other)out.push({id,room,bk,other});
+    data.filter(o=>o.id!==id&&o.status!=='cancelled'&&!deletedBookingIds.has(o.id)&&roomListIncludes(o.blocked_rooms,room)&&o.start_date<bk.end_date&&o.end_date>bk.start_date)
+      .forEach(other=>out.push({id,room,bk,other}));
   });
-  return out;
+  if(!out.length)return out;
+  // A split stay keeps both rooms in blocked_rooms for the whole booking: when a booking has stays registered in the room,
+  // only those nights count (Hilario 2026-11-13: Lara Beard 24→21 then Anne Elizabeth Jay 18→24 on the same day was flagged)
+  const{data:regs,error:e3}=await db.from('registrations').select('booking_id,room,check_in,check_out,cancelled').in('booking_id',[...new Set(out.flatMap(c=>[c.bk.id,c.other.id]))]);
+  if(e3||!regs)return out;
+  const nights=(b,room)=>{const st=regs.filter(r=>r.booking_id===b.id&&!r.cancelled&&roomCodesEqual(r.room,room));return st.length?st.map(r=>[r.check_in||b.start_date,r.check_out||b.end_date]):[[b.start_date,b.end_date]];};
+  const seen=new Set();
+  return out.filter(c=>nights(c.bk,c.room).some(([s1,e1])=>nights(c.other,c.room).some(([s2,e2])=>s1<e2&&e1>s2)))
+    .filter(c=>{const k=c.id+'|'+c.room;if(seen.has(k))return false;seen.add(k);return true;});
 }
 async function _casRoomClashCheck(added){
   try{
