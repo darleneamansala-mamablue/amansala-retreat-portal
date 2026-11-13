@@ -2546,31 +2546,48 @@ function openCopyModal(){
 // (also padded) intersects its own -- so two retreats that are merely close
 // in time (not just literally overlapping) never land on the same color.
 // Populates the shared _rcColorAssignments map getRetreatColorIdx() reads.
-function _rcAssignColors(winStartMs,winEndMs){
+function _rcAssignColors(){
+  // Same colors for every user (Jorge 2026-11-13): colors are assigned over ALL retreats, oldest first, not just the
+  // ones in the window being viewed -- the old window-based pass gave different colors depending on where each person
+  // had the calendar scrolled. And no more pile-ups on the last color: when every color is used by a retreat within
+  // 4 days, it takes a color no retreat actually overlapping is using, the one whose last use is farthest away; only if
+  // more than 10 retreats truly overlap does a color repeat (the least used among them).
   const candidates=AppData.bookings.filter(bk=>
-    bk.status!=='cancelled'&&bk.bookingType!=='room_only'&&bk.source!=='wetravel'&&
-    bk.startDate&&bk.endDate&&pd(bk.startDate).getTime()<winEndMs&&pd(bk.endDate).getTime()>winStartMs
-  ).sort((a,b)=>a.startDate.localeCompare(b.startDate));
-  // Padded by a few days on each side before testing intersection -- two
-  // retreats back-to-back the same week (never literally overlapping) still
-  // count as a conflict, matching Jorge's own example.
-  const CONFLICT_PAD_MS=4*DAY_MS;
-  const assigned=[]; // {startMs,endMs,idx} (already padded)
+    bk.status!=='cancelled'&&bk.bookingType!=='room_only'&&bk.source!=='wetravel'&&bk.startDate&&bk.endDate
+  ).sort((a,b)=>a.startDate.localeCompare(b.startDate)||a.endDate.localeCompare(b.endDate)||String(a.id).localeCompare(String(b.id)));
+  const CONFLICT_PAD_MS=4*DAY_MS,N=RETREAT_PALETTE.length;
+  let active=[]; // {s,e,idx}: real dates of retreats that can still touch the next ones
   const map=new Map();
   candidates.forEach(bk=>{
+    const s=pd(bk.startDate).getTime(),e=pd(bk.endDate).getTime();
+    active=active.filter(o=>o.e+2*CONFLICT_PAD_MS>s);
     const override=bk.packageCustomPrices?.__cfg__?.colorIdx;
-    const s=pd(bk.startDate).getTime()-CONFLICT_PAD_MS,e=pd(bk.endDate).getTime()+CONFLICT_PAD_MS;
     let idx;
-    if(override!=null&&override>=0&&override<RETREAT_PALETTE.length){
+    if(override!=null&&override>=0&&override<N){
       idx=override;
     }else{
-      const taken=new Set(assigned.filter(o=>s<o.endMs&&e>o.startMs).map(o=>o.idx));
-      idx=0;while(taken.has(idx)&&idx<RETREAT_PALETTE.length-1)idx++;
+      const near=active.filter(o=>s-CONFLICT_PAD_MS<o.e+CONFLICT_PAD_MS&&e+CONFLICT_PAD_MS>o.s-CONFLICT_PAD_MS);
+      const nearSet=new Set(near.map(o=>o.idx));
+      idx=-1;for(let i=0;i<N;i++){if(!nearSet.has(i)){idx=i;break;}}
+      if(idx<0){
+        const overlap=near.filter(o=>s<o.e&&e>o.s),overSet=new Set(overlap.map(o=>o.idx));
+        const gap=i=>{let g=Infinity;near.forEach(o=>{if(o.idx===i)g=Math.min(g,Math.max(s-o.e,o.s-e));});return g;};
+        let best=-1;for(let i=0;i<N;i++){if(overSet.has(i))continue;if(best<0||gap(i)>gap(best))best=i;}
+        if(best<0){const cnt=new Array(N).fill(0);overlap.forEach(o=>cnt[o.idx]++);best=cnt.indexOf(Math.min(...cnt));}
+        idx=best;
+      }
     }
-    assigned.push({startMs:s,endMs:e,idx});
+    active.push({s,e,idx});
     map.set(bk.id,idx);
   });
   _rcColorAssignments=map;
+  _rcColorSig=_rcColorSigNow();
+}
+// Recompute when a retreat is added/moved/cancelled or a color override changes.
+let _rcColorSig='';
+function _rcColorSigNow(){
+  let h=0;AppData.bookings.forEach(b=>{if(b.bookingType==='room_only')return;const t=b.id+b.startDate+b.endDate+b.status+(b.packageCustomPrices?.__cfg__?.colorIdx??'');for(let i=0;i<t.length;i++)h=(h*31+t.charCodeAt(i))|0;});
+  return AppData.bookings.length+':'+h;
 }
 function _joinNames(names){
   if(names.length<=1)return names[0]||'';
@@ -2647,7 +2664,7 @@ function rcBuild(){
   // potential color conflict with what's shown (Jorge's example: back-to-
   // back weekly turnovers, never literally overlapping, still confusingly
   // same-colored).
-  _rcAssignColors(startMs-7*DAY_MS,startMs+rcShowDays*DAY_MS+7*DAY_MS);
+  _rcAssignColors();
   let totalRooms=0;
   const occupied=new Array(rcShowDays).fill(0);
 

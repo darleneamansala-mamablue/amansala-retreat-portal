@@ -5691,7 +5691,7 @@ const RETREAT_PALETTE=[
 // two back-to-back or overlapping retreats, confusing at a glance). Both the
 // room grid bars and the "Active in this view" strip read from this same map
 // so they stay visually consistent with each other.
-let _rcColorAssignments=new Map();
+let _rcColorAssignments=new Map(),_rcColorCheckedAt=0;
 // Accepts a booking object (preferred — checks for an admin-set color override
 // first) or a bare id string (back-compat — always hashes, no override possible).
 function getRetreatColorIdx(bkOrId){
@@ -5699,6 +5699,8 @@ function getRetreatColorIdx(bkOrId){
   const override=bk?.packageCustomPrices?.__cfg__?.colorIdx;
   if(override!=null&&override>=0&&override<RETREAT_PALETTE.length)return override;
   const bkId=bk?bk.id:bkOrId;
+  // the shared assignment (venues.js _rcAssignColors) covers every retreat, so every screen and every user gets the same color
+  try{if(typeof _rcAssignColors==='function'&&(!_rcColorAssignments.size||Date.now()-_rcColorCheckedAt>1500)){_rcColorCheckedAt=Date.now();if(!_rcColorAssignments.size||_rcColorSig!==_rcColorSigNow())_rcAssignColors();}}catch(e){}
   if(_rcColorAssignments.has(bkId))return _rcColorAssignments.get(bkId);
   let h=0;for(let i=0;i<(bkId||'').length;i++)h=(h*31+bkId.charCodeAt(i))%RETREAT_PALETTE.length;
   return h;
@@ -7058,7 +7060,7 @@ function switchTab(id,btn){
 <script src="modules/i18n-es-booking-detail.js?v=20261109a"></script>
 <script src="modules/tab-urls.js?v=20261103a"></script>
 <script src="modules/cas-sync.js?v=20261101b"></script>
-<script src="modules/venues.js?v=20261107a"></script>
+<script src="modules/venues.js?v=20261113a"></script>
 <script src="modules/booking-dates.js?v=20261026a"></script>
 <script src="modules/room-optimizer.js?v=20261101a"></script>
 <script src="modules/sales-pipeline.js"></script>
