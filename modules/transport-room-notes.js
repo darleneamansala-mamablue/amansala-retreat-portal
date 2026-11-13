@@ -35,8 +35,8 @@
   window.tnExpand = function (el) { const full = el.getAttribute('data-full'); if (!full) return; const open = el.getAttribute('data-open') === '1'; el.textContent = open ? full.slice(0, MAX).trim() + '…' : full; el.setAttribute('data-open', open ? '0' : '1'); };
   window.trRoomNoteHtml = function (full) {
     if (!full) return '';
-    if (full.length <= MAX) return `<span style="font-size:11px;color:#6b7280;font-style:italic">${esc(full)}</span>`;
-    return `<span title="${esc(full)}" data-full="${esc(full)}" data-open="0" onclick="event.stopPropagation();tnExpand(this)" style="font-size:11px;color:#6b7280;font-style:italic;cursor:pointer">${esc(full.slice(0, MAX).trim())}…</span>`;
+    if (full.length <= MAX) return `<span style="font-size:11px;color:#dc2626;font-weight:700">${esc(full)}</span>`;
+    return `<span title="${esc(full)}" data-full="${esc(full)}" data-open="0" onclick="event.stopPropagation();tnExpand(this)" style="font-size:11px;color:#dc2626;font-weight:700;cursor:pointer">${esc(full.slice(0, MAX).trim())}…</span>`;
   };
 
   // Jorge 2026-11-04: the notes one under the other, each with its label, never run together --
