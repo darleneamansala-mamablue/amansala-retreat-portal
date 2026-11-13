@@ -1892,10 +1892,10 @@ function tr2BuildView() {
   // next to the room number, and in Upgrade mode an Options column (lateral same-category
   // room swaps, see tr2OptionsCell/tr2SwapRooms) sits right before Upgrade. Column count
   // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
-  const totalCols = (tr2UpgradeMode ? 14 : 13) + (tr2View === 'departures' ? 1 : 0);   // + Transport Notes (Jorge 2026-11-13)   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
+  const totalCols = (tr2UpgradeMode ? 13 : 12) + (tr2View === 'departures' ? 1 : 0);   // + Transport Notes (Jorge 2026-11-13)   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
   const tableHeader = `<thead><tr>
     ${TH('Habitación','62px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','62px')}${TH('Nombre','170px')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto · ' + timeColLabel)}${TH('Retiro')}${TH('Share & wait')}${TH('Email / Phone')}
-    ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}${TH('Transport Notes')}
+    ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}
     ${tr2View === 'departures' ? TH('Online check-out','90px') : ''}${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
 
@@ -2077,7 +2077,6 @@ function tr2RenderRow(e, color, groupPax) {
     ${TD(e.share ? `<span title="OK to share a ride and wait up to 30 minutes" style="color:#16a34a;font-weight:700;font-size:14px">✓</span>` : '', 'text-align:center')}
     ${(() => { const c = tr2Contact(e); const line = (lbl, v) => `<div title="${v ? escHtml(v) : 'Missing'}" style="font-size:11px;white-space:nowrap;color:${v ? '#374151' : '#9ca3af'}">${lbl} ${v ? '<span style="color:#16a34a;font-weight:700">✓</span>' : '<span style="color:#d1d5db">—</span>'}</div>`; return TD(line('Email', c.email) + line('Phone number', c.phone)); })()}
     ${tr2UpgradeMode ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2OptionsCell(e)}</td><td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2UpgradeCell(e)}</td>` : TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.notes)}</span>` : '')}
-    ${TD(tr2CleanTransportNotes(e.transportNotes) ? (typeof trRoomNoteHtml === 'function' ? trRoomNoteHtml((window.trDedupeNote || (x => x))(tr2CleanTransportNotes(e.transportNotes))) : `<span style="font-size:11px;color:#dc2626;font-weight:700">${escHtml(tr2CleanTransportNotes(e.transportNotes))}</span>`) : '', 'max-width:220px')}
     ${tr2View === 'departures' ? (() => { const o = e.regId && tr2OnlinePaid[e.regId]; return TD(o ? `<span title="Paid online $${o.amt.toFixed(2)}" style="color:#059669;font-weight:700">✓</span><div style="font-size:10px;color:#059669">$${o.amt.toFixed(2)}</div>` : '<span style="color:#d1d5db">—</span>', 'text-align:center'); })() : ''}
     ${TD(costCell)}
     <td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap">
