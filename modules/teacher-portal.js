@@ -563,11 +563,12 @@ function regRender(){
     const _selectedNotes=new Set(regSelBk.packageCustomPrices?.__cfg__?.roomNotes||[]);
     const notesCard=document.createElement('div');
     notesCard.style.cssText='margin-bottom:14px;padding:12px 14px;background:#f8f5f0;border:1.5px solid var(--border);border-radius:10px';
+    // Add More Rooms sits here too, next to the notes, so it is at hand while working the room list (Jorge 2026-11-13)
     notesCard.innerHTML=`<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Room List Notes</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${ROOM_NOTE_PRESETS.map(n=>{
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${ROOM_NOTE_PRESETS.map(n=>{
         const on=_selectedNotes.has(n);
         return `<button onclick="regToggleRoomNote('${n.replace(/'/g,"\\'")}')" style="padding:5px 12px;border-radius:99px;font-size:12px;font-family:'Jost',sans-serif;cursor:pointer;border:1.5px solid ${on?'var(--teal)':'var(--border)'};background:${on?'var(--teal)':'#fff'};color:${on?'#fff':'var(--dark)'};font-weight:${on?'700':'500'}">${on?'✓ ':''}${escHtml(n)}</button>`;
-      }).join('')}</div>`;
+      }).join('')}<button class="btn btn-secondary btn-sm" onclick="openBlockModal(regSelBk&&regSelBk.id)" style="margin-left:auto;display:flex;gap:5px">🛏 Add More Rooms</button></div>`;
     panel.appendChild(notesCard);
   }
 
