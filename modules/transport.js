@@ -587,6 +587,11 @@ function tr2AutoRate(e, groupPax) {
   return tbl[Math.min(groupPax - 1, tbl.length - 1)];
 }
 
+// "Retreat · Leader" -- when the retreat is named after the teacher ("Shannon Jamail · Shannon Jamail") the name shows once (Darlene 2026-11-13)
+function tr2RetreatTitle(bk) {
+  const r = String(bk.retreatName || '').trim(), l = String(bk.leaderName || '').trim();
+  return (r && l && r.toLowerCase() === l.toLowerCase()) ? r : [r, l].filter(Boolean).join(' · ');
+}
 let tr2View          = 'arrivals';
 let tr2RetreatFilter = '';
 let tr2RetreatLabelMap  = {}; // label (lowercased) -> booking id, for the retreat search box
@@ -1235,7 +1240,7 @@ async function tr2LoadData() {
     gone.forEach(n => { if (!active.has(n)) cancelledKeys.add(`${bk.id}|${n}`); });
   });
   tr2ActiveBooks.forEach(bk => {
-    const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
+    const retreatLabel = tr2RetreatTitle(bk);
     // Same guard as the synthetic "Missing Transport" loop below -- a room
     // removed from the retreat's own room list shouldn't feed room-lookup/
     // name-matching indices either, or a stale reg can still resolve a real
@@ -1279,7 +1284,7 @@ async function tr2LoadData() {
   if (datalist) {
     const sorted = [...tr2ActiveBooks].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
     sorted.forEach(b => {
-      const label = `${b.leaderName}${b.retreatName ? ` · ${b.retreatName}` : ''} (${fmtDate(b.startDate)})`;
+      const label = `${b.leaderName}${b.retreatName && String(b.retreatName).trim().toLowerCase() !== String(b.leaderName || '').trim().toLowerCase() ? ` · ${b.retreatName}` : ''} (${fmtDate(b.startDate)})`;
       tr2RetreatLabelMap[label.toLowerCase()] = b.id;
       tr2RetreatIdToLabel[b.id] = label;
     });
@@ -1506,7 +1511,7 @@ async function tr2LoadData() {
     const room = (matched && matched.room) ? matched.room : ((d.roomOverride || '').trim() || '');
     const regId = matched ? matched.regId : null;
     const checkedIn = !!(matched && matched.checkedInAt);
-    const retreatLabel = bk ? [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ') : 'Sin retiro asignado';
+    const retreatLabel = bk ? tr2RetreatTitle(bk) : 'Sin retiro asignado';
 
     // An OT (own transport) guest legitimately has no date/time at all, or a
     // date with no time (staff ticking the OT box on an existing submission
@@ -1594,7 +1599,7 @@ async function tr2LoadData() {
     });
   };
   tr2ActiveBooks.forEach(bk => {
-    const retreatLabel = [bk.retreatName, bk.leaderName].filter(Boolean).join(' · ');
+    const retreatLabel = tr2RetreatTitle(bk);
     // A room removed from the retreat's own room list (bk.blockedRooms) can still
     // have a leftover registrations row (nobody deletes it, just unblocks the
     // room) -- without this check that orphaned reg kept spawning a synthetic
