@@ -41,16 +41,18 @@ function renderStaticRooms() {
     const num      = String(idx + 1).padStart(2, '0');
     const eyebrow  = getRoomTag(rt);
     const desc     = rt.be_description || getDefaultDesc(rt);
-    const features = (rt.be_amenities && rt.be_amenities.length) ? rt.be_amenities : getFeatures(rt);
-    const photos   = rt.be_photos ?? [];
-    const imgSrc   = photos[0] ?? getRoomImage(rt);
+    const features = getFeatures(rt);
+    const gallery  = getRoomPhotos(rt);
+    const imgSrc   = gallery[0];
 
     html += `<article class="stay-card">
-      <div class="stay-image-wrap" onclick="promptDates()" role="button" tabindex="0" aria-label="Select ${esc(rt.name)}">
+      <div class="stay-image-wrap" onclick="openGallery('${esc(rt.id)}')" role="button" tabindex="0" aria-label="View photos of ${esc(rt.name)}"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openGallery('${esc(rt.id)}')}">
         ${imgSrc
           ? `<img src="${esc(imgSrc)}" alt="${esc(rt.name)} at Amansala" loading="${idx===0?'eager':'lazy'}">`
           : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#d8d1c5;color:rgba(31,43,39,.3);font-size:42px">🌴</div>`}
         <span class="image-count">${num}</span>
+        ${galleryPill(gallery.length)}
       </div>
       <div class="stay-content">
         <div class="stay-title-row">
@@ -61,7 +63,7 @@ function renderStaticRooms() {
           <div class="stay-price"></div>
         </div>
         ${desc ? `<p class="stay-description">${esc(desc)}</p>` : ''}
-        ${features.length ? `<ul>${features.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+        ${features.length ? `<ul class="stay-features">${features.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>` : ''}
         <button class="select-button" type="button" onclick="(_calIn&&_calOut)?searchRooms():promptDates()">Select this room ${arrowSvgLg}</button>
       </div>
     </article>`;
@@ -73,7 +75,7 @@ function renderStaticRooms() {
 
 // ─── SORT HELPER (same order as the app) ─────────────────────
 const _RT_ORD = ['rt1','rt2','rt3','rt4','rt5','rt6','bd1','rt7','bd2','rt8','bd3','rt9','bd4','cg1','cg2','cg3','cg4','cg5','cg6','csh1','csh2','c4b','c4c'];
-const _RT_PFX = [['beachfront king',0],['superior',1],['garden plus',2],['garden',3],['simple n small',4],['beachview double',5],['bed in beachview',6],['double',7],['bed in double',8],['triple',9],['bed in triple',10],['quad',11],['bed in quad',12],['casa master',12.5],['casa grande',13],['casa king downstairs',13.1],['casa grande up',13.2],['casa shanti',18.5],['casita 4 / 1',21.1],['casita 4 / 2',21.2],['casita 4',20.5]];
+const _RT_PFX = [['beachfront king',0],['superior',1],['garden plus',2],['garden',3],['simple n small',4],['beachview double',5],['bed in beachview',6],['double',7],['bed in double',8],['triple',9],['bed in triple',10],['quad',11],['bed in quad',12],['casa master',12.5],['casa grande',13],['casa king downstairs',13.1],['casa grande up',13.2],['casa shanti',18.5],['casita 4 / 1',12.31],['casita 4 / 2',12.32],['casita 4',12.3]];
 function _rtKey(rt) { const i=_RT_ORD.indexOf(rt.id); if(i!==-1)return i; const n=rt.name.toLowerCase().trim(); for(const[p,k]of _RT_PFX){if(n.startsWith(p))return k;} return 9999; }
 function sortRoomTypes(rts) { return [...rts].sort((a,b)=>_rtKey(a)-_rtKey(b)); }
 
@@ -407,14 +409,15 @@ function renderRooms() {
     const feats   = getFeatures(rt);
     const rate    = getRatePerPerson(rt, gc);
     const { price: adjRate, original: origRate, isOffer } = applyRules(rate, checkIn, isManualRate(rt));
-    const img     = getRoomImage(rt);
-    const photos  = rt.be_photos ?? [];
-    const imgSrc  = photos[0] ?? img;
+    const gallery = getRoomPhotos(rt);
+    const imgSrc  = gallery[0];
 
     html += `<article class="stay-card">
-      <div class="stay-image-wrap" onclick="openBooking('${rt.id}')" role="button" tabindex="0" aria-label="Select ${esc(rt.name)}">
+      <div class="stay-image-wrap" onclick="openGallery('${esc(rt.id)}')" role="button" tabindex="0" aria-label="View photos of ${esc(rt.name)}"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openGallery('${esc(rt.id)}')}">
         ${imgSrc ? `<img src="${esc(imgSrc)}" alt="${esc(rt.name)} at Amansala" loading="${idx===0?'eager':'lazy'}" onerror="this.parentElement.style.background='#d8d1c5'">` : ''}
         <span class="image-count">${cardNum}</span>
+        ${galleryPill(gallery.length)}
       </div>
       <div class="stay-content">
         <div class="stay-title-row">
@@ -425,7 +428,7 @@ function renderRooms() {
           <div class="stay-price"></div>
         </div>
         ${desc ? `<p class="stay-description">${esc(desc)}</p>` : ''}
-        ${feats.length ? `<ul>${feats.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+        ${feats.length ? `<ul class="stay-features">${feats.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>` : ''}
         ${rt.available_rooms ? `<span class="avail-badge">✓ ${rt.available_rooms} available</span>` : ''}
         ${adjRate ? `<div class="room-rate-row">
           <span class="room-rate-price">${isOffer && origRate ? `<span class="price-original">$${origRate}</span> ` : ''}$${adjRate}<span class="room-rate-unit"> / night</span></span>
@@ -455,6 +458,9 @@ function getRoomTag(rt) {
   if (n.includes('simple') || n.includes('small')) return 'Budget friendly';
   if (n.includes('triple') || n.includes('quad') || n.includes('family')) return 'Groups & families';
   if (n.includes('casa')) return 'Exclusive villa';
+  if (n.includes('casita')) return 'Private casita';
+  if (n.includes('garden')) return 'Peaceful retreat';
+  if (n.includes('double')) return 'Great for sharing';
   return '';
 }
 
@@ -468,17 +474,24 @@ function getDefaultDesc(rt) {
   if (n.includes('garden double') || n.includes('bed in double')) return 'A comfortable, well-appointed room with two beds for friends or family sharing a relaxed beach stay.';
   if (n.includes('simple') || n.includes('small')) return 'Simple and cozy at the back of the property — the smart choice for an easy, budget-conscious beach stay.';
   if (n.includes('triple') || n.includes('quad')) return 'A large, open room with multiple beds for friends or family traveling together, close to the sea.';
+  if (n.includes('casa master') || n.includes('casa grande')) return 'A two-story house with 5 bedrooms, 8 beds and a large living room. Room for the whole group, with hotel services on call.';
   if (n.includes('casa')) return 'A private villa with exclusive amenities for groups seeking a premium Tulum experience.';
+  // Booking engine names "Garden", "Double" and "Casita 4" (copy from amansala.com/rooms)
+  if (n.includes('casita')) return 'A beautifully appointed three-room private casita with its own garden terrace, living room and open-air shower. Intimate, serene and surrounded by tropical greenery.';
+  if (n.includes('garden')) return 'A charming king room facing the lush garden at the back of the property. Bright, airy and comfortable, and still just steps from the beach.';
+  if (n.includes('double')) return 'A comfortable room with two beds, ideal for friends or family sharing a room. Bright, well-appointed and steps from the beach.';
   return rt.be_description ?? '';
 }
 
-// Every room card ends with the breakfast line (Darlene 2026-11-12).
-const BREAKFAST_LINE = 'Full breakfast served beachfront';
+// Shown on every room, after its own amenities.
+const ALL_ROOMS_FEATURE = 'Full breakfast served beachfront';
+
 function getFeatures(rt) {
-  const list = getBaseFeatures(rt);
-  return list.length && !list.some(f => /breakfast/i.test(f)) ? [...list, BREAKFAST_LINE] : list;
+  const list = getRoomFeatures(rt);
+  return list.some(f => /breakfast/i.test(f)) ? list : [...list, ALL_ROOMS_FEATURE];
 }
-function getBaseFeatures(rt) {
+
+function getRoomFeatures(rt) {
   if (rt.be_amenities && rt.be_amenities.length) return rt.be_amenities;
   const n = rt.name.toLowerCase();
   if (n.includes('beachfront')) return ['King bed','Large terrace','Direct sea view','Private bathroom','Closet'];
@@ -490,6 +503,11 @@ function getBaseFeatures(rt) {
   if (n.includes('simple') || n.includes('small')) return ['Queen bed','Private bathroom','Closet','Safety deposit box'];
   if (n.includes('triple')) return ['3 beds','Private bathroom','Closet'];
   if (n.includes('quad')) return ['4 beds','Private bathroom','Closet'];
+  if (n.includes('casa master') || n.includes('casa grande')) return ['5 bedrooms','8 beds','Two-story house','Large living room'];
+  if (n.includes('shanti')) return ['3 king rooms','3 rooms with two queen beds'];
+  if (n.includes('casita')) return ['2 rooms with 2 beds each','1 room with a queen bed and sitting area','Private living room','Garden terrace with lounge seating','Open-air rain shower'];
+  if (n.includes('garden')) return ['King bed','Garden view','Private bathroom','Closet','Safety deposit box'];
+  if (n.includes('double')) return ['2 queen beds','Private bathroom','Closet','Safety deposit box'];
   return [];
 }
 
@@ -849,3 +867,132 @@ document.getElementById('booking-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('booking-modal')) closeModal();
 });
 
+
+// ─── PHOTO GALLERY ───────────────────────────────────────────
+// Casa and casita galleries are hosted with this site (images/rooms/<slug>/NN.jpg).
+// They were taken from www.amansala.com/rooms: collage images were split into
+// single photos and duplicates removed, and the first photo is the card cover.
+// Hotel rooms add their photo from amansala.com after the booking-engine cover.
+const SITE_IMG = 'https://amansala.com/';
+const LOCAL_SETS = { 'casa-master': 13, 'casa-shanti': 10, 'casita-4': 9 };
+
+function localSet(slug) {
+  return Array.from({ length: LOCAL_SETS[slug] }, (_, i) => `images/rooms/${slug}/${String(i + 1).padStart(2, '0')}.jpg`);
+}
+
+function getHouseSlug(rt) {
+  const n = rt.name.toLowerCase();
+  if (n.includes('shanti')) return 'casa-shanti';
+  if (n.includes('casa master') || n.includes('casa grande') || n.includes('casa king')) return 'casa-master';
+  if (n.includes('casita')) return 'casita-4';
+  return null;
+}
+
+function getExtraPhotos(rt) {
+  const n = rt.name.toLowerCase();
+  if (n.includes('beachfront')) return ['ai-beachfront-king-hammock-terrace.jpg'];
+  if (n.includes('beachview')) return ['ai-beachfront-double-terrace-hammock.jpg'];
+  if (n.includes('garden double') || n.includes('bed in double')) return ['ai-garden-double-open-closet.jpg'];
+  if (n.includes('double')) return ['ai-garden-double-open-closet.jpg'];
+  if (n.includes('simple') || n.includes('small')) return ['simple-small-room.jpg'];
+  return [];
+}
+
+// Backend photos win if the booking engine ever provides them.
+function getRoomPhotos(rt) {
+  if (rt.be_photos && rt.be_photos.length) return [...new Set(rt.be_photos)];
+  const house = getHouseSlug(rt);
+  if (house) return localSet(house);
+  // Single photos chosen by Amansala until more are available.
+  const n = rt.name.toLowerCase();
+  if (n.includes('superior')) return ['images/rooms/superior-01.jpg'];
+  if (n.includes('garden') && !n.includes('garden plus') && !n.includes('garden double')) return ['images/rooms/garden-01.jpg'];
+  const all = [getRoomImage(rt), ...getExtraPhotos(rt).map(f => SITE_IMG + f)].filter(Boolean);
+  return [...new Set(all)];
+}
+
+function galleryPill(count) {
+  if (count < 2) return '';
+  return `<span class="gallery-pill"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 8"/></svg>View all ${count} photos</span>`;
+}
+
+// Small thumbnails for local photos via Netlify Image CDN; remote photos load as-is.
+function thumbSrc(src) {
+  return /^https?:/.test(src) ? src : `/.netlify/images?url=/${encodeURIComponent(src)}&w=180&q=70`;
+}
+
+let _gal = { rt: null, photos: [], i: 0, lastFocus: null };
+
+function findRoomType(id) {
+  return [..._allRoomTypes, ..._available].find(r => r.id === id) || null;
+}
+
+function openGallery(id) {
+  const rt = findRoomType(id);
+  if (!rt) return;
+  _gal = { rt, photos: getRoomPhotos(rt), i: 0, lastFocus: document.activeElement };
+  if (!_gal.photos.length) return;
+  document.getElementById('gal-title').textContent = rt.name;
+  document.getElementById('gal-thumbs').innerHTML = _gal.photos.map((src, i) =>
+    `<button type="button" class="gal-thumb" onclick="showPhoto(${i})" aria-label="Photo ${i + 1}"><img src="${esc(thumbSrc(src))}" alt="" loading="lazy"></button>`
+  ).join('');
+  const many = _gal.photos.length > 1;
+  document.getElementById('gal-prev').hidden = !many;
+  document.getElementById('gal-next').hidden = !many;
+  document.getElementById('gal-thumbs').hidden = !many;
+  const el = document.getElementById('gallery');
+  el.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  showPhoto(0);
+  document.getElementById('gal-close').focus();
+}
+
+function showPhoto(i) {
+  const n = _gal.photos.length;
+  _gal.i = (i + n) % n;
+  const img = document.getElementById('gal-img');
+  img.src = _gal.photos[_gal.i];
+  img.alt = `${_gal.rt.name} at Amansala, photo ${_gal.i + 1} of ${n}`;
+  document.getElementById('gal-count').textContent = `${_gal.i + 1} / ${n}`;
+  document.querySelectorAll('.gal-thumb').forEach((b, j) => b.classList.toggle('active', j === _gal.i));
+  const active = document.querySelectorAll('.gal-thumb')[_gal.i];
+  if (active) active.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  // preload neighbours
+  [1, -1].forEach(d => { const p = new Image(); p.src = _gal.photos[(_gal.i + d + n) % n]; });
+}
+
+function stepPhoto(d) { showPhoto(_gal.i + d); }
+
+function closeGallery() {
+  document.getElementById('gallery').classList.remove('open');
+  document.body.style.overflow = '';
+  if (_gal.lastFocus && _gal.lastFocus.focus) _gal.lastFocus.focus();
+}
+
+function galleryBook() {
+  const id = _gal.rt && _gal.rt.id;
+  closeGallery();
+  if (_calIn && _calOut && _available.some(r => r.id === id)) openBooking(id);
+  else if (_calIn && _calOut) searchRooms();
+  else promptDates();
+}
+
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('gallery').classList.contains('open')) return;
+  if (e.key === 'Escape') closeGallery();
+  else if (e.key === 'ArrowRight') stepPhoto(1);
+  else if (e.key === 'ArrowLeft') stepPhoto(-1);
+});
+
+(function () {
+  const stage = document.getElementById('gal-stage');
+  let x0 = null;
+  stage.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+  stage.addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(dx) > 40) stepPhoto(dx < 0 ? 1 : -1);
+    x0 = null;
+  });
+  document.getElementById('gallery').addEventListener('click', e => { if (e.target.id === 'gallery' || e.target.id === 'gal-stage') closeGallery(); });
+})();

@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Lato:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://js.stripe.com/v3/"></script>
-  <link rel="stylesheet" href="book-styles.css?v=20261112a">
+  <link rel="stylesheet" href="book-styles.css?v=20261113a">
 </head>
 <body>
 
@@ -37,7 +37,7 @@
     <p class="intro-eyebrow">stay with us · tulum, mexico</p>
     <h1>Select the room that’s best for you.</h1>
     <div class="intro-copy">
-      <p>All rooms are made with love and have soft sheets, attention to detail, access to our beach club and a full breakfast served beachfront.</p>
+      <p>All rooms are made with love and have soft sheets, attention to detail, access to our beach club and a full breakfast.</p>
       <a class="retreat-callout" href="https://amansala.com/our-retreats">
         <span class="retreat-callout-text">
           <strong>Looking for an all-inclusive stay?</strong>
@@ -153,7 +153,33 @@
   </div>
 </div>
 
-<script src="book-app.js?v=20261112b"></script>
+<!-- PHOTO GALLERY -->
+<div class="gallery" id="gallery" role="dialog" aria-modal="true" aria-labelledby="gal-title">
+  <div class="gal-top">
+    <div>
+      <h3 id="gal-title"></h3>
+      <span id="gal-count" class="gal-count" aria-live="polite"></span>
+    </div>
+    <div class="gal-top-actions">
+      <button type="button" class="gal-book" onclick="galleryBook()">Book this room</button>
+      <button type="button" class="gal-close" id="gal-close" onclick="closeGallery()" aria-label="Close photos">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="gal-stage" id="gal-stage">
+    <button type="button" class="gal-nav gal-prev" id="gal-prev" onclick="stepPhoto(-1)" aria-label="Previous photo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
+    <img id="gal-img" alt="">
+    <button type="button" class="gal-nav gal-next" id="gal-next" onclick="stepPhoto(1)" aria-label="Next photo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+    </button>
+  </div>
+  <div class="gal-thumbs" id="gal-thumbs"></div>
+</div>
+
+<script src="book-app.js?v=20261113a"></script>
 
 <!-- VISITO CHAT (same widget as www.amansala.com) -->
 <script>window.chtlConfig = { chatbotId: "5256821169" }</script>
