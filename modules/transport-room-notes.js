@@ -59,15 +59,17 @@
   const MARK = '__trnotes__';
   window.tr2RenderRow = function (e) {
     const keep = e.notes;
-    const parts = noteParts(e, keep);
-    e.notes = parts.length ? MARK : '';
-    // the original draws e.notes inside <span>…</span>; swap that span for the labeled lines (each shortened, click to read all)
+    const room = roomNote(e), internal = internalNote(e);
+    e.notes = MARK;
+    // the original draws e.notes inside <span>…</span>; swap that span for the Room notes label (red when there are notes, gray when not;
+    // the note itself shows on hover, Darlene 2026-11-13) and the Internal notes line when the room has one
     try {
       let html = prev.apply(this, arguments);
-      if (parts.length) {
-        const mine = parts.map(p => `<div style="margin:1px 0;line-height:1.35">${label(p[0])}${window.trRoomNoteHtml(p[1])}</div>`).join('');
-        html = html.replace(/<span[^>]*>__trnotes__<\/span>/, () => mine);
-      }
+      const roomLine = room
+        ? `<div title="${esc(room)}" style="margin:1px 0;line-height:1.35;cursor:help"><span style="font-size:11px;font-weight:800;color:#dc2626;text-transform:uppercase;letter-spacing:.3px">Room notes</span></div>`
+        : `<div style="margin:1px 0;line-height:1.35"><span style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.3px">Room notes</span></div>`;
+      const intLine = internal ? `<div style="margin:1px 0;line-height:1.35">${label('Internal notes')}${window.trRoomNoteHtml(internal)}</div>` : '';
+      html = html.replace(/<span[^>]*>__trnotes__<\/span>/, () => roomLine + intLine);
       return html;
     } finally { e.notes = keep; }
   };
