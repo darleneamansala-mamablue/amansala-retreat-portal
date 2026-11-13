@@ -1862,9 +1862,9 @@ function tr2BuildView() {
   // next to the room number, and in Upgrade mode an Options column (lateral same-category
   // room swaps, see tr2OptionsCell/tr2SwapRooms) sits right before Upgrade. Column count
   // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
-  const totalCols = (tr2UpgradeMode ? 13 : 12) + (tr2View === 'departures' ? 1 : 0);   // + Transport Notes (Jorge 2026-11-13)   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
+  const totalCols = (tr2UpgradeMode ? 14 : 13) + (tr2View === 'departures' ? 1 : 0);   // + Transport Notes (Jorge 2026-11-13)   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
   const tableHeader = `<thead><tr>
-    ${TH('Habitación','62px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','62px')}${TH('Nombre','170px')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto · ' + timeColLabel)}${TH('Retiro')}${TH('Email / Phone')}
+    ${TH('Habitación','62px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','62px')}${TH('Nombre','170px')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto · ' + timeColLabel)}${TH('Retiro')}${TH('Share & wait')}${TH('Email / Phone')}
     ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}${TH('Transport Notes')}
     ${tr2View === 'departures' ? TH('Online check-out','90px') : ''}${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
@@ -2015,7 +2015,6 @@ function tr2RenderRow(e, color, groupPax) {
 
   const nameCell = `<div style="font-weight:700;color:#111827">${escHtml(e.guest)}</div>
     ${e.driverConfirmed ? `<span style="font-size:9px;padding:1px 5px;border-radius:10px;background:#d1fae5;color:#065f46;font-weight:600">✓ Chofer</span>` : ''}
-    ${e.share ? `<span style="font-size:9px;padding:1px 5px;border-radius:10px;background:#f0fdf4;color:#16a34a;font-weight:600">Shared</span>` : ''}
     ${chargedBadge}`;
 
   const costCell = displayCost != null
@@ -2045,9 +2044,10 @@ function tr2RenderRow(e, color, groupPax) {
     ${TD(typeBadge)}
     ${TD(`<div style="margin-bottom:2px">${airportBadge}</div>${timeCell}`)}
     ${TD(e.retreatLabel ? `<span style="font-size:11px;color:#6b7280">${escHtml(e.retreatLabel)}</span>` : '')}
+    ${TD(e.share ? `<span title="OK to share a ride and wait up to 30 minutes" style="color:#16a34a;font-weight:700;font-size:14px">✓</span>` : '', 'text-align:center')}
     ${(() => { const c = tr2Contact(e); const line = (lbl, v) => `<div title="${v ? escHtml(v) : 'Missing'}" style="font-size:11px;white-space:nowrap;color:${v ? '#374151' : '#9ca3af'}">${lbl} ${v ? '<span style="color:#16a34a;font-weight:700">✓</span>' : '<span style="color:#d1d5db">—</span>'}</div>`; return TD(line('Email', c.email) + line('Phone number', c.phone)); })()}
     ${tr2UpgradeMode ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2OptionsCell(e)}</td><td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2UpgradeCell(e)}</td>` : TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.notes)}</span>` : '')}
-    ${TD(e.transportNotes ? (typeof trRoomNoteHtml === 'function' ? trRoomNoteHtml((window.trDedupeNote || (x => x))(String(e.transportNotes).replace(/\s+/g, ' ').trim())) : `<span style="font-size:11px;color:#dc2626;font-weight:700">${escHtml(e.transportNotes)}</span>`) : '', 'max-width:220px')}
+    ${TD(tr2CleanTransportNotes(e.transportNotes) ? (typeof trRoomNoteHtml === 'function' ? trRoomNoteHtml((window.trDedupeNote || (x => x))(tr2CleanTransportNotes(e.transportNotes))) : `<span style="font-size:11px;color:#dc2626;font-weight:700">${escHtml(tr2CleanTransportNotes(e.transportNotes))}</span>`) : '', 'max-width:220px')}
     ${tr2View === 'departures' ? (() => { const o = e.regId && tr2OnlinePaid[e.regId]; return TD(o ? `<span title="Paid online $${o.amt.toFixed(2)}" style="color:#059669;font-weight:700">✓</span><div style="font-size:10px;color:#059669">$${o.amt.toFixed(2)}</div>` : '<span style="color:#d1d5db">—</span>', 'text-align:center'); })() : ''}
     ${TD(costCell)}
     <td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap">
@@ -2055,6 +2055,12 @@ function tr2RenderRow(e, color, groupPax) {
       <button onclick="tr2EditEntry('${e.rowId}')" title="${e.isSynthetic ? 'Agregar info de vuelo' : 'Editar'}" style="background:#f1f5f9;border:none;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;color:#374151;line-height:1">✏️</button>
     </td>
   </tr>`;
+}
+
+// The transport form adds "Happy to share a ride and wait up to 30 minutes..." to the notes when the guest ticks the share box;
+// the log has its own "Share & wait" check column now, so that sentence is not repeated in Transport Notes (Darlene 2026-11-13)
+function tr2CleanTransportNotes(n) {
+  return String(n || '').replace(/Happy to share a ride and wait up to 30 minutes for a cheaper transfer\.?/gi, '').replace(/\s+/g, ' ').trim();
 }
 
 // Email / phone shown in the list: the room list's guest (what the teacher and staff edit) wins, the transport form's
