@@ -10,6 +10,9 @@
   const norm = s => String(s || '').toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
   const sameRoom = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 
+  // the same text twice ("Isabel Fry · Isabel Fry", e.g. room note + guest note, or different capitals/spaces) is shown once
+  const dedupe = str => { const seen = new Set(); return String(str || '').split(/\s*[·\n]\s*/).map(x => x.trim()).filter(x => { const k = x.toLowerCase().replace(/\s+/g, ' '); if (!x || seen.has(k)) return false; seen.add(k); return true; }).join(' · '); };
+  window.trDedupeNote = dedupe;
   function roomNote(e) {
     try {
       const regs = (AppData.regs || []).filter(r => r.bookingId === e.retreatId && !r.cancelled && sameRoom(r.room, e.room));
@@ -19,14 +22,14 @@
         const g = (r.guests || []).find(x => x && x.name && norm(x.name) === norm(e.guest));
         if (g && g.notes && String(g.notes).trim()) parts.push(String(g.notes).trim());
       });
-      return [...new Set(parts)].join(' · ').replace(/\s+/g, ' ');
+      return dedupe(parts.join(' · ').replace(/\s+/g, ' '));
     } catch (err) { return ''; }
   }
   // the room's staff-only Internal Notes (Booking Detail → Internal Notes), on arrivals and departures (Jorge 2026-11-04)
   function internalNote(e) {
     try {
-      return [...new Set((AppData.regs || []).filter(r => r.bookingId === e.retreatId && !r.cancelled && sameRoom(r.room, e.room))
-        .map(r => String(r.internalNotes || '').trim()).filter(Boolean))].join(' · ').replace(/\s+/g, ' ');
+      return dedupe((AppData.regs || []).filter(r => r.bookingId === e.retreatId && !r.cancelled && sameRoom(r.room, e.room))
+        .map(r => String(r.internalNotes || '').trim()).filter(Boolean).join(' · ').replace(/\s+/g, ' '));
     } catch (err) { return ''; }
   }
   window.tnExpand = function (el) { const full = el.getAttribute('data-full'); if (!full) return; const open = el.getAttribute('data-open') === '1'; el.textContent = open ? full.slice(0, MAX).trim() + '…' : full; el.setAttribute('data-open', open ? '0' : '1'); };
