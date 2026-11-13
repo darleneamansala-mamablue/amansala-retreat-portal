@@ -2166,11 +2166,15 @@ async function bdConfirmSplitStay(){
   if(!(splitDate>checkIn&&splitDate<checkOut)){errEl.textContent='The split date must fall strictly within the current stay.';return;}
   // Same conflict check rcMoveRoom uses (modules/venues.js) -- is the new
   // room already blocked by another booking for any of those nights?
-  const conflict=AppData.bookings.find(other=>
-    other.id!==bk.id&&other.status!=='cancelled'&&
-    roomListIncludes(other.blockedRooms,newRoom)&&
-    datesOverlap(splitDate,checkOut,other.startDate,other.endDate)
-  );
+  // A booking that was itself split keeps its old room in blockedRooms, so when it has stays registered in that
+  // room only those nights count, not the whole booking (Hilario 2026-11-13: Lara Beard 24→21 on Nov 13 still
+  // blocked 24 until Nov 16)
+  const conflict=AppData.bookings.find(other=>{
+    if(other.id===bk.id||other.status==='cancelled'||!roomListIncludes(other.blockedRooms,newRoom))return false;
+    const stays=(AppData.regs||[]).filter(r=>r.bookingId===other.id&&!r.cancelled&&roomCodesEqual(r.room,newRoom));
+    if(!stays.length)return datesOverlap(splitDate,checkOut,other.startDate,other.endDate);
+    return stays.some(r=>datesOverlap(splitDate,checkOut,r.checkIn||other.startDate,r.checkOut||other.endDate));
+  });
   if(conflict){errEl.textContent=`Room ${newRoom} is already blocked by ${conflict.leaderName||conflict.retreatName} for part of those dates.`;return;}
 
   const btn=document.getElementById('bdSplitBtn');
