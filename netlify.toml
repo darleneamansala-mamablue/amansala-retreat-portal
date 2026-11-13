@@ -139,3 +139,8 @@
 # it: app_store 'menu_whatsapp_numbers' = {enabled, people:[{name, phone}]}. 9:00 PM Tulum (02:00 UTC).
 [functions."menu-whatsapp-pm"]
   schedule = "0 2 * * *"
+
+# The Guest Book by email + WhatsApp to every guest arriving in two days (guest-book-lib.js, Jorge 2026-11-12). Switch and
+# send log: app_store 'guest_book_pre_arrival' = {enabled, sent}. 10:00 AM Tulum (15:00 UTC).
+[functions."guest-book-pre-arrival"]
+  schedule = "0 15 * * *"
