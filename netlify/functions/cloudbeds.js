@@ -530,6 +530,18 @@ exports.handler = async (event) => {
         return ok(h, { success: true, status: d.status, startDate: d.startDate, endDate: d.endDate, guest: d.guestName, lines });
       }
 
+      case "getReservationContact": {
+        // Read only (2026-11-12): the main guest's email and phone of one reservation -- the Guest Book pre-arrival message
+        // (guest-book-lib.js) for Direct/OTA and walk-in stays, whose contact lives only in Cloudbeds.
+        const id = String(body.reservationId || "");
+        if (!id) return ok(h, { error: "reservationId required" }, 400);
+        const res = await cbGet(tok, "/getReservation", { reservationID: id }).catch(() => null);
+        const d = res?.data;
+        if (!d) return ok(h, { success: false });
+        const gl = Object.values(d.guestList || {}), main = gl.find(g => g && g.isMainGuest) || gl[0] || {};
+        return ok(h, { success: true, status: d.status, email: d.guestEmail || main.guestEmail || "", phone: main.guestCellPhone || main.guestPhone || "", name: d.guestName || "" });
+      }
+
       case "getCbGuestNames": {
         // For each room→reservationId, fetch reservation and extract guest name
         const { reservationIds, groupName: grpName } = body; // { room: resId }

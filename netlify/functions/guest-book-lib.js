@@ -24,18 +24,31 @@ async function get(key, path) {
   return r.json();
 }
 
+async function cbContact(reservationId) {
+  try {
+    const r = await fetch(`${SITE}/.netlify/functions/cloudbeds?action=getReservationContact`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...require('./portal-auth-lib').internalHeaders() }, body: JSON.stringify({ reservationId }) });
+    const d = await r.json(); return d && d.success && !/cancel/i.test(d.status || '') ? d : {};
+  } catch (e) { return {}; }
+}
+
 // the guests arriving on ds: [{name, firstName, email, phone, room, bookingId}]
 async function arrivals(key, ds) {
-  const bks = await get(key, `bookings?select=id,start_date,end_date,status&status=neq.cancelled&start_date=lte.${ds}&end_date=gte.${ds}&limit=2000`);
+  const bks = await get(key, `bookings?select=id,start_date,end_date,status,booking_type,leader_email,leader_phone,cb_reservation_ids&status=neq.cancelled&start_date=lte.${ds}&end_date=gte.${ds}&limit=2000`);
   const byId = new Map(bks.map(b => [b.id, b])), ids = [...byId.keys()], out = [], seen = new Set();
   for (let i = 0; i < ids.length; i += 80) {
     const regs = await get(key, `registrations?select=id,booking_id,room,guests,check_in,cancelled&booking_id=in.(${ids.slice(i, i + 80).map(encodeURIComponent).join(',')})`);
     for (const r of regs) {
       if (r.cancelled || (r.check_in || byId.get(r.booking_id).start_date) !== ds) continue;
-      for (const g of r.guests || []) {
-        const name = String((g && g.name) || '').trim();
-        if (!name || g.cancelled) continue;
-        const email = okEmail(g.email) ? String(g.email).trim().toLowerCase() : '', phone = e164(g.phone);
+      const bk = byId.get(r.booking_id), live = (r.guests || []).filter(g => g && String(g.name || '').trim() && !g.cancelled);
+      for (const g of live) {
+        const name = String(g.name).trim();
+        let email = okEmail(g.email) ? String(g.email).trim().toLowerCase() : '', phone = e164(g.phone);
+        // a Room Only stay (Direct/OTA, walk-in) keeps its contact on the booking or only in Cloudbeds: the first guest of the room gets it
+        if (!email && !phone && bk.booking_type === 'room_only' && g === live[0]) {
+          email = okEmail(bk.leader_email) ? String(bk.leader_email).trim().toLowerCase() : ''; phone = e164(bk.leader_phone);
+          const ids = bk.cb_reservation_ids || {}, rid = ids[r.room] || (Object.keys(ids).length === 1 ? Object.values(ids)[0] : '');
+          if (!email && !phone && rid) { const c = await cbContact(rid); email = okEmail(c.email) ? String(c.email).trim().toLowerCase() : ''; phone = e164(c.phone); }
+        }
         if (!email && !phone) continue;
         const k = email || phone;
         if (seen.has(k)) continue;
