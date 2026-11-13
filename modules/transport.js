@@ -1862,9 +1862,9 @@ function tr2BuildView() {
   // next to the room number, and in Upgrade mode an Options column (lateral same-category
   // room swaps, see tr2OptionsCell/tr2SwapRooms) sits right before Upgrade. Column count
   // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
-  const totalCols = (tr2UpgradeMode ? 15 : 14) + (tr2View === 'departures' ? 1 : 0);   // + Transport Notes (Jorge 2026-11-13)   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
+  const totalCols = (tr2UpgradeMode ? 14 : 13) + (tr2View === 'departures' ? 1 : 0);   // + Transport Notes (Jorge 2026-11-13)   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
   const tableHeader = `<thead><tr>
-    ${TH('Habitación','62px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','62px')}${TH('Nombre','170px')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
+    ${TH('Habitación','62px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','62px')}${TH('Nombre','170px')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto · ' + timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
     ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}${TH('Transport Notes')}
     ${tr2View === 'departures' ? TH('Online check-out','90px') : ''}${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
@@ -2043,8 +2043,7 @@ function tr2RenderRow(e, color, groupPax) {
     ${TD(nameCell)}
     ${TD(typeof trbBadge === 'function' ? trbBadge(e.regId, e.guest, e) : '')}
     ${TD(typeBadge)}
-    ${TD(airportBadge, 'text-align:center')}
-    ${TD(timeCell)}
+    ${TD(`<div style="margin-bottom:2px">${airportBadge}</div>${timeCell}`)}
     ${TD(e.retreatLabel ? `<span style="font-size:11px;color:#6b7280">${escHtml(e.retreatLabel)}</span>` : '')}
     ${(() => { const c = tr2Contact(e); return TD(c.email ? `<a href="mailto:${escHtml(c.email)}" onclick="event.stopPropagation()" style="font-size:11px;color:#2563eb;word-break:break-all">${escHtml(c.email)}</a>` : '<span style="color:#d1d5db">—</span>', 'max-width:180px') + TD(c.phone ? `<span style="font-size:11px;white-space:nowrap">${escHtml(c.phone)}</span>` : '<span style="color:#d1d5db">—</span>'); })()}
     ${tr2UpgradeMode ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2OptionsCell(e)}</td><td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2UpgradeCell(e)}</td>` : TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.notes)}</span>` : '')}
