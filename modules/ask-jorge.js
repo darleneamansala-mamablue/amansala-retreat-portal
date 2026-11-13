@@ -8,6 +8,14 @@
   const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
   let msgs = [], busy = false, memo = [];   // memo: guests looked up in this chat, sent back so it remembers who "she" is
   const staffOn = () => { try { return !!sessionStorage.getItem('amansala_staff_token') && !(typeof IS_TEACHER_MODE !== 'undefined' && IS_TEACHER_MODE); } catch (e) { return false; } };
+  // The buttons live in the top bar, next to the staff name, so they never cover the screen (Jorge 2026-11-13); the panels drop down from there.
+  const headerSlot = () => {
+    let sl = document.getElementById('ajHeaderSlot'); if (sl) return sl;
+    const nav = document.querySelector('.app-header .app-nav'); if (!nav) return null;
+    sl = document.createElement('span'); sl.id = 'ajHeaderSlot'; sl.style.cssText = 'display:flex;align-items:center;gap:6px;margin-right:6px';
+    nav.insertBefore(sl, nav.firstChild); return sl;
+  };
+  const PANEL_POS = 'position:fixed;right:18px;top:62px;z-index:8600;';
   const page = () => { try { const p = location.pathname.replace(/^\//, '') || 'dashboard'; return p.charAt(0).toUpperCase() + p.slice(1); } catch (e) { return ''; } };
 
   function mount() {
@@ -15,15 +23,17 @@
     if (document.getElementById('ajBtn') || !staffOn()) return;
     const btn = document.createElement('button');
     btn.id = 'ajBtn'; btn.type = 'button'; btn.textContent = '💬 Ask Jorge';
-    btn.style.cssText = 'position:fixed;right:18px;bottom:74px;z-index:8500;background:#0e7490;color:#fff;border:none;border-radius:22px;padding:10px 16px;font:700 13px Jost,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.2);cursor:pointer';
+    const sl = headerSlot();
+    btn.style.cssText = sl ? 'background:#0e7490;color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:16px;padding:5px 12px;font:700 12px Jost,sans-serif;cursor:pointer;white-space:nowrap'
+      : 'position:fixed;right:18px;bottom:74px;z-index:8500;background:#0e7490;color:#fff;border:none;border-radius:22px;padding:10px 16px;font:700 13px Jost,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.2);cursor:pointer';
     btn.onclick = toggle;
-    document.body.appendChild(btn);
+    (sl || document.body).appendChild(btn);
   }
   function toggle() {
     let p = document.getElementById('ajPanel');
     if (p) { p.remove(); return; }
     p = document.createElement('div'); p.id = 'ajPanel';
-    p.style.cssText = 'position:fixed;right:18px;bottom:122px;z-index:8600;width:min(380px,calc(100vw - 36px));height:min(520px,calc(100vh - 160px));background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;font-family:Jost,sans-serif;overflow:hidden';
+    p.style.cssText = PANEL_POS + 'width:min(380px,calc(100vw - 36px));height:min(520px,calc(100vh - 90px));background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;font-family:Jost,sans-serif;overflow:hidden';
     p.innerHTML = `<div style="background:#0e7490;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
         <div><div style="font-weight:700;font-size:14.5px">Ask Jorge</div><div style="font-size:11px;opacity:.85">How do I…? · Where is…? · ¿Cómo hago…?</div></div>
         <button onclick="document.getElementById('ajPanel').remove()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer">✕</button></div>
@@ -160,9 +170,11 @@
     if (!reqJorge && !reqs.length) { if (b) b.remove(); return; }
     if (b) return;
     b = document.createElement('button'); b.id = 'ajReqBtn'; b.type = 'button';
-    b.style.cssText = 'position:fixed;right:150px;bottom:74px;z-index:8500;background:#fff;color:#0e7490;border:1.5px solid #0e7490;border-radius:22px;padding:9px 14px;font:700 13px Jost,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.15);cursor:pointer';
+    const sl = headerSlot();
+    b.style.cssText = sl ? 'background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:16px;padding:5px 12px;font:700 12px Jost,sans-serif;cursor:pointer;white-space:nowrap'
+      : 'position:fixed;right:150px;bottom:74px;z-index:8500;background:#fff;color:#0e7490;border:1.5px solid #0e7490;border-radius:22px;padding:9px 14px;font:700 13px Jost,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.15);cursor:pointer';
     b.innerHTML = `📋 ${reqJorge ? 'Requests' : 'My requests'} <span id="ajReqN" style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:2px"></span>`;
-    b.onclick = reqOpen; document.body.appendChild(b);
+    b.onclick = reqOpen; if (sl) sl.insertBefore(b, sl.firstChild); else document.body.appendChild(b);
   }
   async function reqLoad() {
     try { const d = await reqCall('list'); reqs = (d.requests || []).filter(x => x.status !== 'old'); reqJorge = !!d.jorge; } catch (e) { return; }
@@ -174,7 +186,7 @@
   function reqOpen() {
     let p = document.getElementById('ajReqPanel'); if (p) { p.remove(); return; }
     p = document.createElement('div'); p.id = 'ajReqPanel';
-    p.style.cssText = 'position:fixed;right:18px;bottom:122px;z-index:8600;width:min(460px,calc(100vw - 36px));max-height:min(600px,calc(100vh - 160px));background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden;font-family:Jost,sans-serif';
+    p.style.cssText = PANEL_POS + 'width:min(460px,calc(100vw - 36px));max-height:min(600px,calc(100vh - 90px));background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden;font-family:Jost,sans-serif';
     document.body.appendChild(p); reqRender(); reqLoad();
   }
   function reqRender() {

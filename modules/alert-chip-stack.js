@@ -27,7 +27,14 @@
     let hb = document.getElementById('alertHideBtn');
     if (!hb) { hb = document.createElement('button'); hb.id = 'alertHideBtn'; hb.type = 'button'; hb.onclick = window.alertStackHide; hb.textContent = 'Hide alerts for this session ✕'; hb.style.cssText = "pointer-events:auto;align-self:flex-end;padding:3px 10px;border-radius:99px;border:1.5px solid #d6cfc4;background:#fff;color:#6b7280;font-family:'Jost',sans-serif;font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15)"; box.insertBefore(hb, box.firstChild); }
     let sp = document.getElementById('alertShowPill');
-    if (!sp) { sp = document.createElement('button'); sp.id = 'alertShowPill'; sp.type = 'button'; sp.onclick = window.alertStackShow; sp.style.cssText = "position:fixed;right:14px;bottom:14px;z-index:99990;display:none;padding:4px 12px;border-radius:99px;border:1.5px solid #fca5a5;background:#fff;color:#b91c1c;font-family:'Jost',sans-serif;font-size:11.5px;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15)"; document.body.appendChild(sp); }
+    if (!sp) {
+      sp = document.createElement('button'); sp.id = 'alertShowPill'; sp.type = 'button'; sp.onclick = window.alertStackShow;
+      // the "⚠ N alerts" pill sits in the top bar, so it doesn't cover the screen (Jorge 2026-11-13)
+      const nav = document.querySelector('.app-header .app-nav');
+      sp.style.cssText = nav ? "display:none;padding:4px 12px;border-radius:99px;border:1.5px solid #fca5a5;background:#fff;color:#b91c1c;font-family:'Jost',sans-serif;font-size:11.5px;font-weight:800;cursor:pointer;white-space:nowrap;margin-right:6px"
+        : "position:fixed;right:14px;bottom:14px;z-index:99990;display:none;padding:4px 12px;border-radius:99px;border:1.5px solid #fca5a5;background:#fff;color:#b91c1c;font-family:'Jost',sans-serif;font-size:11.5px;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15)";
+      if (nav) nav.insertBefore(sp, nav.firstChild); else document.body.appendChild(sp);
+    }
     if (hidden() && total() > hiddenN()) { try { sessionStorage.removeItem(HKEY); sessionStorage.removeItem(HKEY + '_n'); } catch (e) {} }   // new alerts: pop back up
     const n = visibleCount(), hide = hidden();
     box.style.display = hide ? 'none' : 'flex';
