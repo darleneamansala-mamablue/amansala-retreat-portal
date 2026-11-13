@@ -15,6 +15,8 @@
   window.alertStackHide = () => setHidden(true);
   window.alertStackShow = () => setHidden(false);
   const visibleCount = () => IDS.filter(id => { const c = document.getElementById(id); return c && c.style.display !== 'none' && c.style.display !== ''; }).length;
+  // The alerts only show on the Dashboard tab, not on every screen (Darlene 2026-11-13)
+  const onDashboard = () => { const t = document.getElementById('tab-dashboard'); return !!(t && t.classList.contains('active')); };
   function stack() {
     let box = document.getElementById('alertStack');
     if (!box) {
@@ -36,10 +38,10 @@
       if (nav) nav.insertBefore(sp, nav.firstChild); else document.body.appendChild(sp);
     }
     if (hidden() && total() > hiddenN()) { try { sessionStorage.removeItem(HKEY); sessionStorage.removeItem(HKEY + '_n'); } catch (e) {} }   // new alerts: pop back up
-    const n = visibleCount(), hide = hidden();
+    const n = visibleCount(), dash = onDashboard(), hide = hidden() || !dash;
     box.style.display = hide ? 'none' : 'flex';
-    hb.style.display = n ? '' : 'none';
-    sp.style.display = (hide && n) ? 'block' : 'none';
+    hb.style.display = (n && dash) ? '' : 'none';
+    sp.style.display = (hidden() && n && dash) ? 'block' : 'none';
     sp.textContent = '⚠ ' + n + ' alert' + (n !== 1 ? 's' : '');
     IDS.forEach(id => {
       const c = document.getElementById(id); if (!c) return;
@@ -50,5 +52,7 @@
       box.appendChild(c);   // keeps the order above
     });
   }
+  // refresh right away when the tab changes, not on the next 1.5 s tick
+  if (typeof window.switchTab === 'function' && !window.switchTab.__alertWrapped) { const orig = window.switchTab; window.switchTab = function () { const r = orig.apply(this, arguments); try { stack(); } catch (e) {} return r; }; window.switchTab.__alertWrapped = true; }
   setInterval(stack, 1500); setTimeout(stack, 3000); setTimeout(stack, 9000); setTimeout(stack, 14000);
 })();
