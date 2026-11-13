@@ -134,3 +134,8 @@
 # 9:00 PM Tulum (02:00 UTC): tomorrow before 4 PM.
 [functions."shala-briefing-am"]
   schedule = "0 2 * * *"
+
+# Group meals of tomorrow by WhatsApp to the restaurant and kitchen team (menu-whatsapp-lib.js, Jorge 2026-11-12). Who gets
+# it: app_store 'menu_whatsapp_numbers' = {enabled, people:[{name, phone}]}. 9:00 PM Tulum (02:00 UTC).
+[functions."menu-whatsapp-pm"]
+  schedule = "0 2 * * *"
