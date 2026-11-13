@@ -867,12 +867,18 @@ function trInit() {
           oninput="tr2SetRetreatByLabel(this.value)"
           style="padding:6px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px;font-family:'Jost',sans-serif;color:#374151;outline:none;min-width:200px;max-width:280px">
         <datalist id="tr2-retreat-list"></datalist>
-        <div style="display:flex;align-items:center;gap:6px">
+        <div id="tr2-date-nav" style="display:flex;align-items:center;gap:4px">
+          <button onclick="tr2StepDay(-1)" title="Día anterior" style="background:#f1f5f9;color:#374151;border:1.5px solid #e5e7eb;padding:5px 11px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;line-height:1">◀</button>
+          <button id="tr2-today-btn" onclick="tr2JumpToday()" title="Ver solo hoy" style="background:#0f766e;color:#fff;border:1.5px solid #0f766e;padding:5px 14px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:'Jost',sans-serif">Today</button>
+          <button onclick="tr2StepDay(1)" title="Día siguiente" style="background:#f1f5f9;color:#374151;border:1.5px solid #e5e7eb;padding:5px 11px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;line-height:1">▶</button>
+          <span id="tr2-date-label" style="font-size:13px;font-weight:700;color:#374151;margin-left:6px;white-space:nowrap"></span>
+        </div>
+        <div style="display:none;align-items:center;gap:6px">
           <span style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">From</span>
           <input type="date" id="tr2-date-from" onchange="tr2SetDateFrom(this.value)"
             style="padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px;font-family:'Jost',sans-serif;color:#374151;outline:none">
         </div>
-        <div style="display:flex;align-items:center;gap:6px">
+        <div style="display:none;align-items:center;gap:6px">
           <span style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">To</span>
           <input type="date" id="tr2-date-to" onchange="tr2SetDateTo(this.value)"
             style="padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px;font-family:'Jost',sans-serif;color:#374151;outline:none">
@@ -922,8 +928,26 @@ function tr2SetRetreatByLabel(label) {
 }
 function tr2SetDateFrom(v) { tr2DateFrom = v; tr2SyncClearBtn(); tr2BuildView(); }
 function tr2SetDateTo(v)   { tr2DateTo   = v; tr2SyncClearBtn(); tr2BuildView(); }
+// Today button with arrows to step through the days (Darlene 2026-11-13); From/To inputs stay hidden underneath
+function tr2LocalToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function tr2StepDay(delta) {
+  const base = (tr2DateFrom && tr2DateFrom === tr2DateTo) ? tr2DateFrom : tr2LocalToday();
+  const d = new Date(base + 'T12:00:00'); d.setDate(d.getDate() + delta);
+  const t = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  tr2DateFrom = t; tr2DateTo = t;
+  const df = document.getElementById('tr2-date-from'); if (df) df.value = t;
+  const dt = document.getElementById('tr2-date-to');   if (dt) dt.value = t;
+  tr2SyncClearBtn();
+  tr2BuildView();
+}
+function tr2SyncDateNav() {
+  const lbl = document.getElementById('tr2-date-label'), btn = document.getElementById('tr2-today-btn');
+  const single = tr2DateFrom && tr2DateFrom === tr2DateTo;
+  if (lbl) lbl.textContent = single ? new Date(tr2DateFrom + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : (tr2DateFrom || tr2DateTo ? 'Custom dates' : 'All dates');
+  if (btn) { const on = single && tr2DateFrom === tr2LocalToday(); btn.style.background = on ? '#0f766e' : '#fff'; btn.style.color = on ? '#fff' : '#0f766e'; }
+}
 function tr2JumpToday() {
-  const t = new Date().toISOString().slice(0, 10);
+  const t = tr2LocalToday();
   tr2DateFrom = t; tr2DateTo = t;
   const df = document.getElementById('tr2-date-from'); if (df) df.value = t;
   const dt = document.getElementById('tr2-date-to');   if (dt) dt.value = t;
@@ -1779,6 +1803,7 @@ function tr2FilteredSorted() {
 function tr2BuildView() {
   const body = document.getElementById('tr2-body');
   if (!body) return;
+  tr2SyncDateNav();
   tr2GroupKeyMap = new Map();
   let arrTotal = 0, depTotal = 0;
 
