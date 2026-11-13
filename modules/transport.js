@@ -1854,7 +1854,7 @@ function tr2BuildView() {
   const today = new Date().toISOString().slice(0,10);
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0,10);
 
-  const TH = (t, w) => `<th style="padding:7px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;text-align:left;white-space:nowrap;${w?'width:'+w:''}border-bottom:2px solid #e5e7eb">${t}</th>`;
+  const TH = (t, w) => `<th style="padding:7px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;text-align:left;white-space:nowrap;${w?'width:'+w+';min-width:'+w+';':''}border-bottom:2px solid #e5e7eb">${t}</th>`;
   const timeColLabel = tr2View === 'departures' ? 'Pick-up · Hora vuelo' : tr2View === 'arrivals' ? 'Hora vuelo → Hotel' : 'Hora';
   const upgBtn = document.getElementById('tr2-upgrade-btn');
   if (upgBtn) { upgBtn.style.background = tr2UpgradeMode ? '#0d9488' : ''; upgBtn.style.color = tr2UpgradeMode ? '#fff' : ''; }
@@ -1864,7 +1864,7 @@ function tr2BuildView() {
   // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
   const totalCols = (tr2UpgradeMode ? 15 : 14) + (tr2View === 'departures' ? 1 : 0);   // + Transport Notes (Jorge 2026-11-13)   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
   const tableHeader = `<thead><tr>
-    ${TH('Habitación','80px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','70px')}${TH('Nombre')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
+    ${TH('Habitación','62px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','62px')}${TH('Nombre','170px')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
     ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}${TH('Transport Notes')}
     ${tr2View === 'departures' ? TH('Online check-out','90px') : ''}${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
