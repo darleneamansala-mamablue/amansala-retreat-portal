@@ -887,6 +887,11 @@ function trInit() {
     </div>`;
 
   tr2View = localStorage.getItem('ama_tr2_view') || 'arrivals';
+  // The log always opens on today's date (Darlene 2026-11-13); local date, not UTC, so evenings in Tulum don't roll to tomorrow
+  { const d = new Date(), t = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    tr2DateFrom = t; tr2DateTo = t;
+    const df = document.getElementById('tr2-date-from'); if (df) df.value = t;
+    const dt = document.getElementById('tr2-date-to');   if (dt) dt.value = t; }
   tr2ApplyTabStyles();
   tr2SyncWeekBtn();
   tr2LoadData();
