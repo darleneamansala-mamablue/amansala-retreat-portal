@@ -1005,7 +1005,7 @@ function tr2PrintView() {
   const showPickupCol = tr2View !== 'arrivals';
   // Notas: not on the Departures print (Jorge 2026-11-06)
   const showNotesCol = tr2View !== 'departures';
-  const printCols = 5 + (showNotesCol ? 1 : 0) + (showTypeCol ? 1 : 0) + (showPickupCol ? 1 : 0);   // + Notas (Jorge 2026-11-04)
+  const printCols = 6 + (showNotesCol ? 1 : 0) + (showTypeCol ? 1 : 0) + (showPickupCol ? 1 : 0);   // + Notas (Jorge 2026-11-04), + Transport Notes (Jorge 2026-11-13)
 
   const groups = new Map();
   filtered.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
@@ -1020,7 +1020,7 @@ function tr2PrintView() {
     const m = missingByDate.get(date);
     if (!m || !m.length) return '';
     return `<tr class="ride" style="background:#fef9c3"><td colspan="${printCols}">Sin información de transporte (${m.length})</td></tr>
-      ${_printSortEntries(m).map(e => `<tr style="background:#fefce8"><td>${escHtml(e.room || '—')}</td><td>${escHtml(e.guest || '')}</td>${showTypeCol ? `<td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>` : ''}<td><strong>FALTA INFO</strong></td>${showPickupCol ? '<td>—</td>' : ''}<td>—</td><td>${escHtml(e.retreatLabel || '')}</td>${showNotesCol ? '<td></td>' : ''}</tr>`).join('')}
+      ${_printSortEntries(m).map(e => `<tr style="background:#fefce8"><td>${escHtml(e.room || '—')}</td><td>${escHtml(e.guest || '')}</td>${showTypeCol ? `<td>${e.type === 'arrival' ? 'Llegada' : 'Salida'}</td>` : ''}<td><strong>FALTA INFO</strong></td>${showPickupCol ? '<td>—</td>' : ''}<td>—</td><td>${escHtml(e.retreatLabel || '')}</td>${showNotesCol ? '<td></td>' : ''}<td></td></tr>`).join('')}
       <tr class="ride-end"><td colspan="${printCols}"></td></tr>`;
   };
 
@@ -1036,7 +1036,8 @@ function tr2PrintView() {
         ${showPickupCol ? `<td>${e.ot ? '—' : escHtml(e.type === 'departure' ? ((e.groupPickup || e.pickup) || '—') : '—')}</td>` : ''}
         <td>${e.ot ? '—' : escHtml(e.time || '')}</td>
         <td>${escHtml(e.retreatLabel || '')}</td>
-        ${showNotesCol ? `<td style="font-size:10.5px;color:#4b5563;max-width:260px">${typeof trNotesPrintHtml === 'function' ? trNotesPrintHtml(e) : escHtml(String(e.notes || '').replace(/\s+/g, ' '))}</td>` : ''}
+        ${showNotesCol ? `<td style="font-size:10.5px;color:#4b5563;max-width:260px">${typeof trNotesPrintHtml === 'function' ? trNotesPrintHtml(e) : ''}</td>` : ''}
+        <td style="font-size:10.5px;color:#4b5563;max-width:260px">${escHtml(String(e.transportNotes || '').replace(/\s+/g, ' '))}</td>
       </tr>`;
 
   // Jorge's ask 2026-10-19, then follow-up same day: pure category order within a shared-ride
@@ -1149,7 +1150,7 @@ function tr2PrintView() {
       <div class="sub">${escHtml(retreatLabel)} · ${escHtml(rangeLabel)}</div>
     </div>
     <table>
-      <thead><tr><th>Habitación</th><th>Nombre</th>${showTypeCol ? '<th>Tipo</th>' : ''}<th>Aeropuerto</th>${showPickupCol ? '<th>Pick-up</th>' : ''}<th>Hora Vuelo</th><th>Retiro</th>${showNotesCol ? '<th>Notas</th>' : ''}</tr></thead>
+      <thead><tr><th>Habitación</th><th>Nombre</th>${showTypeCol ? '<th>Tipo</th>' : ''}<th>Aeropuerto</th>${showPickupCol ? '<th>Pick-up</th>' : ''}<th>Hora Vuelo</th><th>Retiro</th>${showNotesCol ? '<th>Notas</th>' : ''}<th>Transport Notes</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
   </body></html>`);
@@ -1489,7 +1490,7 @@ async function tr2LoadData() {
       tr2AllEntries.push({
         rowId: row.id, type: 'arrival', date: d.arrivalDate || '', time: d.arrivalTime || '', guest: name,
         email: d.email || '', flight: d.flightNumber || '', airport: d.arrivalAirport || '',
-        ot: !!d.arrivalOT, share: !!d.willingToShare, notes: d.notes || '', room, retreatId: bkId, retreatLabel,
+        ot: !!d.arrivalOT, share: !!d.willingToShare, notes: d.notes || '', transportNotes: d.notes || '', room, retreatId: bkId, retreatLabel,
         eta: (d.arrivalOT || !d.arrivalTime) ? null : tr2AddMins(d.arrivalTime, d.arrivalAirport === 'cancun' ? 90 : 45),
         driverConfirmed: !!d.driver_confirmed, cost: d.serviceCost != null ? Number(d.serviceCost) : null,
         regId, checkedIn,
@@ -1503,7 +1504,7 @@ async function tr2LoadData() {
       tr2AllEntries.push({
         rowId: row.id, type: 'departure', date: d.departureDate || '', time: d.departureTime || '', guest: name,
         email: d.email || '', flight: d.flightNumber || '', airport: depAirport,
-        ot: !!d.departureOT, share: !!d.willingToShare, notes: d.notes || '', room, retreatId: bkId, retreatLabel,
+        ot: !!d.departureOT, share: !!d.willingToShare, notes: d.notes || '', transportNotes: d.notes || '', room, retreatId: bkId, retreatLabel,
         eta: null, pickup, driverConfirmed: !!d.driver_confirmed, cost: d.serviceCost != null ? Number(d.serviceCost) : null,
         regId, checkedIn,
       });
@@ -1861,10 +1862,10 @@ function tr2BuildView() {
   // next to the room number, and in Upgrade mode an Options column (lateral same-category
   // room swaps, see tr2OptionsCell/tr2SwapRooms) sits right before Upgrade. Column count
   // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
-  const totalCols = (tr2UpgradeMode ? 14 : 13) + (tr2View === 'departures' ? 1 : 0);   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
+  const totalCols = (tr2UpgradeMode ? 15 : 14) + (tr2View === 'departures' ? 1 : 0);   // + Transport Notes (Jorge 2026-11-13)   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
   const tableHeader = `<thead><tr>
     ${TH('Habitación','80px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','70px')}${TH('Nombre')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto','90px')}${TH(timeColLabel)}${TH('Retiro')}${TH('Email')}${TH('Phone')}
-    ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}
+    ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}${TH('Transport Notes')}
     ${tr2View === 'departures' ? TH('Online check-out','90px') : ''}${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
 
@@ -2047,6 +2048,7 @@ function tr2RenderRow(e, color, groupPax) {
     ${TD(e.retreatLabel ? `<span style="font-size:11px;color:#6b7280">${escHtml(e.retreatLabel)}</span>` : '')}
     ${(() => { const c = tr2Contact(e); return TD(c.email ? `<a href="mailto:${escHtml(c.email)}" onclick="event.stopPropagation()" style="font-size:11px;color:#2563eb;word-break:break-all">${escHtml(c.email)}</a>` : '<span style="color:#d1d5db">—</span>', 'max-width:180px') + TD(c.phone ? `<span style="font-size:11px;white-space:nowrap">${escHtml(c.phone)}</span>` : '<span style="color:#d1d5db">—</span>'); })()}
     ${tr2UpgradeMode ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2OptionsCell(e)}</td><td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2UpgradeCell(e)}</td>` : TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.notes)}</span>` : '')}
+    ${TD(e.transportNotes ? (typeof trRoomNoteHtml === 'function' ? trRoomNoteHtml(String(e.transportNotes).replace(/\s+/g, ' ').trim()) : `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.transportNotes)}</span>`) : '', 'max-width:220px')}
     ${tr2View === 'departures' ? (() => { const o = e.regId && tr2OnlinePaid[e.regId]; return TD(o ? `<span title="Paid online $${o.amt.toFixed(2)}" style="color:#059669;font-weight:700">✓</span><div style="font-size:10px;color:#059669">$${o.amt.toFixed(2)}</div>` : '<span style="color:#d1d5db">—</span>', 'text-align:center'); })() : ''}
     ${TD(costCell)}
     <td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap">

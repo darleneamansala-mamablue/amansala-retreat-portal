@@ -57,6 +57,7 @@
     // notes column labels (transport-room-notes.js)
     'Room notes': 'Notas del cuarto',
     'Internal notes': 'Notas internas',
+    'Transport Notes': 'Notas de transporte',
     'Guest form': 'Formulario del huésped',
     // check-in ticks on each arrival (checkin-by.js)
     'Offered Upgrade': 'Upgrade ofrecido',

@@ -41,8 +41,8 @@
   //   Internal notes = staff-only (Booking Detail "Internal Notes")
   //   Guest form     = what the guest wrote on the transport form
   function noteParts(e, guestNote) {
-    return [['Room notes', roomNote(e)], ['Internal notes', internalNote(e)], ['Guest form', String(guestNote || '').replace(/\s+/g, ' ').trim()]]
-      .filter(p => p[1]);
+    // the transport entry's own notes (what the guest wrote or the office typed) have their own Transport Notes column now (Jorge 2026-11-13)
+    return [['Room notes', roomNote(e)], ['Internal notes', internalNote(e)]].filter(p => p[1]);
   }
   const label = t => `<span style="font-size:9.5px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.3px;margin-right:4px">${t}</span>`;
   // the printed sheet (Imprimir): same parts, in full
