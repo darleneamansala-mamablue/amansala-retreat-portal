@@ -2825,6 +2825,12 @@ function rcBuild(){
           const _a=_pd(bk.startDate),_z=_pd(bk.endDate),_n=Math.round((new Date(bk.endDate)-new Date(bk.startDate))/86400000);
           bl.dataset.dates=(wi<2)?(_a.d+'→'+_z.d):(_a.m+' '+_a.d+' → '+_z.m+' '+_z.d+(wi>=3&&_n>0?' · '+_n+' night'+(_n>1?'s':''):''));
           bl.title=_a.m+' '+_a.d+' → '+_z.m+' '+_z.d+' ('+_n+' night'+(_n===1?'':'s')+')';
+          // a group reservation names its retreat on hover (Jorge 2026-11-13)
+          if(bk.bookingType!=='room_only'){
+            const _rn=String(bk.retreatName||'').trim(),_ln=String(bk.leaderName||'').trim();
+            const _grp=_rn&&_ln&&_rn.toLowerCase()!==_ln.toLowerCase()?_rn+' ('+_ln+')':(_rn||_ln);
+            if(_grp)bl.title='Retreat: '+_grp+'\n'+bl.title;
+          }
         }
         // Never show retreat/leader name and guest name together on a room row
         // — the retreat is already identifiable via color + the Active in
