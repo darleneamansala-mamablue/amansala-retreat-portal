@@ -873,12 +873,12 @@ function trInit() {
           <button onclick="tr2StepDay(1)" title="Día siguiente" style="background:#f1f5f9;color:#374151;border:1.5px solid #e5e7eb;padding:5px 11px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;line-height:1">▶</button>
           <span id="tr2-date-label" style="font-size:13px;font-weight:700;color:#374151;margin-left:6px;white-space:nowrap"></span>
         </div>
-        <div style="display:none;align-items:center;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">From</span>
           <input type="date" id="tr2-date-from" onchange="tr2SetDateFrom(this.value)"
             style="padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px;font-family:'Jost',sans-serif;color:#374151;outline:none">
         </div>
-        <div style="display:none;align-items:center;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:12px;font-weight:600;color:#6b7280;white-space:nowrap">To</span>
           <input type="date" id="tr2-date-to" onchange="tr2SetDateTo(this.value)"
             style="padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:12.5px;font-family:'Jost',sans-serif;color:#374151;outline:none">
@@ -928,7 +928,7 @@ function tr2SetRetreatByLabel(label) {
 }
 function tr2SetDateFrom(v) { tr2DateFrom = v; tr2SyncClearBtn(); tr2BuildView(); }
 function tr2SetDateTo(v)   { tr2DateTo   = v; tr2SyncClearBtn(); tr2BuildView(); }
-// Today button with arrows to step through the days (Darlene 2026-11-13); From/To inputs stay hidden underneath
+// Today button with arrows to step through the days (Darlene 2026-11-13); the From/To pickers stay visible next to them to jump to any day (Hilario 2026-11-13)
 function tr2LocalToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function tr2StepDay(delta) {
   const base = (tr2DateFrom && tr2DateFrom === tr2DateTo) ? tr2DateFrom : tr2LocalToday();
@@ -1892,9 +1892,9 @@ function tr2BuildView() {
   // next to the room number, and in Upgrade mode an Options column (lateral same-category
   // room swaps, see tr2OptionsCell/tr2SwapRooms) sits right before Upgrade. Column count
   // varies with tr2UpgradeMode, so every colspan="N" group-header row below has to track it.
-  const totalCols = (tr2UpgradeMode ? 14 : 13) + (tr2View === 'departures' ? 1 : 0);   // + Transport Notes (Jorge 2026-11-13)   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
+  const totalCols = (tr2UpgradeMode ? 15 : 14) + (tr2View === 'departures' ? 2 : 0);   // Aeropuerto, and on Departures Pick-up / Hora vuelo, each in its own column again (Hilario 2026-11-13)   // + Transport Notes (Jorge 2026-11-13)   // + Balance (Jorge 2026-11-10)   // + Email and Phone (Jorge 2026-11-04), + Online check-out on Departures
   const tableHeader = `<thead><tr>
-    ${TH('Habitación','62px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','62px')}${TH('Nombre','170px')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto · ' + timeColLabel)}${TH('Retiro')}${TH('Share & wait')}${TH('Email / Phone')}
+    ${TH('Habitación','62px')}${TH(tr2View === 'departures' ? 'Check Out' : 'Check In','62px')}${TH('Nombre','170px')}${TH('Balance','110px')}${TH('Tipo')}${TH('Aeropuerto','80px')}${tr2View === 'departures' ? TH('Pick-up','90px') + TH('Hora vuelo','90px') : TH(timeColLabel)}${TH('Retiro')}${TH('Share & wait')}${TH('Email / Phone')}
     ${tr2UpgradeMode ? TH('Options','170px') + TH('Upgrade','200px') : TH('Notas')}${TH('Transport Notes')}
     ${tr2View === 'departures' ? TH('Online check-out','90px') : ''}${TH('Costo','70px')}${TH('','40px')}
   </tr></thead>`;
@@ -2072,8 +2072,12 @@ function tr2RenderRow(e, color, groupPax) {
     ${TD(nameCell)}
     ${TD(typeof trbBadge === 'function' ? trbBadge(e.regId, e.guest, e) : '')}
     ${TD(typeBadge)}
-    ${TD(`<div style="margin-bottom:2px">${airportBadge}</div>${timeCell}`)}
-    ${TD(e.retreatLabel ? `<span style="font-size:11px;color:#6b7280">${escHtml(e.retreatLabel)}</span>` : '')}
+    ${TD(airportBadge, 'white-space:nowrap')}
+    ${tr2View === 'departures' && !isArr
+      ? TD((e.groupPickup || e.pickup) ? `<span style="color:#7e22ce;font-weight:700;white-space:nowrap">🚐 ${tr2FmtTime(e.groupPickup || e.pickup)}</span>` : '<span style="color:#d1d5db">—</span>', 'white-space:nowrap')
+        + TD(e.time ? `<span style="white-space:nowrap">✈ ${tr2FmtTime(e.time)}</span>` : '<span style="color:#d1d5db">—</span>', 'white-space:nowrap')
+      : TD(timeCell)}
+    ${TD(e.retreatLabel ? `<span style="font-size:11px;color:#6b7280">${escHtml((window.trDedupeNote || (x => x))(e.retreatLabel))}</span>` : '')}
     ${TD(e.share ? `<span title="OK to share a ride and wait up to 30 minutes" style="color:#16a34a;font-weight:700;font-size:14px">✓</span>` : '', 'text-align:center')}
     ${(() => { const c = tr2Contact(e); const line = (lbl, v) => `<div title="${v ? escHtml(v) : 'Missing'}" style="font-size:11px;white-space:nowrap;color:${v ? '#374151' : '#9ca3af'}">${lbl} ${v ? '<span style="color:#16a34a;font-weight:700">✓</span>' : '<span style="color:#d1d5db">—</span>'}</div>`; return TD(line('Email', c.email) + line('Phone number', c.phone)); })()}
     ${tr2UpgradeMode ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2OptionsCell(e)}</td><td style="padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);vertical-align:top">${tr2UpgradeCell(e)}</td>` : TD(e.notes ? `<span style="font-size:11px;color:#6b7280;font-style:italic">${escHtml(e.notes)}</span>` : '')}
